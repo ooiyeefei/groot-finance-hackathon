@@ -1,4 +1,4 @@
 import { ClerkProvider } from '@clerk/nextjs'
+import { auth, currentUser } from '@clerk/nextjs/server'
 
-export { ClerkProvider }
-export { auth, currentUser } from '@clerk/nextjs'
+export { ClerkProvider, auth, currentUser }
