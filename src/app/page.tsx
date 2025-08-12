@@ -1,7 +1,18 @@
-import { UserButton } from '@clerk/nextjs'
+import { auth, currentUser } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
+import HeaderWithUser from '@/components/ui/header-with-user'
 
-export default function Dashboard() {
+export default async function Dashboard() {
+  // Server-side authentication check
+  const { userId } = await auth()
+  
+  if (!userId) {
+    redirect('/sign-in')
+  }
+  
+  const user = await currentUser()
+  
   return (
     <div className="flex h-screen bg-gray-900">
       {/* Sidebar */}
@@ -10,25 +21,14 @@ export default function Dashboard() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="bg-gray-800 border-b border-gray-700 p-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-            <UserButton 
-              appearance={{
-                elements: {
-                  avatarBox: "w-8 h-8",
-                }
-              }}
-            />
-          </div>
-        </header>
+        <HeaderWithUser />
         
         {/* Main Content Area */}
         <main className="flex-1 p-6">
           <div className="max-w-4xl mx-auto">
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
               <h2 className="text-3xl font-bold text-white mb-4">
-                Welcome to FinanSEAL
+                Welcome to FinanSEAL{user?.firstName && `, ${user.firstName}`}
               </h2>
               <p className="text-gray-400 text-lg mb-6">
                 Your intelligent financial co-pilot for Southeast Asian businesses
