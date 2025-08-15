@@ -15,7 +15,25 @@ interface UploadState {
   success: string | null
 }
 
-export default function FileUploadZone() {
+interface UploadedDocument {
+  id: string
+  fileName: string
+  fileSize: number
+  fileType: string
+  status: string
+}
+
+interface FileUploadZoneProps {
+  onUploadSuccess?: (document: UploadedDocument) => void
+  onUploadStart?: () => void
+  autoProcess?: boolean
+}
+
+export default function FileUploadZone({ 
+  onUploadSuccess, 
+  onUploadStart,
+  autoProcess = true 
+}: FileUploadZoneProps) {
   const [dragActive, setDragActive] = useState(false)
   const [uploadState, setUploadState] = useState<UploadState>({
     uploading: false,
@@ -48,6 +66,9 @@ export default function FileUploadZone() {
 
   // Upload file to API
   const uploadFile = async (file: File) => {
+    // Notify parent component that upload is starting
+    onUploadStart?.()
+    
     setUploadState({
       uploading: true,
       progress: 0,
@@ -67,17 +88,35 @@ export default function FileUploadZone() {
       const result = await response.json()
 
       if (result.success) {
+        const uploadedDocument = result.data
+        
         setUploadState({
           uploading: false,
           progress: 100,
           error: null,
-          success: `Successfully uploaded "${result.data.fileName}"`
+          success: `Successfully uploaded "${uploadedDocument.fileName}"`
         })
         
-        // Clear success message after 5 seconds
+        // Notify parent component of successful upload
+        onUploadSuccess?.(uploadedDocument)
+        
+        // Auto-process the document if enabled
+        if (autoProcess) {
+          setTimeout(async () => {
+            try {
+              await fetch(`/api/documents/${uploadedDocument.id}/process`, {
+                method: 'POST'
+              })
+            } catch (error) {
+              console.error('Auto-processing failed:', error)
+            }
+          }, 1000) // Small delay to ensure UI updates
+        }
+        
+        // Clear success message after 3 seconds (reduced for better UX)
         setTimeout(() => {
           setUploadState(prev => ({ ...prev, success: null }))
-        }, 5000)
+        }, 3000)
       } else {
         throw new Error(result.error || 'Upload failed')
       }
@@ -110,7 +149,7 @@ export default function FileUploadZone() {
     }
 
     uploadFile(file)
-  }, [])
+  }, [uploadFile])
 
   // Handle drag events
   const handleDrag = useCallback((e: React.DragEvent) => {

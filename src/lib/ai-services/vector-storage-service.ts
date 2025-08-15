@@ -1,0 +1,403 @@
+/**
+ * Vector Storage Service Implementation
+ * Handles embedding storage and similarity search using Qdrant Cloud
+ */
+
+import { IVectorStorageService } from './interfaces'
+import { ProcessingError, ServiceHealth } from './types'
+import { aiConfig } from '../config/ai-config'
+
+export class VectorStorageService implements IVectorStorageService {
+  private readonly qdrantUrl: string
+  private readonly apiKey: string
+  private readonly collectionName: string
+  
+  constructor() {
+    this.qdrantUrl = aiConfig.qdrant.url
+    this.apiKey = aiConfig.qdrant.apiKey
+    this.collectionName = aiConfig.qdrant.collectionName
+  }
+
+  async storeEmbedding(
+    documentId: string,
+    text: string,
+    embedding: number[],
+    metadata: Record<string, unknown>
+  ): Promise<void> {
+    try {
+      // Ensure collection exists
+      await this.ensureCollectionExists(embedding.length)
+      
+      // Prepare point for insertion
+      const point = {
+        id: documentId,
+        vector: embedding,
+        payload: {
+          text: text.substring(0, 10000), // Limit text size for storage
+          created_at: new Date().toISOString(),
+          ...metadata
+        }
+      }
+
+      console.log(`[Qdrant] Storing embedding for document ${documentId}`)
+
+      const response = await fetch(`${this.qdrantUrl}/collections/${this.collectionName}/points`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': this.apiKey
+        },
+        body: JSON.stringify({
+          points: [point]
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new ProcessingError(
+          `Failed to store embedding: ${response.status} ${response.statusText}`,
+          {
+            service: 'Qdrant',
+            endpoint: this.qdrantUrl,
+            statusCode: response.status,
+            retryable: response.status >= 500 || response.status === 429
+          }
+        )
+      }
+
+      const result = await response.json()
+      
+      if (result.status !== 'ok') {
+        throw new ProcessingError('Qdrant storage operation failed', {
+          service: 'Qdrant',
+          retryable: true
+        })
+      }
+
+      console.log(`[Qdrant] Successfully stored embedding for document ${documentId}`)
+
+    } catch (error) {
+      console.error(`[Qdrant] Failed to store embedding for document ${documentId}:`, error)
+      
+      if (error instanceof ProcessingError) {
+        throw error
+      }
+      
+      throw new ProcessingError(
+        `Vector storage failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {
+          service: 'Qdrant',
+          retryable: false
+        }
+      )
+    }
+  }
+
+  async searchSimilar(
+    embedding: number[],
+    limit: number = 10
+  ): Promise<Array<{ id: string; score: number; metadata: Record<string, unknown> }>> {
+    try {
+      console.log(`[Qdrant] Searching for ${limit} similar documents`)
+
+      const response = await fetch(`${this.qdrantUrl}/collections/${this.collectionName}/points/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': this.apiKey
+        },
+        body: JSON.stringify({
+          vector: embedding,
+          limit,
+          with_payload: true,
+          score_threshold: 0.3 // Minimum similarity threshold
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new ProcessingError(
+          `Failed to search vectors: ${response.status} ${response.statusText}`,
+          {
+            service: 'Qdrant',
+            endpoint: this.qdrantUrl,
+            statusCode: response.status,
+            retryable: response.status >= 500 || response.status === 429
+          }
+        )
+      }
+
+      const result = await response.json()
+      
+      if (result.status !== 'ok') {
+        throw new ProcessingError('Qdrant search operation failed', {
+          service: 'Qdrant',
+          retryable: true
+        })
+      }
+
+      // Transform results to expected format
+      const results = (result.result || []).map((hit: { id: string | number; score: number; payload?: Record<string, unknown> }) => ({
+        id: String(hit.id),
+        score: hit.score,
+        metadata: hit.payload || {}
+      }))
+
+      console.log(`[Qdrant] Found ${results.length} similar documents`)
+      return results
+
+    } catch (error) {
+      console.error('[Qdrant] Similarity search failed:', error)
+      
+      if (error instanceof ProcessingError) {
+        throw error
+      }
+      
+      throw new ProcessingError(
+        `Vector search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {
+          service: 'Qdrant',
+          retryable: false
+        }
+      )
+    }
+  }
+
+  async checkHealth(): Promise<ServiceHealth> {
+    const startTime = Date.now()
+    
+    try {
+      // Check cluster info endpoint
+      const response = await fetch(`${this.qdrantUrl}/cluster`, {
+        method: 'GET',
+        headers: {
+          'api-key': this.apiKey
+        },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      })
+      
+      const latency = Date.now() - startTime
+      
+      if (response.ok) {
+        const clusterInfo = await response.json()
+        const isHealthy = clusterInfo.status === 'ok'
+        
+        return {
+          healthy: isHealthy,
+          latency,
+          lastCheck: new Date(),
+          error: isHealthy ? undefined : 'Cluster not healthy'
+        }
+      } else {
+        return {
+          healthy: false,
+          latency,
+          lastCheck: new Date(),
+          error: `HTTP ${response.status}: ${response.statusText}`
+        }
+      }
+    } catch (error) {
+      return {
+        healthy: false,
+        latency: Date.now() - startTime,
+        lastCheck: new Date(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * Ensure the collection exists with proper configuration
+   */
+  private async ensureCollectionExists(vectorSize: number): Promise<void> {
+    try {
+      // Check if collection exists
+      const checkResponse = await fetch(`${this.qdrantUrl}/collections/${this.collectionName}`, {
+        method: 'GET',
+        headers: {
+          'api-key': this.apiKey
+        }
+      })
+
+      if (checkResponse.ok) {
+        // Collection exists, verify configuration
+        const collectionInfo = await checkResponse.json()
+        const existingSize = collectionInfo.result?.config?.params?.vectors?.size
+        
+        if (existingSize && existingSize !== vectorSize) {
+          console.warn(`[Qdrant] Collection vector size mismatch: expected ${vectorSize}, got ${existingSize}`)
+        }
+        
+        return // Collection exists and is compatible
+      }
+
+      // Collection doesn't exist, create it
+      console.log(`[Qdrant] Creating collection ${this.collectionName} with vector size ${vectorSize}`)
+
+      const createResponse = await fetch(`${this.qdrantUrl}/collections/${this.collectionName}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': this.apiKey
+        },
+        body: JSON.stringify({
+          vectors: {
+            size: vectorSize,
+            distance: 'Cosine' // Use cosine similarity for text embeddings
+          },
+          optimizers_config: {
+            default_segment_number: 2
+          },
+          replication_factor: 1
+        })
+      })
+
+      if (!createResponse.ok) {
+        const errorText = await createResponse.text()
+        throw new ProcessingError(
+          `Failed to create collection: ${createResponse.status} ${createResponse.statusText}`,
+          {
+            service: 'Qdrant',
+            statusCode: createResponse.status,
+            retryable: false
+          }
+        )
+      }
+
+      const createResult = await createResponse.json()
+      
+      if (createResult.status !== 'ok') {
+        throw new ProcessingError('Failed to create Qdrant collection', {
+          service: 'Qdrant',
+          retryable: false
+        })
+      }
+
+      console.log(`[Qdrant] Successfully created collection ${this.collectionName}`)
+
+    } catch (error) {
+      console.error('[Qdrant] Collection creation/check failed:', error)
+      
+      if (error instanceof ProcessingError) {
+        throw error
+      }
+      
+      throw new ProcessingError(
+        `Collection management failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {
+          service: 'Qdrant',
+          retryable: false
+        }
+      )
+    }
+  }
+
+  /**
+   * Delete a document from the vector store
+   */
+  async deleteDocument(documentId: string): Promise<void> {
+    try {
+      console.log(`[Qdrant] Deleting document ${documentId}`)
+
+      const response = await fetch(`${this.qdrantUrl}/collections/${this.collectionName}/points/delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': this.apiKey
+        },
+        body: JSON.stringify({
+          points: [documentId]
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new ProcessingError(
+          `Failed to delete document: ${response.status} ${response.statusText}`,
+          {
+            service: 'Qdrant',
+            statusCode: response.status,
+            retryable: response.status >= 500
+          }
+        )
+      }
+
+      const result = await response.json()
+      
+      if (result.status !== 'ok') {
+        throw new ProcessingError('Qdrant delete operation failed', {
+          service: 'Qdrant',
+          retryable: true
+        })
+      }
+
+      console.log(`[Qdrant] Successfully deleted document ${documentId}`)
+
+    } catch (error) {
+      console.error(`[Qdrant] Failed to delete document ${documentId}:`, error)
+      
+      if (error instanceof ProcessingError) {
+        throw error
+      }
+      
+      throw new ProcessingError(
+        `Document deletion failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {
+          service: 'Qdrant',
+          retryable: false
+        }
+      )
+    }
+  }
+
+  /**
+   * Get collection statistics
+   */
+  async getCollectionStats(): Promise<{
+    pointsCount: number
+    segmentsCount: number
+    vectorsCount: number
+  }> {
+    try {
+      const response = await fetch(`${this.qdrantUrl}/collections/${this.collectionName}`, {
+        method: 'GET',
+        headers: {
+          'api-key': this.apiKey
+        }
+      })
+
+      if (!response.ok) {
+        throw new ProcessingError(
+          `Failed to get collection stats: ${response.status} ${response.statusText}`,
+          {
+            service: 'Qdrant',
+            statusCode: response.status,
+            retryable: true
+          }
+        )
+      }
+
+      const result = await response.json()
+      const stats = result.result?.points_count || 0
+
+      return {
+        pointsCount: stats,
+        segmentsCount: result.result?.segments_count || 0,
+        vectorsCount: stats // Same as points count for this use case
+      }
+
+    } catch (error) {
+      console.error('[Qdrant] Failed to get collection stats:', error)
+      
+      if (error instanceof ProcessingError) {
+        throw error
+      }
+      
+      return {
+        pointsCount: 0,
+        segmentsCount: 0,
+        vectorsCount: 0
+      }
+    }
+  }
+}

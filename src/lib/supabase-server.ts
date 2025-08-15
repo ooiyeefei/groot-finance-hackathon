@@ -1,24 +1,23 @@
 import { createClient } from '@supabase/supabase-js'
-import { auth } from '@clerk/nextjs/server'
 
-// Create a Supabase client with Clerk authentication
-export async function createServerSupabaseClient() {
-  const { getToken } = await auth()
-  const supabaseAccessToken = await getToken({ template: 'supabase' })
-  
-  if (!supabaseAccessToken) {
-    throw new Error('No Supabase access token available')
-  }
-
+// Create a simple Supabase client for database operations
+export function createServerSupabaseClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
+
+// Create a service role client for storage operations (bypasses RLS)
+export function createServiceSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
-      global: {
-        headers: {
-          Authorization: `Bearer ${supabaseAccessToken}`,
-        },
-      },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
     }
   )
 }

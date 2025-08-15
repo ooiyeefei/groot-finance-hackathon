@@ -1,6 +1,6 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createServiceSupabaseClient } from '@/lib/supabase-server'
 
 // File validation constants
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
@@ -66,20 +66,70 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create Supabase client with user authentication
-    const supabase = await createServerSupabaseClient()
+    // Create Supabase client with service role
+    const supabase = createServiceSupabaseClient()
 
-    // Generate unique filename
+    // Get or create user and business relationship
+    const userResult = await supabase
+      .from('users')
+      .select('id, business_id')
+      .eq('clerk_user_id', userId)
+      .single()
+    
+    let userData = userResult.data
+    const userError = userResult.error
+
+    let businessId: string
+
+    if (userError || !userData) {
+      // Get default business
+      const { data: defaultBusiness } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('slug', 'default-business')
+        .single()
+
+      businessId = defaultBusiness?.id || ''
+
+      // Create user record with business association
+      const { data: newUser, error: createError } = await supabase
+        .from('users')
+        .insert({
+          clerk_user_id: userId,
+          email: user.emailAddresses[0]?.emailAddress || 'temp@example.com',
+          full_name: user.fullName || 'User',
+          business_id: businessId,
+          role: 'owner'
+        })
+        .select('id, business_id')
+        .single()
+
+      if (createError) {
+        console.error('Failed to create user:', createError)
+        return NextResponse.json(
+          { success: false, error: 'Failed to initialize user' },
+          { status: 500 }
+        )
+      }
+      
+      userData = newUser
+      businessId = newUser.business_id
+    } else {
+      businessId = userData.business_id
+    }
+
+    // Generate unique filename with business-based storage structure
     const sanitizedName = sanitizeFilename(file.name)
     const timestamp = Date.now()
     const uniqueFilename = `${timestamp}_${sanitizedName}`
-    const storagePath = `${userId}/${uniqueFilename}`
+    // Business-segmented storage: business_id/user_id/filename
+    const storagePath = `${businessId}/${userId}/${uniqueFilename}`
 
     // Convert file to buffer for upload
     const fileBuffer = await file.arrayBuffer()
     const buffer = new Uint8Array(fileBuffer)
 
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage using regular client with permissive policies
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('documents')
       .upload(storagePath, buffer, {
@@ -98,11 +148,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create database record
+    // Create database record with business_id
     const { data: documentData, error: dbError } = await supabase
       .from('documents')
       .insert({
         user_id: userId,
+        business_id: businessId,
         file_name: file.name,
         file_type: file.type,
         file_size: file.size,

@@ -1,0 +1,341 @@
+/**
+ * Individual Transaction CRUD API Endpoints
+ * Handles get, update, and delete operations for specific transactions
+ */
+
+import { auth } from '@clerk/nextjs/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createServiceSupabaseClient } from '@/lib/supabase-server'
+import { currencyService } from '@/lib/currency-service'
+import { UpdateTransactionRequest, SupportedCurrency } from '@/types/transaction'
+
+// Get specific transaction
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ transactionId: string }> }
+) {
+  try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const resolvedParams = await params
+    const transactionId = resolvedParams.transactionId
+
+    if (!transactionId) {
+      return NextResponse.json(
+        { success: false, error: 'Transaction ID is required' },
+        { status: 400 }
+      )
+    }
+
+    console.log(`[Transaction API] Getting transaction ${transactionId} for user ${userId}`)
+
+    const supabase = createServiceSupabaseClient()
+    const { data: transaction, error } = await supabase
+      .from('transactions')
+      .select(`
+        *,
+        line_items (*)
+      `)
+      .eq('id', transactionId)
+      .eq('user_id', userId)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return NextResponse.json(
+          { success: false, error: 'Transaction not found' },
+          { status: 404 }
+        )
+      }
+      console.error('[Transaction API] Failed to fetch transaction:', error)
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch transaction' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: { transaction }
+    })
+
+  } catch (error) {
+    console.error('[Transaction API] Unexpected error:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error'
+      },
+      { status: 500 }
+    )
+  }
+}
+
+// Update transaction
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ transactionId: string }> }
+) {
+  try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const resolvedParams = await params
+    const transactionId = resolvedParams.transactionId
+
+    if (!transactionId) {
+      return NextResponse.json(
+        { success: false, error: 'Transaction ID is required' },
+        { status: 400 }
+      )
+    }
+
+    const body: UpdateTransactionRequest = await request.json()
+    
+    console.log(`[Transaction API] Updating transaction ${transactionId} for user ${userId}`)
+
+    const supabase = createServiceSupabaseClient()
+
+    // First, verify the transaction exists and belongs to the user
+    const { data: existingTransaction, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .eq('user_id', userId)
+      .single()
+
+    if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        return NextResponse.json(
+          { success: false, error: 'Transaction not found' },
+          { status: 404 }
+        )
+      }
+      console.error('[Transaction API] Failed to fetch existing transaction:', fetchError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to verify transaction' },
+        { status: 500 }
+      )
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    }
+
+    // Only update provided fields
+    if (body.transaction_type !== undefined) {
+      if (!['income', 'expense', 'transfer'].includes(body.transaction_type)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid transaction type' },
+          { status: 400 }
+        )
+      }
+      updateData.transaction_type = body.transaction_type
+    }
+
+    if (body.category !== undefined) {
+      updateData.category = body.category
+    }
+
+    if (body.subcategory !== undefined) {
+      updateData.subcategory = body.subcategory
+    }
+
+    if (body.description !== undefined) {
+      updateData.description = body.description
+    }
+
+    if (body.transaction_date !== undefined) {
+      updateData.transaction_date = body.transaction_date
+    }
+
+    if (body.vendor_name !== undefined) {
+      updateData.vendor_name = body.vendor_name
+    }
+
+    if (body.reference_number !== undefined) {
+      updateData.reference_number = body.reference_number
+    }
+
+    // Handle currency and amount updates
+    if (body.original_currency !== undefined || body.original_amount !== undefined) {
+      const newCurrency = body.original_currency || existingTransaction.original_currency
+      const newAmount = body.original_amount || existingTransaction.original_amount
+
+      // Validate currency if changed
+      if (body.original_currency && !currencyService.isSupportedCurrency(body.original_currency)) {
+        return NextResponse.json(
+          { success: false, error: `Unsupported currency: ${body.original_currency}` },
+          { status: 400 }
+        )
+      }
+
+      // Validate amount if changed
+      if (body.original_amount !== undefined && (typeof body.original_amount !== 'number' || body.original_amount <= 0)) {
+        return NextResponse.json(
+          { success: false, error: 'Amount must be a positive number' },
+          { status: 400 }
+        )
+      }
+
+      updateData.original_currency = newCurrency
+      updateData.original_amount = newAmount
+
+      // Recalculate home currency conversion
+      const homeCurrency: SupportedCurrency = existingTransaction.home_currency || 'USD'
+      
+      if (newCurrency !== homeCurrency) {
+        try {
+          const conversion = await currencyService.convertAmount(
+            newAmount,
+            newCurrency as SupportedCurrency,
+            homeCurrency
+          )
+          updateData.home_amount = conversion.converted_amount
+          updateData.exchange_rate = conversion.exchange_rate
+          updateData.exchange_rate_date = conversion.rate_date
+        } catch (error) {
+          console.error('[Transaction API] Currency conversion failed during update:', error)
+          // Keep existing conversion data if conversion fails
+        }
+      } else {
+        updateData.home_amount = newAmount
+        updateData.exchange_rate = 1
+        updateData.exchange_rate_date = new Date().toISOString().split('T')[0]
+      }
+    }
+
+    // Update the transaction
+    const { data: updatedTransaction, error: updateError } = await supabase
+      .from('transactions')
+      .update(updateData)
+      .eq('id', transactionId)
+      .eq('user_id', userId)
+      .select(`
+        *,
+        line_items (*)
+      `)
+      .single()
+
+    if (updateError) {
+      console.error('[Transaction API] Failed to update transaction:', updateError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to update transaction' },
+        { status: 500 }
+      )
+    }
+
+    console.log(`[Transaction API] Successfully updated transaction ${transactionId}`)
+
+    return NextResponse.json({
+      success: true,
+      data: { transaction: updatedTransaction }
+    })
+
+  } catch (error) {
+    console.error('[Transaction API] Unexpected error:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error'
+      },
+      { status: 500 }
+    )
+  }
+}
+
+// Delete transaction
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ transactionId: string }> }
+) {
+  try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const resolvedParams = await params
+    const transactionId = resolvedParams.transactionId
+
+    if (!transactionId) {
+      return NextResponse.json(
+        { success: false, error: 'Transaction ID is required' },
+        { status: 400 }
+      )
+    }
+
+    console.log(`[Transaction API] Deleting transaction ${transactionId} for user ${userId}`)
+
+    const supabase = createServiceSupabaseClient()
+
+    // First verify the transaction exists and belongs to the user
+    const { data: existingTransaction, error: fetchError } = await supabase
+      .from('transactions')
+      .select('id')
+      .eq('id', transactionId)
+      .eq('user_id', userId)
+      .single()
+
+    if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        return NextResponse.json(
+          { success: false, error: 'Transaction not found' },
+          { status: 404 }
+        )
+      }
+      console.error('[Transaction API] Failed to verify transaction for deletion:', fetchError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to verify transaction' },
+        { status: 500 }
+      )
+    }
+
+    // Delete the transaction (line_items will be deleted automatically via CASCADE)
+    const { error: deleteError } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', transactionId)
+      .eq('user_id', userId)
+
+    if (deleteError) {
+      console.error('[Transaction API] Failed to delete transaction:', deleteError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to delete transaction' },
+        { status: 500 }
+      )
+    }
+
+    console.log(`[Transaction API] Successfully deleted transaction ${transactionId}`)
+
+    return NextResponse.json({
+      success: true,
+      data: { message: 'Transaction deleted successfully' }
+    })
+
+  } catch (error) {
+    console.error('[Transaction API] Unexpected error:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error'
+      },
+      { status: 500 }
+    )
+  }
+}
