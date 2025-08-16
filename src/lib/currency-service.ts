@@ -107,7 +107,13 @@ class FixerProvider implements ExchangeRateProvider {
 
     try {
       const response = await fetch(
-        `${this.baseUrl}/latest?access_key=${this.apiKey}&base=${from}&symbols=${to}`
+        `${this.baseUrl}/latest?base=${from}&symbols=${to}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
       )
       
       if (!response.ok) {
@@ -138,7 +144,13 @@ class FixerProvider implements ExchangeRateProvider {
 
     try {
       const response = await fetch(
-        `${this.baseUrl}/${date}?access_key=${this.apiKey}&base=${from}&symbols=${to}`
+        `${this.baseUrl}/${date}?base=${from}&symbols=${to}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
       )
       
       if (!response.ok) {

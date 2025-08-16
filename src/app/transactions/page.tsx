@@ -1,16 +1,82 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
+import { useAuth } from '@clerk/nextjs'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
+import TransactionsList from '@/components/transactions/transactions-list'
+import TransactionFormModal from '@/components/transactions/transaction-form-modal'
+import TransactionDetailModal from '@/components/transactions/transaction-detail-modal'
+import { useTransactions } from '@/hooks/use-transactions'
+import { Transaction } from '@/types/transaction'
 
-export default async function TransactionsPage() {
-  // Server-side authentication check
-  const { userId } = await auth()
+export default function TransactionsPage() {
+  const { userId } = useAuth()
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null)
   
+  const {
+    transactions,
+    loading,
+    refreshTransactions,
+    createTransaction,
+    updateTransaction,
+    deleteTransaction
+  } = useTransactions()
+
+  // Redirect if not authenticated (client-side check)
+  useEffect(() => {
+    if (!userId) {
+      window.location.href = '/sign-in'
+    }
+  }, [userId])
+
   if (!userId) {
-    redirect('/sign-in')
+    return null // Will redirect
   }
-  
+
+  const handleCreateTransaction = async (data: any) => {
+    try {
+      await createTransaction(data)
+      setShowCreateModal(false)
+      refreshTransactions()
+    } catch (error) {
+      console.error('Failed to create transaction:', error)
+    }
+  }
+
+  const handleUpdateTransaction = async (data: any) => {
+    if (!editingTransaction) return
+    
+    try {
+      await updateTransaction(editingTransaction.id, data)
+      setEditingTransaction(null)
+      refreshTransactions()
+    } catch (error) {
+      console.error('Failed to update transaction:', error)
+    }
+  }
+
+  const handleDeleteTransaction = async (transactionId: string) => {
+    try {
+      await deleteTransaction(transactionId)
+      setViewingTransaction(null)
+      refreshTransactions()
+    } catch (error) {
+      console.error('Failed to delete transaction:', error)
+    }
+  }
+
+  const handleEditFromDetail = () => {
+    if (viewingTransaction) {
+      setEditingTransaction(viewingTransaction)
+      setViewingTransaction(null)
+    }
+  }
+
   return (
     <div className="flex h-screen bg-gray-900">
       {/* Sidebar */}
@@ -23,34 +89,59 @@ export default async function TransactionsPage() {
         
         {/* Main Content Area */}
         <main className="flex-1 p-6 overflow-auto">
-          <div className="max-w-4xl mx-auto">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-white mb-2">Transactions</h1>
-              <p className="text-gray-400">
-                View and manage your financial transactions across multiple currencies
-              </p>
-            </div>
-            
-            {/* Placeholder Content */}
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Transaction Management Coming Soon</h3>
-                <p className="text-gray-400 mb-4">
-                  This feature will allow you to view and manage transactions extracted from your uploaded documents.
-                </p>
-                <p className="text-gray-500 text-sm">
-                  Upload documents in the Documents section to start building your transaction history.
+          <div className="max-w-6xl mx-auto">
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-2">Transactions</h1>
+                <p className="text-gray-400">
+                  View and manage your financial transactions across multiple currencies
                 </p>
               </div>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              >
+                Add Transaction
+              </button>
             </div>
+            
+            <TransactionsList
+              transactions={transactions}
+              isLoading={loading}
+              error={null}
+              onRefresh={refreshTransactions}
+              onView={setViewingTransaction}
+              onEdit={setEditingTransaction}
+              onDelete={handleDeleteTransaction}
+            />
           </div>
         </main>
       </div>
+
+      {/* Modals */}
+      {showCreateModal && (
+        <TransactionFormModal
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={handleCreateTransaction}
+        />
+      )}
+
+      {editingTransaction && (
+        <TransactionFormModal
+          transaction={editingTransaction}
+          onClose={() => setEditingTransaction(null)}
+          onSubmit={handleUpdateTransaction}
+        />
+      )}
+
+      {viewingTransaction && (
+        <TransactionDetailModal
+          transaction={viewingTransaction}
+          onClose={() => setViewingTransaction(null)}
+          onEdit={handleEditFromDetail}
+          onDelete={() => handleDeleteTransaction(viewingTransaction.id)}
+        />
+      )}
     </div>
   )
 }

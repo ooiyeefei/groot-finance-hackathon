@@ -18,8 +18,17 @@ interface DocumentPreviewProps {
   fileType: string
   fileSize: number
   boundingBoxes?: BoundingBox[]
+  coordinateReference?: { width?: number; height?: number }
   onBoxHover?: (box: BoundingBox | null) => void
   onBoxClick?: (box: BoundingBox) => void
+  document?: {
+    extracted_data?: {
+      metadata?: {
+        coordinateReference?: { width?: number; height?: number }
+        layoutElements?: any
+      }
+    }
+  }
 }
 
 // Color mapping for different layout categories
@@ -43,8 +52,10 @@ export default function DocumentPreviewWithAnnotations({
   fileType,
   fileSize,
   boundingBoxes = [],
+  coordinateReference,
   onBoxHover,
-  onBoxClick
+  onBoxClick,
+  document
 }: DocumentPreviewProps) {
   const [scale, setScale] = useState(1)
   const [rotation, setRotation] = useState(0)
@@ -88,20 +99,77 @@ export default function DocumentPreviewWithAnnotations({
     const displayWidth = img.clientWidth
     const displayHeight = img.clientHeight
     
-    // Scale coordinates from natural image size to displayed size
-    // Don't divide by scale since both image and boxes are scaled together by container transform
-    const scaleX = displayWidth / imageDimensions.width
-    const scaleY = displayHeight / imageDimensions.height
+    // Get OCR coordinate reference dimensions from metadata
+    const metadata = document?.extracted_data?.metadata
+    const coordinateReference = metadata?.coordinateReference || metadata?.layoutElements
     
-    // Account for container padding (p-4 = 16px)
-    const paddingOffset = 16
-    const left = (box.x1 * scaleX) + paddingOffset
-    const top = (box.y1 * scaleY) + paddingOffset
-    const width = (box.x2 - box.x1) * scaleX
-    const height = (box.y2 - box.y1) * scaleY
+    // Extract reference dimensions - try multiple possible sources
+    let referenceWidth = displayWidth
+    let referenceHeight = displayHeight
+    
+    if (coordinateReference) {
+      // Check if coordinate reference has dimensions
+      if (coordinateReference.width && coordinateReference.height) {
+        referenceWidth = coordinateReference.width
+        referenceHeight = coordinateReference.height
+      } else if (coordinateReference.dimensions) {
+        referenceWidth = coordinateReference.dimensions.width || displayWidth
+        referenceHeight = coordinateReference.dimensions.height || displayHeight
+      }
+    }
+    
+    // If we still don't have reference dimensions, try to get them from image natural size
+    if (referenceWidth === displayWidth && referenceHeight === displayHeight && img.naturalWidth && img.naturalHeight) {
+      referenceWidth = img.naturalWidth
+      referenceHeight = img.naturalHeight
+    }
+    
+    // Calculate proper scaling ratios
+    const scaleX = displayWidth / referenceWidth
+    const scaleY = displayHeight / referenceHeight
+    
+    // Transform coordinates with proper scaling and padding offset
+    // The image container has p-4 (16px) padding that needs to be accounted for
+    const CONTAINER_PADDING = 16 // p-4 = 1rem = 16px
+    
+    // CRITICAL FIX: Account for CSS scale transform applied to the container
+    // The bounding boxes are rendered inside a scaled container, so we need to
+    // apply the inverse scale factor to position them correctly
+    const cssScaleFactor = scale // This is the zoom scale state variable
+    
+    const left = (box.x1 * scaleX / cssScaleFactor) + (CONTAINER_PADDING / cssScaleFactor)
+    const top = (box.y1 * scaleY / cssScaleFactor) + (CONTAINER_PADDING / cssScaleFactor)
+    const width = (box.x2 - box.x1) * scaleX / cssScaleFactor
+    const height = (box.y2 - box.y1) * scaleY / cssScaleFactor
+    
+    // Enhanced debugging - log detailed transformation info
+    console.log(`[BoundingBox DEBUG] Transform calculation:`)
+    console.log(`  - Original box: [${box.x1}, ${box.y1}, ${box.x2}, ${box.y2}] "${box.text}"`)
+    console.log(`  - Display dimensions: ${displayWidth}x${displayHeight}`)
+    console.log(`  - Reference dimensions: ${referenceWidth}x${referenceHeight}`)
+    console.log(`  - Scale factors: ${scaleX.toFixed(4)}x${scaleY.toFixed(4)}`)
+    console.log(`  - CSS zoom scale: ${cssScaleFactor.toFixed(4)}x`)
+    console.log(`  - Image natural size: ${img.naturalWidth}x${img.naturalHeight}`)
+    console.log(`  - Coordinate reference source: ${metadata ? 'metadata' : 'fallback'}`)
+    console.log(`  - Container padding: ${CONTAINER_PADDING}px (adjusted: ${(CONTAINER_PADDING / cssScaleFactor).toFixed(2)}px)`)
+    console.log(`  - Transformed position: left=${left.toFixed(2)}px, top=${top.toFixed(2)}px`)
+    console.log(`  - Transformed size: ${width.toFixed(2)}x${height.toFixed(2)}px`)
+    console.log(`  - Expected on-screen box: [${left}, ${top}, ${left + width}, ${top + height}]`)
+    
+    // Additional debug: check for potential coordinate system mismatches
+    if (referenceWidth !== img.naturalWidth || referenceHeight !== img.naturalHeight) {
+      console.warn(`[BoundingBox WARNING] Coordinate reference (${referenceWidth}x${referenceHeight}) != natural image size (${img.naturalWidth}x${img.naturalHeight})`)
+      console.warn(`  This suggests OCR coordinates may be based on a different image resolution`)
+    }
+    
+    if (scaleX !== scaleY) {
+      console.warn(`[BoundingBox WARNING] Non-uniform scaling detected: scaleX=${scaleX.toFixed(4)} != scaleY=${scaleY.toFixed(4)}`)
+      console.warn(`  This may cause aspect ratio distortion in bounding boxes`)
+    }
     
     const isHovered = hoveredBox === box
-    const color = CATEGORY_COLORS[box.category as keyof typeof CATEGORY_COLORS] || '#6B7280'
+    // Use blue color for all bounding boxes
+    const color = '#3B82F6' // blue-500
     
     return {
       position: 'absolute' as const,
@@ -164,7 +232,7 @@ export default function DocumentPreviewWithAnnotations({
             className="relative inline-block min-w-full min-h-full p-4"
             style={{
               transform: `scale(${scale}) rotate(${rotation}deg)`,
-              transformOrigin: 'center',
+              transformOrigin: 'top left',
               transition: 'transform 0.2s ease'
             }}
           >

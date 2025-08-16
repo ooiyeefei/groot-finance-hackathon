@@ -265,7 +265,7 @@ export default function FileUploadZone({
           </div>
           <div>
             <strong className="text-white">Documents:</strong>
-            <br />PDF files
+            <br />PDF (converted to image for OCR)
           </div>
           <div>
             <strong className="text-white">Size Limit:</strong>

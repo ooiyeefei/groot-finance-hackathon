@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
 import { 
   CreateTransactionRequest, 
@@ -34,14 +34,16 @@ export async function POST(request: NextRequest) {
       transaction_date,
       original_currency,
       original_amount,
+      home_currency,
       vendor_name,
       reference_number,
-      line_items = []
+      line_items = [],
+      source_document_id  // Optional field to link transaction to document
     } = body
 
     // Validate required fields
     if (!transaction_type || !category || !description || !transaction_date || 
-        !original_currency || !original_amount) {
+        !original_currency || !original_amount || !home_currency) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate transaction type
-    if (!['income', 'expense', 'transfer'].includes(transaction_type)) {
+    if (!['income', 'expense', 'transfer', 'asset', 'liability', 'equity'].includes(transaction_type)) {
       return NextResponse.json(
         { success: false, error: 'Invalid transaction type' },
         { status: 400 }
@@ -84,10 +86,10 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Transactions API] Creating ${transaction_type} transaction for user ${userId}`)
 
-    const supabase = createServiceSupabaseClient()
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    // Get user's home currency (default to USD for now)
-    const homeCurrency: SupportedCurrency = 'USD' // TODO: Get from user profile
+    // Use the submitted home currency from the form
+    const homeCurrency: SupportedCurrency = home_currency
 
     // Convert to home currency
     let homeAmount = original_amount
@@ -115,6 +117,7 @@ export async function POST(request: NextRequest) {
       .from('transactions')
       .insert({
         user_id: userId,
+        document_id: source_document_id || null, // Link to source document if provided
         transaction_type,
         category,
         subcategory,
@@ -128,10 +131,11 @@ export async function POST(request: NextRequest) {
         exchange_rate_date: exchangeRateDate,
         transaction_date,
         vendor_name,
-        created_by_method: 'manual',
+        created_by_method: source_document_id ? 'document_extract' : 'manual',
         processing_metadata: {
           created_via: 'api',
-          conversion_attempted: original_currency !== homeCurrency
+          conversion_attempted: original_currency !== homeCurrency,
+          source_document_id: source_document_id || null
         }
       })
       .select()
@@ -156,10 +160,11 @@ export async function POST(request: NextRequest) {
           .from('line_items')
           .insert({
             transaction_id: transaction.id,
-            description: lineItem.description,
+            item_description: lineItem.description,
             quantity: lineItem.quantity,
             unit_price: lineItem.unit_price,
-            line_total: lineTotal,
+            total_amount: lineTotal,
+            currency: original_currency,
             tax_rate: lineItem.tax_rate,
             tax_amount: lineItem.tax_rate ? lineTotal * lineItem.tax_rate : 0,
             item_category: lineItem.item_category,
@@ -170,8 +175,21 @@ export async function POST(request: NextRequest) {
 
         if (lineItemError) {
           console.error('[Transactions API] Failed to create line item:', lineItemError)
+          console.error('[Transactions API] Line item data that failed:', {
+            transaction_id: transaction.id,
+            item_description: lineItem.description,
+            quantity: lineItem.quantity,
+            unit_price: lineItem.unit_price,
+            total_amount: lineTotal,
+            currency: original_currency,
+            tax_rate: lineItem.tax_rate,
+            tax_amount: lineItem.tax_rate ? lineTotal * lineItem.tax_rate : 0,
+            item_category: lineItem.item_category,
+            line_order: i + 1
+          })
           // Continue creating other line items
         } else {
+          console.log('[Transactions API] Successfully created line item:', createdLineItem)
           createdLineItems.push(createdLineItem)
         }
       }
@@ -194,7 +212,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error'
+        error: 'Failed to create transaction'
       },
       { status: 500 }
     )
@@ -229,7 +247,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Transactions API] Listing transactions for user ${userId}:`, params)
 
-    const supabase = createServiceSupabaseClient()
+    const supabase = await createAuthenticatedSupabaseClient(userId)
     let query = supabase
       .from('transactions')
       .select(`
@@ -256,12 +274,27 @@ export async function GET(request: NextRequest) {
     }
 
     if (params.search) {
-      query = query.or(`description.ilike.%${params.search}%,vendor_name.ilike.%${params.search}%,reference_number.ilike.%${params.search}%`)
+      // Sanitize search input to prevent SQL injection
+      const sanitizedSearch = params.search.replace(/[%_]/g, '\\$&').replace(/[^\w\s-]/g, '')
+      if (sanitizedSearch.trim()) {
+        query = query.or(`description.ilike.%${sanitizedSearch}%,vendor_name.ilike.%${sanitizedSearch}%,reference_number.ilike.%${sanitizedSearch}%`)
+      }
     }
 
-    // Apply sorting
-    const sortColumn = params.sort_by === 'amount' ? 'original_amount' : params.sort_by
-    query = query.order(sortColumn!, { ascending: params.sort_order === 'asc' })
+    // Apply sorting with whitelist validation to prevent SQL injection
+    const validSortColumns = ['transaction_date', 'original_amount', 'description', 'vendor_name', 'category', 'created_at']
+    let sortColumn = 'transaction_date' // Safe default
+    
+    if (params.sort_by === 'amount') {
+      sortColumn = 'original_amount'
+    } else if (params.sort_by === 'date') {
+      sortColumn = 'transaction_date'
+    } else if (params.sort_by && validSortColumns.includes(params.sort_by)) {
+      sortColumn = params.sort_by
+    }
+    
+    const sortOrder = params.sort_order === 'asc' ? 'asc' : 'desc' // Safe default
+    query = query.order(sortColumn, { ascending: sortOrder === 'asc' })
 
     // Apply pagination
     const offset = (params.page! - 1) * params.limit!
@@ -304,7 +337,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error'
+        error: 'Failed to fetch transactions'
       },
       { status: 500 }
     )

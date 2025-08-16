@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
+import CurrencySettings from '@/components/settings/currency-settings'
 
 export default async function SettingsPage() {
   // Server-side authentication check
@@ -34,23 +35,7 @@ export default async function SettingsPage() {
             {/* Settings Sections */}
             <div className="space-y-6">
               {/* Currency Settings */}
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                <h2 className="text-xl font-semibold text-white mb-4">Currency Preferences</h2>
-                <div className="grid gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Home Currency
-                    </label>
-                    <select className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="SGD">Singapore Dollar (SGD)</option>
-                      <option value="USD">US Dollar (USD)</option>
-                      <option value="MYR">Malaysian Ringgit (MYR)</option>
-                      <option value="THB">Thai Baht (THB)</option>
-                      <option value="IDR">Indonesian Rupiah (IDR)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+              <CurrencySettings />
 
               {/* Language Settings */}
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">

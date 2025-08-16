@@ -29,6 +29,10 @@ export interface OCRResult {
       category: string
       text: string
     }>
+    coordinateReference?: {
+      width?: number
+      height?: number
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Languages, Eye, FileText, Calendar, DollarSign, Building, Hash } from 'lucide-react'
+import { X, Languages, Eye, FileText, Calendar, DollarSign, Building, Hash, List } from 'lucide-react'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
 import HtmlContentRenderer from './html-content-renderer'
 
@@ -21,6 +21,57 @@ interface Document {
       type: string
       value: string
       confidence: number
+    }>
+    document_summary?: {
+      document_type?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      vendor_name?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      total_amount?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      transaction_date?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+    }
+    financial_entities?: Array<{
+      label: string
+      value: string
+      category: string
+      confidence: number
+      bbox?: number[]
+    }>
+    line_items?: Array<{
+      description?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      quantity?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      unit_price?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      line_total?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
     }>
     metadata: {
       pageCount?: number
@@ -234,6 +285,123 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
     })
   }
 
+  // Generate bounding boxes from various sources in the document
+  const generateBoundingBoxes = () => {
+    const boundingBoxes: Array<{
+      x1: number
+      y1: number
+      x2: number
+      y2: number
+      category: string
+      text: string
+    }> = []
+
+    if (!document.extracted_data) return boundingBoxes
+
+    // Extract from document summary bounding boxes
+    const summary = document.extracted_data.document_summary
+    
+    if (summary) {
+      if (summary.vendor_name?.bbox) {
+        const [x1, y1, x2, y2] = summary.vendor_name.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Vendor',
+          text: summary.vendor_name.value
+        })
+      }
+      
+      if (summary.total_amount?.bbox) {
+        const [x1, y1, x2, y2] = summary.total_amount.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Amount',
+          text: summary.total_amount.value
+        })
+      }
+      
+      if (summary.transaction_date?.bbox) {
+        const [x1, y1, x2, y2] = summary.transaction_date.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Date',
+          text: summary.transaction_date.value
+        })
+      }
+      
+      if (summary.document_type?.bbox) {
+        const [x1, y1, x2, y2] = summary.document_type.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Document Type',
+          text: summary.document_type.value
+        })
+      }
+    }
+
+    // Extract from financial entities
+    if (document.extracted_data.financial_entities) {
+      document.extracted_data.financial_entities.forEach(entity => {
+        if (entity.bbox && entity.bbox.length >= 4) {
+          const [x1, y1, x2, y2] = entity.bbox
+          boundingBoxes.push({
+            x1, y1, x2, y2,
+            category: entity.category || 'Financial',
+            text: entity.value
+          })
+        }
+      })
+    }
+
+    // Extract from line items
+    const lineItems = document.extracted_data.line_items || []
+    
+    lineItems.forEach((item, index) => {
+      if (item.description?.bbox) {
+        const [x1, y1, x2, y2] = item.description.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Line Item',
+          text: `${item.description.value} (Item ${index + 1})`
+        })
+      }
+      
+      if (item.quantity?.bbox) {
+        const [x1, y1, x2, y2] = item.quantity.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Quantity',
+          text: item.quantity.value
+        })
+      }
+      
+      if (item.unit_price?.bbox) {
+        const [x1, y1, x2, y2] = item.unit_price.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Unit Price',
+          text: item.unit_price.value
+        })
+      }
+      
+      if (item.line_total?.bbox) {
+        const [x1, y1, x2, y2] = item.line_total.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Line Total',
+          text: item.line_total.value
+        })
+      }
+    })
+
+    // Fallback: check if boundingBoxes exist in metadata (original structure)
+    if (document.extracted_data.metadata?.boundingBoxes) {
+      boundingBoxes.push(...document.extracted_data.metadata.boundingBoxes)
+    }
+
+    return boundingBoxes
+  }
+
   return (
     <div className="fixed inset-0 bg-gray-800 z-50 flex flex-col">
       <div className="w-full h-full flex flex-col">
@@ -275,7 +443,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   fileName={document.file_name}
                   fileType={document.file_type}
                   fileSize={document.file_size}
-                  boundingBoxes={document.extracted_data?.metadata?.boundingBoxes || []}
+                  boundingBoxes={generateBoundingBoxes()}
+                  document={document}
                   onBoxHover={setHighlightedBox}
                   onBoxClick={(box) => {
                     console.log('Clicked box:', box)
@@ -327,12 +496,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Extracted Text */}
-                {document.extracted_data?.text && !(document.extracted_data.text.includes('error') || document.extracted_data.text.includes('failed')) && (
-                  <div>
+                {/* Document Summary */}
+                {document.extracted_data?.document_summary && (
+                  <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
-                      Extracted Text
+                      Document Summary
                       {highlightedBox && (
                         <span className="ml-2 px-2 py-1 bg-blue-600 text-xs rounded">
                           Hovering: {highlightedBox.category}
@@ -340,19 +509,144 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       )}
                     </h4>
                     
-                    {/* Check if text is JSON structure and render appropriately */}
-                    {document.extracted_data.text.trim().startsWith('[') || document.extracted_data.text.trim().startsWith('{') ? (
-                      <div className="bg-gray-900 rounded-lg p-4">
-                        <div className="text-xs text-gray-400 mb-2">Structured OCR Data (JSON Format)</div>
-                        <pre className="text-xs text-gray-300 whitespace-pre-wrap overflow-auto max-h-64">
-                          {JSON.stringify(JSON.parse(document.extracted_data.text), null, 2)}
-                        </pre>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {document.extracted_data.document_summary.document_type && (
+                        <div className="bg-gray-900 rounded-lg p-3">
+                          <div className="text-xs text-gray-400 mb-1">Document Type</div>
+                          <div className="text-sm text-white font-medium">
+                            {document.extracted_data.document_summary.document_type.value}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Confidence: {Math.round((document.extracted_data.document_summary.document_type.confidence || 0) * 100)}%
+                          </div>
+                        </div>
+                      )}
+                      
+                      {document.extracted_data.document_summary.vendor_name && (
+                        <div className="bg-gray-900 rounded-lg p-3">
+                          <div className="text-xs text-gray-400 mb-1">Vendor</div>
+                          <div className="text-sm text-white font-medium">
+                            {document.extracted_data.document_summary.vendor_name.value}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Confidence: {Math.round((document.extracted_data.document_summary.vendor_name.confidence || 0) * 100)}%
+                          </div>
+                        </div>
+                      )}
+                      
+                      {document.extracted_data.document_summary.total_amount && (
+                        <div className="bg-gray-900 rounded-lg p-3">
+                          <div className="text-xs text-gray-400 mb-1">Amount</div>
+                          <div className="text-sm text-green-400 font-medium">
+                            ${document.extracted_data.document_summary.total_amount.value}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Confidence: {Math.round((document.extracted_data.document_summary.total_amount.confidence || 0) * 100)}%
+                          </div>
+                        </div>
+                      )}
+                      
+                      {document.extracted_data.document_summary.transaction_date && (
+                        <div className="bg-gray-900 rounded-lg p-3">
+                          <div className="text-xs text-gray-400 mb-1">Date</div>
+                          <div className="text-sm text-white font-medium">
+                            {document.extracted_data.document_summary.transaction_date.value}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Confidence: {Math.round((document.extracted_data.document_summary.transaction_date.confidence || 0) * 100)}%
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Financial Entities */}
+                {document.extracted_data?.financial_entities && document.extracted_data.financial_entities.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Financial Entities ({document.extracted_data.financial_entities.length})
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {document.extracted_data.financial_entities.map((entity, index) => (
+                        <div key={index} className="bg-gray-900 rounded-lg p-3">
+                          <div className="text-xs text-gray-400 mb-1">{entity.label}</div>
+                          <div className="text-sm text-white font-medium">{entity.value}</div>
+                          <div className="text-xs text-gray-500">
+                            {entity.category} • Confidence: {Math.round((entity.confidence || 0) * 100)}%
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Line Items Table */}
+                {document.extracted_data?.line_items && document.extracted_data.line_items.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                      <List className="w-4 h-4 mr-2" />
+                      Line Items ({document.extracted_data.line_items.length})
+                    </h4>
+                    
+                    <div className="bg-gray-900 rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-800">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-700">
+                            {document.extracted_data.line_items.map((item, index) => (
+                              <tr key={index} className="hover:bg-gray-800">
+                                <td className="px-3 py-2 text-gray-400">{index + 1}</td>
+                                <td className="px-3 py-2 text-white">
+                                  {item.description?.value || 'N/A'}
+                                  {item.description?.confidence && (
+                                    <div className="text-xs text-gray-500">
+                                      {Math.round(item.description.confidence * 100)}% conf
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right text-white">
+                                  {item.quantity?.value || 'N/A'}
+                                </td>
+                                <td className="px-3 py-2 text-right text-white">
+                                  {item.unit_price?.value || 'N/A'}
+                                </td>
+                                <td className="px-3 py-2 text-right text-green-400 font-medium">
+                                  {item.line_total?.value || 'N/A'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    ) : (
-                      <HtmlContentRenderer 
-                        content={document.extracted_data.text}
-                      />
-                    )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Full Extracted Text */}
+                {document.extracted_data?.text && !(document.extracted_data.text.includes('error') || document.extracted_data.text.includes('failed')) && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Complete Extracted Text
+                    </h4>
+                    
+                    <div className="bg-gray-900 rounded-lg p-4">
+                      <div className="text-xs text-gray-400 mb-2">Raw OCR Output</div>
+                      <div className="text-xs text-gray-300 whitespace-pre-wrap overflow-auto max-h-64 leading-relaxed">
+                        {document.extracted_data.text}
+                      </div>
+                    </div>
                   </div>
                 )}
 

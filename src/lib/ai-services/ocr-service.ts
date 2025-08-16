@@ -6,6 +6,9 @@
 import { IOCRService } from './interfaces'
 import { OCRResult, DocumentContext, ProcessingError, ServiceHealth } from './types'
 import { aiConfig } from '../config/ai-config'
+import { fromBuffer } from 'pdf2pic'
+import { createWriteStream, mkdirSync, unlinkSync, existsSync } from 'fs'
+import { join } from 'path'
 
 export class OCRService implements IOCRService {
   private readonly endpoint: string
@@ -41,8 +44,33 @@ export class OCRService implements IOCRService {
             url: context.imageUrl
           }
         }
+      } else if (context.fileType === 'application/pdf') {
+        // Convert PDF to image first
+        console.log(`[OCR] Converting PDF to image for processing`)
+        const imageBuffer = await this.convertPdfToImage(context.buffer)
+        
+        // Validate that PDF conversion was successful
+        if (!imageBuffer || imageBuffer.length === 0) {
+          throw new ProcessingError(
+            'PDF to image conversion failed or returned empty result. This typically indicates missing system dependencies (GraphicsMagick or ImageMagick). Install with: brew install graphicsmagick',
+            {
+              service: 'OCR',
+              retryable: false,
+              errorDetails: `Converted buffer size: ${imageBuffer ? imageBuffer.length : 'null'} bytes`
+            }
+          )
+        }
+        
+        console.log(`[OCR] PDF converted successfully to image buffer: ${imageBuffer.length} bytes`)
+        const base64Data = imageBuffer.toString('base64')
+        imageContent = {
+          type: "image_url",
+          image_url: {
+            url: `data:image/png;base64,${base64Data}`
+          }
+        }
       } else {
-        // Fallback to base64 encoding for direct image uploads
+        // Direct image processing
         console.log(`[OCR] Using base64 encoding for direct image`)
         const base64Data = context.buffer.toString('base64')
         const mimeType = context.fileType
@@ -54,7 +82,7 @@ export class OCRService implements IOCRService {
         }
       }
       
-      // Create OpenAI Chat Completions compatible request
+      // Create chat completions API compatible request with image (matching your working curl)
       const requestBody = {
         model: this.modelName,
         messages: [
@@ -63,17 +91,21 @@ export class OCRService implements IOCRService {
             content: this.getSystemPrompt()
           },
           {
-            role: "user", 
+            role: "user",
             content: [
               {
                 type: "text",
                 text: "Please process the attached image according to the system instructions."
               },
-              imageContent
+              {
+                type: "image_url",
+                image_url: {
+                  url: imageContent.image_url.url
+                }
+              }
             ]
           }
         ]
-        // Removed temperature and max_tokens to match working curl payload
       }
 
       console.log(`[OCR] Processing document ${context.id} (${context.fileName})`)
@@ -134,8 +166,8 @@ export class OCRService implements IOCRService {
       const result = await response.json()
       console.log('[OCR] API Response:', JSON.stringify(result, null, 2))
       
-      // Extract content from OpenAI format response
-      const content = result.choices?.[0]?.message?.content || result.content || ''
+      // Extract content from chat completions API response
+      const content = result.choices?.[0]?.message?.content || result.choices?.[0]?.text || result.content || ''
       console.log('[OCR] Extracted content:', content)
       
       if (!content || content.trim() === '') {
@@ -299,17 +331,25 @@ You MUST return ONLY a single, valid JSON object matching this schema. Do not in
       console.log(`[OCR] Raw response for ${context.fileName}:`, content.substring(0, 500) + (content.length > 500 ? '...' : ''))
       console.log(`[OCR] Full response length: ${content.length} characters`)
       
-      // Try to find JSON object in the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) {
-        console.error(`[OCR] No JSON found in response for ${context.fileName}`)
-        console.error('[OCR] This indicates the model is not following the JSON format instruction')
-        console.error('[OCR] Response should start with { and end with }')
-        throw new Error("No valid JSON object found in the AI response. Model is not following JSON format instructions.")
+      // Enhanced JSON extraction with multiple strategies
+      let parsedJson = this.extractJSONFromResponse(content);
+      
+      if (!parsedJson) {
+        console.warn(`[OCR] No valid JSON found using standard extraction for ${context.fileName}`);
+        console.warn('[OCR] Attempting fallback parsing strategies...');
+        
+        // Fallback strategy 1: Try to extract partial JSON structures
+        parsedJson = this.attemptPartialJSONReconstruction(content);
+        
+        if (!parsedJson) {
+          console.warn(`[OCR] Partial JSON reconstruction failed for ${context.fileName}`);
+          console.warn('[OCR] Falling back to raw text extraction with entity detection');
+          
+          // Fallback strategy 2: Raw text with intelligent entity detection
+          return this.createFallbackResult(content, context);
+        }
       }
 
-      console.log(`[OCR] Found JSON match of length: ${jsonMatch[0].length}`)
-      const parsedJson = JSON.parse(jsonMatch[0])
       console.log('[OCR] Successfully parsed JSON response')
       console.log('[OCR] Document summary keys:', Object.keys(parsedJson.document_summary || {}))
       console.log('[OCR] Financial entities count:', (parsedJson.financial_entities || []).length)
@@ -410,7 +450,12 @@ You MUST return ONLY a single, valid JSON object matching this schema. Do not in
           language: 'en',
           processingMethod: 'ocr' as const,
           layoutElements: parsedJson,
-          boundingBoxes: boundingBoxes
+          boundingBoxes: boundingBoxes,
+          // Add coordinate reference dimensions for frontend scaling
+          coordinateReference: {
+            width: context.imageUrl ? undefined : context.buffer.length > 0 ? 1024 : 800, // Default OCR processing dimensions
+            height: context.imageUrl ? undefined : context.buffer.length > 0 ? 768 : 600  // These should ideally come from the OCR model
+          }
         }
       }
 
@@ -435,6 +480,142 @@ You MUST return ONLY a single, valid JSON object matching this schema. Do not in
         }
       }
     }
+  }
+
+  /**
+   * Enhanced JSON extraction with multiple strategies
+   */
+  private extractJSONFromResponse(content: string): any | null {
+    // Strategy 1: Look for complete JSON object
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch (error) {
+        console.warn('[OCR] Failed to parse JSON match:', error);
+      }
+    }
+
+    // Strategy 2: Look for JSON between code blocks
+    const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (codeBlockMatch) {
+      try {
+        return JSON.parse(codeBlockMatch[1]);
+      } catch (error) {
+        console.warn('[OCR] Failed to parse code block JSON:', error);
+      }
+    }
+
+    // Strategy 3: Look for JSON after common prefixes
+    const prefixPatterns = [
+      /(?:result|output|response|json):\s*(\{[\s\S]*\})/i,
+      /(?:here|below)\s+is\s+the\s+(?:result|json|output):\s*(\{[\s\S]*\})/i
+    ];
+
+    for (const pattern of prefixPatterns) {
+      const match = content.match(pattern);
+      if (match) {
+        try {
+          return JSON.parse(match[1]);
+        } catch (error) {
+          console.warn(`[OCR] Failed to parse prefixed JSON (${pattern}):`, error);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Attempt to reconstruct partial JSON from malformed responses
+   */
+  private attemptPartialJSONReconstruction(content: string): any | null {
+    try {
+      // Find potential JSON start and try to fix common issues
+      let jsonContent = content.replace(/^[^{]*/, '').replace(/[^}]*$/, '');
+      if (!jsonContent.startsWith('{') || !jsonContent.endsWith('}')) {
+        return null;
+      }
+
+      // Fix common JSON issues
+      jsonContent = jsonContent
+        .replace(/,\s*}/g, '}')  // Remove trailing commas
+        .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
+        .replace(/([{,]\s*)(\w+):/g, '$1"$2":')  // Quote unquoted keys
+        .replace(/:\s*'([^']*)'/g, ': "$1"')  // Convert single quotes to double quotes
+        .replace(/\n/g, ' ')  // Remove newlines that might break parsing
+        .replace(/\t/g, ' ')  // Replace tabs with spaces
+        .replace(/\s+/g, ' '); // Normalize whitespace
+
+      return JSON.parse(jsonContent);
+    } catch (error) {
+      console.warn('[OCR] Partial JSON reconstruction failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a fallback result from raw text when JSON parsing fails
+   */
+  private createFallbackResult(content: string, context: DocumentContext): OCRResult {
+    console.log(`[OCR] Creating fallback result for ${context.fileName}`);
+    
+    const entities: Array<{ type: string; value: string; confidence: number }> = [];
+    
+    // Extract potential amounts using regex patterns
+    const amountPattern = /\$?(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{2})?/g;
+    const amounts = content.match(amountPattern) || [];
+    amounts.forEach((amount, index) => {
+      entities.push({
+        type: 'amount',
+        value: amount.replace(/\$/, ''),
+        confidence: 0.7
+      });
+    });
+
+    // Extract potential dates
+    const datePatterns = [
+      /\d{1,2}\/\d{1,2}\/\d{4}/g,
+      /\d{4}-\d{2}-\d{2}/g,
+      /\d{1,2}-\d{1,2}-\d{4}/g
+    ];
+    
+    datePatterns.forEach(pattern => {
+      const dates = content.match(pattern) || [];
+      dates.forEach(date => {
+        entities.push({
+          type: 'date',
+          value: date,
+          confidence: 0.6
+        });
+      });
+    });
+
+    // Extract potential invoice/receipt numbers
+    const refPattern = /(?:invoice|receipt|ref|no)\.?\s*#?(\w+)/gi;
+    const refs = content.match(refPattern) || [];
+    refs.forEach(ref => {
+      entities.push({
+        type: 'reference_id',
+        value: ref,
+        confidence: 0.5
+      });
+    });
+
+    const wordCount = content.split(/\s+/).filter(Boolean).length;
+    
+    console.log(`[OCR] Fallback extraction: ${entities.length} entities from ${wordCount} words`);
+    
+    return {
+      text: content.trim(),
+      entities: entities,
+      metadata: {
+        pageCount: 1,
+        wordCount,
+        language: 'en',
+        processingMethod: 'text_extraction' as const
+      }
+    };
   }
 
   private mapBbox(bbox: number[]) {
@@ -524,6 +705,62 @@ You MUST return ONLY a single, valid JSON object matching this schema. Do not in
     
     // Return mapped type or original if no mapping found
     return typeMapping[type] || type.replace(/_/g, ' ')
+  }
+
+  /**
+   * Convert PDF buffer to image buffer using pdf2pic
+   */
+  private async convertPdfToImage(pdfBuffer: Buffer): Promise<Buffer> {
+    try {
+      console.log(`[OCR] Starting PDF to image conversion`)
+      
+      // Create pdf2pic converter with options
+      const convert = fromBuffer(pdfBuffer, {
+        density: 200,           // DPI for output image
+        saveFilename: "page",   // Base filename
+        savePath: "./temp",     // Temporary directory
+        format: "png",          // Output format
+        width: 1024,           // Max width
+        height: 1400,          // Max height
+        quality: 95            // Quality (for JPEG)
+      })
+
+      // Ensure temp directory exists
+      const tempDir = './temp'
+      if (!existsSync(tempDir)) {
+        mkdirSync(tempDir, { recursive: true })
+      }
+
+      // Convert first page only
+      console.log(`[OCR] Converting PDF page 1 to PNG`)
+      const result = await convert(1, { responseType: "buffer" })
+      
+      if (!result.buffer) {
+        throw new ProcessingError(
+          'PDF conversion failed: No image buffer returned',
+          {
+            service: 'OCR',
+            retryable: false,
+            errorDetails: 'pdf2pic returned no buffer'
+          }
+        )
+      }
+
+      console.log(`[OCR] PDF converted successfully, image size: ${result.buffer.length} bytes`)
+      return result.buffer
+      
+    } catch (error) {
+      console.error('[OCR] PDF conversion failed:', error)
+      
+      throw new ProcessingError(
+        `PDF to image conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {
+          service: 'OCR',
+          retryable: false,
+          errorDetails: error instanceof Error ? error.message : 'Unknown conversion error'
+        }
+      )
+    }
   }
 
 }

@@ -96,7 +96,7 @@ export default function HtmlContentRenderer({ content, className = '' }: HtmlCon
       </button>
 
       {/* Content Container */}
-      <div className="bg-gray-900 rounded-lg p-4 max-h-96 overflow-auto">
+      <div className="bg-gray-900 rounded-lg p-4 max-h-[32rem] overflow-auto">
         <style jsx>{`
           /* Custom table styles for better readability */
           :global(.bg-gray-900 table) {

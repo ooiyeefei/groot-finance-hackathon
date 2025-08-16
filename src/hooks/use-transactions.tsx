@@ -268,12 +268,8 @@ export function useTransactions(): UseTransactionsReturn {
 // Utility functions for currency formatting
 export function formatCurrency(amount: number, currency: SupportedCurrency): string {
   try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount)
+    // Use explicit currency code format for better clarity (e.g., "SGD 108.61")
+    return `${currency} ${amount.toFixed(2)}`
   } catch {
     // Fallback for unsupported currencies
     return `${amount.toFixed(2)} ${currency}`
@@ -288,6 +284,12 @@ export function getTransactionTypeColor(type: string): string {
       return 'text-red-400'
     case 'transfer':
       return 'text-blue-400'
+    case 'asset':
+      return 'text-purple-400'
+    case 'liability':
+      return 'text-orange-400'
+    case 'equity':
+      return 'text-yellow-400'
     default:
       return 'text-gray-400'
   }
@@ -301,6 +303,12 @@ export function getTransactionTypeIcon(type: string): string {
       return '↙️'
     case 'transfer':
       return '↔️'
+    case 'asset':
+      return '📈'
+    case 'liability':
+      return '📊'
+    case 'equity':
+      return '🏛️'
     default:
       return '💰'
   }

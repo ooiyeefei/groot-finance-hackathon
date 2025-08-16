@@ -21,11 +21,16 @@ export async function GET() {
     console.log('[API] Supabase URL configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL)
     console.log('[API] Service role key configured:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
 
-    // Fetch user's documents ordered by creation date (newest first)
+    // Fetch user's documents with linked transaction information ordered by creation date (newest first)
     // Using Clerk user ID directly since RLS is disabled
     const { data: documents, error } = await supabase
       .from('documents')
-      .select('id, file_name, file_type, file_size, storage_path, processing_status, created_at, processed_at, error_message, extracted_data')
+      .select(`
+        id, file_name, file_type, file_size, storage_path, processing_status, created_at, processed_at, error_message, extracted_data,
+        transactions:transactions!document_id (
+          id, description, original_amount, original_currency, created_at
+        )
+      `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
@@ -37,9 +42,16 @@ export async function GET() {
       )
     }
 
+    // Process documents to include linked transaction data
+    const processedDocuments = (documents || []).map((doc: any) => ({
+      ...doc,
+      linked_transaction: doc.transactions && doc.transactions.length > 0 ? doc.transactions[0] : null,
+      transactions: undefined // Remove the raw transactions array from the response
+    }))
+
     return NextResponse.json({
       success: true,
-      data: documents || []
+      data: processedDocuments
     })
 
   } catch (error) {

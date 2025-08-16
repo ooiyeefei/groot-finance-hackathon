@@ -1,11 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, Image, File, Play, RotateCcw, Eye, Trash2 } from 'lucide-react'
+import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus } from 'lucide-react'
 import { useDocumentPolling } from '@/hooks/use-document-polling'
 import DocumentStatusBadge from './document-status-badge'
 import ConfidenceScoreMeter from './confidence-score-meter'
 import DocumentAnalysisModal from './document-analysis-modal'
+import TransactionFormModal from '@/components/transactions/transaction-form-modal'
+import { mapDocumentToTransaction, canCreateTransactionFromDocument } from '@/lib/document-to-transaction-mapper'
+import { CreateTransactionRequest } from '@/types/transaction'
 
 interface DocumentsListProps {
   onRefresh?: () => void
@@ -24,6 +27,7 @@ export default function DocumentsList({ onRefresh }: DocumentsListProps) {
 
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [transactionFormDocument, setTransactionFormDocument] = useState<string | null>(null)
 
   // Handle refresh from parent component
   const handleRefresh = async () => {
@@ -70,6 +74,55 @@ export default function DocumentsList({ onRefresh }: DocumentsListProps) {
   // Close extracted data modal
   const closeModal = () => {
     setSelectedDocument(null)
+  }
+
+  // Handle opening transaction form with pre-filled data
+  const openTransactionForm = (documentId: string) => {
+    setTransactionFormDocument(documentId)
+  }
+
+  // Handle viewing linked transaction 
+  const openTransactionView = (transactionId: string) => {
+    // Navigate to transactions page with the specific transaction focused
+    // For now, we'll redirect to the transactions page
+    // TODO: Could implement a transaction detail modal or direct navigation
+    window.location.href = `/transactions?highlight=${transactionId}`
+  }
+
+  // Close transaction form modal
+  const closeTransactionForm = () => {
+    setTransactionFormDocument(null)
+  }
+
+  // Handle transaction creation from document
+  const handleCreateTransaction = async (data: CreateTransactionRequest) => {
+    try {
+      console.log('[Documents List] Sending transaction data to API:', JSON.stringify(data, null, 2))
+      console.log('[Documents List] Home currency being sent:', data.home_currency)
+      console.log('[Documents List] Source document ID being sent:', data.source_document_id)
+      
+      const response = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create transaction')
+      }
+
+      console.log('Transaction created successfully from document')
+      setTransactionFormDocument(null)
+      
+      // Refresh documents list to update the linked transaction status
+      await refreshDocuments()
+      
+      // Optional: Show success message or redirect to transactions page
+      // You could add a toast notification here
+    } catch (error) {
+      console.error('Failed to create transaction:', error)
+      // Optional: Show error message
+    }
   }
 
   // Get document by ID for modal display
@@ -168,6 +221,13 @@ export default function DocumentsList({ onRefresh }: DocumentsListProps) {
                     errorMessage={document.error_message}
                   />
                   
+                  {/* Show transaction linked status */}
+                  {document.linked_transaction && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/20 text-green-400 border border-green-700">
+                      💰 Transaction Created
+                    </span>
+                  )}
+                  
                   {/* Show confidence score for completed documents */}
                   {document.processing_status === 'completed' && document.confidence_score && (
                     <ConfidenceScoreMeter 
@@ -201,6 +261,29 @@ export default function DocumentsList({ onRefresh }: DocumentsListProps) {
                       <Eye className="w-4 h-4 mr-1.5" />
                       Analyze
                     </button>
+                  )}
+
+                  {/* Add/View Transaction button for completed documents with extractable data */}
+                  {document.processing_status === 'completed' && document.extracted_data && canCreateTransactionFromDocument(document) && (
+                    document.linked_transaction ? (
+                      <button
+                        onClick={() => openTransactionView(document.linked_transaction!.id)}
+                        className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
+                        title={`View transaction: ${document.linked_transaction.description}`}
+                      >
+                        <Eye className="w-4 h-4 mr-1.5" />
+                        View Transaction
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => openTransactionForm(document.id)}
+                        className="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
+                        title="Create transaction from extracted document data"
+                      >
+                        <Plus className="w-4 h-4 mr-1.5" />
+                        Add Transaction
+                      </button>
+                    )
                   )}
 
                   {/* Reprocess button for completed documents */}
@@ -275,6 +358,18 @@ export default function DocumentsList({ onRefresh }: DocumentsListProps) {
         <DocumentAnalysisModal
           document={getDocumentById(selectedDocument)!}
           onClose={closeModal}
+        />
+      )}
+
+      {/* Transaction Form Modal with pre-filled data */}
+      {transactionFormDocument && getDocumentById(transactionFormDocument) && (
+        <TransactionFormModal
+          onClose={closeTransactionForm}
+          onSubmit={handleCreateTransaction}
+          prefilledData={{
+            ...mapDocumentToTransaction(getDocumentById(transactionFormDocument)!),
+            source_document_id: transactionFormDocument // Link transaction to document
+          }}
         />
       )}
 

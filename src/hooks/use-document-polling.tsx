@@ -25,6 +25,13 @@ interface Document {
     }
   }
   confidence_score?: number
+  linked_transaction?: {
+    id: string
+    description: string
+    original_amount: number
+    original_currency: string
+    created_at: string
+  }
 }
 
 interface UseDocumentPollingReturn {
@@ -107,28 +114,25 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
       
       const result = await response.json()
       
-      if (result.success) {
-        // Update with completed status and extracted data
-        setDocuments(prev => prev.map(doc => 
-          doc.id === documentId 
-            ? { 
-                ...doc, 
-                processing_status: 'completed',
-                processed_at: new Date().toISOString(),
-                extracted_data: result.data.extractedData,
-                confidence_score: calculateOverallConfidence(result.data.extractedData),
-                error_message: undefined
-              }
-            : doc
-        ))
+      if (response.ok && result.success) {
+        // Processing was successfully queued - keep status as 'processing'
+        // The actual completion will be detected by polling
+        console.log('Document processing started successfully')
+      } else if (response.status === 409) {
+        // Document is already being processed - revert to actual status from server
+        console.log('Document is already being processed')
+        alert('This document is already being processed. Please wait for the current process to complete.')
+        
+        // Refresh documents to get the actual current status from server
+        await fetchDocuments()
       } else {
-        // Update status to failed
+        // Processing failed to start
         setDocuments(prev => prev.map(doc => 
           doc.id === documentId 
             ? { ...doc, processing_status: 'failed', error_message: result.error }
             : doc
         ))
-        console.error('Processing failed:', result.error)
+        console.error('Processing failed to start:', result.error)
       }
     } catch (error) {
       console.error('Error processing document:', error)
