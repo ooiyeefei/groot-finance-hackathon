@@ -49,13 +49,23 @@ export default function TransactionFormModal({
     source_document_id: prefilledData?.source_document_id || undefined
   })
 
-  const [lineItems, setLineItems] = useState<Partial<LineItem>[]>(
-    transaction?.line_items || prefilledData?.line_items || []
-  )
+  const [lineItems, setLineItems] = useState<Partial<LineItem>[]>([])
 
-  // Calculate line totals for prefilled data
+  // Initialize line items from transaction or prefilled data
   useEffect(() => {
-    if (prefilledData?.line_items && prefilledData.line_items.length > 0) {
+    if (transaction?.line_items && transaction.line_items.length > 0) {
+      console.log('[Transaction Form] Loading existing line items:', transaction.line_items)
+      const existingItems = transaction.line_items.map(item => ({
+        ...item,
+        // Use the correct database field names
+        description: item.item_description || item.description || '',  // Map item_description to description for form
+        line_total: item.total_amount || item.line_total || ((item.quantity || 0) * (item.unit_price || 0) + (item.tax_amount || 0)),  // Use total_amount from DB
+        tax_amount: item.tax_amount || 0,
+        tax_rate: item.tax_rate || 0
+      }))
+      setLineItems(existingItems)
+    } else if (prefilledData?.line_items && prefilledData.line_items.length > 0) {
+      console.log('[Transaction Form] Loading prefilled line items:', prefilledData.line_items)
       const itemsWithTotals = prefilledData.line_items.map(item => ({
         ...item,
         line_total: (item.quantity || 0) * (item.unit_price || 0),
@@ -63,8 +73,10 @@ export default function TransactionFormModal({
         tax_rate: item.tax_rate || 0
       }))
       setLineItems(itemsWithTotals)
+    } else {
+      setLineItems([])
     }
-  }, [prefilledData?.line_items])
+  }, [transaction?.line_items, prefilledData?.line_items])
 
   const [previewAmount, setPreviewAmount] = useState<number | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
@@ -110,9 +122,17 @@ export default function TransactionFormModal({
     try {
       const submitData: CreateTransactionRequest = {
         ...formData,
-        line_items: lineItems.filter(item => 
-          item.description && item.quantity && item.unit_price
-        ) as LineItem[]
+        line_items: lineItems
+          .filter(item => 
+            item.description && item.quantity && item.unit_price
+          )
+          .map(item => ({
+            description: item.description!,
+            quantity: item.quantity!,
+            unit_price: item.unit_price!,
+            tax_rate: item.tax_rate,
+            item_category: item.item_category
+          }))
       }
 
       console.log('[Transaction Form] Submit data:', JSON.stringify(submitData, null, 2))

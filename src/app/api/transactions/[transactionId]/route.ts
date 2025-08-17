@@ -169,8 +169,20 @@ export async function PUT(
       updateData.reference_number = body.reference_number
     }
 
+    // Handle home currency update
+    if (body.home_currency !== undefined) {
+      // Validate home currency if changed
+      if (!currencyService.isSupportedCurrency(body.home_currency)) {
+        return NextResponse.json(
+          { success: false, error: `Unsupported home currency: ${body.home_currency}` },
+          { status: 400 }
+        )
+      }
+      updateData.home_currency = body.home_currency
+    }
+
     // Handle currency and amount updates
-    if (body.original_currency !== undefined || body.original_amount !== undefined) {
+    if (body.original_currency !== undefined || body.original_amount !== undefined || body.home_currency !== undefined) {
       const newCurrency = body.original_currency || existingTransaction.original_currency
       const newAmount = body.original_amount || existingTransaction.original_amount
 
@@ -193,8 +205,8 @@ export async function PUT(
       updateData.original_currency = newCurrency
       updateData.original_amount = newAmount
 
-      // Recalculate home currency conversion
-      const homeCurrency: SupportedCurrency = existingTransaction.home_currency || 'USD'
+      // Recalculate home currency conversion - use updated home currency if provided
+      const homeCurrency: SupportedCurrency = body.home_currency || existingTransaction.home_currency || 'USD'
       
       if (newCurrency !== homeCurrency) {
         try {

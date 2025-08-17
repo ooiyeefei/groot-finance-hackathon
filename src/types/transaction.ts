@@ -102,23 +102,30 @@ export interface LineItem {
   id: string
   transaction_id: string
   
-  // Item details
-  description: string
+  // Item details - Database uses item_description and total_amount, not description and line_total
+  item_description: string  // Database field name
+  description?: string      // Legacy field (null in database)
   quantity: number
   unit_price: number
-  line_total: number
+  total_amount: number      // Database field name  
+  line_total?: number       // Legacy field (null in database)
+  
+  // Currency and metadata
+  currency: string
+  category?: string
   
   // Tax and discount
-  tax_amount: number
-  discount_amount: number
+  tax_amount?: number
+  discount_amount?: number
   tax_rate?: number
   
   // Classification
   item_category?: string
   
   // System fields
-  created_at: string
-  line_order: number
+  created_at?: string
+  updated_at?: string
+  line_order?: number
 }
 
 // API Request/Response types
@@ -138,7 +145,7 @@ export interface CreateTransactionRequest {
 }
 
 export interface CreateLineItemRequest {
-  description: string
+  description: string  // This will map to item_description in database
   quantity: number
   unit_price: number
   tax_rate?: number

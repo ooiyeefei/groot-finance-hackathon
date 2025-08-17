@@ -49,7 +49,7 @@ export default function TransactionsList({
       transaction.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       transaction.reference_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       transaction.line_items?.some(item => 
-        item.description.toLowerCase().includes(searchQuery.toLowerCase())
+        (item.item_description || item.description || '').toLowerCase().includes(searchQuery.toLowerCase())
       )
     
     const matchesCategory = !selectedCategory || transaction.category === selectedCategory

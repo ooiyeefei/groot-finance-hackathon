@@ -7,7 +7,6 @@ import { IAIServiceFactory } from './interfaces'
 import { ServiceHealth } from './types'
 
 // Service implementations
-import { OCRService } from './ocr-service'
 import { EmbeddingService } from './embedding-service'
 import { TextAnalysisService } from './text-analysis-service'
 import { VectorStorageService } from './vector-storage-service'
@@ -16,7 +15,6 @@ export class AIServiceFactory implements IAIServiceFactory {
   private static instance: AIServiceFactory
   
   // Service instances (lazy-loaded singletons)
-  private _ocrService?: OCRService
   private _embeddingService?: EmbeddingService
   private _textAnalysisService?: TextAnalysisService
   private _vectorStorageService?: VectorStorageService
@@ -35,16 +33,6 @@ export class AIServiceFactory implements IAIServiceFactory {
     return AIServiceFactory.instance
   }
 
-  /**
-   * Get OCR service instance
-   */
-  getOCRService(): OCRService {
-    if (!this._ocrService) {
-      this._ocrService = new OCRService()
-      console.log('[Factory] Initialized OCR service')
-    }
-    return this._ocrService
-  }
 
   /**
    * Get embedding service instance
@@ -85,7 +73,6 @@ export class AIServiceFactory implements IAIServiceFactory {
    */
   async checkAllServicesHealth(): Promise<Record<string, ServiceHealth>> {
     const healthChecks = await Promise.allSettled([
-      this.getOCRService().checkHealth(),
       this.getEmbeddingService().checkHealth(),
       this.getTextAnalysisService().checkHealth(),
       this.getVectorStorageService().checkHealth()
@@ -93,18 +80,8 @@ export class AIServiceFactory implements IAIServiceFactory {
 
     const results: Record<string, ServiceHealth> = {}
 
-    // OCR Service Health
-    const ocrResult = healthChecks[0]
-    results.ocr = ocrResult.status === 'fulfilled' 
-      ? ocrResult.value 
-      : {
-          healthy: false,
-          lastCheck: new Date(),
-          error: ocrResult.reason?.message || 'Health check failed'
-        }
-
     // Embedding Service Health
-    const embeddingResult = healthChecks[1]
+    const embeddingResult = healthChecks[0]
     results.embedding = embeddingResult.status === 'fulfilled'
       ? embeddingResult.value
       : {
@@ -114,7 +91,7 @@ export class AIServiceFactory implements IAIServiceFactory {
         }
 
     // Text Analysis Service Health
-    const textAnalysisResult = healthChecks[2]
+    const textAnalysisResult = healthChecks[1]
     results.textAnalysis = textAnalysisResult.status === 'fulfilled'
       ? textAnalysisResult.value
       : {
@@ -124,7 +101,7 @@ export class AIServiceFactory implements IAIServiceFactory {
         }
 
     // Vector Storage Service Health
-    const vectorStorageResult = healthChecks[3]
+    const vectorStorageResult = healthChecks[2]
     results.vectorStorage = vectorStorageResult.status === 'fulfilled'
       ? vectorStorageResult.value
       : {
@@ -180,7 +157,6 @@ export class AIServiceFactory implements IAIServiceFactory {
    * Reset all service instances (for testing or configuration changes)
    */
   resetServices(): void {
-    this._ocrService = undefined
     this._embeddingService = undefined
     this._textAnalysisService = undefined
     this._vectorStorageService = undefined
@@ -202,8 +178,6 @@ export class AIServiceFactory implements IAIServiceFactory {
 
     // Check required environment variables
     const requiredVars = {
-      OCR_ENDPOINT_URL: 'OCR Service',
-      OCR_MODEL_NAME: 'OCR Service',
       EMBEDDING_ENDPOINT_URL: 'Embedding Service',
       EMBEDDING_MODEL_ID: 'Embedding Service',
       EMBEDDING_API_KEY: 'Embedding Service',
@@ -222,7 +196,7 @@ export class AIServiceFactory implements IAIServiceFactory {
     })
 
     // Check URL validity
-    const urlVars = ['OCR_ENDPOINT_URL', 'EMBEDDING_ENDPOINT_URL', 'SEALION_ENDPOINT_URL', 'QDRANT_URL']
+    const urlVars = ['EMBEDDING_ENDPOINT_URL', 'SEALION_ENDPOINT_URL', 'QDRANT_URL']
     urlVars.forEach(envVar => {
       const url = process.env[envVar]
       if (url) {

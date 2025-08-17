@@ -1,15 +1,21 @@
 /**
- * Document Processing API Endpoint - Synchronous Version
- * This endpoint processes documents synchronously using direct OCR service calls.
- * Robust implementation with improved error handling and JSON fallback parsing.
+ * Document Processing API Endpoint - Trigger.dev Integration
+ * This endpoint triggers OCR processing via Trigger.dev for reliable background execution.
+ * 
+ * Flow:
+ * 1. Fetch and validate document ownership
+ * 2. Update document status to 'processing' for immediate UI feedback
+ * 3. Send event to Trigger.dev to start background OCR job
+ * 4. Return immediate 202 Accepted response
  */
 
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server';
-import { OCRService } from '@/lib/ai-services/ocr-service';
-import { DocumentContext } from '@/lib/ai-services/types';
 import { processRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter';
+import { convertPdfToImage } from '@/lib/pdf-converter';
+import { tasks } from '@trigger.dev/sdk/v3';
+import type { processDocumentOCR } from '@/trigger/process-document-ocr';
 
 export async function POST(
   request: NextRequest,
@@ -48,7 +54,7 @@ export async function POST(
       );
     }
 
-    console.log(`[Document-Processor] Starting synchronous processing for document ${documentId}`);
+    console.log(`[Document-Processor] Starting two-stage processing for document ${documentId}`);
     const supabase = await createAuthenticatedSupabaseClient(userId);
 
     // Step 2: Find and validate the document
@@ -103,129 +109,108 @@ export async function POST(
       );
     }
 
-    // Step 4: Download document from storage (requires service role for storage access)
-    console.log(`[Document-Processor] Downloading document from storage: ${document.storage_path}`);
-    const storageClient = createServiceSupabaseClient();
-    const { data: fileData, error: downloadError } = await storageClient.storage
-      .from('documents')
-      .download(document.storage_path);
+    // Step 4: PREPARATION STAGE - Handle PDF conversion if needed
+    let imageStoragePath = document.storage_path;
+    
+    if (document.file_type === 'application/pdf') {
+      console.log(`[Document-Processor] PDF detected - starting conversion to image`);
+      
+      try {
+        // Download PDF from storage
+        const storageClient = createServiceSupabaseClient();
+        const { data: pdfData, error: downloadError } = await storageClient.storage
+          .from('documents')
+          .download(document.storage_path);
 
-    if (downloadError || !fileData) {
-      console.error('[Document-Processor] Failed to download document:', downloadError);
-      await supabase
-        .from('documents')
-        .update({
-          processing_status: 'failed',
-          error_message: 'Failed to download document from storage',
-          processed_at: new Date().toISOString()
-        })
-        .eq('id', documentId);
+        if (downloadError || !pdfData) {
+          throw new Error(`Failed to download PDF: ${downloadError?.message}`);
+        }
 
-      return NextResponse.json(
-        { success: false, error: 'Failed to access document' },
-        { status: 500 }
-      );
+        // Convert PDF to image using pdf2pic
+        const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
+        const imageBuffer = await convertPdfToImage(pdfBuffer);
+        
+        // Upload converted image to processed-images folder
+        const imageFileName = `processed-images/${documentId}_converted.png`;
+        const { error: uploadError } = await storageClient.storage
+          .from('documents')
+          .upload(imageFileName, imageBuffer, {
+            contentType: 'image/png',
+            upsert: true
+          });
+
+        if (uploadError) {
+          throw new Error(`Failed to upload converted image: ${uploadError.message}`);
+        }
+
+        imageStoragePath = imageFileName;
+        console.log(`[Document-Processor] PDF converted and uploaded to: ${imageStoragePath}`);
+        
+      } catch (conversionError) {
+        console.error('[Document-Processor] PDF conversion failed:', conversionError);
+        
+        // Update document status to failed
+        await supabase
+          .from('documents')
+          .update({
+            processing_status: 'failed',
+            error_message: `PDF conversion failed: ${conversionError instanceof Error ? conversionError.message : 'Unknown error'}`,
+            processed_at: new Date().toISOString()
+          })
+          .eq('id', documentId);
+
+        return NextResponse.json(
+          { success: false, error: 'PDF conversion failed' },
+          { status: 500 }
+        );
+      }
+    } else {
+      console.log(`[Document-Processor] Image document detected - proceeding directly to OCR stage`);
     }
 
-    // Step 5: Convert file to buffer and create context
-    const buffer = Buffer.from(await fileData.arrayBuffer());
-    const context: DocumentContext = {
-      id: document.id,
-      fileName: document.file_name,
-      fileType: document.file_type,
-      fileSize: document.file_size,
-      buffer: buffer,
-      userId: userId
-    };
-
-    // Step 6: Process with OCR service
-    console.log(`[Document-Processor] Processing ${document.file_type} document with OCR`);
-    let ocrResult;
-    let processingRoute = 'direct-image';
+    // Step 5: TRIGGER STAGE - Send event to Trigger.dev for OCR processing
+    console.log(`[Document-Processor] Triggering Trigger.dev job for OCR processing`);
     
     try {
-      const ocrService = new OCRService();
+      await tasks.trigger<typeof processDocumentOCR>("process-document-ocr", {
+        documentId: documentId,
+        imageStoragePath: imageStoragePath
+      });
       
-      // Handle PDF conversion if needed
-      if (document.file_type === 'application/pdf') {
-        console.log(`[Document-Processor] PDF detected - converting to image for OCR processing`);
-        processingRoute = 'pdf-to-image-conversion';
-        
-        // Convert PDF to image and process with OCR
-        ocrResult = await ocrService.processDocument(context);
-      } else {
-        // Direct image processing
-        ocrResult = await ocrService.processDocument(context);
-      }
+      console.log(`[Document-Processor] Successfully triggered Trigger.dev task for document ${documentId}`);
+    } catch (triggerError) {
+      console.error('[Document-Processor] Failed to trigger Trigger.dev task:', triggerError);
       
-      console.log(`[Document-Processor] OCR processing completed successfully`);
-      
-    } catch (ocrError) {
-      console.error('[Document-Processor] OCR processing failed:', ocrError);
-      
-      // Save error to database
+      // Update document status to failed
       await supabase
         .from('documents')
         .update({
           processing_status: 'failed',
-          error_message: ocrError instanceof Error ? ocrError.message : 'OCR processing failed',
+          error_message: 'Failed to start background OCR processing via Trigger.dev',
           processed_at: new Date().toISOString()
         })
         .eq('id', documentId);
-
+        
       return NextResponse.json(
-        { success: false, error: 'Document processing failed' },
+        { success: false, error: 'Failed to start background processing' },
         { status: 500 }
       );
     }
 
-    // Step 7: Calculate average confidence
-    const avgConfidence = ocrResult.entities.length > 0 
-      ? ocrResult.entities.reduce((sum, entity) => sum + (entity.confidence || 0), 0) / ocrResult.entities.length
-      : 0;
-
-    // Step 8: Save results to database
-    console.log(`[Document-Processor] Saving results to database`);
-    const { error: saveError } = await supabase
-      .from('documents')
-      .update({
-        extracted_data: ocrResult,
-        processing_status: 'completed',
-        processed_at: new Date().toISOString(),
-        confidence_score: avgConfidence,
-        processing_metadata: {
-          route: processingRoute,
-          confidence: avgConfidence,
-          entityCount: ocrResult.entities.length,
-          wordCount: ocrResult.metadata?.wordCount || 0
-        },
-      })
-      .eq('id', documentId)
-      .eq('user_id', userId);
-
-    if (saveError) {
-      console.error('[Document-Processor] Failed to save results:', saveError);
-      return NextResponse.json(
-        { success: false, error: 'Failed to save processing results' },
-        { status: 500 }
-      );
-    }
-
-    console.log(`[Document-Processor] Document ${documentId} processed successfully`);
+    // Step 6: Return immediate 202 Accepted response
+    console.log(`[Document-Processor] Document ${documentId} processing started via Trigger.dev`);
     
-    // Step 9: Return success response
     return NextResponse.json({
       success: true,
       data: {
         documentId: documentId,
-        status: 'completed',
-        message: 'Document processed successfully',
-        confidence: avgConfidence,
-        entityCount: ocrResult.entities.length,
-        processingRoute: processingRoute,
-        processedAt: new Date().toISOString()
+        status: 'processing',
+        message: 'Document processing started via Trigger.dev',
+        processingType: document.file_type === 'application/pdf' ? 'PDF converted and OCR queued' : 'Direct OCR queued',
+        processingStarted: new Date().toISOString(),
+        method: 'trigger.dev'
       },
-    });
+    }, { status: 202 }); // 202 Accepted for async processing
 
   } catch (error) {
     console.error('[Document-Processor] Unexpected error:', error);
@@ -246,7 +231,7 @@ export async function POST(
               processed_at: new Date().toISOString()
             })
             .eq('id', documentId)
-            .eq('user_id', userId); // Ensure user can only update their own documents
+            .eq('user_id', userId);
         }
       } catch (updateError) {
         console.error('[Document-Processor] Failed to update error status:', updateError);
@@ -259,4 +244,5 @@ export async function POST(
     );
   }
 }
+
 

@@ -13,6 +13,8 @@ interface UploadState {
   progress: number
   error: string | null
   success: string | null
+  uploadedFiles: number
+  totalFiles: number
 }
 
 interface UploadedDocument {
@@ -25,21 +27,27 @@ interface UploadedDocument {
 
 interface FileUploadZoneProps {
   onUploadSuccess?: (document: UploadedDocument) => void
+  onBatchUploadSuccess?: (documents: UploadedDocument[]) => void
   onUploadStart?: () => void
   autoProcess?: boolean
+  allowMultiple?: boolean
 }
 
 export default function FileUploadZone({ 
-  onUploadSuccess, 
+  onUploadSuccess,
+  onBatchUploadSuccess, 
   onUploadStart,
-  autoProcess = true 
+  autoProcess = true,
+  allowMultiple = false
 }: FileUploadZoneProps) {
   const [dragActive, setDragActive] = useState(false)
   const [uploadState, setUploadState] = useState<UploadState>({
     uploading: false,
     progress: 0,
     error: null,
-    success: null
+    success: null,
+    uploadedFiles: 0,
+    totalFiles: 0
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -64,18 +72,8 @@ export default function FileUploadZone({
     return null
   }
 
-  // Upload file to API
+  // Upload single file to API
   const uploadFile = async (file: File) => {
-    // Notify parent component that upload is starting
-    onUploadStart?.()
-    
-    setUploadState({
-      uploading: true,
-      progress: 0,
-      error: null,
-      success: null
-    })
-
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -90,16 +88,6 @@ export default function FileUploadZone({
       if (result.success) {
         const uploadedDocument = result.data
         
-        setUploadState({
-          uploading: false,
-          progress: 100,
-          error: null,
-          success: `Successfully uploaded "${uploadedDocument.fileName}"`
-        })
-        
-        // Notify parent component of successful upload
-        onUploadSuccess?.(uploadedDocument)
-        
         // Auto-process the document if enabled
         if (autoProcess) {
           setTimeout(async () => {
@@ -113,43 +101,137 @@ export default function FileUploadZone({
           }, 1000) // Small delay to ensure UI updates
         }
         
-        // Clear success message after 3 seconds (reduced for better UX)
-        setTimeout(() => {
-          setUploadState(prev => ({ ...prev, success: null }))
-        }, 3000)
+        return uploadedDocument
       } else {
         throw new Error(result.error || 'Upload failed')
       }
     } catch (error) {
       console.error('Upload error:', error)
+      throw error
+    }
+  }
+
+  // Upload multiple files
+  const uploadFiles = async (files: File[]) => {
+    // Notify parent component that upload is starting
+    onUploadStart?.()
+    
+    setUploadState({
+      uploading: true,
+      progress: 0,
+      error: null,
+      success: null,
+      uploadedFiles: 0,
+      totalFiles: files.length
+    })
+
+    const uploadedDocuments: UploadedDocument[] = []
+    const errors: string[] = []
+
+    for (let i = 0; i < files.length; i++) {
+      try {
+        const uploadedDocument = await uploadFile(files[i])
+        uploadedDocuments.push(uploadedDocument)
+        
+        // Update progress
+        setUploadState(prev => ({
+          ...prev,
+          uploadedFiles: i + 1,
+          progress: ((i + 1) / files.length) * 100
+        }))
+        
+        // Notify parent for single file success
+        onUploadSuccess?.(uploadedDocument)
+      } catch (error) {
+        errors.push(`${files[i].name}: ${error instanceof Error ? error.message : 'Upload failed'}`)
+      }
+    }
+
+    // Finalize upload state
+    if (errors.length === 0) {
+      setUploadState({
+        uploading: false,
+        progress: 100,
+        error: null,
+        success: uploadedDocuments.length === 1 
+          ? `Successfully uploaded "${uploadedDocuments[0].fileName}"`
+          : `Successfully uploaded ${uploadedDocuments.length} files`,
+        uploadedFiles: uploadedDocuments.length,
+        totalFiles: files.length
+      })
+      
+      // Notify parent of batch success
+      if (allowMultiple && uploadedDocuments.length > 1) {
+        onBatchUploadSuccess?.(uploadedDocuments)
+      }
+    } else if (uploadedDocuments.length > 0) {
+      setUploadState({
+        uploading: false,
+        progress: 100,
+        error: `Some uploads failed: ${errors.join(', ')}`,
+        success: `Successfully uploaded ${uploadedDocuments.length} of ${files.length} files`,
+        uploadedFiles: uploadedDocuments.length,
+        totalFiles: files.length
+      })
+      
+      // Notify parent of partial success
+      if (allowMultiple && uploadedDocuments.length > 0) {
+        onBatchUploadSuccess?.(uploadedDocuments)
+      }
+    } else {
       setUploadState({
         uploading: false,
         progress: 0,
-        error: error instanceof Error ? error.message : 'Upload failed',
-        success: null
+        error: `All uploads failed: ${errors.join(', ')}`,
+        success: null,
+        uploadedFiles: 0,
+        totalFiles: files.length
       })
     }
+    
+    // Clear messages after 5 seconds for batch uploads
+    setTimeout(() => {
+      setUploadState(prev => ({ ...prev, success: null, error: null }))
+    }, 5000)
   }
 
   // Handle file selection
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return
 
-    const file = files[0]
-    const validationError = validateFile(file)
-    
-    if (validationError) {
+    // Convert FileList to Array and validate
+    const fileArray = Array.from(files)
+    const validFiles: File[] = []
+    const errors: string[] = []
+
+    // If not allowing multiple, take only the first file
+    const filesToProcess = allowMultiple ? fileArray : [fileArray[0]]
+
+    for (const file of filesToProcess) {
+      const validationError = validateFile(file)
+      if (validationError) {
+        errors.push(`${file.name}: ${validationError}`)
+      } else {
+        validFiles.push(file)
+      }
+    }
+
+    if (errors.length > 0) {
       setUploadState({
         uploading: false,
         progress: 0,
-        error: validationError,
-        success: null
+        error: errors.join('; '),
+        success: null,
+        uploadedFiles: 0,
+        totalFiles: filesToProcess.length
       })
       return
     }
 
-    uploadFile(file)
-  }, [uploadFile])
+    if (validFiles.length > 0) {
+      uploadFiles(validFiles)
+    }
+  }, [allowMultiple])
 
   // Handle drag events
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -210,6 +292,7 @@ export default function FileUploadZone({
           onChange={handleFileInputChange}
           className="hidden"
           disabled={uploadState.uploading}
+          multiple={allowMultiple}
         />
         
         <div className="space-y-4">
@@ -217,8 +300,23 @@ export default function FileUploadZone({
             <>
               <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto" />
               <div>
-                <p className="text-white font-medium">Uploading file...</p>
-                <p className="text-gray-400 text-sm">Please wait while we process your document</p>
+                <p className="text-white font-medium">
+                  {uploadState.totalFiles > 1 ? 'Uploading files...' : 'Uploading file...'}
+                </p>
+                <p className="text-gray-400 text-sm">
+                  {uploadState.totalFiles > 1 
+                    ? `Processing ${uploadState.uploadedFiles} of ${uploadState.totalFiles} files`
+                    : 'Please wait while we process your document'
+                  }
+                </p>
+                {uploadState.totalFiles > 1 && (
+                  <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadState.progress}%` }}
+                    />
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -226,10 +324,14 @@ export default function FileUploadZone({
               <Upload className="w-12 h-12 text-gray-400 mx-auto" />
               <div>
                 <p className="text-white font-medium">
-                  {dragActive ? 'Drop your file here' : 'Click to upload or drag and drop'}
+                  {dragActive 
+                    ? `Drop your ${allowMultiple ? 'files' : 'file'} here` 
+                    : `Click to upload or drag and drop`
+                  }
                 </p>
                 <p className="text-gray-400 text-sm mt-1">
                   JPG, PNG, or PDF files up to 10MB
+                  {allowMultiple && ' (multiple files supported)'}
                 </p>
               </div>
             </>

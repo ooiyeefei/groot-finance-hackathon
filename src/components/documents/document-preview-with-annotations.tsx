@@ -99,73 +99,29 @@ export default function DocumentPreviewWithAnnotations({
     const displayWidth = img.clientWidth
     const displayHeight = img.clientHeight
     
-    // Get OCR coordinate reference dimensions from metadata
+    // Get the OCR reference dimensions from the metadata
     const metadata = document?.extracted_data?.metadata
-    const coordinateReference = metadata?.coordinateReference || metadata?.layoutElements
     
-    // Extract reference dimensions - try multiple possible sources
-    let referenceWidth = displayWidth
-    let referenceHeight = displayHeight
+    // Default reference dimensions: try to get from OCR processing
+    // OCR typically processes images at specific resolutions (like 1024x1400 for PDF conversion)
+    let referenceWidth = img.naturalWidth
+    let referenceHeight = img.naturalHeight
     
-    if (coordinateReference) {
-      // Check if coordinate reference has dimensions
-      if (coordinateReference.width && coordinateReference.height) {
-        referenceWidth = coordinateReference.width
-        referenceHeight = coordinateReference.height
-      } else if (coordinateReference.dimensions) {
-        referenceWidth = coordinateReference.dimensions.width || displayWidth
-        referenceHeight = coordinateReference.dimensions.height || displayHeight
-      }
+    // If we have coordinate reference in metadata, use those dimensions
+    if (metadata?.coordinateReference?.width && metadata?.coordinateReference?.height) {
+      referenceWidth = metadata.coordinateReference.width
+      referenceHeight = metadata.coordinateReference.height
     }
     
-    // If we still don't have reference dimensions, try to get them from image natural size
-    if (referenceWidth === displayWidth && referenceHeight === displayHeight && img.naturalWidth && img.naturalHeight) {
-      referenceWidth = img.naturalWidth
-      referenceHeight = img.naturalHeight
-    }
-    
-    // Calculate proper scaling ratios
+    // Calculate scaling ratios from OCR coordinates to displayed image
     const scaleX = displayWidth / referenceWidth
     const scaleY = displayHeight / referenceHeight
     
-    // Transform coordinates with proper scaling and padding offset
-    // The image container has p-4 (16px) padding that needs to be accounted for
-    const CONTAINER_PADDING = 16 // p-4 = 1rem = 16px
-    
-    // CRITICAL FIX: Account for CSS scale transform applied to the container
-    // The bounding boxes are rendered inside a scaled container, so we need to
-    // apply the inverse scale factor to position them correctly
-    const cssScaleFactor = scale // This is the zoom scale state variable
-    
-    const left = (box.x1 * scaleX / cssScaleFactor) + (CONTAINER_PADDING / cssScaleFactor)
-    const top = (box.y1 * scaleY / cssScaleFactor) + (CONTAINER_PADDING / cssScaleFactor)
-    const width = (box.x2 - box.x1) * scaleX / cssScaleFactor
-    const height = (box.y2 - box.y1) * scaleY / cssScaleFactor
-    
-    // Enhanced debugging - log detailed transformation info
-    console.log(`[BoundingBox DEBUG] Transform calculation:`)
-    console.log(`  - Original box: [${box.x1}, ${box.y1}, ${box.x2}, ${box.y2}] "${box.text}"`)
-    console.log(`  - Display dimensions: ${displayWidth}x${displayHeight}`)
-    console.log(`  - Reference dimensions: ${referenceWidth}x${referenceHeight}`)
-    console.log(`  - Scale factors: ${scaleX.toFixed(4)}x${scaleY.toFixed(4)}`)
-    console.log(`  - CSS zoom scale: ${cssScaleFactor.toFixed(4)}x`)
-    console.log(`  - Image natural size: ${img.naturalWidth}x${img.naturalHeight}`)
-    console.log(`  - Coordinate reference source: ${metadata ? 'metadata' : 'fallback'}`)
-    console.log(`  - Container padding: ${CONTAINER_PADDING}px (adjusted: ${(CONTAINER_PADDING / cssScaleFactor).toFixed(2)}px)`)
-    console.log(`  - Transformed position: left=${left.toFixed(2)}px, top=${top.toFixed(2)}px`)
-    console.log(`  - Transformed size: ${width.toFixed(2)}x${height.toFixed(2)}px`)
-    console.log(`  - Expected on-screen box: [${left}, ${top}, ${left + width}, ${top + height}]`)
-    
-    // Additional debug: check for potential coordinate system mismatches
-    if (referenceWidth !== img.naturalWidth || referenceHeight !== img.naturalHeight) {
-      console.warn(`[BoundingBox WARNING] Coordinate reference (${referenceWidth}x${referenceHeight}) != natural image size (${img.naturalWidth}x${img.naturalHeight})`)
-      console.warn(`  This suggests OCR coordinates may be based on a different image resolution`)
-    }
-    
-    if (scaleX !== scaleY) {
-      console.warn(`[BoundingBox WARNING] Non-uniform scaling detected: scaleX=${scaleX.toFixed(4)} != scaleY=${scaleY.toFixed(4)}`)
-      console.warn(`  This may cause aspect ratio distortion in bounding boxes`)
-    }
+    // Simple coordinate transformation without complex scaling adjustments
+    const left = box.x1 * scaleX
+    const top = box.y1 * scaleY
+    const width = (box.x2 - box.x1) * scaleX
+    const height = (box.y2 - box.y1) * scaleY
     
     const isHovered = hoveredBox === box
     // Use blue color for all bounding boxes

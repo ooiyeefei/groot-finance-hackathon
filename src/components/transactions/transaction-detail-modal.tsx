@@ -37,7 +37,7 @@ export default function TransactionDetailModal({
 
   const calculateLineItemsTotal = () => {
     if (!transaction.line_items || transaction.line_items.length === 0) return 0
-    return transaction.line_items.reduce((sum, item) => sum + item.line_total, 0)
+    return transaction.line_items.reduce((sum, item) => sum + (item.total_amount || item.line_total || 0), 0)
   }
 
   return (
@@ -253,7 +253,7 @@ export default function TransactionDetailModal({
                         <tr key={item.id || index} className="hover:bg-gray-600/20">
                           <td className="p-3">
                             <div>
-                              <div className="text-white font-medium">{item.description}</div>
+                              <div className="text-white font-medium">{item.item_description || item.description}</div>
                               {item.item_category && (
                                 <div className="text-xs text-gray-400 mt-1">
                                   {formatCategoryName(item.item_category)}
@@ -268,9 +268,9 @@ export default function TransactionDetailModal({
                             {formatCurrency(item.unit_price, transaction.original_currency)}
                           </td>
                           <td className="p-3 text-right text-white">
-                            {item.tax_amount > 0 ? (
+                            {(item.tax_amount || 0) > 0 ? (
                               <div>
-                                {formatCurrency(item.tax_amount, transaction.original_currency)}
+                                {formatCurrency(item.tax_amount || 0, transaction.original_currency)}
                                 {item.tax_rate && (
                                   <div className="text-xs text-gray-400">
                                     ({(item.tax_rate * 100).toFixed(1)}%)
@@ -282,7 +282,7 @@ export default function TransactionDetailModal({
                             )}
                           </td>
                           <td className="p-3 text-right text-white font-medium">
-                            {formatCurrency(item.line_total, transaction.original_currency)}
+                            {formatCurrency(item.total_amount || item.line_total || 0, transaction.original_currency)}
                           </td>
                         </tr>
                       ))}

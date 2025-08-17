@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus } from 'lucide-react'
 import { useDocumentPolling } from '@/hooks/use-document-polling'
 import DocumentStatusBadge from './document-status-badge'
@@ -15,6 +16,7 @@ interface DocumentsListProps {
 }
 
 export default function DocumentsList({ onRefresh }: DocumentsListProps) {
+  const router = useRouter()
   const { 
     documents, 
     loading, 
@@ -83,10 +85,8 @@ export default function DocumentsList({ onRefresh }: DocumentsListProps) {
 
   // Handle viewing linked transaction 
   const openTransactionView = (transactionId: string) => {
-    // Navigate to transactions page with the specific transaction focused
-    // For now, we'll redirect to the transactions page
-    // TODO: Could implement a transaction detail modal or direct navigation
-    window.location.href = `/transactions?highlight=${transactionId}`
+    // Navigate to transactions page with the specific transaction focused using Next.js router
+    router.push(`/transactions?highlight=${transactionId}`)
   }
 
   // Close transaction form modal

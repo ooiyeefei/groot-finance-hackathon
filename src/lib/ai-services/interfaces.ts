@@ -3,21 +3,7 @@
  * Service contracts for all AI processing capabilities
  */
 
-import { OCRResult, AnalysisResult, DocumentContext, ServiceHealth } from './types'
-
-// OCR Service Interface
-export interface IOCRService {
-  /**
-   * Process document using OCR endpoint
-   * Handles images and scanned PDFs
-   */
-  processDocument(context: DocumentContext): Promise<OCRResult>
-  
-  /**
-   * Check service health and availability
-   */
-  checkHealth(): Promise<ServiceHealth>
-}
+import { AnalysisResult, ServiceHealth } from './types'
 
 // Embedding Service Interface  
 export interface IEmbeddingService {
@@ -83,7 +69,6 @@ export interface IVectorStorageService {
 
 // Main AI Service Factory Interface
 export interface IAIServiceFactory {
-  getOCRService(): IOCRService
   getEmbeddingService(): IEmbeddingService
   getTextAnalysisService(): ITextAnalysisService
   getVectorStorageService(): IVectorStorageService

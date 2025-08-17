@@ -266,13 +266,18 @@ export function useTransactions(): UseTransactionsReturn {
 }
 
 // Utility functions for currency formatting
-export function formatCurrency(amount: number, currency: SupportedCurrency): string {
+export function formatCurrency(amount: number | null | undefined, currency: SupportedCurrency): string {
+  // Handle null/undefined amounts
+  if (amount === null || amount === undefined || isNaN(amount)) {
+    return `${currency} 0.00`
+  }
+
   try {
     // Use explicit currency code format for better clarity (e.g., "SGD 108.61")
     return `${currency} ${amount.toFixed(2)}`
   } catch {
     // Fallback for unsupported currencies
-    return `${amount.toFixed(2)} ${currency}`
+    return `0.00 ${currency}`
   }
 }
 
