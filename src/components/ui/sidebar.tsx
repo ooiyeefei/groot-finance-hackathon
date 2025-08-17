@@ -11,7 +11,7 @@ export default function Sidebar() {
     { name: 'Dashboard', href: '/', icon: Home },
     { name: 'Documents', href: '/documents', icon: FileText },
     { name: 'Transactions', href: '/transactions', icon: CreditCard },
-    { name: 'AI Assistant', href: '/chat', icon: MessageSquare },
+    { name: 'AI Assistant', href: '/ai-assistant', icon: MessageSquare },
     { name: 'Settings', href: '/settings', icon: Settings },
   ]
   

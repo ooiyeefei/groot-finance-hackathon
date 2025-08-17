@@ -38,7 +38,7 @@ interface UseTransactionsReturn {
 const DEFAULT_FILTERS: TransactionListParams = {
   page: 1,
   limit: 20,
-  sort_by: 'transaction_date',
+  sort_by: 'date',
   sort_order: 'desc'
 }
 
