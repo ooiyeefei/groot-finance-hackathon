@@ -2,8 +2,8 @@
   "dependencies": ["."],
   "graphs": {
     "financial_agent": {
-    "path": "src/lib/langgraph-agent.ts:createFinancialAgent"
-  }
+      "path": "src/lib/secure-langgraph-agent.ts:createSecureFinancialAgent"
+    }
   },
   "env": ".env.local",
   "dockerfile": null,
