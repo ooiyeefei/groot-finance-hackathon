@@ -5,8 +5,9 @@
  * Contains the complete OCR processing logic migrated from Supabase Edge Functions.
  */
 
-import { task } from "@trigger.dev/sdk/v3";
+import { task, tasks } from "@trigger.dev/sdk/v3";
 import { createClient } from '@supabase/supabase-js';
+import type { annotateDocumentImage } from './annotate-document-image';
 
 // Initialize Supabase client with service role key for background processing
 const supabase = createClient(
@@ -42,8 +43,9 @@ function getSystemPrompt(): string {
 **CORE OBJECTIVES:**
 1. **Identify Document Type:** Determine if the document is an invoice, receipt, credit note, etc.
 2. **Extract Key-Value Pairs:** Identify all relevant financial entities. Use clear, semantic labels for each entity. You are not limited to a fixed list; identify any data point that is financially significant.
-3. **Extract Line Items:** If a table of items is present, extract each line item with its description, quantity, unit price, and total price.
-4. **Provide Bounding Boxes:** For every single piece of extracted data (including individual fields within line items), you MUST provide accurate pixel-based bounding box coordinates [x1, y1, x2, y2].
+3. **Extract Line Items:** If a table of items is present, extract EVERY line item with its description, quantity, unit price, and total price. Include ALL rows in the table, not just the first few.
+4. **Provide Bounding Boxes:** For every single piece of extracted data (including individual fields within line items), you MUST provide accurate pixel-based bounding box coordinates [x1, y1, x2, y2]. This is CRITICAL for line items - each field (description, quantity, unit price, total) must have its own bounding box.
+5. **Complete Line Item Coverage:** Ensure ALL line items from tables are captured with individual bounding boxes for each data field. Missing line items are not acceptable.
 
 **MANDATORY JSON OUTPUT STRUCTURE:**
 You MUST return ONLY a single, valid JSON object matching this schema. Do not include any other text, explanations, or markdown.
@@ -60,10 +62,14 @@ You MUST return ONLY a single, valid JSON object matching this schema. Do not in
   ],
   "line_items": [
     {
+      "item_number": { "value": "1", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
+      "item_code": { "value": "ABC123", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "description": { "value": "Item Description", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "quantity": { "value": "1", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
+      "unit_of_measure": { "value": "PCS", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "unit_price": { "value": "50.00", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
-      "line_total": { "value": "50.00", "bbox": [x1, y1, x2, y2], "confidence": 0.9 }
+      "line_total": { "value": "50.00", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
+      "row_bbox": [x1, y1, x2, y2]
     }
   ],
   "full_text": "A full transcription of all text on the document."
@@ -165,6 +171,42 @@ function parseOCRResponse(content: string) {
         if (item && item.value) {
           entities.push({ type: item.label || 'unknown', value: String(item.value), confidence: item.confidence || 0.8 });
           if (item.bbox) boundingBoxes.push({ category: item.label || 'unknown', text: String(item.value), ...mapBbox(item.bbox) });
+        }
+      });
+    }
+
+    // Process line items with individual field bounding boxes
+    if (Array.isArray(parsedJson.line_items)) {
+      parsedJson.line_items.forEach((item: any, index: number) => {
+        if (item) {
+          // Add row-level bounding box if available
+          if (item.row_bbox) {
+            boundingBoxes.push({ 
+              category: `line_item_row_${index + 1}`, 
+              text: `Line Item ${index + 1}`, 
+              ...mapBbox(item.row_bbox) 
+            });
+          }
+
+          // Process individual fields with their own bounding boxes
+          const fields = ['item_number', 'item_code', 'description', 'quantity', 'unit_of_measure', 'unit_price', 'line_total'];
+          fields.forEach(field => {
+            if (item[field] && item[field].value) {
+              entities.push({ 
+                type: `line_item_${field}`, 
+                value: String(item[field].value), 
+                confidence: item[field].confidence || 0.8 
+              });
+              
+              if (item[field].bbox) {
+                boundingBoxes.push({ 
+                  category: `line_item_${field}`, 
+                  text: String(item[field].value), 
+                  ...mapBbox(item[field].bbox) 
+                });
+              }
+            }
+          });
         }
       });
     }
@@ -275,6 +317,27 @@ export const processDocumentOCR = task({
       }
 
       console.log(`✅ Successfully processed and updated document: ${payload.documentId}`);
+
+      // Step 6: Trigger downstream annotation task if bounding boxes exist
+      const boundingBoxes = (ocrResult.metadata as any)?.boundingBoxes || [];
+      if (boundingBoxes.length > 0) {
+        console.log(`🎨 Triggering annotation task for ${boundingBoxes.length} bounding boxes`);
+        
+        try {
+          await tasks.trigger<typeof annotateDocumentImage>("annotate-document-image", {
+            documentId: payload.documentId,
+            imageStoragePath: payload.imageStoragePath,
+            extractedData: ocrResult
+          });
+          console.log(`✅ Annotation task triggered successfully for document: ${payload.documentId}`);
+        } catch (annotationTriggerError) {
+          console.warn(`⚠️ Failed to trigger annotation task:`, annotationTriggerError);
+          // Don't fail the main OCR task if annotation trigger fails
+        }
+      } else {
+        console.log(`📝 No bounding boxes found - skipping annotation for document: ${payload.documentId}`);
+      }
+
       return { success: true, documentId: payload.documentId, avgConfidence };
 
     } catch (error) {

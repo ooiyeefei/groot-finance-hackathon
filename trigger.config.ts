@@ -1,4 +1,5 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
+import { pythonExtension } from "@trigger.dev/python/extension";
 
 export default defineConfig({
   project: "proj_qjsdxdsoxmrgplspwuwj",
@@ -19,4 +20,14 @@ export default defineConfig({
     },
   },
   dirs: ["src/trigger"],
+  build: {
+    extensions: [
+      pythonExtension({
+        // Path to requirements.txt file
+        requirementsFile: "./requirements.txt",
+        // Python scripts to include
+        scripts: ["src/python/**/*.py"],
+      }),
+    ],
+  },
 });

@@ -10,7 +10,9 @@ FinanSEAL is a multimodal financial co-pilot web application designed for Southe
 - **Authentication**: Clerk for user management
 - **Vector Database**: Qdrant Cloud for embedding storage
 - **AI Models**: Hugging Face Inference API (ColNomic Embed Multimodal 3B for OCR)
+- **Background Jobs**: Trigger.dev v3 with Python runtime for long-running tasks
 - **Document Processing**: PDF-to-image conversion with multimodal OCR extraction
+- **Image Annotation**: Python + OpenCV for professional computer vision processing  
 - **Currency APIs**: Real-time exchange rate conversion with caching
 
 ## Key Features
@@ -37,10 +39,18 @@ FinanSEAL is a multimodal financial co-pilot web application designed for Southe
 
 ## External Services Integration
 
+- **Trigger.dev v3**: Background job processing with Python runtime support
 - **Hugging Face API**: ColNomic Embed Multimodal 3B for document OCR
 - **Exchange Rate APIs**: Real-time currency conversion with caching
 - **Supabase Storage**: Secure file upload and document storage
 - **Clerk**: Authentication and user session management
+
+### Trigger.dev Configuration
+- **Runtime**: Node.js with Python extension for computer vision tasks
+- **Task Definitions**: Located in `src/trigger/` directory
+- **Python Scripts**: `src/python/` with OpenCV dependencies in `requirements.txt`
+- **Max Duration**: 3600 seconds for long-running OCR processing
+- **Auto Retry**: 3 attempts with exponential backoff
 
 ## Development Guidelines
 
@@ -70,11 +80,25 @@ These are the fundamental rules that govern all development work in this reposit
 ---
 
 ### Document Processing Workflow
-1. File upload (PDF/images) → Supabase Storage
-2. PDF conversion to image for multimodal processing
-3. ColNomic Embed Multimodal 3B OCR extraction
-4. Structured data mapping with bounding box coordinates
-5. Transaction creation with document linking (`source_document_id`)
+
+#### Client-to-Server Flow
+1. **File Upload**: Client uploads PDF/images → Supabase Storage
+2. **API Trigger**: Client calls `/api/documents/[documentId]/process` 
+3. **Non-blocking Response**: API returns 202 Accepted immediately (no timeout)
+4. **Background Job Trigger**: API uses `tasks.trigger<typeof processDocumentOCR>()` to start Trigger.dev job
+
+#### Trigger.dev Background Processing
+5. **PDF Conversion**: Two-stage hybrid architecture converts PDF to images
+6. **OCR Processing**: ColNomic Embed Multimodal 3B extracts structured data with bounding boxes
+7. **Downstream Annotation**: If bounding boxes exist, triggers `annotate-document-image` task
+8. **Python + OpenCV Annotation**: Professional computer vision processing draws bounding boxes on images
+9. **Storage & Database Update**: Stores annotated images to Supabase with `annotated_${documentId}_` prefix
+
+#### Key Technical Patterns
+- **Fire-and-forget**: Client receives immediate response, no blocking
+- **Task Orchestration**: OCR task automatically triggers annotation task
+- **Industry Standards**: Python + OpenCV for professional image processing
+- **Decoupled Architecture**: Python runtime independent of Next.js app
 
 ### Currency Handling
 - Store original currency/amount alongside home currency conversion
@@ -89,10 +113,21 @@ These are the fundamental rules that govern all development work in this reposit
 - Conditional UI states based on document status
 
 ### Key Technical Patterns
-- Database schema field mapping (`description` → `item_description`)
-- CSS scale transform handling for bounding box positioning
-- State management with automatic UI refresh after operations
-- Error handling with detailed logging for debugging
+- **Trigger.dev v3 Syntax**: `tasks.trigger<typeof taskName>("task-id", payload)` 
+- **Batch Processing**: `tasks.batchTrigger()` for multiple documents
+- **Python Integration**: `python.runScript()` with OpenCV for image processing
+- **Task Orchestration**: Downstream task triggers (`OCR → Annotation`)
+- **Database schema field mapping** (`description` → `item_description`)
+- **CSS scale transform handling** for bounding box positioning
+- **State management** with automatic UI refresh after operations
+- **Error handling** with detailed logging for debugging
+
+### Background Job Architecture Files
+- `src/trigger/process-document-ocr.ts`: Main OCR processing task definition
+- `src/trigger/annotate-document-image.ts`: Python + OpenCV annotation task
+- `src/python/annotate_image.py`: Professional image annotation script
+- `trigger.config.ts`: Python extension configuration
+- `requirements.txt`: OpenCV and computer vision dependencies
 
 ### Build Requirements
 - Mandatory `npm run build` validation before completion

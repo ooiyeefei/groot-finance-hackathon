@@ -102,26 +102,37 @@ export default function DocumentPreviewWithAnnotations({
     // Get the OCR reference dimensions from the metadata
     const metadata = document?.extracted_data?.metadata
     
-    // Default reference dimensions: try to get from OCR processing
-    // OCR typically processes images at specific resolutions (like 1024x1400 for PDF conversion)
+    // OCR coordinate system: Use original image dimensions as reference
+    // This ensures proper scaling from OCR coordinates to display coordinates
     let referenceWidth = img.naturalWidth
     let referenceHeight = img.naturalHeight
     
-    // If we have coordinate reference in metadata, use those dimensions
+    // Check if we have coordinate reference from OCR processing
     if (metadata?.coordinateReference?.width && metadata?.coordinateReference?.height) {
       referenceWidth = metadata.coordinateReference.width
       referenceHeight = metadata.coordinateReference.height
+      console.log(`[BBox] Using OCR reference dimensions: ${referenceWidth}x${referenceHeight}`)
+    } else {
+      console.log(`[BBox] Using natural image dimensions: ${referenceWidth}x${referenceHeight}`)
     }
     
-    // Calculate scaling ratios from OCR coordinates to displayed image
+    // Calculate scaling ratios accounting for aspect ratio preservation
     const scaleX = displayWidth / referenceWidth
     const scaleY = displayHeight / referenceHeight
     
-    // Simple coordinate transformation without complex scaling adjustments
-    const left = box.x1 * scaleX
-    const top = box.y1 * scaleY
-    const width = (box.x2 - box.x1) * scaleX
-    const height = (box.y2 - box.y1) * scaleY
+    // Apply coordinate transformation with proper scaling
+    let left = box.x1 * scaleX
+    let top = box.y1 * scaleY
+    let width = (box.x2 - box.x1) * scaleX
+    let height = (box.y2 - box.y1) * scaleY
+    
+    // Handle edge cases: ensure bounding boxes stay within image bounds
+    left = Math.max(0, Math.min(left, displayWidth - width))
+    top = Math.max(0, Math.min(top, displayHeight - height))
+    width = Math.min(width, displayWidth - left)
+    height = Math.min(height, displayHeight - top)
+    
+    console.log(`[BBox] Transform: [${box.x1},${box.y1},${box.x2},${box.y2}] → [${left.toFixed(1)},${top.toFixed(1)},${width.toFixed(1)},${height.toFixed(1)}]`)
     
     const isHovered = hoveredBox === box
     // Use blue color for all bounding boxes
