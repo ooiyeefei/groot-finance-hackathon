@@ -122,6 +122,7 @@ async function processDocumentWithOCR(imageUrl: string, endpoint: string, modelN
     };
 
     console.log(`[OCR] Processing image from URL. Making request to: ${endpoint}/chat/completions`);
+    console.log(`[OCR] Model parameters: temperature=${requestBody.temperature}, top_p=${requestBody.top_p}, repetition_penalty=${requestBody.repetition_penalty}`);
     console.log(`[OCR] Request payload:`, JSON.stringify(requestBody, null, 2));
     console.log(`[OCR] Timeout settings: 15 minutes main, 1-15 minute retry range with 3 attempts`);
     
