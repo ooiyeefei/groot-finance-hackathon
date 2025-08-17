@@ -149,6 +149,19 @@ except Exception as e:
 
       console.log(`✅ Image uploaded successfully to: ${imagePath}`);
 
+      // Step 3.5: Update document record with converted image path
+      console.log(`💾 Updating document record with converted image path`);
+      const { error: updateError } = await supabase.from('documents').update({
+        converted_image_path: imagePath
+      }).eq('id', payload.documentId);
+
+      if (updateError) {
+        console.warn(`⚠️ Failed to update document with converted image path: ${updateError.message}`);
+        // Don't throw error - continue with OCR processing
+      } else {
+        console.log(`✅ Document record updated with converted image path`);
+      }
+
       // Step 4: Trigger OCR processing task with the image path
       console.log(`🔗 Triggering OCR processing for converted image`);
       await processDocumentOCR.trigger({
