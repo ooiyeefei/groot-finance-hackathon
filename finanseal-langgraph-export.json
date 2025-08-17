@@ -1,0 +1,274 @@
+{
+  "title": "FinanSEAL Agentic RAG System",
+  "description": "LangGraph implementation for financial co-pilot with document search and transaction lookup capabilities",
+  "metadata": {
+    "version": "1.0.0",
+    "created": "2025-01-16",
+    "framework": "LangGraph",
+    "models": ["SEA-LION", "ColNomic Embed Multimodal 3B"],
+    "tools": ["search_documents", "lookup_transactions"]
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "START",
+        "type": "start",
+        "label": "START",
+        "description": "Entry point for the agent workflow",
+        "position": { "x": 100, "y": 100 }
+      },
+      {
+        "id": "callModel",
+        "type": "node",
+        "label": "Call Model",
+        "description": "SEA-LION inference with prompt-guided tool calling system",
+        "implementation": "async function callModel(state: AgentState)",
+        "details": {
+          "model": "SEA-LION via Hugging Face Inference API",
+          "purpose": "Main reasoning and response generation",
+          "input": "AgentState with message history",
+          "output": "AI response with potential tool calls",
+          "language_support": ["en", "th", "id"],
+          "system_prompt": "Multi-language financial co-pilot with tool access"
+        },
+        "position": { "x": 300, "y": 100 }
+      },
+      {
+        "id": "executeTool",
+        "type": "node", 
+        "label": "Execute Tool",
+        "description": "Tool orchestration and execution hub",
+        "implementation": "async function executeTool(state: AgentState)",
+        "details": {
+          "available_tools": [
+            {
+              "name": "search_documents",
+              "description": "RAG-powered document search using Qdrant vector database",
+              "data_source": "Qdrant Cloud vector database",
+              "method": "REST API",
+              "input": "Natural language query",
+              "process": [
+                "Convert query to embedding via ColNomic Embed",
+                "Similarity search in Qdrant collection", 
+                "Return top 5 relevant document chunks with metadata"
+              ]
+            },
+            {
+              "name": "lookup_transactions", 
+              "description": "SQL-based transaction queries with natural language interface",
+              "data_source": "Supabase PostgreSQL transactions table",
+              "method": "Supabase JavaScript client",
+              "input": "Natural language financial query",
+              "process": [
+                "Convert query to SQL using SEA-LION",
+                "Execute against transactions table",
+                "Format and return transaction records"
+              ]
+            }
+          ]
+        },
+        "position": { "x": 500, "y": 200 }
+      },
+      {
+        "id": "END",
+        "type": "end",
+        "label": "END", 
+        "description": "Final response delivered to user",
+        "position": { "x": 300, "y": 300 }
+      }
+    ],
+    "edges": [
+      {
+        "source": "START",
+        "target": "callModel",
+        "type": "default",
+        "label": "Initialize",
+        "description": "Agent receives user message and conversation context"
+      },
+      {
+        "source": "callModel",
+        "target": "executeTool", 
+        "type": "conditional",
+        "label": "Tool Needed",
+        "condition": "shouldContinue() === 'executeTool'",
+        "description": "AI message contains tool calls requiring execution",
+        "trigger": "lastMessage.tool_calls?.length > 0"
+      },
+      {
+        "source": "callModel",
+        "target": "END",
+        "type": "conditional", 
+        "label": "Final Response",
+        "condition": "shouldContinue() === '__end__'",
+        "description": "AI provides final response without tool usage"
+      },
+      {
+        "source": "executeTool",
+        "target": "callModel",
+        "type": "default",
+        "label": "Tool Results",
+        "description": "Tool execution results fed back to model for processing"
+      }
+    ]
+  },
+  "state_schema": {
+    "AgentState": {
+      "messages": {
+        "type": "BaseMessage[]",
+        "description": "Chat history in LangChain format",
+        "reducer": "messagesReducer - appends new messages to history"
+      },
+      "language": {
+        "type": "string",
+        "description": "User's preferred language (en/th/id)", 
+        "default": "en"
+      },
+      "userId": {
+        "type": "string", 
+        "description": "Current authenticated user identifier",
+        "source": "Clerk authentication"
+      },
+      "conversationId": {
+        "type": "string",
+        "description": "Active conversation UUID",
+        "source": "Supabase conversations table"
+      }
+    }
+  },
+  "routing_logic": {
+    "shouldContinue": {
+      "description": "Conditional router determining next step based on AI response",
+      "implementation": "function shouldContinue(state: AgentState): 'executeTool' | '__end__'",
+      "conditions": [
+        {
+          "condition": "lastMessage._getType() === 'ai' && lastMessage.tool_calls?.length",
+          "route": "executeTool",
+          "description": "AI wants to use tools"
+        },
+        {
+          "condition": "else", 
+          "route": "__end__",
+          "description": "Final response ready"
+        }
+      ]
+    }
+  },
+  "tool_calling_mechanism": {
+    "approach": "Prompt-guided tool calling",
+    "reason": "SEA-LION doesn't have native function calling support",
+    "system_prompt_excerpt": "Available tools:\n- search_documents(query: string): Search financial documents\n- lookup_transactions(filters: object): Find transactions\n\nWhen you need to use a tool, respond with JSON:\n{\"tool\": \"tool_name\", \"parameters\": {...}}",
+    "parsing": "Custom JSON parsing in executeTool node"
+  },
+  "data_flow": {
+    "persistence_strategy": {
+      "langgraph_state": {
+        "scope": "Single request/conversation turn", 
+        "duration": "Temporary (request lifecycle)",
+        "purpose": "Workflow coordination & reasoning",
+        "storage": "In-memory"
+      },
+      "supabase_storage": {
+        "scope": "Persistent across sessions",
+        "duration": "Permanent", 
+        "purpose": "Chat history, user preferences, financial records",
+        "tables": ["conversations", "messages", "transactions", "documents"]
+      }
+    },
+    "rag_pipeline": {
+      "document_ingestion": [
+        "User uploads invoice/receipt",
+        "ColNomic Embed Multimodal 3B processes document", 
+        "Structured data stored in documents.extracted_data",
+        "Text chunks embedded and stored in Qdrant"
+      ],
+      "query_processing": [
+        "User asks question about documents",
+        "Query converted to embedding",
+        "Similarity search in Qdrant", 
+        "Relevant chunks returned to agent"
+      ]
+    }
+  },
+  "external_integrations": {
+    "qdrant_cloud": {
+      "purpose": "Vector storage and similarity search",
+      "collection": "financial_documents",
+      "embedding_model": "ColNomic Embed Multimodal 3B",
+      "similarity_metric": "Cosine similarity",
+      "api_endpoint": "${QDRANT_URL}/collections/${COLLECTION}/points/search"
+    },
+    "supabase": {
+      "purpose": "Relational data storage and user management",
+      "tables": ["conversations", "messages", "transactions", "line_items", "documents", "users"],
+      "security": "Row Level Security (RLS) policies",
+      "client": "Supabase JavaScript client"
+    },
+    "sea_lion": {
+      "purpose": "Conversational AI and text-to-SQL generation",
+      "endpoint": "Hugging Face Inference API",
+      "specialization": "Southeast Asian languages and context",
+      "use_cases": ["Chat responses", "Natural language to SQL", "Multi-language support"]
+    }
+  },
+  "execution_flow_example": {
+    "user_query": "What expenses did I have last month for office supplies?",
+    "steps": [
+      {
+        "node": "callModel",
+        "action": "SEA-LION receives query and determines tool needed",
+        "output": "{\"tool\": \"lookup_transactions\", \"parameters\": {\"query\": \"expenses last month office supplies\"}}"
+      },
+      {
+        "node": "executeTool", 
+        "action": "Execute lookup_transactions tool",
+        "sub_steps": [
+          "Convert 'expenses last month office supplies' to SQL using SEA-LION",
+          "Execute SQL query against Supabase transactions table",
+          "Format results with amounts, dates, vendors"
+        ],
+        "output": "Found 3 transactions: Office Depot $45.67, Staples $23.45, Amazon $67.89"
+      },
+      {
+        "node": "callModel",
+        "action": "SEA-LION processes tool results and generates final response", 
+        "output": "I found 3 office supply expenses from last month totaling $137.01..."
+      },
+      {
+        "node": "END",
+        "action": "Response delivered to user and saved to Supabase"
+      }
+    ]
+  },
+  "configuration": {
+    "environment_variables": [
+      "SEALION_ENDPOINT_URL", 
+      "SEALION_MODEL_ID",
+      "QDRANT_URL",
+      "QDRANT_API_KEY", 
+      "QDRANT_COLLECTION_NAME",
+      "EMBEDDING_ENDPOINT_URL",
+      "EMBEDDING_MODEL_ID",
+      "SUPABASE_URL",
+      "SUPABASE_ANON_KEY"
+    ],
+    "models": {
+      "sea_lion": {
+        "provider": "Hugging Face",
+        "specialization": "Southeast Asian languages",
+        "use_case": "Conversational AI and reasoning"
+      },
+      "colnomic_embed": {
+        "provider": "Hugging Face", 
+        "specialization": "Multimodal document understanding",
+        "use_case": "Document processing and embedding generation"
+      }
+    }
+  },
+  "security_considerations": {
+    "authentication": "Clerk user sessions validated in API routes",
+    "authorization": "Supabase RLS policies restrict data access by user_id", 
+    "data_isolation": "Multi-tenant architecture with business_id separation",
+    "input_validation": "SQL injection prevention in text-to-SQL conversion",
+    "prompt_injection": "System prompt boundaries and input sanitization"
+  }
+}
