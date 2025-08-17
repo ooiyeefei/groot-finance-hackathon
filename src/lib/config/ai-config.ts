@@ -13,7 +13,7 @@ export interface AIConfig {
     modelId: string
     apiKey: string
   }
-  seaLion: {
+  chat: {
     endpointUrl: string
     modelId: string
   }
@@ -32,8 +32,8 @@ function validateConfig(): void {
     'EMBEDDING_ENDPOINT_URL',
     'EMBEDDING_MODEL_ID',
     'EMBEDDING_API_KEY',
-    'SEALION_ENDPOINT_URL',
-    'SEALION_MODEL_ID',
+    'CHAT_MODEL_ENDPOINT_URL',
+    'CHAT_MODEL_MODEL_ID',
     'QDRANT_URL',
     'QDRANT_API_KEY'
   ]
@@ -73,9 +73,9 @@ export const aiConfig: AIConfig = {
     modelId: process.env.EMBEDDING_MODEL_ID!,
     apiKey: process.env.EMBEDDING_API_KEY!
   },
-  seaLion: {
-    endpointUrl: process.env.SEALION_ENDPOINT_URL!,
-    modelId: process.env.SEALION_MODEL_ID!
+  chat: {
+    endpointUrl: process.env.CHAT_MODEL_ENDPOINT_URL!,
+    modelId: process.env.CHAT_MODEL_MODEL_ID!
   },
   qdrant: {
     url: process.env.QDRANT_URL!,
@@ -98,7 +98,7 @@ export function checkAIConfigHealth(): { healthy: boolean; issues: string[] } {
   try {
     new URL(aiConfig.ocr.endpointUrl)
     new URL(aiConfig.embedding.endpointUrl)
-    new URL(aiConfig.seaLion.endpointUrl)
+    new URL(aiConfig.chat.endpointUrl)
     new URL(aiConfig.qdrant.url)
   } catch (error) {
     issues.push('Invalid URL format in AI endpoint configuration')

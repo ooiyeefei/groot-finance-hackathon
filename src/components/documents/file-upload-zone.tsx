@@ -90,15 +90,22 @@ export default function FileUploadZone({
         
         // Auto-process the document if enabled
         if (autoProcess) {
-          setTimeout(async () => {
-            try {
-              await fetch(`/api/documents/${uploadedDocument.id}/process`, {
-                method: 'POST'
-              })
-            } catch (error) {
-              console.error('Auto-processing failed:', error)
+          try {
+            // Immediately trigger processing without delay
+            const processResponse = await fetch(`/api/documents/${uploadedDocument.id}/process`, {
+              method: 'POST'
+            })
+            
+            if (processResponse.ok) {
+              console.log('Auto-processing triggered successfully for:', uploadedDocument.id)
+              // Update the returned document status to processing
+              uploadedDocument.status = 'processing'
+            } else {
+              console.error('Auto-processing failed to start')
             }
-          }, 1000) // Small delay to ensure UI updates
+          } catch (error) {
+            console.error('Auto-processing failed:', error)
+          }
         }
         
         return uploadedDocument

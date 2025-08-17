@@ -22,21 +22,14 @@ export default async function Dashboard() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <HeaderWithUser />
+        <HeaderWithUser 
+          title="Dashboard" 
+          subtitle={`Welcome to FinanSEAL${user?.firstName ? `, ${user.firstName}` : ''} - Your intelligent financial co-pilot`}
+        />
         
         {/* Main Content Area */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 overflow-auto p-6">
           <div className="max-w-7xl mx-auto space-y-8">
-            {/* Welcome Section */}
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
-              <h2 className="text-3xl font-bold text-white mb-4">
-                Welcome to FinanSEAL{user?.firstName && `, ${user.firstName}`}
-              </h2>
-              <p className="text-gray-400 text-lg mb-6">
-                Your intelligent financial co-pilot for Southeast Asian businesses
-              </p>
-            </div>
-
             {/* Transaction Summary Dashboard */}
             <TransactionSummaryCards />
 

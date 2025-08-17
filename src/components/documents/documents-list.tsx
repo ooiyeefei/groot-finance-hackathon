@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, forwardRef, useImperativeHandle } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus } from 'lucide-react'
 import { useDocumentPolling } from '@/hooks/use-document-polling'
@@ -15,7 +15,11 @@ interface DocumentsListProps {
   onRefresh?: () => void
 }
 
-export default function DocumentsList({ onRefresh }: DocumentsListProps) {
+interface DocumentsListRef {
+  refreshDocuments: () => Promise<void>
+}
+
+const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefresh }, ref) => {
   const router = useRouter()
   const { 
     documents, 
@@ -30,6 +34,13 @@ export default function DocumentsList({ onRefresh }: DocumentsListProps) {
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [transactionFormDocument, setTransactionFormDocument] = useState<string | null>(null)
+
+  // Expose refresh method to parent via ref
+  useImperativeHandle(ref, () => ({
+    refreshDocuments: async () => {
+      await refreshDocuments()
+    }
+  }), [refreshDocuments])
 
   // Handle refresh from parent component
   const handleRefresh = async () => {
@@ -401,4 +412,8 @@ export default function DocumentsList({ onRefresh }: DocumentsListProps) {
       )}
     </div>
   )
-}
+})
+
+DocumentsList.displayName = 'DocumentsList'
+
+export default DocumentsList

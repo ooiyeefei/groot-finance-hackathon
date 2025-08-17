@@ -96,31 +96,22 @@ export default function DocumentPreviewWithAnnotations({
     if (!imageLoaded || !imageRef.current) return {}
     
     const img = imageRef.current
+    const naturalWidth = img.naturalWidth
+    const naturalHeight = img.naturalHeight
     const displayWidth = img.clientWidth
     const displayHeight = img.clientHeight
     
-    // Get the OCR reference dimensions from the metadata
-    const metadata = document?.extracted_data?.metadata
-    
-    // OCR coordinate system: Use original image dimensions as reference
-    // This ensures proper scaling from OCR coordinates to display coordinates
-    let referenceWidth = img.naturalWidth
-    let referenceHeight = img.naturalHeight
-    
-    // Check if we have coordinate reference from OCR processing
-    if (metadata?.coordinateReference?.width && metadata?.coordinateReference?.height) {
-      referenceWidth = metadata.coordinateReference.width
-      referenceHeight = metadata.coordinateReference.height
-      console.log(`[BBox] Using OCR reference dimensions: ${referenceWidth}x${referenceHeight}`)
-    } else {
-      console.log(`[BBox] Using natural image dimensions: ${referenceWidth}x${referenceHeight}`)
+    // Prevent division by zero
+    if (naturalWidth === 0 || naturalHeight === 0) {
+      console.warn('[BBox] Natural image dimensions are zero, skipping bounding box')
+      return {}
     }
     
-    // Calculate scaling ratios accounting for aspect ratio preservation
-    const scaleX = displayWidth / referenceWidth
-    const scaleY = displayHeight / referenceHeight
+    // Calculate scale factors from OCR coordinates to display coordinates
+    const scaleX = displayWidth / naturalWidth
+    const scaleY = displayHeight / naturalHeight
     
-    // Apply coordinate transformation with proper scaling
+    // Transform coordinates with proper scaling
     let left = box.x1 * scaleX
     let top = box.y1 * scaleY
     let width = (box.x2 - box.x1) * scaleX
@@ -132,7 +123,7 @@ export default function DocumentPreviewWithAnnotations({
     width = Math.min(width, displayWidth - left)
     height = Math.min(height, displayHeight - top)
     
-    console.log(`[BBox] Transform: [${box.x1},${box.y1},${box.x2},${box.y2}] → [${left.toFixed(1)},${top.toFixed(1)},${width.toFixed(1)},${height.toFixed(1)}]`)
+    console.log(`[BBox] Scaled mapping: [${box.x1},${box.y1},${box.x2},${box.y2}] × [${scaleX.toFixed(3)},${scaleY.toFixed(3)}] → [${left.toFixed(1)},${top.toFixed(1)},${width.toFixed(1)},${height.toFixed(1)}]`)
     
     const isHovered = hoveredBox === box
     // Use blue color for all bounding boxes

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { SupportedLanguage } from '@/lib/translations'
-import { createFinancialAgent, AgentState } from '@/lib/langgraph-agent'
+import { createSecureFinancialAgent, SecureAgentState } from '@/lib/secure-langgraph-agent'
 import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages'
 
 interface ChatRequest {
@@ -80,19 +80,24 @@ export async function POST(request: NextRequest) {
     // Add the new user message
     conversationHistory.push(new HumanMessage(message))
 
-    // Create the agent state
-    const initialState: AgentState = {
-      messages: conversationHistory,
-      language: language,
+    // Create secure agent state with proper user context
+    const userContext = {
       userId: userId,
-      conversationId: currentConversationId || 'default'
+      conversationId: currentConversationId || undefined
     }
 
-    console.log(`[Chat API] Invoking LangGraph agent with ${initialState.messages.length} messages`)
+    const initialState: SecureAgentState = {
+      messages: conversationHistory,
+      language: language,
+      userContext: userContext,
+      securityValidated: false
+    }
 
-    // Create and invoke the LangGraph agent
-    const agent = createFinancialAgent()
-    const result = await agent.invoke(initialState as any)
+    console.log(`[Chat API] Invoking secure LangGraph agent with ${initialState.messages.length} messages for user ${userId}`)
+
+    // Create and invoke the secure LangGraph agent
+    const agent = createSecureFinancialAgent()
+    const result = await agent.invoke(initialState)
 
     console.log('[Chat API] LangGraph agent completed')
 

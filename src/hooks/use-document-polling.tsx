@@ -197,7 +197,7 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
       if (hasProcessingDocuments) {
         fetchDocuments()
       }
-    }, 10000) // Poll every 10 seconds for OCR tasks (5-8 min processing)
+    }, 3000) // Poll every 3 seconds for more responsive status updates
   }, [documents, fetchDocuments])
 
   // Stop polling
@@ -216,7 +216,7 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
   // Start/stop polling based on processing documents
   useEffect(() => {
     const hasProcessingDocuments = documents.some(doc => 
-      doc.processing_status === 'processing'
+      doc.processing_status === 'processing' || doc.processing_status === 'ocr_processing'
     )
     
     if (hasProcessingDocuments) {

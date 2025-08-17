@@ -14,11 +14,12 @@ interface Message {
 interface ChatInterfaceProps {
   conversationId?: string
   onConversationCreated?: (conversationId: string) => void
+  initialMessages?: Message[]
 }
 
-export default function ChatInterface({ conversationId, onConversationCreated }: ChatInterfaceProps) {
+export default function ChatInterface({ conversationId, onConversationCreated, initialMessages }: ChatInterfaceProps) {
   const { language, t } = useLanguage()
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(initialMessages || [])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>(conversationId)
@@ -32,6 +33,14 @@ export default function ChatInterface({ conversationId, onConversationCreated }:
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Update messages when initialMessages changes (conversation switch)
+  useEffect(() => {
+    if (initialMessages) {
+      setMessages(initialMessages)
+      setCurrentConversationId(conversationId)
+    }
+  }, [initialMessages, conversationId])
 
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return

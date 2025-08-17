@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import FileUploadZone from './file-upload-zone'
 import DocumentsList from './documents-list'
 
 export default function DocumentsContainer() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const documentsListRef = useRef<{ refreshDocuments: () => Promise<void> } | null>(null)
 
   const handleUploadSuccess = useCallback((document: {
     id: string
@@ -14,9 +15,21 @@ export default function DocumentsContainer() {
     fileType: string
     status: string
   }) => {
-    console.log('Document uploaded successfully:', document)
-    // Trigger a refresh of the documents list
-    setRefreshTrigger(prev => prev + 1)
+    console.log('Document uploaded and processing triggered:', document)
+    
+    // If document is auto-processing, trigger immediate refresh to show processing status
+    if (document.status === 'processing') {
+      // Trigger immediate refresh to show the processing status
+      if (documentsListRef.current) {
+        documentsListRef.current.refreshDocuments()
+      } else {
+        // Fallback to refresh trigger
+        setRefreshTrigger(prev => prev + 1)
+      }
+    } else {
+      // Standard refresh for pending documents
+      setRefreshTrigger(prev => prev + 1)
+    }
   }, [])
 
   const handleUploadStart = useCallback(() => {
@@ -28,23 +41,25 @@ export default function DocumentsContainer() {
   }, [])
 
   return (
-    <>
+    <div className="space-y-8">
       {/* File Upload Zone */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+      <div>
         <FileUploadZone 
           onUploadSuccess={handleUploadSuccess}
           onUploadStart={handleUploadStart}
           autoProcess={true}
+          allowMultiple={true}
         />
       </div>
       
       {/* Documents List */}
-      <div className="mt-8 bg-gray-800 rounded-lg border border-gray-700 p-8">
+      <div>
         <DocumentsList 
           key={refreshTrigger} // This will force a re-render when refreshTrigger changes
           onRefresh={handleDocumentsRefresh}
+          ref={documentsListRef}
         />
       </div>
-    </>
+    </div>
   )
 }

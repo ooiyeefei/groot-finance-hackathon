@@ -5,9 +5,8 @@
  * Contains the complete OCR processing logic migrated from Supabase Edge Functions.
  */
 
-import { task, tasks, retry } from "@trigger.dev/sdk/v3";
+import { task, retry } from "@trigger.dev/sdk/v3";
 import { createClient } from '@supabase/supabase-js';
-import type { annotateDocumentImage } from './annotate-document-image';
 
 // Initialize Supabase client with service role key for background processing
 const supabase = createClient(
@@ -116,7 +115,10 @@ async function processDocumentWithOCR(imageUrl: string, endpoint: string, modelN
             { type: "image_url", image_url: { url: imageUrl } }
           ]
         }
-      ]
+      ],
+      temperature: 0.6,
+      top_p: 0.95,
+      repetition_penalty: 1.05
     };
 
     console.log(`[OCR] Processing image from URL. Making request to: ${endpoint}/chat/completions`);
@@ -561,40 +563,19 @@ export const processDocumentOCR = task({
 
       console.log(`✅ Successfully processed and updated document: ${payload.documentId}`);
 
-      // Step 6: Trigger downstream annotation task if bounding boxes exist
+      // Step 6: Log bounding box availability for frontend annotation rendering
       const boundingBoxes = (ocrResult.metadata as any)?.boundingBoxes || [];
-      console.log(`[Annotation] Checking bounding boxes for document: ${payload.documentId}`);
-      console.log(`[Annotation] Total bounding boxes found: ${boundingBoxes.length}`);
+      console.log(`[Frontend Annotation] Bounding boxes available for frontend rendering: ${boundingBoxes.length}`);
       
       if (boundingBoxes.length > 0) {
-        console.log(`[Annotation] Sample bounding boxes:`, boundingBoxes.slice(0, 3).map((bb: any) => ({
+        console.log(`[Frontend Annotation] Sample bounding boxes for hover rendering:`, boundingBoxes.slice(0, 3).map((bb: any) => ({
           category: bb.category,
           text: bb.text?.substring(0, 20) + '...',
           coords: `(${bb.x1},${bb.y1})-(${bb.x2},${bb.y2})`
         })));
-        
-        console.log(`🎨 Triggering annotation task for ${boundingBoxes.length} bounding boxes`);
-        
-        try {
-          await tasks.trigger<typeof annotateDocumentImage>("annotate-document-image", {
-            documentId: payload.documentId,
-            imageStoragePath: payload.imageStoragePath,
-            extractedData: ocrResult
-          });
-          console.log(`✅ Annotation task triggered successfully for document: ${payload.documentId}`);
-        } catch (annotationTriggerError) {
-          console.warn(`⚠️ Failed to trigger annotation task:`, annotationTriggerError);
-          // Don't fail the main OCR task if annotation trigger fails
-        }
+        console.log(`✅ Frontend annotation system will handle ${boundingBoxes.length} bounding boxes on hover/click`);
       } else {
-        console.log(`📝 No bounding boxes found - skipping annotation for document: ${payload.documentId}`);
-        console.log(`[Annotation] OCR result structure:`, {
-          hasDocumentSummary: !!(ocrResult as any).document_summary,
-          hasFinancialEntities: !!(ocrResult as any).financial_entities?.length,
-          hasLineItems: !!(ocrResult as any).line_items?.length,
-          hasMetadata: !!ocrResult.metadata,
-          hasBoundingBoxes: !!(ocrResult.metadata as any)?.boundingBoxes
-        });
+        console.log(`📝 No bounding boxes found - frontend annotation system will have no data to render`);
       }
 
       return { success: true, documentId: payload.documentId, avgConfidence };

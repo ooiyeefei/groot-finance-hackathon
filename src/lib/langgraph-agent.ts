@@ -136,13 +136,13 @@ Database Schema:
 
 Return only the SQL query, no explanations.`;
 
-      const response = await fetch(`${aiConfig.seaLion.endpointUrl}/chat/completions`, {
+      const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: aiConfig.seaLion.modelId,
+          model: aiConfig.chat.modelId,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Convert this to SQL: ${naturalLanguageQuery}` }
@@ -214,13 +214,13 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
   ];
 
   try {
-    const response = await fetch(`${aiConfig.seaLion.endpointUrl}/chat/completions`, {
+    const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: aiConfig.seaLion.modelId,
+        model: aiConfig.chat.modelId,
         messages,
         max_tokens: 1000,
         temperature: 0.3

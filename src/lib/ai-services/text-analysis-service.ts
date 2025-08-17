@@ -12,8 +12,8 @@ export class TextAnalysisService implements ITextAnalysisService {
   private readonly modelId: string
   
   constructor() {
-    this.endpoint = aiConfig.seaLion.endpointUrl
-    this.modelId = aiConfig.seaLion.modelId
+    this.endpoint = aiConfig.chat.endpointUrl
+    this.modelId = aiConfig.chat.modelId
   }
 
   async extractFinancialData(text: string): Promise<AnalysisResult> {

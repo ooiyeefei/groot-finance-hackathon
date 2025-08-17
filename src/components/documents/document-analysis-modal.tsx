@@ -124,38 +124,55 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
     category: string
     text: string
   } | null>(null)
+  const [hoveredEntity, setHoveredEntity] = useState<string | null>(null)
 
   // Fetch document image URL on component mount
   useEffect(() => {
     const fetchDocumentImage = async () => {
       try {
-        // For PDF documents, check if converted image exists
+        console.log('[Document Preview] Fetching image for document:', {
+          id: document.id,
+          fileName: document.file_name,
+          fileType: document.file_type,
+          storagePath: document.storage_path
+        })
+
+        // For PDF documents, try the converted image path used by the system
         if (document.file_type === 'application/pdf') {
-          // Try to get the converted image URL
-          const imageFileName = document.file_name.replace('.pdf', '_page1.png')
-          const storagePath = `${document.id}/${document.storage_path?.split('/')[1]}/${imageFileName}`
+          // The system converts PDFs to: processed-images/{documentId}_converted.png
+          const convertedImagePath = `processed-images/${document.id}_converted.png`
           
-          // Make a request to get signed URL for the converted image
-          const response = await fetch('/api/documents/image-url', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              storagePath,
-              documentId: document.id 
+          console.log('[Document Preview] Trying PDF conversion path:', convertedImagePath)
+
+          try {
+            const response = await fetch('/api/documents/image-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                storagePath: convertedImagePath,
+                documentId: document.id 
+              })
             })
-          })
-          
-          if (response.ok) {
-            const result = await response.json()
-            if (result.success && result.imageUrl) {
-              setDocumentImageUrl(result.imageUrl)
-              return
+            
+            if (response.ok) {
+              const result = await response.json()
+              if (result.success && result.imageUrl) {
+                console.log('[Document Preview] Successfully found PDF conversion at:', convertedImagePath)
+                setDocumentImageUrl(result.imageUrl)
+                return
+              }
             }
+          } catch (pathError) {
+            console.log('[Document Preview] Failed to get converted PDF image:', pathError)
           }
+          
+          console.log('[Document Preview] No PDF conversion found, trying original file')
         }
         
-        // Fallback: use original document if it's an image
-        if (document.file_type.startsWith('image/') && document.storage_path) {
+        // Fallback: use original document (works for both images and PDFs if no conversion exists)
+        if (document.storage_path) {
+          console.log('[Document Preview] Trying original file path:', document.storage_path)
+          
           const response = await fetch('/api/documents/image-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -168,12 +185,16 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
           if (response.ok) {
             const result = await response.json()
             if (result.success && result.imageUrl) {
+              console.log('[Document Preview] Successfully loaded original file')
               setDocumentImageUrl(result.imageUrl)
+              return
             }
           }
         }
+        
+        console.warn('[Document Preview] No valid image path found for document')
       } catch (error) {
-        console.error('Failed to fetch document image:', error)
+        console.error('[Document Preview] Failed to fetch document image:', error)
       }
     }
 
@@ -185,13 +206,54 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
 
     setIsTranslating(true)
     try {
+      // Prepare comprehensive text for translation including structured elements
+      let textToTranslate = document.extracted_data.text
+
+      // If we have structured financial data, format it properly for translation
+      const extractedData = document.extracted_data
+      if (extractedData.financial_entities || extractedData.line_items) {
+        let structuredText = ''
+        
+        // Add document header info
+        if (extractedData.financial_entities && Array.isArray(extractedData.financial_entities)) {
+          extractedData.financial_entities.forEach((entity: any) => {
+            if (entity.label && entity.value) {
+              structuredText += `${entity.label}: ${entity.value}\n`
+            }
+          })
+          structuredText += '\n'
+        }
+
+        // Add line items
+        if (extractedData.line_items && extractedData.line_items.length > 0) {
+          structuredText += `Line Items:\n`
+          extractedData.line_items.forEach((item: any, index: number) => {
+            structuredText += `${index + 1}. ${item.description || item.item_description || 'Item'} - ${item.amount || item.unit_price || item.total_amount || 'N/A'}\n`
+          })
+          structuredText += '\n'
+        }
+
+        // Add summary if available - try different possible total amount fields
+        const totalAmount = (extractedData as any).total_amount || 
+                           (extractedData as any).document_summary?.total_amount?.value ||
+                           (extractedData as any).financial_entities?.find((e: any) => e.label?.toLowerCase().includes('total'))?.value
+        if (totalAmount) {
+          structuredText += `Total Amount: ${totalAmount}\n`
+        }
+
+        // Use structured text if we have it, otherwise fall back to raw text
+        if (structuredText.trim()) {
+          textToTranslate = structuredText + '\n---\nOriginal Text:\n' + document.extracted_data.text
+        }
+      }
+
       const response = await fetch('/api/translate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          text: document.extracted_data.text,
+          text: textToTranslate,
           sourceLanguage: sourceLanguage === 'auto' ? 'Thai' : SUPPORTED_LANGUAGES.find(l => l.code === sourceLanguage)?.name || 'English',
           targetLanguage: SUPPORTED_LANGUAGES.find(l => l.code === targetLanguage)?.name || 'English'
         })
@@ -232,6 +294,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
       y2: number
       category: string
       text: string
+      entityKey?: string
     }> = []
 
     if (!document.extracted_data) return boundingBoxes
@@ -245,7 +308,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         boundingBoxes.push({
           x1, y1, x2, y2,
           category: 'Vendor',
-          text: summary.vendor_name.value
+          text: summary.vendor_name.value,
+          entityKey: 'vendor_name'
         })
       }
       
@@ -254,7 +318,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         boundingBoxes.push({
           x1, y1, x2, y2,
           category: 'Amount',
-          text: summary.total_amount.value
+          text: summary.total_amount.value,
+          entityKey: 'total_amount'
         })
       }
       
@@ -263,7 +328,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         boundingBoxes.push({
           x1, y1, x2, y2,
           category: 'Date',
-          text: summary.transaction_date.value
+          text: summary.transaction_date.value,
+          entityKey: 'transaction_date'
         })
       }
       
@@ -272,20 +338,22 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         boundingBoxes.push({
           x1, y1, x2, y2,
           category: 'Document Type',
-          text: summary.document_type.value
+          text: summary.document_type.value,
+          entityKey: 'document_type'
         })
       }
     }
 
     // Extract from financial entities
     if (document.extracted_data.financial_entities) {
-      document.extracted_data.financial_entities.forEach(entity => {
+      document.extracted_data.financial_entities.forEach((entity, index) => {
         if (entity.bbox && entity.bbox.length >= 4) {
           const [x1, y1, x2, y2] = entity.bbox
           boundingBoxes.push({
             x1, y1, x2, y2,
             category: entity.category || 'Financial',
-            text: entity.value
+            text: entity.value,
+            entityKey: `financial_entity_${index}`
           })
         }
       })
@@ -300,7 +368,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         boundingBoxes.push({
           x1, y1, x2, y2,
           category: 'Line Item',
-          text: `${item.description.value} (Item ${index + 1})`
+          text: `${item.description.value} (Item ${index + 1})`,
+          entityKey: `line_item_${index}_description`
         })
       }
       
@@ -309,7 +378,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         boundingBoxes.push({
           x1, y1, x2, y2,
           category: 'Quantity',
-          text: item.quantity.value
+          text: item.quantity.value,
+          entityKey: `line_item_${index}_quantity`
         })
       }
       
@@ -318,7 +388,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         boundingBoxes.push({
           x1, y1, x2, y2,
           category: 'Unit Price',
-          text: item.unit_price.value
+          text: item.unit_price.value,
+          entityKey: `line_item_${index}_unit_price`
         })
       }
       
@@ -327,17 +398,29 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         boundingBoxes.push({
           x1, y1, x2, y2,
           category: 'Line Total',
-          text: item.line_total.value
+          text: item.line_total.value,
+          entityKey: `line_item_${index}_line_total`
         })
       }
     })
 
     // Fallback: check if boundingBoxes exist in metadata (original structure)
     if (document.extracted_data.metadata?.boundingBoxes) {
-      boundingBoxes.push(...document.extracted_data.metadata.boundingBoxes)
+      boundingBoxes.push(...document.extracted_data.metadata.boundingBoxes.map((box: any, index: number) => ({
+        ...box,
+        entityKey: `metadata_${index}`
+      })))
     }
 
     return boundingBoxes
+  }
+
+  // Filter bounding boxes based on hover state
+  const getFilteredBoundingBoxes = () => {
+    if (!hoveredEntity) return []
+    
+    const allBoxes = generateBoundingBoxes()
+    return allBoxes.filter(box => box.entityKey === hoveredEntity)
   }
 
   return (
@@ -381,7 +464,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   fileName={document.file_name}
                   fileType={document.file_type}
                   fileSize={document.file_size}
-                  boundingBoxes={generateBoundingBoxes()}
+                  boundingBoxes={getFilteredBoundingBoxes()}
                   document={document}
                   onBoxHover={setHighlightedBox}
                   onBoxClick={(box) => {
@@ -459,7 +542,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {translatedText && (
                   <div className="bg-gray-800 rounded-lg p-3">
                     <h6 className="text-xs font-medium text-gray-300 mb-2">Translation Result</h6>
-                    <div className="text-xs text-white whitespace-pre-wrap max-h-32 overflow-y-auto">
+                    <div className="text-xs text-white whitespace-pre-wrap max-h-64 overflow-y-auto bg-gray-800/50 rounded-md p-3 border border-gray-600">
                       {translatedText}
                     </div>
                   </div>
@@ -525,7 +608,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {document.extracted_data.document_summary.document_type && (
-                        <div className="bg-gray-900 rounded-lg p-3">
+                        <div 
+                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          onMouseEnter={() => setHoveredEntity('document_type')}
+                          onMouseLeave={() => setHoveredEntity(null)}
+                        >
                           <div className="text-xs text-gray-400 mb-1">Document Type</div>
                           <div className="text-sm text-white font-medium">
                             {document.extracted_data.document_summary.document_type.value}
@@ -537,7 +624,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       )}
                       
                       {document.extracted_data.document_summary.vendor_name && (
-                        <div className="bg-gray-900 rounded-lg p-3">
+                        <div 
+                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          onMouseEnter={() => setHoveredEntity('vendor_name')}
+                          onMouseLeave={() => setHoveredEntity(null)}
+                        >
                           <div className="text-xs text-gray-400 mb-1">Vendor</div>
                           <div className="text-sm text-white font-medium">
                             {document.extracted_data.document_summary.vendor_name.value}
@@ -549,7 +640,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       )}
                       
                       {document.extracted_data.document_summary.total_amount && (
-                        <div className="bg-gray-900 rounded-lg p-3">
+                        <div 
+                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          onMouseEnter={() => setHoveredEntity('total_amount')}
+                          onMouseLeave={() => setHoveredEntity(null)}
+                        >
                           <div className="text-xs text-gray-400 mb-1">Amount</div>
                           <div className="text-sm text-green-400 font-medium">
                             ${document.extracted_data.document_summary.total_amount.value}
@@ -561,7 +656,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       )}
                       
                       {document.extracted_data.document_summary.transaction_date && (
-                        <div className="bg-gray-900 rounded-lg p-3">
+                        <div 
+                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          onMouseEnter={() => setHoveredEntity('transaction_date')}
+                          onMouseLeave={() => setHoveredEntity(null)}
+                        >
                           <div className="text-xs text-gray-400 mb-1">Date</div>
                           <div className="text-sm text-white font-medium">
                             {document.extracted_data.document_summary.transaction_date.value}
@@ -585,7 +684,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {document.extracted_data.financial_entities.map((entity, index) => (
-                        <div key={index} className="bg-gray-900 rounded-lg p-3">
+                        <div 
+                          key={index} 
+                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          onMouseEnter={() => setHoveredEntity(`financial_entity_${index}`)}
+                          onMouseLeave={() => setHoveredEntity(null)}
+                        >
                           <div className="text-xs text-gray-400 mb-1">{entity.label}</div>
                           <div className="text-sm text-white font-medium">{entity.value}</div>
                           <div className="text-xs text-gray-500">
@@ -621,7 +725,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             {document.extracted_data.line_items.map((item, index) => (
                               <tr key={index} className="hover:bg-gray-800">
                                 <td className="px-3 py-2 text-gray-400">{index + 1}</td>
-                                <td className="px-3 py-2 text-white">
+                                <td 
+                                  className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  onMouseEnter={() => setHoveredEntity(`line_item_${index}_description`)}
+                                  onMouseLeave={() => setHoveredEntity(null)}
+                                >
                                   {item.description?.value || 'N/A'}
                                   {item.description?.confidence && (
                                     <div className="text-xs text-gray-500">
@@ -629,13 +737,25 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                     </div>
                                   )}
                                 </td>
-                                <td className="px-3 py-2 text-right text-white">
+                                <td 
+                                  className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  onMouseEnter={() => setHoveredEntity(`line_item_${index}_quantity`)}
+                                  onMouseLeave={() => setHoveredEntity(null)}
+                                >
                                   {item.quantity?.value || 'N/A'}
                                 </td>
-                                <td className="px-3 py-2 text-right text-white">
+                                <td 
+                                  className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  onMouseEnter={() => setHoveredEntity(`line_item_${index}_unit_price`)}
+                                  onMouseLeave={() => setHoveredEntity(null)}
+                                >
                                   {item.unit_price?.value || 'N/A'}
                                 </td>
-                                <td className="px-3 py-2 text-right text-green-400 font-medium">
+                                <td 
+                                  className="px-3 py-2 text-right text-green-400 font-medium cursor-pointer hover:bg-blue-900/30 rounded"
+                                  onMouseEnter={() => setHoveredEntity(`line_item_${index}_line_total`)}
+                                  onMouseLeave={() => setHoveredEntity(null)}
+                                >
                                   {item.line_total?.value || 'N/A'}
                                 </td>
                               </tr>
