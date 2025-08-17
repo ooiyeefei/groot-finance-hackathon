@@ -25,10 +25,10 @@ export default defineConfig({
       pythonExtension({
         // Path to requirements.txt file
         requirementsFile: "./requirements.txt",
-        // Python scripts to include
-        scripts: ["src/python/**/*.py"],
-        // Python binary path for development (uses virtual environment)
+        // Python binary path for development (uses virtual environment)  
         devPythonBinaryPath: "./venv/bin/python3",
+        // System packages required for pdf2image
+        systemPackages: ["poppler-utils"]
       }),
     ],
   },

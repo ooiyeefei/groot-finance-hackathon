@@ -26,7 +26,7 @@ export async function GET() {
     const { data: documents, error } = await supabase
       .from('documents')
       .select(`
-        id, file_name, file_type, file_size, storage_path, converted_image_path, processing_status, created_at, processed_at, error_message, extracted_data,
+        id, file_name, file_type, file_size, storage_path, processing_status, created_at, processed_at, error_message, extracted_data,
         transactions:transactions!document_id (
           id, description, original_amount, original_currency, created_at
         )

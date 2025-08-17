@@ -50,10 +50,27 @@ import base64
 import io
 import sys
 import traceback
-from pdf2image import convert_from_bytes
-from PIL import Image
+import subprocess
 
 try:
+    # Check system dependencies first
+    print("[Python] Checking system dependencies...")
+    try:
+        result = subprocess.run(['which', 'pdftoppm'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"[Python] Found pdftoppm at: {result.stdout.strip()}")
+        else:
+            print("[Python] WARNING: pdftoppm not found - this may cause issues")
+    except Exception as dep_error:
+        print(f"[Python] WARNING: Could not check dependencies: {dep_error}")
+    
+    # Import PDF processing libraries
+    print("[Python] Importing pdf2image library...")
+    from pdf2image import convert_from_bytes
+    print("[Python] Importing PIL...")
+    from PIL import Image
+    print("[Python] All imports successful")
+
     # PDF data is passed as base64 string
     pdf_base64 = """${pdfBuffer.toString('base64')}"""
     print(f"[Python] Base64 string length: {len(pdf_base64)}")
@@ -103,6 +120,16 @@ try:
 except Exception as e:
     print(f"[Python] ERROR: {str(e)}")
     print(f"[Python] Traceback: {traceback.format_exc()}")
+    
+    # Additional debugging information
+    print("[Python] Environment debugging:")
+    print(f"[Python] Python version: {sys.version}")
+    try:
+        import platform
+        print(f"[Python] Platform: {platform.platform()}")
+    except:
+        pass
+    
     sys.exit(1)
 `);
 

@@ -10,7 +10,6 @@ interface Document {
   file_type: string
   file_size: number
   storage_path?: string
-  converted_image_path?: string
   processing_status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed'
   created_at: string
   processed_at?: string
@@ -138,16 +137,19 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
           storagePath: document.storage_path
         })
 
-        // For PDF documents, check if there's a converted image path stored in the database
-        if (document.file_type === 'application/pdf' && document.converted_image_path) {
-          console.log('[Document Preview] Using stored converted image path:', document.converted_image_path)
+        // For PDF documents, try the converted image path used by the system
+        if (document.file_type === 'application/pdf' && document.storage_path) {
+          // Check if we have a stored converted image path, otherwise use the new pattern
+          const convertedImagePath = `converted/${document.storage_path.split('/')[0]}/${document.file_name.replace('.pdf', '.png')}`
+          
+          console.log('[Document Preview] Trying PDF conversion path:', convertedImagePath)
 
           try {
             const response = await fetch('/api/documents/image-url', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ 
-                storagePath: document.converted_image_path,
+                storagePath: convertedImagePath,
                 documentId: document.id 
               })
             })
@@ -155,7 +157,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
             if (response.ok) {
               const result = await response.json()
               if (result.success && result.imageUrl) {
-                console.log('[Document Preview] Successfully found PDF conversion at:', document.converted_image_path)
+                console.log('[Document Preview] Successfully found PDF conversion at:', convertedImagePath)
                 setDocumentImageUrl(result.imageUrl)
                 return
               }

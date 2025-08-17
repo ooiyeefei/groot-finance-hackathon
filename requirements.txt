@@ -1,5 +1,10 @@
-opencv-python>=4.10.0.84
+# Core dependencies
 numpy>=1.26.0
 requests>=2.31.0
-pdf2image>=1.17.0
 Pillow>=10.4.0
+
+# PDF processing - pdf2image requires poppler-utils system package
+pdf2image>=1.17.0
+
+# Computer vision (optional - only needed for annotation tasks)
+# opencv-python>=4.10.0.84
