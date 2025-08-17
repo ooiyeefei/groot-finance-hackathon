@@ -1,5 +1,6 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
 import { pythonExtension } from "@trigger.dev/python/extension";
+import { aptGet } from "@trigger.dev/build/extensions/core";
 
 export default defineConfig({
   project: "proj_qjsdxdsoxmrgplspwuwj",
@@ -22,13 +23,13 @@ export default defineConfig({
   dirs: ["src/trigger"],
   build: {
     extensions: [
+      // Install system packages required for pdf2image
+      aptGet({ packages: ["poppler-utils"] }),
       pythonExtension({
         // Path to requirements.txt file
         requirementsFile: "./requirements.txt",
         // Python binary path for development (uses virtual environment)  
         devPythonBinaryPath: "./venv/bin/python3",
-        // System packages required for pdf2image
-        systemPackages: ["poppler-utils"]
       }),
     ],
   },
