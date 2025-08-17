@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { SupportedCurrency } from '@/types/transaction'
 
 interface TransactionSummary {
@@ -20,14 +20,14 @@ interface TransactionSummaryHook {
 }
 
 export function useTransactionSummary(
-  period: 'week' | 'month' | 'year' = 'month',
+  period: 'week' | 'month' | '60days' | '90days' | '6months' | 'year' = '60days',
   homeCurrency: SupportedCurrency = 'USD'
 ): TransactionSummaryHook {
   const [summary, setSummary] = useState<TransactionSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchSummary = async () => {
+  const fetchSummary = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
@@ -39,9 +39,15 @@ export function useTransactionSummary(
       if (period === 'week') {
         startDate.setDate(now.getDate() - 7)
       } else if (period === 'month') {
-        startDate.setMonth(now.getMonth() - 1)
+        startDate.setDate(now.getDate() - 30)
+      } else if (period === '60days') {
+        startDate.setDate(now.getDate() - 60)
+      } else if (period === '90days') {
+        startDate.setDate(now.getDate() - 90)
+      } else if (period === '6months') {
+        startDate.setDate(now.getDate() - 180)
       } else if (period === 'year') {
-        startDate.setFullYear(now.getFullYear() - 1)
+        startDate.setDate(now.getDate() - 365)
       }
 
       // Fetch transactions in the date range
@@ -55,16 +61,20 @@ export function useTransactionSummary(
         throw new Error('Failed to fetch transactions')
       }
 
-      const data = await response.json()
-      const transactions = data.transactions || []
+      const result = await response.json()
+      console.log('Transaction API response:', result) // Debug log
+      const transactions = result.data?.transactions || [] // Fix: correct API response structure
 
       // Calculate summary with currency conversion
       let totalIncome = 0
       let totalExpense = 0
       const transactionCount = transactions.length
 
+      console.log(`Processing ${transactions.length} transactions for summary`) // Debug log
+      
       for (const transaction of transactions) {
         let amount = transaction.home_amount || transaction.original_amount
+        console.log(`Transaction: ${transaction.description}, Type: ${transaction.transaction_type}, Amount: ${amount}`) // Debug log
 
         // Convert to home currency if needed
         if (transaction.home_currency !== homeCurrency) {
@@ -82,6 +92,8 @@ export function useTransactionSummary(
       }
 
       const netAmount = totalIncome - totalExpense
+      
+      console.log(`Summary calculated: Income=${totalIncome}, Expense=${totalExpense}, Net=${netAmount}, Count=${transactionCount}`) // Debug log
 
       setSummary({
         totalIncome,
@@ -97,7 +109,7 @@ export function useTransactionSummary(
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [period, homeCurrency])
 
   const refreshSummary = async () => {
     await fetchSummary()
@@ -105,7 +117,7 @@ export function useTransactionSummary(
 
   useEffect(() => {
     fetchSummary()
-  }, [period, homeCurrency])
+  }, [fetchSummary])
 
   return {
     summary,
@@ -116,12 +128,18 @@ export function useTransactionSummary(
 }
 
 // Utility function to get period display name
-export function getPeriodDisplayName(period: 'week' | 'month' | 'year'): string {
+export function getPeriodDisplayName(period: 'week' | 'month' | '60days' | '90days' | '6months' | 'year'): string {
   switch (period) {
     case 'week':
       return 'Last 7 Days'
     case 'month':
       return 'Last 30 Days'
+    case '60days':
+      return 'Last 60 Days'
+    case '90days':
+      return 'Last 90 Days'
+    case '6months':
+      return 'Last 6 Months'
     case 'year':
       return 'Last 12 Months'
     default:

@@ -37,66 +37,66 @@ class OCRProcessingError extends Error {
  * Provides the detailed system prompt for the AI model.
  */
 function getSystemPrompt(): string {
-  return `You are an expert financial analyst AI specializing in document intelligence. Your task is to analyze the provided image of a financial document (e.g., invoice, receipt) and extract all financially relevant information in a structured JSON format.
-
-**CRITICAL: JSON-ONLY RESPONSE REQUIRED**
-Your response MUST be ONLY valid JSON. Do NOT include any explanations, reasoning, thoughts, or commentary before, after, or within your response. Do NOT start with phrases like "Okay, let's tackle this", "Looking at this", "I can see", "Let me analyze", etc.
-
-**ABSOLUTELY FORBIDDEN - THESE WILL CAUSE PARSING FAILURE:**
-- NO JavaScript-style comments (// or /* */) anywhere in your response
-- NO trailing commas after array elements
-- NO explanatory text like "// Continued for all items..."
-- NO code comments of any kind within the JSON structure
-- NO truncation indicators like "... // (more items follow)"
-- NO abbreviated responses - extract ALL line items completely
-- NO reasoning text mixed with JSON - PURE JSON ONLY
+  return `IMPORTANT: You have extremely tight timeline to think, so quickly deduce your result. You are an expert financial analyst AI specializing in document intelligence. Your task is to analyze the provided image of a financial document (e.g., invoice, receipt) and extract all financially relevant information in a structured JSON format.
 
 **CORE OBJECTIVES:**
 1. **Identify Document Type:** Determine if the document is an invoice, receipt, credit note, etc.
 2. **Extract Key-Value Pairs:** Identify all relevant financial entities. Use clear, semantic labels for each entity. You are not limited to a fixed list; identify any data point that is financially significant.
-3. **Extract Line Items:** If a table of items is present, extract EVERY line item with its description, quantity, unit price, and total price. Include ALL rows in the table, not just the first few.
-4. **Provide Bounding Boxes:** For every single piece of extracted data (including individual fields within line items), you MUST provide accurate pixel-based bounding box coordinates [x1, y1, x2, y2]. This is CRITICAL for line items - each field (description, quantity, unit price, total) must have its own bounding box.
-5. **Complete Line Item Coverage:** Ensure ALL line items from tables are captured with individual bounding boxes for each data field. Missing line items are not acceptable.
+3. **Extract Line Items:** If a table of items is present, extract each line item with its description, quantity, unit price, and total price.
+4. **Provide Bounding Boxes:** For every single piece of extracted data (including individual fields within line items), you MUST provide accurate pixel-based bounding box coordinates [x1, y1, x2, y2].
 
 **MANDATORY JSON OUTPUT STRUCTURE:**
 You MUST return ONLY a single, valid JSON object matching this schema. Do not include any other text, explanations, or markdown.
 
 {
   "document_summary": {
-    "document_type": { "value": "Invoice | Receipt | Credit Note | Other", "confidence": 0.95, "bbox": [x1, y1, x2, y2] },
-    "vendor_name": { "value": "Vendor's Business Name", "confidence": 0.9, "bbox": [x1, y1, x2, y2] },
-    "total_amount": { "value": "123.45", "confidence": 0.99, "bbox": [x1, y1, x2, y2] },
-    "transaction_date": { "value": "YYYY-MM-DD", "confidence": 0.9, "bbox": [x1, y1, x2, y2] }
+    "document_type": {
+      "value": "Invoice | Receipt | Credit Note | Other",
+      "confidence": 0.95,
+      "bbox": [x1, y1, x2, y2]
+    },
+    "vendor_name": {
+      "value": "Vendor's Business Name",
+      "confidence": 0.9,
+      "bbox": [x1, y1, x2, y2]
+    },
+    "total_amount": {
+      "value": "123.45",
+      "confidence": 0.99,
+      "bbox": [x1, y1, x2, y2]
+    },
+    "transaction_date": {
+      "value": "YYYY-MM-DD",
+      "confidence": 0.9,
+      "bbox": [x1, y1, x2, y2]
+    }
   },
   "financial_entities": [
-    { "label": "A semantic label, e.g., 'Subtotal', 'Tax (8%)', 'Invoice Number'", "value": "The extracted text or normalized value", "category": "amount | date | id | text", "confidence": 0.85, "bbox": [x1, y1, x2, y2] }
+    {
+      "label": "A semantic label, e.g., 'Subtotal', 'Tax (8%)', 'Invoice Number', 'Payment Method'",
+      "value": "The extracted text or normalized value",
+      "category": "amount | date | id | address | text",
+      "confidence": 0.85,
+      "bbox": [x1, y1, x2, y2]
+    }
   ],
   "line_items": [
     {
-      "item_number": { "value": "1", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
-      "item_code": { "value": "ABC123", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "description": { "value": "Item Description", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "quantity": { "value": "1", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
-      "unit_of_measure": { "value": "PCS", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "unit_price": { "value": "50.00", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
-      "line_total": { "value": "50.00", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
-      "row_bbox": [x1, y1, x2, y2]
+      "line_total": { "value": "50.00", "bbox": [x1, y1, x2, y2], "confidence": 0.9 }
     }
   ],
   "full_text": "A full transcription of all text on the document."
 }
 
-**CRITICAL RULES - ABSOLUTELY MANDATORY:**
-- Your response MUST start with { and end with } - nothing else
-- NO text before the opening brace { 
-- NO text after the closing brace }
-- NO explanations, reasoning, thinking, or commentary anywhere
-- NO phrases like "Okay, let's tackle this", "Looking at this", "I can see", "Let me analyze", "First, I need to", etc.
-- Your ENTIRE response must be pure, valid JSON only
-- Every value must have a corresponding bounding box
-- Normalize data where appropriate (e.g., dates to YYYY-MM-DD, amounts to numeric strings)
-- If a field is not present, omit it from the JSON instead of using null or empty values
-- VIOLATION OF THESE RULES WILL RESULT IN PROCESSING FAILURE`;
+**CRITICAL RULES:**
+- Return ONLY the JSON object. Your response must start with { and end with }.
+- Every value must have a corresponding bounding box.
+- Normalize data where appropriate (e.g., dates to YYYY-MM-DD, amounts to numeric strings).
+- If a field is not present in the document, omit it from the JSON instead of using null or empty values.
+- The ''financial_entities'' array should be a comprehensive list of all key-value data found on the document. Be descriptive with your labels.`;
 }
 
 /**
@@ -529,6 +529,19 @@ export const processDocumentOCR = task({
       }
       const signedImageUrl = urlData.signedUrl;
       console.log("🔗 Signed URL created successfully.");
+      console.log(`[OCR] Image storage path: ${payload.imageStoragePath}`);
+      console.log(`[OCR] Signed URL: ${signedImageUrl.substring(0, 100)}...`);
+      
+      // Test if the signed URL is accessible
+      try {
+        const testResponse = await fetch(signedImageUrl, { method: 'HEAD' });
+        console.log(`[OCR] URL accessibility test - Status: ${testResponse.status}, Content-Type: ${testResponse.headers.get('content-type')}, Content-Length: ${testResponse.headers.get('content-length')}`);
+        if (!testResponse.ok) {
+          console.warn(`[OCR] Warning: Signed URL returned ${testResponse.status} ${testResponse.statusText}`);
+        }
+      } catch (testError) {
+        console.error(`[OCR] Error testing signed URL accessibility:`, testError);
+      }
 
       // Step 2: Get OCR service configuration
       const ocrEndpointUrl = process.env.OCR_ENDPOINT_URL;

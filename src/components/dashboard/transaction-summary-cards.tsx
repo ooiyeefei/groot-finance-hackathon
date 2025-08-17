@@ -7,13 +7,13 @@ import { useHomeCurrency } from '@/components/settings/currency-settings'
 import { SupportedCurrency } from '@/types/transaction'
 
 interface TransactionSummaryCardsProps {
-  period?: 'week' | 'month' | 'year'
+  period?: 'week' | 'month' | '60days' | '90days' | '6months' | 'year'
 }
 
 export default function TransactionSummaryCards({
-  period = 'month'
+  period = '60days'
 }: TransactionSummaryCardsProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>(period)
+  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | '60days' | '90days' | '6months' | 'year'>(period)
   const homeCurrency = useHomeCurrency() // Get user's preferred currency
   const { summary, isLoading, error, refreshSummary } = useTransactionSummary(selectedPeriod, homeCurrency)
 
@@ -76,11 +76,14 @@ export default function TransactionSummaryCards({
           {/* Period Selector */}
           <select
             value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value as 'week' | 'month' | 'year')}
+            onChange={(e) => setSelectedPeriod(e.target.value as 'week' | 'month' | '60days' | '90days' | '6months' | 'year')}
             className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="week">Last 7 Days</option>
             <option value="month">Last 30 Days</option>
+            <option value="60days">Last 60 Days</option>
+            <option value="90days">Last 90 Days</option>
+            <option value="6months">Last 6 Months</option>
             <option value="year">Last 12 Months</option>
           </select>
 
