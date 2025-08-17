@@ -11,11 +11,11 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server';
+import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server';
 import { processRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter';
-import { convertPdfToImage } from '@/lib/pdf-converter';
 import { tasks } from '@trigger.dev/sdk/v3';
 import type { processDocumentOCR } from '@/trigger/process-document-ocr';
+import type { convertPdfToImage } from '@/trigger/convert-pdf-to-image';
 
 export async function POST(
   request: NextRequest,
@@ -109,75 +109,25 @@ export async function POST(
       );
     }
 
-    // Step 4: PREPARATION STAGE - Handle PDF conversion if needed
-    let imageStoragePath = document.storage_path;
-    
-    if (document.file_type === 'application/pdf') {
-      console.log(`[Document-Processor] PDF detected - starting conversion to image`);
-      
-      try {
-        // Download PDF from storage
-        const storageClient = createServiceSupabaseClient();
-        const { data: pdfData, error: downloadError } = await storageClient.storage
-          .from('documents')
-          .download(document.storage_path);
-
-        if (downloadError || !pdfData) {
-          throw new Error(`Failed to download PDF: ${downloadError?.message}`);
-        }
-
-        // Convert PDF to image using pdf2pic
-        const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
-        const imageBuffer = await convertPdfToImage(pdfBuffer);
-        
-        // Upload converted image to processed-images folder
-        const imageFileName = `processed-images/${documentId}_converted.png`;
-        const { error: uploadError } = await storageClient.storage
-          .from('documents')
-          .upload(imageFileName, imageBuffer, {
-            contentType: 'image/png',
-            upsert: true
-          });
-
-        if (uploadError) {
-          throw new Error(`Failed to upload converted image: ${uploadError.message}`);
-        }
-
-        imageStoragePath = imageFileName;
-        console.log(`[Document-Processor] PDF converted and uploaded to: ${imageStoragePath}`);
-        
-      } catch (conversionError) {
-        console.error('[Document-Processor] PDF conversion failed:', conversionError);
-        
-        // Update document status to failed
-        await supabase
-          .from('documents')
-          .update({
-            processing_status: 'failed',
-            error_message: `PDF conversion failed: ${conversionError instanceof Error ? conversionError.message : 'Unknown error'}`,
-            processed_at: new Date().toISOString()
-          })
-          .eq('id', documentId);
-
-        return NextResponse.json(
-          { success: false, error: 'PDF conversion failed' },
-          { status: 500 }
-        );
-      }
-    } else {
-      console.log(`[Document-Processor] Image document detected - proceeding directly to OCR stage`);
-    }
-
-    // Step 5: TRIGGER STAGE - Send event to Trigger.dev for OCR processing
-    console.log(`[Document-Processor] Triggering Trigger.dev job for OCR processing`);
+    // Step 4: TRIGGER STAGE - Send event to Trigger.dev for processing
+    console.log(`[Document-Processor] Triggering Trigger.dev job for document processing`);
     
     try {
-      await tasks.trigger<typeof processDocumentOCR>("process-document-ocr", {
-        documentId: documentId,
-        imageStoragePath: imageStoragePath
-      });
-      
-      console.log(`[Document-Processor] Successfully triggered Trigger.dev task for document ${documentId}`);
+      if (document.file_type === 'application/pdf') {
+        console.log(`[Document-Processor] PDF detected - triggering PDF conversion task`);
+        await tasks.trigger<typeof convertPdfToImage>("convert-pdf-to-image", {
+          documentId: documentId,
+          pdfStoragePath: document.storage_path
+        });
+        console.log(`[Document-Processor] Successfully triggered PDF conversion task for document ${documentId}`);
+      } else {
+        console.log(`[Document-Processor] Image document detected - triggering OCR directly`);
+        await tasks.trigger<typeof processDocumentOCR>("process-document-ocr", {
+          documentId: documentId,
+          imageStoragePath: document.storage_path
+        });
+        console.log(`[Document-Processor] Successfully triggered OCR task for document ${documentId}`);
+      }
     } catch (triggerError) {
       console.error('[Document-Processor] Failed to trigger Trigger.dev task:', triggerError);
       
@@ -186,7 +136,7 @@ export async function POST(
         .from('documents')
         .update({
           processing_status: 'failed',
-          error_message: 'Failed to start background OCR processing via Trigger.dev',
+          error_message: 'Failed to start background processing via Trigger.dev',
           processed_at: new Date().toISOString()
         })
         .eq('id', documentId);

@@ -11,11 +11,11 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server';
+import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server';
 import { processRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter';
-import { convertPdfToImage } from '@/lib/pdf-converter';
 import { tasks } from "@trigger.dev/sdk/v3";
 import type { processDocumentOCR } from '@/trigger/process-document-ocr';
+import type { convertPdfToImage } from '@/trigger/convert-pdf-to-image';
 
 interface BatchProcessRequest {
   documentIds: string[];
@@ -140,14 +140,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 5: Process each document through two-stage hybrid architecture
-    console.log(`[Batch-Processor] Starting two-stage processing for ${processingUpdateIds.length} documents`);
+    // Step 5: Trigger appropriate tasks for each document
+    console.log(`[Batch-Processor] Triggering Trigger.dev tasks for ${processingUpdateIds.length} documents`);
     
-    // Prepare batch payloads for documents that need PDF conversion vs direct OCR
-    const batchPayloads: Array<{ payload: { documentId: string; imageStoragePath: string }; documentMeta: typeof processableDocuments[0] }> = [];
-    const conversionResults: Array<{ documentId: string; success: boolean; error?: string; processingType?: string }> = [];
+    const triggerResults: Array<{ documentId: string; success: boolean; error?: string; processingType?: string }> = [];
     
-    // Process PDF conversions first (must be done sequentially due to storage operations)
+    // Trigger tasks for each document
     for (const documentId of processingUpdateIds) {
       try {
         const document = processableDocuments.find(doc => doc.id === documentId);
@@ -155,77 +153,37 @@ export async function POST(request: NextRequest) {
           throw new Error('Document not found in processable documents list');
         }
 
-        console.log(`[Batch-Processor] Processing document ${documentId} (${document.file_name})`);
+        console.log(`[Batch-Processor] Triggering task for document ${documentId} (${document.file_name})`);
 
-        // PREPARATION STAGE - Handle PDF conversion if needed
-        let imageStoragePath = document.storage_path;
-        
         if (document.file_type === 'application/pdf') {
-          console.log(`[Batch-Processor] PDF detected for ${documentId} - starting conversion to image`);
+          console.log(`[Batch-Processor] PDF detected - triggering PDF conversion task for ${documentId}`);
+          await tasks.trigger<typeof convertPdfToImage>("convert-pdf-to-image", {
+            documentId: documentId,
+            pdfStoragePath: document.storage_path
+          });
           
-          try {
-            // Download PDF from storage
-            const storageClient = createServiceSupabaseClient();
-            const { data: pdfData, error: downloadError } = await storageClient.storage
-              .from('documents')
-              .download(document.storage_path);
-
-            if (downloadError || !pdfData) {
-              throw new Error(`Failed to download PDF: ${downloadError?.message}`);
-            }
-
-            // Convert PDF to image using pdf2pic
-            const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
-            const imageBuffer = await convertPdfToImage(pdfBuffer);
-            
-            // Upload converted image to processed-images folder
-            const imageFileName = `processed-images/${documentId}_converted.png`;
-            const { error: uploadError } = await storageClient.storage
-              .from('documents')
-              .upload(imageFileName, imageBuffer, {
-                contentType: 'image/png',
-                upsert: true
-              });
-
-            if (uploadError) {
-              throw new Error(`Failed to upload converted image: ${uploadError.message}`);
-            }
-
-            imageStoragePath = imageFileName;
-            console.log(`[Batch-Processor] PDF converted and uploaded for ${documentId}: ${imageStoragePath}`);
-            
-          } catch (conversionError) {
-            console.error(`[Batch-Processor] PDF conversion failed for document ${documentId}:`, conversionError);
-            
-            // Update document status to failed
-            await supabase
-              .from('documents')
-              .update({
-                processing_status: 'failed',
-                error_message: `PDF conversion failed: ${conversionError instanceof Error ? conversionError.message : 'Unknown error'}`,
-                processed_at: new Date().toISOString()
-              })
-              .eq('id', documentId);
-
-            conversionResults.push({
-              documentId,
-              success: false,
-              error: `PDF conversion failed: ${conversionError instanceof Error ? conversionError.message : 'Unknown error'}`
-            });
-            continue; // Skip this document for batch triggering
-          }
+          triggerResults.push({
+            documentId,
+            success: true,
+            processingType: 'pdf_conversion'
+          });
         } else {
-          console.log(`[Batch-Processor] Image document detected for ${documentId} - proceeding directly to OCR stage`);
+          console.log(`[Batch-Processor] Image detected - triggering OCR task for ${documentId}`);
+          await tasks.trigger<typeof processDocumentOCR>("process-document-ocr", {
+            documentId: documentId,
+            imageStoragePath: document.storage_path
+          });
+          
+          triggerResults.push({
+            documentId,
+            success: true,
+            processingType: 'direct_ocr'
+          });
         }
 
-        // Add to batch payload for Trigger.dev
-        batchPayloads.push({
-          payload: { documentId, imageStoragePath },
-          documentMeta: document
-        });
         
-      } catch (preparationError) {
-        console.error(`[Batch-Processor] Preparation error for document ${documentId}:`, preparationError);
+      } catch (triggerError) {
+        console.error(`[Batch-Processor] Task trigger error for document ${documentId}:`, triggerError);
         
         // Update document status to failed
         try {
@@ -233,7 +191,7 @@ export async function POST(request: NextRequest) {
             .from('documents')
             .update({
               processing_status: 'failed',
-              error_message: 'Failed to prepare document for processing',
+              error_message: 'Failed to trigger background processing task',
               processed_at: new Date().toISOString()
             })
             .eq('id', documentId);
@@ -241,69 +199,18 @@ export async function POST(request: NextRequest) {
           console.error(`[Batch-Processor] Failed to update error status for document ${documentId}:`, updateFailureError);
         }
 
-        conversionResults.push({
+        triggerResults.push({
           documentId,
           success: false,
-          error: preparationError instanceof Error ? preparationError.message : 'Failed to prepare document'
+          error: triggerError instanceof Error ? triggerError.message : 'Failed to trigger task'
         });
       }
     }
 
-    // Step 6: BATCH TRIGGER STAGE - Send all prepared documents to Trigger.dev in a single efficient call
-    let batchTriggerResults: Array<{ documentId: string; success: boolean; error?: string; processingType?: string; method?: string }> = [];
+    console.log(`[Batch-Processor] Batch processing completed`);
     
-    if (batchPayloads.length > 0) {
-      console.log(`[Batch-Processor] Batch triggering Trigger.dev jobs for ${batchPayloads.length} documents`);
-      
-      try {
-        await tasks.batchTrigger<typeof processDocumentOCR>(
-          "process-document-ocr",
-          batchPayloads.map(item => ({ payload: item.payload }))
-        );
-        
-        console.log(`[Batch-Processor] Successfully batch-triggered Trigger.dev tasks for ${batchPayloads.length} documents`);
-        
-        // Mark all batch-triggered documents as successful
-        batchTriggerResults = batchPayloads.map(item => ({
-          documentId: item.payload.documentId,
-          success: true,
-          processingType: item.documentMeta.file_type === 'application/pdf' ? 'PDF converted and OCR queued' : 'Direct OCR queued',
-          method: 'trigger.dev-batch'
-        }));
-        
-      } catch (batchTriggerError) {
-        console.error(`[Batch-Processor] Failed to batch trigger Trigger.dev tasks:`, batchTriggerError);
-        
-        // Mark all documents as failed and update their status
-        for (const item of batchPayloads) {
-          const documentId = item.payload.documentId;
-          
-          // Update document status to failed in background
-          supabase
-            .from('documents')
-            .update({
-              processing_status: 'failed',
-              error_message: 'Failed to start background OCR processing via Trigger.dev batch',
-              processed_at: new Date().toISOString()
-            })
-            .eq('id', documentId)
-            .then(({ error }) => {
-              if (error) {
-                console.error(`[Batch-Processor] Failed to update error status for ${documentId}:`, error);
-              }
-            });
-        }
-            
-        batchTriggerResults = batchPayloads.map(item => ({
-          documentId: item.payload.documentId,
-          success: false,
-          error: `Failed to batch trigger processing: ${batchTriggerError instanceof Error ? batchTriggerError.message : 'Unknown error'}`
-        }));
-      }
-    }
-    
-    // Combine conversion results and batch trigger results
-    const results = [...conversionResults, ...batchTriggerResults];
+    // Analyze results
+    const results = triggerResults;
     
     // Analyze results
     const successful = results.filter(result => result.success);

@@ -27,6 +27,8 @@ export default defineConfig({
         requirementsFile: "./requirements.txt",
         // Python scripts to include
         scripts: ["src/python/**/*.py"],
+        // Python binary path for development (uses virtual environment)
+        devPythonBinaryPath: "./venv/bin/python3",
       }),
     ],
   },
