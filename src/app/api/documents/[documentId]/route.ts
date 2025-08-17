@@ -50,15 +50,31 @@ export async function DELETE(
       )
     }
 
-    // Delete file from Supabase Storage
+    // Delete files from Supabase Storage
     try {
+      const filesToDelete = [document.storage_path]
+      
+      // Also delete converted image if it exists
+      if (document.converted_image_path) {
+        filesToDelete.push(document.converted_image_path)
+        console.log(`[API] Will also delete converted image: ${document.converted_image_path}`)
+      }
+      
+      // Also delete annotated image if it exists
+      if (document.annotated_image_path) {
+        filesToDelete.push(document.annotated_image_path)
+        console.log(`[API] Will also delete annotated image: ${document.annotated_image_path}`)
+      }
+
       const { error: storageError } = await supabase.storage
         .from('documents')
-        .remove([document.storage_path])
+        .remove(filesToDelete)
 
       if (storageError) {
-        console.warn(`[API] Failed to delete file from storage: ${storageError.message}`)
+        console.warn(`[API] Failed to delete files from storage: ${storageError.message}`)
         // Continue with database deletion even if storage deletion fails
+      } else {
+        console.log(`[API] Successfully deleted ${filesToDelete.length} files from storage`)
       }
     } catch (storageError) {
       console.warn(`[API] Storage deletion error:`, storageError)
