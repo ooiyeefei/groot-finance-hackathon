@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Languages, Eye, FileText, Calendar, DollarSign, Building, Hash, List } from 'lucide-react'
+import { X, Languages, Eye, FileText, DollarSign, List } from 'lucide-react'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
-import HtmlContentRenderer from './html-content-renderer'
 
 interface Document {
   id: string
@@ -213,67 +212,6 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
     }
   }
 
-  const getEntityIcon = (type: string) => {
-    const normalizedType = type.toLowerCase().replace(/\s+/g, '_')
-    
-    switch (normalizedType) {
-      // Amount/Currency types
-      case 'currency':
-      case 'amount':
-      case 'total':
-      case 'subtotal':
-      case 'tax_amount':
-      case 'discount_amount':
-      case 'item_total':
-      case 'item_unit_price':
-        return <DollarSign className="w-4 h-4 text-green-400" />
-      
-      // Date types
-      case 'date':
-      case 'due_date':
-      case 'transaction_date':
-      case 'invoice_date':
-        return <Calendar className="w-4 h-4 text-blue-400" />
-      
-      // Vendor/Company types
-      case 'vendor':
-      case 'company':
-      case 'business':
-      case 'supplier':
-      case 'merchant':
-        return <Building className="w-4 h-4 text-purple-400" />
-      
-      // ID/Reference types
-      case 'reference_number':
-      case 'invoice':
-      case 'invoice_id':
-      case 'receipt_id':
-      case 'transaction_id':
-      case 'reference_id':
-        return <Hash className="w-4 h-4 text-orange-400" />
-      
-      // Line item types
-      case 'item_description':
-      case 'item_quantity':
-        return <FileText className="w-4 h-4 text-cyan-400" />
-      
-      // Address types
-      case 'address':
-      case 'location':
-        return <Building className="w-4 h-4 text-indigo-400" />
-      
-      // Payment types
-      case 'payment_method':
-        return <DollarSign className="w-4 h-4 text-yellow-400" />
-      
-      // Document type
-      case 'document_type':
-        return <FileText className="w-4 h-4 text-pink-400" />
-      
-      default:
-        return <FileText className="w-4 h-4 text-gray-400" />
-    }
-  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -428,16 +366,16 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         
         {/* Modal Content - Two Pane Layout */}
         <div className="flex-1 flex min-h-0">
-          {/* Left Pane - Visual */}
-          <div className="w-1/2 p-6 border-r border-gray-700 flex flex-col min-h-0">
-            <h4 className="text-sm font-medium text-white mb-4 flex items-center flex-shrink-0">
-              <FileText className="w-4 h-4 mr-2" />
-              Document Preview
-            </h4>
-            
-            {/* Document Preview with Annotations */}
-            <div className="flex-1 min-h-0 flex flex-col">
-              <div className="flex-1 min-h-0 max-w-full">
+          {/* Left Pane - Visual (Scrollable) */}
+          <div className="w-1/2 border-r border-gray-700 flex flex-col min-h-0">
+            <div className="overflow-y-auto flex-1 p-6">
+              <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                <FileText className="w-4 h-4 mr-2" />
+                Document Preview
+              </h4>
+              
+              {/* Document Preview with Fixed Height (50% of screen) */}
+              <div className="mb-6" style={{ height: '50vh', minHeight: '400px' }}>
                 <DocumentPreviewWithAnnotations
                   imageUrl={documentImageUrl || undefined}
                   fileName={document.file_name}
@@ -451,6 +389,81 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     // TODO: Highlight corresponding text in extracted content
                   }}
                 />
+              </div>
+
+            {/* Translation Feature */}
+            <div className="mt-4 bg-gray-700/50 rounded-lg p-4 flex-shrink-0">
+              <h5 className="text-sm font-medium text-white mb-4 flex items-center">
+                <Languages className="w-4 h-4 mr-2" />
+                Translation
+              </h5>
+              
+              <div className="space-y-3">
+                {/* Language Selection */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-300 mb-1">
+                      Source Language
+                    </label>
+                    <select
+                      value={sourceLanguage}
+                      onChange={(e) => setSourceLanguage(e.target.value)}
+                      className="w-full bg-gray-600 border border-gray-500 rounded-md px-2 py-1 text-white text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="auto">Auto-detect</option>
+                      {SUPPORTED_LANGUAGES.map((lang) => (
+                        <option key={lang.code} value={lang.code}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-300 mb-1">
+                      Target Language
+                    </label>
+                    <select
+                      value={targetLanguage}
+                      onChange={(e) => setTargetLanguage(e.target.value)}
+                      className="w-full bg-gray-600 border border-gray-500 rounded-md px-2 py-1 text-white text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {SUPPORTED_LANGUAGES.map((lang) => (
+                        <option key={lang.code} value={lang.code}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Translate Button */}
+                <button
+                  onClick={handleTranslate}
+                  disabled={isTranslating || !document.extracted_data?.text}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white py-1.5 px-3 rounded-md text-xs font-medium transition-colors flex items-center justify-center"
+                >
+                  {isTranslating ? (
+                    <>
+                      <div className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full mr-2" />
+                      Translating...
+                    </>
+                  ) : (
+                    <>
+                      <Languages className="w-3 h-3 mr-2" />
+                      Translate
+                    </>
+                  )}
+                </button>
+
+                {/* Translation Output */}
+                {translatedText && (
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <h6 className="text-xs font-medium text-gray-300 mb-2">Translation Result</h6>
+                    <div className="text-xs text-white whitespace-pre-wrap max-h-32 overflow-y-auto">
+                      {translatedText}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -481,6 +494,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </span>
                 </div>
               </div>
+            </div>
             </div>
           </div>
 
@@ -642,147 +656,99 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     </h4>
                     
                     <div className="bg-gray-900 rounded-lg p-4">
-                      <div className="text-xs text-gray-400 mb-2">Raw OCR Output</div>
+                      <div className="text-xs text-gray-400 mb-2">Clean OCR Output</div>
                       <div className="text-xs text-gray-300 whitespace-pre-wrap overflow-auto max-h-64 leading-relaxed">
-                        {document.extracted_data.text}
+                        {(() => {
+                          // Filter out AI reasoning patterns from the displayed text
+                          let cleanText = document.extracted_data.text;
+                          
+                          // Remove common AI reasoning patterns
+                          cleanText = cleanText
+                            .replace(/^(Okay,?\s*let's?\s*(tackle|analyze|examine|process|look at)\s*this.*?\.?\s*)/i, '')
+                            .replace(/^(Looking at this.*?\.?\s*)/i, '')
+                            .replace(/^(I can see.*?\.?\s*)/i, '')
+                            .replace(/^(This appears to be.*?\.?\s*)/i, '')
+                            .replace(/^(Let me.*?\.?\s*)/i, '')
+                            .replace(/^(I'll.*?\.?\s*)/i, '')
+                            .replace(/^(First,?\s*I.*?\.?\s*)/i, '')
+                            .replace(/^(From what I can see.*?\.?\s*)/i, '')
+                            .replace(/^(Based on.*?analysis.*?\.?\s*)/i, '')
+                            .replace(/^(After examining.*?\.?\s*)/i, '')
+                            .trim();
+                          
+                          // If text is too short or still contains reasoning, show structured summary instead
+                          if (cleanText.length < 50 || /^(I |Let |Looking |Okay |This |From |Based )/i.test(cleanText)) {
+                            // Generate comprehensive text from all structured data
+                            const parts = [];
+                            const summary = document.extracted_data.document_summary;
+                            
+                            // Document Summary
+                            if (summary) {
+                              if (summary.document_type?.value) parts.push(`Document Type: ${summary.document_type.value}`);
+                              if (summary.vendor_name?.value) parts.push(`Vendor: ${summary.vendor_name.value}`);
+                              if (summary.transaction_date?.value) parts.push(`Date: ${summary.transaction_date.value}`);
+                              if (summary.total_amount?.value) parts.push(`Total Amount: ${summary.total_amount.value}`);
+                            }
+                            
+                            // Financial Entities
+                            const financialEntities = document.extracted_data.financial_entities;
+                            if (financialEntities && financialEntities.length > 0) {
+                              parts.push('\\n--- Financial Information ---');
+                              financialEntities.forEach(entity => {
+                                parts.push(`${entity.label}: ${entity.value} (${entity.category})`);
+                              });
+                            }
+                            
+                            // Comprehensive Line Items
+                            const lineItems = document.extracted_data.line_items;
+                            if (lineItems && lineItems.length > 0) {
+                              parts.push('\\n--- Line Items ---');
+                              lineItems.forEach((item, index) => {
+                                const itemParts = [`Item ${index + 1}:`];
+                                if (item.description?.value) itemParts.push(`Description: ${item.description.value}`);
+                                if (item.quantity?.value) itemParts.push(`Quantity: ${item.quantity.value}`);
+                                if (item.unit_price?.value) itemParts.push(`Unit Price: ${item.unit_price.value}`);
+                                if (item.line_total?.value) itemParts.push(`Line Total: ${item.line_total.value}`);
+                                parts.push(itemParts.join(' | '));
+                              });
+                            }
+                            
+                            // Legacy entities fallback
+                            const entities = document.extracted_data.entities;
+                            if (entities && entities.length > 0 && parts.length === 0) {
+                              parts.push('--- Extracted Entities ---');
+                              entities.forEach(entity => {
+                                parts.push(`${entity.type.replace('_', ' ')}: ${entity.value}`);
+                              });
+                            }
+                            
+                            return parts.length > 0 ? parts.join('\\n') : 'Clean structured data extracted successfully';
+                          }
+                          
+                          return cleanText;
+                        })()}
                       </div>
+                    </div>
+
+                    {/* Raw Data Toggle - Positioned directly below Complete Extracted Text */}
+                    <div className="mt-4">
+                      <button
+                        onClick={() => setShowRawJson(!showRawJson)}
+                        className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        {showRawJson ? 'Hide' : 'Show'} Raw JSON Data
+                      </button>
+                      
+                      {showRawJson && (
+                        <div className="mt-3 bg-gray-800 rounded-lg p-4">
+                          <pre className="text-xs text-gray-300 whitespace-pre-wrap overflow-auto max-h-64">
+                            {JSON.stringify(document.extracted_data, null, 2)}
+                          </pre>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
-
-                {/* Detected Entities */}
-                <div>
-                  <h4 className="text-sm font-medium text-white mb-4 flex items-center">
-                    <DollarSign className="w-4 h-4 mr-2" />
-                    Detected Financial Information
-                  </h4>
-                  
-                  {document.extracted_data?.entities && document.extracted_data.entities.length > 0 ? (
-                    <div className="space-y-2">
-                      {document.extracted_data.entities.map((entity, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between bg-gray-700/50 rounded-lg p-3"
-                        >
-                          <div className="flex items-center space-x-3">
-                            {getEntityIcon(entity.type)}
-                            <div>
-                              <div className="text-sm font-medium text-white capitalize">
-                                {entity.type.replace('_', ' ')}
-                              </div>
-                              <div className="text-sm text-gray-300">{entity.value}</div>
-                            </div>
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {Math.round(entity.confidence * 100)}% confident
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-gray-400">
-                      <FileText className="w-6 h-6 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No financial entities detected</p>
-                      {document.extracted_data?.text && !document.extracted_data.text.includes('error') && (
-                        <p className="text-xs text-gray-500 mt-1">Text was extracted but no structured financial data was found</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Translation Feature */}
-                <div>
-                  <h4 className="text-sm font-medium text-white mb-4 flex items-center">
-                    <Languages className="w-4 h-4 mr-2" />
-                    Translation
-                  </h4>
-                  
-                  <div className="space-y-4">
-                    {/* Language Selection */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-300 mb-2">
-                          Source Language
-                        </label>
-                        <select
-                          value={sourceLanguage}
-                          onChange={(e) => setSourceLanguage(e.target.value)}
-                          className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="auto">Auto-detect</option>
-                          {SUPPORTED_LANGUAGES.map((lang) => (
-                            <option key={lang.code} value={lang.code}>
-                              {lang.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-300 mb-2">
-                          Target Language
-                        </label>
-                        <select
-                          value={targetLanguage}
-                          onChange={(e) => setTargetLanguage(e.target.value)}
-                          className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          {SUPPORTED_LANGUAGES.map((lang) => (
-                            <option key={lang.code} value={lang.code}>
-                              {lang.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Translate Button */}
-                    <button
-                      onClick={handleTranslate}
-                      disabled={isTranslating || !document.extracted_data?.text}
-                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center"
-                    >
-                      {isTranslating ? (
-                        <>
-                          <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
-                          Translating...
-                        </>
-                      ) : (
-                        <>
-                          <Languages className="w-4 h-4 mr-2" />
-                          Translate
-                        </>
-                      )}
-                    </button>
-
-                    {/* Translation Output */}
-                    {translatedText && (
-                      <div className="bg-gray-900 rounded-lg p-4">
-                        <h5 className="text-xs font-medium text-gray-300 mb-2">Translation Result</h5>
-                        <div className="text-sm text-white whitespace-pre-wrap">
-                          {translatedText}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Raw Data Toggle */}
-                <div>
-                  <button
-                    onClick={() => setShowRawJson(!showRawJson)}
-                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-                  >
-                    {showRawJson ? 'Hide' : 'Show'} Raw JSON Data
-                  </button>
-                  
-                  {showRawJson && (
-                    <div className="mt-3 bg-gray-900 rounded-lg p-4">
-                      <pre className="text-xs text-gray-300 whitespace-pre-wrap overflow-auto max-h-64">
-                        {JSON.stringify(document.extracted_data, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           </div>

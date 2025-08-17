@@ -5,7 +5,7 @@
  * Contains the complete OCR processing logic migrated from Supabase Edge Functions.
  */
 
-import { task, tasks } from "@trigger.dev/sdk/v3";
+import { task, tasks, retry } from "@trigger.dev/sdk/v3";
 import { createClient } from '@supabase/supabase-js';
 import type { annotateDocumentImage } from './annotate-document-image';
 
@@ -39,6 +39,18 @@ class OCRProcessingError extends Error {
  */
 function getSystemPrompt(): string {
   return `You are an expert financial analyst AI specializing in document intelligence. Your task is to analyze the provided image of a financial document (e.g., invoice, receipt) and extract all financially relevant information in a structured JSON format.
+
+**CRITICAL: JSON-ONLY RESPONSE REQUIRED**
+Your response MUST be ONLY valid JSON. Do NOT include any explanations, reasoning, thoughts, or commentary before, after, or within your response. Do NOT start with phrases like "Okay, let's tackle this", "Looking at this", "I can see", "Let me analyze", etc.
+
+**ABSOLUTELY FORBIDDEN - THESE WILL CAUSE PARSING FAILURE:**
+- NO JavaScript-style comments (// or /* */) anywhere in your response
+- NO trailing commas after array elements
+- NO explanatory text like "// Continued for all items..."
+- NO code comments of any kind within the JSON structure
+- NO truncation indicators like "... // (more items follow)"
+- NO abbreviated responses - extract ALL line items completely
+- NO reasoning text mixed with JSON - PURE JSON ONLY
 
 **CORE OBJECTIVES:**
 1. **Identify Document Type:** Determine if the document is an invoice, receipt, credit note, etc.
@@ -75,11 +87,17 @@ You MUST return ONLY a single, valid JSON object matching this schema. Do not in
   "full_text": "A full transcription of all text on the document."
 }
 
-**CRITICAL RULES:**
-- Return ONLY the JSON object. Your response must start with { and end with }.
-- Every value must have a corresponding bounding box.
-- Normalize data where appropriate (e.g., dates to YYYY-MM-DD, amounts to numeric strings).
-- If a field is not present, omit it from the JSON instead of using null or empty values.`;
+**CRITICAL RULES - ABSOLUTELY MANDATORY:**
+- Your response MUST start with { and end with } - nothing else
+- NO text before the opening brace { 
+- NO text after the closing brace }
+- NO explanations, reasoning, thinking, or commentary anywhere
+- NO phrases like "Okay, let's tackle this", "Looking at this", "I can see", "Let me analyze", "First, I need to", etc.
+- Your ENTIRE response must be pure, valid JSON only
+- Every value must have a corresponding bounding box
+- Normalize data where appropriate (e.g., dates to YYYY-MM-DD, amounts to numeric strings)
+- If a field is not present, omit it from the JSON instead of using null or empty values
+- VIOLATION OF THESE RULES WILL RESULT IN PROCESSING FAILURE`;
 }
 
 /**
@@ -102,18 +120,40 @@ async function processDocumentWithOCR(imageUrl: string, endpoint: string, modelN
     };
 
     console.log(`[OCR] Processing image from URL. Making request to: ${endpoint}/chat/completions`);
+    console.log(`[OCR] Request payload:`, JSON.stringify(requestBody, null, 2));
+    console.log(`[OCR] Timeout settings: 15 minutes main, 1-15 minute retry range with 3 attempts`);
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 720000); // 12-minute timeout
-
-    const response = await fetch(`${endpoint}/chat/completions`, {
+    // Use Trigger.dev's retry.fetch with proper timeout handling
+    const response = await retry.fetch(`${endpoint}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Connection': 'keep-alive'
+      },
       body: JSON.stringify(requestBody),
-      signal: controller.signal
+      timeoutInMs: 15 * 60 * 1000, // 15 minutes timeout for large documents
+      retry: {
+        timeout: {
+          maxAttempts: 3,
+          factor: 1.5,
+          minTimeoutInMs: 60_000, // Increased to 1 minute for large models
+          maxTimeoutInMs: 15 * 60 * 1000, // 15 minutes max
+          randomize: false,
+        },
+        byStatus: {
+          "500-599": {
+            strategy: "backoff",
+            maxAttempts: 3,
+            factor: 2,
+            minTimeoutInMs: 5_000,
+            maxTimeoutInMs: 30_000,
+            randomize: false,
+          }
+        }
+      }
     });
-
-    clearTimeout(timeoutId);
+    
+    console.log(`[OCR] Fetch completed. Status: ${response.status}, StatusText: ${response.statusText}`);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -125,9 +165,17 @@ async function processDocumentWithOCR(imageUrl: string, endpoint: string, modelN
     const result = await response.json();
     const content = result.choices?.[0]?.message?.content || result.choices?.[0]?.text || result.content || '';
     
+    console.log(`[OCR] Raw response structure:`, {
+      hasChoices: !!result.choices,
+      choicesLength: result.choices?.length || 0,
+      hasContent: !!content,
+      contentLength: content?.length || 0,
+      contentPreview: content?.substring(0, 200) || 'NO CONTENT'
+    });
+    
     if (!content.trim()) {
       throw new OCRProcessingError('OCR service returned an empty response', {
-        service: 'OCR', retryable: true, errorDetails: `Finish Reason: ${result.choices?.[0]?.finish_reason}`
+        service: 'OCR', retryable: true, errorDetails: `Finish Reason: ${result.choices?.[0]?.finish_reason}, Result: ${JSON.stringify(result)}`
       });
     }
 
@@ -144,13 +192,44 @@ async function processDocumentWithOCR(imageUrl: string, endpoint: string, modelN
 
 /**
  * Parses the string response from the AI into a structured object.
+ * Filters out AI reasoning and thought process to show only clean structured data.
  */
 function parseOCRResponse(content: string) {
   try {
+    // First, extract clean JSON from the response
     const parsedJson = extractJSONFromResponse(content);
     if (!parsedJson) {
       console.warn('[Parser] Failed to find JSON, creating fallback result.');
       return createFallbackResult(content);
+    }
+    
+    console.log('[Parser] Successfully parsed OCR JSON response');
+    console.log('[Parser] Document summary:', JSON.stringify(parsedJson.document_summary, null, 2));
+    console.log('[Parser] Financial entities count:', parsedJson.financial_entities?.length || 0);
+    console.log('[Parser] Line items count:', parsedJson.line_items?.length || 0);
+    
+    // Filter out AI reasoning from the full_text field
+    let cleanFullText = parsedJson.full_text || '';
+    if (cleanFullText) {
+      // Remove AI reasoning patterns like "Okay, let's tackle this...", "Looking at this...", etc.
+      cleanFullText = cleanFullText
+        .replace(/^(Okay,?\s*let's?\s*(tackle|analyze|examine|process|look at)\s*this.*?\.?\s*)/i, '')
+        .replace(/^(Looking at this.*?\.?\s*)/i, '')
+        .replace(/^(I can see.*?\.?\s*)/i, '')
+        .replace(/^(This appears to be.*?\.?\s*)/i, '')
+        .replace(/^(Let me.*?\.?\s*)/i, '')
+        .replace(/^(I'll.*?\.?\s*)/i, '')
+        .replace(/^(First,?\s*I.*?\.?\s*)/i, '')
+        .replace(/^(From what I can see.*?\.?\s*)/i, '')
+        .replace(/^(Based on.*?analysis.*?\.?\s*)/i, '')
+        .replace(/^(After examining.*?\.?\s*)/i, '')
+        .trim();
+      
+      // If the cleaned text is too short or still contains reasoning, extract from entities instead
+      if (cleanFullText.length < 50 || /^(I |Let |Looking |Okay |This |From |Based )/i.test(cleanFullText)) {
+        console.log('[Parser] Full text contains AI reasoning, extracting clean text from entities');
+        cleanFullText = '';
+      }
     }
     
     const entities: any[] = [];
@@ -161,7 +240,12 @@ function parseOCRResponse(content: string) {
       Object.entries(parsedJson.document_summary).forEach(([key, item]: [string, any]) => {
         if (item && item.value) {
           entities.push({ type: key, value: String(item.value), confidence: item.confidence || 0.9 });
-          if (item.bbox) boundingBoxes.push({ category: key, text: String(item.value), ...mapBbox(item.bbox) });
+          if (item.bbox) {
+            console.log(`[BBox] Found bbox for ${key}:`, item.bbox);
+            boundingBoxes.push({ category: key, text: String(item.value), ...mapBbox(item.bbox) });
+          } else {
+            console.log(`[BBox] No bbox for ${key}`);
+          }
         }
       });
     }
@@ -211,12 +295,60 @@ function parseOCRResponse(content: string) {
       });
     }
 
-    const text = parsedJson.full_text || entities.map((e) => e.value).join('\n');
-    const wordCount = text.split(/\s+/).filter(Boolean).length;
+    // Use cleaned full text or construct clean text from entities
+    let finalText = cleanFullText;
+    if (!finalText || finalText.length < 50) {
+      // Construct clean text from structured data
+      const textParts: string[] = [];
+      
+      // Add document summary info
+      if (parsedJson.document_summary) {
+        const summary = parsedJson.document_summary;
+        if (summary.vendor_name?.value) textParts.push(`Vendor: ${summary.vendor_name.value}`);
+        if (summary.document_type?.value) textParts.push(`Document Type: ${summary.document_type.value}`);
+        if (summary.transaction_date?.value) textParts.push(`Date: ${summary.transaction_date.value}`);
+        if (summary.total_amount?.value) textParts.push(`Total: ${summary.total_amount.value}`);
+      }
+      
+      // Add line items
+      if (Array.isArray(parsedJson.line_items) && parsedJson.line_items.length > 0) {
+        textParts.push('\nLine Items:');
+        parsedJson.line_items.forEach((item: any, index: number) => {
+          const itemParts = [`${index + 1}.`];
+          if (item.description?.value) itemParts.push(item.description.value);
+          if (item.quantity?.value) itemParts.push(`Qty: ${item.quantity.value}`);
+          if (item.unit_price?.value) itemParts.push(`Price: ${item.unit_price.value}`);
+          if (item.line_total?.value) itemParts.push(`Total: ${item.line_total.value}`);
+          textParts.push(itemParts.join(' '));
+        });
+      }
+      
+      // Add financial entities
+      if (Array.isArray(parsedJson.financial_entities)) {
+        parsedJson.financial_entities.forEach((entity: any) => {
+          if (entity.value && entity.label) {
+            textParts.push(`${entity.label}: ${entity.value}`);
+          }
+        });
+      }
+      
+      finalText = textParts.join('\n');
+    }
+    
+    // Fallback to entities if still no clean text
+    if (!finalText) {
+      finalText = entities.map((e) => e.value).join('\n');
+    }
+    
+    const wordCount = finalText.split(/\s+/).filter(Boolean).length;
     
     return {
-      text: text.trim(),
+      text: finalText.trim(),
       entities: entities,
+      // Add structured data directly to match frontend expectations
+      document_summary: parsedJson.document_summary || undefined,
+      financial_entities: parsedJson.financial_entities || undefined,
+      line_items: parsedJson.line_items || undefined,
       metadata: {
         pageCount: 1,
         wordCount,
@@ -235,14 +367,69 @@ function parseOCRResponse(content: string) {
 // --- Helper Functions ---
 
 function extractJSONFromResponse(content: string): any | null {
+  console.log('[Parser] Raw response length:', content.length);
+  console.log('[Parser] Raw response preview:', content.substring(0, 200));
+  
+  // First, try to find JSON in code blocks
   const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
   if (codeBlockMatch && codeBlockMatch[1]) {
-    try { return JSON.parse(codeBlockMatch[1]); } catch (e) { /* ignore */}
+    try { 
+      console.log('[Parser] Found JSON in code block');
+      // Remove JavaScript-style comments before parsing
+      const cleanedJson = removeJavaScriptComments(codeBlockMatch[1]);
+      return JSON.parse(cleanedJson); 
+    } catch (e) { 
+      console.warn('[Parser] Failed to parse JSON from code block:', e);
+      console.log('[Parser] Code block content that failed:', codeBlockMatch[1].substring(0, 1000));
+    }
   }
+  
+  // More aggressive cleaning - remove everything that's not JSON
+  let cleanedContent = content.trim();
+  
+  // Remove all text before first opening brace
+  const firstBraceIndex = cleanedContent.indexOf('{');
+  if (firstBraceIndex > 0) {
+    cleanedContent = cleanedContent.substring(firstBraceIndex);
+    console.log('[Parser] Removed text before first brace');
+  }
+  
+  // Remove all text after last closing brace
+  const lastBraceIndex = cleanedContent.lastIndexOf('}');
+  if (lastBraceIndex >= 0 && lastBraceIndex < cleanedContent.length - 1) {
+    cleanedContent = cleanedContent.substring(0, lastBraceIndex + 1);
+    console.log('[Parser] Removed text after last brace');
+  }
+  
+  // Remove JavaScript-style comments from cleaned content
+  cleanedContent = removeJavaScriptComments(cleanedContent);
+  
+  // Try to parse the cleaned content
+  if (cleanedContent.startsWith('{') && cleanedContent.endsWith('}')) {
+    try {
+      console.log('[Parser] Attempting to parse cleaned JSON');
+      return JSON.parse(cleanedContent);
+    } catch (e) {
+      console.warn('[Parser] Failed to parse cleaned JSON:', e);
+      console.log('[Parser] Cleaned content preview:', cleanedContent.substring(0, 500));
+      console.log('[Parser] Full cleaned content length:', cleanedContent.length);
+    }
+  }
+  
+  // Try to extract JSON using regex as fallback
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (jsonMatch && jsonMatch[0]) {
-    try { return JSON.parse(jsonMatch[0]); } catch (e) { /* ignore */ }
+    try { 
+      console.log('[Parser] Attempting regex-extracted JSON');
+      // Remove JavaScript-style comments before parsing
+      const cleanedRegexJson = removeJavaScriptComments(jsonMatch[0]);
+      return JSON.parse(cleanedRegexJson); 
+    } catch (e) { 
+      console.warn('[Parser] Failed to parse regex-extracted JSON:', e);
+    }
   }
+  
+  console.warn('[Parser] No valid JSON found in response');
   return null;
 }
 
@@ -258,6 +445,61 @@ function createFallbackResult(content: string) {
       processingMethod: 'text_extraction',
     }
   };
+}
+
+/**
+ * Removes JavaScript-style comments from a JSON string to make it parseable.
+ * Handles both single-line (//) and multi-line block comments while preserving strings.
+ */
+function removeJavaScriptComments(jsonString: string): string {
+  console.log('[Parser] Removing JavaScript comments from JSON');
+  
+  // Split by lines and process each line to remove single-line comments
+  const lines = jsonString.split('\n');
+  const processedLines = lines.map(line => {
+    // Find the position of // that's not inside a string
+    let inString = false;
+    let escapeNext = false;
+    let commentIndex = -1;
+    
+    for (let i = 0; i < line.length - 1; i++) {
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      
+      if (line[i] === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      
+      if (line[i] === '"') {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString && line[i] === '/' && line[i + 1] === '/') {
+        commentIndex = i;
+        break;
+      }
+    }
+    
+    if (commentIndex >= 0) {
+      // Remove the comment and any trailing whitespace
+      const cleaned = line.substring(0, commentIndex).trim();
+      console.log(`[Parser] Removed comment from line: "${line.trim()}" -> "${cleaned}"`);
+      return cleaned;
+    }
+    
+    return line;
+  });
+  
+  let result = processedLines.join('\n');
+  
+  // Remove multi-line comments /* ... */
+  result = result.replace(/\/\*[\s\S]*?\*\//g, '');
+  
+  return result;
 }
 
 function mapBbox(bbox: number[]): { x1: number; y1: number; x2: number; y2: number } {
@@ -289,8 +531,9 @@ export const processDocumentOCR = task({
       // Step 2: Get OCR service configuration
       const ocrEndpointUrl = process.env.OCR_ENDPOINT_URL;
       const ocrModelName = process.env.OCR_MODEL_NAME;
+      console.log(`[OCR] Environment variables - Endpoint: ${ocrEndpointUrl ? 'SET' : 'MISSING'}, Model: ${ocrModelName ? 'SET' : 'MISSING'}`);
       if (!ocrEndpointUrl || !ocrModelName) {
-        throw new Error('Missing OCR service environment variables');
+        throw new Error(`Missing OCR service environment variables. Endpoint: ${ocrEndpointUrl ? 'SET' : 'MISSING'}, Model: ${ocrModelName ? 'SET' : 'MISSING'}`);
       }
 
       // Step 3: Call the external OCR service with complete processing logic
@@ -320,7 +563,16 @@ export const processDocumentOCR = task({
 
       // Step 6: Trigger downstream annotation task if bounding boxes exist
       const boundingBoxes = (ocrResult.metadata as any)?.boundingBoxes || [];
+      console.log(`[Annotation] Checking bounding boxes for document: ${payload.documentId}`);
+      console.log(`[Annotation] Total bounding boxes found: ${boundingBoxes.length}`);
+      
       if (boundingBoxes.length > 0) {
+        console.log(`[Annotation] Sample bounding boxes:`, boundingBoxes.slice(0, 3).map((bb: any) => ({
+          category: bb.category,
+          text: bb.text?.substring(0, 20) + '...',
+          coords: `(${bb.x1},${bb.y1})-(${bb.x2},${bb.y2})`
+        })));
+        
         console.log(`🎨 Triggering annotation task for ${boundingBoxes.length} bounding boxes`);
         
         try {
@@ -336,6 +588,13 @@ export const processDocumentOCR = task({
         }
       } else {
         console.log(`📝 No bounding boxes found - skipping annotation for document: ${payload.documentId}`);
+        console.log(`[Annotation] OCR result structure:`, {
+          hasDocumentSummary: !!(ocrResult as any).document_summary,
+          hasFinancialEntities: !!(ocrResult as any).financial_entities?.length,
+          hasLineItems: !!(ocrResult as any).line_items?.length,
+          hasMetadata: !!ocrResult.metadata,
+          hasBoundingBoxes: !!(ocrResult.metadata as any)?.boundingBoxes
+        });
       }
 
       return { success: true, documentId: payload.documentId, avgConfidence };

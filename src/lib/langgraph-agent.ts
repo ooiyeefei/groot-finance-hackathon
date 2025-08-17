@@ -3,21 +3,35 @@
  * State-driven, cyclical agent architecture for intelligent financial assistance
  */
 
-import { StateGraph, END, START } from "@langchain/langgraph";
-import { BaseMessage, HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
+import { StateGraph, END, START, Annotation } from "@langchain/langgraph";
+import { BaseMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import { EmbeddingService } from './ai-services/embedding-service';
 import { VectorStorageService } from './ai-services/vector-storage-service';
 import { aiConfig } from './config/ai-config';
 import { createServiceSupabaseClient } from './supabase-server';
 
-// Agent State Interface - tracks conversation and intermediate steps
-export interface AgentState {
-  messages: BaseMessage[];
-  language?: string;
-  userId?: string;
-  conversationId?: string;
-  [key: string]: any; // Index signature for LangGraph compatibility
-}
+// Agent State Definition using modern Annotation.Root pattern
+const AgentStateAnnotation = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
+    default: () => []
+  }),
+  language: Annotation<string>({
+    reducer: (x: string, y: string) => y || x,
+    default: () => 'en'
+  }),
+  userId: Annotation<string>({
+    reducer: (x: string, y: string) => y || x,
+    default: () => ''
+  }),
+  conversationId: Annotation<string>({
+    reducer: (x: string, y: string) => y || x,
+    default: () => ''
+  })
+});
+
+// Export the state type for use in functions
+export type AgentState = typeof AgentStateAnnotation.State;
 
 // Tool execution results interface
 interface ToolExecutionResult {
@@ -386,39 +400,17 @@ Always be helpful, accurate, and focus on financial insights that benefit small 
 export function createFinancialAgent() {
   console.log('[LangGraph] Creating financial agent...');
 
-  // Define the state graph
-  const workflow = new StateGraph<AgentState>({
-    channels: {
-      messages: {
-        value: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
-        default: () => []
-      },
-      language: {
-        value: (x?: string, y?: string) => y ?? x,
-        default: () => 'en'
-      },
-      userId: {
-        value: (x?: string, y?: string) => y ?? x,
-        default: () => undefined
-      },
-      conversationId: {
-        value: (x?: string, y?: string) => y ?? x,  
-        default: () => undefined
-      }
-    }
-  });
+  // Define the state graph using modern Annotation pattern
+  const workflow = new StateGraph(AgentStateAnnotation);
 
   // Add nodes
   workflow.addNode('callModel', callModel);
   workflow.addNode('executeTool', executeTool);
 
   // Add edges
-  workflow.addEdge(START, 'callModel');
-  workflow.addConditionalEdges('callModel', shouldContinue, {
-    'executeTool': 'executeTool',
-    [END]: END
-  });
-  workflow.addEdge('executeTool', 'callModel');
+  workflow.addEdge("__start__", "callModel" as any);
+  workflow.addConditionalEdges("callModel" as any, shouldContinue);
+  workflow.addEdge("executeTool" as any, "callModel" as any);
 
   // Compile the graph
   const app = workflow.compile();

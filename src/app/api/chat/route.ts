@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       messages: conversationHistory,
       language: language,
       userId: userId,
-      conversationId: currentConversationId
+      conversationId: currentConversationId || 'default'
     }
 
     console.log(`[Chat API] Invoking LangGraph agent with ${initialState.messages.length} messages`)

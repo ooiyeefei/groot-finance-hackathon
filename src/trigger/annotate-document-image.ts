@@ -26,10 +26,66 @@ interface BoundingBox {
   text: string;
 }
 
+interface ImageDimensions {
+  width: number;
+  height: number;
+}
+
+/**
+ * Scale bounding box coordinates to match actual image dimensions
+ * OCR models often assume different image sizes than our PDF converter output
+ * PDF converter standardizes to 1024x1400, but OCR may assume different dimensions
+ */
+function scaleBoundingBoxes(
+  boundingBoxes: BoundingBox[], 
+  actualDimensions: ImageDimensions,
+  assumedDimensions: ImageDimensions = { width: 1024, height: 1400 }
+): BoundingBox[] {
+  const scaleX = actualDimensions.width / assumedDimensions.width;
+  const scaleY = actualDimensions.height / assumedDimensions.height;
+  
+  console.log(`[Annotation] Scaling coordinates: ${assumedDimensions.width}x${assumedDimensions.height} → ${actualDimensions.width}x${actualDimensions.height}`);
+  console.log(`[Annotation] Scale factors: X=${scaleX.toFixed(3)}, Y=${scaleY.toFixed(3)}`);
+  
+  return boundingBoxes.map(box => ({
+    ...box,
+    x1: Math.round(box.x1 * scaleX),
+    y1: Math.round(box.y1 * scaleY),
+    x2: Math.round(box.x2 * scaleX),
+    y2: Math.round(box.y2 * scaleY)
+  }));
+}
+
 /**
  * Creates an annotated image using Python + OpenCV for professional quality
  * This is the industry standard approach for computer vision tasks
  */
+/**
+ * Get actual image dimensions without processing annotations
+ */
+async function getImageDimensions(imageUrl: string): Promise<ImageDimensions> {
+  try {
+    // Use a simple Python script call to get dimensions only
+    const result = await python.runScript(
+      "./src/python/annotate_image.py",
+      [imageUrl, "[]"] // Empty bounding boxes array to just get dimensions
+    );
+    
+    const scriptResult = JSON.parse(result.stdout);
+    if (!scriptResult.success) {
+      throw new Error(`Failed to get image dimensions: ${scriptResult.error}`);
+    }
+    
+    return {
+      width: scriptResult.original_size.width,
+      height: scriptResult.original_size.height
+    };
+  } catch (error) {
+    console.error(`[Annotation] Failed to get image dimensions:`, error);
+    throw error;
+  }
+}
+
 async function createAnnotatedImage(
   originalImageUrl: string,
   boundingBoxes: BoundingBox[]
@@ -67,6 +123,46 @@ async function createAnnotatedImage(
 
 // --- Main Trigger.dev v3 Task Definition ---
 
+/**
+ * Smart filtering function to reduce overlapping bounding boxes
+ * Prioritizes field-level boxes over row-level boxes for line items
+ */
+function filterBoundingBoxes(boundingBoxes: BoundingBox[]): BoundingBox[] {
+  const filtered: BoundingBox[] = [];
+  const rowCategories = new Set<string>();
+  
+  // First pass: collect all row-level categories
+  boundingBoxes.forEach(box => {
+    if (box.category.startsWith('line_item_row_')) {
+      rowCategories.add(box.category);
+    }
+  });
+  
+  // Second pass: filter boxes intelligently
+  boundingBoxes.forEach(box => {
+    // Always include document-level and financial entities
+    if (!box.category.startsWith('line_item_')) {
+      filtered.push(box);
+      return;
+    }
+    
+    // For line items: prioritize field-level boxes, skip row-level boxes
+    if (box.category.startsWith('line_item_row_')) {
+      // Skip row-level boxes - we want field-level granularity
+      console.log(`[Annotation] Skipping row-level box: ${box.category}`);
+      return;
+    }
+    
+    // Include field-level line item boxes (description, quantity, price, etc.)
+    if (box.category.startsWith('line_item_')) {
+      filtered.push(box);
+    }
+  });
+  
+  console.log(`[Annotation] Filtered ${boundingBoxes.length} boxes down to ${filtered.length} relevant annotations`);
+  return filtered;
+}
+
 export const annotateDocumentImage = task({
   id: "annotate-document-image",
   run: async (payload: { 
@@ -77,10 +173,10 @@ export const annotateDocumentImage = task({
     console.log(`✅ Starting annotation process for document: ${payload.documentId}`);
 
     try {
-      // Step 1: Extract bounding boxes from OCR results
-      const boundingBoxes = payload.extractedData?.metadata?.boundingBoxes || [];
+      // Step 1: Extract and filter bounding boxes from OCR results
+      const rawBoundingBoxes = payload.extractedData?.metadata?.boundingBoxes || [];
       
-      if (boundingBoxes.length === 0) {
+      if (rawBoundingBoxes.length === 0) {
         console.log(`[Annotation] No bounding boxes found for document: ${payload.documentId}`);
         return { 
           success: true, 
@@ -89,7 +185,21 @@ export const annotateDocumentImage = task({
         };
       }
 
-      console.log(`[Annotation] Found ${boundingBoxes.length} bounding boxes to annotate`);
+      console.log(`[Annotation] Found ${rawBoundingBoxes.length} raw bounding boxes`);
+      
+      // Apply smart filtering to reduce overlapping annotations
+      const boundingBoxes = filterBoundingBoxes(rawBoundingBoxes);
+      
+      if (boundingBoxes.length === 0) {
+        console.log(`[Annotation] No bounding boxes remaining after filtering for document: ${payload.documentId}`);
+        return { 
+          success: true, 
+          message: 'No annotations to create after filtering',
+          documentId: payload.documentId 
+        };
+      }
+
+      console.log(`[Annotation] Using ${boundingBoxes.length} filtered bounding boxes for annotation`);
 
       // Step 2: Create signed URL for original image
       const { data: urlData, error: urlError } = await supabase.storage
@@ -102,22 +212,33 @@ export const annotateDocumentImage = task({
 
       console.log(`[Annotation] Created signed URL for original image`);
 
-      // Step 3: Generate annotated image using Python + OpenCV
+      // Step 3: Get actual image dimensions to fix coordinate scaling issue
+      console.log(`[Annotation] Getting actual image dimensions for coordinate scaling`);
+      const actualDimensions = await getImageDimensions(urlData.signedUrl);
+      
+      // Step 4: Scale coordinates based on actual vs assumed dimensions
+      // This fixes the critical positioning mismatch where annotations appear in wrong locations
+      // OCR models often assume different image sizes than our PDF converter output (1024x1400)
+      const scaledBoundingBoxes = scaleBoundingBoxes(boundingBoxes, actualDimensions);
+      
+      console.log(`[Annotation] Applied coordinate scaling for ${scaledBoundingBoxes.length} bounding boxes`);
+      
+      // Step 5: Generate annotated image using scaled coordinates
       const tempImagePath = await createAnnotatedImage(
         urlData.signedUrl, 
-        boundingBoxes
+        scaledBoundingBoxes
       );
 
-      // Step 4: Read the annotated image from temporary file
+      // Step 6: Read the annotated image from temporary file
       const annotatedImageBuffer = await fs.readFile(tempImagePath);
 
-      // Step 5: Generate annotated storage path
+      // Step 7: Generate annotated storage path
       const pathParts = payload.imageStoragePath.split('/');
       const fileName = pathParts[pathParts.length - 1];
       const directory = pathParts.slice(0, -1).join('/');
       const annotatedImagePath = `${directory}/annotated_${payload.documentId}_${fileName}`;
 
-      // Step 6: Store annotated image to Supabase Storage
+      // Step 8: Store annotated image to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('documents')
         .upload(annotatedImagePath, annotatedImageBuffer, {
@@ -125,7 +246,7 @@ export const annotateDocumentImage = task({
           upsert: true
         });
 
-      // Step 7: Clean up temporary file
+      // Step 9: Clean up temporary file
       try {
         await fs.unlink(tempImagePath);
         console.log(`[Annotation] Cleaned up temporary file: ${tempImagePath}`);
@@ -139,7 +260,7 @@ export const annotateDocumentImage = task({
 
       console.log(`[Annotation] Uploaded annotated image to: ${annotatedImagePath}`);
 
-      // Step 8: Update document record with annotated image path  
+      // Step 10: Update document record with annotated image path  
       const { error: updateError } = await supabase
         .from('documents')
         .update({ 

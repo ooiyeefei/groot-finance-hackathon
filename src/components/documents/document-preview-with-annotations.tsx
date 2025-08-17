@@ -264,30 +264,6 @@ export default function DocumentPreviewWithAnnotations({
         )}
       </div>
 
-      {/* Legend */}
-      {boundingBoxes.length > 0 && (
-        <div className="mt-4 p-3 bg-gray-700/30 rounded-lg">
-          <div className="text-xs font-medium text-gray-300 mb-2">Detection Categories</div>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(CATEGORY_COLORS).map(([category, color]) => {
-              const count = boundingBoxes.filter(box => box.category === category).length
-              if (count === 0) return null
-              
-              return (
-                <div key={category} className="flex items-center space-x-1">
-                  <div 
-                    className="w-3 h-3 rounded-sm"
-                    style={{ backgroundColor: color }}
-                  />
-                  <span className="text-xs text-gray-400">
-                    {category} ({count})
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
