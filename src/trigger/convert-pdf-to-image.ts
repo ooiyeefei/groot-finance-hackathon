@@ -159,8 +159,17 @@ except Exception as e:
       const imageBuffer = Buffer.from(base64String, 'base64');
       console.log(`📦 Final image buffer size: ${imageBuffer.length} bytes`);
 
-      // Step 3: Upload to Supabase (using placeholder for now)
-      const imagePath = payload.pdfStoragePath.replace('.pdf', '.png').replace(/^[^/]*\//, 'converted/');
+      // Step 3: Upload to Supabase - construct proper path for converted images
+      // Original path: "cc5fdbbc-1459-43ad-9736-3cc65649d23b/user_31B9ml2Dwl2q8qxYFS4E13ABXSe/1755448953936_magpie_i-2507_0042.pdf"
+      // Target path: "converted/cc5fdbbc-1459-43ad-9736-3cc65649d23b/MAGPIE I-2507_0042.png" (use original filename from database)
+      const pathParts = payload.pdfStoragePath.split('/');
+      const directory = pathParts[0]; // Get the first directory (UUID)
+      
+      // Get the document record to extract the original filename
+      const { data: document } = await supabase.from('documents').select('file_name').eq('id', payload.documentId).single();
+      const originalFilename = document?.file_name || pathParts[pathParts.length - 1];
+      
+      const imagePath = `converted/${directory}/${originalFilename.replace('.pdf', '.png')}`;
       
       console.log(`📤 Uploading converted image to: ${imagePath}`);
       const { error: uploadError } = await supabase.storage
