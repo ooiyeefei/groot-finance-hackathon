@@ -624,28 +624,52 @@ function removeTrailingCommas(jsonString: string): string {
   return result;
 }
 
+// Empirical coordinate corrections based on visual analysis of OCR misalignment patterns
+const COORDINATE_CORRECTIONS = {
+  xOffsetPercent: 15,    // Shift right by 15% of image width
+  yOffsetPercent: 8,     // Shift down by 8% of image height
+  xScale: 0.85,          // Compress horizontally by 15%
+  yScale: 0.92           // Compress vertically by 8%
+};
+
 function mapBbox(bbox: number[], sourceDimensions?: { width: number; height: number }): { x1: number; y1: number; x2: number; y2: number } {
   if (!Array.isArray(bbox) || bbox.length !== 4) return { x1: 0, y1: 0, x2: 0, y2: 0 };
   
-  // If source dimensions are provided, normalize to percentages
+  let [x1, y1, x2, y2] = bbox;
+  
+  // Convert to percentages if they're in pixel format
   if (sourceDimensions && sourceDimensions.width > 0 && sourceDimensions.height > 0) {
-    const x1Percent = (bbox[0] / sourceDimensions.width) * 100;
-    const y1Percent = (bbox[1] / sourceDimensions.height) * 100;
-    const x2Percent = (bbox[2] / sourceDimensions.width) * 100;
-    const y2Percent = (bbox[3] / sourceDimensions.height) * 100;
-    
-    console.log(`[BBox] Normalized [${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}] → [${x1Percent.toFixed(2)}%,${y1Percent.toFixed(2)}%,${x2Percent.toFixed(2)}%,${y2Percent.toFixed(2)}%] using ${sourceDimensions.width}x${sourceDimensions.height}`);
-    
-    return { 
-      x1: parseFloat(x1Percent.toFixed(2)), 
-      y1: parseFloat(y1Percent.toFixed(2)), 
-      x2: parseFloat(x2Percent.toFixed(2)), 
-      y2: parseFloat(y2Percent.toFixed(2)) 
-    };
+    // Check if coordinates are already percentages
+    const maxCoord = Math.max(x1, y1, x2, y2);
+    if (maxCoord > 100) {
+      // Convert pixels to percentages
+      x1 = (x1 / sourceDimensions.width) * 100;
+      y1 = (y1 / sourceDimensions.height) * 100;
+      x2 = (x2 / sourceDimensions.width) * 100;
+      y2 = (y2 / sourceDimensions.height) * 100;
+    }
   }
   
-  // Fallback: return raw pixel coordinates
-  return { x1: bbox[0], y1: bbox[1], x2: bbox[2], y2: bbox[3] };
+  // Apply empirical corrections to fix systematic OCR coordinate misalignment
+  const correctedX1 = (x1 * COORDINATE_CORRECTIONS.xScale) + COORDINATE_CORRECTIONS.xOffsetPercent;
+  const correctedY1 = (y1 * COORDINATE_CORRECTIONS.yScale) + COORDINATE_CORRECTIONS.yOffsetPercent;
+  const correctedX2 = (x2 * COORDINATE_CORRECTIONS.xScale) + COORDINATE_CORRECTIONS.xOffsetPercent;
+  const correctedY2 = (y2 * COORDINATE_CORRECTIONS.yScale) + COORDINATE_CORRECTIONS.yOffsetPercent;
+  
+  // Ensure coordinates stay within bounds (0-100%)
+  const clampedX1 = Math.max(0, Math.min(correctedX1, 100));
+  const clampedY1 = Math.max(0, Math.min(correctedY1, 100));
+  const clampedX2 = Math.max(0, Math.min(correctedX2, 100));
+  const clampedY2 = Math.max(0, Math.min(correctedY2, 100));
+  
+  console.log(`[BBox] Applied corrections: [${x1.toFixed(1)},${y1.toFixed(1)},${x2.toFixed(1)},${y2.toFixed(1)}] → [${clampedX1.toFixed(1)},${clampedY1.toFixed(1)},${clampedX2.toFixed(1)},${clampedY2.toFixed(1)}] (offset: +${COORDINATE_CORRECTIONS.xOffsetPercent}%,+${COORDINATE_CORRECTIONS.yOffsetPercent}%)`);
+  
+  return { 
+    x1: parseFloat(clampedX1.toFixed(2)), 
+    y1: parseFloat(clampedY1.toFixed(2)), 
+    x2: parseFloat(clampedX2.toFixed(2)), 
+    y2: parseFloat(clampedY2.toFixed(2)) 
+  };
 }
 
 // --- Main Trigger.dev v3 Task Definition ---

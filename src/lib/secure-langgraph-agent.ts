@@ -129,10 +129,6 @@ async function validateSecurity(state: SecureAgentState): Promise<Partial<Secure
  * Secure Call Model Node - The agent's "brain" with security enforcement
  * Only processes requests after security validation
  */
-/**
- * Secure Call Model Node - The agent's "brain" with security enforcement
- * Only processes requests after security validation
- */
 async function secureCallModel(state: SecureAgentState): Promise<Partial<SecureAgentState>> {
   console.log('[SecureCallModel] Processing request with security validation')
 
@@ -146,18 +142,24 @@ async function secureCallModel(state: SecureAgentState): Promise<Partial<SecureA
 
   const systemPrompt = getSecureSystemPrompt(state.language || 'en')
   
-  // Prepare messages for SEA-LION
+  // Prepare messages for LLM
   const messages = [
     { role: 'system', content: systemPrompt },
-    // ### UPDATED: Use a robust type check for both local code and Studio UI inputs
     ...state.messages.map((msg: any) => ({
-      role: msg._getType ? msg._getType() : msg.type, // Check if _getType exists, otherwise use .type
+      role: (msg._getType ? msg._getType() : msg.type) === 'human' ? 'user' : 'assistant',
       content: msg.content
     }))
   ]
 
   try {
-    console.log(`[SecureCallModel] Calling SEA-LION for user: ${state.userContext.userId}`)
+    console.log(`[SecureCallModel] Calling LLM for user: ${state.userContext.userId}`)
+    // ### DEBUGGING: Log the full request payload being sent to the LLM endpoint
+    console.log('[SecureCallModel] Request Payload:', JSON.stringify({
+        model: aiConfig.chat.modelId,
+        messages,
+        max_tokens: 1000,
+        temperature: 0.3
+    }, null, 2));
     
     const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
       method: 'POST',
@@ -173,77 +175,73 @@ async function secureCallModel(state: SecureAgentState): Promise<Partial<SecureA
     })
 
     if (!response.ok) {
-      throw new Error(`SEA-LION API error: ${response.status}`)
+      // ### DEBUGGING: Log the non-OK response status and text
+      const errorText = await response.text();
+      console.error(`[SecureCallModel] LLM API error: ${response.status} - ${errorText}`);
+      throw new Error(`LLM API error: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json()
-    let content = result.choices?.[0]?.message?.content || 'I apologize, but I cannot process your request right now.'
+    // ### DEBUGGING: Log the full successful response from the LLM endpoint
+    console.log('[SecureCallModel] Raw LLM Response:', JSON.stringify(result, null, 2));
 
-    console.log(`[SecureCallModel] SEA-LION response for user ${state.userContext.userId}:`, content.substring(0, 100) + '...')
+    const assistantResponse = result.choices?.[0]?.message;
 
-    // Clean SEA-LION thinking process - enhanced cleaning for chat responses
-    if (content && typeof content === 'string') {
-      // Handle </think> delimiter pattern
-      if (content.includes('</think>')) {
-        const parts = content.split('</think>')
-        if (parts.length > 1) {
-          content = parts[parts.length - 1].trim()
-        }
+    // CRITICAL: Check for tool calls directly from the JSON response.
+    // This is the most reliable way to handle the output.
+    if (assistantResponse?.tool_calls) {
+      const toolCall = assistantResponse.tool_calls[0];
+      const toolName = toolCall.function?.name;
+      
+      if (!ToolFactory.hasToolType(toolName)) {
+        console.error(`[SecureCallModel] Unknown tool requested: ${toolName}`);
+        return {
+          messages: [...state.messages, new AIMessage('I apologize, but I cannot use the requested tool.')],
+        };
       }
       
-      // Remove additional LLM meta-commentary patterns specific to chat
+      // Construct a new message with the tool call.
+      const aiMessageWithToolCall = new AIMessage({
+        content: '',
+        tool_calls: [toolCall],
+      });
+
+      console.log('[SecureCallModel] Tool call detected:', toolCall);
+      return {
+        messages: [...state.messages, aiMessageWithToolCall],
+      };
+    }
+    
+    // If no tool call, get the content.
+    let content = assistantResponse?.content || 'I apologize, but I cannot process your request right now.';
+    
+    // Clean up extra fields or meta-commentary in the content if they exist.
+    if (content && typeof content === 'string') {
       content = content
         .replace(/^(I need to understand.*?\.)?\s*/i, '')
         .replace(/^(Let me help you.*?\.)?\s*/i, '')
-        .replace(/^(I can help.*?\.)?\s*/i, '')
-        .replace(/^(Based on.*?let me.*?\.)?\s*/i, '')
-        .replace(/^(I'll.*?for you.*?\.)?\s*/i, '')
-        .replace(/^(Looking at.*?I can.*?\.)?\s*/i, '')
-        .replace(/^\*\*[^*]+\*\*\s*/i, '') // Remove **bold headers**
-        .replace(/^Analysis:\s*/i, '')
-        .replace(/^Response:\s*/i, '')
-        .replace(/^Answer:\s*/i, '')
-        .trim()
+        .replace(/^\*\*Response:\*\*\s*/i, '')
+        .trim();
     }
-
-    // Check if the response is a tool call (JSON format)
-    try {
-      const toolCall = JSON.parse(content)
-      if (toolCall.tool_call && toolCall.tool_call.name) {
-        // This is a tool call - validate it's a known tool
-        if (!ToolFactory.hasToolType(toolCall.tool_call.name)) {
-          return {
-            messages: [...state.messages, new AIMessage('I apologize, but I cannot use the requested tool. Please try a different approach.')]
-          }
-        }
-        
-        // Add tool call to messages
-        return {
-          messages: [...state.messages, new AIMessage(content)]
-        }
-      }
-    } catch {
-      // Not JSON, treat as regular response
-    }
-
-    // Final validation - ensure we have clean content
-    if (!content || content.length < 3) {
-      content = 'I understand your question. Could you please provide more details so I can assist you better?'
-    }
-
-    // Regular text response - add to messages
+    
+    // Add the final text response.
+    console.log('[SecureCallModel] Final AI Content:', content); // ### Added final content log
     return {
-      messages: [...state.messages, new AIMessage(content)]
-    }
+      messages: [...state.messages, new AIMessage(content)],
+    };
 
   } catch (error) {
-    console.error(`[SecureCallModel] Error for user ${state.userContext.userId}:`, error)
-    return {
-      messages: [...state.messages, new AIMessage('I apologize, but I encountered an error processing your request. Please try again.')]
+    // ### DEBUGGING: Log the full error object for detailed insights
+    console.error(`[SecureCallModel] Caught an error for user ${state.userContext.userId}:`, error);
+    // If it's an HTTP error, log response details
+    if (error instanceof Error && error.message.startsWith('LLM API error:')) {
+      console.error('[SecureCallModel] API Error Details:', error.message);
     }
+    return {
+      messages: [...state.messages, new AIMessage('I apologize, but I encountered an error processing your request. Please try again.')],
+    };
   }
 }
-
 /**
  * Secure Execute Tool Node - The agent's "hands" with RLS enforcement
  * All tool execution goes through the secure ToolFactory
