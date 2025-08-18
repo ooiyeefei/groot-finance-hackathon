@@ -3,7 +3,7 @@
  * Centralized, secure tool registration and instantiation
  */
 
-import { BaseTool, UserContext, ToolParameters, ToolResult } from './base-tool'
+import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema } from './base-tool'
 import { DocumentSearchTool } from './document-search-tool'
 import { TransactionLookupTool } from './transaction-lookup-tool'
 
@@ -110,6 +110,29 @@ export class ToolFactory {
   }
 
   /**
+   * Generate OpenAI-compatible tool schemas for all registered tools
+   * This is the new single source of truth for tool schemas
+   */
+  static getToolSchemas(): OpenAIToolSchema[] {
+    const schemas: OpenAIToolSchema[] = []
+    
+    for (const [name, factory] of this.tools.entries()) {
+      try {
+        const tool = factory()
+        const schema = tool.getToolSchema()
+        schemas.push(schema)
+        console.log(`[ToolFactory] Generated schema for tool: ${name}`)
+      } catch (error) {
+        console.error(`[ToolFactory] Error generating schema for ${name}:`, error)
+        // Continue with other tools, don't fail completely
+      }
+    }
+    
+    console.log(`[ToolFactory] Generated ${schemas.length} tool schemas dynamically`)
+    return schemas
+  }
+
+  /**
    * Validate all registered tools
    */
   static async validateTools(): Promise<{ valid: boolean; errors: string[] }> {
@@ -126,6 +149,16 @@ export class ToolFactory {
         
         if (!tool.getDescription()) {
           errors.push(`Tool ${name}: Missing description`)
+        }
+
+        // Validate schema generation
+        try {
+          const schema = tool.getToolSchema()
+          if (!schema || !schema.function || !schema.function.name) {
+            errors.push(`Tool ${name}: Invalid schema structure`)
+          }
+        } catch (error) {
+          errors.push(`Tool ${name}: Schema generation failed - ${error}`)
         }
         
       } catch (error) {

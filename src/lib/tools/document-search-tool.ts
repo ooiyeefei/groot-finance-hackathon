@@ -3,7 +3,7 @@
  * Enforces RLS and proper user context validation
  */
 
-import { BaseTool, UserContext, ToolParameters, ToolResult } from './base-tool'
+import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema } from './base-tool'
 import { EmbeddingService } from '../ai-services/embedding-service'
 import { VectorStorageService } from '../ai-services/vector-storage-service'
 
@@ -23,6 +23,38 @@ export class DocumentSearchTool extends BaseTool {
 
   getDescription(): string {
     return 'Search uploaded financial documents (invoices, receipts, reports) using semantic similarity. Requires a search query parameter.'
+  }
+
+  getToolSchema(): OpenAIToolSchema {
+    return {
+      type: "function",
+      function: {
+        name: this.getToolName(),
+        description: "Search uploaded financial documents (invoices, receipts, reports) using semantic similarity. Use this when users ask about their specific financial documents, invoices, receipts, or want to find documents with specific content.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "The search query to find relevant documents. Include relevant keywords like vendor names, amounts, dates, or document types."
+            },
+            limit: {
+              type: "integer",
+              description: "Maximum number of results to return (1-20, default: 5)",
+              minimum: 1,
+              maximum: 20
+            },
+            similarityThreshold: {
+              type: "number",
+              description: "Similarity threshold for matching (0-1, default: 0.7)",
+              minimum: 0,
+              maximum: 1
+            }
+          },
+          required: ["query"]
+        }
+      }
+    }
   }
 
   protected async validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }> {

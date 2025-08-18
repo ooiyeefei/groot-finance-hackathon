@@ -3,7 +3,7 @@
  * Enforces RLS and proper user context validation for transaction queries
  */
 
-import { BaseTool, UserContext, ToolParameters, ToolResult } from './base-tool'
+import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema } from './base-tool'
 import { aiConfig } from '../config/ai-config'
 
 interface TransactionLookupParameters {
@@ -22,6 +22,52 @@ export class TransactionLookupTool extends BaseTool {
 
   getDescription(): string {
     return 'Look up transaction data from your financial records using natural language queries. Supports filtering by amount, date, vendor, category, etc.'
+  }
+
+  getToolSchema(): OpenAIToolSchema {
+    return {
+      type: "function",
+      function: {
+        name: this.getToolName(),
+        description: "Lookup and analyze financial transactions with filtering options. Use this when users ask about their transactions, expenses, spending patterns, or financial summaries.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Query to filter transactions by description, category, or other attributes"
+            },
+            startDate: {
+              type: "string",
+              description: "Start date for filtering transactions (YYYY-MM-DD format)"
+            },
+            endDate: {
+              type: "string",
+              description: "End date for filtering transactions (YYYY-MM-DD format)"
+            },
+            category: {
+              type: "string",
+              description: "Filter by transaction category"
+            },
+            minAmount: {
+              type: "number",
+              description: "Minimum transaction amount"
+            },
+            maxAmount: {
+              type: "number",
+              description: "Maximum transaction amount"
+            },
+            limit: {
+              type: "integer",
+              description: "Maximum number of results to return (default: 10)",
+              minimum: 1,
+              maximum: 100
+            }
+          },
+          required: []
+        }
+      }
+    }
   }
 
   protected async validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }> {

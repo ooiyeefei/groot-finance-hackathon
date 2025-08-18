@@ -22,6 +22,19 @@ export interface ToolResult {
   metadata?: Record<string, any>
 }
 
+export interface OpenAIToolSchema {
+  type: "function"
+  function: {
+    name: string
+    description: string
+    parameters: {
+      type: "object"
+      properties: Record<string, any>
+      required: string[]
+    }
+  }
+}
+
 /**
  * Abstract base class that enforces security patterns for all tools
  */
@@ -81,6 +94,7 @@ export abstract class BaseTool {
    */
   abstract getToolName(): string
   abstract getDescription(): string
+  abstract getToolSchema(): OpenAIToolSchema
   protected abstract validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }>
   protected abstract executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult>
 

@@ -10,7 +10,8 @@ import { BaseMessage, AIMessage, ToolMessage, HumanMessage } from "@langchain/co
 import { ToolFactory } from './tools/tool-factory';
 import { UserContext } from './tools/base-tool';
 import { aiConfig } from './config/ai-config';
-import { generateToolSchemas } from './tools/tool-schema-generator';
+// Removed: import { generateToolSchemas } from './tools/tool-schema-generator';
+// Now using ToolFactory.getToolSchemas() directly for single source of truth
 
 // Agent State Definition with mandatory user context
 const AgentStateAnnotation = Annotation.Root({
@@ -138,8 +139,8 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
   try {
     console.log(`[CallModel] Calling LLM for user: ${state.userContext.userId}`);
     
-    // Get available tools for function calling
-    const tools = generateToolSchemas();
+    // Get available tools for function calling from ToolFactory (single source of truth)
+    const tools = ToolFactory.getToolSchemas();
     
     const requestPayload = {
       model: aiConfig.chat.modelId,
