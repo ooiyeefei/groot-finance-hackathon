@@ -212,11 +212,11 @@ export default function DocumentPreviewWithAnnotations({
       {/* Document Container */}
       <div 
         ref={containerRef}
-        className="flex-1 relative overflow-auto bg-gray-900 rounded-lg border border-gray-600"
+        className="flex-1 relative overflow-auto bg-gray-900 rounded-lg border border-gray-600 p-4"
       >
         {imageUrl ? (
           <div 
-            className="relative inline-block min-w-full min-h-full p-4"
+            className="relative inline-block min-w-full min-h-full"
             style={{
               transform: `scale(${scale}) rotate(${rotation}deg)`,
               transformOrigin: 'top left',
