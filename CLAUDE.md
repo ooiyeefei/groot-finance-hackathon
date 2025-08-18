@@ -112,6 +112,41 @@ These are the fundamental rules that govern all development work in this reposit
 - Document-transaction linking to prevent duplicates
 - Conditional UI states based on document status
 
+### AI Agent System Architecture
+
+#### LangGraph Financial Agent
+- **Agent Engine**: LangGraph-based conversational AI for financial queries
+- **Security-First**: Mandatory user context validation and RLS enforcement
+- **Tool Integration**: Dynamic OpenAI function calling with automatic schema generation
+- **Multi-language**: English, Thai, Indonesian support
+
+#### Agent Tool System (Single Source of Truth)
+```
+src/lib/tools/
+├── base-tool.ts              # Abstract base class with security patterns
+├── tool-factory.ts           # Registry and dynamic schema generation
+├── document-search-tool.ts   # Self-describing document search tool
+├── transaction-lookup-tool.ts # Self-describing transaction tool
+└── index.ts                  # Module exports
+```
+
+#### Tool Architecture Flow
+1. **BaseTool** - Security foundation with mandatory `getToolSchema()` 
+2. **Concrete Tools** - Self-describing with OpenAI schemas
+3. **ToolFactory** - Central registry with `getToolSchemas()` static method
+4. **LangGraph Agent** - Uses `ToolFactory.getToolSchemas()` for function calling
+
+#### Agent Components
+- `src/lib/langgraph-agent.ts`: Main agent implementation with security validation
+- `src/app/api/chat/route.ts`: Chat API endpoint with conversation management
+- `src/lib/tools/`: Self-describing tool system with dynamic schema generation
+
+#### Key Agent Patterns
+- **Self-Describing Tools**: Each tool defines its own OpenAI function schema
+- **Dynamic Schema Generation**: `ToolFactory.getToolSchemas()` auto-generates from registry
+- **Security Enforcement**: Mandatory user context validation and RLS queries
+- **Single Source of Truth**: Tool definitions in classes, no hardcoded schemas
+
 ### Key Technical Patterns
 - **Trigger.dev v3 Syntax**: `tasks.trigger<typeof taskName>("task-id", payload)` 
 - **Batch Processing**: `tasks.batchTrigger()` for multiple documents
@@ -121,6 +156,7 @@ These are the fundamental rules that govern all development work in this reposit
 - **CSS scale transform handling** for bounding box positioning
 - **State management** with automatic UI refresh after operations
 - **Error handling** with detailed logging for debugging
+- **Dynamic Tool Registration**: `ToolFactory` registry with automatic schema sync
 
 ### Background Job Architecture Files
 - `src/trigger/process-document-ocr.ts`: Main OCR processing task definition

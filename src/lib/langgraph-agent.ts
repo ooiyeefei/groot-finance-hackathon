@@ -10,8 +10,7 @@ import { BaseMessage, AIMessage, ToolMessage, HumanMessage } from "@langchain/co
 import { ToolFactory } from './tools/tool-factory';
 import { UserContext } from './tools/base-tool';
 import { aiConfig } from './config/ai-config';
-// Removed: import { generateToolSchemas } from './tools/tool-schema-generator';
-// Now using ToolFactory.getToolSchemas() directly for single source of truth
+// Using ToolFactory.getToolSchemas() directly for single source of truth
 
 // Agent State Definition with mandatory user context
 const AgentStateAnnotation = Annotation.Root({
