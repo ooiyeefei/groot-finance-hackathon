@@ -37,14 +37,22 @@ export default function TransactionFormModal({
   const [isLoading, setIsLoading] = useState(false)
   const userHomeCurrency = useHomeCurrency()
   
+  // Get default category based on transaction type
+  const getDefaultCategory = (transactionType: TransactionType) => {
+    const availableCategories = getAvailableCategories(transactionType)
+    return availableCategories[0] || ''
+  }
+
+  const initialTransactionType = transaction?.transaction_type || prefilledData?.transaction_type || 'expense' as const
+
   const [formData, setFormData] = useState({
-    transaction_type: transaction?.transaction_type || prefilledData?.transaction_type || 'expense' as const,
+    transaction_type: initialTransactionType,
     description: transaction?.description || prefilledData?.description || '',
     original_amount: transaction?.original_amount || prefilledData?.original_amount || 0,
     original_currency: transaction?.original_currency || prefilledData?.original_currency || userHomeCurrency,
     home_currency: transaction?.home_currency || prefilledData?.home_currency || userHomeCurrency,
     transaction_date: transaction?.transaction_date?.split('T')[0] || prefilledData?.transaction_date || new Date().toISOString().split('T')[0],
-    category: transaction?.category || prefilledData?.category || 'operational',
+    category: transaction?.category || prefilledData?.category || getDefaultCategory(initialTransactionType),
     subcategory: transaction?.subcategory || prefilledData?.subcategory || '',
     vendor_name: transaction?.vendor_name || prefilledData?.vendor_name || '',
     reference_number: transaction?.reference_number || prefilledData?.reference_number || '',
