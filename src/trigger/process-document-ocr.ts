@@ -465,7 +465,9 @@ function extractJSONFromResponse(content: string): any | null {
     try { 
       console.log('[Parser] Found JSON in code block');
       // Remove JavaScript-style comments before parsing
-      const cleanedJson = removeJavaScriptComments(codeBlockMatch[1]);
+      let cleanedJson = removeJavaScriptComments(codeBlockMatch[1]);
+      // Remove trailing commas
+      cleanedJson = removeTrailingCommas(cleanedJson);
       return JSON.parse(cleanedJson); 
     } catch (e) { 
       console.warn('[Parser] Failed to parse JSON from code block:', e);
@@ -493,6 +495,9 @@ function extractJSONFromResponse(content: string): any | null {
   // Remove JavaScript-style comments from cleaned content
   cleanedContent = removeJavaScriptComments(cleanedContent);
   
+  // Remove trailing commas that break JSON parsing
+  cleanedContent = removeTrailingCommas(cleanedContent);
+  
   // Try to parse the cleaned content
   if (cleanedContent.startsWith('{') && cleanedContent.endsWith('}')) {
     try {
@@ -511,7 +516,9 @@ function extractJSONFromResponse(content: string): any | null {
     try { 
       console.log('[Parser] Attempting regex-extracted JSON');
       // Remove JavaScript-style comments before parsing
-      const cleanedRegexJson = removeJavaScriptComments(jsonMatch[0]);
+      let cleanedRegexJson = removeJavaScriptComments(jsonMatch[0]);
+      // Remove trailing commas
+      cleanedRegexJson = removeTrailingCommas(cleanedRegexJson);
       return JSON.parse(cleanedRegexJson); 
     } catch (e) { 
       console.warn('[Parser] Failed to parse regex-extracted JSON:', e);
@@ -588,6 +595,23 @@ function removeJavaScriptComments(jsonString: string): string {
   // Remove multi-line comments /* ... */
   result = result.replace(/\/\*[\s\S]*?\*\//g, '');
   
+  return result;
+}
+
+/**
+ * Removes trailing commas that break JSON parsing.
+ * Handles common patterns like: },] and },} 
+ */
+function removeTrailingCommas(jsonString: string): string {
+  console.log('[Parser] Removing trailing commas from JSON');
+  
+  // Remove trailing commas before closing brackets and braces
+  // Pattern: comma + optional whitespace + closing bracket/brace
+  const result = jsonString
+    .replace(/,(\s*[\]}])/g, '$1')  // Remove trailing commas before ] or }
+    .replace(/,(\s*$)/g, '');       // Remove trailing commas at end of string
+  
+  console.log('[Parser] Trailing comma removal completed');
   return result;
 }
 
