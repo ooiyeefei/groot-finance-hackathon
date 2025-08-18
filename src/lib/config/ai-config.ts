@@ -17,6 +17,10 @@ export interface AIConfig {
     endpointUrl: string
     modelId: string
   }
+  gemini: {
+    apiKey: string
+    model: string
+  }
   qdrant: {
     url: string
     apiKey: string
@@ -34,6 +38,7 @@ function validateConfig(): void {
     'EMBEDDING_API_KEY',
     'CHAT_MODEL_ENDPOINT_URL',
     'CHAT_MODEL_MODEL_ID',
+    'GEMINI_API_KEY',
     'QDRANT_URL',
     'QDRANT_API_KEY'
   ]
@@ -76,6 +81,10 @@ export const aiConfig: AIConfig = {
   chat: {
     endpointUrl: process.env.CHAT_MODEL_ENDPOINT_URL!,
     modelId: process.env.CHAT_MODEL_MODEL_ID!
+  },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY!,
+    model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-001'
   },
   qdrant: {
     url: process.env.QDRANT_URL!,

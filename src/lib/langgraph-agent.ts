@@ -10,6 +10,7 @@ import { BaseMessage, AIMessage, ToolMessage, HumanMessage } from "@langchain/co
 import { ToolFactory } from './tools/tool-factory';
 import { UserContext } from './tools/base-tool';
 import { aiConfig } from './config/ai-config';
+import { GeminiService } from './ai-services/gemini-service';
 // Using ToolFactory.getToolSchemas() directly for single source of truth
 
 // Agent State Definition with mandatory user context
@@ -53,6 +54,17 @@ const AgentStateAnnotation = Annotation.Root({
 
 // Export the secure state type
 export type AgentState = typeof AgentStateAnnotation.State;
+
+// Helper to check if we should use Gemini
+const shouldUseGemini = () => {
+  return process.env.USE_GEMINI === 'true' || aiConfig.gemini?.apiKey;
+};
+
+// Initialize Gemini service if configured
+let geminiService: GeminiService | null = null;
+if (shouldUseGemini() && aiConfig.gemini?.apiKey) {
+  geminiService = new GeminiService();
+}
 
 /**
  * Get system prompt for native function calling
@@ -204,8 +216,69 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
     if (tools.length === 0) {
       console.warn(`[CallModel] No valid tools available, proceeding without function calling`);
     }
+
+    // Check if we should use Gemini
+    if (shouldUseGemini() && geminiService) {
+      console.log(`[CallModel] Using Gemini ${aiConfig.gemini.model} with ${messages.length} messages`);
+      
+      // Convert messages to GeminiMessage format
+      const geminiMessages = messages.slice(1).map((msg: any) => ({
+        role: msg.role === 'assistant' ? 'assistant' : msg.role,
+        content: msg.content,
+        tool_call_id: msg.tool_call_id
+      }));
+
+      const response = await geminiService.generateContent(geminiMessages, systemPrompt, tools);
+
+      if (!response.success) {
+        console.error('[CallModel] Gemini error:', response.error);
+        return {
+          messages: [...state.messages, new AIMessage('I apologize, but I encountered an error processing your request.')],
+        };
+      }
+
+      // Check for function calls
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        const toolCall = response.tool_calls[0];
+        const toolName = toolCall.function.name;
+        
+        console.log('[CallModel] Gemini function call detected:', toolCall);
+        
+        if (!ToolFactory.hasToolType(toolName)) {
+          console.error(`[CallModel] Unknown tool requested: ${toolName}`);
+          return {
+            messages: [...state.messages, new AIMessage('I apologize, but I cannot use the requested tool.')],
+          };
+        }
+        
+        // Convert to LangChain ToolCall format
+        const aiMessageWithToolCall = new AIMessage({
+          content: '',
+          tool_calls: [{
+            name: toolName,
+            args: JSON.parse(toolCall.function.arguments),
+            id: toolCall.id,
+            type: 'tool_call'
+          }],
+        });
+
+        return {
+          messages: [...state.messages, aiMessageWithToolCall],
+        };
+      }
+
+      // Return text response from Gemini
+      const content = response.content || 'I apologize, but I cannot process your request right now.';
+      console.log('[CallModel] Gemini text response generated');
+      
+      return {
+        messages: [...state.messages, new AIMessage(content)],
+      };
+    }
+
+    // Fallback to original OpenAI-compatible API
+    console.log(`[CallModel] Using OpenAI-compatible API ${aiConfig.chat.modelId}`);
     
-    // Try different payload structures for custom API compatibility
     const basePayload = {
       model: aiConfig.chat.modelId,
       messages,
@@ -219,8 +292,6 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
       tool_choice: "auto"
     } : basePayload;
     
-    // DEBUGGING: Log the actual tools array being sent to the API
-    console.log(`[CallModel] Calling ${requestPayload.model} with ${requestPayload.messages.length} messages`);
     console.log(`[CallModel] TOOLS PAYLOAD (${tools.length} tools):`, JSON.stringify(tools.length > 0 ? (requestPayload as any).tools : null, null, 2));
     
     const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
@@ -232,20 +303,17 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
     });
 
     if (!response.ok) {
-      // ### DEBUGGING: Log the non-OK response status and text
       const errorText = await response.text();
       console.error(`[CallModel] LLM API error: ${response.status} - ${errorText}`);
       throw new Error(`LLM API error: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
-    // Log simplified response info to prevent context explosion
     const hasToolCalls = result.choices?.[0]?.message?.tool_calls?.length > 0;
     console.log(`[CallModel] Response received, tool_calls: ${hasToolCalls}`);
 
     const assistantResponse = result.choices?.[0]?.message;
 
-    // CRITICAL: Check for tool calls and ensure the array is not empty.
     if (assistantResponse?.tool_calls && assistantResponse.tool_calls.length > 0) {
       const toolCall = assistantResponse.tool_calls[0];
       const toolName = toolCall.function?.name;
@@ -257,7 +325,6 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
         };
       }
       
-      // Construct a new AIMessage with the tool call, this is the key to clean routing.
       const aiMessageWithToolCall = new AIMessage({
         content: '',
         tool_calls: [toolCall],
@@ -281,8 +348,6 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
         .trim();
     }
     
-    // Add the final text response.
-    // ### DEBUGGING: Log the final content being added to the messages
     console.log('[CallModel] Final AI Content:', content);
     return {
       messages: [...state.messages, new AIMessage(content)],
