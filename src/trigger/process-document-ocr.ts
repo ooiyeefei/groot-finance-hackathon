@@ -45,6 +45,12 @@ function getSystemPrompt(): string {
 3. **Extract Line Items:** If a table of items is present, extract each line item with its description, quantity, unit price, and total price.
 4. **Provide Bounding Boxes:** For every single piece of extracted data (including individual fields within line items), you MUST provide accurate pixel-based bounding box coordinates [x1, y1, x2, y2].
 
+**CRITICAL COORDINATE SYSTEM REQUIREMENTS:**
+- Use top-left corner as origin (0,0)
+- Coordinates must be relative to the EXACT image dimensions you receive
+- Format: [x1, y1, x2, y2] where (x1,y1) is top-left corner and (x2,y2) is bottom-right corner of the text area
+- DO NOT scale or normalize coordinates - provide raw pixel values relative to the image you process
+
 **MANDATORY JSON OUTPUT STRUCTURE:**
 You MUST return ONLY a single, valid JSON object matching this schema. Do not include any other text, explanations, or markdown.
 
@@ -245,7 +251,10 @@ function parseOCRResponse(content: string, sourceDimensions?: { width: number; h
           entities.push({ type: key, value: String(item.value), confidence: item.confidence || 0.9 });
           if (item.bbox) {
             console.log(`[BBox] Found bbox for ${key}:`, item.bbox);
-            boundingBoxes.push({ category: key, text: String(item.value), ...mapBbox(item.bbox, sourceDimensions) });
+            console.log(`[BBox] Source dimensions for transformation:`, sourceDimensions);
+            const mappedBbox = mapBbox(item.bbox, sourceDimensions);
+            console.log(`[BBox] ${key} transformed: [${item.bbox.join(',')}] → [${mappedBbox.x1},${mappedBbox.y1},${mappedBbox.x2},${mappedBbox.y2}]`);
+            boundingBoxes.push({ category: key, text: String(item.value), ...mappedBbox });
           } else {
             console.log(`[BBox] No bbox for ${key}`);
           }

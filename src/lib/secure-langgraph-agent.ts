@@ -1,3 +1,5 @@
+// src/lib/secure-langgraph-agent.ts
+
 /**
  * Secure LangGraph Financial Co-pilot Agent
  * Security-first architecture with mandatory user context validation and RLS enforcement
@@ -33,6 +35,58 @@ const SecureAgentStateAnnotation = Annotation.Root({
 
 // Export the secure state type
 export type SecureAgentState = typeof SecureAgentStateAnnotation.State
+
+/**
+ * Get secure system prompt with available tools
+ */
+function getSecureSystemPrompt(language: string): string {
+  const toolDescriptions = ToolFactory.getToolDescriptions()
+  const availableTools = Object.entries(toolDescriptions)
+    .map(([name, desc]) => `${name}: ${desc}`)
+    .join('\n')
+
+  const basePrompt = `You are FinanSEAL AI, a secure financial co-pilot for Southeast Asian SMEs. You help users understand their financial data with complete privacy and security.
+
+IMPORTANT SECURITY NOTICE: You are operating in a secure environment where all data access is properly authorized and user-isolated.
+
+Available Tools:
+${availableTools}
+
+CRITICAL RAG INTEGRATION GUIDELINES:
+- For ANY financial questions about user's specific data (invoices, receipts, transactions, expenses, vendors, amounts), ALWAYS use search_documents tool first
+- For questions about transactions or financial summaries, use get_transactions tool
+- Simple questions like "show me my expenses" or "what invoices do I have" require tool usage to access actual data
+- Only provide general financial advice without tools when the question is purely educational/theoretical
+
+When you need to use a tool, respond with JSON in this exact format:
+{
+  "tool_call": {
+    "name": "tool_name",
+    "parameters": {
+      "query": "user's search query here"
+    }
+  },
+  "reasoning": "Why you need to use this tool"
+}
+
+Examples of when to use tools:
+- "What are my recent expenses?" → Use get_transactions
+- "Show me invoices from vendor ABC" → Use search_documents with query "vendor ABC invoices"  
+- "What's my total spending this month?" → Use get_transactions
+- "Find receipts with amount over $100" → Use search_documents with query "receipts amount over 100"
+
+For regular responses (no tool needed), respond normally in conversational text.
+
+Always be helpful, accurate, and proactive in accessing user data to provide specific insights. All data you access belongs to the authenticated user only.`
+
+  const translations = {
+    en: basePrompt,
+    th: `${basePrompt}\n\nตอบเป็นภาษาไทยเสมอ และรักษาความปลอดภัยของข้อมูลผู้ใช้`,
+    id: `${basePrompt}\n\nSelalu jawab dalam bahasa Indonesia dan jaga keamanan data pengguna.`
+  }
+
+  return translations[language as keyof typeof translations] || translations.en
+}
 
 /**
  * Security Validation Node - MANDATORY first step
@@ -75,6 +129,10 @@ async function validateSecurity(state: SecureAgentState): Promise<Partial<Secure
  * Secure Call Model Node - The agent's "brain" with security enforcement
  * Only processes requests after security validation
  */
+/**
+ * Secure Call Model Node - The agent's "brain" with security enforcement
+ * Only processes requests after security validation
+ */
 async function secureCallModel(state: SecureAgentState): Promise<Partial<SecureAgentState>> {
   console.log('[SecureCallModel] Processing request with security validation')
 
@@ -91,8 +149,9 @@ async function secureCallModel(state: SecureAgentState): Promise<Partial<SecureA
   // Prepare messages for SEA-LION
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...state.messages.map(msg => ({
-      role: msg._getType() === 'human' ? 'user' : 'assistant',
+    // ### UPDATED: Use a robust type check for both local code and Studio UI inputs
+    ...state.messages.map((msg: any) => ({
+      role: msg._getType ? msg._getType() : msg.type, // Check if _getType exists, otherwise use .type
       content: msg.content
     }))
   ]
@@ -251,117 +310,41 @@ async function secureExecuteTool(state: SecureAgentState): Promise<Partial<Secur
 }
 
 /**
- * Secure Router Function - Determines next step with security awareness
+ * Secure Router Function - Determines next step with security awareness.
  */
 function secureRouter(state: SecureAgentState): string {
-  // CRITICAL: Always check security validation first
-  if (!state.securityValidated) {
-    console.log('[SecureRouter] Security not validated, routing to security validation')
-    return 'validateSecurity'
+  // CRITICAL: Check for empty messages array at the start.
+  if (!state.messages || state.messages.length === 0) {
+    return 'validateSecurity';
   }
 
-  const lastMessage = state.messages[state.messages.length - 1]
-  
-  if (!lastMessage) {
-    console.log('[SecureRouter] No messages, ending conversation')
-    return END
-  }
+  // Use a type assertion to treat the message as a dynamic object for `type` property.
+  const lastMessage = state.messages[state.messages.length - 1] as any;
 
-  console.log(`[SecureRouter] Last message type: ${lastMessage._getType()} for user: ${state.userContext.userId}`)
+  // Check the message type. If it's not a standard LangChain type, use the `type` property.
+  const messageType = lastMessage._getType ? lastMessage._getType() : lastMessage.type;
 
-  // If the last message is from AI, check if it's a tool call
-  if (lastMessage._getType() === 'ai') {
+  // Route based on message type
+  if (messageType === 'ai') {
     try {
-      const content = lastMessage.content as string
-      const toolCall = JSON.parse(content)
-      
+      const toolCall = JSON.parse(lastMessage.content as string);
       if (toolCall.tool_call && toolCall.tool_call.name) {
-        console.log('[SecureRouter] Tool call detected, routing to secure tool execution')
-        return 'secureExecuteTool'
+        return 'secureExecuteTool';
       }
     } catch {
-      // Not JSON, regular response
+      // Not JSON, fall through to END
     }
-    
-    // For AI responses, we should continue if there are recent messages or if the user might want to continue
-    // Only end if this seems like a definitive conclusion
-    const aiContent = lastMessage.content as string
-    const isDefinitiveEnd = (
-      aiContent.toLowerCase().includes('goodbye') ||
-      aiContent.toLowerCase().includes('have a great day') ||
-      aiContent.toLowerCase().includes('is there anything else') ||
-      aiContent.toLowerCase().includes('let me know if you need')
-    )
-    
-    if (isDefinitiveEnd) {
-      console.log('[SecureRouter] Definitive AI response, ending conversation')
-      return END
-    } else {
-      console.log('[SecureRouter] Regular AI response, conversation remains open')
-      return END // Still end, but the conversation stays accessible for follow-up
-    }
+    // If the last AI message is not a tool call, the turn is over.
+    return END;
   }
 
-  // If the last message is a tool result, continue to model
-  if (lastMessage._getType() === 'tool') {
-    console.log('[SecureRouter] Tool result detected, routing to secure model call')
-    return 'secureCallModel'
+  if (messageType === 'tool') {
+    // A tool result needs to be processed by the model for a final answer.
+    return 'secureCallModel';
   }
 
-  console.log('[SecureRouter] Default routing to secure model call')
-  return 'secureCallModel'
-}
-
-/**
- * Get secure system prompt with available tools
- */
-function getSecureSystemPrompt(language: string): string {
-  const toolDescriptions = ToolFactory.getToolDescriptions()
-  const availableTools = Object.entries(toolDescriptions)
-    .map(([name, desc]) => `${name}: ${desc}`)
-    .join('\n')
-
-  const basePrompt = `You are FinanSEAL AI, a secure financial co-pilot for Southeast Asian SMEs. You help users understand their financial data with complete privacy and security.
-
-IMPORTANT SECURITY NOTICE: You are operating in a secure environment where all data access is properly authorized and user-isolated.
-
-Available Tools:
-${availableTools}
-
-CRITICAL RAG INTEGRATION GUIDELINES:
-- For ANY financial questions about user's specific data (invoices, receipts, transactions, expenses, vendors, amounts), ALWAYS use search_documents tool first
-- For questions about transactions or financial summaries, use get_transactions tool
-- Simple questions like "show me my expenses" or "what invoices do I have" require tool usage to access actual data
-- Only provide general financial advice without tools when the question is purely educational/theoretical
-
-When you need to use a tool, respond with JSON in this exact format:
-{
-  "tool_call": {
-    "name": "tool_name",
-    "parameters": {
-      "query": "user's search query here"
-    }
-  },
-  "reasoning": "Why you need to use this tool"
-}
-
-Examples of when to use tools:
-- "What are my recent expenses?" → Use get_transactions
-- "Show me invoices from vendor ABC" → Use search_documents with query "vendor ABC invoices"  
-- "What's my total spending this month?" → Use get_transactions
-- "Find receipts with amount over $100" → Use search_documents with query "receipts amount over 100"
-
-For regular responses (no tool needed), respond normally in conversational text.
-
-Always be helpful, accurate, and proactive in accessing user data to provide specific insights. All data you access belongs to the authenticated user only.`
-
-  const translations = {
-    en: basePrompt,
-    th: `${basePrompt}\n\nตอบเป็นภาษาไทยเสมอ และรักษาความปลอดภัยของข้อมูลผู้ใช้`,
-    id: `${basePrompt}\n\nSelalu jawab dalam bahasa Indonesia dan jaga keamanan data pengguna.`
-  }
-
-  return translations[language as keyof typeof translations] || translations.en
+  // If the message is a human message, the agent needs to respond.
+  return 'secureCallModel';
 }
 
 /**
@@ -391,7 +374,7 @@ export function createSecureFinancialAgent() {
   workflow.addEdge("__start__", "validateSecurity" as any)
   workflow.addConditionalEdges("validateSecurity" as any, secureRouter)
   workflow.addConditionalEdges("secureCallModel" as any, secureRouter)
-  workflow.addEdge("secureExecuteTool" as any, "secureCallModel" as any)
+  workflow.addConditionalEdges("secureExecuteTool" as any, secureRouter)
 
   // Compile the secure graph
   const app = workflow.compile()
