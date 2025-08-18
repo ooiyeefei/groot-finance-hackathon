@@ -369,6 +369,92 @@ function parseOCRResponse(content: string, sourceDimensions?: { width: number; h
 
 // --- Helper Functions ---
 
+/**
+ * Get image dimensions from image URL by downloading and reading image headers
+ */
+async function getImageDimensionsFromUrl(imageUrl: string): Promise<{ width: number; height: number } | null> {
+  try {
+    console.log(`[ImageDimensions] Fetching image to get dimensions from: ${imageUrl.substring(0, 100)}...`);
+    
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      console.warn(`[ImageDimensions] Failed to fetch image: ${response.status}`);
+      return null;
+    }
+    
+    const buffer = await response.arrayBuffer();
+    const uint8Array = new Uint8Array(buffer);
+    
+    // Try to read image dimensions from headers
+    // JPEG format detection
+    if (uint8Array[0] === 0xFF && uint8Array[1] === 0xD8) {
+      console.log(`[ImageDimensions] Detected JPEG format`);
+      const dimensions = getJPEGDimensions(uint8Array);
+      if (dimensions) {
+        console.log(`[ImageDimensions] JPEG dimensions: ${dimensions.width}x${dimensions.height}`);
+        return dimensions;
+      }
+    }
+    
+    // PNG format detection
+    if (uint8Array[0] === 0x89 && uint8Array[1] === 0x50 && uint8Array[2] === 0x4E && uint8Array[3] === 0x47) {
+      console.log(`[ImageDimensions] Detected PNG format`);
+      const dimensions = getPNGDimensions(uint8Array);
+      if (dimensions) {
+        console.log(`[ImageDimensions] PNG dimensions: ${dimensions.width}x${dimensions.height}`);
+        return dimensions;
+      }
+    }
+    
+    console.warn(`[ImageDimensions] Unsupported image format or couldn't read dimensions`);
+    return null;
+  } catch (error) {
+    console.error(`[ImageDimensions] Error getting image dimensions:`, error);
+    return null;
+  }
+}
+
+/**
+ * Extract dimensions from JPEG image data
+ */
+function getJPEGDimensions(data: Uint8Array): { width: number; height: number } | null {
+  let i = 2; // Skip SOI marker
+  
+  while (i < data.length) {
+    // Look for SOF markers (Start of Frame)
+    if (data[i] === 0xFF && (data[i + 1] === 0xC0 || data[i + 1] === 0xC2)) {
+      // SOF marker found, dimensions are at offset 5 and 7 from marker
+      const height = (data[i + 5] << 8) | data[i + 6];
+      const width = (data[i + 7] << 8) | data[i + 8];
+      return { width, height };
+    }
+    
+    // Skip to next marker
+    if (data[i] === 0xFF) {
+      const length = (data[i + 2] << 8) | data[i + 3];
+      i += length + 2;
+    } else {
+      i++;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extract dimensions from PNG image data
+ */
+function getPNGDimensions(data: Uint8Array): { width: number; height: number } | null {
+  try {
+    // PNG dimensions are in IHDR chunk at bytes 16-23
+    const width = (data[16] << 24) | (data[17] << 16) | (data[18] << 8) | data[19];
+    const height = (data[20] << 24) | (data[21] << 16) | (data[22] << 8) | data[23];
+    return { width, height };
+  } catch (error) {
+    return null;
+  }
+}
+
 function extractJSONFromResponse(content: string): any | null {
   console.log('[Parser] Raw response length:', content.length);
   console.log('[Parser] Raw response preview:', content.substring(0, 200));
@@ -540,7 +626,7 @@ export const processDocumentOCR = task({
       // Step 0: Fetch document record to get source image dimensions
       const { data: documentRecord, error: fetchError } = await supabase
         .from('documents')
-        .select('converted_image_width, converted_image_height')
+        .select('file_name, file_type, converted_image_width, converted_image_height')
         .eq('id', payload.documentId)
         .single();
 
@@ -550,9 +636,47 @@ export const processDocumentOCR = task({
           width: documentRecord.converted_image_width,
           height: documentRecord.converted_image_height
         };
-        console.log(`📐 Retrieved source image dimensions: ${sourceDimensions.width}x${sourceDimensions.height}`);
+        console.log(`📐 Retrieved source image dimensions: ${sourceDimensions.width}x${sourceDimensions.height} from database`);
       } else {
-        console.warn(`⚠️ No source image dimensions found for document ${payload.documentId} - will use raw pixel coordinates`);
+        console.warn(`⚠️ No source image dimensions found for document ${payload.documentId} (${documentRecord?.file_name || 'unknown'}, ${documentRecord?.file_type || 'unknown'}) - will use raw pixel coordinates`);
+        console.log(`📋 Document details: file_type=${documentRecord?.file_type}, converted_width=${documentRecord?.converted_image_width}, converted_height=${documentRecord?.converted_image_height}`);
+        
+        // For image files (JPEG, PNG), we need to get dimensions from the actual image
+        if (documentRecord?.file_type?.startsWith('image/')) {
+          console.log(`🖼️ Detected image file - attempting to get dimensions from image headers`);
+          
+          // Get signed URL and extract dimensions
+          const { data: urlData, error: urlError } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(payload.imageStoragePath, 600);
+          
+          if (!urlError && urlData?.signedUrl) {
+            const detectedDimensions = await getImageDimensionsFromUrl(urlData.signedUrl);
+            if (detectedDimensions) {
+              sourceDimensions = detectedDimensions;
+              console.log(`📐 Successfully detected image dimensions: ${sourceDimensions.width}x${sourceDimensions.height}`);
+              
+              // Update database with detected dimensions
+              const { error: updateError } = await supabase
+                .from('documents')
+                .update({
+                  converted_image_width: detectedDimensions.width,
+                  converted_image_height: detectedDimensions.height
+                })
+                .eq('id', payload.documentId);
+              
+              if (updateError) {
+                console.warn(`⚠️ Failed to update document with detected dimensions: ${updateError.message}`);
+              } else {
+                console.log(`✅ Updated database with detected image dimensions`);
+              }
+            } else {
+              console.warn(`⚠️ Failed to detect image dimensions from headers`);
+            }
+          } else {
+            console.warn(`⚠️ Failed to create signed URL for image dimension detection: ${urlError?.message}`);
+          }
+        }
       }
       // Step 1: Create a signed URL for the image
       const { data: urlData, error: urlError } = await supabase.storage
