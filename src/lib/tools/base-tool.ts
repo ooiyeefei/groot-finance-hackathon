@@ -106,10 +106,11 @@ export abstract class BaseTool {
       console.log(`[${this.getToolName()}] Checking permissions for user: ${userContext.userId}`)
       
       // Verify user exists and is active
+      // Query by clerk_user_id since userContext.userId contains Clerk user ID
       const { data: user, error } = await this.supabase
         .from('users')
-        .select('id')
-        .eq('id', userContext.userId)
+        .select('id, clerk_user_id')
+        .eq('clerk_user_id', userContext.userId)
         .single()
 
       console.log(`[${this.getToolName()}] User lookup result:`, { user, error })

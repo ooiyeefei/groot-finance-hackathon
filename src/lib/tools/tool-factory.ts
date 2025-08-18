@@ -120,15 +120,57 @@ export class ToolFactory {
       try {
         const tool = factory()
         const schema = tool.getToolSchema()
-        schemas.push(schema)
-        console.log(`[ToolFactory] Generated schema for tool: ${name}`)
+        
+        // CRITICAL: Validate schema has required fields with comprehensive checks
+        if (!schema) {
+          console.error(`[ToolFactory] NULL SCHEMA for ${name}`)
+          throw new Error(`Tool ${name} returned null schema`)
+        }
+        
+        if (!schema.function) {
+          console.error(`[ToolFactory] MISSING FUNCTION for ${name}:`, JSON.stringify(schema, null, 2))
+          throw new Error(`Tool ${name} schema missing function property`)
+        }
+        
+        if (!schema.function.name) {
+          console.error(`[ToolFactory] MISSING NAME for ${name}:`, JSON.stringify(schema, null, 2))
+          throw new Error(`Tool ${name} schema missing function.name property`)
+        }
+        
+        if (typeof schema.function.name !== 'string' || schema.function.name.trim().length === 0) {
+          console.error(`[ToolFactory] INVALID NAME for ${name}:`, JSON.stringify(schema.function.name, null, 2))
+          throw new Error(`Tool ${name} has invalid function.name: ${schema.function.name}`)
+        }
+        
+        // COMPREHENSIVE SCHEMA VALIDATION: Ensure all required OpenAI fields are present
+        const validatedSchema: OpenAIToolSchema = {
+          type: "function",
+          function: {
+            name: schema.function.name.toString().trim(),
+            description: schema.function.description || `${name} tool`,
+            parameters: schema.function.parameters || {
+              type: "object",
+              properties: {},
+              required: []
+            }
+          }
+        }
+        
+        schemas.push(validatedSchema)
+        console.log(`[ToolFactory] Generated valid schema for tool: ${name} (name: ${validatedSchema.function.name})`)
       } catch (error) {
         console.error(`[ToolFactory] Error generating schema for ${name}:`, error)
         // Continue with other tools, don't fail completely
       }
     }
     
-    console.log(`[ToolFactory] Generated ${schemas.length} tool schemas dynamically`)
+    console.log(`[ToolFactory] Generated ${schemas.length} valid tool schemas dynamically`)
+    
+    // ADDITIONAL VALIDATION: Log all schemas for debugging
+    schemas.forEach((schema, index) => {
+      console.log(`[ToolFactory] Schema ${index}: ${schema.function?.name || 'MISSING NAME'}`)
+    })
+    
     return schemas
   }
 

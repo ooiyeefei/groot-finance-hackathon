@@ -15,7 +15,15 @@ import { aiConfig } from './config/ai-config';
 // Agent State Definition with mandatory user context
 const AgentStateAnnotation = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
-    reducer: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
+    reducer: (x: BaseMessage[], y: BaseMessage[]) => {
+      const combined = x.concat(y);
+      // Prevent context overflow: Keep only last 50 messages
+      if (combined.length > 50) {
+        console.log(`[Context Management] Trimming conversation from ${combined.length} to 50 messages`);
+        return combined.slice(-50);
+      }
+      return combined;
+    },
     default: () => []
   }),
   language: Annotation<string>({
@@ -31,6 +39,15 @@ const AgentStateAnnotation = Annotation.Root({
   securityValidated: Annotation<boolean>({
     reducer: (x: boolean, y: boolean) => y,
     default: () => false
+  }),
+  // Track consecutive tool failures for circuit breaker
+  failureCount: Annotation<number>({
+    reducer: (x: number, y: number) => y,
+    default: () => 0
+  }),
+  lastFailedTool: Annotation<string | null>({
+    reducer: (x: string | null, y: string | null) => y,
+    default: () => null
   })
 });
 
@@ -46,19 +63,26 @@ function getSystemPrompt(language: string): string {
 IMPORTANT SECURITY NOTICE: You are operating in a secure environment where all data access is properly authorized and user-isolated.
 
 CRITICAL RAG INTEGRATION GUIDELINES:
-- For ANY financial questions about user's specific data (invoices, receipts, transactions, expenses, vendors, amounts), you MUST use the appropriate function
-- For document-related queries (invoices, receipts, reports), use the search_documents function
-- For transaction queries (expenses, spending, financial summaries), use the get_transactions function
-- Simple questions like "show me my expenses" or "what invoices do I have" require function usage to access actual data
-- Only provide general financial advice without functions when the question is purely educational/theoretical
+- For ANY financial questions about user's specific data, you MUST use the appropriate function
+- CHOOSE THE RIGHT TOOL:
+  * get_transactions: For analyzing TRANSACTION DATA (expenses, spending patterns, amounts, financial summaries, largest/smallest transactions)
+  * search_documents: For finding DOCUMENT CONTENT (specific invoices, receipts, document text, vendor info from documents)
+
+- KEY DISTINCTION: 
+  * "What's my largest invoice amount?" → get_transactions (analyzes transaction amounts)
+  * "largest invoice amount" → get_transactions (amount analysis, NOT document search)
+  * "biggest transaction" → get_transactions (amount analysis)
+  * "Show me my ABC Company invoice" → search_documents (finds specific document)
+  * "Total spending last month?" → get_transactions (calculates from transaction data)
+  * "Find receipt mentioning warranty" → search_documents (searches document text)
+
+- CRITICAL: Queries about AMOUNTS, TOTALS, LARGEST/SMALLEST always use get_transactions
+- Only use search_documents when looking for specific document content or text
+
+- PARAMETERS: Use specific date ranges, amounts, and filters. For "past 60 days" calculate the actual date.
+- NO REASONING LOOPS: If a function fails, try different parameters or the other function. Don't repeat the same call.
 
 You have access to function calling capabilities. When you need to access user data, call the appropriate function with relevant parameters.
-
-Examples of when to use functions:
-- "What are my recent expenses?" → Call get_transactions function
-- "Show me invoices from vendor ABC" → Call search_documents function with query "vendor ABC invoices"  
-- "What's my total spending this month?" → Call get_transactions function with date filters
-- "Find receipts with amount over $100" → Call search_documents function with query "receipts amount over 100"
 
 Always be helpful, accurate, and proactive in accessing user data to provide specific insights. All data you access belongs to the authenticated user only.`;
 
@@ -126,33 +150,67 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
 
   const systemPrompt = getSystemPrompt(state.language || 'en');
   
-  // Prepare messages for LLM
+  // Prepare messages for LLM with proper tool message handling
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...state.messages.map((msg: any) => ({
-      // Map LangChain 'human' type to LLM's 'user' type
-      role: (msg._getType ? msg._getType() : msg.type) === 'human' ? 'user' : 'assistant',
-      content: msg.content
-    }))
+    ...state.messages.map((msg: any) => {
+      const msgType = msg._getType ? msg._getType() : msg.type;
+      if (msgType === 'human') {
+        return { role: 'user', content: msg.content };
+      } else if (msgType === 'tool') {
+        // CRITICAL FIX: Proper OpenAI tool message format
+        return { 
+          role: 'tool', 
+          content: msg.content, 
+          tool_call_id: msg.tool_call_id 
+        };
+      } else {
+        return { role: 'assistant', content: msg.content };
+      }
+    })
   ];
 
   try {
     console.log(`[CallModel] Calling LLM for user: ${state.userContext.userId}`);
     
     // Get available tools for function calling from ToolFactory (single source of truth)
-    const tools = ToolFactory.getToolSchemas();
+    const rawTools = ToolFactory.getToolSchemas();
     
-    const requestPayload = {
+    // ADDITIONAL VALIDATION: Ensure each tool has a name before sending to API
+    const tools = rawTools.filter(tool => {
+      const hasName = tool?.function?.name;
+      if (!hasName) {
+        console.error(`[CallModel] CRITICAL: Tool missing name:`, JSON.stringify(tool, null, 2));
+        return false;
+      }
+      return true;
+    });
+    
+    // If no valid tools after filtering, proceed without tools
+    if (tools.length === 0) {
+      console.warn(`[CallModel] No valid tools available, proceeding without function calling`);
+    }
+    
+    // Try different payload structures for custom API compatibility
+    const basePayload = {
       model: aiConfig.chat.modelId,
       messages,
-      tools,
-      tool_choice: "auto",
       max_tokens: 1000,
       temperature: 0.3
     };
     
-    // ### DEBUGGING: Log the full request payload being sent to the LLM endpoint
-    console.log('[CallModel] Request Payload:', JSON.stringify(requestPayload, null, 2));
+    const requestPayload = tools.length > 0 ? {
+      ...basePayload,
+      tools,
+      tool_choice: "auto",
+      // Some APIs might expect these additional parameters
+      functions: tools.map(tool => tool.function),
+      function_call: "auto"
+    } : basePayload;
+    
+    // DEBUGGING: Log the actual tools array being sent to the API
+    console.log(`[CallModel] Calling ${requestPayload.model} with ${requestPayload.messages.length} messages`);
+    console.log(`[CallModel] TOOLS PAYLOAD (${tools.length} tools):`, JSON.stringify(tools.length > 0 ? (requestPayload as any).tools : null, null, 2));
     
     const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
       method: 'POST',
@@ -170,8 +228,9 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
     }
 
     const result = await response.json();
-    // ### DEBUGGING: Log the full successful response from the LLM endpoint
-    console.log('[CallModel] Raw LLM Response:', JSON.stringify(result, null, 2));
+    // Log simplified response info to prevent context explosion
+    const hasToolCalls = result.choices?.[0]?.message?.tool_calls?.length > 0;
+    console.log(`[CallModel] Response received, tool_calls: ${hasToolCalls}`);
 
     const assistantResponse = result.choices?.[0]?.message;
 
@@ -275,6 +334,29 @@ async function executeTool(state: AgentState): Promise<Partial<AgentState>> {
     console.log(`[DEBUG] Parameters: ${JSON.stringify(parameters, null, 2)}`);
     console.log(`[DEBUG] User Context: ${JSON.stringify(state.userContext, null, 2)}`);
 
+    // Check for repeated failures and try fallback tool
+    if (state.failureCount && state.failureCount >= 2 && state.lastFailedTool === toolName) {
+      console.log(`[ExecuteTool] Attempting fallback tool after ${state.failureCount} failures with ${toolName}`);
+      const fallbackTool = toolName === 'search_documents' ? 'get_transactions' : 'search_documents';
+      if (ToolFactory.hasToolType(fallbackTool)) {
+        console.log(`[ExecuteTool] Switching to fallback tool: ${fallbackTool}`);
+        const fallbackResult = await ToolFactory.executeTool(fallbackTool, parameters, state.userContext);
+        
+        if (fallbackResult.success) {
+          const toolMessage = new ToolMessage({
+            content: `[Automatic tool correction] ${fallbackResult.data}`,
+            tool_call_id: toolCall.id || 'fallback_exec',
+            name: fallbackTool
+          });
+          return {
+            messages: [...state.messages, toolMessage],
+            failureCount: 0,
+            lastFailedTool: null
+          };
+        }
+      }
+    }
+
     // Execute tool through secure ToolFactory with user context
     const result = await ToolFactory.executeTool(toolName, parameters, state.userContext);
 
@@ -287,8 +369,14 @@ async function executeTool(state: AgentState): Promise<Partial<AgentState>> {
       name: toolName
     });
 
+    // Update failure tracking for circuit breaker
+    const newFailureCount = result.success ? 0 : (state.failureCount || 0) + 1;
+    const newLastFailedTool = result.success ? null : toolName;
+
     return {
-      messages: [...state.messages, toolMessage]
+      messages: [...state.messages, toolMessage],
+      failureCount: newFailureCount,
+      lastFailedTool: newLastFailedTool
     };
 
   } catch (error) {
@@ -324,7 +412,7 @@ async function correctToolCall(state: AgentState): Promise<Partial<AgentState>> 
 }
 
 /**
- * Router Function - Determines next step in the graph.
+ * Router Function - Determines next step in the graph with circuit breaker.
  */
 function router(state: AgentState): string {
   // CRITICAL: Check for empty messages array at the start.
@@ -358,6 +446,16 @@ function router(state: AgentState): string {
   }
 
   if (messageType === 'tool') {
+    // Check for circuit breaker - prevent infinite loops
+    const toolMessage = lastMessage as ToolMessage;
+    const contentStr = typeof toolMessage.content === 'string' ? toolMessage.content : '';
+    const isFailure = !contentStr || contentStr.includes('error') || contentStr.includes('failed');
+    
+    if (isFailure && state.failureCount && state.failureCount >= 3) {
+      console.log(`[Router] Circuit breaker activated after ${state.failureCount} failures`);
+      return END; // Stop the conversation to prevent infinite loops
+    }
+    
     // A tool result needs to be processed by the model for a final answer.
     console.log('[Router] Tool result received. Routing to call model.');
     return 'callModel';
@@ -418,6 +516,8 @@ export function createAgentState(
     messages: [new HumanMessage(initialMessage)],
     language,
     userContext,
-    securityValidated: false
+    securityValidated: false,
+    failureCount: 0,
+    lastFailedTool: null
   };
 }

@@ -7,12 +7,13 @@ import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema } f
 import { aiConfig } from '../config/ai-config'
 
 interface TransactionLookupParameters {
-  query: string
+  query?: string
   limit?: number
-  dateRange?: {
-    start?: string
-    end?: string
-  }
+  startDate?: string
+  endDate?: string
+  category?: string
+  minAmount?: number
+  maxAmount?: number
 }
 
 export class TransactionLookupTool extends BaseTool {
@@ -73,38 +74,51 @@ export class TransactionLookupTool extends BaseTool {
   protected async validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }> {
     const params = parameters as TransactionLookupParameters
 
-    if (!params.query || typeof params.query !== 'string') {
-      return { valid: false, error: 'Query parameter is required and must be a string' }
-    }
-
-    if (params.query.trim().length === 0) {
-      return { valid: false, error: 'Query cannot be empty' }
-    }
-
-    if (params.query.length > 300) {
-      return { valid: false, error: 'Query too long (max 300 characters)' }
-    }
-
-    // Validate optional limit
-    if (params.limit !== undefined && (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > 50)) {
-      return { valid: false, error: 'Limit must be an integer between 1 and 50' }
-    }
-
-    // Validate date range if provided
-    if (params.dateRange) {
-      const { start, end } = params.dateRange
-      
-      if (start && !this.isValidDate(start)) {
-        return { valid: false, error: 'Invalid start date format' }
+    // Query is optional - allow analysis without specific query
+    if (params.query !== undefined) {
+      if (typeof params.query !== 'string') {
+        return { valid: false, error: 'Query must be a string' }
       }
-      
-      if (end && !this.isValidDate(end)) {
-        return { valid: false, error: 'Invalid end date format' }
+      if (params.query.trim().length === 0) {
+        return { valid: false, error: 'Query cannot be empty' }
       }
-      
-      if (start && end && new Date(start) > new Date(end)) {
-        return { valid: false, error: 'Start date cannot be after end date' }
+      if (params.query.length > 300) {
+        return { valid: false, error: 'Query too long (max 300 characters)' }
       }
+    }
+
+    // Validate optional limit - handle JSON number parsing properly
+    if (params.limit !== undefined) {
+      const limit = Number(params.limit)
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        return { valid: false, error: 'Limit must be an integer between 1 and 100' }
+      }
+    }
+
+    // Validate dates if provided
+    if (params.startDate && !this.isValidDate(params.startDate)) {
+      return { valid: false, error: 'Invalid start date format (use YYYY-MM-DD)' }
+    }
+    
+    if (params.endDate && !this.isValidDate(params.endDate)) {
+      return { valid: false, error: 'Invalid end date format (use YYYY-MM-DD)' }
+    }
+    
+    if (params.startDate && params.endDate && new Date(params.startDate) > new Date(params.endDate)) {
+      return { valid: false, error: 'Start date cannot be after end date' }
+    }
+
+    // Validate amounts if provided
+    if (params.minAmount !== undefined && (typeof params.minAmount !== 'number' || params.minAmount < 0)) {
+      return { valid: false, error: 'Minimum amount must be a non-negative number' }
+    }
+
+    if (params.maxAmount !== undefined && (typeof params.maxAmount !== 'number' || params.maxAmount < 0)) {
+      return { valid: false, error: 'Maximum amount must be a non-negative number' }
+    }
+
+    if (params.minAmount !== undefined && params.maxAmount !== undefined && params.minAmount > params.maxAmount) {
+      return { valid: false, error: 'Minimum amount cannot be greater than maximum amount' }
     }
 
     return { valid: true }
@@ -112,7 +126,7 @@ export class TransactionLookupTool extends BaseTool {
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as TransactionLookupParameters
-    const query = params.query.trim()
+    const query = params.query?.trim() || 'all transactions'
     const limit = params.limit || 20
 
     try {
@@ -137,20 +151,29 @@ export class TransactionLookupTool extends BaseTool {
         .order('transaction_date', { ascending: false })
         .limit(limit)
 
-      // Apply date range filter if provided
-      if (params.dateRange) {
-        if (params.dateRange.start) {
-          transactionQuery = transactionQuery.gte('transaction_date', params.dateRange.start)
-        }
-        if (params.dateRange.end) {
-          transactionQuery = transactionQuery.lte('transaction_date', params.dateRange.end)
-        }
+      // Apply direct parameter filters
+      if (params.startDate) {
+        transactionQuery = transactionQuery.gte('transaction_date', params.startDate)
+      }
+      if (params.endDate) {
+        transactionQuery = transactionQuery.lte('transaction_date', params.endDate)
+      }
+      if (params.category) {
+        transactionQuery = transactionQuery.ilike('category', `%${params.category}%`)
+      }
+      if (params.minAmount !== undefined) {
+        transactionQuery = transactionQuery.gte('home_currency_amount', params.minAmount)
+      }
+      if (params.maxAmount !== undefined) {
+        transactionQuery = transactionQuery.lte('home_currency_amount', params.maxAmount)
       }
 
-      // Attempt to enhance query with AI-generated filters
-      const enhancedFilters = await this.generateSmartFilters(query)
-      if (enhancedFilters) {
-        transactionQuery = this.applySmartFilters(transactionQuery, enhancedFilters)
+      // Attempt to enhance query with AI-generated filters if we have a text query
+      if (params.query) {
+        const enhancedFilters = await this.generateSmartFilters(params.query)
+        if (enhancedFilters) {
+          transactionQuery = this.applySmartFilters(transactionQuery, enhancedFilters)
+        }
       }
 
       const { data: transactions, error } = await transactionQuery
@@ -341,10 +364,11 @@ Return only valid JSON, no explanations.`
 
     try {
       // Additional check: verify user has access to transactions
+      // Query by clerk_user_id since userContext.userId contains Clerk user ID
       const { data: userProfile, error } = await this.supabase
         .from('users')
-        .select('id, home_currency')
-        .eq('id', userContext.userId)
+        .select('id, home_currency, clerk_user_id')
+        .eq('clerk_user_id', userContext.userId)
         .single()
 
       if (error || !userProfile) {

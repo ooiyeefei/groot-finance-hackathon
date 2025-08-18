@@ -52,6 +52,18 @@ export default function TransactionFormModal({
     source_document_id: prefilledData?.source_document_id || undefined
   })
 
+  // Update currencies when user's home currency preference loads/changes
+  useEffect(() => {
+    if (userHomeCurrency && userHomeCurrency !== 'USD') { // Only update if different from default
+      setFormData(prev => ({
+        ...prev,
+        // Only update if not already set by transaction or prefilled data
+        original_currency: transaction?.original_currency || prefilledData?.original_currency || userHomeCurrency,
+        home_currency: transaction?.home_currency || prefilledData?.home_currency || userHomeCurrency
+      }))
+    }
+  }, [userHomeCurrency, transaction?.original_currency, transaction?.home_currency, prefilledData?.original_currency, prefilledData?.home_currency])
+
   const [lineItems, setLineItems] = useState<Partial<LineItem>[]>([])
 
   // Initialize line items from transaction or prefilled data

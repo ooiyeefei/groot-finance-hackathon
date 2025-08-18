@@ -72,9 +72,24 @@ export class DocumentSearchTool extends BaseTool {
       return { valid: false, error: 'Query too long (max 500 characters)' }
     }
 
-    // Validate optional parameters
-    if (params.limit !== undefined && (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > 20)) {
-      return { valid: false, error: 'Limit must be an integer between 1 and 20' }
+    // Validate optional parameters - handle JSON number parsing properly
+    if (params.limit !== undefined) {
+      // Handle edge cases: null, undefined, empty string, NaN
+      if (params.limit === null || params.limit === undefined || (typeof params.limit === 'string' && params.limit === '')) {
+        return { valid: false, error: `Limit cannot be null, empty, or undefined (received: ${params.limit})` }
+      }
+      
+      const limit = Number(params.limit)
+      console.log(`[DocumentSearchTool] Validating limit: ${JSON.stringify(params.limit)} (${typeof params.limit}) -> ${limit} (isInteger: ${Number.isInteger(limit)})`)
+      
+      // Check for NaN after conversion
+      if (isNaN(limit)) {
+        return { valid: false, error: `Limit must be a valid number (received: ${params.limit})` }
+      }
+      
+      if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+        return { valid: false, error: `Limit must be an integer between 1 and 20 (received: ${params.limit} -> ${limit})` }
+      }
     }
 
     if (params.similarityThreshold !== undefined && (params.similarityThreshold < 0 || params.similarityThreshold > 1)) {
@@ -91,37 +106,16 @@ export class DocumentSearchTool extends BaseTool {
     const threshold = params.similarityThreshold || 0.7
 
     try {
-      console.log(`[DocumentSearchTool] Processing query for user ${userContext.userId}: ${query}`)
-
-      // SECURITY: First verify user has uploaded documents
-      const { data: userDocuments, error: docError } = await this.supabase
-        .from('documents')
-        .select('id')
-        .eq('user_id', userContext.userId)
-        .eq('processing_status', 'completed')
-
-      if (docError) {
-        console.error('[DocumentSearchTool] Error checking user documents:', docError)
-        return {
-          success: false,
-          error: 'Failed to verify document access'
-        }
-      }
-
-      if (!userDocuments || userDocuments.length === 0) {
-        return {
-          success: true,
-          data: 'No processed documents found for your account. Please upload and process documents first.'
-        }
-      }
+      console.log(`[DocumentSearchTool] Processing secure query for user ${userContext.userId}: ${query}`)
 
       // Generate embedding for the user's query
       const queryEmbedding = await this.embeddingService.generateEmbedding(query)
 
-      // Perform similarity search against Qdrant
-      // NOTE: The vector service should be enhanced to include user_id filtering
-      const searchResults = await this.vectorService.similaritySearch(
+      // SECURITY FIX: Use secure similarity search with user_id filtering at Qdrant level
+      // This prevents data leakage and improves performance by filtering at the database
+      const searchResults = await this.vectorService.similaritySearchSecure(
         queryEmbedding,
+        userContext.userId,
         limit,
         threshold
       )
@@ -133,19 +127,9 @@ export class DocumentSearchTool extends BaseTool {
         }
       }
 
-      // SECURITY: Filter results to only include user's documents
-      const userDocumentIds = new Set(userDocuments.map(doc => doc.id))
-      const filteredResults = searchResults.filter(result => {
-        const documentId = result.payload?.document_id
-        return documentId && userDocumentIds.has(documentId)
-      })
-
-      if (filteredResults.length === 0) {
-        return {
-          success: true,
-          data: 'No relevant documents found in your uploaded files for this query.'
-        }
-      }
+      // Note: No longer need application-level filtering since Qdrant filters by user_id
+      // All results are guaranteed to belong to the authenticated user
+      const filteredResults = searchResults
 
       const formattedResults = this.formatResultData(filteredResults)
 
@@ -197,19 +181,8 @@ Upload Date: ${metadata.created_at || 'Unknown'}`
     }
 
     try {
-      // Check if user has any documents (additional validation)
-      const { data: documents, error } = await this.supabase
-        .from('documents')
-        .select('id')
-        .eq('user_id', userContext.userId)
-        .limit(1)
-
-      if (error) {
-        console.error('[DocumentSearchTool] Permission check error:', error)
-        return false
-      }
-
-      // Allow access even if no documents (they'll get an appropriate message)
+      // With secure Qdrant filtering, no additional document validation needed
+      // The secure vector search will return empty results if user has no documents
       return true
 
     } catch (error) {
