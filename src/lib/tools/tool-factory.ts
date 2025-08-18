@@ -127,22 +127,17 @@ export class ToolFactory {
           throw new Error(`Tool ${name} returned null schema`)
         }
         
-        if (!schema.function) {
-          console.error(`[ToolFactory] MISSING FUNCTION for ${name}:`, JSON.stringify(schema, null, 2))
-          throw new Error(`Tool ${name} schema missing function property`)
-        }
-        
-        if (!schema.function.name) {
-          console.error(`[ToolFactory] MISSING NAME for ${name}:`, JSON.stringify(schema, null, 2))
+        if (!schema.function || !schema.function.name) {
+          console.error(`[ToolFactory] MISSING FUNCTION NAME for ${name}:`, JSON.stringify(schema, null, 2))
           throw new Error(`Tool ${name} schema missing function.name property`)
         }
         
         if (typeof schema.function.name !== 'string' || schema.function.name.trim().length === 0) {
-          console.error(`[ToolFactory] INVALID NAME for ${name}:`, JSON.stringify(schema.function.name, null, 2))
-          throw new Error(`Tool ${name} has invalid function.name: ${schema.function.name}`)
+          console.error(`[ToolFactory] INVALID FUNCTION NAME for ${name}:`, JSON.stringify(schema.function.name, null, 2))
+          throw new Error(`Tool ${name} has invalid function name: ${schema.function.name}`)
         }
         
-        // COMPREHENSIVE SCHEMA VALIDATION: Ensure all required OpenAI fields are present
+        // COMPREHENSIVE SCHEMA VALIDATION: Ensure all required SGLang/OpenAI fields are present
         const validatedSchema: OpenAIToolSchema = {
           type: "function",
           function: {

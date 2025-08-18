@@ -176,11 +176,11 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
     // Get available tools for function calling from ToolFactory (single source of truth)
     const rawTools = ToolFactory.getToolSchemas();
     
-    // ADDITIONAL VALIDATION: Ensure each tool has a name before sending to API
+    // ADDITIONAL VALIDATION: Ensure each tool has a function.name before sending to API
     const tools = rawTools.filter(tool => {
       const hasName = tool?.function?.name;
       if (!hasName) {
-        console.error(`[CallModel] CRITICAL: Tool missing name:`, JSON.stringify(tool, null, 2));
+        console.error(`[CallModel] CRITICAL: Tool missing function.name:`, JSON.stringify(tool, null, 2));
         return false;
       }
       return true;
@@ -202,10 +202,7 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
     const requestPayload = tools.length > 0 ? {
       ...basePayload,
       tools,
-      tool_choice: "auto",
-      // Some APIs might expect these additional parameters
-      functions: tools.map(tool => tool.function),
-      function_call: "auto"
+      tool_choice: "auto"
     } : basePayload;
     
     // DEBUGGING: Log the actual tools array being sent to the API

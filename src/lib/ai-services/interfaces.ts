@@ -65,6 +65,16 @@ export interface IVectorStorageService {
     embedding: number[], 
     limit: number
   ): Promise<Array<{ id: string; score: number; metadata: Record<string, unknown> }>>
+
+  /**
+   * SECURE search similar documents with user_id filtering at database level
+   */
+  similaritySearchSecure(
+    embedding: number[],
+    userId: string,
+    limit?: number,
+    scoreThreshold?: number
+  ): Promise<Array<{ id: string; score: number; payload?: Record<string, unknown> }>>
 }
 
 // Main AI Service Factory Interface

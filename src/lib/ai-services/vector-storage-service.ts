@@ -351,7 +351,95 @@ export class VectorStorageService implements IVectorStorageService {
   }
 
   /**
+   * SECURE similarity search with user_id filtering at Qdrant level
+   * This prevents data leakage by filtering documents at the database level
+   */
+  async similaritySearchSecure(
+    embedding: number[],
+    userId: string,
+    limit: number = 10,
+    scoreThreshold: number = 0.3
+  ): Promise<Array<{ id: string; score: number; payload?: Record<string, unknown> }>> {
+    try {
+      console.log(`[Qdrant] SECURE similarity search for user ${userId}: ${limit} documents with threshold ${scoreThreshold}`)
+
+      const response = await fetch(`${this.qdrantUrl}/collections/${this.collectionName}/points/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': this.apiKey
+        },
+        body: JSON.stringify({
+          vector: embedding,
+          limit,
+          with_payload: true,
+          score_threshold: scoreThreshold,
+          // CRITICAL SECURITY FIX: Filter by user_id at Qdrant level
+          filter: {
+            must: [
+              {
+                key: "user_id",
+                match: {
+                  value: userId
+                }
+              }
+            ]
+          }
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new ProcessingError(
+          `Failed to search vectors: ${response.status} ${response.statusText}`,
+          {
+            service: 'Qdrant',
+            endpoint: this.qdrantUrl,
+            statusCode: response.status,
+            retryable: response.status >= 500 || response.status === 429
+          }
+        )
+      }
+
+      const result = await response.json()
+      
+      if (result.status !== 'ok') {
+        throw new ProcessingError('Qdrant search operation failed', {
+          service: 'Qdrant',
+          retryable: true
+        })
+      }
+
+      // Transform results to expected format for LangGraph agent
+      const results = (result.result || []).map((hit: { id: string | number; score: number; payload?: Record<string, unknown> }) => ({
+        id: String(hit.id),
+        score: hit.score,
+        payload: hit.payload || {}
+      }))
+
+      console.log(`[Qdrant] SECURE search found ${results.length} documents for user ${userId}`)
+      return results
+
+    } catch (error) {
+      console.error(`[Qdrant] Secure similarity search failed for user ${userId}:`, error)
+      
+      if (error instanceof ProcessingError) {
+        throw error
+      }
+      
+      throw new ProcessingError(
+        `Secure vector similarity search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {
+          service: 'Qdrant',
+          retryable: false
+        }
+      )
+    }
+  }
+
+  /**
    * Similarity search with customizable threshold (for LangGraph agent compatibility)
+   * @deprecated Use similaritySearchSecure() instead for security
    */
   async similaritySearch(
     embedding: number[],

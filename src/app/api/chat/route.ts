@@ -90,7 +90,9 @@ export async function POST(request: NextRequest) {
       messages: conversationHistory,
       language: language,
       userContext: userContext,
-      securityValidated: false
+      securityValidated: false,
+      failureCount: 0,
+      lastFailedTool: null
     }
 
     console.log(`[Chat API] Invoking secure LangGraph agent with ${initialState.messages.length} messages for user ${userId}`)
