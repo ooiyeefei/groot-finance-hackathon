@@ -95,6 +95,36 @@ export default function DocumentPreviewWithAnnotations({
   const getBoxStyle = (box: BoundingBox) => {
     if (!imageLoaded || !imageRef.current) return {}
     
+    // Check if coordinates are already in percentage format (< 100)
+    const arePercentages = box.x1 <= 100 && box.y1 <= 100 && box.x2 <= 100 && box.y2 <= 100
+    
+    if (arePercentages) {
+      // Use percentage-based positioning directly
+      const left = box.x1
+      const top = box.y1  
+      const width = box.x2 - box.x1
+      const height = box.y2 - box.y1
+      
+      console.log(`[BBox] Percentage-based positioning: [${box.x1}%,${box.y1}%,${box.x2}%,${box.y2}%] → left:${left}%, top:${top}%, width:${width}%, height:${height}%`)
+      
+      const isHovered = hoveredBox === box
+      const color = '#3B82F6' // blue-500
+      
+      return {
+        position: 'absolute' as const,
+        left: `${left}%`,
+        top: `${top}%`,
+        width: `${width}%`,
+        height: `${height}%`,
+        border: `2px solid ${color}`,
+        backgroundColor: isHovered ? `${color}20` : `${color}10`,
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        zIndex: isHovered ? 10 : 1
+      }
+    }
+    
+    // Fallback: Legacy pixel-based scaling for old data
     const img = imageRef.current
     const naturalWidth = img.naturalWidth
     const naturalHeight = img.naturalHeight
@@ -123,10 +153,9 @@ export default function DocumentPreviewWithAnnotations({
     width = Math.min(width, displayWidth - left)
     height = Math.min(height, displayHeight - top)
     
-    console.log(`[BBox] Scaled mapping: [${box.x1},${box.y1},${box.x2},${box.y2}] × [${scaleX.toFixed(3)},${scaleY.toFixed(3)}] → [${left.toFixed(1)},${top.toFixed(1)},${width.toFixed(1)},${height.toFixed(1)}]`)
+    console.log(`[BBox] Legacy pixel scaling: [${box.x1},${box.y1},${box.x2},${box.y2}] × [${scaleX.toFixed(3)},${scaleY.toFixed(3)}] → [${left.toFixed(1)},${top.toFixed(1)},${width.toFixed(1)},${height.toFixed(1)}]`)
     
     const isHovered = hoveredBox === box
-    // Use blue color for all bounding boxes
     const color = '#3B82F6' // blue-500
     
     return {

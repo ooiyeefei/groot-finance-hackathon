@@ -97,7 +97,8 @@ try:
     
     # Get the first (and only) image
     image = images[0]
-    print(f"[Python] Image converted: {image.size[0]}x{image.size[1]} pixels")
+    image_width, image_height = image.size
+    print(f"[Python] Image converted: {image_width}x{image_height} pixels")
     
     # Convert to PNG bytes
     img_buffer = io.BytesIO()
@@ -110,12 +111,15 @@ try:
     if len(png_bytes) == 0:
         raise Exception("Generated PNG is empty")
     
-    # Output base64 for capture
+    # Output both base64 and dimensions for capture
     base64_result = base64.b64encode(png_bytes).decode('utf-8')
     print(f"[Python] Base64 result length: {len(base64_result)}")
     print("RESULT_START")
     print(base64_result)
     print("RESULT_END")
+    print("DIMENSIONS_START")
+    print(f"{image_width},{image_height}")
+    print("DIMENSIONS_END")
     
 except Exception as e:
     print(f"[Python] ERROR: {str(e)}")
@@ -141,6 +145,8 @@ except Exception as e:
       const stdout = result.stdout;
       const startMarker = 'RESULT_START';
       const endMarker = 'RESULT_END';
+      const dimStartMarker = 'DIMENSIONS_START';
+      const dimEndMarker = 'DIMENSIONS_END';
       
       const startIndex = stdout.indexOf(startMarker);
       const endIndex = stdout.indexOf(endMarker);
@@ -153,6 +159,20 @@ except Exception as e:
       
       if (!base64String) {
         throw new Error('Empty base64 result from Python conversion');
+      }
+      
+      // Extract dimensions
+      const dimStartIndex = stdout.indexOf(dimStartMarker);
+      const dimEndIndex = stdout.indexOf(dimEndMarker);
+      let imageDimensions = null;
+      
+      if (dimStartIndex !== -1 && dimEndIndex !== -1) {
+        const dimensionsString = stdout.substring(dimStartIndex + dimStartMarker.length, dimEndIndex).trim();
+        const [width, height] = dimensionsString.split(',').map(d => parseInt(d.trim()));
+        if (width && height) {
+          imageDimensions = { width, height };
+          console.log(`📐 Extracted image dimensions: ${width}x${height}`);
+        }
       }
       
       console.log(`🔍 Extracted base64 length: ${base64String.length}`);
@@ -185,17 +205,26 @@ except Exception as e:
 
       console.log(`✅ Image uploaded successfully to: ${imagePath}`);
 
-      // Step 3.5: Update document record with converted image path
-      console.log(`💾 Updating document record with converted image path`);
-      const { error: updateError } = await supabase.from('documents').update({
+      // Step 3.5: Update document record with converted image path and dimensions
+      console.log(`💾 Updating document record with converted image path and dimensions`);
+      const updateData: any = {
         converted_image_path: imagePath
-      }).eq('id', payload.documentId);
+      };
+      
+      // Add dimensions if available
+      if (imageDimensions) {
+        updateData.converted_image_width = imageDimensions.width;
+        updateData.converted_image_height = imageDimensions.height;
+        console.log(`📐 Storing image dimensions: ${imageDimensions.width}x${imageDimensions.height}`);
+      }
+      
+      const { error: updateError } = await supabase.from('documents').update(updateData).eq('id', payload.documentId);
 
       if (updateError) {
         console.warn(`⚠️ Failed to update document with converted image path: ${updateError.message}`);
         // Don't throw error - continue with OCR processing
       } else {
-        console.log(`✅ Document record updated with converted image path`);
+        console.log(`✅ Document record updated with converted image path and dimensions`);
       }
 
       // Step 4: Trigger OCR processing task with the image path

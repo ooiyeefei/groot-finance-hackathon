@@ -102,7 +102,7 @@ You MUST return ONLY a single, valid JSON object matching this schema. Do not in
 /**
  * Handles the actual API call to the OCR service.
  */
-async function processDocumentWithOCR(imageUrl: string, endpoint: string, modelName: string) {
+async function processDocumentWithOCR(imageUrl: string, endpoint: string, modelName: string, sourceDimensions?: { width: number; height: number }) {
   try {
     const requestBody = {
       model: modelName,
@@ -182,7 +182,7 @@ async function processDocumentWithOCR(imageUrl: string, endpoint: string, modelN
       });
     }
 
-    return parseOCRResponse(content);
+    return parseOCRResponse(content, sourceDimensions);
 
   } catch (error) {
     if (error instanceof OCRProcessingError) throw error;
@@ -197,7 +197,7 @@ async function processDocumentWithOCR(imageUrl: string, endpoint: string, modelN
  * Parses the string response from the AI into a structured object.
  * Filters out AI reasoning and thought process to show only clean structured data.
  */
-function parseOCRResponse(content: string) {
+function parseOCRResponse(content: string, sourceDimensions?: { width: number; height: number }) {
   try {
     // First, extract clean JSON from the response
     const parsedJson = extractJSONFromResponse(content);
@@ -245,7 +245,7 @@ function parseOCRResponse(content: string) {
           entities.push({ type: key, value: String(item.value), confidence: item.confidence || 0.9 });
           if (item.bbox) {
             console.log(`[BBox] Found bbox for ${key}:`, item.bbox);
-            boundingBoxes.push({ category: key, text: String(item.value), ...mapBbox(item.bbox) });
+            boundingBoxes.push({ category: key, text: String(item.value), ...mapBbox(item.bbox, sourceDimensions) });
           } else {
             console.log(`[BBox] No bbox for ${key}`);
           }
@@ -257,7 +257,7 @@ function parseOCRResponse(content: string) {
       parsedJson.financial_entities.forEach((item: any) => {
         if (item && item.value) {
           entities.push({ type: item.label || 'unknown', value: String(item.value), confidence: item.confidence || 0.8 });
-          if (item.bbox) boundingBoxes.push({ category: item.label || 'unknown', text: String(item.value), ...mapBbox(item.bbox) });
+          if (item.bbox) boundingBoxes.push({ category: item.label || 'unknown', text: String(item.value), ...mapBbox(item.bbox, sourceDimensions) });
         }
       });
     }
@@ -271,7 +271,7 @@ function parseOCRResponse(content: string) {
             boundingBoxes.push({ 
               category: `line_item_row_${index + 1}`, 
               text: `Line Item ${index + 1}`, 
-              ...mapBbox(item.row_bbox) 
+              ...mapBbox(item.row_bbox, sourceDimensions) 
             });
           }
 
@@ -289,7 +289,7 @@ function parseOCRResponse(content: string) {
                 boundingBoxes.push({ 
                   category: `line_item_${field}`, 
                   text: String(item[field].value), 
-                  ...mapBbox(item[field].bbox) 
+                  ...mapBbox(item[field].bbox, sourceDimensions) 
                 });
               }
             }
@@ -505,8 +505,27 @@ function removeJavaScriptComments(jsonString: string): string {
   return result;
 }
 
-function mapBbox(bbox: number[]): { x1: number; y1: number; x2: number; y2: number } {
+function mapBbox(bbox: number[], sourceDimensions?: { width: number; height: number }): { x1: number; y1: number; x2: number; y2: number } {
   if (!Array.isArray(bbox) || bbox.length !== 4) return { x1: 0, y1: 0, x2: 0, y2: 0 };
+  
+  // If source dimensions are provided, normalize to percentages
+  if (sourceDimensions && sourceDimensions.width > 0 && sourceDimensions.height > 0) {
+    const x1Percent = (bbox[0] / sourceDimensions.width) * 100;
+    const y1Percent = (bbox[1] / sourceDimensions.height) * 100;
+    const x2Percent = (bbox[2] / sourceDimensions.width) * 100;
+    const y2Percent = (bbox[3] / sourceDimensions.height) * 100;
+    
+    console.log(`[BBox] Normalized [${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}] → [${x1Percent.toFixed(2)}%,${y1Percent.toFixed(2)}%,${x2Percent.toFixed(2)}%,${y2Percent.toFixed(2)}%] using ${sourceDimensions.width}x${sourceDimensions.height}`);
+    
+    return { 
+      x1: parseFloat(x1Percent.toFixed(2)), 
+      y1: parseFloat(y1Percent.toFixed(2)), 
+      x2: parseFloat(x2Percent.toFixed(2)), 
+      y2: parseFloat(y2Percent.toFixed(2)) 
+    };
+  }
+  
+  // Fallback: return raw pixel coordinates
   return { x1: bbox[0], y1: bbox[1], x2: bbox[2], y2: bbox[3] };
 }
 
@@ -518,6 +537,23 @@ export const processDocumentOCR = task({
     console.log(`✅ Starting OCR process for document: ${payload.documentId}`);
 
     try {
+      // Step 0: Fetch document record to get source image dimensions
+      const { data: documentRecord, error: fetchError } = await supabase
+        .from('documents')
+        .select('converted_image_width, converted_image_height')
+        .eq('id', payload.documentId)
+        .single();
+
+      let sourceDimensions: { width: number; height: number } | undefined;
+      if (documentRecord?.converted_image_width && documentRecord?.converted_image_height) {
+        sourceDimensions = {
+          width: documentRecord.converted_image_width,
+          height: documentRecord.converted_image_height
+        };
+        console.log(`📐 Retrieved source image dimensions: ${sourceDimensions.width}x${sourceDimensions.height}`);
+      } else {
+        console.warn(`⚠️ No source image dimensions found for document ${payload.documentId} - will use raw pixel coordinates`);
+      }
       // Step 1: Create a signed URL for the image
       const { data: urlData, error: urlError } = await supabase.storage
         .from('documents')
@@ -553,7 +589,7 @@ export const processDocumentOCR = task({
       }
 
       // Step 3: Call the external OCR service with complete processing logic
-      const ocrResult = await processDocumentWithOCR(signedImageUrl, ocrEndpointUrl, ocrModelName);
+      const ocrResult = await processDocumentWithOCR(signedImageUrl, ocrEndpointUrl, ocrModelName, sourceDimensions);
       
       console.log("🤖 OCR service responded successfully.");
       

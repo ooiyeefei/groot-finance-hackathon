@@ -11,6 +11,8 @@ interface Document {
   file_size: number
   storage_path?: string
   converted_image_path?: string
+  converted_image_width?: number
+  converted_image_height?: number
   processing_status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed'
   created_at: string
   processed_at?: string
