@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText } from 'lucide-react'
 import { Transaction, CreateTransactionRequest, LineItem, SupportedCurrency, TRANSACTION_CATEGORIES, TransactionType } from '@/types/transaction'
 import { formatCurrency } from '@/hooks/use-transactions'
+import { useHomeCurrency } from '@/components/settings/currency-settings'
 
 interface TransactionFormModalProps {
   transaction?: Transaction
@@ -34,12 +35,14 @@ export default function TransactionFormModal({
   onSubmit
 }: TransactionFormModalProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const userHomeCurrency = useHomeCurrency()
+  
   const [formData, setFormData] = useState({
     transaction_type: transaction?.transaction_type || prefilledData?.transaction_type || 'expense' as const,
     description: transaction?.description || prefilledData?.description || '',
     original_amount: transaction?.original_amount || prefilledData?.original_amount || 0,
-    original_currency: transaction?.original_currency || prefilledData?.original_currency || 'USD' as SupportedCurrency,
-    home_currency: transaction?.home_currency || prefilledData?.home_currency || 'USD' as SupportedCurrency,
+    original_currency: transaction?.original_currency || prefilledData?.original_currency || userHomeCurrency,
+    home_currency: transaction?.home_currency || prefilledData?.home_currency || userHomeCurrency,
     transaction_date: transaction?.transaction_date?.split('T')[0] || prefilledData?.transaction_date || new Date().toISOString().split('T')[0],
     category: transaction?.category || prefilledData?.category || 'operational',
     subcategory: transaction?.subcategory || prefilledData?.subcategory || '',

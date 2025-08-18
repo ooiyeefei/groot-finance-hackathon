@@ -9,4 +9,4 @@ export { DocumentSearchTool } from './document-search-tool'
 export { TransactionLookupTool } from './transaction-lookup-tool'
 
 // Re-export for backward compatibility and convenience
-export { createSecureFinancialAgent, createSecureAgentState, type SecureAgentState } from '../secure-langgraph-agent'
+export { createFinancialAgent, createAgentState, type AgentState } from '../langgraph-agent'

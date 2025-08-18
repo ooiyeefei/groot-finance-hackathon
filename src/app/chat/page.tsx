@@ -41,7 +41,7 @@ export default async function ChatPage() {
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-2">AI Chat Coming Soon</h3>
                 <p className="text-gray-400 mb-4">
-                  Our SEA-LION powered AI assistant will help you understand your finances and provide personalized guidance.
+                  Our LLM powered AI assistant will help you understand your finances and provide personalized guidance.
                 </p>
                 <div className="text-gray-500 text-sm space-y-2">
                   <p>• Multi-language support (English, Thai, Indonesian)</p>

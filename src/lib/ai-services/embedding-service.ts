@@ -60,7 +60,7 @@ export class EmbeddingService implements IEmbeddingService {
 
       const result = await response.json()
       
-      // Extract embedding from OpenAI-compatible response format
+      // Extract embedding from API response format
       const embedding = result.data?.[0]?.embedding
       
       if (!embedding || !Array.isArray(embedding)) {
@@ -137,7 +137,7 @@ export class EmbeddingService implements IEmbeddingService {
 
       const result = await response.json()
       
-      // Extract embeddings from OpenAI-compatible response format
+      // Extract embeddings from API response format
       if (!result.data || !Array.isArray(result.data)) {
         throw new ProcessingError('Invalid batch embedding response format', {
           service: 'Embedding',

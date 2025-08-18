@@ -2,7 +2,7 @@
   "dependencies": ["."],
   "graphs": {
     "financial_agent": {
-      "path": "src/lib/secure-langgraph-agent.ts:createSecureFinancialAgent"
+      "path": "src/lib/langgraph-agent.ts:createFinancialAgent"
     }
   },
   "env": ".env.local",

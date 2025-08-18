@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { SupportedLanguage } from '@/lib/translations'
-import { createSecureFinancialAgent, SecureAgentState } from '@/lib/secure-langgraph-agent'
+import { createFinancialAgent, AgentState } from '@/lib/langgraph-agent'
 import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages'
 
 interface ChatRequest {
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       conversationId: currentConversationId || undefined
     }
 
-    const initialState: SecureAgentState = {
+    const initialState: AgentState = {
       messages: conversationHistory,
       language: language,
       userContext: userContext,
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     console.log(`[Chat API] Invoking secure LangGraph agent with ${initialState.messages.length} messages for user ${userId}`)
 
     // Create and invoke the secure LangGraph agent
-    const agent = createSecureFinancialAgent()
+    const agent = createFinancialAgent()
     const result = await agent.invoke(initialState)
 
     console.log('[Chat API] LangGraph agent completed')

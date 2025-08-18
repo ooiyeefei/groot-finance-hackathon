@@ -18,17 +18,8 @@ interface DocumentPreviewProps {
   fileType: string
   fileSize: number
   boundingBoxes?: BoundingBox[]
-  coordinateReference?: { width?: number; height?: number }
   onBoxHover?: (box: BoundingBox | null) => void
   onBoxClick?: (box: BoundingBox) => void
-  document?: {
-    extracted_data?: {
-      metadata?: {
-        coordinateReference?: { width?: number; height?: number }
-        layoutElements?: any
-      }
-    }
-  }
 }
 
 // Color mapping for different layout categories
@@ -52,27 +43,18 @@ export default function DocumentPreviewWithAnnotations({
   fileType,
   fileSize,
   boundingBoxes = [],
-  coordinateReference,
   onBoxHover,
-  onBoxClick,
-  document
+  onBoxClick
 }: DocumentPreviewProps) {
   const [scale, setScale] = useState(1)
   const [rotation, setRotation] = useState(0)
   const [hoveredBox, setHoveredBox] = useState<BoundingBox | null>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
 
   const handleImageLoad = () => {
     setImageLoaded(true)
-    if (imageRef.current) {
-      setImageDimensions({
-        width: imageRef.current.naturalWidth,
-        height: imageRef.current.naturalHeight
-      })
-    }
   }
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3))
@@ -93,19 +75,24 @@ export default function DocumentPreviewWithAnnotations({
 
   // Calculate bounding box positions relative to displayed image
   const getBoxStyle = (box: BoundingBox) => {
-    if (!imageLoaded || !imageRef.current) return {}
+    if (!imageLoaded || !imageRef.current || !containerRef.current) return {}
     
     // Check if coordinates are already in percentage format (< 100)
     const arePercentages = box.x1 <= 100 && box.y1 <= 100 && box.x2 <= 100 && box.y2 <= 100
     
     if (arePercentages) {
-      // Use percentage-based positioning directly
+      // Account for CSS layout factors (container has p-4 padding and border)
+      // The percentage positioning is relative to the image element itself,
+      // so no additional offset calculations are needed since the overlays
+      // are positioned absolutely within the same parent as the image
+      
+      // Use percentage-based positioning relative to image dimensions
       const left = box.x1
       const top = box.y1  
       const width = box.x2 - box.x1
       const height = box.y2 - box.y1
       
-      console.log(`[BBox] Percentage-based positioning: [${box.x1}%,${box.y1}%,${box.x2}%,${box.y2}%] → left:${left}%, top:${top}%, width:${width}%, height:${height}%`)
+      console.log(`[BBox] CSS-aware positioning: coords [${box.x1}%,${box.y1}%,${box.x2}%,${box.y2}%] → positioned at left:${left}%, top:${top}%, width:${width}%, height:${height}%`)
       
       const isHovered = hoveredBox === box
       const color = '#3B82F6' // blue-500
@@ -120,7 +107,9 @@ export default function DocumentPreviewWithAnnotations({
         backgroundColor: isHovered ? `${color}20` : `${color}10`,
         cursor: 'pointer',
         transition: 'all 0.2s ease',
-        zIndex: isHovered ? 10 : 1
+        zIndex: isHovered ? 10 : 1,
+        // Ensure bounding box is positioned relative to the image, not the container
+        transform: 'translateZ(0)' // Force hardware acceleration for better positioning
       }
     }
     

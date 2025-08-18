@@ -497,7 +497,6 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   fileType={document.file_type}
                   fileSize={document.file_size}
                   boundingBoxes={getFilteredBoundingBoxes()}
-                  document={document}
                   onBoxHover={setHighlightedBox}
                   onBoxClick={(box) => {
                     console.log('Clicked box:', box)

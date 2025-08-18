@@ -142,7 +142,7 @@ export default function AIAssistantPage() {
           {/* Header */}
           <HeaderWithUser 
             title="AI Assistant" 
-            subtitle="Get intelligent financial guidance powered by GPT OSS-20B"
+            subtitle="Get intelligent financial guidance powered by LLM"
             actions={
               <>
                 <ActionButton
