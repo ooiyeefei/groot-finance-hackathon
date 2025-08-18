@@ -1,3 +1,5 @@
+// src/lib/langgraph-agent.ts
+
 /**
  * LangGraph Financial Co-pilot Agent
  * Architecture with user context validation and RLS enforcement
@@ -8,6 +10,7 @@ import { BaseMessage, AIMessage, ToolMessage, HumanMessage } from "@langchain/co
 import { ToolFactory } from './tools/tool-factory';
 import { UserContext } from './tools/base-tool';
 import { aiConfig } from './config/ai-config';
+import { generateToolSchemas } from './tools/tool-schema-generator';
 
 // Agent State Definition with mandatory user context
 const AgentStateAnnotation = Annotation.Root({
@@ -35,45 +38,27 @@ const AgentStateAnnotation = Annotation.Root({
 export type AgentState = typeof AgentStateAnnotation.State;
 
 /**
- * Get system prompt with available tools
+ * Get system prompt for native function calling
  */
 function getSystemPrompt(language: string): string {
-  const toolDescriptions = ToolFactory.getToolDescriptions();
-  const availableTools = Object.entries(toolDescriptions)
-    .map(([name, desc]) => `${name}: ${desc}`)
-    .join('\n');
-
   const basePrompt = `You are FinanSEAL AI, a secure financial co-pilot for Southeast Asian SMEs. You help users understand their financial data with complete privacy and security.
 
 IMPORTANT SECURITY NOTICE: You are operating in a secure environment where all data access is properly authorized and user-isolated.
 
-Available Tools:
-${availableTools}
-
 CRITICAL RAG INTEGRATION GUIDELINES:
-- For ANY financial questions about user's specific data (invoices, receipts, transactions, expenses, vendors, amounts), ALWAYS use search_documents tool first
-- For questions about transactions or financial summaries, use get_transactions tool
-- Simple questions like "show me my expenses" or "what invoices do I have" require tool usage to access actual data
-- Only provide general financial advice without tools when the question is purely educational/theoretical
+- For ANY financial questions about user's specific data (invoices, receipts, transactions, expenses, vendors, amounts), you MUST use the appropriate function
+- For document-related queries (invoices, receipts, reports), use the search_documents function
+- For transaction queries (expenses, spending, financial summaries), use the get_transactions function
+- Simple questions like "show me my expenses" or "what invoices do I have" require function usage to access actual data
+- Only provide general financial advice without functions when the question is purely educational/theoretical
 
-When you need to use a tool, respond with JSON in this exact format:
-{
-  "tool_call": {
-    "name": "tool_name",
-    "parameters": {
-      "query": "user's search query here"
-    }
-  },
-  "reasoning": "Why you need to use this tool"
-}
+You have access to function calling capabilities. When you need to access user data, call the appropriate function with relevant parameters.
 
-Examples of when to use tools:
-- "What are my recent expenses?" → Use get_transactions
-- "Show me invoices from vendor ABC" → Use search_documents with query "vendor ABC invoices"  
-- "What's my total spending this month?" → Use get_transactions
-- "Find receipts with amount over $100" → Use search_documents with query "receipts amount over 100"
-
-For regular responses (no tool needed), respond normally in conversational text.
+Examples of when to use functions:
+- "What are my recent expenses?" → Call get_transactions function
+- "Show me invoices from vendor ABC" → Call search_documents function with query "vendor ABC invoices"  
+- "What's my total spending this month?" → Call get_transactions function with date filters
+- "Find receipts with amount over $100" → Call search_documents function with query "receipts amount over 100"
 
 Always be helpful, accurate, and proactive in accessing user data to provide specific insights. All data you access belongs to the authenticated user only.`;
 
@@ -153,25 +138,27 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
   try {
     console.log(`[CallModel] Calling LLM for user: ${state.userContext.userId}`);
     
+    // Get available tools for function calling
+    const tools = generateToolSchemas();
+    
+    const requestPayload = {
+      model: aiConfig.chat.modelId,
+      messages,
+      tools,
+      tool_choice: "auto",
+      max_tokens: 1000,
+      temperature: 0.3
+    };
+    
     // ### DEBUGGING: Log the full request payload being sent to the LLM endpoint
-    console.log('[CallModel] Request Payload:', JSON.stringify({
-        model: aiConfig.chat.modelId,
-        messages,
-        max_tokens: 1000,
-        temperature: 0.3
-    }, null, 2));
+    console.log('[CallModel] Request Payload:', JSON.stringify(requestPayload, null, 2));
     
     const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: aiConfig.chat.modelId,
-        messages,
-        max_tokens: 1000,
-        temperature: 0.3
-      })
+      body: JSON.stringify(requestPayload)
     });
 
     if (!response.ok) {
@@ -341,19 +328,21 @@ function router(state: AgentState): string {
     return 'validate';
   }
 
-  // Use a type assertion to treat the message as a dynamic object for `type` property.
+  // Get the last message from the state.
   const lastMessage = state.messages[state.messages.length - 1] as any;
-  const messageType = lastMessage._getType ? lastMessage._getType() : lastMessage.type;
-
-  // Added a new check to handle the specific case where content is null and finish_reason is 'tool_calls'.
-  // This ensures we always try to correct a failed tool call before ending the turn.
-  if (lastMessage.content === null && lastMessage.tool_calls.length === 0 && lastMessage.finish_reason === 'tool_calls') {
+  
+  // PRIMARY FIX: Check if the raw LLM response has an empty tool_calls array and a tool_calls finish reason.
+  // This is the most reliable way to catch the incomplete response.
+  if (lastMessage.finish_reason === 'tool_calls' && (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0)) {
     console.log('[Router] Incomplete tool call detected. Routing for correction.');
     return 'correctToolCall';
   }
 
+  // Now, proceed with the regular routing logic based on the message type.
+  const messageType = lastMessage._getType ? lastMessage._getType() : lastMessage.type;
+
   if (messageType === 'ai') {
-    // Check for a valid tool call.
+    // If the message is a valid tool call (not incomplete), execute it.
     if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
       console.log('[Router] Valid tool call detected. Routing to execute tool.');
       return 'executeTool';
