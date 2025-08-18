@@ -84,6 +84,20 @@ CRITICAL RAG INTEGRATION GUIDELINES:
 
 You have access to function calling capabilities. When you need to access user data, call the appropriate function with relevant parameters.
 
+FUNCTION CALLING FORMAT: When you need to call a function, respond with a tool_calls array in this exact JSON format:
+{
+  "tool_calls": [
+    {
+      "id": "call_1",
+      "type": "function", 
+      "function": {
+        "name": "function_name",
+        "arguments": "{\"param1\": \"value1\", \"param2\": \"value2\"}"
+      }
+    }
+  ]
+}
+
 Always be helpful, accurate, and proactive in accessing user data to provide specific insights. All data you access belongs to the authenticated user only.`;
 
   const translations = {
