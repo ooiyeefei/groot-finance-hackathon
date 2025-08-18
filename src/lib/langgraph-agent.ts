@@ -77,6 +77,7 @@ Always be helpful, accurate, and proactive in accessing user data to provide spe
  */
 async function validate(state: AgentState): Promise<Partial<AgentState>> {
   console.log('[Validation] Validating user context and permissions');
+  console.log('[DEBUG] User Context:', JSON.stringify(state.userContext, null, 2));
 
   // CRITICAL: Validate user context exists
   if (!state.userContext || !state.userContext.userId) {
@@ -269,7 +270,10 @@ async function executeTool(state: AgentState): Promise<Partial<AgentState>> {
     const toolName = toolCall.function.name;
     const parameters = JSON.parse(toolCall.function.arguments);
 
+    // ### DEBUGGING: Log the exact parameters and user context before execution
     console.log(`[ExecuteTool] Executing tool: ${toolName} for user: ${state.userContext.userId}`);
+    console.log(`[DEBUG] Parameters: ${JSON.stringify(parameters, null, 2)}`);
+    console.log(`[DEBUG] User Context: ${JSON.stringify(state.userContext, null, 2)}`);
 
     // Execute tool through secure ToolFactory with user context
     const result = await ToolFactory.executeTool(toolName, parameters, state.userContext);
