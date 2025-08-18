@@ -208,39 +208,39 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
       return 'cost_of_goods_sold'
     }
     
-    // Meals & entertainment
+    // Travel & entertainment
     if (textLower.includes('restaurant') || textLower.includes('cafe') || textLower.includes('meal') ||
         textLower.includes('food') || textLower.includes('drink') || textLower.includes('coffee') ||
         textLower.includes('lunch') || textLower.includes('dinner')) {
-      return 'meals_entertainment'
+      return 'travel_entertainment'
     }
     
-    // Marketing
+    // Marketing & advertising
     if (textLower.includes('marketing') || textLower.includes('advertising') || textLower.includes('promotion') ||
         textLower.includes('facebook') || textLower.includes('google ads') || textLower.includes('campaign')) {
-      return 'marketing'
+      return 'marketing_advertising'
     }
     
-    // Equipment
+    // Equipment (administrative expenses)
     if (textLower.includes('equipment') || textLower.includes('hardware') || textLower.includes('computer') ||
         textLower.includes('laptop') || textLower.includes('monitor') || textLower.includes('printer')) {
-      return 'equipment'
+      return 'administrative_expenses'
     }
     
-    // Utilities
+    // Utilities & communications
     if (textLower.includes('electricity') || textLower.includes('water') || textLower.includes('internet') ||
         textLower.includes('phone') || textLower.includes('utility') || textLower.includes('telecom')) {
-      return 'utilities'
+      return 'utilities_communications'
     }
     
-    // Professional services
+    // Professional services (administrative expenses)
     if (textLower.includes('legal') || textLower.includes('accounting') || textLower.includes('consulting') ||
         textLower.includes('professional') || textLower.includes('service') || textLower.includes('advisory')) {
-      return 'professional_services'
+      return 'administrative_expenses'
     }
     
-    // Default to office supplies for unknown expenses
-    return 'office_supplies'
+    // Default to administrative expenses for unknown expenses
+    return 'administrative_expenses'
   }
 
   // Map basic transaction information

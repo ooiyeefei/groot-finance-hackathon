@@ -100,7 +100,7 @@ export class GeminiService {
       // Convert messages to Gemini format
       const geminiContents = this.convertMessagesToGemini(messages, systemPrompt)
       
-      // Prepare the request
+      // Prepare the request - following @google/genai documentation structure
       const requestConfig: any = {
         model: this.model,
         contents: geminiContents
@@ -111,23 +111,41 @@ export class GeminiService {
         requestConfig.systemInstruction = { parts: [{ text: systemPrompt }] }
       }
 
-      // Add function calling if tools are provided
+      // Add function calling if tools are provided - following @google/genai docs format
       if (tools && tools.length > 0) {
+        console.log(`[GeminiService] Processing ${tools.length} tools:`, tools.map(t => t.function?.name))
+        
         const functionDeclarations = tools.map(tool => 
           this.convertToolToGeminiFunctionDeclaration(tool)
         )
 
-        requestConfig.tools = [{ functionDeclarations }]
-        requestConfig.config = {
-          toolConfig: {
-            functionCallingConfig: {
-              mode: FunctionCallingConfigMode.AUTO
+        // Only add function calling config if we actually have declarations
+        if (functionDeclarations.length > 0) {
+          // Correct structure based on @google/genai documentation:
+          // tools and config should be at the same level
+          requestConfig.tools = [{ functionDeclarations }]
+          requestConfig.config = {
+            toolConfig: {
+              functionCallingConfig: {
+                mode: FunctionCallingConfigMode.AUTO
+              }
             }
           }
+          console.log(`[GeminiService] Function calling config:`, JSON.stringify(requestConfig.config, null, 2))
+          console.log(`[GeminiService] Tools array:`, JSON.stringify(requestConfig.tools, null, 2))
+          console.log(`[GeminiService] Using ${functionDeclarations.length} function declarations:`, functionDeclarations.map(f => f.name))
+        } else {
+          console.warn(`[GeminiService] No valid function declarations generated from ${tools.length} tools`)
         }
-
-        console.log(`[GeminiService] Using ${functionDeclarations.length} function declarations`)
       }
+
+      console.log(`[GeminiService] Final request structure:`, JSON.stringify({
+        model: requestConfig.model,
+        hasContents: !!requestConfig.contents,
+        hasSystemInstruction: !!requestConfig.systemInstruction,
+        hasTools: !!requestConfig.tools,
+        hasConfig: !!requestConfig.config
+      }, null, 2))
 
       const response = await this.client.models.generateContent(requestConfig)
 
