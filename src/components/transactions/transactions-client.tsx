@@ -7,6 +7,7 @@ import ActionButton from '@/components/ui/action-button'
 import TransactionsList from '@/components/transactions/transactions-list'
 import TransactionFormModal from '@/components/transactions/transaction-form-modal'
 import TransactionDetailModal from '@/components/transactions/transaction-detail-modal'
+import DocumentAnalysisModal from '@/components/documents/document-analysis-modal'
 import { useTransactions } from '@/hooks/use-transactions'
 import { Transaction } from '@/types/transaction'
 
@@ -14,6 +15,7 @@ export default function TransactionsClient() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null)
+  const [selectedDocument, setSelectedDocument] = useState<any | null>(null)
   
   const {
     transactions,
@@ -60,6 +62,20 @@ export default function TransactionsClient() {
     if (viewingTransaction) {
       setEditingTransaction(viewingTransaction)
       setViewingTransaction(null)
+    }
+  }
+
+  const handleViewDocument = async (documentId: string) => {
+    try {
+      // Fetch the document by ID
+      const response = await fetch(`/api/documents/${documentId}`)
+      if (response.ok) {
+        const document = await response.json()
+        setSelectedDocument(document)
+        setViewingTransaction(null) // Close transaction modal
+      }
+    } catch (error) {
+      console.error('Failed to fetch document:', error)
     }
   }
 
@@ -121,6 +137,14 @@ export default function TransactionsClient() {
           onClose={() => setViewingTransaction(null)}
           onEdit={handleEditFromDetail}
           onDelete={() => handleDeleteTransaction(viewingTransaction.id)}
+          onViewDocument={handleViewDocument}
+        />
+      )}
+
+      {selectedDocument && (
+        <DocumentAnalysisModal
+          document={selectedDocument}
+          onClose={() => setSelectedDocument(null)}
         />
       )}
     </div>

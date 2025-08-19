@@ -9,13 +9,15 @@ interface TransactionDetailModalProps {
   onClose: () => void
   onEdit: () => void
   onDelete: () => Promise<void>
+  onViewDocument?: (documentId: string) => void
 }
 
 export default function TransactionDetailModal({
   transaction,
   onClose,
   onEdit,
-  onDelete
+  onDelete,
+  onViewDocument
 }: TransactionDetailModalProps) {
   const handleDelete = async () => {
     if (window.confirm(`Are you sure you want to delete this ${transaction.transaction_type}?`)) {
@@ -218,9 +220,13 @@ export default function TransactionDetailModal({
                         <FileText className="w-3 h-3" />
                         Source Document:
                       </span>
-                      <span className="text-blue-400 cursor-pointer hover:text-blue-300">
+                      <button
+                        onClick={() => onViewDocument?.(transaction.document_id!)}
+                        className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                      >
+                        <Eye className="w-3 h-3" />
                         View Document
-                      </span>
+                      </button>
                     </div>
                   )}
                 </div>
