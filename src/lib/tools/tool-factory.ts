@@ -6,8 +6,9 @@
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { DocumentSearchTool } from './document-search-tool'
 import { TransactionLookupTool } from './transaction-lookup-tool'
+import { GetVendorsTool } from './get-vendors-tool'
 
-export type ToolName = 'search_documents' | 'get_transactions'
+export type ToolName = 'search_documents' | 'get_transactions' | 'get_vendors'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -21,6 +22,7 @@ export class ToolFactory {
   static {
     this.registerTool('search_documents', () => new DocumentSearchTool())
     this.registerTool('get_transactions', () => new TransactionLookupTool())
+    this.registerTool('get_vendors', () => new GetVendorsTool())
   }
 
   /**

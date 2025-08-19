@@ -747,11 +747,11 @@ Your response must be valid JSON only. Nothing else.`
 
     try {
       // Additional check: verify user has access to transactions
-      // Query by user_id to match transaction queries (consistent with architecture)
+      // Query by clerk_user_id since that's the actual column in users table
       const { data: userProfile, error } = await this.supabase
         .from('users')
-        .select('id, home_currency, user_id')
-        .eq('user_id', userContext.userId)
+        .select('id, home_currency, clerk_user_id')
+        .eq('clerk_user_id', userContext.userId)
         .single()
 
       if (error || !userProfile) {

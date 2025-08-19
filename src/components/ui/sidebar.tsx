@@ -65,8 +65,8 @@ export default function Sidebar() {
                     <Image
                       src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
                       alt="FinanSEAL Logo"
-                      width={39}
-                      height={39}
+                      width={43}
+                      height={43}
                       className="rounded-lg"
                     />
                   </div>
@@ -91,8 +91,8 @@ export default function Sidebar() {
                   <Image
                     src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
                     alt="FinanSEAL Logo"
-                    width={33}
-                    height={33}
+                    width={39}
+                    height={39}
                     className="rounded hover:opacity-80 transition-opacity"
                   />
                 </Link>
