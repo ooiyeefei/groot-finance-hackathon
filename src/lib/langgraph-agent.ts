@@ -138,7 +138,11 @@ Convert the user's query into the appropriate function call now. NO explanations
  * Direct Command Prompt - For non-reasoning models like Qwen
  */
 function getIntelligentAgentPrompt(language: string): string {
-  const basePrompt = `You are a specialized API automation model. Your function is to process a user's query and decide on one of three possible actions: 1) Respond directly, 2) Call a tool, or 3) Signal completion. You MUST follow these rules in order.
+  const basePrompt = `/nothink
+
+You are a specialized API automation model. Your function is to process a user's query and decide on one of three possible actions: 1) Respond directly, 2) Call a tool, or 3) Signal completion. You MUST follow these rules in order.
+
+**CRITICAL: DO NOT THINK OR REASON. NO <think> TAGS. NO </think> TAGS. NO INTERNAL REASONING.**
 
 **PRIORITIZED ACTION PROTOCOL:**
 

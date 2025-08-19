@@ -187,7 +187,12 @@ export class TransactionLookupTool extends BaseTool {
       const inferredAnalysis = (limit === 1 && params.minAmount === 0) // AI pattern for "largest" queries
       const isAnalysisQuery = queryAnalysis || inferredAnalysis
       
-      console.log(`[TransactionLookupTool] Analysis detection: queryAnalysis=${queryAnalysis}, inferredAnalysis=${inferredAnalysis}, isAnalysis=${isAnalysisQuery}`)
+      console.log(`[TransactionLookupTool] ❗ ANALYSIS DETECTION DEBUG:`)
+      console.log(`[TransactionLookupTool]   - Raw query: "${query}"`)
+      console.log(`[TransactionLookupTool]   - Query contains analysis terms: ${queryAnalysis}`)
+      console.log(`[TransactionLookupTool]   - Inferred analysis (limit=1, minAmount=0): ${inferredAnalysis}`)
+      console.log(`[TransactionLookupTool]   - Final isAnalysisQuery: ${isAnalysisQuery}`)
+      console.log(`[TransactionLookupTool]   - needsAnalysis will be set to: ${isAnalysisQuery}`)
 
       // DETERMINISTIC DATE CALCULATION - Prevent LLM date hallucination
       let startDate: string | undefined = params.startDate
@@ -347,6 +352,12 @@ export class TransactionLookupTool extends BaseTool {
 
       // CRITICAL FIX: Only apply text search for NON-analysis, NON-document-type queries
       // If document_type parameter was used, skip text filtering entirely as database already filtered
+      console.log(`[TransactionLookupTool] ❗ TEXT FILTER DECISION:`)
+      console.log(`[TransactionLookupTool]   - params.document_type: ${params.document_type}`)
+      console.log(`[TransactionLookupTool]   - needsAnalysis: ${needsAnalysis}`)
+      console.log(`[TransactionLookupTool]   - params.query: "${params.query}"`)
+      console.log(`[TransactionLookupTool]   - Will apply text filtering: ${!params.document_type && !needsAnalysis && params.query}`)
+      
       if (!params.document_type && !needsAnalysis && params.query) {
         // Extract only meaningful filter terms (not analysis terms, not document types)
         const { filterTerms } = this.separateAnalysisAndFilter(params.query)
