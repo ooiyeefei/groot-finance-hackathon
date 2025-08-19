@@ -252,8 +252,8 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
                  
   if (summary) {
     // Extract document type from OCR - this bridges the context gap!
-    if (summary.document_type?.value) {
-      const docType = summary.document_type.value.toLowerCase()
+    if ((summary as any).document_type?.value) {
+      const docType = (summary as any).document_type.value.toLowerCase()
       // Map common document types to our supported types
       if (docType.includes('invoice')) {
         mappedData.document_type = 'invoice'
