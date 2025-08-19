@@ -37,10 +37,9 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
 
   // Update messages when initialMessages changes (conversation switch)
   useEffect(() => {
-    if (initialMessages) {
-      setMessages(initialMessages)
-      setCurrentConversationId(conversationId)
-    }
+    // Always update messages, even if initialMessages is empty array (for new chat)
+    setMessages(initialMessages || [])
+    setCurrentConversationId(conversationId)
   }, [initialMessages, conversationId])
 
   // Notify parent when messages change

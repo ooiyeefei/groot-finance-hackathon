@@ -107,6 +107,7 @@ export default function AIAssistantPage() {
   const startNewChat = () => {
     setCurrentMessages([])
     setCurrentConversationId(undefined)
+    setLoading(false) // Ensure loading state is reset
   }
 
   // Handle conversation creation from chat interface

@@ -16,7 +16,7 @@ export default function Sidebar() {
   ]
   
   return (
-    <div className="w-64 bg-gray-800 flex flex-col">
+    <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
       {/* Logo */}
       <div className="p-6">
         <Link href="/" className="block">
