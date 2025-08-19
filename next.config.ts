@@ -2,6 +2,18 @@
 const nextConfig = {
   // Your other Next.js config options can go here
   
+  // Allow external images from Google Cloud Storage
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'storage.googleapis.com',
+        port: '',
+        pathname: '/finanseal-logo/**',
+      },
+    ],
+  },
+  
   // Exclude Supabase Edge Functions from Next.js build
   webpack: (config: any) => {
     config.resolve.alias = {

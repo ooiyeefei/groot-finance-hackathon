@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Home, FileText, CreditCard, MessageSquare, Settings, Menu, ChevronLeft } from 'lucide-react'
@@ -55,15 +56,19 @@ export default function Sidebar() {
         ${isMobile ? 'fixed left-0 top-0 h-full z-50' : 'relative'}
       `}>
         {/* Logo and Toggle */}
-        <div className={`${isExpanded ? 'p-6' : 'p-4'} border-b border-gray-700 transition-all duration-300 ease-in-out`}>
+        <div className={`${isExpanded ? 'p-6' : 'p-4'} transition-all duration-300 ease-in-out`}>
           <div className={`flex items-center ${isExpanded ? 'justify-between' : 'justify-center'}`}>
             {isExpanded ? (
               <>
                 <Link href="/" className="flex items-center space-x-3 min-w-0">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                      F
-                    </div>
+                    <Image
+                      src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
+                      alt="FinanSEAL Logo"
+                      width={32}
+                      height={32}
+                      className="rounded-lg"
+                    />
                   </div>
                   <div className="transition-all duration-300 ease-in-out overflow-hidden">
                     <h2 className="text-xl font-bold text-white whitespace-nowrap">
@@ -83,9 +88,13 @@ export default function Sidebar() {
             ) : (
               <div className="flex flex-col items-center space-y-2">
                 <Link href="/" className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm hover:bg-blue-700 transition-colors">
-                    F
-                  </div>
+                  <Image
+                    src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
+                    alt="FinanSEAL Logo"
+                    width={24}
+                    height={24}
+                    className="rounded hover:opacity-80 transition-opacity"
+                  />
                 </Link>
                 
                 <button
@@ -147,16 +156,6 @@ export default function Sidebar() {
           </ul>
         </nav>
 
-        {/* Footer - User info or additional actions could go here */}
-        <div className={`p-4 border-t border-gray-700 ${!isExpanded ? 'px-2' : ''}`}>
-          <div className={`
-            text-xs text-gray-400 text-center
-            transition-all duration-300 ease-in-out
-            ${isExpanded ? 'opacity-100' : 'opacity-0'}
-          `}>
-            Financial Co-Pilot
-          </div>
-        </div>
       </div>
 
       {/* Mobile overlay */}
