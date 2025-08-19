@@ -182,9 +182,14 @@ export class TransactionLookupTool extends BaseTool {
       const queryAnalysis = query.toLowerCase().includes('largest') || query.toLowerCase().includes('biggest') || 
                            query.toLowerCase().includes('highest') || query.toLowerCase().includes('maximum') ||
                            query.toLowerCase().includes('smallest') || query.toLowerCase().includes('lowest') || 
-                           query.toLowerCase().includes('minimum')
+                           query.toLowerCase().includes('minimum') ||
+                           // Enhanced analysis patterns
+                           query.toLowerCase().includes('most expensive') || 
+                           query.toLowerCase().includes('least expensive') ||
+                           query.toLowerCase().match(/\b(top|max|min)\s*\d*\b/)
       
-      const inferredAnalysis = (limit === 1 && params.minAmount === 0) // AI pattern for "largest" queries
+      // Make inference more flexible - analysis queries often have limit=1 or small limits
+      const inferredAnalysis = (limit === 1) || (params.minAmount === 0 && limit <= 5)
       const isAnalysisQuery = queryAnalysis || inferredAnalysis
       
       console.log(`[TransactionLookupTool] ❗ ANALYSIS DETECTION DEBUG:`)
@@ -233,11 +238,14 @@ export class TransactionLookupTool extends BaseTool {
         
         startDate = startDateObj.toISOString().split('T')[0]
         console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
+        console.log(`[TransactionLookupTool] Current timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+        console.log(`[TransactionLookupTool] Start date object: ${startDateObj.toISOString()}`)
+        console.log(`[TransactionLookupTool] End date object: ${new Date(endDate + 'T23:59:59').toISOString()}`)
       }
 
-      // CRITICAL: According to schema, transactions.user_id stores Clerk user ID directly (text field)
-      // No mapping needed - use Clerk user ID directly
-      console.log(`[TransactionLookupTool] Using Clerk user ID directly for transactions query: ${userContext.userId}`)
+      // CRITICAL: Use consistent user_id column (from CLAUDE.md: Users → All entities via user_id)
+      // Based on architecture docs, all entities use user_id column for relationships
+      console.log(`[TransactionLookupTool] Using user_id column for transactions query: ${userContext.userId}`)
 
       // TWO-PHASE QUERY STRATEGY
       // Phase 1: Broad Search - Use only high-confidence filters
@@ -322,17 +330,35 @@ export class TransactionLookupTool extends BaseTool {
       }
 
       if (!allTransactions || allTransactions.length === 0) {
-        // Get total count to help with debugging (use Clerk user ID directly)
+        // Enhanced debugging for zero results
+        console.log(`[TransactionLookupTool] ❌ DEBUGGING ZERO RESULTS`)
+        console.log(`[TransactionLookupTool] User ID used in query: ${userContext.userId}`)
+        console.log(`[TransactionLookupTool] Date range: ${startDate || 'none'} to ${endDate || 'none'}`)
+        console.log(`[TransactionLookupTool] Query parameters:`, JSON.stringify(params, null, 2))
+        console.log(`[TransactionLookupTool] Analysis detection: ${isAnalysisQuery}`)
+        console.log(`[TransactionLookupTool] Current timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+        
+        // Try to get total count with user_id
         const { count: totalCount } = await this.supabase
           .from('transactions')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', userContext.userId);
         
-        console.log(`[TransactionLookupTool] ❌ NO RESULTS FOUND`)
-        console.log(`[TransactionLookupTool] Query: "${query}"`)
-        console.log(`[TransactionLookupTool] Total transactions for user: ${totalCount}`)
-        console.log(`[TransactionLookupTool] Date range: ${startDate || 'none'} to ${endDate || 'none'}`)
-        console.log(`[TransactionLookupTool] Filters applied: minAmount=${params.minAmount}, maxAmount=${params.maxAmount}, category=${params.category}, document_type=${params.document_type}`);
+        console.log(`[TransactionLookupTool] User has ${totalCount} total transactions with user_id=${userContext.userId}`)
+        
+        // If no transactions with user_id, try clerk_user_id (fallback check)
+        if (totalCount === 0) {
+          const { count: clerkIdCount } = await this.supabase
+            .from('transactions')
+            .select('*', { count: 'exact', head: true })
+            .eq('clerk_user_id', userContext.userId);
+          
+          console.log(`[TransactionLookupTool] FALLBACK: User has ${clerkIdCount || 0} total transactions with clerk_user_id=${userContext.userId}`)
+          
+          if ((clerkIdCount || 0) > 0) {
+            console.error(`[TransactionLookupTool] ⚠️ COLUMN MISMATCH DETECTED: Transactions exist under clerk_user_id but query uses user_id`)
+          }
+        }
         
         return {
           success: true,
@@ -359,28 +385,33 @@ export class TransactionLookupTool extends BaseTool {
       console.log(`[TransactionLookupTool]   - Will apply text filtering: ${!params.document_type && !needsAnalysis && params.query}`)
       
       if (!params.document_type && !needsAnalysis && params.query) {
-        // Extract only meaningful filter terms (not analysis terms, not document types)
-        const { filterTerms } = this.separateAnalysisAndFilter(params.query)
-        
-        // Remove document type terms that should have been passed as document_type parameter
-        const documentTypeTerms = ['invoice', 'receipt', 'bill', 'statement', 'contract']
-        const meaningfulFilterTerms = filterTerms.filter(term => 
-          !documentTypeTerms.includes(term.toLowerCase())
-        )
-        
-        if (meaningfulFilterTerms.length > 0) {
-          console.log(`[TransactionLookupTool] Applying text search for meaningful filter terms: ${meaningfulFilterTerms.join(', ')}`)
-          transactions = transactions.filter(t => {
-            return meaningfulFilterTerms.some(searchTerm => {
-              const term = searchTerm.toLowerCase()
-              return (t.description && t.description.toLowerCase().includes(term)) ||
-                     (t.vendor_name && t.vendor_name.toLowerCase().includes(term)) ||
-                     (t.category && t.category.toLowerCase().includes(term))
-            })
-          })
-          console.log(`[TransactionLookupTool] Text search filtered to ${transactions.length} results`)
+        // SAFETY: For analysis queries that might have been missed, double-check
+        if (query.toLowerCase().match(/\b(largest|biggest|highest|maximum|smallest|lowest|minimum)\b/)) {
+          console.log(`[TransactionLookupTool] SAFETY: Detected analysis terms in query, skipping text filtering`)
         } else {
-          console.log(`[TransactionLookupTool] No meaningful filter terms found, skipping text search`)
+          // Extract only meaningful filter terms (not analysis terms, not document types)
+          const { filterTerms } = this.separateAnalysisAndFilter(params.query)
+          
+          // Remove document type terms that should have been passed as document_type parameter
+          const documentTypeTerms = ['invoice', 'receipt', 'bill', 'statement', 'contract']
+          const meaningfulFilterTerms = filterTerms.filter(term => 
+            !documentTypeTerms.includes(term.toLowerCase())
+          )
+          
+          if (meaningfulFilterTerms.length > 0) {
+            console.log(`[TransactionLookupTool] Applying text search for meaningful filter terms: ${meaningfulFilterTerms.join(', ')}`)
+            transactions = transactions.filter(t => {
+              return meaningfulFilterTerms.some(searchTerm => {
+                const term = searchTerm.toLowerCase()
+                return (t.description && t.description.toLowerCase().includes(term)) ||
+                       (t.vendor_name && t.vendor_name.toLowerCase().includes(term)) ||
+                       (t.category && t.category.toLowerCase().includes(term))
+              })
+            })
+            console.log(`[TransactionLookupTool] Text search filtered to ${transactions.length} results`)
+          } else {
+            console.log(`[TransactionLookupTool] No meaningful filter terms found, skipping text search`)
+          }
         }
       } else {
         console.log(`[TransactionLookupTool] Skipping text search - document_type used: ${!!params.document_type}, analysis needed: ${needsAnalysis}`)
@@ -716,11 +747,11 @@ Your response must be valid JSON only. Nothing else.`
 
     try {
       // Additional check: verify user has access to transactions
-      // Query by clerk_user_id since userContext.userId contains Clerk user ID
+      // Query by user_id to match transaction queries (consistent with architecture)
       const { data: userProfile, error } = await this.supabase
         .from('users')
-        .select('id, home_currency, clerk_user_id')
-        .eq('clerk_user_id', userContext.userId)
+        .select('id, home_currency, user_id')
+        .eq('user_id', userContext.userId)
         .single()
 
       if (error || !userProfile) {

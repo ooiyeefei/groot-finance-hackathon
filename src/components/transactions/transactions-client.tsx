@@ -70,9 +70,15 @@ export default function TransactionsClient() {
       // Fetch the document by ID
       const response = await fetch(`/api/documents/${documentId}`)
       if (response.ok) {
-        const document = await response.json()
-        setSelectedDocument(document)
-        setViewingTransaction(null) // Close transaction modal
+        const result = await response.json()
+        if (result.success && result.data) {
+          setSelectedDocument(result.data)
+          setViewingTransaction(null) // Close transaction modal
+        } else {
+          console.error('Failed to fetch document:', result.error)
+        }
+      } else {
+        console.error('Failed to fetch document:', response.status, response.statusText)
       }
     } catch (error) {
       console.error('Failed to fetch document:', error)
