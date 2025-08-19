@@ -75,14 +75,40 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate category exists in our predefined categories
+    // Flexible category validation - handles both top-level categories and subcategories
     const typeCategories = TRANSACTION_CATEGORIES[transaction_type]
-    const validCategories = Object.keys(typeCategories)
-    if (!validCategories.includes(category)) {
-      return NextResponse.json(
-        { success: false, error: `Invalid category '${category}' for transaction type '${transaction_type}'` },
-        { status: 400 }
-      )
+    const validTopLevelCategories = Object.keys(typeCategories)
+    
+    let finalCategory = category
+    let finalSubcategory = subcategory
+    
+    // Check if it's a top-level category
+    if (validTopLevelCategories.includes(category)) {
+      // Valid top-level category, use as-is
+      finalCategory = category
+      finalSubcategory = subcategory
+    } else {
+      // Check if it's a subcategory and map to parent category
+      let foundParentCategory = null
+      for (const [parentCategory, subCategories] of Object.entries(typeCategories)) {
+        if (subCategories.includes(category)) {
+          foundParentCategory = parentCategory
+          break
+        }
+      }
+      
+      if (foundParentCategory) {
+        // Map subcategory to parent category
+        finalCategory = foundParentCategory
+        finalSubcategory = category
+        console.log(`[Transactions API] Mapped subcategory '${category}' to parent category '${foundParentCategory}'`)
+      } else {
+        // Invalid category/subcategory
+        return NextResponse.json(
+          { success: false, error: `Invalid category '${category}' for transaction type '${transaction_type}'` },
+          { status: 400 }
+        )
+      }
     }
 
     console.log(`[Transactions API] Creating ${transaction_type} transaction for user ${userId}`)
@@ -120,8 +146,8 @@ export async function POST(request: NextRequest) {
         user_id: userId,
         document_id: source_document_id || null, // Link to source document if provided
         transaction_type,
-        category,
-        subcategory,
+        category: finalCategory,
+        subcategory: finalSubcategory,
         description,
         reference_number,
         document_type, // From OCR extraction - bridges context gap!
