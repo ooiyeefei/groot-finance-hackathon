@@ -56,9 +56,9 @@ const AgentStateAnnotation = Annotation.Root({
 // Export the secure state type
 export type AgentState = typeof AgentStateAnnotation.State;
 
-// Helper to check if we should use Gemini
+// Helper to check if we should use Gemini - BOTH conditions must be true
 const shouldUseGemini = () => {
-  return process.env.USE_GEMINI === 'true' || aiConfig.gemini?.apiKey;
+  return process.env.USE_GEMINI === 'true' && !!aiConfig.gemini?.apiKey;
 };
 
 // Model type detection for conditional logic
