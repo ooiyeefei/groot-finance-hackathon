@@ -65,13 +65,13 @@ export default function Sidebar() {
                     <Image
                       src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
                       alt="FinanSEAL Logo"
-                      width={36}
-                      height={36}
+                      width={39}
+                      height={39}
                       className="rounded-lg"
                     />
                   </div>
                   <div className="transition-all duration-300 ease-in-out overflow-hidden">
-                    <h2 className="text-2xl font-bold text-white whitespace-nowrap">
+                    <h2 className="text-3xl font-bold text-white whitespace-nowrap">
                       FinanSEAL
                     </h2>
                   </div>
@@ -91,8 +91,8 @@ export default function Sidebar() {
                   <Image
                     src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
                     alt="FinanSEAL Logo"
-                    width={28}
-                    height={28}
+                    width={33}
+                    height={33}
                     className="rounded hover:opacity-80 transition-opacity"
                   />
                 </Link>
