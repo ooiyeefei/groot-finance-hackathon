@@ -275,7 +275,7 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
 
   // --- CONDITIONAL SANITIZATION (GEMINI ONLY) ---
   // Only apply sanitization workarounds for Gemini due to safety restrictions
-  let processedMessages = [...state.messages];
+  const processedMessages = [...state.messages];
   
   if (modelType === 'gemini') {
     console.log(`[CallModel] Applying Gemini-specific sanitization workarounds`);
