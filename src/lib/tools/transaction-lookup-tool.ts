@@ -124,8 +124,8 @@ export class TransactionLookupTool extends BaseTool {
       }
     }
 
-    // Validate optional limit - handle JSON number parsing properly
-    if (params.limit !== undefined) {
+    // Validate optional limit - handle JSON number parsing properly (handle both undefined and null)
+    if (params.limit != null) {
       const limit = Number(params.limit)
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
         return { valid: false, error: 'Limit must be an integer between 1 and 100' }
@@ -145,21 +145,21 @@ export class TransactionLookupTool extends BaseTool {
       return { valid: false, error: 'Start date cannot be after end date' }
     }
 
-    // Validate amounts if provided
-    if (params.minAmount !== undefined && (typeof params.minAmount !== 'number' || params.minAmount < 0)) {
+    // Validate amounts if provided (handle both undefined and null from different LLM models)
+    if (params.minAmount != null && (typeof params.minAmount !== 'number' || params.minAmount < 0)) {
       return { valid: false, error: 'Minimum amount must be a non-negative number' }
     }
 
-    if (params.maxAmount !== undefined && (typeof params.maxAmount !== 'number' || params.maxAmount < 0)) {
+    if (params.maxAmount != null && (typeof params.maxAmount !== 'number' || params.maxAmount < 0)) {
       return { valid: false, error: 'Maximum amount must be a non-negative number' }
     }
 
-    if (params.minAmount !== undefined && params.maxAmount !== undefined && params.minAmount > params.maxAmount) {
+    if (params.minAmount != null && params.maxAmount != null && params.minAmount > params.maxAmount) {
       return { valid: false, error: 'Minimum amount cannot be greater than maximum amount' }
     }
 
-    // Validate document_type if provided
-    if (params.document_type !== undefined) {
+    // Validate document_type if provided (handle both undefined and null)
+    if (params.document_type != null) {
       const validDocumentTypes = ['invoice', 'receipt', 'bill', 'statement', 'contract', 'other']
       if (!validDocumentTypes.includes(params.document_type)) {
         return { valid: false, error: 'Invalid document type. Must be one of: invoice, receipt, bill, statement, contract, other' }
@@ -265,11 +265,11 @@ export class TransactionLookupTool extends BaseTool {
           console.log(`[TransactionLookupTool] IGNORED category filter "${params.category}" - treating as description search instead`)
         }
       }
-      if (params.minAmount !== undefined) {
+      if (params.minAmount != null) {
         broadQuery = broadQuery.gte('home_currency_amount', params.minAmount)
         console.log(`[TransactionLookupTool] Applied minAmount filter: ${params.minAmount}`)
       }
-      if (params.maxAmount !== undefined) {
+      if (params.maxAmount != null) {
         broadQuery = broadQuery.lte('home_currency_amount', params.maxAmount)
         console.log(`[TransactionLookupTool] Applied maxAmount filter: ${params.maxAmount}`)
       }
@@ -606,9 +606,9 @@ Your response must be valid JSON only. Nothing else.`
       return false
     }
 
-    // Validate data types
-    if (filters.min_amount !== undefined && typeof filters.min_amount !== 'number') return false
-    if (filters.max_amount !== undefined && typeof filters.max_amount !== 'number') return false
+    // Validate data types (handle both undefined and null)
+    if (filters.min_amount != null && typeof filters.min_amount !== 'number') return false
+    if (filters.max_amount != null && typeof filters.max_amount !== 'number') return false
 
     return true
   }
