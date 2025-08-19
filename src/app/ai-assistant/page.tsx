@@ -37,6 +37,7 @@ interface ConversationData {
 export default function AIAssistantPage() {
   const { userId, isLoaded } = useAuth()
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>()
+  const [chatKey, setChatKey] = useState<string>('initial')
   const [currentMessages, setCurrentMessages] = useState<Message[]>([])
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -95,6 +96,7 @@ export default function AIAssistantPage() {
         
         setCurrentMessages(formattedMessages)
         setCurrentConversationId(conversationId)
+        setChatKey(`conversation-${conversationId}`) // Force component remount when switching conversations
       }
     } catch (error) {
       console.error('Failed to load conversation:', error)
@@ -108,6 +110,7 @@ export default function AIAssistantPage() {
     setCurrentMessages([])
     setCurrentConversationId(undefined)
     setLoading(false) // Ensure loading state is reset
+    setChatKey(`new-chat-${Date.now()}`) // Force component remount
   }
 
   // Handle conversation creation from chat interface
@@ -179,6 +182,7 @@ export default function AIAssistantPage() {
                 </div>
               ) : (
                 <ChatInterface
+                  key={chatKey}
                   conversationId={currentConversationId}
                   onConversationCreated={handleConversationCreated}
                   initialMessages={currentMessages}
