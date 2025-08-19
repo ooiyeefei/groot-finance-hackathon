@@ -15,9 +15,10 @@ interface ChatInterfaceProps {
   conversationId?: string
   onConversationCreated?: (conversationId: string) => void
   initialMessages?: Message[]
+  onMessagesUpdate?: (messages: Message[]) => void
 }
 
-export default function ChatInterface({ conversationId, onConversationCreated, initialMessages }: ChatInterfaceProps) {
+export default function ChatInterface({ conversationId, onConversationCreated, initialMessages, onMessagesUpdate }: ChatInterfaceProps) {
   const { language, t } = useLanguage()
   const [messages, setMessages] = useState<Message[]>(initialMessages || [])
   const [inputValue, setInputValue] = useState('')
@@ -41,6 +42,11 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
       setCurrentConversationId(conversationId)
     }
   }, [initialMessages, conversationId])
+
+  // Notify parent when messages change
+  useEffect(() => {
+    onMessagesUpdate?.(messages)
+  }, [messages, onMessagesUpdate])
 
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return

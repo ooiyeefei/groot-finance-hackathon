@@ -114,6 +114,11 @@ export default function AIAssistantPage() {
     setCurrentConversationId(conversationId)
   }
 
+  // Handle messages update from chat interface
+  const handleMessagesUpdate = (messages: Message[]) => {
+    setCurrentMessages(messages)
+  }
+
   if (!isLoaded || !userId) {
     return (
       <div className="flex h-screen bg-gray-900 items-center justify-center">
@@ -176,6 +181,7 @@ export default function AIAssistantPage() {
                   conversationId={currentConversationId}
                   onConversationCreated={handleConversationCreated}
                   initialMessages={currentMessages}
+                  onMessagesUpdate={handleMessagesUpdate}
                 />
               )}
             </div>
