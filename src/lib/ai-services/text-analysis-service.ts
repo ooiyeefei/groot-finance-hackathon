@@ -43,12 +43,20 @@ export class TextAnalysisService implements ITextAnalysisService {
 
       console.log(`[SEA-LION] Analyzing financial data (${text.length} chars)`)
 
+      // Build headers conditionally based on API key presence
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      
+      // Only add Authorization header if API key is present
+      if (aiConfig.chat.apiKey) {
+        headers['Authorization'] = `Bearer ${aiConfig.chat.apiKey}`;
+      }
+
       const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers,
         body: JSON.stringify(requestBody)
       })
 
@@ -121,12 +129,20 @@ export class TextAnalysisService implements ITextAnalysisService {
 
       console.log(`[SEA-LION] Translating text from ${sourceLanguage} to ${targetLanguage}`)
 
+      // Build headers conditionally based on API key presence
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      
+      // Only add Authorization header if API key is present
+      if (aiConfig.chat.apiKey) {
+        headers['Authorization'] = `Bearer ${aiConfig.chat.apiKey}`;
+      }
+
       const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers,
         body: JSON.stringify(requestBody)
       })
 
@@ -185,12 +201,20 @@ export class TextAnalysisService implements ITextAnalysisService {
         max_tokens: 10
       }
 
+      // Build headers conditionally based on API key presence
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      
+      // Only add Authorization header if API key is present
+      if (aiConfig.chat.apiKey) {
+        headers['Authorization'] = `Bearer ${aiConfig.chat.apiKey}`;
+      }
+
       const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers,
         body: JSON.stringify(testRequest),
         signal: AbortSignal.timeout(10000) // 10 second timeout
       })

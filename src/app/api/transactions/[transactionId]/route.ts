@@ -169,6 +169,10 @@ export async function PUT(
       updateData.reference_number = body.reference_number
     }
 
+    if (body.document_type !== undefined) {
+      updateData.document_type = body.document_type
+    }
+
     // Handle home currency update
     if (body.home_currency !== undefined) {
       // Validate home currency if changed

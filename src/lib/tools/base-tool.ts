@@ -22,6 +22,8 @@ export interface ToolResult {
   metadata?: Record<string, any>
 }
 
+export type ModelType = 'gemini' | 'openai'
+
 export interface OpenAIToolSchema {
   type: "function"
   function: {
@@ -92,9 +94,9 @@ export abstract class BaseTool {
   /**
    * Abstract methods that must be implemented by concrete tools
    */
-  abstract getToolName(): string
-  abstract getDescription(): string
-  abstract getToolSchema(): OpenAIToolSchema
+  abstract getToolName(modelType?: ModelType): string
+  abstract getDescription(modelType?: ModelType): string
+  abstract getToolSchema(modelType?: ModelType): OpenAIToolSchema
   protected abstract validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }>
   protected abstract executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult>
 

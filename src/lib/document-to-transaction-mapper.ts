@@ -251,6 +251,24 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
                  document.extracted_data.metadata?.layoutElements?.document_summary
                  
   if (summary) {
+    // Extract document type from OCR - this bridges the context gap!
+    if (summary.document_type?.value) {
+      const docType = summary.document_type.value.toLowerCase()
+      // Map common document types to our supported types
+      if (docType.includes('invoice')) {
+        mappedData.document_type = 'invoice'
+      } else if (docType.includes('receipt')) {
+        mappedData.document_type = 'receipt'
+      } else if (docType.includes('bill')) {
+        mappedData.document_type = 'bill'
+      } else if (docType.includes('statement')) {
+        mappedData.document_type = 'statement'
+      } else if (docType.includes('contract')) {
+        mappedData.document_type = 'contract'
+      } else {
+        mappedData.document_type = 'other'
+      }
+    }
     // Extract vendor name
     if (summary.vendor_name?.value) {
       mappedData.vendor_name = summary.vendor_name.value

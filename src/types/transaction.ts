@@ -3,9 +3,12 @@
  * Supporting Southeast Asian SME multi-currency operations
  */
 
-// Core transaction types - Following accounting standards (Income Statement + Balance Sheet)
+// Core transaction types - Following accounting standards (Income Statement + Balance Sheet)  
 export type TransactionType = 'income' | 'expense' | 'transfer' | 'asset' | 'liability' | 'equity'
 export type CreationMethod = 'manual' | 'document_extract'
+
+// Document types from OCR extraction
+export type DocumentType = 'invoice' | 'receipt' | 'bill' | 'statement' | 'contract' | 'other'
 
 // Southeast Asian currencies (most common)
 export type SupportedCurrency = 
@@ -73,6 +76,7 @@ export interface Transaction {
   subcategory?: string
   description: string
   reference_number?: string
+  document_type?: DocumentType // From OCR extraction
   
   // Multi-currency amounts
   original_currency: SupportedCurrency
@@ -140,6 +144,7 @@ export interface CreateTransactionRequest {
   home_currency: SupportedCurrency
   vendor_name?: string
   reference_number?: string
+  document_type?: DocumentType // From OCR extraction
   line_items?: CreateLineItemRequest[]
   source_document_id?: string  // Optional link to source document
 }

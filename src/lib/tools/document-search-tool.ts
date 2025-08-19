@@ -3,7 +3,7 @@
  * Enforces RLS and proper user context validation
  */
 
-import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema } from './base-tool'
+import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { EmbeddingService } from '../ai-services/embedding-service'
 import { VectorStorageService } from '../ai-services/vector-storage-service'
 
@@ -17,26 +17,37 @@ export class DocumentSearchTool extends BaseTool {
   private embeddingService = new EmbeddingService()
   private vectorService = new VectorStorageService()
 
-  getToolName(): string {
-    return 'search_documents'
+  getToolName(modelType: ModelType = 'openai'): string {
+    return modelType === 'gemini' ? 'search_text_documents' : 'search_documents'
   }
 
-  getDescription(): string {
-    return 'Search uploaded financial documents (invoices, receipts, reports) using semantic similarity. Requires a search query parameter.'
+  getDescription(modelType: ModelType = 'openai'): string {
+    if (modelType === 'gemini') {
+      // Abstract, sanitized description for Gemini
+      return 'TEXT SEARCH TOOL for finding specific documents or text content by keywords. Use this ONLY to locate documents by vendor names, document types, or text content. NEVER use for numerical analysis, date ranges, amounts, or categories - use get_data_records for those queries instead.'
+    } else {
+      // Rich, descriptive description for OpenAI-compatible models
+      return 'Document Search and Retrieval Tool - Find uploaded financial documents by text content ONLY. Use this tool to search for documents by vendor name, document type, or keywords. IMPORTANT: This tool does NOT support date ranges, amount filters, or transaction categories. For queries involving dates, amounts, or financial analysis, use the transaction lookup tool instead.'
+    }
   }
 
-  getToolSchema(): OpenAIToolSchema {
+  getToolSchema(modelType: ModelType = 'openai'): OpenAIToolSchema {
+    const toolName = this.getToolName(modelType)
+    const description = this.getDescription(modelType)
+    
     return {
       type: "function",
       function: {
-        name: this.getToolName(),
-        description: "Search uploaded financial documents (invoices, receipts, reports) using semantic similarity. Use this when users ask about their specific financial documents, invoices, receipts, or want to find documents with specific content.",
+        name: toolName,
+        description: modelType === 'gemini' 
+          ? "TEXT SEARCH TOOL for finding specific documents by keywords only. NEVER use startDate, endDate, minAmount, maxAmount, or category parameters - use get_data_records for those queries instead."
+          : description + " WARNING: Do not pass date, amount, or category parameters to this tool.",
         parameters: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "The search query to find relevant documents. Include relevant keywords like vendor names, amounts, dates, or document types."
+              description: "The search query to find relevant documents by text content. Use keywords like vendor names, document types, or content. Do NOT include date ranges or amounts - those belong in transaction lookup tool."
             },
             limit: {
               type: "integer",
@@ -59,6 +70,18 @@ export class DocumentSearchTool extends BaseTool {
 
   protected async validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }> {
     const params = parameters as DocumentSearchParameters
+
+    // CRITICAL: Check for invalid parameters that should be used with transaction lookup tool instead
+    const invalidParams = ['startDate', 'endDate', 'minAmount', 'maxAmount', 'category']
+    const receivedInvalidParams = invalidParams.filter(param => param in parameters)
+    
+    if (receivedInvalidParams.length > 0) {
+      console.error(`[DocumentSearchTool] Invalid parameters detected: ${receivedInvalidParams.join(', ')}`)
+      return { 
+        valid: false, 
+        error: `Document search does not support date or amount filters (${receivedInvalidParams.join(', ')}). Use transaction lookup tool for financial data queries with date ranges, amounts, or categories.` 
+      }
+    }
 
     if (!params.query || typeof params.query !== 'string') {
       return { valid: false, error: 'Query parameter is required and must be a string' }
@@ -108,17 +131,41 @@ export class DocumentSearchTool extends BaseTool {
     try {
       console.log(`[DocumentSearchTool] Processing secure query for user ${userContext.userId}: ${query}`)
 
-      // Generate embedding for the user's query
-      const queryEmbedding = await this.embeddingService.generateEmbedding(query)
+      // Generate embedding for the user's query with timeout and retry
+      let queryEmbedding: number[]
+      try {
+        console.log(`[DocumentSearchTool] Generating embedding for query: "${query}"`)
+        queryEmbedding = await this.embeddingService.generateEmbedding(query)
+      } catch (embeddingError) {
+        console.error('[DocumentSearchTool] Embedding generation failed:', embeddingError)
+        
+        // Fallback: Return helpful message about network issues
+        return {
+          success: false,
+          error: 'Document search temporarily unavailable due to network issues. Please try again in a moment, or use the transaction lookup tool for financial data queries.'
+        }
+      }
 
       // SECURITY FIX: Use secure similarity search with user_id filtering at Qdrant level
       // This prevents data leakage and improves performance by filtering at the database
-      const searchResults = await this.vectorService.similaritySearchSecure(
-        queryEmbedding,
-        userContext.userId,
-        limit,
-        threshold
-      )
+      let searchResults: any[]
+      try {
+        console.log(`[DocumentSearchTool] Performing vector similarity search`)
+        searchResults = await this.vectorService.similaritySearchSecure(
+          queryEmbedding,
+          userContext.userId,
+          limit,
+          threshold
+        )
+      } catch (vectorError) {
+        console.error('[DocumentSearchTool] Vector search failed:', vectorError)
+        
+        // Fallback: Return helpful message about search issues
+        return {
+          success: false,
+          error: 'Document search service temporarily unavailable. Please try again later, or use the transaction lookup tool for financial queries.'
+        }
+      }
 
       if (!searchResults || searchResults.length === 0) {
         return {

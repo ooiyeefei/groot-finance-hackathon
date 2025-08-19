@@ -16,6 +16,7 @@ export interface AIConfig {
   chat: {
     endpointUrl: string
     modelId: string
+    apiKey?: string
   }
   gemini: {
     apiKey: string
@@ -30,7 +31,7 @@ export interface AIConfig {
 
 // Validate required environment variables
 function validateConfig(): void {
-  const required = [
+  const baseRequired = [
     'OCR_ENDPOINT_URL',
     'OCR_MODEL_NAME', 
     'EMBEDDING_ENDPOINT_URL',
@@ -38,10 +39,14 @@ function validateConfig(): void {
     'EMBEDDING_API_KEY',
     'CHAT_MODEL_ENDPOINT_URL',
     'CHAT_MODEL_MODEL_ID',
-    'GEMINI_API_KEY',
     'QDRANT_URL',
     'QDRANT_API_KEY'
   ]
+
+  // Only require Gemini API key if USE_GEMINI is true
+  const required = process.env.USE_GEMINI === 'true' 
+    ? [...baseRequired, 'GEMINI_API_KEY']
+    : baseRequired
 
   const missing = required.filter(key => !process.env[key])
   
@@ -80,10 +85,11 @@ export const aiConfig: AIConfig = {
   },
   chat: {
     endpointUrl: process.env.CHAT_MODEL_ENDPOINT_URL!,
-    modelId: process.env.CHAT_MODEL_MODEL_ID!
+    modelId: process.env.CHAT_MODEL_MODEL_ID!,
+    apiKey: process.env.CHAT_MODEL_API_KEY
   },
   gemini: {
-    apiKey: process.env.GEMINI_API_KEY!,
+    apiKey: process.env.GEMINI_API_KEY || '',
     model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-001'
   },
   qdrant: {

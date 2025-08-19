@@ -56,6 +56,7 @@ export default function TransactionFormModal({
     subcategory: transaction?.subcategory || prefilledData?.subcategory || '',
     vendor_name: transaction?.vendor_name || prefilledData?.vendor_name || '',
     reference_number: transaction?.reference_number || prefilledData?.reference_number || '',
+    document_type: transaction?.document_type || prefilledData?.document_type || undefined,
     vendor_details: transaction?.vendor_details || {},
     source_document_id: prefilledData?.source_document_id || undefined
   })
@@ -400,6 +401,20 @@ export default function TransactionFormModal({
                   placeholder="Invoice number, receipt ID, etc."
                 />
               </div>
+              
+              {/* Document Type - Read-only field from OCR */}
+              {formData.document_type && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <FileText className="w-4 h-4 inline mr-1" />
+                    Document Type
+                  </label>
+                  <div className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400">
+                    <span className="capitalize">{formData.document_type}</span>
+                    <span className="text-xs ml-2 text-blue-400">(from OCR)</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

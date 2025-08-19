@@ -3,7 +3,7 @@
  * Centralized, secure tool registration and instantiation
  */
 
-import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema } from './base-tool'
+import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { DocumentSearchTool } from './document-search-tool'
 import { TransactionLookupTool } from './transaction-lookup-tool'
 
@@ -93,13 +93,13 @@ export class ToolFactory {
   /**
    * Get tool information for LLM prompt generation
    */
-  static getToolDescriptions(): Record<ToolName, string> {
+  static getToolDescriptions(modelType: ModelType = 'openai'): Record<ToolName, string> {
     const descriptions: Record<string, string> = {}
     
     for (const [name, factory] of this.tools.entries()) {
       try {
         const tool = factory()
-        descriptions[name] = tool.getDescription()
+        descriptions[name] = tool.getDescription(modelType)
       } catch (error) {
         console.error(`[ToolFactory] Error getting description for ${name}:`, error)
         descriptions[name] = 'Tool description unavailable'
@@ -113,13 +113,13 @@ export class ToolFactory {
    * Generate OpenAI-compatible tool schemas for all registered tools
    * This is the new single source of truth for tool schemas
    */
-  static getToolSchemas(): OpenAIToolSchema[] {
+  static getToolSchemas(modelType: ModelType = 'openai'): OpenAIToolSchema[] {
     const schemas: OpenAIToolSchema[] = []
     
     for (const [name, factory] of this.tools.entries()) {
       try {
         const tool = factory()
-        const schema = tool.getToolSchema()
+        const schema = tool.getToolSchema(modelType)
         
         // CRITICAL: Validate schema has required fields with comprehensive checks
         if (!schema) {

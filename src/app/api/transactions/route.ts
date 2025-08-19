@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
       home_currency,
       vendor_name,
       reference_number,
+      document_type, // From OCR extraction
       line_items = [],
       source_document_id  // Optional field to link transaction to document
     } = body
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
         subcategory,
         description,
         reference_number,
+        document_type, // From OCR extraction - bridges context gap!
         original_currency,
         original_amount,
         home_currency: homeCurrency,

@@ -244,6 +244,11 @@ export default function TransactionsList({
                       <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${getTransactionTypeColor(transaction.transaction_type)}`}>
                         {transaction.transaction_type}
                       </span>
+                      {transaction.document_type && (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium capitalize bg-blue-600/20 text-blue-400 border border-blue-600/30">
+                          {transaction.document_type}
+                        </span>
+                      )}
                     </div>
                     
                     <div className="flex items-center gap-4 text-sm text-gray-400">
