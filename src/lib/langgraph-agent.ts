@@ -551,7 +551,7 @@ Return ONLY the sanitized query, no explanations.`;
       } else {
         // Fallback if no tool message found
         return {
-          messages: [...state.messages, new AIMessage('I have completed processing your request.')],
+          messages: [...state.messages, new AIMessage('I\'ve completed the task but could not find the result to display.')],
         };
       }
     }

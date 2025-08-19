@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Home, FileText, CreditCard, MessageSquare, Settings, Menu, ChevronLeft } from 'lucide-react'
@@ -56,39 +55,48 @@ export default function Sidebar() {
         ${isMobile ? 'fixed left-0 top-0 h-full z-50' : 'relative'}
       `}>
         {/* Logo and Toggle */}
-        <div className="p-6 border-b border-gray-700">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-3 min-w-0">
-              <div className="flex-shrink-0">
-                <Image
-                  src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
-                  alt="FinanSEAL Logo"
-                  width={isExpanded ? 32 : 24}
-                  height={isExpanded ? 32 : 24}
-                  className="transition-all duration-300 ease-in-out"
-                />
+        <div className={`${isExpanded ? 'p-6' : 'p-4'} border-b border-gray-700 transition-all duration-300 ease-in-out`}>
+          <div className={`flex items-center ${isExpanded ? 'justify-between' : 'justify-center'}`}>
+            {isExpanded ? (
+              <>
+                <Link href="/" className="flex items-center space-x-3 min-w-0">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                      F
+                    </div>
+                  </div>
+                  <div className="transition-all duration-300 ease-in-out overflow-hidden">
+                    <h2 className="text-xl font-bold text-white whitespace-nowrap">
+                      FinanSEAL
+                    </h2>
+                  </div>
+                </Link>
+                
+                <button
+                  onClick={toggleSidebar}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0"
+                  aria-label="Collapse sidebar"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+              </>
+            ) : (
+              <div className="flex flex-col items-center space-y-2">
+                <Link href="/" className="flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm hover:bg-blue-700 transition-colors">
+                    F
+                  </div>
+                </Link>
+                
+                <button
+                  onClick={toggleSidebar}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                  aria-label="Expand sidebar"
+                >
+                  <Menu className="w-4 h-4" />
+                </button>
               </div>
-              <div className={`
-                transition-all duration-300 ease-in-out overflow-hidden
-                ${isExpanded ? 'opacity-100 max-w-none' : 'opacity-0 max-w-0'}
-              `}>
-                <h2 className="text-xl font-bold text-white whitespace-nowrap">
-                  FinanSEAL
-                </h2>
-              </div>
-            </Link>
-            
-            <button
-              onClick={toggleSidebar}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-              aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-            >
-              {isExpanded ? (
-                <ChevronLeft className="w-5 h-5" />
-              ) : (
-                <Menu className="w-5 h-5" />
-              )}
-            </button>
+            )}
           </div>
         </div>
         
