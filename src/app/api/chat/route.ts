@@ -12,84 +12,26 @@ interface ChatRequest {
 }
 
 /**
- * Filters out LLM thinking process and internal reasoning from responses
- * This prevents users from seeing the model's internal thought process
+ * Simplified response parser for direct AI responses
+ * Removes any malformed tool calls or reasoning artifacts
  */
-function filterThinkingProcess(content: string): string {
+function parseFinalAnswer(content: string): string {
   if (!content || typeof content !== 'string') {
     return content
   }
 
-  // Remove content between thinking tags (various formats)
+  // Remove any malformed tool call artifacts that confuse the model
   content = content
-    // Remove <think>...</think> blocks
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    // Remove </think> tags that might appear without opening tags
-    .replace(/<\/think>/gi, '')
-    // Remove <thinking>...</thinking> blocks
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-    // Remove </thinking> tags
-    .replace(/<\/thinking>/gi, '')
-
-  // Remove internal reasoning patterns
-  content = content
-    // Remove "Okay, the user is..." style reasoning
-    .replace(/^Okay,\s+the\s+user\s+is\s+.*?\./mi, '')
-    .replace(/^Let\s+me\s+understand\s+.*?\./mi, '')
-    .replace(/^The\s+user\s+wants\s+.*?\./mi, '')
-    .replace(/^I\s+need\s+to\s+.*?\./mi, '')
-    .replace(/^Looking\s+at\s+this\s+request\s+.*?\./mi, '')
-    .replace(/^Based\s+on\s+the\s+query\s+.*?\./mi, '')
-    .replace(/^To\s+answer\s+this\s+question\s+.*?\./mi, '')
-    .replace(/^First,\s+let\s+me\s+.*?\./mi, '')
-    .replace(/^I\s+should\s+.*?\./mi, '')
-    .replace(/^I'll\s+start\s+by\s+.*?\./mi, '')
-    .replace(/^Let\s+me\s+check\s+.*?\./mi, '')
-    .replace(/^I'm\s+going\s+to\s+.*?\./mi, '')
-    .replace(/^From\s+what\s+I\s+can\s+see\s+.*?\./mi, '')
-    .replace(/^According\s+to\s+.*?\./mi, '')
-
-  // Remove meta-commentary patterns
-  content = content
-    .replace(/^Based\s+on\s+.*?\./mi, '')
-    .replace(/^Looking\s+at\s+.*?\./mi, '')
-    .replace(/^From\s+the\s+.*?\./mi, '')
-    .replace(/^According\s+to\s+.*?\./mi, '')
-    .replace(/^The\s+data\s+shows\s+.*?\./mi, '')
-    .replace(/^Analyzing\s+.*?\./mi, '')
-    .replace(/^Processing\s+.*?\./mi, '')
-    .replace(/^Searching\s+.*?\./mi, '')
-    .replace(/^Reviewing\s+.*?\./mi, '')
-    .replace(/^Examining\s+.*?\./mi, '')
-    .replace(/^Investigating\s+.*?\./mi, '')
-    .replace(/^Checking\s+.*?\./mi, '')
-
-  // Remove response formatting markers
-  content = content
-    .replace(/^\*\*Response:\*\*\s*/mi, '')
-    .replace(/^\*\*Answer:\*\*\s*/mi, '')
-    .replace(/^\*\*Final Answer:\*\*\s*/mi, '')
-    .replace(/^\*\*Result:\*\*\s*/mi, '')
-
-  // Remove thinking indicators at the start of sentences
-  content = content
-    .replace(/^(I need to understand|Let me help you|To answer your question|First, let me|I'll start by|Let me search|I should|I'm going to|I will)\s+.*?\.\s*/mi, '')
-
-  // Clean up multiple line breaks and extra whitespace
-  content = content
-    .replace(/\n\s*\n\s*\n/g, '\n\n')
-    .replace(/^\s+/gm, '')
+    .replace(/<\/tool_call>[\s\S]*?<\/tool_call>/gi, '') // Remove malformed tool call blocks
+    .replace(/\{"name":\s*"[^"]+",\s*"arguments":\s*\{[^}]*\}\}/g, '') // Remove JSON tool call artifacts
+    .replace(/^(Let me see what|Hmm, maybe|I should|The tool|Looking at|Based on|From what|According to)[\s\S]*?(?=The |Your |Here |In |\d)/mi, '') // Remove reasoning preambles
+    .replace(/<think>[\s\S]*?<\/think>/gi, '') // Remove any remaining think blocks
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '') // Remove thinking blocks
     .trim()
 
-  // If content starts with reasoning verbs, remove the entire first sentence
-  const reasoningPatterns = /^(Analyzing|Processing|Searching|Reviewing|Examining|Investigating|Looking|Checking|Understanding|Considering)\s+.*?\./i
-  if (reasoningPatterns.test(content)) {
-    content = content.replace(reasoningPatterns, '').trim()
-  }
-
-  // Ensure we don't return empty content after cleaning
+  // If content is empty or too short after cleaning, provide fallback
   if (!content || content.length < 10) {
-    content = 'I apologize, but I cannot process your request right now.'
+    return 'I apologize, but I encountered an issue processing that request.'
   }
 
   return content
@@ -208,7 +150,7 @@ export async function POST(request: NextRequest) {
       }
       
       // CRITICAL: Filter out thinking process and internal reasoning
-      assistantResponse = filterThinkingProcess(assistantResponse)
+      assistantResponse = parseFinalAnswer(assistantResponse)
     }
 
     // Save user message to database

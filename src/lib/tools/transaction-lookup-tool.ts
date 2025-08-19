@@ -29,7 +29,7 @@ export class TransactionLookupTool extends BaseTool {
       return 'FINANCIAL DATA RETRIEVAL TOOL that queries the Supabase transactions table for numerical analysis and record retrieval. Use this to find highest/largest, lowest/smallest, totals, averages, or any specific values from the user\'s financial transactions stored in the database. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. CRITICAL: When users mention document types like "invoice", "receipt", "bill", "statement", "contract" - use the document_type parameter for precise database filtering instead of the generic query parameter. This ensures fast, accurate results by querying the transactions table directly. Examples: "largest invoice" → use document_type:"invoice" + analysis; "receipt from last month" → use document_type:"receipt" + dateRange. Perfect for answering questions about maximum values, minimum values, totals, counts, and finding specific document types from the user\'s transaction records.'
     } else {
       // Rich, descriptive description for OpenAI-compatible models
-      return 'Transaction Lookup and Analysis Tool - Search, filter, and analyze financial transactions with intelligent query processing. This tool can find specific transactions, calculate totals and averages, identify highest/lowest amounts, and perform complex financial analysis. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. CRITICAL: When users mention document types like "invoice", "receipt", "bill", "statement", "contract" - use the document_type parameter for precise database filtering instead of the generic query parameter. This ensures fast, accurate results. Examples: "largest invoice" → use document_type:"invoice" + analysis; "receipt from last month" → use document_type:"receipt" + dateRange. Perfect for answering questions like "What is my largest invoice?" or "Show me all receipts from this vendor".'
+      return 'Transaction Lookup and Analysis Tool - Search, filter, and analyze financial transactions with intelligent query processing. This tool can find specific transactions, calculate totals and averages, identify highest/lowest amounts, and perform complex financial analysis. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. CRITICAL: When users mention document types like "invoice", "receipt", "bill", "statement", "contract" - use the document_type parameter for precise database filtering instead of the generic query parameter. For analysis queries like "largest transaction", "biggest expense", "highest amount" - you MUST include query: "largest transaction" or similar meaningful search terms. Examples: "largest invoice" → use document_type:"invoice" + query:"largest"; "what is my biggest transaction in past 60 days" → use dateRange:"past_60_days" + query:"biggest transaction"; "receipt from last month" → use document_type:"receipt" + dateRange. Perfect for answering questions like "What is my largest invoice?" or "Show me all receipts from this vendor".'
     }
   }
 
@@ -47,7 +47,7 @@ export class TransactionLookupTool extends BaseTool {
           properties: {
             query: {
               type: "string",
-              description: "Query to filter transactions by description, category, or other attributes"
+              description: "Query to filter transactions by description, category, vendor name, or other attributes"
             },
             dateRange: {
               type: "string",
@@ -111,8 +111,8 @@ export class TransactionLookupTool extends BaseTool {
     
     const params = parameters as TransactionLookupParameters
 
-    // Query is optional - allow analysis without specific query
-    if (params.query !== undefined) {
+    // Query is optional - allow analysis without specific query (handle undefined, null, and empty strings)
+    if (params.query) {
       if (typeof params.query !== 'string') {
         return { valid: false, error: 'Query must be a string' }
       }
@@ -176,6 +176,18 @@ export class TransactionLookupTool extends BaseTool {
 
     try {
       console.log(`[TransactionLookupTool] Processing query for user ${userContext.userId}: ${query}`)
+      
+      // CRITICAL: Detect analysis queries - check query content or inference from parameters
+      // If limit=1 and minAmount=0, it's likely an analysis query for "largest" transaction
+      const queryAnalysis = query.toLowerCase().includes('largest') || query.toLowerCase().includes('biggest') || 
+                           query.toLowerCase().includes('highest') || query.toLowerCase().includes('maximum') ||
+                           query.toLowerCase().includes('smallest') || query.toLowerCase().includes('lowest') || 
+                           query.toLowerCase().includes('minimum')
+      
+      const inferredAnalysis = (limit === 1 && params.minAmount === 0) // AI pattern for "largest" queries
+      const isAnalysisQuery = queryAnalysis || inferredAnalysis
+      
+      console.log(`[TransactionLookupTool] Analysis detection: queryAnalysis=${queryAnalysis}, inferredAnalysis=${inferredAnalysis}, isAnalysis=${isAnalysisQuery}`)
 
       // DETERMINISTIC DATE CALCULATION - Prevent LLM date hallucination
       let startDate: string | undefined = params.startDate
@@ -265,13 +277,19 @@ export class TransactionLookupTool extends BaseTool {
           console.log(`[TransactionLookupTool] IGNORED category filter "${params.category}" - treating as description search instead`)
         }
       }
-      if (params.minAmount != null) {
-        broadQuery = broadQuery.gte('home_currency_amount', params.minAmount)
-        console.log(`[TransactionLookupTool] Applied minAmount filter: ${params.minAmount}`)
-      }
-      if (params.maxAmount != null) {
-        broadQuery = broadQuery.lte('home_currency_amount', params.maxAmount)
-        console.log(`[TransactionLookupTool] Applied maxAmount filter: ${params.maxAmount}`)
+      // CRITICAL: For analysis queries (largest/smallest), don't apply amount filters 
+      // as they exclude negative expenses. Users want largest by absolute value.
+      if (!isAnalysisQuery) {
+        if (params.minAmount != null) {
+          broadQuery = broadQuery.gte('home_currency_amount', params.minAmount)
+          console.log(`[TransactionLookupTool] Applied minAmount filter: ${params.minAmount}`)
+        }
+        if (params.maxAmount != null) {
+          broadQuery = broadQuery.lte('home_currency_amount', params.maxAmount)
+          console.log(`[TransactionLookupTool] Applied maxAmount filter: ${params.maxAmount}`)
+        }
+      } else {
+        console.log(`[TransactionLookupTool] SKIPPED amount filters for analysis query to include negative expenses`)
       }
       
       // CRITICAL: Apply document_type filter for precise database filtering
@@ -280,16 +298,8 @@ export class TransactionLookupTool extends BaseTool {
         console.log(`[TransactionLookupTool] Applied document_type filter: ${params.document_type}`)
       }
 
-      // Determine if we need more results for in-memory analysis
-      const needsAnalysis = params.query && (
-        params.query.toLowerCase().includes('largest') ||
-        params.query.toLowerCase().includes('biggest') ||
-        params.query.toLowerCase().includes('highest') ||
-        params.query.toLowerCase().includes('smallest') ||
-        params.query.toLowerCase().includes('lowest') ||
-        params.query.toLowerCase().includes('maximum') ||
-        params.query.toLowerCase().includes('minimum')
-      )
+      // Use the analysis detection we calculated earlier
+      const needsAnalysis = isAnalysisQuery
 
       const fetchLimit = needsAnalysis ? Math.max(50, limit * 3) : limit
       broadQuery = broadQuery.limit(fetchLimit)
@@ -366,23 +376,29 @@ export class TransactionLookupTool extends BaseTool {
       }
 
       // Apply analysis for superlative queries (largest, smallest, etc.)
-      if (needsAnalysis && params.query) {
-        console.log(`[TransactionLookupTool] Applying analysis for query: "${params.query}"`)
-        const queryLower = params.query.toLowerCase()
+      if (needsAnalysis) {
+        console.log(`[TransactionLookupTool] Applying analysis - query: "${query}", inference: ${inferredAnalysis}`)
         
-        if (queryLower.includes('largest') || queryLower.includes('biggest') || queryLower.includes('highest') || queryLower.includes('maximum')) {
-          // Sort by amount descending and take the top results
+        // Determine analysis type from query or default to "largest" for inferred analysis
+        const queryLower = query.toLowerCase()
+        const isLargest = queryLower.includes('largest') || queryLower.includes('biggest') || 
+                         queryLower.includes('highest') || queryLower.includes('maximum') || inferredAnalysis
+        const isSmallest = queryLower.includes('smallest') || queryLower.includes('lowest') || 
+                          queryLower.includes('minimum')
+        
+        if (isLargest) {
+          // Sort by ABSOLUTE VALUE descending to handle negative expenses properly
           transactions = transactions
-            .sort((a, b) => (b.home_currency_amount || 0) - (a.home_currency_amount || 0))
+            .sort((a, b) => Math.abs(b.home_currency_amount || 0) - Math.abs(a.home_currency_amount || 0))
             .slice(0, limit)
-          console.log(`[TransactionLookupTool] Sorted by largest amount, showing top ${limit}`)
-        } else if (queryLower.includes('smallest') || queryLower.includes('lowest') || queryLower.includes('minimum')) {
-          // Sort by amount ascending and take the top results
+          console.log(`[TransactionLookupTool] Sorted by largest absolute amount, showing top ${limit}`)
+        } else if (isSmallest) {
+          // Sort by absolute value ascending and exclude zero amounts
           transactions = transactions
-            .filter(t => (t.home_currency_amount || 0) > 0) // Exclude zero amounts
-            .sort((a, b) => (a.home_currency_amount || 0) - (b.home_currency_amount || 0))
+            .filter(t => Math.abs(t.home_currency_amount || 0) > 0) // Exclude zero amounts
+            .sort((a, b) => Math.abs(a.home_currency_amount || 0) - Math.abs(b.home_currency_amount || 0))
             .slice(0, limit)
-          console.log(`[TransactionLookupTool] Sorted by smallest amount, showing top ${limit}`)
+          console.log(`[TransactionLookupTool] Sorted by smallest absolute amount, showing top ${limit}`)
         }
         
         // CRITICAL FIX: For analysis queries, don't apply additional text filtering
@@ -391,7 +407,7 @@ export class TransactionLookupTool extends BaseTool {
         
         // If document_type was specified, the database already filtered correctly
         // If query contains document type terms but document_type param wasn't used, warn but continue
-        if (params.query.toLowerCase().includes('invoice') && !params.document_type) {
+        if (params.query && params.query.toLowerCase().includes('invoice') && !params.document_type) {
           console.log(`[TransactionLookupTool] WARNING: Query contains 'invoice' but document_type parameter not used. Consider using document_type='invoice' for better results.`)
         }
       } else {

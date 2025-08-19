@@ -135,64 +135,39 @@ Convert the user's query into the appropriate function call now. NO explanations
 }
 
 /**
- * Original Intelligent Agent Prompt - For non-Gemini models with better reasoning
+ * Direct Command Prompt - For non-reasoning models like Qwen
  */
 function getIntelligentAgentPrompt(language: string): string {
-  const basePrompt = `You are an intelligent financial assistant with access to financial data and documents. Your role is to help users analyze their financial information by using the appropriate tools available to you.
+  const basePrompt = `You are a specialized API automation model. Your sole function is to convert a user's natural language query into a single, valid function call.
 
-**YOUR CAPABILITIES:**
-- Analyze financial transactions, invoices, and expenses
-- Search through financial documents and receipts
-- Calculate totals, averages, and find maximum/minimum values
-- Filter data by date ranges, categories, and amounts
-- Provide insights and answer questions about financial patterns
+**MISSION DIRECTIVE:**
+Your output MUST BE a single, valid tool call in the required JSON format. Do not provide any other text, explanations, or conversational filler.
 
-**AVAILABLE TOOLS:**
-- Transaction analysis tool: For querying financial data, finding largest amounts, calculating totals, etc.
-- Document search tool: For finding specific invoices, receipts, or documents by company name or content
+**INPUT/OUTPUT MAPPING:**
 
-**RESPONSE GUIDELINES:**
-- Always use tools to access data - never make up financial information
-- Provide clear, accurate answers based on the data retrieved
-- Include relevant context like date ranges, amounts, and categories
-- If asked about specific transactions or documents, use appropriate filters
+1. **If the user query contains keywords like "invoice", "receipt", or "bill":**
+   **ACTION:** You MUST use the \`get_transactions\` tool.
+   **PARAMETER:** You MUST set the \`document_type\` parameter to the appropriate value (e.g., "invoice").
+   **EXAMPLE:** "largest invoice last month" -> \`get_transactions({document_type: "invoice", dateRange: "last_month"})\`
 
-**RESILIENCE PROTOCOL - CRITICAL:**
-If a tool returns "No results found" or "No transactions found":
-1. DO NOT immediately use the same tool again with identical or similar parameters
-2. First, inform the user clearly about what you searched for and that no results were found
-3. Then either:
-   - Ask the user for clarification (e.g., "Would you like to try a different date range?")
-   - OR attempt to use a different tool if it seems logical (e.g., try document search if transaction search fails)
-   - OR suggest alternative approaches (e.g., "Try searching without date filters")
-4. NEVER repeatedly call the same tool with minor parameter variations - this causes infinite loops
+2. **If the user query contains analytical keywords like "largest", "highest", "total", "average", "biggest", or "smallest" WITHOUT a specific document type:**
+   **ACTION:** You MUST use the \`get_transactions\` tool.
+   **PARAMETER:** You MUST include the user's full analytical phrase in the \`query\` parameter.
+   **EXAMPLE:** "what is my largest transaction" -> \`get_transactions({query: "largest transaction"})\`
 
-**OUTPUT FORMATTING RULES - CRITICAL:**
-Your response MUST strictly follow one of two formats:
+3. **If the user query contains a relative date range like "past 60 days", "last month", or "this year":**
+   **ACTION:** You MUST use the \`dateRange\` parameter. Do not attempt to calculate specific dates.
+   **EXAMPLE:** "transactions from last month" -> \`get_transactions({dateRange: "last_month"})\`
 
-1. **If you need to use a tool:** Your response must ONLY contain the tool call. DO NOT include any reasoning, thoughts, or other text.
+4. **If the previous turn was a successful tool result:**
+   **ACTION:** Your job is complete. You MUST output the special stop command: \`DONE\`.
 
-2. **If you are providing a final answer:** Provide only the helpful, conversational answer. Do not include tool calls.
-
-**ABSOLUTELY FORBIDDEN PATTERNS:**
-- DO NOT start responses with: "I need to", "Let me", "First, I'll", "I'm going to", "I should", "Based on", "To answer", "Looking at", "From the", "According to"
-- DO NOT include thinking patterns like "Analyzing...", "Processing...", "Searching..."
-- DO NOT explain your process or methodology
-- DO NOT use formatting like "**Response:**" or "**Answer:**"
-- DO NOT show your internal reasoning or decision-making process
-
-**CORRECT EXAMPLES:**
-- Tool needed: [Make tool call directly]
-- Final answer: "You have 3 transactions totaling $1,247.50 this month."
-
-**WRONG EXAMPLES:**
-- "I need to search for your transactions first." ❌
-- "Let me analyze your financial data." ❌
-- "Based on your request, I'll look up..." ❌
+**FAILURE CONDITION:**
+If you cannot determine the correct tool or parameters, output the special error command: \`ERROR: Cannot determine action.\`
 
 **LANGUAGE:** Respond in ${language === 'th' ? 'Thai' : language === 'id' ? 'Indonesian' : 'English'} and maintain user data privacy.
 
-Analyze the user's request and use the appropriate tools to provide a helpful response.`;
+**EXECUTE NOW.**`;
 
   const translations = {
     en: basePrompt,
@@ -556,6 +531,39 @@ Return ONLY the sanitized query, no explanations.`;
 
     const assistantResponse = result.choices?.[0]?.message;
 
+    // --- CHECK FOR SPECIAL 'DONE' COMMAND ---
+    if (assistantResponse?.content?.trim() === 'DONE') {
+      console.log('[CallModel] Model issued DONE command. Synthesizing final answer.');
+      
+      // Find the last successful tool result in the history
+      const lastToolMessage = state.messages.slice().reverse().find(m => m._getType() === 'tool');
+      
+      if (lastToolMessage) {
+        // Return the tool's content as the final answer
+        const finalAnswer = typeof lastToolMessage.content === 'string' 
+          ? lastToolMessage.content 
+          : 'Here is the information I found for you.';
+        
+        console.log('[CallModel] DONE command processed, returning final answer');
+        return {
+          messages: [...state.messages, new AIMessage(finalAnswer)],
+        };
+      } else {
+        // Fallback if no tool message found
+        return {
+          messages: [...state.messages, new AIMessage('I have completed processing your request.')],
+        };
+      }
+    }
+    
+    // --- CHECK FOR ERROR COMMAND ---
+    if (assistantResponse?.content?.trim()?.startsWith('ERROR:')) {
+      console.log('[CallModel] Model issued ERROR command:', assistantResponse.content);
+      return {
+        messages: [...state.messages, new AIMessage('I apologize, but I cannot determine how to process your request. Please try rephrasing your question.')],
+      };
+    }
+
     if (assistantResponse?.tool_calls && assistantResponse.tool_calls.length > 0) {
       const toolCall = assistantResponse.tool_calls[0];
       const toolName = toolCall.function?.name;
@@ -578,47 +586,16 @@ Return ONLY the sanitized query, no explanations.`;
       };
     }
     
-    // If no tool call, get the content.
+    // If no tool call, get the content - simplified for direct command model
     let content = assistantResponse?.content || 'I apologize, but I cannot process your request right now.';
     
-    // ENHANCED CONTENT CLEANING: Remove AI reasoning and meta-commentary
+    // Basic content cleaning for direct command model
     if (content && typeof content === 'string') {
-      content = content
-        // Remove common reasoning patterns
-        .replace(/^(I need to understand.*?\.)?\s*/i, '')
-        .replace(/^(Let me help you.*?\.)?\s*/i, '')
-        .replace(/^(Based on your request.*?\.)?\s*/i, '')
-        .replace(/^(To answer your question.*?\.)?\s*/i, '')
-        .replace(/^(First, let me.*?\.)?\s*/i, '')
-        .replace(/^(I'll start by.*?\.)?\s*/i, '')
-        .replace(/^(Let me search.*?\.)?\s*/i, '')
-        .replace(/^(I should.*?\.)?\s*/i, '')
-        .replace(/^(I'm going to.*?\.)?\s*/i, '')
-        .replace(/^(I will.*?\.)?\s*/i, '')
-        // Remove response formatting markers
-        .replace(/^\*\*Response:\*\*\s*/i, '')
-        .replace(/^\*\*Answer:\*\*\s*/i, '')
-        .replace(/^\*\*Final Answer:\*\*\s*/i, '')
-        // Remove thinking patterns
-        .replace(/^(Looking at.*?\.)?\s*/i, '')
-        .replace(/^(From the.*?\.)?\s*/i, '')
-        .replace(/^(According to.*?\.)?\s*/i, '')
-        .replace(/^(The data shows.*?\.)?\s*/i, '')
-        .replace(/^(Analyzing.*?\.)?\s*/i, '')
-        .replace(/^(Processing.*?\.)?\s*/i, '')
-        .replace(/^(Searching.*?\.)?\s*/i, '')
-        // Remove multiple line breaks and extra whitespace
-        .replace(/\n\s*\n\s*\n/g, '\n\n')
-        .trim();
-        
-      // If the content starts with reasoning verbs, remove the entire first sentence
-      const reasoningPatterns = /^(Analyzing|Processing|Searching|Reviewing|Examining|Investigating|Looking|Checking)\s+.*?\./i;
-      if (reasoningPatterns.test(content)) {
-        content = content.replace(reasoningPatterns, '').trim();
-      }
+      content = content.trim();
       
-      // Ensure we don't return empty content after cleaning
-      if (!content || content.length < 10) {
+      // For direct command models, we expect clean output, so minimal cleaning needed
+      // Just ensure we don't return empty content
+      if (!content || content.length < 3) {
         content = 'I apologize, but I cannot process your request right now.';
       }
     }

@@ -8,7 +8,7 @@ import { UserContext, ToolParameters, ToolResult, SecurityValidator } from '../b
 import { aiConfig } from '@/lib/config/ai-config'
 
 interface TransactionLookupParameters {
-  query: string
+  query?: string
   limit?: number
   dateRange?: {
     start?: string
@@ -28,14 +28,21 @@ export class TransactionLookupTool extends BaseTool {
   protected async validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }> {
     const params = parameters as TransactionLookupParameters
 
-    // Validate query
-    const queryValidation = SecurityValidator.validateQuery(params.query, 300)
-    if (!queryValidation.valid) {
-      return queryValidation
+    // Query is optional - allow analysis without specific query (handle undefined, null, and empty strings)
+    if (params.query) {
+      if (typeof params.query !== 'string') {
+        return { valid: false, error: 'Query must be a string' }
+      }
+      if (params.query.trim().length === 0) {
+        return { valid: false, error: 'Query cannot be empty' }
+      }
+      if (params.query.length > 300) {
+        return { valid: false, error: 'Query too long (max 300 characters)' }
+      }
     }
 
-    // Validate optional limit
-    if (params.limit !== undefined && (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > 50)) {
+    // Validate optional limit - handle JSON number parsing properly (handle both undefined and null)
+    if (params.limit != null && (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > 50)) {
       return { valid: false, error: 'Limit must be an integer between 1 and 50' }
     }
 
@@ -61,7 +68,7 @@ export class TransactionLookupTool extends BaseTool {
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as TransactionLookupParameters
-    const query = SecurityValidator.sanitizeString(params.query)
+    const query = params.query?.trim() || 'all transactions'
     const limit = params.limit || 20
 
     try {
@@ -265,9 +272,9 @@ Return only valid JSON, no explanations.`
       return false
     }
 
-    // Validate data types
-    if (filters.min_amount !== undefined && typeof filters.min_amount !== 'number') return false
-    if (filters.max_amount !== undefined && typeof filters.max_amount !== 'number') return false
+    // Validate data types (handle both undefined and null)
+    if (filters.min_amount != null && typeof filters.min_amount !== 'number') return false
+    if (filters.max_amount != null && typeof filters.max_amount !== 'number') return false
 
     return true
   }
