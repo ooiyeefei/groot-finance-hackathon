@@ -235,10 +235,15 @@ export default function TransactionFormModal({
                   onChange={(e) => {
                     const newType = e.target.value as TransactionType
                     const availableCategories = getAvailableCategories(newType)
+                    
+                    // Only reset category if current category is not valid for new transaction type
+                    // This preserves prefilled categories from document extraction
+                    const currentCategoryValid = availableCategories.includes(formData.category)
+                    
                     setFormData({ 
                       ...formData, 
                       transaction_type: newType,
-                      category: availableCategories[0] || '' // Set to first available category or empty
+                      category: currentCategoryValid ? formData.category : (availableCategories[0] || '')
                     })
                   }}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"

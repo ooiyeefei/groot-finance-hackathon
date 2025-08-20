@@ -254,7 +254,7 @@ export const TRANSACTION_CATEGORIES: TransactionCategories = {
     cost_of_goods_sold: ['raw_materials', 'direct_labor', 'manufacturing_overhead', 'inventory_cost'],
     administrative_expenses: ['office_supplies', 'software_subscriptions', 'professional_services', 'bank_fees'],
     marketing_advertising: ['digital_marketing', 'trade_shows', 'advertising', 'promotional_materials'],
-    travel_entertainment: ['business_travel', 'meals_entertainment', 'accommodation', 'transport'],
+    travel_entertainment: ['business_travel', 'meals_entertainment', 'accommodation', 'transport', 'travel_expenses'],
     utilities_communications: ['electricity', 'water', 'internet', 'phone', 'telecom_services'],
     rent_facilities: ['office_rent', 'warehouse_rent', 'equipment_lease', 'storage_fees'],
     insurance: ['business_insurance', 'health_insurance', 'property_insurance', 'liability_insurance'],

@@ -432,15 +432,15 @@ export class TransactionLookupTool extends BaseTool {
           // Sort by ABSOLUTE VALUE descending to handle negative expenses properly
           transactions = transactions
             .sort((a, b) => Math.abs(b.home_currency_amount || 0) - Math.abs(a.home_currency_amount || 0))
-            .slice(0, limit)
-          console.log(`[TransactionLookupTool] Sorted by largest absolute amount, showing top ${limit}`)
+            .slice(0, 1) // CRITICAL FIX: Return only the single largest transaction
+          console.log(`[TransactionLookupTool] Found THE largest transaction by absolute amount`)
         } else if (isSmallest) {
           // Sort by absolute value ascending and exclude zero amounts
           transactions = transactions
             .filter(t => Math.abs(t.home_currency_amount || 0) > 0) // Exclude zero amounts
             .sort((a, b) => Math.abs(a.home_currency_amount || 0) - Math.abs(b.home_currency_amount || 0))
-            .slice(0, limit)
-          console.log(`[TransactionLookupTool] Sorted by smallest absolute amount, showing top ${limit}`)
+            .slice(0, 1) // CRITICAL FIX: Return only the single smallest transaction
+          console.log(`[TransactionLookupTool] Found THE smallest transaction by absolute amount`)
         }
         
         // CRITICAL FIX: For analysis queries, don't apply additional text filtering

@@ -765,9 +765,12 @@ function router(state: AgentState): string {
     return 'validate';
   }
 
-  // AGGRESSIVE CIRCUIT BREAKER: Stop if conversation is getting too long
-  if (state.messages.length > 20) {
-    console.log(`[Router] CIRCUIT BREAKER: Conversation too long (${state.messages.length} messages). Ending to prevent infinite loops.`);
+  // SMART CIRCUIT BREAKER: Only count recent interactions in current turn, not entire conversation history
+  const recentTurnMessages = state.messages.slice(-10); // Only look at last 10 messages for current turn
+  const currentTurnLength = recentTurnMessages.length;
+  
+  if (currentTurnLength > 8) {
+    console.log(`[Router] CIRCUIT BREAKER: Current turn too long (${currentTurnLength} recent messages). Ending to prevent infinite loops.`);
     return END;
   }
 
@@ -841,6 +844,15 @@ function router(state: AgentState): string {
     const contentStr = typeof toolMessage.content === 'string' ? toolMessage.content : '';
     const isFailure = !contentStr || contentStr.includes('error') || contentStr.includes('failed') || contentStr.includes('timeout');
     
+    // Check if this is a successful tool result
+    const isSuccess = contentStr && (
+      contentStr.includes('"success": true') || 
+      contentStr.includes('vendors') || 
+      contentStr.includes('transactions') ||
+      contentStr.includes('documents') ||
+      (contentStr.length > 50 && !isFailure) // Non-empty substantial content without error indicators
+    );
+    
     if (isFailure && state.failureCount && state.failureCount >= 2) {
       console.log(`[Router] Circuit breaker activated after ${state.failureCount} failures`);
       return END;
@@ -848,7 +860,7 @@ function router(state: AgentState): string {
     
     // Check for repeated "No transactions found" messages
     if (contentStr.includes('No transactions found') || contentStr.includes('No results found')) {
-      const noResultsCount = recentMessages.filter(msg => {
+      const noResultsCount = recentTurnMessages.filter(msg => {
         if (msg._getType && msg._getType() === 'tool') {
           const content = typeof msg.content === 'string' ? msg.content : '';
           return content.includes('No transactions found') || content.includes('No results found');
@@ -862,8 +874,13 @@ function router(state: AgentState): string {
       }
     }
     
+    // If we have a successful tool result and this is getting long, try to wrap up
+    if (isSuccess && currentTurnLength >= 6) {
+      console.log(`[Router] Successful tool result detected with long turn. Allowing one final model call to complete.`);
+    }
+    
     // A tool result needs to be processed by the model for a final answer.
-    console.log('[Router] Tool result received. Routing to call model.');
+    console.log('[Router] Tool result received. Routing to call model for final answer.');
     return 'callModel';
   }
 
