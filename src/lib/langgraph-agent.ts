@@ -765,18 +765,31 @@ function router(state: AgentState): string {
     return 'validate';
   }
 
-  // SMART CIRCUIT BREAKER: Only count recent interactions in current turn, not entire conversation history
-  const recentTurnMessages = state.messages.slice(-10); // Only look at last 10 messages for current turn
-  const currentTurnLength = recentTurnMessages.length;
+  // FIXED CIRCUIT BREAKER: Count messages within the current turn only, not total conversation history
+  // Find the start of the current turn by looking backwards for the last HumanMessage
+  let currentTurnStart = state.messages.length - 1;
+  for (let i = state.messages.length - 1; i >= 0; i--) {
+    const msg = state.messages[i];
+    const msgType = msg._getType ? msg._getType() : (msg as any).type;
+    if (msgType === 'human') {
+      currentTurnStart = i;
+      break;
+    }
+  }
   
-  if (currentTurnLength > 8) {
-    console.log(`[Router] CIRCUIT BREAKER: Current turn too long (${currentTurnLength} recent messages). Ending to prevent infinite loops.`);
+  // Count messages in current turn only (from last human message to end)
+  const currentTurnMessages = state.messages.slice(currentTurnStart);
+  const currentTurnLength = currentTurnMessages.length;
+  
+  // Allow reasonable interaction within current turn: human -> ai -> tool -> ai (up to 6 messages)
+  // Only trigger circuit breaker for excessive loops within THIS turn
+  if (currentTurnLength > 6) {
+    console.log(`[Router] CIRCUIT BREAKER: Current turn too long (${currentTurnLength} messages in this turn). Ending to prevent infinite loops.`);
     return END;
   }
 
-  // Count recent tool failures in the last few messages
-  const recentMessages = state.messages.slice(-10); // Look at last 10 messages
-  const recentToolFailures = recentMessages.filter(msg => {
+  // Count tool failures in the current turn only
+  const currentTurnToolFailures = currentTurnMessages.filter(msg => {
     if (msg._getType && msg._getType() === 'tool') {
       const content = typeof msg.content === 'string' ? msg.content : '';
       return content.includes('error') || content.includes('failed') || content.includes('timeout');
@@ -784,8 +797,8 @@ function router(state: AgentState): string {
     return false;
   }).length;
 
-  if (recentToolFailures >= 3) {
-    console.log(`[Router] CIRCUIT BREAKER: ${recentToolFailures} tool failures in recent messages. Ending conversation.`);
+  if (currentTurnToolFailures >= 3) {
+    console.log(`[Router] CIRCUIT BREAKER: ${currentTurnToolFailures} tool failures in current turn. Ending conversation.`);
     return END;
   }
 
@@ -858,9 +871,9 @@ function router(state: AgentState): string {
       return END;
     }
     
-    // Check for repeated "No transactions found" messages
+    // Check for repeated "No transactions found" messages in current turn
     if (contentStr.includes('No transactions found') || contentStr.includes('No results found')) {
-      const noResultsCount = recentTurnMessages.filter(msg => {
+      const noResultsCount = currentTurnMessages.filter(msg => {
         if (msg._getType && msg._getType() === 'tool') {
           const content = typeof msg.content === 'string' ? msg.content : '';
           return content.includes('No transactions found') || content.includes('No results found');
