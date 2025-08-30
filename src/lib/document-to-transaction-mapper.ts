@@ -279,6 +279,27 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
         mappedData.document_type = 'other'
       }
     }
+    
+    // Set initial transaction status based on document type
+    if (mappedData.document_type) {
+      if (mappedData.document_type === 'receipt') {
+        // Receipts indicate payment has already been made
+        mappedData.status = 'paid'
+      } else if (mappedData.document_type === 'invoice') {
+        // Invoices are awaiting payment
+        mappedData.status = 'awaiting_payment'
+      } else if (mappedData.document_type === 'bill') {
+        // Bills are awaiting payment
+        mappedData.status = 'awaiting_payment'
+      } else {
+        // Default status for other document types
+        mappedData.status = 'paid'
+      }
+    } else {
+      // Default status when document type cannot be determined
+      mappedData.status = 'paid'
+    }
+    
     // Extract vendor name
     if (summary.vendor_name?.value) {
       mappedData.vendor_name = summary.vendor_name.value

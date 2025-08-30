@@ -9,6 +9,7 @@ import ActionButton from '@/components/ui/action-button'
 import ChatInterface from '@/components/chat/chat-interface'
 import ConversationSidebar from '@/components/chat/conversation-sidebar'
 import { LanguageProvider } from '@/contexts/language-context'
+import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { Menu } from 'lucide-react'
 
 interface Message {
@@ -125,8 +126,19 @@ export default function AIAssistantPage() {
 
   if (!isLoaded || !userId) {
     return (
-      <div className="flex h-screen bg-gray-900 items-center justify-center">
-        <div className="text-white">Loading...</div>
+      <div className="flex h-screen bg-gray-900">
+        <Sidebar />
+        <div className="flex-1 flex flex-col">
+          <HeaderWithUser 
+            title="AI Assistant" 
+            subtitle="Get intelligent financial guidance powered by LLM"
+          />
+          <main className="flex-1 overflow-auto p-6">
+            <div className="h-[calc(100vh-160px)] max-w-6xl mx-auto">
+              <SkeletonLoader variant="chat" className="mt-8" />
+            </div>
+          </main>
+        </div>
       </div>
     )
   }
@@ -177,9 +189,7 @@ export default function AIAssistantPage() {
             {/* Chat Interface */}
             <div className="h-[calc(100vh-160px)] max-w-6xl mx-auto">
               {loading ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-white">Loading conversation...</div>
-                </div>
+                <SkeletonLoader variant="chat" className="mt-8" />
               ) : (
                 <ChatInterface
                   key={chatKey}

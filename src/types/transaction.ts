@@ -146,6 +146,7 @@ export interface CreateTransactionRequest {
   home_currency: SupportedCurrency
   vendor_name?: string
   reference_number?: string
+  status?: 'pending' | 'awaiting_payment' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
   document_type?: DocumentType // From OCR extraction
   line_items?: CreateLineItemRequest[]
   source_document_id?: string  // Optional link to source document

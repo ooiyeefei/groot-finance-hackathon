@@ -50,7 +50,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
     if (!isUpdatingFromProps.current && onMessagesUpdate) {
       onMessagesUpdate(messages)
     }
-  }, [messages, onMessagesUpdate])
+  }, [messages]) // Remove onMessagesUpdate from deps to prevent infinite loop
 
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return

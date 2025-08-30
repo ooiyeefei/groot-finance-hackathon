@@ -2,7 +2,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import TransactionSummaryCards from '@/components/dashboard/transaction-summary-cards'
+import CompleteDashboard from '@/components/dashboard/complete-dashboard'
 
 export default async function Dashboard() {
   // Server-side authentication check
@@ -30,8 +30,8 @@ export default async function Dashboard() {
         {/* Main Content Area */}
         <main className="flex-1 overflow-auto p-6">
           <div className="max-w-7xl mx-auto space-y-8">
-            {/* Transaction Summary Dashboard */}
-            <TransactionSummaryCards />
+            {/* Complete Financial Dashboard with Charts */}
+            <CompleteDashboard />
 
             {/* Feature Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

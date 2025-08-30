@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { Search, Filter, Plus, Eye, Edit, Trash2, RefreshCw, Calendar, Building, DollarSign } from 'lucide-react'
+import SkeletonLoader from '@/components/ui/skeleton-loader'
+import CategorySelector from './CategorySelector'
 import { Transaction } from '@/types/transaction'
 import { formatCurrency, getTransactionTypeColor, getTransactionTypeIcon } from '@/hooks/use-transactions'
 
@@ -199,12 +201,7 @@ export default function TransactionsList({
 
       {/* Transactions List */}
       {isLoading ? (
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-          <div className="text-center">
-            <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-4" />
-            <p className="text-gray-400">Loading transactions...</p>
-          </div>
-        </div>
+        <SkeletonLoader variant="list" count={6} />
       ) : filteredTransactions.length === 0 ? (
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
           <div className="text-center">
@@ -264,9 +261,15 @@ export default function TransactionsList({
                         </span>
                       )}
                       
-                      <span className="bg-gray-700 px-2 py-1 rounded text-xs">
-                        {formatCategoryName(transaction.category)}
-                      </span>
+                      <CategorySelector
+                        transactionId={transaction.id}
+                        currentCategory={transaction.category}
+                        transactionType={transaction.transaction_type}
+                        onCategoryUpdate={(newCategory) => {
+                          // Optimistically update the transaction in the parent component
+                          onRefresh()
+                        }}
+                      />
                     </div>
                   </div>
                 </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus } from 'lucide-react'
+import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocumentPolling } from '@/hooks/use-document-polling'
 import DocumentStatusBadge from './document-status-badge'
 import ConfidenceScoreMeter from './confidence-score-meter'
@@ -249,12 +250,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-        <span className="ml-2 text-gray-400">Loading documents...</span>
-      </div>
-    )
+    return <SkeletonLoader variant="list" count={5} />
   }
 
   if (documents.length === 0) {
