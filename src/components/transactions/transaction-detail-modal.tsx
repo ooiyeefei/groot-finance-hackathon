@@ -43,17 +43,17 @@ export default function TransactionDetailModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">
-              {getTransactionTypeIcon(transaction.transaction_type)}
-            </span>
+    <div className="fixed inset-0 bg-gray-800 z-50 flex flex-col">
+      <div className="w-full h-full flex flex-col">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-900 flex-shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-600 rounded-lg">
+              <Eye className="w-5 h-5 text-white" />
+            </div>
             <div>
-              <h2 className="text-xl font-semibold text-white">Transaction Details</h2>
-              <p className="text-sm text-gray-400">
+              <h3 className="text-lg font-medium text-white">Transaction Details</h3>
+              <p className="text-sm text-gray-400 mt-1">
                 {formatCategoryName(transaction.category)} • {formatDate(transaction.transaction_date)}
               </p>
             </div>
@@ -75,259 +75,281 @@ export default function TransactionDetailModal({
             </button>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors"
+              className="text-gray-400 hover:text-white transition-colors"
             >
               <X className="w-6 h-6" />
             </button>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Main Transaction Info */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Column */}
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-lg font-medium text-white mb-4">Transaction Information</h3>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Type:</span>
-                    <span className={`font-medium capitalize ${getTransactionTypeColor(transaction.transaction_type)}`}>
-                      {transaction.transaction_type}
-                    </span>
-                  </div>
+        {/* Modal Content - Two Pane Layout */}
+        <div className="flex-1 flex min-h-0">
+          {/* Left Pane - Transaction Information (Scrollable) */}
+          <div className="w-1/2 border-r border-gray-700 flex flex-col min-h-0">
+            <div className="overflow-y-auto flex-1 p-6">
+              <div className="space-y-6">
+                {/* Transaction Information */}
+                <div>
+                  <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Transaction Information
+                  </h4>
                   
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Description:</span>
-                    <span className="text-white font-medium">{transaction.description}</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Category:</span>
-                    <span className="text-white">{formatCategoryName(transaction.category)}</span>
-                  </div>
-                  
-                  {transaction.subcategory && (
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Subcategory:</span>
-                      <span className="text-white">{formatCategoryName(transaction.subcategory)}</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400 flex items-center gap-1">
-                      <Calendar className="w-4 h-4" />
-                      Date:
-                    </span>
-                    <span className="text-white">{formatDate(transaction.transaction_date)}</span>
-                  </div>
-                  
-                  {transaction.vendor_name && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-400 flex items-center gap-1">
-                        <Building className="w-4 h-4" />
-                        Vendor:
+                      <span className="text-gray-400">Type:</span>
+                      <span className={`font-medium capitalize ${getTransactionTypeColor(transaction.transaction_type)}`}>
+                        {transaction.transaction_type}
                       </span>
-                      <span className="text-white">{transaction.vendor_name}</span>
                     </div>
-                  )}
-                  
-                  {transaction.reference_number && (
+                    
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400 flex items-center gap-1">
-                        <Hash className="w-4 h-4" />
-                        Reference:
-                      </span>
-                      <span className="text-white">{transaction.reference_number}</span>
+                      <span className="text-gray-400">Description:</span>
+                      <span className="text-white font-medium">{transaction.description}</span>
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column */}
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-lg font-medium text-white mb-4">Amount & Currency</h3>
-                
-                <div className="bg-gray-700/30 rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Original Amount:</span>
-                    <span className={`text-xl font-bold ${getTransactionTypeColor(transaction.transaction_type)}`}>
-                      {transaction.transaction_type === 'expense' && '-'}
-                      {formatCurrency(transaction.original_amount, transaction.original_currency)}
-                    </span>
-                  </div>
-                  
-                  {transaction.original_currency !== transaction.home_currency && (
-                    <>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Category:</span>
+                      <span className="text-white">{formatCategoryName(transaction.category)}</span>
+                    </div>
+                    
+                    {transaction.subcategory && (
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-400">Home Currency:</span>
-                        <span className="text-white font-semibold">
-                          {formatCurrency(transaction.home_amount, transaction.home_currency)}
-                        </span>
+                        <span className="text-gray-400">Subcategory:</span>
+                        <span className="text-white">{formatCategoryName(transaction.subcategory)}</span>
                       </div>
-                      
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Exchange Rate:</span>
-                        <span className="text-gray-400">
-                          1 {transaction.original_currency} = {transaction.exchange_rate.toFixed(6)} {transaction.home_currency}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Rate Date:</span>
-                        <span className="text-gray-400">
-                          {formatDate(transaction.exchange_rate_date)}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-              
-              {/* System Information */}
-              <div>
-                <h3 className="text-lg font-medium text-white mb-4">System Information</h3>
-                
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Created:</span>
-                    <span className="text-gray-400">
-                      {new Date(transaction.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Last Updated:</span>
-                    <span className="text-gray-400">
-                      {new Date(transaction.updated_at).toLocaleString()}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Creation Method:</span>
-                    <span className="text-gray-400 capitalize">
-                      {transaction.created_by_method.replace('_', ' ')}
-                    </span>
-                  </div>
-                  
-                  {transaction.document_id && (
+                    )}
+                    
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500 flex items-center gap-1">
-                        <FileText className="w-3 h-3" />
-                        Source Document:
+                      <span className="text-gray-400 flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        Date:
                       </span>
-                      <button
-                        onClick={() => onViewDocument?.(transaction.document_id!)}
-                        className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
-                      >
-                        <Eye className="w-3 h-3" />
-                        View Document
-                      </button>
+                      <span className="text-white">{formatDate(transaction.transaction_date)}</span>
                     </div>
-                  )}
+                    
+                    {transaction.vendor_name && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400 flex items-center gap-1">
+                          <Building className="w-4 h-4" />
+                          Vendor:
+                        </span>
+                        <span className="text-white">{transaction.vendor_name}</span>
+                      </div>
+                    )}
+                    
+                    {transaction.reference_number && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400 flex items-center gap-1">
+                          <Hash className="w-4 h-4" />
+                          Reference:
+                        </span>
+                        <span className="text-white">{transaction.reference_number}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Amount & Currency */}
+                <div>
+                  <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Amount & Currency
+                  </h4>
+                  
+                  <div className="bg-gray-900 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Original Amount:</span>
+                      <span className={`text-xl font-bold ${getTransactionTypeColor(transaction.transaction_type)}`}>
+                        {transaction.transaction_type === 'expense' && '-'}
+                        {formatCurrency(transaction.original_amount, transaction.original_currency)}
+                      </span>
+                    </div>
+                    
+                    {transaction.original_currency !== transaction.home_currency && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400">Home Currency:</span>
+                          <span className="text-white font-semibold">
+                            {formatCurrency(transaction.home_amount, transaction.home_currency)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500">Exchange Rate:</span>
+                          <span className="text-gray-400">
+                            1 {transaction.original_currency} = {transaction.exchange_rate.toFixed(6)} {transaction.home_currency}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500">Rate Date:</span>
+                          <span className="text-gray-400">
+                            {formatDate(transaction.exchange_rate_date)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                
+                {/* System Information */}
+                <div>
+                  <h4 className="text-sm font-medium text-white mb-4">System Information</h4>
+                  
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Created:</span>
+                      <span className="text-gray-400">
+                        {new Date(transaction.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Last Updated:</span>
+                      <span className="text-gray-400">
+                        {new Date(transaction.updated_at).toLocaleString()}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Creation Method:</span>
+                      <span className="text-gray-400 capitalize">
+                        {transaction.created_by_method.replace('_', ' ')}
+                      </span>
+                    </div>
+                    
+                    {transaction.document_id && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500 flex items-center gap-1">
+                          <FileText className="w-3 h-3" />
+                          Source Document:
+                        </span>
+                        <button
+                          onClick={() => onViewDocument?.(transaction.document_id!)}
+                          className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                        >
+                          <Eye className="w-3 h-3" />
+                          View Document
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Line Items */}
-          {transaction.line_items && transaction.line_items.length > 0 && (
-            <div>
-              <h3 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Line Items ({transaction.line_items.length})
-              </h3>
-              
-              <div className="bg-gray-700/30 rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-600/50">
-                      <tr>
-                        <th className="text-left p-3 text-sm font-medium text-gray-300">Description</th>
-                        <th className="text-center p-3 text-sm font-medium text-gray-300">Quantity</th>
-                        <th className="text-right p-3 text-sm font-medium text-gray-300">Unit Price</th>
-                        <th className="text-right p-3 text-sm font-medium text-gray-300">Tax</th>
-                        <th className="text-right p-3 text-sm font-medium text-gray-300">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-600">
-                      {transaction.line_items.map((item, index) => (
-                        <tr key={item.id || index} className="hover:bg-gray-600/20">
-                          <td className="p-3">
-                            <div>
-                              <div className="text-white font-medium">{item.item_description || item.description}</div>
-                              {item.item_category && (
-                                <div className="text-xs text-gray-400 mt-1">
-                                  {formatCategoryName(item.item_category)}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-3 text-center text-white">
-                            {item.quantity}
-                          </td>
-                          <td className="p-3 text-right text-white">
-                            {formatCurrency(item.unit_price, transaction.original_currency)}
-                          </td>
-                          <td className="p-3 text-right text-white">
-                            {(item.tax_amount || 0) > 0 ? (
-                              <div>
-                                {formatCurrency(item.tax_amount || 0, transaction.original_currency)}
-                                {item.tax_rate && (
-                                  <div className="text-xs text-gray-400">
-                                    ({(item.tax_rate * 100).toFixed(1)}%)
+          {/* Right Pane - Line Items Table */}
+          <div className="w-1/2 flex flex-col min-h-0">
+            <div className="p-6 flex-1 overflow-y-auto">
+              <div className="space-y-6">
+                {/* Line Items Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Line Items ({transaction.line_items?.length || 0})
+                  </h4>
+                </div>
+
+                {/* Line Items Table */}
+                {transaction.line_items && transaction.line_items.length > 0 ? (
+                  <div className="bg-gray-900 rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-800">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700">
+                          {transaction.line_items.map((item, index) => (
+                            <tr key={item.id || index} className="hover:bg-gray-800">
+                              <td className="px-3 py-2 text-gray-400">{index + 1}</td>
+                              <td className="px-3 py-2">
+                                <div className="text-white font-medium">{item.item_description || item.description}</div>
+                                {item.item_category && (
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    {formatCategoryName(item.item_category)}
                                   </div>
                                 )}
-                              </div>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-                          <td className="p-3 text-right text-white font-medium">
-                            {formatCurrency(item.total_amount || item.line_total || 0, transaction.original_currency)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-gray-600/30">
-                      <tr>
-                        <td colSpan={4} className="p-3 text-right font-medium text-gray-300">
-                          Subtotal:
-                        </td>
-                        <td className="p-3 text-right font-bold text-white">
-                          {formatCurrency(calculateLineItemsTotal(), transaction.original_currency)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-              
-              {/* Note about line items vs main amount */}
-              {Math.abs(calculateLineItemsTotal() - transaction.original_amount) > 0.01 && (
-                <div className="mt-2 text-xs text-yellow-400 bg-yellow-900/20 rounded p-2">
-                  Note: Line items total differs from transaction amount. 
-                  This may be due to additional fees, discounts, or rounding differences.
-                </div>
-              )}
-            </div>
-          )}
+                              </td>
+                              <td className="px-3 py-2 text-white">{item.item_code || '-'}</td>
+                              <td className="px-3 py-2 text-right text-white">{item.quantity}</td>
+                              <td className="px-3 py-2 text-white">{item.unit_measurement || '-'}</td>
+                              <td className="px-3 py-2 text-right text-white">
+                                {formatCurrency(item.unit_price, transaction.original_currency)}
+                              </td>
+                              <td className="px-3 py-2 text-right text-green-400 font-medium">
+                                {formatCurrency(item.total_amount || item.line_total || 0, transaction.original_currency)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>No line items found</p>
+                    <p className="text-xs mt-1">This transaction has no itemized details</p>
+                  </div>
+                )}
 
-          {/* Additional Details */}
-          {transaction.vendor_details && Object.keys(transaction.vendor_details).length > 0 && (
-            <div>
-              <h3 className="text-lg font-medium text-white mb-4">Additional Details</h3>
-              <div className="bg-gray-700/30 rounded-lg p-4">
-                <pre className="text-sm text-gray-300 whitespace-pre-wrap">
-                  {JSON.stringify(transaction.vendor_details, null, 2)}
-                </pre>
+                {/* Transaction Summary */}
+                {transaction.line_items && transaction.line_items.length > 0 && (
+                  <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
+                    <h5 className="text-sm font-medium text-white mb-3">Transaction Summary</h5>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Items Count:</span>
+                        <span className="text-white">{transaction.line_items.length}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Subtotal:</span>
+                        <span className="text-white">
+                          {formatCurrency(calculateLineItemsTotal(), transaction.original_currency)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t border-gray-700 pt-2">
+                        <span className="text-gray-300 font-medium">Total Amount:</span>
+                        <span className="text-green-400 font-medium">
+                          {formatCurrency(transaction.original_amount, transaction.original_currency)}
+                        </span>
+                      </div>
+                      
+                      {/* Note about line items vs main amount */}
+                      {Math.abs(calculateLineItemsTotal() - transaction.original_amount) > 0.01 && (
+                        <div className="mt-3 text-xs text-yellow-400 bg-yellow-900/20 rounded p-2">
+                          Note: Line items total differs from transaction amount. 
+                          This may be due to additional fees, discounts, or rounding differences.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Additional Details */}
+                {transaction.vendor_details && Object.keys(transaction.vendor_details).length > 0 && (
+                  <div>
+                    <h5 className="text-sm font-medium text-white mb-3">Additional Details</h5>
+                    <div className="bg-gray-900 rounded-lg p-4">
+                      <pre className="text-sm text-gray-300 whitespace-pre-wrap">
+                        {JSON.stringify(transaction.vendor_details, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Footer */}

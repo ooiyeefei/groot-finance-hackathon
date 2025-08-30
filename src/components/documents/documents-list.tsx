@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, forwardRef, useImperativeHandle } from 'react'
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus } from 'lucide-react'
 import { useDocumentPolling } from '@/hooks/use-document-polling'
@@ -34,6 +34,8 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [transactionFormDocument, setTransactionFormDocument] = useState<string | null>(null)
+  const [editTransactionData, setEditTransactionData] = useState<{documentId: string, transactionId: string} | null>(null)
+  const [reprocessedDocuments, setReprocessedDocuments] = useState<Set<string>>(new Set())
 
   // Expose refresh method to parent via ref
   useImperativeHandle(ref, () => ({
@@ -56,6 +58,8 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   // Handle reprocess for completed documents
   const reprocessDocument = async (documentId: string) => {
     await processDocument(documentId)
+    // Track that this document has been reprocessed
+    setReprocessedDocuments(prev => new Set(prev).add(documentId))
   }
 
   // Handle delete confirmation
@@ -94,6 +98,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     setTransactionFormDocument(documentId)
   }
 
+  // Handle opening transaction edit form for reprocessed documents
+  const openTransactionEditForm = (documentId: string, transactionId: string) => {
+    setEditTransactionData({ documentId, transactionId })
+  }
+
   // Handle viewing linked transaction 
   const openTransactionView = (transactionId: string) => {
     // Navigate to transactions page with the specific transaction focused using Next.js router
@@ -103,6 +112,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   // Close transaction form modal
   const closeTransactionForm = () => {
     setTransactionFormDocument(null)
+  }
+
+  // Close transaction edit modal
+  const closeTransactionEditForm = () => {
+    setEditTransactionData(null)
   }
 
   // Handle transaction creation from document
@@ -136,9 +150,75 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     }
   }
 
+  // Handle transaction update from reprocessed document
+  const handleUpdateTransaction = async (data: CreateTransactionRequest) => {
+    if (!editTransactionData) return
+    
+    try {
+      console.log('[Documents List] Updating transaction with reprocessed data:', JSON.stringify(data, null, 2))
+      
+      const response = await fetch(`/api/transactions/${editTransactionData.transactionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          // Remove fields that shouldn't be in the update request
+          source_document_id: undefined,
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update transaction')
+      }
+
+      console.log('Transaction updated successfully with reprocessed data')
+      setEditTransactionData(null)
+      
+      // Remove document from reprocessed set since update is complete
+      setReprocessedDocuments(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(editTransactionData.documentId)
+        return newSet
+      })
+      
+      // Refresh documents list
+      await refreshDocuments()
+      
+    } catch (error) {
+      console.error('Failed to update transaction:', error)
+      // Optional: Show error message
+    }
+  }
+
   // Get document by ID for modal display
   const getDocumentById = (id: string) => {
     return documents.find(doc => doc.id === id)
+  }
+
+  // Get transaction by ID (we'll need to fetch it from API)
+  const [editTransactionDetails, setEditTransactionDetails] = useState<any>(null)
+  
+  // Fetch transaction details for editing when editTransactionData changes
+  useEffect(() => {
+    if (editTransactionData) {
+      fetchTransactionDetails(editTransactionData.transactionId)
+    } else {
+      setEditTransactionDetails(null)
+    }
+  }, [editTransactionData])
+
+  const fetchTransactionDetails = async (transactionId: string) => {
+    try {
+      const response = await fetch(`/api/transactions/${transactionId}`)
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setEditTransactionDetails(result.data.transaction)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch transaction details:', error)
+    }
   }
 
   const getFileIcon = (fileType: string) => {
@@ -239,6 +319,13 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     </span>
                   )}
                   
+                  {/* Show reprocessed status for documents that have been reprocessed */}
+                  {reprocessedDocuments.has(document.id) && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-900/20 text-orange-400 border border-orange-700">
+                      🔄 Reprocessed
+                    </span>
+                  )}
+                  
                   {/* Show confidence score for completed documents */}
                   {document.processing_status === 'completed' && document.confidence_score && (
                     <ConfidenceScoreMeter 
@@ -274,17 +361,30 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     </button>
                   )}
 
-                  {/* Add/View Transaction button for completed documents with extractable data */}
-                  {document.processing_status === 'completed' && document.extracted_data && canCreateTransactionFromDocument(document) && (
+                  {/* Add/View/Update Transaction button for completed documents with extractable data */}
+                  {document.processing_status === 'completed' && document.extracted_data && canCreateTransactionFromDocument(document as any) && (
                     document.linked_transaction ? (
-                      <button
-                        onClick={() => openTransactionView(document.linked_transaction!.id)}
-                        className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
-                        title={`View transaction: ${document.linked_transaction.description}`}
-                      >
-                        <Eye className="w-4 h-4 mr-1.5" />
-                        View Transaction
-                      </button>
+                      reprocessedDocuments.has(document.id) ? (
+                        // Show Update Transaction for reprocessed documents
+                        <button
+                          onClick={() => openTransactionEditForm(document.id, document.linked_transaction!.id)}
+                          className="inline-flex items-center px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-md transition-colors"
+                          title={`Update transaction with reprocessed data: ${document.linked_transaction.description}`}
+                        >
+                          <Plus className="w-4 h-4 mr-1.5" />
+                          Update Transaction
+                        </button>
+                      ) : (
+                        // Show View Transaction for normal processed documents
+                        <button
+                          onClick={() => openTransactionView(document.linked_transaction!.id)}
+                          className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
+                          title={`View transaction: ${document.linked_transaction.description}`}
+                        >
+                          <Eye className="w-4 h-4 mr-1.5" />
+                          View Transaction
+                        </button>
+                      )
                     ) : (
                       <button
                         onClick={() => openTransactionForm(document.id)}
@@ -337,25 +437,116 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
               </div>
             </div>
             
-            {/* Show extracted entities for completed documents */}
-            {document.processing_status === 'completed' && document.extracted_data?.entities && document.extracted_data.entities.length > 0 && (
+            {/* Show extracted information for completed documents */}
+            {document.processing_status === 'completed' && document.extracted_data && (
               <div className="mt-4 pt-4 border-t border-gray-600">
                 <h5 className="text-sm font-medium text-gray-300 mb-2">Extracted Information</h5>
                 <div className="flex flex-wrap gap-2">
-                  {document.extracted_data.entities.slice(0, 5).map((entity, index) => (
-                    <span
-                      key={index}
-                      className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-600/50 text-gray-300 border border-gray-500"
-                      title={`Confidence: ${Math.round(entity.confidence * 100)}%`}
-                    >
-                      <span className="font-medium text-blue-300">{entity.type}:</span>
-                      <span className="ml-1">{entity.value}</span>
-                    </span>
-                  ))}
-                  {document.extracted_data.entities.length > 5 && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs text-gray-400">
-                      +{document.extracted_data.entities.length - 5} more
-                    </span>
+                  {/* Document Summary */}
+                  {document.extracted_data.document_summary && (
+                    <>
+                      {document.extracted_data.document_summary.vendor_name && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                          <span className="font-medium">Vendor:</span>
+                          <span className="ml-1">{document.extracted_data.document_summary.vendor_name.value}</span>
+                        </span>
+                      )}
+                      {document.extracted_data.document_summary.total_amount && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-green-600/20 text-green-300 border border-green-500/30">
+                          <span className="font-medium">Amount:</span>
+                          <span className="ml-1">{document.extracted_data.document_summary.total_amount.value}</span>
+                        </span>
+                      )}
+                      {document.extracted_data.document_summary.transaction_date && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-purple-600/20 text-purple-300 border border-purple-500/30">
+                          <span className="font-medium">Date:</span>
+                          <span className="ml-1">{document.extracted_data.document_summary.transaction_date.value}</span>
+                        </span>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Line Items Summary */}
+                  {document.extracted_data.line_items && document.extracted_data.line_items.length > 0 && (
+                    <>
+                      <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-orange-600/20 text-orange-300 border border-orange-500/30">
+                        <span className="font-medium">Items:</span>
+                        <span className="ml-1">{document.extracted_data.line_items.length}</span>
+                      </span>
+                      {/* Show first few line items with new fields */}
+                      {document.extracted_data.line_items.slice(0, 3).map((item, index) => (
+                        <div key={`line-${index}`} className="flex flex-wrap gap-1">
+                          {item.description && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-600/50 text-gray-300 border border-gray-500">
+                              <span className="font-medium text-yellow-300">Item:</span>
+                              <span className="ml-1">{item.description.value}</span>
+                            </span>
+                          )}
+                          {item.item_code && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-indigo-600/20 text-indigo-300 border border-indigo-500/30">
+                              <span className="font-medium">Code:</span>
+                              <span className="ml-1">{item.item_code.value}</span>
+                            </span>
+                          )}
+                          {item.unit_measurement && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-teal-600/20 text-teal-300 border border-teal-500/30">
+                              <span className="font-medium">Unit:</span>
+                              <span className="ml-1">{item.unit_measurement.value}</span>
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {document.extracted_data.line_items.length > 3 && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs text-gray-400">
+                          +{document.extracted_data.line_items.length - 3} more items
+                        </span>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Financial Entities */}
+                  {document.extracted_data.financial_entities && document.extracted_data.financial_entities.length > 0 && (
+                    <>
+                      {document.extracted_data.financial_entities.slice(0, 3).map((entity, index) => (
+                        <span
+                          key={`financial-${index}`}
+                          className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-emerald-600/20 text-emerald-300 border border-emerald-500/30"
+                          title={`${entity.category} • Confidence: ${Math.round(entity.confidence * 100)}%`}
+                        >
+                          <span className="font-medium">{entity.label}:</span>
+                          <span className="ml-1">{entity.value}</span>
+                        </span>
+                      ))}
+                      {document.extracted_data.financial_entities.length > 3 && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs text-gray-400">
+                          +{document.extracted_data.financial_entities.length - 3} more
+                        </span>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Legacy entities fallback */}
+                  {document.extracted_data.entities && document.extracted_data.entities.length > 0 && 
+                   !document.extracted_data.document_summary && 
+                   !document.extracted_data.line_items && 
+                   !document.extracted_data.financial_entities && (
+                    <>
+                      {document.extracted_data.entities.slice(0, 5).map((entity, index) => (
+                        <span
+                          key={`legacy-${index}`}
+                          className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-600/50 text-gray-300 border border-gray-500"
+                          title={`Confidence: ${Math.round(entity.confidence * 100)}%`}
+                        >
+                          <span className="font-medium text-blue-300">{entity.type}:</span>
+                          <span className="ml-1">{entity.value}</span>
+                        </span>
+                      ))}
+                      {document.extracted_data.entities.length > 5 && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs text-gray-400">
+                          +{document.extracted_data.entities.length - 5} more
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -378,9 +569,22 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
           onClose={closeTransactionForm}
           onSubmit={handleCreateTransaction}
           prefilledData={{
-            ...mapDocumentToTransaction(getDocumentById(transactionFormDocument)!),
+            ...mapDocumentToTransaction(getDocumentById(transactionFormDocument)! as any),
             source_document_id: transactionFormDocument // Link transaction to document
           }}
+        />
+      )}
+
+      {/* Transaction Edit Form Modal for reprocessed documents */}
+      {editTransactionData && getDocumentById(editTransactionData.documentId) && editTransactionDetails && (
+        <TransactionFormModal
+          transaction={editTransactionDetails}
+          prefilledData={{
+            ...mapDocumentToTransaction(getDocumentById(editTransactionData.documentId)! as any)
+            // Don't include source_document_id for updates
+          }}
+          onClose={closeTransactionEditForm}
+          onSubmit={handleUpdateTransaction}
         />
       )}
 

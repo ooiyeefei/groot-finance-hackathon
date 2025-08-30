@@ -79,14 +79,28 @@ export default function TransactionFormModal({
   useEffect(() => {
     if (transaction?.line_items && transaction.line_items.length > 0) {
       console.log('[Transaction Form] Loading existing line items:', transaction.line_items)
-      const existingItems = transaction.line_items.map(item => ({
-        ...item,
-        // Use the correct database field names
-        description: item.item_description || item.description || '',  // Map item_description to description for form
-        line_total: item.total_amount || item.line_total || ((item.quantity || 0) * (item.unit_price || 0) + (item.tax_amount || 0)),  // Use total_amount from DB
-        tax_amount: item.tax_amount || 0,
-        tax_rate: item.tax_rate || 0
-      }))
+      
+      // Check if we have prefilled data with new OCR fields to merge
+      const prefilledItems = prefilledData?.line_items || []
+      
+      const existingItems = transaction.line_items.map((item, index) => {
+        // Try to find matching prefilled item by description
+        const matchingPrefilledItem = prefilledItems.find(prefilled => 
+          prefilled.description?.toLowerCase().trim() === (item.item_description || item.description || '').toLowerCase().trim()
+        )
+        
+        return {
+          ...item,
+          // Use the correct database field names
+          description: item.item_description || item.description || '',  // Map item_description to description for form
+          line_total: item.total_amount || item.line_total || ((item.quantity || 0) * (item.unit_price || 0) + (item.tax_amount || 0)),  // Use total_amount from DB
+          tax_amount: item.tax_amount || 0,
+          tax_rate: item.tax_rate || 0,
+          // Merge new OCR fields if available from prefilled data
+          item_code: item.item_code || matchingPrefilledItem?.item_code || '',
+          unit_measurement: item.unit_measurement || matchingPrefilledItem?.unit_measurement || ''
+        }
+      })
       setLineItems(existingItems)
     } else if (prefilledData?.line_items && prefilledData.line_items.length > 0) {
       console.log('[Transaction Form] Loading prefilled line items:', prefilledData.line_items)
@@ -152,7 +166,9 @@ export default function TransactionFormModal({
           )
           .map(item => ({
             description: item.description!,
+            item_code: item.item_code,
             quantity: item.quantity!,
+            unit_measurement: item.unit_measurement,
             unit_price: item.unit_price!,
             tax_rate: item.tax_rate,
             item_category: item.item_category
@@ -173,7 +189,9 @@ export default function TransactionFormModal({
   const addLineItem = () => {
     setLineItems([...lineItems, {
       description: '',
+      item_code: '',
       quantity: 1,
+      unit_measurement: '',
       unit_price: 0,
       line_total: 0,
       tax_amount: 0,
@@ -205,140 +223,166 @@ export default function TransactionFormModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <h2 className="text-xl font-semibold text-white">
-            {transaction ? 'Edit Transaction' : prefilledData ? 'Create Transaction from Document' : 'Create New Transaction'}
-          </h2>
+    <div className="fixed inset-0 bg-gray-800 z-50 flex flex-col">
+      <div className="w-full h-full flex flex-col">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-900 flex-shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-600 rounded-lg">
+              <DollarSign className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-medium text-white">
+                {transaction ? 'Edit Transaction' : prefilledData ? 'Create Transaction from Document' : 'Create New Transaction'}
+              </h3>
+              <p className="text-sm text-gray-400 mt-1">
+                {prefilledData?.source_document_id ? 'Pre-filled from document extraction' : 'Manual transaction entry'}
+              </p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors"
+            className="text-gray-400 hover:text-white transition-colors"
           >
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Basic Information */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Column */}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Transaction Type *
-                </label>
-                <select
-                  value={formData.transaction_type}
-                  onChange={(e) => {
-                    const newType = e.target.value as TransactionType
-                    const availableCategories = getAvailableCategories(newType)
-                    
-                    // Only reset category if current category is not valid for new transaction type
-                    // This preserves prefilled categories from document extraction
-                    const currentCategoryValid = availableCategories.includes(formData.category)
-                    
-                    setFormData({ 
-                      ...formData, 
-                      transaction_type: newType,
-                      category: currentCategoryValid ? formData.category : (availableCategories[0] || '')
-                    })
-                  }}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  {TRANSACTION_TYPES.map(type => (
-                    <option key={type} value={type}>
-                      {formatCategoryName(type)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        {/* Modal Content - Two Pane Layout */}
+        <div className="flex-1 flex min-h-0">
+          {/* Left Pane - Form Fields (Scrollable) */}
+          <div className="w-1/2 border-r border-gray-700 flex flex-col min-h-0">
+            <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 p-6">
+              <div className="space-y-4">
+                {/* Transaction Details */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Transaction Type *
+                  </label>
+                  <select
+                    value={formData.transaction_type}
+                    onChange={(e) => {
+                      const newType = e.target.value as TransactionType
+                      const availableCategories = getAvailableCategories(newType)
+                      
+                      // Only reset category if current category is not valid for new transaction type
+                      // This preserves prefilled categories from document extraction
+                      const currentCategoryValid = availableCategories.includes(formData.category)
+                      
+                      setFormData({ 
+                        ...formData, 
+                        transaction_type: newType,
+                        category: currentCategoryValid ? formData.category : (availableCategories[0] || '')
+                      })
+                    }}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    {TRANSACTION_TYPES.map(type => (
+                      <option key={type} value={type}>
+                        {formatCategoryName(type)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Description *
-                </label>
-                <input
-                  type="text"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter transaction description"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Category *
-                </label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  {getAvailableCategories(formData.transaction_type).map(category => (
-                    <option key={category} value={category}>
-                      {formatCategoryName(category)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Subcategory
-                </label>
-                <input
-                  type="text"
-                  value={formData.subcategory}
-                  onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Optional subcategory"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  <Calendar className="w-4 h-4 inline mr-1" />
-                  Transaction Date *
-                </label>
-                <input
-                  type="date"
-                  value={formData.transaction_date}
-                  onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Right Column */}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  <DollarSign className="w-4 h-4 inline mr-1" />
-                  Amount *
-                </label>
-                <div className="flex gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Description *
+                  </label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.original_amount}
-                    onChange={(e) => setFormData({ ...formData, original_amount: parseFloat(e.target.value) || 0 })}
-                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0.00"
+                    type="text"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter transaction description"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Category *
+                  </label>
                   <select
-                    value={formData.original_currency}
-                    onChange={(e) => setFormData({ ...formData, original_currency: e.target.value as SupportedCurrency })}
-                    className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    {getAvailableCategories(formData.transaction_type).map(category => (
+                      <option key={category} value={category}>
+                        {formatCategoryName(category)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Subcategory
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.subcategory}
+                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Optional subcategory"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <Calendar className="w-4 h-4 inline mr-1" />
+                    Transaction Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.transaction_date}
+                    onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <DollarSign className="w-4 h-4 inline mr-1" />
+                    Amount *
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.original_amount}
+                      onChange={(e) => setFormData({ ...formData, original_amount: parseFloat(e.target.value) || 0 })}
+                      className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.00"
+                      required
+                    />
+                    <select
+                      value={formData.original_currency}
+                      onChange={(e) => setFormData({ ...formData, original_currency: e.target.value as SupportedCurrency })}
+                      className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {SUPPORTED_CURRENCIES.map(currency => (
+                        <option key={currency} value={currency}>
+                          {currency}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Home Currency
+                  </label>
+                  <select
+                    value={formData.home_currency}
+                    onChange={(e) => setFormData({ ...formData, home_currency: e.target.value as SupportedCurrency })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {SUPPORTED_CURRENCIES.map(currency => (
                       <option key={currency} value={currency}>
@@ -347,189 +391,230 @@ export default function TransactionFormModal({
                     ))}
                   </select>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Home Currency
-                </label>
-                <select
-                  value={formData.home_currency}
-                  onChange={(e) => setFormData({ ...formData, home_currency: e.target.value as SupportedCurrency })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {SUPPORTED_CURRENCIES.map(currency => (
-                    <option key={currency} value={currency}>
-                      {currency}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Exchange Rate Preview */}
-              {previewAmount !== null && exchangeRate !== null && (
-                <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
-                  <div className="text-sm text-blue-300 mb-1">Currency Conversion Preview:</div>
-                  <div className="text-white font-medium">
-                    {formatCurrency(previewAmount, formData.home_currency)}
+                {/* Exchange Rate Preview */}
+                {previewAmount !== null && exchangeRate !== null && (
+                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
+                    <div className="text-sm text-blue-300 mb-1">Currency Conversion Preview:</div>
+                    <div className="text-white font-medium">
+                      {formatCurrency(previewAmount, formData.home_currency)}
+                    </div>
+                    <div className="text-xs text-blue-400">
+                      Rate: 1 {formData.original_currency} = {exchangeRate.toFixed(6)} {formData.home_currency}
+                    </div>
                   </div>
-                  <div className="text-xs text-blue-400">
-                    Rate: 1 {formData.original_currency} = {exchangeRate.toFixed(6)} {formData.home_currency}
-                  </div>
-                </div>
-              )}
+                )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  <Building className="w-4 h-4 inline mr-1" />
-                  Vendor Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.vendor_name}
-                  onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Company or vendor name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  <Hash className="w-4 h-4 inline mr-1" />
-                  Reference Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.reference_number}
-                  onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Invoice number, receipt ID, etc."
-                />
-              </div>
-              
-              {/* Document Type - Read-only field from OCR */}
-              {formData.document_type && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    <FileText className="w-4 h-4 inline mr-1" />
-                    Document Type
+                    <Building className="w-4 h-4 inline mr-1" />
+                    Vendor Name
                   </label>
-                  <div className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400">
-                    <span className="capitalize">{formData.document_type}</span>
-                    <span className="text-xs ml-2 text-blue-400">(from OCR)</span>
-                  </div>
+                  <input
+                    type="text"
+                    value={formData.vendor_name}
+                    onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Company or vendor name"
+                  />
                 </div>
-              )}
-            </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <Hash className="w-4 h-4 inline mr-1" />
+                    Reference Number
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.reference_number}
+                    onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Invoice number, receipt ID, etc."
+                  />
+                </div>
+                
+                {/* Document Type - Read-only field from OCR */}
+                {formData.document_type && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <FileText className="w-4 h-4 inline mr-1" />
+                      Document Type
+                    </label>
+                    <div className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400">
+                      <span className="capitalize">{formData.document_type}</span>
+                      <span className="text-xs ml-2 text-blue-400">(from OCR)</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Form Actions */}
+                <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-700">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
+                    disabled={isLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    {isLoading ? 'Saving...' : (transaction ? 'Update Transaction' : 'Create Transaction')}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
 
-          {/* Line Items */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-white flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Line Items
-              </h3>
-              <button
-                type="button"
-                onClick={addLineItem}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Item
-              </button>
-            </div>
+          {/* Right Pane - Line Items Table */}
+          <div className="w-1/2 flex flex-col min-h-0">
+            <div className="p-6 flex-1 overflow-y-auto">
+              <div className="space-y-6">
+                {/* Line Items Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Line Items ({lineItems.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={addLineItem}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Item
+                  </button>
+                </div>
 
-            {lineItems.length > 0 && (
-              <div className="space-y-3">
-                {lineItems.map((item, index) => (
-                  <div key={index} className="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-medium text-gray-400 mb-1">
-                          Description
-                        </label>
-                        <input
-                          type="text"
-                          value={item.description || ''}
-                          onChange={(e) => updateLineItem(index, 'description', e.target.value)}
-                          className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="Item description"
-                        />
+                {/* Line Items Table */}
+                {lineItems.length > 0 ? (
+                  <div className="bg-gray-900 rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-800">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                            <th className="px-3 py-2 text-center text-gray-400 font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700">
+                          {lineItems.map((item, index) => (
+                            <tr key={index} className="hover:bg-gray-800">
+                              <td className="px-3 py-2 text-gray-400">{index + 1}</td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="text"
+                                  value={item.description || ''}
+                                  onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                                  className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  placeholder="Item description"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="text"
+                                  value={item.item_code || ''}
+                                  onChange={(e) => updateLineItem(index, 'item_code', e.target.value)}
+                                  className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  placeholder="SKU"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.quantity || ''}
+                                  onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="text"
+                                  value={item.unit_measurement || ''}
+                                  onChange={(e) => updateLineItem(index, 'unit_measurement', e.target.value)}
+                                  className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  placeholder="kg, pkt"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.unit_price || ''}
+                                  onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right text-green-400 font-medium">
+                                {formatCurrency(item.line_total || 0, formData.original_currency)}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => removeLineItem(index)}
+                                  className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded transition-colors"
+                                  title="Remove item"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>No line items added yet</p>
+                    <p className="text-xs mt-1">Click &quot;Add Item&quot; to start adding line items</p>
+                  </div>
+                )}
+
+                {/* Transaction Summary */}
+                {lineItems.length > 0 && (
+                  <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
+                    <h5 className="text-sm font-medium text-white mb-3">Transaction Summary</h5>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Items Count:</span>
+                        <span className="text-white">{lineItems.length}</span>
                       </div>
-                      
-                      <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">
-                          Quantity
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.quantity || ''}
-                          onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Subtotal:</span>
+                        <span className="text-white">
+                          {formatCurrency(
+                            lineItems.reduce((sum, item) => sum + (item.line_total || 0), 0),
+                            formData.original_currency
+                          )}
+                        </span>
                       </div>
-                      
-                      <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">
-                          Unit Price
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.unit_price || ''}
-                          onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                          className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      <div className="flex items-end gap-2">
-                        <div className="flex-1">
-                          <label className="block text-xs font-medium text-gray-400 mb-1">
-                            Total
-                          </label>
-                          <div className="px-2 py-1 bg-gray-800 border border-gray-600 rounded text-white text-sm">
-                            {formatCurrency(item.line_total || 0, formData.original_currency)}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeLineItem(index)}
-                          className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded transition-colors"
-                          title="Remove item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div className="flex justify-between border-t border-gray-700 pt-2">
+                        <span className="text-gray-300 font-medium">Total Amount:</span>
+                        <span className="text-green-400 font-medium">
+                          {formatCurrency(formData.original_amount, formData.original_currency)}
+                        </span>
                       </div>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
-            )}
+            </div>
           </div>
-
-          {/* Form Actions */}
-          <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-700">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
-              disabled={isLoading}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
-              {isLoading ? 'Saving...' : (transaction ? 'Update Transaction' : 'Create Transaction')}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   )

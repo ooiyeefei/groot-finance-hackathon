@@ -109,7 +109,9 @@ export interface LineItem {
   // Item details - Database uses item_description and total_amount, not description and line_total
   item_description: string  // Database field name
   description?: string      // Legacy field (null in database)
+  item_code?: string        // Product/stock/item code from invoice
   quantity: number
+  unit_measurement?: string // Unit of measurement (kg, pkt, can, etc.)
   unit_price: number
   total_amount: number      // Database field name  
   line_total?: number       // Legacy field (null in database)
@@ -151,7 +153,9 @@ export interface CreateTransactionRequest {
 
 export interface CreateLineItemRequest {
   description: string  // This will map to item_description in database
+  item_code?: string   // Product/stock/item code from invoice
   quantity: number
+  unit_measurement?: string  // Unit of measurement (kg, pkt, can, etc.)
   unit_price: number
   tax_rate?: number
   item_category?: string

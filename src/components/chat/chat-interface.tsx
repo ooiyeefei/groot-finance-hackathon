@@ -26,6 +26,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>(conversationId)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const isUpdatingFromProps = useRef(false)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -35,16 +36,20 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
     scrollToBottom()
   }, [messages])
 
-  // Update messages when initialMessages changes (conversation switch)
+  // Update messages when initialMessages or conversationId changes (conversation switch)
   useEffect(() => {
-    // Always update messages, even if initialMessages is empty array (for new chat)
+    // Set flag to prevent feedback loop
+    isUpdatingFromProps.current = true
     setMessages(initialMessages || [])
     setCurrentConversationId(conversationId)
+    isUpdatingFromProps.current = false
   }, [initialMessages, conversationId])
 
-  // Notify parent when messages change
+  // Notify parent when messages change (but not when updating from props)
   useEffect(() => {
-    onMessagesUpdate?.(messages)
+    if (!isUpdatingFromProps.current && onMessagesUpdate) {
+      onMessagesUpdate(messages)
+    }
   }, [messages, onMessagesUpdate])
 
   const sendMessage = async () => {

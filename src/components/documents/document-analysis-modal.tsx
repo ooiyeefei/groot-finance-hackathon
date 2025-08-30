@@ -59,7 +59,17 @@ interface Document {
         confidence: number
         bbox?: number[]
       }
+      item_code?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
       quantity?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      unit_measurement?: {
         value: string
         confidence: number
         bbox?: number[]
@@ -405,6 +415,16 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         })
       }
       
+      if (item.item_code?.bbox) {
+        const [x1, y1, x2, y2] = item.item_code.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Item Code',
+          text: item.item_code.value,
+          entityKey: `line_item_${index}_item_code`
+        })
+      }
+      
       if (item.quantity?.bbox) {
         const [x1, y1, x2, y2] = item.quantity.bbox
         boundingBoxes.push({
@@ -412,6 +432,16 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
           category: 'Quantity',
           text: item.quantity.value,
           entityKey: `line_item_${index}_quantity`
+        })
+      }
+      
+      if (item.unit_measurement?.bbox) {
+        const [x1, y1, x2, y2] = item.unit_measurement.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Unit Measurement',
+          text: item.unit_measurement.value,
+          entityKey: `line_item_${index}_unit_measurement`
         })
       }
       
@@ -747,7 +777,9 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             <tr>
                               <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
                               <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
                               <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
                               <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
                               <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
                             </tr>
@@ -769,11 +801,35 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   )}
                                 </td>
                                 <td 
+                                  className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  onMouseEnter={() => setHoveredEntity(`line_item_${index}_item_code`)}
+                                  onMouseLeave={() => setHoveredEntity(null)}
+                                >
+                                  {item.item_code?.value || '-'}
+                                  {item.item_code?.confidence && (
+                                    <div className="text-xs text-gray-500">
+                                      {Math.round(item.item_code.confidence * 100)}% conf
+                                    </div>
+                                  )}
+                                </td>
+                                <td 
                                   className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_quantity`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {item.quantity?.value || 'N/A'}
+                                </td>
+                                <td 
+                                  className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  onMouseEnter={() => setHoveredEntity(`line_item_${index}_unit_measurement`)}
+                                  onMouseLeave={() => setHoveredEntity(null)}
+                                >
+                                  {item.unit_measurement?.value || '-'}
+                                  {item.unit_measurement?.confidence && (
+                                    <div className="text-xs text-gray-500">
+                                      {Math.round(item.unit_measurement.confidence * 100)}% conf
+                                    </div>
+                                  )}
                                 </td>
                                 <td 
                                   className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"

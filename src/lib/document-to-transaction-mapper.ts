@@ -17,7 +17,17 @@ interface StructuredLineItem {
     confidence: number
     bbox?: number[]
   }
+  item_code?: {
+    value: string
+    confidence: number
+    bbox?: number[]
+  }
   quantity?: {
+    value: string
+    confidence: number
+    bbox?: number[]
+  }
+  unit_measurement?: {
     value: string
     confidence: number
     bbox?: number[]
@@ -349,7 +359,9 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     
     lineItemsSource.forEach((structuredItem, index) => {
       const description = structuredItem.description?.value || `Item ${index + 1}`
+      const itemCode = structuredItem.item_code?.value || undefined
       const quantity = parseFloat(structuredItem.quantity?.value || '1') || 1
+      const unitMeasurement = structuredItem.unit_measurement?.value || undefined
       const unitPrice = parseAmount(structuredItem.unit_price?.value || '0')
       const lineTotal = parseAmount(structuredItem.line_total?.value || '0')
       
@@ -359,7 +371,9 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
       if (description && quantity > 0 && finalUnitPrice > 0) {
         lineItems.push({
           description: description.trim(),
+          item_code: itemCode,
           quantity: quantity,
+          unit_measurement: unitMeasurement,
           unit_price: finalUnitPrice,
           tax_rate: 0, // TODO: Extract tax rate from OCR if available
           item_category: mappedData.category || 'cost_of_goods_sold'

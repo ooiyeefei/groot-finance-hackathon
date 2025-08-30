@@ -18,10 +18,85 @@ interface Document {
       value: string
       confidence: number
     }>
+    document_summary?: {
+      document_type?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      vendor_name?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      total_amount?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      transaction_date?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+    }
+    financial_entities?: Array<{
+      label: string
+      value: string
+      category: string
+      confidence: number
+      bbox?: number[]
+    }>
+    line_items?: Array<{
+      description?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      item_code?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      quantity?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      unit_measurement?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      unit_price?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      line_total?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+    }>
     metadata: {
       pageCount?: number
       wordCount: number
       language?: string
+      processingMethod?: 'ocr'
+      layoutElements?: Array<{
+        bbox?: number[]
+        category?: string
+        text?: string
+      }>
+      boundingBoxes?: Array<{
+        x1: number
+        y1: number
+        x2: number
+        y2: number
+        category: string
+        text: string
+      }>
     }
   }
   confidence_score?: number

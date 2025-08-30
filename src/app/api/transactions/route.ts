@@ -189,7 +189,9 @@ export async function POST(request: NextRequest) {
           .insert({
             transaction_id: transaction.id,
             item_description: lineItem.description,
+            item_code: lineItem.item_code || null,
             quantity: lineItem.quantity,
+            unit_measurement: lineItem.unit_measurement || null,
             unit_price: lineItem.unit_price,
             total_amount: lineTotal,
             currency: original_currency,

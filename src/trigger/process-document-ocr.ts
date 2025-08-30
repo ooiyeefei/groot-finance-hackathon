@@ -42,7 +42,7 @@ function getSystemPrompt(): string {
 **CORE OBJECTIVES:**
 1. **Identify Document Type:** Determine if the document is an invoice, receipt, credit note, etc.
 2. **Extract Key-Value Pairs:** Identify all relevant financial entities. Use clear, semantic labels for each entity. You are not limited to a fixed list; identify any data point that is financially significant.
-3. **Extract Line Items:** If a table of items is present, extract each line item with its description, quantity, unit price, and total price.
+3. **Extract Line Items:** If a table of items is present, extract each line item with ALL visible fields including item codes (product/SKU codes), descriptions, quantities, units of measurement, unit prices, and total prices.
 4. **Provide Bounding Boxes:** For every single piece of extracted data (including individual fields within line items), you MUST provide accurate pixel-based bounding box coordinates [x1, y1, x2, y2].
 
 **CRITICAL COORDINATE SYSTEM REQUIREMENTS:**
@@ -88,8 +88,10 @@ You MUST return ONLY a single, valid JSON object matching this schema. Do not in
   ],
   "line_items": [
     {
+      "item_code": { "value": "ABC123", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "description": { "value": "Item Description", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "quantity": { "value": "1", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
+      "unit_measurement": { "value": "KG", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "unit_price": { "value": "50.00", "bbox": [x1, y1, x2, y2], "confidence": 0.9 },
       "line_total": { "value": "50.00", "bbox": [x1, y1, x2, y2], "confidence": 0.9 }
     }
@@ -102,7 +104,9 @@ You MUST return ONLY a single, valid JSON object matching this schema. Do not in
 - Every value must have a corresponding bounding box.
 - Normalize data where appropriate (e.g., dates to YYYY-MM-DD, amounts to numeric strings).
 - If a field is not present in the document, omit it from the JSON instead of using null or empty values.
-- The ''financial_entities'' array should be a comprehensive list of all key-value data found on the document. Be descriptive with your labels.`;
+- The ''financial_entities'' array should be a comprehensive list of all key-value data found on the document. Be descriptive with your labels.
+- **MANDATORY for line items**: Always look for and extract item_code (product codes like "068", "ABC123", SKU numbers) and unit_measurement (units like "KG", "MG", "NOS", "PCS", "LITER", etc.) when visible in invoices.
+- **Southeast Asian Invoice Patterns**: Look for common patterns like item codes in leftmost columns, descriptions in main text columns, quantities with decimal places, and unit abbreviations (KG, MG, NOS, PCS, etc.).`;
 }
 
 /**
@@ -285,7 +289,7 @@ function parseOCRResponse(content: string, sourceDimensions?: { width: number; h
           }
 
           // Process individual fields with their own bounding boxes
-          const fields = ['item_number', 'item_code', 'description', 'quantity', 'unit_of_measure', 'unit_price', 'line_total'];
+          const fields = ['item_code', 'description', 'quantity', 'unit_measurement', 'unit_price', 'line_total'];
           fields.forEach(field => {
             if (item[field] && item[field].value) {
               entities.push({ 
