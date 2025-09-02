@@ -7,7 +7,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
-import { CrossBorderTaxComplianceTool } from '@/lib/tools/cross-border-tax-compliance-tool'
+import { CrossBorderTaxComplianceTool } from '@/lib/tools'
 import { UpdateTransactionRequest, SupportedCurrency } from '@/types/transaction'
 
 // Get specific transaction

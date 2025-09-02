@@ -5,6 +5,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { EmbeddingService } from '@/lib/ai-services/embedding-service'
+import { VectorStorageService } from '@/lib/ai-services/vector-storage-service'
 
 // Service authentication key (should be set in environment variables)
 const SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || 'dev-service-key-change-in-production'
@@ -99,170 +101,36 @@ async function searchRegulatoryDocuments(
 ): Promise<Array<{id: string, text: string, metadata: any, source_document: any, processing_info: any, score: number}>> {
   
   try {
-    // Use the finanseal-docs-search MCP to query the regulatory_kb collection
-    // This leverages our Qdrant infrastructure with the ingested regulatory content
-    
-    const response = await fetch(`${process.env.NEXT_PUBLIC_QDRANT_SEARCH_URL || 'http://localhost:3001'}/search-regulatory`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.INTERNAL_SERVICE_KEY}`
-      },
-      body: JSON.stringify({
-        query,
-        collection: 'regulatory_kb',
-        limit,
-        score_threshold: scoreThreshold
-      })
-    })
+    const embeddingService = new EmbeddingService()
+    const vectorService = new VectorStorageService()
+    const collectionName = 'regulatory_kb'
 
-    if (response.ok) {
-      const results = await response.json()
-      console.log(`[searchRegulatoryDocuments] Qdrant search returned ${results.length} results for query: "${query}"`)
-      return results
-    } else {
-      throw new Error(`Qdrant search failed: ${response.statusText}`)
-    }
+    console.log(`[searchRegulatoryDocuments] Generating embedding for query: "${query}"`)
+    const queryEmbedding = await embeddingService.generateEmbedding(query)
+
+    console.log(`[searchRegulatoryDocuments] Searching Qdrant collection "${collectionName}"`)
+    const searchResults = await vectorService.similaritySearch(
+      queryEmbedding,
+      limit,
+      scoreThreshold,
+      collectionName
+    )
+
+    const formattedResults = searchResults.map(result => ({
+      id: result.id,
+      text: result.payload?.text as string || '',
+      metadata: result.payload || {},
+      source_document: result.payload?.source_document || {},
+      processing_info: result.payload?.processing_info || {},
+      score: result.score
+    }))
+
+    console.log(`[searchRegulatoryDocuments] Direct Qdrant search returned ${formattedResults.length} results for query: "${query}"`)
+    return formattedResults
 
   } catch (error) {
-    console.warn('[searchRegulatoryDocuments] Qdrant search unavailable, using enhanced fallback regulatory content:', error)
-    
-    // Enhanced fallback with real regulatory snippets from our processed documents
-    const enhancedRegulatoryContent = [
-      {
-        id: 'fallback_sg_gst_registration',
-        text: `GST registration is mandatory for businesses with annual taxable turnover exceeding S$1 million. Foreign businesses making supplies of digital services to Singapore consumers may need to register for GST under the Overseas Vendor Registration regime. Registration must be completed within 30 days of exceeding the threshold.`,
-        metadata: {
-          country: 'singapore',
-          tax_type: 'gst',
-          source_name: 'GST General Guide for Businesses',
-          topics: ['gst_registration', 'digital_services', 'overseas_vendors'],
-          document_version: '2025.latest'
-        },
-        source_document: {
-          id: 'sg_gst_business_guide_2025_v_latest',
-          url: 'https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/basics-of-gst'
-        },
-        processing_info: {
-          processed_at: new Date().toISOString(),
-          extraction_method: 'fallback_enhanced'
-        },
-        score: 0.85
-      },
-      {
-        id: 'fallback_sg_withholding_tax',
-        text: `Withholding tax applies to certain payments made to non-residents. The standard withholding tax rate is 17%, but this may be reduced under applicable Double Taxation Agreements. Payments for technical fees, royalties, and interest are subject to withholding tax. The payer is responsible for withholding and remitting the tax.`,
-        metadata: {
-          country: 'singapore',
-          tax_type: 'withholding_tax',
-          source_name: 'Singapore Tax Treaties and Withholding Tax',
-          topics: ['withholding_tax', 'non_residents', 'dta_benefits'],
-          document_version: '2025.latest'
-        },
-        source_document: {
-          id: 'sg_withholding_tax_guide',
-          url: 'https://www.iras.gov.sg/taxes/withholding-tax'
-        },
-        processing_info: {
-          processed_at: new Date().toISOString(),
-          extraction_method: 'fallback_enhanced'
-        },
-        score: 0.82
-      },
-      {
-        id: 'fallback_my_sst_cross_border',
-        text: `Service Tax is imposed on taxable services provided by registered persons. Cross-border services may be subject to Service Tax if consumed in Malaysia. Digital services provided by foreign service providers to Malaysian consumers are subject to 6% Service Tax under the digital service tax regime.`,
-        metadata: {
-          country: 'malaysia',
-          tax_type: 'service_tax',
-          source_name: 'Malaysia Service Tax Guidelines',
-          topics: ['service_tax', 'cross_border_services', 'digital_services'],
-          document_version: '2025.latest'
-        },
-        source_document: {
-          id: 'my_service_tax_guide_2025_v_latest',
-          url: 'https://mysst.customs.gov.my/'
-        },
-        processing_info: {
-          processed_at: new Date().toISOString(),
-          extraction_method: 'fallback_enhanced'
-        },
-        score: 0.80
-      },
-      {
-        id: 'fallback_my_withholding_tax_legislation',
-        text: `Withholding tax is imposed on payments to non-residents at rates ranging from 10% to 15% depending on the nature of payment and applicable tax treaties. Services payments are subject to 10% withholding tax unless reduced under a Double Taxation Agreement. Proper documentation including tax residency certificates must be obtained.`,
-        metadata: {
-          country: 'malaysia',
-          tax_type: 'withholding_tax',
-          source_name: 'LHDN Withholding Tax Legislation and Guidelines',
-          topics: ['withholding_tax', 'non_residents', 'dta_benefits', 'tax_treaties'],
-          document_version: '2025.latest'
-        },
-        source_document: {
-          id: 'my_withholding_tax_legislation_2025',
-          url: 'https://www.hasil.gov.my/en/legislation/withholding-tax/'
-        },
-        processing_info: {
-          processed_at: new Date().toISOString(),
-          extraction_method: 'fallback_enhanced'
-        },
-        score: 0.88
-      },
-      {
-        id: 'fallback_asean_tax_treaties',
-        text: `ASEAN countries have established comprehensive networks of Double Taxation Agreements providing preferential withholding tax rates for cross-border transactions. Treaty benefits typically reduce withholding tax rates from standard rates to preferential rates ranging from 5% to 15% depending on the type of income and applicable treaty provisions.`,
-        metadata: {
-          country: 'regional',
-          tax_type: 'all',
-          source_name: 'ASEAN Tax Treaty Network',
-          topics: ['tax_treaties', 'asean', 'preferential_rates', 'cross_border'],
-          document_version: '2025.latest'
-        },
-        source_document: {
-          id: 'asean_tax_treaties_overview',
-          url: 'https://asean.org/tax-cooperation/'
-        },
-        processing_info: {
-          processed_at: new Date().toISOString(),
-          extraction_method: 'fallback_enhanced'
-        },
-        score: 0.75
-      }
-    ]
-
-    // Enhanced relevance scoring based on query content
-    const queryLower = query.toLowerCase()
-    const relevantContent = enhancedRegulatoryContent
-      .map(doc => {
-        let relevanceScore = 0
-        
-        // Text matching
-        if (doc.text.toLowerCase().includes(queryLower)) relevanceScore += 0.3
-        
-        // Topic matching
-        const matchingTopics = doc.metadata.topics.filter((topic: string) => 
-          queryLower.includes(topic) || topic.includes('tax') || topic.includes('cross')
-        )
-        relevanceScore += matchingTopics.length * 0.2
-        
-        // Country matching
-        if (queryLower.includes(doc.metadata.country)) relevanceScore += 0.3
-        
-        // Tax type matching
-        if (queryLower.includes(doc.metadata.tax_type)) relevanceScore += 0.2
-        
-        return {
-          ...doc,
-          score: Math.min(doc.score * (1 + relevanceScore), 1.0) // Boost original score by relevance
-        }
-      })
-      .filter(doc => doc.score >= scoreThreshold)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
-
-    console.log(`[searchRegulatoryDocuments] Enhanced fallback returned ${relevantContent.length} results for query: "${query}"`)
-    return relevantContent
+    console.error('[searchRegulatoryDocuments] Direct Qdrant search failed:', error)
+    throw new Error('Failed to execute regulatory document search')
   }
 }
 

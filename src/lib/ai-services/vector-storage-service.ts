@@ -444,12 +444,14 @@ export class VectorStorageService implements IVectorStorageService {
   async similaritySearch(
     embedding: number[],
     limit: number = 10,
-    scoreThreshold: number = 0.3
+    scoreThreshold: number = 0.3,
+    collectionName?: string
   ): Promise<Array<{ id: string; score: number; payload?: Record<string, unknown> }>> {
     try {
-      console.log(`[Qdrant] Similarity search for ${limit} documents with threshold ${scoreThreshold}`)
+      const targetCollection = collectionName || this.collectionName;
+      console.log(`[Qdrant] Similarity search on collection "${targetCollection}" for ${limit} documents with threshold ${scoreThreshold}`)
 
-      const response = await fetch(`${this.qdrantUrl}/collections/${this.collectionName}/points/search`, {
+      const response = await fetch(`${this.qdrantUrl}/collections/${targetCollection}/points/search`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

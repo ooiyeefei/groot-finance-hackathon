@@ -73,7 +73,11 @@ class RegulatoryKnowledgeIngestion:
             raise ValueError("Missing required environment variables: QDRANT_URL, QDRANT_API_KEY, EMBEDDING_API_KEY")
         
         # Initialize clients
-        self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_api_key)
+        self.qdrant_client = QdrantClient(
+            url=self.qdrant_url,
+            api_key=self.qdrant_api_key,
+            timeout=60.0
+        )
         
         # FIXED: More conservative HTTP client settings
         self.embedding_client = httpx.AsyncClient(
