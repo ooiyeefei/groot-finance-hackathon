@@ -28,26 +28,10 @@ export default async function Dashboard() {
         />
         
         {/* Main Content Area */}
-        <main className="flex-1 overflow-auto p-6">
-          <div className="max-w-7xl mx-auto space-y-8">
+        <main className="flex-1 overflow-auto p-4 sm:p-6">
+          <div className="max-w-7xl mx-auto">
             {/* Complete Financial Dashboard with Charts */}
             <CompleteDashboard />
-
-            {/* Feature Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-gray-700 rounded-lg p-6">
-                <h3 className="text-white font-semibold mb-2">Document Processing</h3>
-                <p className="text-gray-400 text-sm">Upload and process invoices, receipts, and financial documents</p>
-              </div>
-              <div className="bg-gray-700 rounded-lg p-6">
-                <h3 className="text-white font-semibold mb-2">Transaction Management</h3>
-                <p className="text-gray-400 text-sm">Track and manage cross-border cash flows in multiple currencies</p>
-              </div>
-              <div className="bg-gray-700 rounded-lg p-6">
-                <h3 className="text-white font-semibold mb-2">AI Assistant</h3>
-                <p className="text-gray-400 text-sm">Get localized financial guidance in your preferred language</p>
-              </div>
-            </div>
           </div>
         </main>
       </div>

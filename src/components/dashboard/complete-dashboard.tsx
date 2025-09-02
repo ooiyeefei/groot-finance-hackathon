@@ -8,6 +8,8 @@ import useFinancialAnalytics from './hooks/use-financial-analytics';
 import CurrencyBreakdown from './financial-analytics/CurrencyBreakdown';
 import CategoryAnalysis from './financial-analytics/CategoryAnalysis';
 import ActionCenter from './financial-analytics/ActionCenter';
+import AgedReceivablesWidget from './AgedReceivablesWidget';
+import AgedPayablesWidget from './AgedPayablesWidget';
 
 export default function CompleteDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
@@ -163,10 +165,12 @@ export default function CompleteDashboard() {
         </div>
       </div>
 
-      {/* Unified Metrics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+      {/* KPI Metrics - 3+2 Grid Layout */}
+      <div className="space-y-4">
+        {/* Top Row: Primary Financial Health Metrics (3 cards) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Total Income Card */}
-        <div className="bg-gray-800 border border-green-700/50 bg-green-900/10 rounded-lg p-4 transition-all hover:bg-gray-750 shadow-sm">
+        <div className="bg-gray-800 border border-green-700/50 bg-green-900/10 rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px]">
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-medium text-gray-300">Total Income</p>
             <PiggyBank className="w-4 h-4 text-gray-400" />
@@ -198,7 +202,7 @@ export default function CompleteDashboard() {
         </div>
 
         {/* Total Expenses Card */}
-        <div className="bg-gray-800 border border-red-700/50 bg-red-900/10 rounded-lg p-4 transition-all hover:bg-gray-750 shadow-sm">
+        <div className="bg-gray-800 border border-red-700/50 bg-red-900/10 rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px]">
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-medium text-gray-300">Total Expenses</p>
             <CreditCard className="w-4 h-4 text-gray-400" />
@@ -229,8 +233,8 @@ export default function CompleteDashboard() {
           </div>
         </div>
 
-        {/* Net Profit Card */}
-        <div className={`bg-gray-800 border rounded-lg p-4 transition-all hover:bg-gray-750 shadow-sm ${
+          {/* Net Profit Card */}
+        <div className={`bg-gray-800 border rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px] ${
           analytics && analytics.net_profit >= 0 
             ? 'border-green-700/50 bg-green-900/10' 
             : 'border-red-700/50 bg-red-900/10'
@@ -264,9 +268,12 @@ export default function CompleteDashboard() {
             <span className="text-xs text-gray-500">vs. prev period</span>
           </div>
         </div>
-
+        </div>
+        
+        {/* Bottom Row: Operational Metrics (2 cards) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 max-w-2xl">
         {/* Transaction Count Card */}
-        <div className="bg-gray-800 border border-blue-700/50 bg-blue-900/10 rounded-lg p-4 transition-all hover:bg-gray-750 shadow-sm">
+        <div className="bg-gray-800 border border-blue-700/50 bg-blue-900/10 rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px]">
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-medium text-gray-300">Transactions</p>
             <Activity className="w-4 h-4 text-gray-400" />
@@ -289,7 +296,7 @@ export default function CompleteDashboard() {
         </div>
 
         {/* Profit Margin Card */}
-        <div className={`bg-gray-800 border rounded-lg p-4 transition-all hover:bg-gray-750 shadow-sm ${
+        <div className={`bg-gray-800 border rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px] ${
           analytics && analytics.net_profit >= 0 
             ? 'border-blue-700/50 bg-blue-900/10'
             : 'border-orange-700/50 bg-orange-900/10'
@@ -323,10 +330,43 @@ export default function CompleteDashboard() {
             <span className="text-xs text-gray-500">vs. prev period</span>
           </div>
         </div>
+        </div>
       </div>
 
       {/* Charts and Analysis Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Aged Receivables - Priority placement for critical business metric */}
+        <AgedReceivablesWidget
+          agedReceivables={analytics?.aged_receivables || {
+            current: 0,
+            late_31_60: 0,
+            late_61_90: 0,
+            late_90_plus: 0,
+            total_outstanding: 0,
+            risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+            average_risk_score: 0,
+            high_risk_transactions: 0
+          }}
+          homeCurrency={homeCurrency}
+          loading={loading}
+        />
+
+        {/* Aged Payables - Critical for cash flow management */}
+        <AgedPayablesWidget
+          agedPayables={analytics?.aged_payables || {
+            current: 0,
+            late_31_60: 0,
+            late_61_90: 0,
+            late_90_plus: 0,
+            total_outstanding: 0,
+            risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+            average_risk_score: 0,
+            high_risk_transactions: 0
+          }}
+          homeCurrency={homeCurrency}
+          loading={loading}
+        />
+
         {/* Currency Breakdown Chart */}
         <CurrencyBreakdown
           currencyData={analytics?.currency_breakdown || {}}
