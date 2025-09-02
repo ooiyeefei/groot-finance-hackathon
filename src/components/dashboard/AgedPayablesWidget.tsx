@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Clock, TrendingDown, AlertTriangle, CreditCard } from 'lucide-react';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/types/transaction';
-import { AgedPayables, DARK_THEME_COLORS } from './types/analytics';
+import { DARK_THEME_COLORS } from './types/analytics';
 import { EnhancedAgedPayables } from '@/lib/analytics/engine';
 
 interface AgedPayablesWidgetProps {

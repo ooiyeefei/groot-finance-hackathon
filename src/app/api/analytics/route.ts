@@ -44,9 +44,10 @@ export async function GET(request: NextRequest) {
       // Use standard period (month/quarter/year) but enhance month to use 60-day window for consistency
       if (period === 'month') {
         // Use 60-day rolling window to match transaction summary behavior
+        // Adding 1 extra day to make the range more inclusive (61 days total)
         endDate = new Date();
         startDate = new Date();
-        startDate.setDate(endDate.getDate() - 60);
+        startDate.setDate(endDate.getDate() - 61);
       } else {
         // Use standard period for quarter/year
         const periodRange = getAnalyticsPeriod(period);

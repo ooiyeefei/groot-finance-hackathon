@@ -7,6 +7,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
+import { CrossBorderTaxComplianceTool } from '@/lib/tools/cross-border-tax-compliance-tool'
 import { 
   CreateTransactionRequest, 
   SupportedCurrency, 
@@ -226,6 +227,44 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[Transactions API] Created transaction ${transaction.id} with ${createdLineItems.length} line items`)
+
+    // TASK 2: Cross-border compliance analysis
+    // Check if this is a cross-border transaction (currency different from home currency)
+    const isCrossBorderTransaction = original_currency !== homeCurrency
+    
+    if (isCrossBorderTransaction) {
+      console.log(`[Transactions API] Cross-border transaction detected: ${original_currency} → ${homeCurrency}`)
+      
+      // Asynchronously trigger compliance analysis (don't block response)
+      setImmediate(async () => {
+        try {
+          const complianceTool = new CrossBorderTaxComplianceTool()
+          
+          const analysisResult = await complianceTool.execute({
+            transaction_id: transaction.id,
+            amount: original_amount,
+            original_currency: original_currency,
+            home_currency: homeCurrency,
+            transaction_type: transaction_type,
+            category: finalCategory,
+            description: description,
+            vendor_name: vendor_name
+          }, {
+            userId: userId
+          })
+
+          if (analysisResult.success) {
+            console.log(`[Transactions API] Compliance analysis completed for transaction ${transaction.id}`)
+          } else {
+            console.error(`[Transactions API] Compliance analysis failed for transaction ${transaction.id}:`, analysisResult.error)
+          }
+        } catch (error) {
+          console.error(`[Transactions API] Compliance analysis error for transaction ${transaction.id}:`, error)
+        }
+      })
+    } else {
+      console.log(`[Transactions API] Domestic transaction (${original_currency}), skipping compliance analysis`)
+    }
 
     return NextResponse.json({
       success: true,

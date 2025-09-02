@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useMemo, useState } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/types/transaction';
 import { CategoryChartData, DARK_THEME_COLORS } from '../types/analytics';
 
@@ -11,11 +11,29 @@ interface CategoryAnalysisProps {
   loading: boolean;
 }
 
+// Helper function to create a lighter version of a hex color for the gradient
+const lightenColor = (hex: string, percent: number) => {
+  let r = parseInt(hex.substring(1, 3), 16);
+  let g = parseInt(hex.substring(3, 5), 16);
+  let b = parseInt(hex.substring(5, 7), 16);
+
+  r = Math.min(255, r + (255 - r) * (percent / 100));
+  g = Math.min(255, g + (255 - g) * (percent / 100));
+  b = Math.min(255, b + (255 - b) * (percent / 100));
+
+  const toHex = (c: number) => ('00' + Math.round(c).toString(16)).slice(-2);
+
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+};
+
 export default function CategoryAnalysis({
   categoryData,
   homeCurrency,
   loading
 }: CategoryAnalysisProps) {
+  // State to track the index of the hovered bar
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
   const chartData = useMemo(() => {
     if (!categoryData || Object.keys(categoryData).length === 0) {
       return [];
@@ -70,12 +88,12 @@ export default function CategoryAnalysis({
     const symbol = CURRENCY_SYMBOLS[homeCurrency];
     
     return (
-      <div className="bg-gray-900 border border-gray-600 rounded-lg p-3 shadow-lg">
-        <p className="text-white font-medium">{data.name}</p>
-        <p className="text-gray-300 text-sm">
+      <div className="bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 shadow-xl">
+        <p className="text-gray-200 font-medium text-sm">{data.name}</p>
+        <p className="text-gray-300 font-semibold text-base">
           Amount: {symbol}{data.value.toLocaleString()}
         </p>
-        <p className="text-gray-300 text-sm">
+        <p className="text-gray-400 text-xs">
           Share: {data.percentage.toFixed(1)}%
         </p>
       </div>
@@ -113,7 +131,16 @@ export default function CategoryAnalysis({
               left: 20,
               bottom: 60,
             }}
+            onMouseLeave={() => setActiveIndex(null)}
           >
+            <defs>
+              {chartData.map((entry, index) => (
+                <linearGradient id={`category-gradient-${index}`} key={`category-gradient-${index}`} x1="0" y1="1" x2="0" y2="0">
+                  <stop offset="0%" stopColor={entry.color} stopOpacity={1} />
+                  <stop offset="100%" stopColor={lightenColor(entry.color, 30)} stopOpacity={1} />
+                </linearGradient>
+              ))}
+            </defs>
             <CartesianGrid 
               strokeDasharray="3 3" 
               stroke={DARK_THEME_COLORS.chart.grid}
@@ -143,14 +170,18 @@ export default function CategoryAnalysis({
               tickLine={{ stroke: DARK_THEME_COLORS.chart.grid }}
               tickFormatter={formatYAxisTick}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} cursor={false} />
             <Bar 
               dataKey="value" 
               radius={[2, 2, 0, 0]}
-              fill={DARK_THEME_COLORS.expense}
+              onMouseEnter={(data, index) => setActiveIndex(index)}
             >
               {chartData.map((entry, index) => (
-                <Bar key={`bar-${index}`} fill={entry.color} />
+                <Cell 
+                  key={`cell-${index}`} 
+                  fill={activeIndex === index ? `url(#category-gradient-${index})` : entry.color}
+                  style={{ cursor: 'pointer' }}
+                />
               ))}
             </Bar>
           </BarChart>

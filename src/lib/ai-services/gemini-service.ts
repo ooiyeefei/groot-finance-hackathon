@@ -3,7 +3,7 @@
  * Implements Google Gemini API with function calling support
  */
 
-import { GoogleGenAI, FunctionDeclaration, FunctionCallingConfigMode, HarmCategory, HarmBlockThreshold } from '@google/genai'
+import { GoogleGenerativeAI, FunctionDeclaration, FunctionCallingMode, HarmCategory, HarmBlockThreshold, SchemaType } from '@google/generative-ai'
 import { aiConfig } from '../config/ai-config'
 import { OpenAIToolSchema } from '../tools/base-tool'
 
@@ -28,11 +28,11 @@ export interface GeminiResponse {
 }
 
 export class GeminiService {
-  private client: GoogleGenAI
+  private client: GoogleGenerativeAI
   private model: string
 
   constructor() {
-    this.client = new GoogleGenAI({ apiKey: aiConfig.gemini.apiKey })
+    this.client = new GoogleGenerativeAI(aiConfig.gemini.apiKey)
     // ULTRA-AGGRESSIVE: Try older model with potentially fewer safety restrictions
     this.model = 'gemini-1.5-flash'
     console.log(`[GeminiService] ULTRA-AGGRESSIVE model override: ${this.model} (original: ${aiConfig.gemini.model})`)
@@ -45,8 +45,8 @@ export class GeminiService {
     return {
       name: toolSchema.function.name,
       description: toolSchema.function.description,
-      parametersJsonSchema: {
-        type: 'object',
+      parameters: {
+        type: SchemaType.OBJECT,
         properties: toolSchema.function.parameters.properties,
         required: toolSchema.function.parameters.required || []
       }
@@ -165,14 +165,14 @@ export class GeminiService {
             console.log(`[GeminiService] FORCING get_data_records for analytical query: ${userQueryText}`)
             requestConfig.toolConfig = {
               functionCallingConfig: {
-                mode: FunctionCallingConfigMode.ANY,
+                mode: FunctionCallingMode.ANY,
                 allowedFunctionNames: ['get_data_records']
               }
             }
           } else {
             requestConfig.toolConfig = {
               functionCallingConfig: {
-                mode: FunctionCallingConfigMode.ANY
+                mode: FunctionCallingMode.ANY
               }
             }
           }
@@ -209,27 +209,30 @@ export class GeminiService {
         console.log(`[GeminiService] TESTING: Query that should trigger get_transactions:`, userQueryText.includes('transaction') || userQueryText.includes('invoice') || userQueryText.includes('amount') || userQueryText.includes('expense'))
       }
 
-      const response = await this.client.models.generateContent(requestConfig)
+      const model = this.client.getGenerativeModel(requestConfig)
+      const response = await model.generateContent(requestConfig.contents)
 
       // Enhanced logging for debugging function calling issues
       console.log(`[GeminiService] Raw response object keys:`, Object.keys(response))
-      console.log(`[GeminiService] Response candidates:`, response.candidates?.length || 0)
-      if (response.promptFeedback) {
-        console.log(`[GeminiService] Prompt feedback:`, JSON.stringify(response.promptFeedback, null, 2))
-        if (response.promptFeedback.safetyRatings) {
-          console.log(`[GeminiService] Safety ratings:`, JSON.stringify(response.promptFeedback.safetyRatings, null, 2))
+      console.log(`[GeminiService] Response candidates:`, response.response?.candidates?.length || 0)
+      if (response.response?.promptFeedback) {
+        console.log(`[GeminiService] Prompt feedback:`, JSON.stringify(response.response.promptFeedback, null, 2))
+        if (response.response.promptFeedback.safetyRatings) {
+          console.log(`[GeminiService] Safety ratings:`, JSON.stringify(response.response.promptFeedback.safetyRatings, null, 2))
         }
       }
       
       // Log the exact response text for debugging
-      console.log(`[GeminiService] Response text:`, response.text || 'No text response')
+      const responseText = response.response?.text() || 'No text response'
+      console.log(`[GeminiService] Response text:`, responseText)
 
       // Check for function calls
-      if (response.functionCalls && response.functionCalls.length > 0) {
-        console.log(`[GeminiService] Function calls detected: ${response.functionCalls.length}`)
+      const functionCalls = response.response?.functionCalls?.() || []
+      if (functionCalls.length > 0) {
+        console.log(`[GeminiService] Function calls detected: ${functionCalls.length}`)
         
-        const tool_calls = response.functionCalls.map((call, index) => ({
-          id: call.id || `call_${index}`,
+        const tool_calls = functionCalls.map((call, index) => ({
+          id: `call_${index}`,
           type: 'function' as const,
           function: {
             name: call.name || '',
@@ -244,7 +247,7 @@ export class GeminiService {
       }
 
       // Return text response
-      const content = response.text || 'I apologize, but I cannot process your request right now.'
+      const content = responseText || 'I apologize, but I cannot process your request right now.'
       
       console.log(`[GeminiService] Text response generated`)
       
@@ -268,10 +271,8 @@ export class GeminiService {
    */
   async healthCheck(): Promise<{ healthy: boolean; error?: string }> {
     try {
-      const response = await this.client.models.generateContent({
-        model: this.model,
-        contents: [{ role: 'user', parts: [{ text: 'Hello' }] }]
-      })
+      const model = this.client.getGenerativeModel({ model: this.model })
+      const response = await model.generateContent('Hello')
       
       return { healthy: true }
     } catch (error) {

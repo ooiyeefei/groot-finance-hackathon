@@ -43,3 +43,44 @@ next-env.d.ts
 .trigger
 # LangGraph API
 .langgraph_api
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Python knowledge base artifacts
+src/scripts/knowledge_base/venv/
+src/scripts/knowledge_base/output/
+src/scripts/knowledge_base/__pycache__/
+src/scripts/knowledge_base/*.log

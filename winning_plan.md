@@ -506,4 +506,57 @@ const TransactionDetailModal = () => {
 
 ---
 
+## Scalability & Future Roadmap
+
+### Automated Knowledge Base Update Pipeline
+
+To maintain the regulatory knowledge base's accuracy and completeness, we implement a best-practice architecture for continuous document monitoring and automated ingestion:
+
+#### 1. Human Curator Role
+- **Designated Knowledge Steward**: Assign a compliance expert to maintain the `sources.yaml` configuration
+- **Quarterly Review Cycle**: Scheduled assessment of regulatory document sources for additions/removals
+- **Change Management**: Version-controlled updates to source configurations with approval workflows
+- **Quality Assurance**: Manual validation of new regulatory sources before automation integration
+
+#### 2. Automated Cron Job Execution
+- **Scheduled Processing**: Daily/weekly cron jobs execute the RAG pipeline automatically
+  ```bash
+  # Example crontab configuration
+  0 2 * * 1 cd /app && python scripts/knowledge_base/process.py # Weekly on Monday 2 AM
+  30 2 * * 1 cd /app && python scripts/knowledge_base/ingest.py # 30 minutes later
+  ```
+- **Resource Management**: Execute during low-traffic periods to minimize system impact
+- **Error Handling**: Comprehensive logging and alerting for failed automation runs
+- **Rollback Strategy**: Maintain previous knowledge base snapshots for quick recovery
+
+#### 3. Checksum Validation for Efficiency
+- **Document Fingerprinting**: Calculate SHA-256 checksums for all source documents
+- **Change Detection**: Compare current checksums against stored values to identify updates
+- **Incremental Processing**: Process only new or modified documents to optimize pipeline performance
+- **Storage Optimization**: Avoid redundant embedding generation and vector storage operations
+
+#### 4. Versioning Metadata in Qdrant
+- **Document Versioning**: Include version timestamps and checksums in vector payload metadata
+- **Audit Trail**: Maintain complete history of regulatory document changes and ingestion events
+- **Compliance Tracking**: Enable legal teams to trace analysis results back to specific document versions
+- **Rollback Capability**: Support rollback to previous knowledge base versions if needed
+
+### Implementation Architecture
+```python
+# Enhanced metadata structure for production knowledge base
+{
+  "document_checksum": "sha256_hash",
+  "ingestion_timestamp": "2024-01-31T10:00:00Z",
+  "document_version": "v2.1",
+  "source_last_modified": "2024-01-30T14:30:00Z",
+  "curator_approved": true,
+  "regulatory_effective_date": "2024-02-01",
+  "pipeline_version": "1.2.0"
+}
+```
+
+This scalable architecture ensures the RAG system remains current with evolving Southeast Asian regulatory landscapes while maintaining operational efficiency and audit compliance.
+
+---
+
 *This winning plan transforms FinanSEAL from a document processing tool into a comprehensive Cross-Border Financial Intelligence Platform that judges will recognize as both technically impressive and commercially viable.*

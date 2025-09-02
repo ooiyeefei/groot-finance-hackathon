@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText } from 'lucide-react'
+import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock } from 'lucide-react'
 import { Transaction, CreateTransactionRequest, LineItem, SupportedCurrency, TRANSACTION_CATEGORIES, TransactionType } from '@/types/transaction'
 import { formatCurrency } from '@/hooks/use-transactions'
 import { useHomeCurrency } from '@/components/settings/currency-settings'
@@ -27,6 +27,15 @@ const getAvailableCategories = (transactionType: TransactionType) => {
 }
 
 const TRANSACTION_TYPES = ['income', 'expense', 'transfer', 'asset', 'liability', 'equity'] as const
+
+const TRANSACTION_STATUSES = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'awaiting_payment', label: 'Awaiting Payment' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'disputed', label: 'Disputed' }
+] as const
 
 export default function TransactionFormModal({
   transaction,
@@ -57,6 +66,11 @@ export default function TransactionFormModal({
     vendor_name: transaction?.vendor_name || prefilledData?.vendor_name || '',
     reference_number: transaction?.reference_number || prefilledData?.reference_number || '',
     document_type: transaction?.document_type || prefilledData?.document_type || undefined,
+    status: transaction?.status || prefilledData?.status || 'pending',
+    due_date: transaction?.due_date?.split('T')[0] || '',
+    payment_date: transaction?.payment_date?.split('T')[0] || '',
+    payment_method: transaction?.payment_method || '',
+    notes: transaction?.notes || '',
     vendor_details: transaction?.vendor_details || {},
     source_document_id: prefilledData?.source_document_id || undefined
   })
@@ -430,6 +444,84 @@ export default function TransactionFormModal({
                     onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Invoice number, receipt ID, etc."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <Clock className="w-4 h-4 inline mr-1" />
+                    Transaction Status
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {TRANSACTION_STATUSES.map(status => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Conditional Date Fields Based on Status */}
+                {(formData.status === 'awaiting_payment' || formData.status === 'overdue') && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <Calendar className="w-4 h-4 inline mr-1" />
+                      Due Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.due_date}
+                      onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+
+                {formData.status === 'paid' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        <Calendar className="w-4 h-4 inline mr-1" />
+                        Payment Date
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.payment_date}
+                        onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Payment Method
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.payment_method}
+                        onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Cash, Card, Transfer, etc."
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Notes field for additional details */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Additional notes or details..."
+                    rows={3}
                   />
                 </div>
                 

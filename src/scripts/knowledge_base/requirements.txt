@@ -1,0 +1,38 @@
+# RAG Pipeline Dependencies for Regulatory Knowledge Base
+# Production-ready document processing and vector storage
+
+# Core Configuration and YAML Processing
+PyYAML>=6.0
+
+# PDF Processing Libraries
+pdfplumber>=0.9.0       # Primary PDF text extraction with superior table handling
+PyMuPDF>=1.23.0         # Fallback PDF library for complex government layouts
+pypdf>=3.0.0            # Additional PDF support for edge cases
+
+# OCR for Scanned Government Documents
+pytesseract>=0.3.10     # OCR engine for scanned PDFs
+Pillow>=10.0.0          # Image processing support for OCR
+
+# HTTP Client and Web Scraping
+httpx>=0.24.0           # Async HTTP client with retry support
+requests>=2.31.0        # Synchronous HTTP fallback
+beautifulsoup4>=4.12.0  # HTML content parsing for Thai government documents
+
+# Text Processing and Language Detection
+nltk>=3.8               # Natural language processing and sentence boundaries
+langdetect>=1.0.9       # Language detection for multi-lingual documents
+chardet>=5.0.0          # Character encoding detection for government PDFs
+
+# Vector Embeddings and Storage
+sentence-transformers>=2.2.2  # Embedding model integration
+qdrant-client>=1.6.0    # Qdrant vector database client
+numpy>=1.24.0           # Numerical operations for embeddings
+
+# Utility Libraries  
+tqdm>=4.65.0            # Progress bars for processing
+python-dotenv>=1.0.0    # Environment variable management
+jsonschema>=4.17.0      # JSON validation for output format
+
+# Optional: Advanced Text Processing
+spacy>=3.6.0            # Advanced NLP for regulatory text analysis
+transformers>=4.30.0    # Hugging Face transformers for advanced processing

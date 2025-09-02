@@ -5,11 +5,46 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { SupportedCurrency } from '@/types/transaction';
+import { AgedReceivables, AgedPayables } from '@/components/dashboard/types/analytics';
+import { calculateRiskScore, TransactionRiskContext, RiskScore, DEFAULT_RISK_CONFIG } from './risk-scoring';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+export interface EnhancedAgedReceivables extends AgedReceivables {
+  risk_distribution: {
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+  };
+  average_risk_score: number;
+  high_risk_transactions: number;
+}
+
+export interface EnhancedAgedPayables extends AgedPayables {
+  risk_distribution: {
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+  };
+  average_risk_score: number;
+  high_risk_transactions: number;
+}
+
+export interface ComplianceAlert {
+  transaction_id: string;
+  compliance_status: 'requires_attention' | 'non_compliant';
+  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  description: string;
+  vendor_name?: string;
+  original_amount: number;
+  original_currency: string;
+  recommendations: string[];
+}
 
 export interface FinancialAnalytics {
   id?: string;
@@ -22,6 +57,9 @@ export interface FinancialAnalytics {
   transaction_count: number;
   currency_breakdown: Record<string, number>;
   category_breakdown: Record<string, number>;
+  aged_receivables: EnhancedAgedReceivables;
+  aged_payables: EnhancedAgedPayables;
+  compliance_alerts: ComplianceAlert[];
   calculated_at: Date;
 }
 
@@ -118,6 +156,27 @@ export async function calculateFinancialAnalytics(
       transaction_count: 0,
       currency_breakdown: {},
       category_breakdown: {},
+      aged_receivables: {
+        current: 0,
+        late_31_60: 0,
+        late_61_90: 0,
+        late_90_plus: 0,
+        total_outstanding: 0,
+        risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+        average_risk_score: 0,
+        high_risk_transactions: 0
+      },
+      aged_payables: {
+        current: 0,
+        late_31_60: 0,
+        late_61_90: 0,
+        late_90_plus: 0,
+        total_outstanding: 0,
+        risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+        average_risk_score: 0,
+        high_risk_transactions: 0
+      },
+      compliance_alerts: [],
       calculated_at: new Date()
     };
     
@@ -161,6 +220,252 @@ export async function calculateFinancialAnalytics(
 
   const netProfit = totalIncome - totalExpenses;
 
+  // Calculate aged receivables for income transactions
+  console.log('[Analytics Engine] Calculating aged receivables...');
+  
+  // Fetch income transactions with outstanding payments
+  // Include 'pending' status as per accounting standards - pending income represents unpaid receivables
+  const { data: receivableTransactions, error: receivableError } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('user_id', clerkUserId)
+    .eq('transaction_type', 'income')
+    .in('status', ['pending', 'awaiting_payment', 'overdue']);
+
+  if (receivableError) {
+    console.error('[Analytics Engine] Failed to fetch receivable transactions:', receivableError);
+  }
+
+  const agedReceivables: EnhancedAgedReceivables = {
+    current: 0,
+    late_31_60: 0,
+    late_61_90: 0,
+    late_90_plus: 0,
+    total_outstanding: 0,
+    risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+    average_risk_score: 0,
+    high_risk_transactions: 0
+  };
+
+  const currentDate = new Date();
+  const receivableRiskScores: RiskScore[] = [];
+  
+  if (receivableTransactions && receivableTransactions.length > 0) {
+    console.log('[Analytics Engine] Found', receivableTransactions.length, 'outstanding receivable transactions');
+    
+    for (const transaction of receivableTransactions) {
+      const amount = transaction.home_amount || transaction.original_amount || 0;
+      const currency = (transaction.home_currency || transaction.original_currency || homeCurrency) as SupportedCurrency;
+      
+      // Use due_date if available, otherwise calculate as transaction_date + 30 days (standard payment terms)
+      let dueDate: Date;
+      const paymentTerms = transaction.payment_terms || DEFAULT_RISK_CONFIG.defaultPaymentTerms;
+      
+      if (transaction.due_date) {
+        dueDate = new Date(transaction.due_date);
+      } else {
+        // Default payment terms: 30 days from transaction date
+        dueDate = new Date(transaction.transaction_date);
+        dueDate.setDate(dueDate.getDate() + paymentTerms);
+      }
+      
+      const daysPastDue = Math.floor((currentDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Calculate dynamic risk score
+      const riskContext: TransactionRiskContext = {
+        amount,
+        currency,
+        daysPastDue,
+        transactionType: 'income',
+        paymentTerms
+      };
+      
+      const riskScore = calculateRiskScore(riskContext, DEFAULT_RISK_CONFIG);
+      receivableRiskScores.push(riskScore);
+      
+      // Track high-risk transactions
+      if (riskScore.level === 'high' || riskScore.level === 'critical') {
+        agedReceivables.high_risk_transactions++;
+      }
+      
+      // Categorize by age (traditional buckets maintained for compatibility)
+      if (daysPastDue <= 30) {
+        agedReceivables.current += amount;
+      } else if (daysPastDue <= 60) {
+        agedReceivables.late_31_60 += amount;
+      } else if (daysPastDue <= 90) {
+        agedReceivables.late_61_90 += amount;
+      } else {
+        agedReceivables.late_90_plus += amount;
+      }
+      
+      agedReceivables.total_outstanding += amount;
+      
+      // Update risk distribution
+      agedReceivables.risk_distribution[riskScore.level]++;
+    }
+    
+    // Calculate average risk score
+    if (receivableRiskScores.length > 0) {
+      agedReceivables.average_risk_score = receivableRiskScores.reduce((sum, score) => sum + score.score, 0) / receivableRiskScores.length;
+    }
+    
+    console.log('[Analytics Engine] Enhanced aged receivables calculated:', agedReceivables);
+    console.log('[Analytics Engine] Risk distribution:', agedReceivables.risk_distribution);
+  } else {
+    console.log('[Analytics Engine] No outstanding receivables found');
+  }
+
+  // Calculate aged payables for expense transactions
+  console.log('[Analytics Engine] Calculating aged payables...');
+  
+  // Fetch expense transactions with outstanding payments
+  // Include 'pending' status as per accounting standards - pending expenses represent unpaid payables
+  const { data: payableTransactions, error: payableError } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('user_id', clerkUserId)
+    .eq('transaction_type', 'expense')
+    .in('status', ['pending', 'awaiting_payment', 'overdue']);
+
+  if (payableError) {
+    console.error('[Analytics Engine] Failed to fetch payable transactions:', payableError);
+  }
+
+  const agedPayables: EnhancedAgedPayables = {
+    current: 0,
+    late_31_60: 0,
+    late_61_90: 0,
+    late_90_plus: 0,
+    total_outstanding: 0,
+    risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+    average_risk_score: 0,
+    high_risk_transactions: 0
+  };
+  
+  const payableRiskScores: RiskScore[] = [];
+  
+  if (payableTransactions && payableTransactions.length > 0) {
+    console.log('[Analytics Engine] Found', payableTransactions.length, 'outstanding payable transactions');
+    
+    for (const transaction of payableTransactions) {
+      const amount = Math.abs(transaction.home_amount || transaction.original_amount || 0);
+      const currency = (transaction.home_currency || transaction.original_currency || homeCurrency) as SupportedCurrency;
+      
+      // Use due_date if available, otherwise calculate as transaction_date + 30 days (standard payment terms)
+      let dueDate: Date;
+      const paymentTerms = transaction.payment_terms || DEFAULT_RISK_CONFIG.defaultPaymentTerms;
+      
+      if (transaction.due_date) {
+        dueDate = new Date(transaction.due_date);
+      } else {
+        // Default payment terms: 30 days from transaction date
+        dueDate = new Date(transaction.transaction_date);
+        dueDate.setDate(dueDate.getDate() + paymentTerms);
+      }
+      
+      const daysPastDue = Math.floor((currentDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Calculate dynamic risk score
+      const riskContext: TransactionRiskContext = {
+        amount,
+        currency,
+        daysPastDue,
+        transactionType: 'expense',
+        paymentTerms
+      };
+      
+      const riskScore = calculateRiskScore(riskContext, DEFAULT_RISK_CONFIG);
+      payableRiskScores.push(riskScore);
+      
+      // Track high-risk transactions
+      if (riskScore.level === 'high' || riskScore.level === 'critical') {
+        agedPayables.high_risk_transactions++;
+      }
+      
+      // Categorize by age (traditional buckets maintained for compatibility)
+      if (daysPastDue <= 30) {
+        agedPayables.current += amount;
+      } else if (daysPastDue <= 60) {
+        agedPayables.late_31_60 += amount;
+      } else if (daysPastDue <= 90) {
+        agedPayables.late_61_90 += amount;
+      } else {
+        agedPayables.late_90_plus += amount;
+      }
+      
+      agedPayables.total_outstanding += amount;
+      
+      // Update risk distribution
+      agedPayables.risk_distribution[riskScore.level]++;
+    }
+    
+    // Calculate average risk score
+    if (payableRiskScores.length > 0) {
+      agedPayables.average_risk_score = payableRiskScores.reduce((sum, score) => sum + score.score, 0) / payableRiskScores.length;
+    }
+    
+    console.log('[Analytics Engine] Enhanced aged payables calculated:', agedPayables);
+    console.log('[Analytics Engine] Risk distribution:', agedPayables.risk_distribution);
+  } else {
+    console.log('[Analytics Engine] No outstanding payables found');
+  }
+
+  // TASK 3: Analyze compliance_analysis fields for alerts
+  console.log('[Analytics Engine] Analyzing compliance data for alerts...');
+  
+  const complianceAlerts: ComplianceAlert[] = [];
+  
+  // Fetch transactions with compliance analysis that require attention
+  const { data: complianceTransactions, error: complianceError } = await supabase
+    .from('transactions')
+    .select('id, compliance_analysis, description, vendor_name, original_amount, original_currency')
+    .eq('user_id', clerkUserId)
+    .not('compliance_analysis', 'is', null);
+    
+  if (complianceError) {
+    console.error('[Analytics Engine] Failed to fetch compliance data:', complianceError);
+  } else if (complianceTransactions && complianceTransactions.length > 0) {
+    console.log('[Analytics Engine] Found', complianceTransactions.length, 'transactions with compliance analysis');
+    
+    for (const transaction of complianceTransactions) {
+      try {
+        const complianceData = transaction.compliance_analysis;
+        
+        // Check if compliance status requires attention or is non-compliant
+        if (complianceData?.compliance_status === 'requires_attention' || 
+            complianceData?.compliance_status === 'non_compliant') {
+          
+          const alert: ComplianceAlert = {
+            transaction_id: transaction.id,
+            compliance_status: complianceData.compliance_status,
+            risk_level: complianceData.risk_level || 'medium',
+            description: complianceData.recommendations?.length > 0 
+              ? complianceData.recommendations[0] 
+              : `Cross-border transaction requires compliance review`,
+            vendor_name: transaction.vendor_name,
+            original_amount: transaction.original_amount,
+            original_currency: transaction.original_currency,
+            recommendations: complianceData.recommendations || []
+          };
+          
+          complianceAlerts.push(alert);
+        }
+      } catch (error) {
+        console.error('[Analytics Engine] Failed to parse compliance analysis for transaction:', transaction.id, error);
+      }
+    }
+    
+    console.log('[Analytics Engine] Generated', complianceAlerts.length, 'compliance alerts');
+    
+    // Log sample alerts for debugging
+    if (complianceAlerts.length > 0) {
+      console.log('[Analytics Engine] Sample compliance alerts:', complianceAlerts.slice(0, 3));
+    }
+  } else {
+    console.log('[Analytics Engine] No transactions with compliance analysis found');
+  }
+
   const analytics: FinancialAnalytics = {
     user_id: supabaseUserId,
     period_start: periodStart,
@@ -171,6 +476,9 @@ export async function calculateFinancialAnalytics(
     transaction_count: transactions.length,
     currency_breakdown: currencyBreakdown,
     category_breakdown: categoryBreakdown,
+    aged_receivables: agedReceivables,
+    aged_payables: agedPayables,
+    compliance_alerts: complianceAlerts,
     calculated_at: new Date()
   };
 
@@ -221,6 +529,27 @@ async function getCachedAnalytics(
     transaction_count: cached.transaction_count || 0,
     currency_breakdown: cached.currency_breakdown || {},
     category_breakdown: cached.category_breakdown || {},
+    aged_receivables: cached.aged_receivables || {
+      current: 0,
+      late_31_60: 0,
+      late_61_90: 0,
+      late_90_plus: 0,
+      total_outstanding: 0,
+      risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+      average_risk_score: 0,
+      high_risk_transactions: 0
+    },
+    aged_payables: cached.aged_payables || {
+      current: 0,
+      late_31_60: 0,
+      late_61_90: 0,
+      late_90_plus: 0,
+      total_outstanding: 0,
+      risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+      average_risk_score: 0,
+      high_risk_transactions: 0
+    },
+    compliance_alerts: cached.compliance_alerts || [],
     calculated_at: new Date(cached.calculated_at)
   };
 }
@@ -241,6 +570,9 @@ async function cacheAnalytics(analytics: FinancialAnalytics): Promise<void> {
       transaction_count: analytics.transaction_count,
       currency_breakdown: analytics.currency_breakdown,
       category_breakdown: analytics.category_breakdown,
+      aged_receivables: analytics.aged_receivables,
+      aged_payables: analytics.aged_payables,
+      compliance_alerts: analytics.compliance_alerts,
       calculated_at: analytics.calculated_at.toISOString()
     }, {
       onConflict: 'user_id,period_start,period_end'

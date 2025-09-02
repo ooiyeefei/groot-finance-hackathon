@@ -91,6 +91,13 @@ export interface Transaction {
   vendor_name?: string
   vendor_details?: Record<string, any>
   
+  // Transaction status and workflow
+  status?: 'pending' | 'awaiting_payment' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
+  due_date?: string // ISO date
+  payment_date?: string // ISO date
+  payment_method?: string
+  notes?: string
+  
   // System fields
   created_at: string
   updated_at: string
@@ -147,6 +154,10 @@ export interface CreateTransactionRequest {
   vendor_name?: string
   reference_number?: string
   status?: 'pending' | 'awaiting_payment' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
+  due_date?: string // ISO date
+  payment_date?: string // ISO date
+  payment_method?: string
+  notes?: string
   document_type?: DocumentType // From OCR extraction
   line_items?: CreateLineItemRequest[]
   source_document_id?: string  // Optional link to source document

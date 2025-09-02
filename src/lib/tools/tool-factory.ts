@@ -7,8 +7,9 @@ import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, Mo
 import { DocumentSearchTool } from './document-search-tool'
 import { TransactionLookupTool } from './transaction-lookup-tool'
 import { GetVendorsTool } from './get-vendors-tool'
+import { CrossBorderTaxComplianceTool } from './cross-border-tax-compliance-tool'
 
-export type ToolName = 'search_documents' | 'get_transactions' | 'get_vendors'
+export type ToolName = 'search_documents' | 'get_transactions' | 'get_vendors' | 'analyze_cross_border_compliance'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -23,6 +24,7 @@ export class ToolFactory {
     this.registerTool('search_documents', () => new DocumentSearchTool())
     this.registerTool('get_transactions', () => new TransactionLookupTool())
     this.registerTool('get_vendors', () => new GetVendorsTool())
+    this.registerTool('analyze_cross_border_compliance', () => new CrossBorderTaxComplianceTool())
   }
 
   /**

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Search, Filter, Plus, Eye, Edit, Trash2, RefreshCw, Calendar, Building, DollarSign } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import CategorySelector from './CategorySelector'
+import StatusSelector from './StatusSelector'
 import { Transaction } from '@/types/transaction'
 import { formatCurrency, getTransactionTypeColor, getTransactionTypeIcon } from '@/hooks/use-transactions'
 
@@ -234,13 +235,21 @@ export default function TransactionsList({
                   </div>
                   
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="font-medium text-white truncate">
                         {transaction.description}
                       </h3>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${getTransactionTypeColor(transaction.transaction_type)}`}>
                         {transaction.transaction_type}
                       </span>
+                      <StatusSelector
+                        transactionId={transaction.id}
+                        currentStatus={transaction.status || 'pending'}
+                        onStatusUpdate={(newStatus) => {
+                          // Optimistically update the transaction in the parent component
+                          onRefresh()
+                        }}
+                      />
                       {transaction.document_type && (
                         <span className="text-xs px-2 py-1 rounded-full font-medium capitalize bg-blue-600/20 text-blue-400 border border-blue-600/30">
                           {transaction.document_type}

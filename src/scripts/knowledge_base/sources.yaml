@@ -1,0 +1,438 @@
+regulatory_sources:
+  
+  # Singapore - IRAS (Inland Revenue Authority of Singapore)
+  - id: "sg_gst_ovr_remote_services_2025_v5"
+    country: "singapore"
+    tax_type: "gst"
+    source_name: "GST: Taxing imported remote services by way of the overseas vendor registration regime (Fifth Edition)"
+    url: "https://www.iras.gov.sg/media/docs/default-source/e-tax/gst-e-tax-guide_taxing-imported-remote-services-by-way-of-the-overseas-vendor-registration-regime_(1st-ed).pdf?sfvrsn=7a18d6f5_49"
+    document_version: "2025.5"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["cross_border_services", "overseas_vendor_registration", "remote_services", "gst_compliance"]
+    
+  - id: "sg_gst_ovr_low_value_goods_2025_v4"
+    country: "singapore"
+    tax_type: "gst"
+    source_name: "GST: Taxing imported low-value goods by way of the overseas vendor registration regime (Fourth Edition)"
+    url: "https://www.iras.gov.sg/media/docs/default-source/e-tax/gst-e-tax-guide_taxing-imported-low-value-goods-by-way-of-the-overseas-vendor-registration-regime_(1st-ed).pdf?sfvrsn=b1a36692_34"
+    document_version: "2025.4"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["low_value_goods", "cross_border_ecommerce", "gst_compliance", "overseas_suppliers"]
+    
+  - id: "sg_gst_business_guide_2025_v_latest"
+    country: "singapore"
+    tax_type: "gst"
+    source_name: "GST: General Guide for Businesses"
+    url: "https://www.iras.gov.sg/media/docs/default-source/e-tax/etaxguide_gst_gst-general-guide-for-businesses(1).pdf?sfvrsn=8a66716d_97"
+    document_version: "2025"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "medium"
+    topics: ["general_gst", "business_compliance", "registration", "filing_requirements"]
+    
+  - id: "sg_gst_overseas_businesses_guide_2025"
+    country: "singapore"
+    tax_type: "gst"
+    source_name: "IRAS GST Guide for Overseas Businesses"
+    url: "https://www.iras.gov.sg/taxes/goods-services-tax-(gst)/gst-and-digital-economy/overseas-businesses"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["gst_compliance", "digital_economy", "overseas_vendor_registration", "remote_services"]
+
+  - id: "sg_ovr_lva_checklist_2025"
+    country: "singapore"
+    tax_type: "gst"
+    source_name: "IRAS Checklist for OVR Vendors (Low-Value Goods)"
+    url: "https://www.iras.gov.sg/media/docs/default-source/e-tax/3.-preparation-checklist-for-ovr-vendors-(low-value-goods).pdf?sfvrsn=2103b01d_17"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["gst_compliance", "overseas_vendor_registration", "low_value_goods", "checklist"]
+
+  - id: "sg_ovr_remote_services_checklist_2025"
+    country: "singapore"
+    tax_type: "gst"
+    source_name: "IRAS Checklist for OVR Vendors (Remote Services)"
+    url: "https://www.iras.gov.sg/media/docs/default-source/e-tax/4.-preparation-checklist-for-ovr-vendors-(remote-services).pdf?sfvrsn=9b92170e_19"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["gst_compliance", "overseas_vendor_registration", "remote_services", "checklist"]
+  
+  - id: "sg_map_2025"
+    country: "singapore"
+    tax_type: "all"
+    source_name: "IRAS Mutual Agreement Procedure (MAP) Guide"
+    url: "https://www.iras.gov.sg/taxes/international-tax/dispute-prevention-and-resolution/mutual-agreement-procedure-(map)-and-arbitration"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["dispute_resolution", "map", "dtaa_disputes", "cross_border_tax"]
+
+  # Singapore - ACRA (Accounting and Corporate Regulatory Authority)
+  - id: "sg_acra_how_to_guides"
+    country: "singapore"
+    tax_type: "business_registration"
+    source_name: "ACRA How-to Guides"
+    url: "https://www.acra.gov.sg/how-to-guides"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["company_registration", "sole_proprietorship", "partnership", "foreigner_registration"]
+
+  - id: "sg_acra_re_domiciliation"
+    country: "singapore"
+    tax_type: "company_law"
+    source_name: "Application for Transfer of Registration - Foreign Corporate Entities"
+    url: "https://www.acra.gov.sg/how-to-guides/application-for-transfer-of-registration-foreign-corporate-entities"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["re_domiciliation", "foreign_company", "legal_entity", "corporate_law"]
+
+  - id: "sg_acra_companies_act_1967_main"
+    country: "singapore"
+    tax_type: "company_law"
+    source_name: "Singapore Companies Act 1967 (Main Legislation)"
+    url: "https://sso.agc.gov.sg/Act/CoA1967"
+    document_version: "1967.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["companies_act", "corporate_law", "legislation", "company_incorporation"]
+    
+  - id: "sg_acra_companies_act_subsidiary"
+    country: "singapore"
+    tax_type: "company_law"
+    source_name: "Companies Act 1967 Subsidiary Legislation"
+    url: "https://sso.agc.gov.sg/Act/CoA1967?ViewType=Sl"
+    document_version: "1967.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["subsidiary_legislation", "corporate_law", "regulations", "fees"]
+
+  - id: "sg_acra_companies_act_amendments"
+    country: "singapore"
+    tax_type: "company_law"
+    source_name: "ACRA Commencement of Subsidiary Legislation"
+    url: "https://www.acra.gov.sg/legislation/legislative-reform/companies-act-reform/commencement-of-subsidiary-legislation"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "medium"
+    topics: ["companies_act", "legislation_updates", "amendments", "exemptions"]
+
+  # Additional Found Sources
+  - id: "sg_my_dtaa_2021_mli"
+    country: "singapore"
+    tax_type: "all"
+    source_name: "Singapore-Malaysia Double Taxation Avoidance Agreement (DTAA)"
+    url: "https://www.iras.gov.sg/media/docs/default-source/dtas/singapore-malaysia-dta-(mli)(1-jun-2021).pdf"
+    document_version: "2021"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["double_taxation", "dtaa", "permanent_establishment", "withholding_tax"]
+    
+  - id: "sg_mof_budget_2025_annexh2"
+    country: "singapore"
+    tax_type: "corporate_tax"
+    source_name: "Singapore Ministry of Finance Budget 2025 Annex H-2: Corporate Income Tax Changes"
+    url: "https://www.mof.gov.sg/docs/librariesprovider3/budget2025/download/pdf/annexh2.pdf"
+    document_version: "2025"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["corporate_tax", "tax_incentives", "budget_2025"]
+
+  - id: "sg_customs_circular_2025"
+    country: "singapore"
+    tax_type: "customs"
+    source_name: "Singapore Customs - Circulars and Guidelines"
+    url: "https://www.customs.gov.sg/news-and-media/circulars/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "low"
+    topics: ["customs", "import_export", "country_of_origin"]
+
+  # Malaysia - LHDN (Inland Revenue Board of Malaysia) & Customs
+  - id: "my_fsi_public_ruling_2025_v_latest"
+    country: "malaysia"
+    tax_type: "corporate_tax"
+    source_name: "Public Ruling on Tax Treatment for Micro, Small and Medium Enterprises (No. X/2025)"
+    url: "https://www.hasil.gov.my/media/zteihign/20250718-public-ruling-tax-treatment-for-micro-small-and-medium-enterprises.pdf"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["withholding_tax", "foreign_source_income", "smes", "dta_benefits"]
+    
+  - id: "my_service_tax_guide_2025_v_latest"
+    country: "malaysia"
+    tax_type: "service_tax"
+    source_name: "Malaysia Sales and Service Tax (SST) Portal - Comprehensive Guide"
+    url: "https://mysst.customs.gov.my/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["service_tax", "sst_compliance", "cross_border_services", "imported_taxable_service"]
+    
+  - id: "my_dta_2025"
+    country: "malaysia"
+    tax_type: "all"
+    source_name: "LHDN Double Taxation Avoidance Agreement (DTA) Guide"
+    url: "https://www.hasil.gov.my/en/international/double-taxation-avoidance-agreement-dtadtaa/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["double_taxation", "dtaa", "tax_treaties", "international_tax"]
+  
+  - id: "my_map_2025"
+    country: "malaysia"
+    tax_type: "all"
+    source_name: "LHDN Mutual Agreement Procedure (MAP) Guide"
+    url: "https://www.hasil.gov.my/en/international/mutual-agreement-procedure-map/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["dispute_resolution", "map", "dtaa_disputes"]
+
+  - id: "my_aeoi_crs_2025"
+    country: "malaysia"
+    tax_type: "all"
+    source_name: "LHDN Common Reporting Standard (CRS) Guide"
+    url: "https://www.hasil.gov.my/en/international/automatic-exchange-of-information-aeoi/common-reporting-standard-crs/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "low"
+    topics: ["aeoi", "crs", "information_exchange"]
+    
+  - id: "my_aeoi_fatca_2025"
+    country: "malaysia"
+    tax_type: "all"
+    source_name: "LHDN Foreign Account Tax Compliance Act (FATCA) Guide"
+    url: "https://www.hasil.gov.my/en/international/automatic-exchange-of-information-aeoi/foreign-account-tax-compliance-act-fatca/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "low"
+    topics: ["aeoi", "fatca", "information_exchange"]
+    
+  - id: "my_mli_2025"
+    country: "malaysia"
+    tax_type: "all"
+    source_name: "LHDN Multilateral Instrument (MLI) Guide"
+    url: "https://www.hasil.gov.my/en/international/multilateral-instrument-mli/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["mli", "beps", "dtaa_modifications", "international_tax"]
+    
+  - id: "my_s140c_2025"
+    country: "malaysia"
+    tax_type: "corporate_tax"
+    source_name: "LHDN Restriction on Deductibility of Interest (Section 140C) Guide"
+    url: "https://www.hasil.gov.my/en/international/restriction-on-deductibility-of-interest-section-140c-income-tax-act-1967/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["interest_deductibility", "thin_capitalisation", "cross_border_financing"]
+
+  - id: "my_lhdn_gmt_2025_guide"
+    country: "malaysia"
+    tax_type: "corporate_tax"
+    source_name: "Malaysia LHDN Global Minimum Tax (GMT) Guidance"
+    url: "https://www.hasil.gov.my/en/international/global-minimum-tax-gmt/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["global_minimum_tax", "bebs_pillar_two", "dtt", "mtt"]
+    
+  # Malaysia - SSM (Companies Commission of Malaysia)
+  - id: "my_ssm_ezbiz_portal"
+    country: "malaysia"
+    tax_type: "business_registration"
+    source_name: "SSM EzBiz Online Portal"
+    url: "https://ezbiz.ssm.com.my/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["sole_proprietorship", "partnership", "business_registration", "ezbiz"]
+
+  - id: "my_ssm_reg_new_business_guide"
+    country: "malaysia"
+    tax_type: "business_registration"
+    source_name: "SSM Guidelines for Registration of New Business (PDF)"
+    url: "https://www.ssm.com.my/Documents/Ezbiz%20Online%20User%20Guideline/GUIDELINE-FOR-REGISTRATION-OF-NEW-BUSINESS.pdf"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["sole_proprietorship", "partnership", "business_registration", "fees"]
+
+  - id: "my_ssm_companies_act_2016"
+    country: "malaysia"
+    tax_type: "company_law"
+    source_name: "Malaysia Companies Act 2016 (Official PDF)"
+    url: "https://www.ssm.com.my/Pages/Legal_Framework/Document/Companies%20Act%202016_Akta%20777_BI%20(1.8.2022).pdf"
+    document_version: "20220801"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["companies_act", "corporate_law", "legislation", "company_incorporation"]
+
+  - id: "my_ssm_foreign_company_guide"
+    country: "malaysia"
+    tax_type: "company_law"
+    source_name: "Guidelines for Registration of Foreign Company (PDF)"
+    url: "https://www.ssm.com.my/Pages/Legal_Framework/GUIDELINES/gl6_bi_guidelines_for_registration_of_foreign_company_201117_0.pdf"
+    document_version: "201117"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["foreign_company_registration", "branch_office", "representative_office", "company_law"]
+
+  - id: "my_ssm_amendments_2021"
+    country: "malaysia"
+    tax_type: "company_law"
+    source_name: "Companies (Amendment) Regulations 2021 (P.U. (A) 339/2021)"
+    url: "https://www.ssm.com.my/Lists/Announcement/AnnouncementDetails.aspx?ID=264"
+    document_version: "20210819"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "medium"
+    topics: ["amendments", "regulations", "fees", "companies_act"]
+    
+  - id: "my_ssm_amendment_act_2024"
+    country: "malaysia"
+    tax_type: "company_law"
+    source_name: "Companies (Amendment) Act 2024 Announcement"
+    url: "https://www.ssm.com.my/Pages/Training_Academy/Training_Calendar-and_Brochure/2024/COMPANIES%20(AMENDMENT)%20ACT%202024.pdf"
+    document_version: "2024"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "medium"
+    topics: ["amendments", "corporate_governance", "legal_reform"]
+
+  # Malaysia - LHDN Additional Critical Documents (Previously Missing)
+  - id: "my_withholding_tax_guidelines_2025"
+    country: "malaysia"
+    tax_type: "withholding_tax"
+    source_name: "LHDN Guidelines on Withholding Tax"
+    url: "https://www.hasil.gov.my/en/guidelines/direct-taxes/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["withholding_tax", "cross_border_payments", "non_resident_tax", "dta_benefits"]
+    
+  - id: "my_service_tax_guidelines_2025"
+    country: "malaysia"
+    tax_type: "service_tax"
+    source_name: "LHDN Guidelines on Service Tax"
+    url: "https://www.hasil.gov.my/en/guidelines/service-tax/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["service_tax", "cross_border_services", "sst_compliance", "imported_services"]
+    
+  - id: "my_withholding_tax_legislation_2025"
+    country: "malaysia"
+    tax_type: "withholding_tax"
+    source_name: "LHDN Withholding Tax Legislation and Guidelines"
+    url: "https://www.hasil.gov.my/en/legislation/withholding-tax/"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["withholding_tax", "legislation", "cross_border_payments", "non_resident_tax", "dta_benefits"]
+
+  - id: "my_ssm_local_company_guide"
+    country: "malaysia"
+    tax_type: "company_law"
+    source_name: "Guidelines for the Incorporation of Local Companies (PDF)"
+    url: "https://www.ssm.com.my/Pages/Legal_Framework/GUIDELINES/4.-Guidelines-For-Incorporation-Of-A-Local-Company.pdf"
+    document_version: "2025.latest"
+    language: "en"
+    last_checked_date: "2025-09-01"
+    priority: "high"
+    topics: ["local_company", "incorporation_guide", "sdn_bhd", "private_company"]
+
+# Processing Configuration for Curated RAG Pipeline
+processing_config:
+  chunk_size: 512
+  chunk_overlap: 100
+  min_chunk_length: 100
+  max_chunks_per_document: 500
+  
+  # Checksum validation for versioning
+  validate_checksums: true
+  checksum_file: "checksums.json"
+  
+  # Text cleaning and processing
+  remove_headers_footers: true
+  normalize_whitespace: true
+  remove_empty_lines: true
+  
+  # Language processing
+  detect_language: true
+  translate_non_english: false  # Keep original language for authority
+  
+  # Output configuration
+  output_format: "json"
+  include_metadata: true
+  preserve_structure: true
+  output_file: "processed_chunks.json"
+
+# Embedding Configuration for Vector Storage
+embedding_config:
+  # Use custom LiteLLM endpoint with Qwen3 embedding model
+  endpoint_url: "https://litellm.eks.kopi.io/v1"
+  model_id: "openai/qwen3-embedding-4b-bf16-cpu"
+  api_key_env: "EMBEDDING_API_KEY"
+  dimension: 2560  # Qwen3-4B uses 2560 dimensions
+  batch_size: 32
+  max_tokens: 8192
+  
+# Qdrant Collection Configuration for Regulatory KB
+qdrant_config:
+  collection_name: "regulatory_kb"
+  vector_size: 2560  # Updated to match Qwen3-4B embedding dimensions
+  distance: "Cosine"
+  on_disk_payload: true
+  replication_factor: 1
+  
+  # Enhanced metadata indexing for compliance queries
+  payload_indexes:
+    - field_name: "country"
+      field_type: "keyword"
+    - field_name: "tax_type" 
+      field_type: "keyword"
+    - field_name: "topics"
+      field_type: "keyword"
+    - field_name: "document_version"
+      field_type: "keyword"
+    - field_name: "language"
+      field_type: "keyword"

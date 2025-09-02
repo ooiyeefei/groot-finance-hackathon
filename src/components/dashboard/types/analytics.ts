@@ -4,6 +4,23 @@
  */
 
 import { SupportedCurrency } from '@/types/transaction';
+import { EnhancedAgedReceivables, EnhancedAgedPayables, ComplianceAlert } from '@/lib/analytics/engine';
+
+export interface AgedReceivables {
+  current: number;        // 0-30 days
+  late_31_60: number;     // 31-60 days  
+  late_61_90: number;     // 61-90 days
+  late_90_plus: number;   // 90+ days
+  total_outstanding: number;
+}
+
+export interface AgedPayables {
+  current: number;        // 0-30 days
+  late_31_60: number;     // 31-60 days  
+  late_61_90: number;     // 61-90 days
+  late_90_plus: number;   // 90+ days
+  total_outstanding: number;
+}
 
 export interface AnalyticsData {
   total_income: number;
@@ -12,6 +29,9 @@ export interface AnalyticsData {
   transaction_count: number;
   currency_breakdown: Record<string, number>;
   category_breakdown: Record<string, number>;
+  aged_receivables: EnhancedAgedReceivables;
+  aged_payables: EnhancedAgedPayables;
+  compliance_alerts: ComplianceAlert[];
   period_start: string;
   period_end: string;
   calculated_at: string;

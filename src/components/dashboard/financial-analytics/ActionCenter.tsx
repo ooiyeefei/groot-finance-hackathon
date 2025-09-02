@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { AlertTriangle, TrendingDown, TrendingUp, CheckCircle, CreditCard, PiggyBank, AlertCircle } from 'lucide-react';
+import React, { useMemo, useEffect, useState } from 'react';
+import { AlertTriangle, TrendingDown, TrendingUp, CheckCircle, CreditCard, PiggyBank, AlertCircle, Calendar, Clock } from 'lucide-react';
 import ActionButton from '@/components/ui/action-button';
 import { AnalyticsData, AnalyticsTrends, ActionItem } from '../types/analytics';
+import { Transaction } from '@/types/transaction';
 
 interface ActionCenterProps {
   analytics: AnalyticsData | null;
@@ -18,10 +19,146 @@ export default function ActionCenter({
   onActionClick,
   loading
 }: ActionCenterProps) {
+  const [statusBasedData, setStatusBasedData] = useState<{
+    overdueTransactions: Transaction[];
+    upcomingDueTransactions: Transaction[];
+    awaitingPaymentCount: number;
+  }>({
+    overdueTransactions: [],
+    upcomingDueTransactions: [],
+    awaitingPaymentCount: 0
+  });
+
+  // Fetch status-based transaction data for smart alerts
+  useEffect(() => {
+    const fetchStatusData = async () => {
+      try {
+        const response = await fetch('/api/transactions?include_status_analytics=true');
+        if (response.ok) {
+          const data = await response.json();
+          
+          const today = new Date();
+          const nextWeek = new Date();
+          nextWeek.setDate(today.getDate() + 7);
+          
+          const overdue = data.transactions?.filter((t: Transaction) => 
+            t.status === 'overdue' || 
+            (t.due_date && new Date(t.due_date) < today && t.status !== 'paid')
+          ) || [];
+          
+          const upcomingDue = data.transactions?.filter((t: Transaction) =>
+            t.due_date && 
+            new Date(t.due_date) >= today && 
+            new Date(t.due_date) <= nextWeek &&
+            t.status !== 'paid'
+          ) || [];
+          
+          const awaitingCount = data.transactions?.filter((t: Transaction) =>
+            t.status === 'awaiting_payment'
+          ).length || 0;
+          
+          setStatusBasedData({
+            overdueTransactions: overdue,
+            upcomingDueTransactions: upcomingDue,
+            awaitingPaymentCount: awaitingCount
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch status-based analytics:', error);
+      }
+    };
+
+    fetchStatusData();
+  }, [analytics]); // Refetch when analytics change
+
   const actionItems = useMemo(() => {
     if (!analytics) return [];
 
     const items: ActionItem[] = [];
+
+    // TASK 3: Compliance alerts (highest priority)
+    if (analytics.compliance_alerts && analytics.compliance_alerts.length > 0) {
+      // Group compliance alerts by status and risk level
+      const criticalAlerts = analytics.compliance_alerts.filter(alert => 
+        alert.compliance_status === 'non_compliant' || alert.risk_level === 'critical'
+      );
+      const requiresAttentionAlerts = analytics.compliance_alerts.filter(alert => 
+        alert.compliance_status === 'requires_attention' && alert.risk_level !== 'critical'
+      );
+
+      // Critical compliance alerts
+      if (criticalAlerts.length > 0) {
+        items.push({
+          id: 'critical-compliance',
+          type: 'error',
+          title: 'Critical Compliance Issues',
+          description: `${criticalAlerts.length} transaction${criticalAlerts.length === 1 ? '' : 's'} with critical compliance violations requiring immediate attention.`,
+          priority: 'high',
+          action: {
+            label: 'Review Compliance',
+            onClick: () => onActionClick?.('review-critical-compliance')
+          }
+        });
+      }
+
+      // Requires attention alerts
+      if (requiresAttentionAlerts.length > 0) {
+        items.push({
+          id: 'compliance-attention',
+          type: 'warning',
+          title: 'Compliance Review Needed',
+          description: `${requiresAttentionAlerts.length} cross-border transaction${requiresAttentionAlerts.length === 1 ? '' : 's'} require${requiresAttentionAlerts.length === 1 ? 's' : ''} compliance review.`,
+          priority: 'high',
+          action: {
+            label: 'Review Transactions',
+            onClick: () => onActionClick?.('review-compliance-transactions')
+          }
+        });
+      }
+    }
+
+    // Status-based alerts (high priority)
+    if (statusBasedData.overdueTransactions.length > 0) {
+      items.push({
+        id: 'overdue-transactions',
+        type: 'error',
+        title: 'Overdue Payments',
+        description: `You have ${statusBasedData.overdueTransactions.length} overdue ${statusBasedData.overdueTransactions.length === 1 ? 'transaction' : 'transactions'} requiring immediate attention.`,
+        priority: 'high',
+        action: {
+          label: 'Review Overdue',
+          onClick: () => onActionClick?.('review-overdue')
+        }
+      });
+    }
+
+    if (statusBasedData.upcomingDueTransactions.length > 0) {
+      items.push({
+        id: 'upcoming-due',
+        type: 'warning',
+        title: 'Upcoming Due Dates',
+        description: `${statusBasedData.upcomingDueTransactions.length} ${statusBasedData.upcomingDueTransactions.length === 1 ? 'payment is' : 'payments are'} due within the next 7 days.`,
+        priority: 'high',
+        action: {
+          label: 'View Calendar',
+          onClick: () => onActionClick?.('view-payment-calendar')
+        }
+      });
+    }
+
+    if (statusBasedData.awaitingPaymentCount > 0) {
+      items.push({
+        id: 'awaiting-payment',
+        type: 'info',
+        title: 'Awaiting Payment',
+        description: `${statusBasedData.awaitingPaymentCount} ${statusBasedData.awaitingPaymentCount === 1 ? 'transaction is' : 'transactions are'} waiting for payment confirmation.`,
+        priority: 'medium',
+        action: {
+          label: 'Update Status',
+          onClick: () => onActionClick?.('update-payment-status')
+        }
+      });
+    }
 
     // Negative profit alert
     if (analytics.net_profit < 0) {

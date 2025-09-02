@@ -7,6 +7,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
+import { CrossBorderTaxComplianceTool } from '@/lib/tools/cross-border-tax-compliance-tool'
 import { UpdateTransactionRequest, SupportedCurrency } from '@/types/transaction'
 
 // Get specific transaction
@@ -254,6 +255,46 @@ export async function PUT(
     }
 
     console.log(`[Transaction API] Successfully updated transaction ${transactionId}`)
+
+    // TASK 2: Cross-border compliance analysis for updated transactions
+    // Check if currency or amount changed and if it's now a cross-border transaction
+    const finalHomeCurrency = updatedTransaction.home_currency
+    const finalOriginalCurrency = updatedTransaction.original_currency
+    const isCrossBorderTransaction = finalOriginalCurrency !== finalHomeCurrency
+    
+    if (isCrossBorderTransaction) {
+      console.log(`[Transaction API] Cross-border transaction detected after update: ${finalOriginalCurrency} → ${finalHomeCurrency}`)
+      
+      // Asynchronously trigger compliance analysis (don't block response)
+      setImmediate(async () => {
+        try {
+          const complianceTool = new CrossBorderTaxComplianceTool()
+          
+          const analysisResult = await complianceTool.execute({
+            transaction_id: transactionId,
+            amount: updatedTransaction.original_amount,
+            original_currency: finalOriginalCurrency,
+            home_currency: finalHomeCurrency,
+            transaction_type: updatedTransaction.transaction_type,
+            category: updatedTransaction.category,
+            description: updatedTransaction.description,
+            vendor_name: updatedTransaction.vendor_name
+          }, {
+            userId: userId
+          })
+
+          if (analysisResult.success) {
+            console.log(`[Transaction API] Compliance analysis completed for updated transaction ${transactionId}`)
+          } else {
+            console.error(`[Transaction API] Compliance analysis failed for updated transaction ${transactionId}:`, analysisResult.error)
+          }
+        } catch (error) {
+          console.error(`[Transaction API] Compliance analysis error for updated transaction ${transactionId}:`, error)
+        }
+      })
+    } else {
+      console.log(`[Transaction API] Domestic transaction after update (${finalOriginalCurrency}), skipping compliance analysis`)
+    }
 
     return NextResponse.json({
       success: true,
