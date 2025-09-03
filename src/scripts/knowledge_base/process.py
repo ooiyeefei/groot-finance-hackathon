@@ -531,50 +531,79 @@ class RegulatoryTextProcessor:
         return text
     
     def clean_text(self, text: str) -> str:
-        """Clean and normalize regulatory text"""
+        """Clean and normalize regulatory text with robust, bidirectional acronym expansion."""
         
-        # Acronym Expansion for Better Semantic Linking
-        common_acronyms = {
-            'OVR': 'Overseas Vendor Registration',
-            'GST': 'Goods and Services Tax',
-            'DST': 'Digital Services Tax',
-            'SST': 'Sales and Service Tax',
-            'MAP': 'Mutual Agreement Procedure',
-            'DTAA': 'Double Taxation Avoidance Agreement',
-            'CRS': 'Common Reporting Standard',
-            'FATCA': 'Foreign Account Tax Compliance Act',
-            'MLI': 'Multilateral Instrument',
-            'APA': 'Advance Pricing Arrangement',
-            'CFC': 'Controlled Foreign Company',
-            'RPGT': 'Real Property Gains Tax',
-            'BEPS': 'Base Erosion and Profit Shifting',
-            'GMT': 'Global Minimum Tax'
-        }
-
-        for acronym, expansion in common_acronyms.items():
-            # Expand acronym: OVR -> OVR (Overseas Vendor Registration)
-            # - \\b ensures whole word match
-            # - (?!\\s*\\() ensures it's not already followed by an opening parenthesis
-            text = re.sub(r'\b' + re.escape(acronym) + r'\b(?!\s*\()', f'{acronym} ({expansion})', text, flags=re.IGNORECASE)
-            
-            # Expand full term: Overseas Vendor Registration -> Overseas Vendor Registration (OVR)
-            # - (?!\\s*\\() ensures it's not already followed by an opening parenthesis with the acronym
-            text = re.sub(r'\b' + re.escape(expansion) + r'\b(?!\s*\(\s*' + re.escape(acronym) + r'\s*\))', f'{expansion} ({acronym})', text, flags=re.IGNORECASE)
+        # --- Stage 1: Enhanced Header/Footer Removal ---
+        # Split into lines for targeted cleaning
+        lines = text.split('\n')
+        cleaned_lines = []
         
-        # Remove excessive whitespace
+        # Define footer/header patterns that reduce semantic quality
+        footer_patterns = [
+            re.compile(r'^.*best viewed in.*google chrome.*resolution.*$', re.IGNORECASE),
+            re.compile(r'^.*privacy policy\s*\|.*security policy.*$', re.IGNORECASE),
+            re.compile(r'^.*terms\s*&\s*conditions\s*\|.*policy.*$', re.IGNORECASE),
+            re.compile(r'^.*copyright.*suruhanjaya syarikat malaysia.*$', re.IGNORECASE),
+            re.compile(r'^.*sign in.*username.*password.*verification code.*$', re.IGNORECASE),
+            re.compile(r'^.*guideline\s*\|.*terms.*conditions.*policy.*$', re.IGNORECASE),
+            re.compile(r'^page \d+ of \d+$', re.IGNORECASE),
+            re.compile(r'^\d+\s*$'),  # Standalone page numbers
+            re.compile(r'^.*hotline:\s*\d+-\d+-\d+.*$', re.IGNORECASE),  # Contact hotlines
+        ]
+        
+        for line in lines:
+            line = line.strip()
+            if line and not any(pattern.search(line) for pattern in footer_patterns):
+                cleaned_lines.append(line)
+        
+        text = '\n'.join(cleaned_lines)
+        
+        # Standard cleaning
         text = re.sub(r'\s+', ' ', text)
-        
-        # Remove page numbers and headers/footers
-        text = re.sub(r'Page \d+ of \d+', '', text)
-        text = re.sub(r'^\d+\s*$', '', text, flags=re.MULTILINE)
-        
         # Normalize quotation marks
         text = re.sub(r'[""]', '"', text)
         text = re.sub(r"[''']", "'", text)
-        
         # Remove excessive line breaks
         text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
-        
+
+        # --- Stage 2: Bidirectional Acronym Expansion ---
+        acronym_map = {
+            "OVR": "Overseas Vendor Registration",
+            "GST": "Goods and Services Tax",
+            "SST": "Sales and Service Tax",
+            "DST": "Digital Services Tax",
+            "DTAA": "Double Taxation Avoidance Agreement",
+            "MAP": "Mutual Agreement Procedure",
+            "IRAS": "Inland Revenue Authority of Singapore",
+            "LHDN": "Lembaga Hasil Dalam Negeri",
+            "ACRA": "Accounting and Corporate Regulatory Authority",
+            "SSM": "Suruhanjaya Syarikat Malaysia",
+            "CRS": "Common Reporting Standard",
+            "FATCA": "Foreign Account Tax Compliance Act",
+            "MLI": "Multilateral Instrument",
+            "APA": "Advance Pricing Arrangement",
+            "CFC": "Controlled Foreign Company",
+            "RPGT": "Real Property Gains Tax",
+            "BEPS": "Base Erosion and Profit Shifting",
+            "GMT": "Global Minimum Tax"
+        }
+
+        # Pass 1: Replace full phrase with "Full Phrase (Acronym)"
+        # This ensures the acronym is always present with its definition.
+        for acronym, full_phrase in acronym_map.items():
+            # Use a negative lookahead `(?!\s*\({acronym}\))` to avoid double-adding the acronym
+            pattern = re.compile(rf'\b{re.escape(full_phrase)}\b(?!\s*\({acronym}\))', re.IGNORECASE)
+            replacement = f"{full_phrase} ({acronym})"
+            text = pattern.sub(replacement, text)
+
+        # Pass 2: Replace standalone acronym with "Full Phrase (Acronym)"
+        # This ensures the definition is always present with the acronym.
+        for acronym, full_phrase in acronym_map.items():
+            # Use word boundaries `\b` to match only the whole word acronym
+            pattern = re.compile(rf'\b{re.escape(acronym)}\b', re.IGNORECASE)
+            replacement = f"{full_phrase} ({acronym})"
+            text = pattern.sub(replacement, text)
+            
         return text.strip()
     
     def chunk_text(self, text: str, document: Dict[str, Any]) -> List[ProcessedChunk]:

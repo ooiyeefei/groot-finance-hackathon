@@ -57,8 +57,8 @@ class RegulatoryKnowledgeIngestion:
         # FIXED Configuration: Controlled concurrency
         self.collection_name = "regulatory_kb"
         self.vector_size = 2560
-        self.batch_size = 16  # REDUCED from 32 to 16
-        self.max_concurrent_requests = 4  # CRITICAL: Limit concurrent requests
+        self.batch_size = 16  # Efficient batch size for good performance
+        self.max_concurrent_requests = 4  # Optimal concurrent requests for throughput
         self.retry_attempts = 3
         
         # Load environment configuration
@@ -81,7 +81,7 @@ class RegulatoryKnowledgeIngestion:
         
         # FIXED: More conservative HTTP client settings
         self.embedding_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(120.0),  # Increased timeout
+            timeout=httpx.Timeout(120.0),  # Reasonable 2-minute timeout for embedding service
             limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
             headers={
                 'Authorization': f'Bearer {self.embedding_api_key}',
@@ -101,7 +101,7 @@ class RegulatoryKnowledgeIngestion:
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler('output/ingestion_fixed.log'),
+                logging.FileHandler('output/ingestion.log'),
                 logging.StreamHandler(sys.stdout)
             ]
         )
@@ -241,25 +241,53 @@ class RegulatoryKnowledgeIngestion:
                     points.append(point)
                     batch_successes += 1
                 
-                # Upload successful points to Qdrant
+                # Upload successful points to Qdrant with robust retry mechanism
                 if points:
-                    self.qdrant_client.upsert(collection_name=self.collection_name, points=points)
-                    successful_ingestions += batch_successes
+                    # --- Start of Retry Logic ---
+                    max_retries = 3
+                    upload_successful = False
+                    
+                    for attempt in range(max_retries):
+                        try:
+                            self.qdrant_client.upsert(collection_name=self.collection_name, points=points)
+                            successful_ingestions += batch_successes
+                            logging.info(f"✅ Batch {batch_num} uploaded successfully on attempt {attempt + 1}")
+                            upload_successful = True
+                            break  # Exit loop on success
+                        except Exception as e:
+                            logging.warning(f"⚠️ Qdrant upload failed on attempt {attempt + 1}/{max_retries} for batch {batch_num}: {e}")
+                            if attempt + 1 == max_retries:
+                                # All retries exhausted, mark as failed
+                                logging.error(f"❌ Batch {batch_num} failed after all retries: {str(e)}")
+                                failed_ingestions += batch_successes  # Count successful embeddings as failed due to upload failure
+                                break
+                            else:
+                                wait_time = 2 ** (attempt + 1)  # Exponential backoff: 2, 4 seconds
+                                logging.info(f"Retrying in {wait_time} seconds...")
+                                await asyncio.sleep(wait_time)
+                    # --- End of Retry Logic ---
+                else:
+                    logging.warning(f"⚠️ Batch {batch_num} resulted in no points to upload.")
                     
                 failed_ingestions += batch_failures
                 batch_time = time.time() - batch_start_time
                 
-                logging.info(f"✅ Batch {batch_num} completed in {batch_time:.2f}s ({batch_successes} success, {batch_failures} failed)")
+                if points and upload_successful:
+                    logging.info(f"✅ Batch {batch_num} completed in {batch_time:.2f}s ({batch_successes} success, {batch_failures} failed)")
+                elif points:
+                    logging.error(f"❌ Batch {batch_num} failed upload in {batch_time:.2f}s ({batch_successes} embeddings generated but upload failed, {batch_failures} embedding failures)")
+                else:
+                    logging.warning(f"⚠️ Batch {batch_num} completed in {batch_time:.2f}s with no valid embeddings ({batch_failures} failures)")
                 
-                # FIXED: Add delay between batches to be respectful to the endpoint
+                # Reasonable delay between batches for stability
                 if batch_num < total_batches:
                     await asyncio.sleep(2.0)  # 2 second delay between batches
                 
             except Exception as e:
                 batch_time = time.time() - batch_start_time
-                error_msg = f"❌ Batch {batch_num} failed in {batch_time:.2f}s: {str(e)[:200]}"
-                logging.error(error_msg, exc_info=True)
-                failed_ingestions += len(batch)
+                error_msg = f"❌ Batch {batch_num} failed catastrophically after all retries: {str(e)[:200]}"
+                logging.error(error_msg, exc_info=False)  # No need for full traceback on final failure
+                failed_ingestions += len(batch)  # Count all chunks in the batch as failed
             
             # Progress update with time estimates
             progress = (i + len(batch)) / len(chunks) * 100
@@ -302,14 +330,14 @@ async def main():
         print(f"📄 Collection name: regulatory_kb")
         
         if result.failed_ingestions > 0:
-            print(f"⚠️ {result.failed_ingestions} chunks failed to ingest (check output/ingestion_fixed.log)")
+            print(f"⚠️ {result.failed_ingestions} chunks failed to ingest (check output/ingestion.log)")
         else:
             print(f"✅ All {result.total_chunks} chunks ingested successfully!")
         
         return result.successful_ingestions > 0
     except Exception as e:
         print(f"\n❌ Fixed ingestion failed: {e}")
-        print(f"Check output/ingestion_fixed.log for detailed error information")
+        print(f"Check output/ingestion.log for detailed error information")
         return False
 
 if __name__ == "__main__":

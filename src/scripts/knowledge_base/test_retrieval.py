@@ -65,10 +65,62 @@ class RegulatoryRetrievalTester:
         else:
             raise Exception(f"Embedding generation failed: HTTP {response.status_code}")
     
+    def expand_query_acronyms(self, query: str) -> str:
+        """FIXED: True bidirectional query expansion for acronyms to improve semantic matching"""
+        
+        # Same acronym map as used in document processing for consistency
+        acronym_map = {
+            "OVR": "Overseas Vendor Registration",
+            "GST": "Goods and Services Tax",
+            "SST": "Sales and Service Tax", 
+            "DST": "Digital Services Tax",
+            "DTAA": "Double Taxation Avoidance Agreement",
+            "MAP": "Mutual Agreement Procedure",
+            "IRAS": "Inland Revenue Authority of Singapore",
+            "LHDN": "Lembaga Hasil Dalam Negeri",
+            "ACRA": "Accounting and Corporate Regulatory Authority",
+            "SSM": "Suruhanjaya Syarikat Malaysia",
+            "CRS": "Common Reporting Standard",
+            "FATCA": "Foreign Account Tax Compliance Act",
+            "MLI": "Multilateral Instrument",
+            "APA": "Advance Pricing Arrangement",
+            "CFC": "Controlled Foreign Company",
+            "RPGT": "Real Property Gains Tax",
+            "BEPS": "Base Erosion and Profit Shifting",
+            "GMT": "Global Minimum Tax"
+        }
+        
+        # Invert the map for efficient phrase-to-acronym lookup
+        phrase_map = {v.lower(): k for k, v in acronym_map.items()}
+        
+        additions = set()
+        query_lower = query.lower()
+
+        # 1. FIXED: Check for full phrases in the query and add the acronym
+        for phrase, acronym in phrase_map.items():
+            if phrase in query_lower:
+                additions.add(acronym)
+
+        # 2. Check for acronyms in the query and add the full phrase
+        # Use regex for whole-word matching to avoid partial matches
+        import re
+        for acronym, phrase in acronym_map.items():
+            if re.search(rf'\b{re.escape(acronym)}\b', query, re.IGNORECASE):
+                additions.add(phrase)
+        
+        if not additions:
+            return query
+
+        # FIXED: Append unique new terms to the original query for comprehensive search
+        return query + " " + " ".join(sorted(list(additions)))
+    
     async def test_retrieval(self, query: str, top_k: int = 5, score_threshold: float = 0.7) -> Dict[str, Any]:
         """Test retrieval with different topK and threshold settings"""
-        # Generate query embedding  
-        query_embedding = await self.generate_embedding(query)
+        # Apply application-side query expansion for better semantic matching
+        expanded_query = self.expand_query_acronyms(query)
+        
+        # Generate query embedding using expanded query
+        query_embedding = await self.generate_embedding(expanded_query)
         
         # Search with specified topK
         results = self.qdrant_client.query_points(
@@ -80,6 +132,8 @@ class RegulatoryRetrievalTester:
         
         return {
             'query': query,
+            'expanded_query': expanded_query,
+            'query_expansion_applied': expanded_query != query,
             'top_k': top_k,
             'score_threshold': score_threshold,
             'results_count': len(results),
@@ -100,7 +154,9 @@ class RegulatoryRetrievalTester:
         import asyncio
         
         async def _test():
-            query_embedding = await self.generate_embedding(query)
+            # Apply query expansion for consistency
+            expanded_query = self.expand_query_acronyms(query)
+            query_embedding = await self.generate_embedding(expanded_query)
             
             # Build filter conditions
             filter_conditions = []

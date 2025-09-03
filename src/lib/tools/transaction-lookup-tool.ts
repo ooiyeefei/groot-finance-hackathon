@@ -389,14 +389,36 @@ export class TransactionLookupTool extends BaseTool {
         if (query.toLowerCase().match(/\b(largest|biggest|highest|maximum|smallest|lowest|minimum)\b/)) {
           console.log(`[TransactionLookupTool] SAFETY: Detected analysis terms in query, skipping text filtering`)
         } else {
-          // Extract only meaningful filter terms (not analysis terms, not document types)
-          const { filterTerms } = this.separateAnalysisAndFilter(params.query)
+          // CRITICAL FIX: Extract meaningful filter terms, excluding date-related terms that were used for date filtering
+          const usedDateTerms: string[] = []
+          
+          // Track which date terms were likely used if we have startDate/endDate parameters
+          if (startDate || endDate) {
+            // Extract date-related words that might have been used for date parameter extraction
+            const queryWords = params.query.toLowerCase().split(/\s+/)
+            for (const word of queryWords) {
+              const cleanWord = word.replace(/[^\w]/g, '')
+              if (this.isDateRelatedTerm(cleanWord) || this.isMonthName(cleanWord)) {
+                usedDateTerms.push(cleanWord)
+              }
+            }
+            console.log(`[TransactionLookupTool] Identified date terms used for filtering: ${usedDateTerms.join(', ')}`)
+          }
+          
+          // Extract only meaningful filter terms (not analysis terms, not date terms, not document types)
+          const { filterTerms, dateTerms } = this.separateAnalysisAndFilter(params.query, usedDateTerms)
           
           // Remove document type terms that should have been passed as document_type parameter
           const documentTypeTerms = ['invoice', 'receipt', 'bill', 'statement', 'contract']
           const meaningfulFilterTerms = filterTerms.filter(term => 
             !documentTypeTerms.includes(term.toLowerCase())
           )
+          
+          console.log(`[TransactionLookupTool] FILTER TERM ANALYSIS:`)
+          console.log(`[TransactionLookupTool]   - Original query: "${params.query}"`)
+          console.log(`[TransactionLookupTool]   - Date terms excluded: ${dateTerms.join(', ') || 'none'}`)
+          console.log(`[TransactionLookupTool]   - Used date terms excluded: ${usedDateTerms.join(', ') || 'none'}`)
+          console.log(`[TransactionLookupTool]   - Meaningful filter terms: ${meaningfulFilterTerms.join(', ') || 'none'}`)
           
           if (meaningfulFilterTerms.length > 0) {
             console.log(`[TransactionLookupTool] Applying text search for meaningful filter terms: ${meaningfulFilterTerms.join(', ')}`)
@@ -410,7 +432,7 @@ export class TransactionLookupTool extends BaseTool {
             })
             console.log(`[TransactionLookupTool] Text search filtered to ${transactions.length} results`)
           } else {
-            console.log(`[TransactionLookupTool] No meaningful filter terms found, skipping text search`)
+            console.log(`[TransactionLookupTool] No meaningful filter terms found after excluding date/analysis terms, skipping text search`)
           }
         }
       } else {
@@ -672,11 +694,12 @@ Your response must be valid JSON only. Nothing else.`
   }
 
   /**
-   * Separate analysis terms from actual filter terms in queries
+   * Separate analysis terms from actual filter terms in queries, excluding date-related terms
    * Analysis terms: largest, biggest, highest, smallest, lowest, minimum, maximum, etc.
+   * Date terms: month names, day numbers, years that were used for date filtering
    * Filter terms: invoice, company names, categories, etc.
    */
-  private separateAnalysisAndFilter(query: string): { analysisTerms: string[]; filterTerms: string[] } {
+  private separateAnalysisAndFilter(query: string, usedDateTerms: string[] = []): { analysisTerms: string[]; filterTerms: string[]; dateTerms: string[] } {
     const queryLower = query.toLowerCase()
     const words = queryLower.split(/\s+/)
     
@@ -685,6 +708,14 @@ Your response must be valid JSON only. Nothing else.`
       'largest', 'biggest', 'highest', 'maximum', 'max', 'most', 'greatest',
       'smallest', 'lowest', 'minimum', 'min', 'least', 'fewest',
       'total', 'sum', 'average', 'mean', 'count', 'number'
+    ]
+    
+    // Define date-related terms that should be excluded from text search when used for date filtering
+    const monthNames = [
+      'january', 'february', 'march', 'april', 'may', 'june',
+      'july', 'august', 'september', 'october', 'november', 'december',
+      'jan', 'feb', 'mar', 'apr', 'may', 'jun',
+      'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
     ]
     
     // Define common non-filter words that don't help with text search
@@ -697,25 +728,35 @@ Your response must be valid JSON only. Nothing else.`
     ]
     
     const foundAnalysisTerms: string[] = []
+    const foundDateTerms: string[] = []
     const filterWords: string[] = []
     
     for (const word of words) {
       const cleanWord = word.replace(/[^\w]/g, '') // Remove punctuation
       
+      // Skip empty words
+      if (!cleanWord) continue
+      
       if (analysisTerms.includes(cleanWord)) {
         foundAnalysisTerms.push(cleanWord)
+      } else if (monthNames.includes(cleanWord) || this.isDateRelatedTerm(cleanWord)) {
+        foundDateTerms.push(cleanWord)
+      } else if (usedDateTerms.includes(cleanWord)) {
+        // Explicitly exclude date terms that were used for parameter extraction
+        foundDateTerms.push(cleanWord)
+        console.log(`[TransactionLookupTool] Excluding date term used for filtering: ${cleanWord}`)
       } else if (!commonWords.includes(cleanWord) && cleanWord.length > 2) {
         // Only include meaningful words that could be used for filtering
         filterWords.push(cleanWord)
       }
     }
     
-    // Also extract quoted phrases as filter terms
+    // Also extract quoted phrases as filter terms (but check they're not date-related)
     const quotedPhrases = query.match(/"([^"]+)"/g)
     if (quotedPhrases) {
       quotedPhrases.forEach(phrase => {
         const cleanPhrase = phrase.replace(/"/g, '').trim()
-        if (cleanPhrase.length > 0) {
+        if (cleanPhrase.length > 0 && !this.containsDateTerms(cleanPhrase)) {
           filterWords.push(cleanPhrase)
         }
       })
@@ -723,8 +764,52 @@ Your response must be valid JSON only. Nothing else.`
     
     return {
       analysisTerms: foundAnalysisTerms,
-      filterTerms: filterWords
+      filterTerms: filterWords,
+      dateTerms: foundDateTerms
     }
+  }
+
+  /**
+   * Check if a word is date-related (year, day with suffix, etc.)
+   */
+  private isDateRelatedTerm(word: string): boolean {
+    // Check for years (1900-2099)
+    if (/^\d{4}$/.test(word)) {
+      const year = parseInt(word)
+      if (year >= 1900 && year <= 2099) return true
+    }
+    
+    // Check for day numbers with suffixes (1st, 2nd, 3rd, 4th, ... 31st)
+    if (/^\d{1,2}(st|nd|rd|th)$/.test(word)) return true
+    
+    // Check for simple day numbers (1-31)
+    if (/^\d{1,2}$/.test(word)) {
+      const day = parseInt(word)
+      if (day >= 1 && day <= 31) return true
+    }
+    
+    return false
+  }
+
+  /**
+   * Check if a word is a month name (full or abbreviated)
+   */
+  private isMonthName(word: string): boolean {
+    const monthNames = [
+      'january', 'february', 'march', 'april', 'may', 'june',
+      'july', 'august', 'september', 'october', 'november', 'december',
+      'jan', 'feb', 'mar', 'apr', 'may', 'jun',
+      'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
+    ]
+    return monthNames.includes(word.toLowerCase())
+  }
+
+  /**
+   * Check if a phrase contains date-related terms
+   */
+  private containsDateTerms(phrase: string): boolean {
+    const words = phrase.toLowerCase().split(/\s+/)
+    return words.some(word => this.isDateRelatedTerm(word))
   }
 
   /**
