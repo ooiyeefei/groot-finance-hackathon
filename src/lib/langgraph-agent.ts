@@ -384,12 +384,20 @@ Return ONLY the sanitized query, no explanations.`;
     console.log(`[CallModel] Using original approach for ${modelType} - no sanitization needed`);
   }
   
-  // Prepare messages for LLM using processed messages (sanitized for Gemini, original for others)
-  console.log(`[CallModel] Building messages for LLM from ${processedMessages.length} processed messages`);
+  // CRITICAL FIX: Trim conversation history to prevent context pollution
+  // Keep only the last 6 messages (3 user/assistant pairs) to prevent LLM confusion
+  let trimmedMessages = processedMessages;
+  if (processedMessages.length > 6) {
+    trimmedMessages = processedMessages.slice(-6);
+    console.log(`[CallModel] TRIMMED conversation history from ${processedMessages.length} to ${trimmedMessages.length} messages to prevent context pollution`);
+  }
+  
+  // Prepare messages for LLM using trimmed messages (sanitized for Gemini, original for others)
+  console.log(`[CallModel] Building messages for LLM from ${trimmedMessages.length} processed messages`);
   
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...processedMessages.map((msg: any, index) => {
+    ...trimmedMessages.map((msg: any, index) => {
       const msgType = msg._getType ? msg._getType() : msg.type;
       console.log(`[CallModel] Processing message ${index}: type=${msgType}, content="${typeof msg.content === 'string' ? msg.content.substring(0, 50) + '...' : 'Complex content'}"`);
       
