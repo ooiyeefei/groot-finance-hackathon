@@ -3,6 +3,8 @@
 import { X, Edit, Trash2, Calendar, Building, FileText, DollarSign, Hash, Eye } from 'lucide-react'
 import { Transaction } from '@/types/transaction'
 import { formatCurrency, getTransactionTypeColor, getTransactionTypeIcon } from '@/hooks/use-transactions'
+import ConfirmationDialog from '@/components/ui/confirmation-dialog'
+import { useState } from 'react'
 
 interface TransactionDetailModalProps {
   transaction: Transaction
@@ -19,10 +21,41 @@ export default function TransactionDetailModal({
   onDelete,
   onViewDocument
 }: TransactionDetailModalProps) {
-  const handleDelete = async () => {
-    if (window.confirm(`Are you sure you want to delete this ${transaction.transaction_type}?`)) {
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean
+    isLoading: boolean
+  }>({
+    isOpen: false,
+    isLoading: false
+  })
+
+  const handleDeleteClick = () => {
+    setDeleteConfirmation({
+      isOpen: true,
+      isLoading: false
+    })
+  }
+
+  const handleDeleteConfirm = async () => {
+    setDeleteConfirmation(prev => ({ ...prev, isLoading: true }))
+
+    try {
       await onDelete()
+      setDeleteConfirmation({
+        isOpen: false,
+        isLoading: false
+      })
+    } catch (error) {
+      console.error('Delete failed:', error)
+      setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
     }
+  }
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation({
+      isOpen: false,
+      isLoading: false
+    })
   }
 
   const formatDate = (dateString: string) => {
@@ -67,7 +100,7 @@ export default function TransactionDetailModal({
               <Edit className="w-5 h-5" />
             </button>
             <button
-              onClick={handleDelete}
+              onClick={handleDeleteClick}
               className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded-lg transition-colors"
               title="Delete Transaction"
             >
@@ -376,6 +409,19 @@ export default function TransactionDetailModal({
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={deleteConfirmation.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Transaction"
+        message={`Are you sure you want to delete this ${transaction.transaction_type}? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        isLoading={deleteConfirmation.isLoading}
+      />
     </div>
   )
 }

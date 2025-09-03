@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Search, Filter, Plus, Eye, Edit, Trash2, RefreshCw, Calendar, Building, DollarSign } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
+import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import CategorySelector from './CategorySelector'
 import StatusSelector from './StatusSelector'
 import { Transaction } from '@/types/transaction'
@@ -32,6 +33,15 @@ export default function TransactionsList({
   const [selectedType, setSelectedType] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean
+    transaction: Transaction | null
+    isLoading: boolean
+  }>({
+    isOpen: false,
+    transaction: null,
+    isLoading: false
+  })
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -43,6 +53,40 @@ export default function TransactionsList({
 
   const formatCategoryName = (category: string) => {
     return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  const handleDeleteClick = (transaction: Transaction) => {
+    setDeleteConfirmation({
+      isOpen: true,
+      transaction,
+      isLoading: false
+    })
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmation.transaction) return
+
+    setDeleteConfirmation(prev => ({ ...prev, isLoading: true }))
+
+    try {
+      await onDelete(deleteConfirmation.transaction.id)
+      setDeleteConfirmation({
+        isOpen: false,
+        transaction: null,
+        isLoading: false
+      })
+    } catch (error) {
+      // Keep dialog open on error, just stop loading
+      setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
+    }
+  }
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation({
+      isOpen: false,
+      transaction: null,
+      isLoading: false
+    })
   }
 
   const filteredTransactions = transactions.filter(transaction => {
@@ -315,11 +359,7 @@ export default function TransactionsList({
                     </button>
                     
                     <button
-                      onClick={() => {
-                        if (window.confirm(`Are you sure you want to delete this ${transaction.transaction_type}?`)) {
-                          onDelete(transaction.id)
-                        }
-                      }}
+                      onClick={() => handleDeleteClick(transaction)}
                       className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded-lg transition-colors"
                       title="Delete Transaction"
                     >
@@ -332,6 +372,23 @@ export default function TransactionsList({
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={deleteConfirmation.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Transaction"
+        message={
+          deleteConfirmation.transaction
+            ? `Are you sure you want to delete this ${deleteConfirmation.transaction.transaction_type}? This action cannot be undone.`
+            : ''
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        isLoading={deleteConfirmation.isLoading}
+      />
     </div>
   )
 }

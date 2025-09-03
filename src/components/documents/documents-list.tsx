@@ -9,6 +9,7 @@ import DocumentStatusBadge from './document-status-badge'
 import ConfidenceScoreMeter from './confidence-score-meter'
 import DocumentAnalysisModal from './document-analysis-modal'
 import TransactionFormModal from '@/components/transactions/transaction-form-modal'
+import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { mapDocumentToTransaction, canCreateTransactionFromDocument } from '@/lib/document-to-transaction-mapper'
 import { CreateTransactionRequest } from '@/types/transaction'
 
@@ -33,7 +34,15 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   } = useDocumentPolling()
 
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean
+    documentId: string | null
+    isLoading: boolean
+  }>({
+    isOpen: false,
+    documentId: null,
+    isLoading: false
+  })
   const [transactionFormDocument, setTransactionFormDocument] = useState<string | null>(null)
   const [editTransactionData, setEditTransactionData] = useState<{documentId: string, transactionId: string} | null>(null)
   const [reprocessedDocuments, setReprocessedDocuments] = useState<Set<string>>(new Set())
@@ -64,24 +73,41 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   }
 
   // Handle delete confirmation
-  const confirmDelete = (documentId: string) => {
-    setDeleteConfirmId(documentId)
+  const handleDeleteClick = (documentId: string) => {
+    setDeleteConfirmation({
+      isOpen: true,
+      documentId,
+      isLoading: false
+    })
   }
 
   // Handle delete execution
-  const executeDelete = async (documentId: string) => {
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmation.documentId) return
+
+    setDeleteConfirmation(prev => ({ ...prev, isLoading: true }))
+
     try {
-      await deleteDocument(documentId)
-      setDeleteConfirmId(null)
+      await deleteDocument(deleteConfirmation.documentId)
+      setDeleteConfirmation({
+        isOpen: false,
+        documentId: null,
+        isLoading: false
+      })
     } catch (error) {
       console.error('Delete failed:', error)
-      // Keep the confirmation dialog open on error
+      // Keep dialog open on error, just stop loading
+      setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
     }
   }
 
   // Cancel delete
-  const cancelDelete = () => {
-    setDeleteConfirmId(null)
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation({
+      isOpen: false,
+      documentId: null,
+      isLoading: false
+    })
   }
 
   // Handle viewing extracted data
@@ -421,7 +447,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
                   {/* Delete button for all documents */}
                   <button
-                    onClick={() => confirmDelete(document.id)}
+                    onClick={() => handleDeleteClick(document.id)}
                     disabled={deletingDocuments.has(document.id)}
                     className="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
                     title="Delete this document"
@@ -584,32 +610,18 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         />
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmId && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg border border-gray-600 p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-medium text-white mb-4">Delete Document</h3>
-            <p className="text-gray-300 mb-6">
-              Are you sure you want to delete this document? This action cannot be undone.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={cancelDelete}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => executeDelete(deleteConfirmId)}
-                disabled={deletingDocuments.has(deleteConfirmId)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
-              >
-                {deletingDocuments.has(deleteConfirmId) ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Standardized Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={deleteConfirmation.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Document"
+        message="Are you sure you want to delete this document? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        isLoading={deleteConfirmation.isLoading}
+      />
     </div>
   )
 })
