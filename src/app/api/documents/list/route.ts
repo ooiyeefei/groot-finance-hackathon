@@ -23,15 +23,18 @@ export async function GET() {
 
     // Fetch user's documents with linked transaction information ordered by creation date (newest first)
     // Using Clerk user ID directly since RLS is disabled
+    // Exclude soft-deleted documents by filtering on deleted_at IS NULL
     const { data: documents, error } = await supabase
       .from('documents')
       .select(`
         id, file_name, file_type, file_size, storage_path, converted_image_path, converted_image_width, converted_image_height, processing_status, created_at, processed_at, error_message, extracted_data,
-        transactions:transactions!document_id (
+        transactions:transactions!document_id!left (
           id, description, original_amount, original_currency, created_at
         )
       `)
       .eq('user_id', userId)
+      .is('deleted_at', null)
+      .or('deleted_at.is.null', { foreignTable: 'transactions' })
       .order('created_at', { ascending: false })
 
     if (error) {

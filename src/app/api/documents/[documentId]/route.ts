@@ -35,7 +35,7 @@ export async function GET(
     // Create Supabase client with service role
     const supabase = createServiceSupabaseClient()
 
-    // Get document record and verify ownership
+    // Get document record and verify ownership (exclude deleted documents)
     const { data: document, error: fetchError } = await supabase
       .from('documents')
       .select(`
@@ -57,6 +57,7 @@ export async function GET(
       `)
       .eq('id', documentId)
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .single()
 
     if (fetchError || !document) {
@@ -114,12 +115,13 @@ export async function DELETE(
     // Create Supabase client with service role
     const supabase = createServiceSupabaseClient()
 
-    // Get document record and verify ownership
+    // Get document record and verify ownership (exclude deleted documents)
     const { data: document, error: fetchError } = await supabase
       .from('documents')
       .select('*')
       .eq('id', documentId)
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .single()
 
     if (fetchError || !document) {
@@ -129,7 +131,47 @@ export async function DELETE(
       )
     }
 
-    // Delete files from Supabase Storage
+    const deletedAt = new Date().toISOString()
+
+    // Soft delete document record from database first
+    const { error: deleteError } = await supabase
+      .from('documents')
+      .update({ 
+        deleted_at: deletedAt,
+        updated_at: deletedAt
+      })
+      .eq('id', documentId)
+      .eq('user_id', userId)
+
+    if (deleteError) {
+      console.error('[API] Database soft deletion failed:', deleteError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to delete document from database' },
+        { status: 500 }
+      )
+    }
+
+    // Also soft delete any associated transactions
+    const { error: transactionDeleteError } = await supabase
+      .from('transactions')
+      .update({ 
+        deleted_at: deletedAt,
+        updated_at: deletedAt
+      })
+      .eq('document_id', documentId)
+      .is('deleted_at', null) // Only soft delete non-deleted transactions
+
+    if (transactionDeleteError) {
+      console.error('[API] Failed to soft delete associated transactions:', transactionDeleteError)
+      // Continue since document was successfully deleted
+    }
+
+    // Note: Files are kept in storage for potential recovery
+    // TODO: Implement scheduled cleanup job for files of soft-deleted documents older than retention period
+    console.log(`[API] Document ${documentId} soft deleted - files preserved for recovery`)
+
+    // Optional: Delete files from Supabase Storage immediately (uncomment if desired)
+    /*
     try {
       const filesToDelete = [document.storage_path]
       
@@ -151,37 +193,21 @@ export async function DELETE(
 
       if (storageError) {
         console.warn(`[API] Failed to delete files from storage: ${storageError.message}`)
-        // Continue with database deletion even if storage deletion fails
       } else {
         console.log(`[API] Successfully deleted ${filesToDelete.length} files from storage`)
       }
     } catch (storageError) {
       console.warn(`[API] Storage deletion error:`, storageError)
-      // Continue with database deletion
     }
+    */
 
-    // Delete document record from database
-    const { error: deleteError } = await supabase
-      .from('documents')
-      .delete()
-      .eq('id', documentId)
-      .eq('user_id', userId)
-
-    if (deleteError) {
-      console.error('[API] Database deletion failed:', deleteError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to delete document from database' },
-        { status: 500 }
-      )
-    }
-
-    // TODO: Also delete from Qdrant vector database if implemented
+    // TODO: Also soft delete from Qdrant vector database if implemented
     try {
-      // This would require implementing vector deletion in the AI services
+      // This would require implementing vector soft deletion in the AI services
       // For now, we'll log this as a future enhancement
-      console.log(`[API] TODO: Delete vector embedding for document ${documentId}`)
+      console.log(`[API] TODO: Soft delete vector embedding for document ${documentId}`)
     } catch (vectorError) {
-      console.warn(`[API] Vector deletion warning:`, vectorError)
+      console.warn(`[API] Vector soft deletion warning:`, vectorError)
       // Don't fail the deletion if vector cleanup fails
     }
 

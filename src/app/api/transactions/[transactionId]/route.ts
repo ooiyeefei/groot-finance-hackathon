@@ -41,10 +41,12 @@ export async function GET(
       .from('transactions')
       .select(`
         *,
-        line_items (*)
+        line_items!left (*)
       `)
       .eq('id', transactionId)
       .eq('user_id', userId)
+      .is('deleted_at', null)
+      .or('deleted_at.is.null', { foreignTable: 'line_items' })
       .single()
 
     if (error) {
@@ -114,6 +116,7 @@ export async function PUT(
       .select('*')
       .eq('id', transactionId)
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .single()
 
     if (fetchError) {
@@ -242,7 +245,7 @@ export async function PUT(
       .eq('user_id', userId)
       .select(`
         *,
-        line_items (*)
+        line_items!left (*)
       `)
       .single()
 
@@ -341,12 +344,13 @@ export async function DELETE(
 
     const supabase = createServiceSupabaseClient()
 
-    // First verify the transaction exists and belongs to the user
+    // First verify the transaction exists and belongs to the user (and is not already deleted)
     const { data: existingTransaction, error: fetchError } = await supabase
       .from('transactions')
       .select('id')
       .eq('id', transactionId)
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .single()
 
     if (fetchError) {
@@ -363,19 +367,38 @@ export async function DELETE(
       )
     }
 
-    // Delete the transaction (line_items will be deleted automatically via CASCADE)
+    const deletedAt = new Date().toISOString()
+
+    // Soft delete the transaction by setting deleted_at timestamp
     const { error: deleteError } = await supabase
       .from('transactions')
-      .delete()
+      .update({ 
+        deleted_at: deletedAt,
+        updated_at: deletedAt
+      })
       .eq('id', transactionId)
       .eq('user_id', userId)
 
     if (deleteError) {
-      console.error('[Transaction API] Failed to delete transaction:', deleteError)
+      console.error('[Transaction API] Failed to soft delete transaction:', deleteError)
       return NextResponse.json(
         { success: false, error: 'Failed to delete transaction' },
         { status: 500 }
       )
+    }
+
+    // Also soft delete associated line items to maintain referential integrity
+    const { error: lineItemsDeleteError } = await supabase
+      .from('line_items')
+      .update({ 
+        deleted_at: deletedAt,
+        updated_at: deletedAt
+      })
+      .eq('transaction_id', transactionId)
+
+    if (lineItemsDeleteError) {
+      console.error('[Transaction API] Failed to soft delete line items:', lineItemsDeleteError)
+      // Continue with success since transaction was deleted, but log the line items error
     }
 
     console.log(`[Transaction API] Successfully deleted transaction ${transactionId}`)

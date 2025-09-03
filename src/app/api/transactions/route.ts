@@ -321,9 +321,11 @@ export async function GET(request: NextRequest) {
       .from('transactions')
       .select(`
         *,
-        line_items (*)
+        line_items!left (*) 
       `)
       .eq('user_id', userId)
+      .is('deleted_at', null)
+      .or('deleted_at.is.null', { foreignTable: 'line_items' })
 
     // Apply filters
     if (params.transaction_type) {
@@ -379,11 +381,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get total count for pagination
+    // Get total count for pagination (excluding soft-deleted transactions)
     const { count: totalCount } = await supabase
       .from('transactions')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
+      .is('deleted_at', null)
 
     const hasMore = offset + params.limit! < (totalCount || 0)
 
