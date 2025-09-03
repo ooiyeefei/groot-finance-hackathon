@@ -19,6 +19,104 @@ interface TransactionLookupParameters {
 }
 
 export class TransactionLookupTool extends BaseTool {
+  // Temporal contamination detection patterns
+  private static readonly TEMPORAL_PATTERNS = [
+    /\b(past|last|previous|recent)\b/gi,
+    /\b(days?|weeks?|months?|years?)\b/gi,
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/gi,
+    /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/gi,
+    /\b(today|yesterday|tomorrow)\b/gi,
+    /\b(this|next)\s+(week|month|year)\b/gi,
+    /\d{1,2}(st|nd|rd|th)\b/gi,  // 25th, 3rd, etc.
+    /\b\d{1,4}[-/]\d{1,2}[-/]\d{1,4}\b/gi  // Date patterns
+  ]
+
+  private static readonly ANALYTICAL_PATTERNS = [
+    /\b(largest|biggest|highest|maximum|max)\b/gi,
+    /\b(smallest|lowest|minimum|min)\b/gi,
+    /\b(total|sum|average|mean)\b/gi,
+    /\b(all|every|each)\b/gi,
+    /\b(what|show|list|find)\b/gi
+  ]
+
+  /**
+   * Self-defending query sanitization to prevent temporal contamination
+   */
+  private _sanitize_query(query: string, dateRange?: string): string {
+    if (!query || !query.trim()) {
+      return ""
+    }
+
+    const originalQuery = query.toLowerCase().trim()
+    let sanitized = originalQuery
+
+    // Remove temporal contamination
+    for (const pattern of TransactionLookupTool.TEMPORAL_PATTERNS) {
+      sanitized = sanitized.replace(pattern, '')
+    }
+
+    // Remove analytical contamination  
+    for (const pattern of TransactionLookupTool.ANALYTICAL_PATTERNS) {
+      sanitized = sanitized.replace(pattern, '')
+    }
+
+    // Clean up extra spaces and common words
+    sanitized = sanitized.replace(/\b(i|have|in|the|what|are|transactions?)\b/gi, '')
+    sanitized = sanitized.split(/\s+/).filter(word => word.length > 0).join(' ') // Normalize spaces
+
+    // Log contamination detection
+    if (sanitized !== originalQuery) {
+      console.log(`[GUARDRAIL] Query sanitized: '${originalQuery}' → '${sanitized}'`)
+    }
+
+    // If date_range exists and query is now empty/meaningless, return empty
+    if (dateRange && (!sanitized || sanitized.length < 3)) {
+      console.log(`[GUARDRAIL] Empty query with dateRange=${dateRange} - returning empty string`)
+      return ""
+    }
+      
+    return sanitized
+  }
+
+  /**
+   * Pre-execution parameter validation with automatic fixes
+   */
+  private _validate_parameters(parameters: TransactionLookupParameters): { is_valid: boolean; issues: string[]; suggested_fixes: Partial<TransactionLookupParameters> } {
+    const issues: string[] = []
+    const suggested_fixes: Partial<TransactionLookupParameters> = {}
+
+    // Check for temporal contamination in query
+    if (parameters.query) {
+      const queryLower = parameters.query.toLowerCase()
+      for (const pattern of TransactionLookupTool.TEMPORAL_PATTERNS) {
+        if (pattern.test(queryLower)) {
+          issues.push(`Temporal contamination detected: ${pattern}`)
+        }
+      }
+    }
+
+    // Check for query pollution when asking for "all transactions"
+    if (parameters.dateRange && parameters.query) {
+      const pollutionIndicators = ['all', 'transactions', 'what', 'are', 'show', 'list']
+      const queryWords = new Set(parameters.query.toLowerCase().split(/\s+/))
+      const intersection = pollutionIndicators.filter(word => queryWords.has(word))
+      if (intersection.length >= 2) {
+        issues.push("Query pollution detected - likely asking for all transactions in period")
+      }
+    }
+
+    // Suggest fixes if issues found
+    if (issues.length > 0 && parameters.query) {
+      suggested_fixes.query = this._sanitize_query(parameters.query, parameters.dateRange)
+    }
+
+    return {
+      is_valid: issues.length === 0,
+      issues,
+      suggested_fixes
+    }
+  }
+
   getToolName(modelType: ModelType = 'openai'): string {
     return modelType === 'gemini' ? 'get_data_records' : 'get_transactions'
   }
@@ -46,12 +144,13 @@ export class TransactionLookupTool extends BaseTool {
           type: "object",
           properties: {
             query: {
-              type: "string",
-              description: "Query to filter transactions by description, category, vendor name, or other attributes"
+              type: "string", 
+              description: "CONTENT SEARCH ONLY: Vendor names, transaction descriptions, or category terms. NEVER include dates, time words, or analytical terms like 'largest'. Use empty string for 'all transactions' queries.",
+              examples: ["", "McDonald's", "Grab", "office supplies"]
             },
             dateRange: {
-              type: "string",
-              description: "Relative date range for filtering transactions. Use this for queries like 'past 60 days' instead of calculating specific dates. PREFERRED over startDate/endDate for relative queries.",
+              type: "string", 
+              description: "TIME CONSTRAINT ONLY: Handles all temporal filtering. Use this for queries like 'past 60 days' instead of calculating specific dates.",
               enum: ["past_7_days", "past_30_days", "past_60_days", "past_90_days", "this_month", "last_month", "this_year"]
             },
             startDate: {
@@ -171,6 +270,27 @@ export class TransactionLookupTool extends BaseTool {
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as TransactionLookupParameters
+    
+    // Apply guardrails - CRITICAL Layer 3 protection
+    const validation = this._validate_parameters(params)
+    
+    if (!validation.is_valid) {
+      console.log(`[GUARDRAIL] Parameter issues detected: ${validation.issues.join(', ')}`)
+      
+      // Auto-correct the parameters
+      if (validation.suggested_fixes.query !== undefined) {
+        params.query = validation.suggested_fixes.query
+        console.log(`[GUARDRAIL] Auto-corrected query to: '${params.query}'`)
+      }
+    }
+
+    // Execute search with cleaned parameters
+    const sanitizedQuery = this._sanitize_query(params.query || '', params.dateRange)
+    if (params.query && sanitizedQuery !== params.query) {
+      params.query = sanitizedQuery
+      console.log(`[GUARDRAIL] Final sanitized query: '${params.query}'`)
+    }
+
     const query = params.query?.trim() || 'all transactions'
     const limit = params.limit || 20
 
@@ -206,41 +326,125 @@ export class TransactionLookupTool extends BaseTool {
       if (params.dateRange) {
         console.log(`[TransactionLookupTool] DETERMINISTIC: Calculating dates for range: ${params.dateRange}`)
         const today = new Date() // Current date - reliable!
-        endDate = today.toISOString().split('T')[0] // YYYY-MM-DD format
         
-        const startDateObj = new Date()
+        // NEW LOGIC: Handle month_year patterns (e.g., "june_2024") and month-only patterns (e.g., "june")
+        const monthYearMatch = params.dateRange.match(/^(\w+)_(\d{4})$/)
+        const monthOnlyMatch = params.dateRange.match(/^(\w+)$/) && 
+                              !['past_7_days', 'past_30_days', 'past_60_days', 'past_90_days', 'this_month', 'last_month', 'this_year'].includes(params.dateRange)
         
-        switch (params.dateRange) {
-          case 'past_7_days':
-            startDateObj.setDate(today.getDate() - 7)
-            break
-          case 'past_30_days':
-            startDateObj.setDate(today.getDate() - 30)
-            break  
-          case 'past_60_days':
-            startDateObj.setDate(today.getDate() - 60)
-            break
-          case 'past_90_days':
-            startDateObj.setDate(today.getDate() - 90)
-            break
-          case 'this_month':
-            startDateObj.setDate(1) // First day of current month
-            break
-          case 'last_month':
-            startDateObj.setMonth(today.getMonth() - 1)
-            startDateObj.setDate(1)
-            endDate = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0] // Last day of previous month
-            break
-          case 'this_year':
-            startDateObj.setMonth(0, 1) // January 1st of current year
-            break
+        if (monthYearMatch) {
+          // Handle patterns like "june_2024"
+          const monthName = monthYearMatch[1].toLowerCase()
+          const year = parseInt(monthYearMatch[2])
+          
+          // Convert month name to month number (0-based for Date constructor)
+          const monthMap: { [key: string]: number } = {
+            'january': 0, 'jan': 0,
+            'february': 1, 'feb': 1,
+            'march': 2, 'mar': 2,
+            'april': 3, 'apr': 3,
+            'may': 4,
+            'june': 5, 'jun': 5,
+            'july': 6, 'jul': 6,
+            'august': 7, 'aug': 7,
+            'september': 8, 'sep': 8, 'sept': 8,
+            'october': 9, 'oct': 9,
+            'november': 10, 'nov': 10,
+            'december': 11, 'dec': 11
+          }
+          
+          const monthNumber = monthMap[monthName]
+          if (monthNumber !== undefined) {
+            // Calculate first and last day of the specified month
+            const startDateObj = new Date(year, monthNumber, 1)
+            const endDateObj = new Date(year, monthNumber + 1, 0) // Last day of the month
+            
+            startDate = startDateObj.toISOString().split('T')[0]
+            endDate = endDateObj.toISOString().split('T')[0]
+            
+            console.log(`[TransactionLookupTool] MONTH_YEAR: Parsed ${params.dateRange} as ${monthName} ${year}`)
+            console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
+          } else {
+            console.warn(`[TransactionLookupTool] Unknown month name: ${monthName}`)
+            // Fall back to current date range
+            endDate = today.toISOString().split('T')[0]
+            startDate = endDate
+          }
+        } else if (monthOnlyMatch) {
+          // Handle patterns like "june" (defaults to current year)
+          const monthName = params.dateRange.toLowerCase()
+          const currentYear = today.getFullYear()
+          
+          // Convert month name to month number (0-based for Date constructor)
+          const monthMap: { [key: string]: number } = {
+            'january': 0, 'jan': 0,
+            'february': 1, 'feb': 1,
+            'march': 2, 'mar': 2,
+            'april': 3, 'apr': 3,
+            'may': 4,
+            'june': 5, 'jun': 5,
+            'july': 6, 'jul': 6,
+            'august': 7, 'aug': 7,
+            'september': 8, 'sep': 8, 'sept': 8,
+            'october': 9, 'oct': 9,
+            'november': 10, 'nov': 10,
+            'december': 11, 'dec': 11
+          }
+          
+          const monthNumber = monthMap[monthName]
+          if (monthNumber !== undefined) {
+            // Calculate first and last day of the specified month in current year
+            const startDateObj = new Date(currentYear, monthNumber, 1)
+            const endDateObj = new Date(currentYear, monthNumber + 1, 0) // Last day of the month
+            
+            startDate = startDateObj.toISOString().split('T')[0]
+            endDate = endDateObj.toISOString().split('T')[0]
+            
+            console.log(`[TransactionLookupTool] MONTH_ONLY: Parsed ${params.dateRange} as ${monthName} ${currentYear}`)
+            console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
+          } else {
+            console.warn(`[TransactionLookupTool] Unknown month name: ${monthName}`)
+            // Fall back to current date range
+            endDate = today.toISOString().split('T')[0]
+            startDate = endDate
+          }
+        } else {
+          // Existing logic for standard dateRange values
+          endDate = today.toISOString().split('T')[0] // YYYY-MM-DD format
+          const startDateObj = new Date()
+          
+          switch (params.dateRange) {
+            case 'past_7_days':
+              startDateObj.setDate(today.getDate() - 7)
+              break
+            case 'past_30_days':
+              startDateObj.setDate(today.getDate() - 30)
+              break  
+            case 'past_60_days':
+              startDateObj.setDate(today.getDate() - 60)
+              break
+            case 'past_90_days':
+              startDateObj.setDate(today.getDate() - 90)
+              break
+            case 'this_month':
+              startDateObj.setDate(1) // First day of current month
+              break
+            case 'last_month':
+              startDateObj.setMonth(today.getMonth() - 1)
+              startDateObj.setDate(1)
+              endDate = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0] // Last day of previous month
+              break
+            case 'this_year':
+              startDateObj.setMonth(0, 1) // January 1st of current year
+              break
+          }
+          
+          startDate = startDateObj.toISOString().split('T')[0]
+          console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
+          console.log(`[TransactionLookupTool] Current timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+          console.log(`[TransactionLookupTool] Start date object: ${startDateObj.toISOString()}`)
+          console.log(`[TransactionLookupTool] End date object: ${new Date(endDate + 'T23:59:59').toISOString()}`)
         }
-        
-        startDate = startDateObj.toISOString().split('T')[0]
-        console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
-        console.log(`[TransactionLookupTool] Current timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
-        console.log(`[TransactionLookupTool] Start date object: ${startDateObj.toISOString()}`)
-        console.log(`[TransactionLookupTool] End date object: ${new Date(endDate + 'T23:59:59').toISOString()}`)
       }
 
       // CRITICAL: Use consistent user_id column (from CLAUDE.md: Users → All entities via user_id)

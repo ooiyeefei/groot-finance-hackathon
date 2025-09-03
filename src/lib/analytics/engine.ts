@@ -8,10 +8,21 @@ import { SupportedCurrency } from '@/types/transaction';
 import { AgedReceivables, AgedPayables } from '@/components/dashboard/types/analytics';
 import { calculateRiskScore, TransactionRiskContext, RiskScore, DEFAULT_RISK_CONFIG } from './risk-scoring';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Create Supabase client with error handling for build process
+function createSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.warn('Supabase configuration missing during build process');
+    // Return a mock client during build to prevent errors
+    return null as any;
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+const supabase = createSupabaseClient();
 
 export interface EnhancedAgedReceivables extends AgedReceivables {
   risk_distribution: {
@@ -72,6 +83,10 @@ export interface AnalyticsCalculationOptions {
  * Get Supabase user ID from Clerk user ID
  */
 async function getSupabaseUserId(clerkUserId: string): Promise<string> {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized');
+  }
+
   const { data: user, error } = await supabase
     .from('users')
     .select('id')
@@ -98,6 +113,10 @@ export async function calculateFinancialAnalytics(
   periodEnd: Date,
   options: AnalyticsCalculationOptions = {}
 ): Promise<FinancialAnalytics> {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized');
+  }
+
   const { homeCurrency = 'SGD', forceRefresh = false } = options;
 
   // Get Supabase user ID for caching (but use Clerk ID for transactions)
@@ -496,6 +515,10 @@ async function getCachedAnalytics(
   periodStart: Date,
   periodEnd: Date
 ): Promise<FinancialAnalytics | null> {
+  if (!supabase) {
+    return null;
+  }
+
   const { data: cached, error } = await supabase
     .from('financial_analytics')
     .select('*')
