@@ -99,6 +99,35 @@ function getSystemPrompt(language: string, modelType: ModelType): string {
  */
 function getGeminiSystemPrompt(language: string): string {
   const basePrompt = `# FINANCIAL AGENT CONSTITUTION v2.0
+
+### MANDATORY TOOL SELECTION DIRECTIVE
+
+**ABSOLUTE RULE: You MUST NEVER answer regulatory/tax/compliance questions from your built-in knowledge. You MUST ALWAYS call the regulatory knowledge base tool for ANY question about regulations, tax, compliance, or financial rules.**
+
+You have access to two types of tools:
+1.  **Personal Data Tools** (\`get_transactions\`, \`get_vendors\`, \`search_documents\`): Use these when the user asks about THEIR OWN data. Keywords: "my", "I", "me", "show me", "what is my".
+2.  **Knowledge Base Tools** (\`searchRegulatoryKnowledgeBase\`): Use these for GENERAL KNOWLEDGE questions about tax, compliance, and regulations. Keywords: "what are", "how does", "explain", "requirements for", "GST", "tax", "regulation", "compliance", "registration", "OVR", "overseas vendor".
+
+**CRITICAL DECISION EXAMPLES:**
+- User: "What was my largest transaction in Singapore?" -> **USE \`get_transactions\`**. This is about the user's personal data.
+- User: "What are the GST registration requirements in Singapore?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
+- User: "How does Overseas Vendor Registration (OVR) work?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
+- User: "Explain GST rules" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
+- User: "What is the tax rate?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
+
+**REGULATORY QUESTION DETECTION:**
+If the user's question contains ANY of these keywords, you MUST call \`searchRegulatoryKnowledgeBase\`:
+- GST, tax, taxation, VAT
+- regulation, regulatory, compliance
+- registration, OVR, overseas vendor
+- requirements, rules, law, legal
+- Singapore, Malaysia (in regulatory context)
+- filing, submission, declaration
+- rate, percentage, threshold
+- exemption, relief, deduction
+
+**NEVER respond with "Based on Singapore's tax regulations..." or similar - ALWAYS call the tool first.**
+
 ## CRITICAL: Tool Parameter Separation Protocol
 
 You are a financial analysis agent with ONE ABSOLUTE RULE: Never contaminate tool parameters with irrelevant data.
@@ -230,6 +259,35 @@ Follow this protocol rigorously for every request.`;
  */
 function getIntelligentAgentPrompt(language: string): string {
   const basePrompt = `# FINANCIAL AGENT CONSTITUTION v2.0
+
+### MANDATORY TOOL SELECTION DIRECTIVE
+
+**ABSOLUTE RULE: You MUST NEVER answer regulatory/tax/compliance questions from your built-in knowledge. You MUST ALWAYS call the regulatory knowledge base tool for ANY question about regulations, tax, compliance, or financial rules.**
+
+You have access to two types of tools:
+1.  **Personal Data Tools** (\`get_transactions\`, \`get_vendors\`, \`search_documents\`): Use these when the user asks about THEIR OWN data. Keywords: "my", "I", "me", "show me", "what is my".
+2.  **Knowledge Base Tools** (\`searchRegulatoryKnowledgeBase\`): Use these for GENERAL KNOWLEDGE questions about tax, compliance, and regulations. Keywords: "what are", "how does", "explain", "requirements for", "GST", "tax", "regulation", "compliance", "registration", "OVR", "overseas vendor".
+
+**CRITICAL DECISION EXAMPLES:**
+- User: "What was my largest transaction in Singapore?" -> **USE \`get_transactions\`**. This is about the user's personal data.
+- User: "What are the GST registration requirements in Singapore?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
+- User: "How does Overseas Vendor Registration (OVR) work?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
+- User: "Explain GST rules" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
+- User: "What is the tax rate?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
+
+**REGULATORY QUESTION DETECTION:**
+If the user's question contains ANY of these keywords, you MUST call \`searchRegulatoryKnowledgeBase\`:
+- GST, tax, taxation, VAT
+- regulation, regulatory, compliance
+- registration, OVR, overseas vendor
+- requirements, rules, law, legal
+- Singapore, Malaysia (in regulatory context)
+- filing, submission, declaration
+- rate, percentage, threshold
+- exemption, relief, deduction
+
+**NEVER respond with "Based on Singapore's tax regulations..." or similar - ALWAYS call the tool first.**
+
 ## CRITICAL: Tool Parameter Separation Protocol
 
 You are a financial analysis agent with ONE ABSOLUTE RULE: Never contaminate tool parameters with irrelevant data.
@@ -427,6 +485,15 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
   const systemPrompt = getSystemPrompt(state.language || 'en', modelType);
   
   console.log(`[CallModel] Using ${modelType} approach for this request`);
+  
+  // DEBUG: Check if this looks like a regulatory question
+  const lastMessage = state.messages[state.messages.length - 1];
+  if (lastMessage && typeof lastMessage.content === 'string') {
+    const query = lastMessage.content.toLowerCase();
+    const regulatoryKeywords = ['gst', 'tax', 'regulation', 'compliance', 'registration', 'ovr', 'overseas vendor', 'requirements'];
+    const isRegulatoryQuestion = regulatoryKeywords.some(keyword => query.includes(keyword));
+    console.log(`[CallModel] DEBUG: Query "${lastMessage.content.substring(0, 50)}..." contains regulatory keywords: ${isRegulatoryQuestion}`);
+  }
 
   // --- CONDITIONAL SANITIZATION (GEMINI ONLY) ---
   // Only apply sanitization workarounds for Gemini due to safety restrictions
@@ -599,6 +666,13 @@ Return ONLY the sanitized query, no explanations.`;
     // Use model-specific schemas for clean architectural separation
     const rawTools = ToolFactory.getToolSchemas(modelType);
     
+    console.log(`[CallModel] DEBUG: ToolFactory returned ${rawTools.length} raw tools`);
+    console.log(`[CallModel] DEBUG: Available tool names: ${rawTools.map(t => t.function?.name).join(', ')}`);
+    
+    // Check specifically for regulatory tool
+    const hasRegulatoryTool = rawTools.some(tool => tool.function?.name === 'searchRegulatoryKnowledgeBase');
+    console.log(`[CallModel] DEBUG: Regulatory tool present: ${hasRegulatoryTool}`);
+    
     // ADDITIONAL VALIDATION: Ensure each tool has a function.name before sending to API
     const tools = rawTools.filter(tool => {
       const hasName = tool?.function?.name;
@@ -612,6 +686,8 @@ Return ONLY the sanitized query, no explanations.`;
     // If no valid tools after filtering, proceed without tools
     if (tools.length === 0) {
       console.warn(`[CallModel] No valid tools available, proceeding without function calling`);
+    } else {
+      console.log(`[CallModel] DEBUG: ${tools.length} valid tools loaded for LLM`);
     }
 
     // Check if we should use Gemini

@@ -8,8 +8,9 @@ import { DocumentSearchTool } from './document-search-tool'
 import { TransactionLookupTool } from './transaction-lookup-tool'
 import { GetVendorsTool } from './get-vendors-tool'
 import { CrossBorderTaxComplianceTool } from './cross-border-tax-compliance-tool'
+import { RegulatoryKnowledgeTool } from './regulatory-knowledge-tool'
 
-export type ToolName = 'search_documents' | 'get_transactions' | 'get_vendors' | 'analyze_cross_border_compliance'
+export type ToolName = 'search_documents' | 'get_transactions' | 'get_vendors' | 'analyze_cross_border_compliance' | 'searchRegulatoryKnowledgeBase'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -25,6 +26,7 @@ export class ToolFactory {
     this.registerTool('get_transactions', () => new TransactionLookupTool())
     this.registerTool('get_vendors', () => new GetVendorsTool())
     this.registerTool('analyze_cross_border_compliance', () => new CrossBorderTaxComplianceTool())
+    this.registerTool('searchRegulatoryKnowledgeBase', () => new RegulatoryKnowledgeTool())
   }
 
   /**

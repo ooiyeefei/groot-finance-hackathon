@@ -690,6 +690,7 @@ class RegulatoryTextProcessor:
                 'topics': document['topics'],
                 'language': document['language'],
                 'document_version': document['document_version'],
+                'url': document.get('url', ''),  # Add URL from sources.yaml
                 'chunk_index': chunk_index,
                 'char_count': len(text),
                 'sentence_range': [start_sentence, end_sentence],

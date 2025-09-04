@@ -3,7 +3,8 @@ import { auth } from '@clerk/nextjs/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { SupportedLanguage } from '@/lib/translations'
 import { createFinancialAgent, AgentState } from '@/lib/langgraph-agent'
-import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages'
+import { HumanMessage, AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages'
+import { CitationData } from '@/lib/tools/base-tool'
 
 interface ChatRequest {
   message: string
@@ -35,6 +36,57 @@ function parseFinalAnswer(content: string): string {
   }
 
   return content
+}
+
+/**
+ * Extract citations from tool messages in the conversation
+ */
+function extractCitations(messages: BaseMessage[]): CitationData[] {
+  const allCitations: CitationData[] = []
+  
+  console.log(`[Citation Extraction] Processing ${messages.length} messages`)
+  
+  for (const message of messages) {
+    console.log(`[Citation Extraction] Message type: ${message._getType()}, content preview:`, 
+                typeof message.content === 'string' ? message.content.substring(0, 100) + '...' : 'non-string')
+    
+    if (message._getType() === 'tool') {
+      const toolMessage = message as ToolMessage
+      console.log(`[Citation Extraction] Tool message name: ${toolMessage.name}`)
+      
+      try {
+        // Get tool content as string
+        const toolContent = typeof toolMessage.content === 'string' 
+          ? toolMessage.content 
+          : JSON.stringify(toolMessage.content)
+        
+        // Check if this is a regulatory knowledge tool result
+        if (toolMessage.name === 'searchRegulatoryKnowledgeBase') {
+          console.log('[Citation Extraction] Found regulatory knowledge tool result')
+          // Extract embedded citations data
+          const citationsMatch = toolContent.match(/<!--CITATIONS_DATA:([\s\S]+?):END_CITATIONS-->/)
+          if (citationsMatch) {
+            try {
+              const citationsData = JSON.parse(citationsMatch[1])
+              if (Array.isArray(citationsData)) {
+                console.log(`[Citation Extraction] Found ${citationsData.length} citations in tool result`)
+                allCitations.push(...citationsData)
+              }
+            } catch (parseError) {
+              console.error('Error parsing embedded citations data:', parseError)
+            }
+          } else {
+            console.log('[Citation Extraction] No citations data found in regulatory tool result')
+          }
+        }
+      } catch (error) {
+        console.error('Error extracting citations from tool message:', error)
+      }
+    }
+  }
+  
+  console.log(`[Citation Extraction] Total citations extracted: ${allCitations.length}`)
+  return allCitations
 }
 
 export async function POST(request: NextRequest) {
@@ -129,11 +181,12 @@ export async function POST(request: NextRequest) {
 
     console.log('[Chat API] LangGraph agent completed')
 
-    // Extract the final assistant response
+    // Extract the final assistant response and citations
     const finalMessages = (result.messages as BaseMessage[]) || []
     const lastMessage = finalMessages.length > 0 ? finalMessages[finalMessages.length - 1] : null
     
     let assistantResponse = "I apologize, but I couldn't process your request. Please try again."
+    let citations: CitationData[] = []
     
     if (lastMessage && lastMessage._getType() === 'ai') {
       assistantResponse = lastMessage.content as string
@@ -152,6 +205,9 @@ export async function POST(request: NextRequest) {
       // CRITICAL: Filter out thinking process and internal reasoning
       assistantResponse = parseFinalAnswer(assistantResponse)
     }
+    
+    // Extract citations from the conversation
+    citations = extractCitations(finalMessages)
 
     // Save user message to database
     const { error: userMessageError } = await supabase
@@ -167,14 +223,15 @@ export async function POST(request: NextRequest) {
       console.error('Error saving user message:', userMessageError)
     }
 
-    // Save assistant response to database
+    // Save assistant response to database with citations
     const { error: assistantMessageError } = await supabase
       .from('messages')
       .insert({
         conversation_id: currentConversationId,
         user_id: userId,
         role: 'assistant',
-        content: assistantResponse
+        content: assistantResponse,
+        metadata: citations.length > 0 ? { citations } : null
       })
 
     if (assistantMessageError) {
@@ -188,11 +245,12 @@ export async function POST(request: NextRequest) {
       .eq('id', currentConversationId)
       .eq('user_id', userId)
 
-    console.log('[Chat API] Successfully completed LangGraph agent interaction')
+    console.log(`[Chat API] Successfully completed LangGraph agent interaction with ${citations.length} citations`)
 
     return NextResponse.json({
       message: assistantResponse,
-      conversationId: currentConversationId
+      conversationId: currentConversationId,
+      citations: citations
     })
 
   } catch (error) {

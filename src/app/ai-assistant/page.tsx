@@ -17,6 +17,24 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  citations?: Array<{
+    id: string
+    index: number
+    source_name: string
+    country: string
+    section?: string
+    pdf_url?: string
+    page_number?: number
+    text_coordinates?: {
+      x1: number
+      y1: number
+      x2: number
+      y2: number
+    }
+    content_snippet: string
+    confidence_score: number
+    official_url?: string
+  }>
 }
 
 interface ConversationData {
@@ -32,6 +50,26 @@ interface ConversationData {
     role: 'user' | 'assistant'
     content: string
     created_at: string
+    metadata?: {
+      citations?: Array<{
+        id: string
+        index: number
+        source_name: string
+        country: string
+        section?: string
+        pdf_url?: string
+        page_number?: number
+        text_coordinates?: {
+          x1: number
+          y1: number
+          x2: number
+          y2: number
+        }
+        content_snippet: string
+        confidence_score: number
+        official_url?: string
+      }>
+    }
   }>
 }
 
@@ -92,7 +130,8 @@ export default function AIAssistantPage() {
           id: msg.id,
           role: msg.role,
           content: msg.content,
-          timestamp: new Date(msg.created_at)
+          timestamp: new Date(msg.created_at),
+          citations: msg.metadata?.citations || []
         }))
         
         setCurrentMessages(formattedMessages)

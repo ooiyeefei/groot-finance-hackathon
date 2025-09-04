@@ -515,6 +515,69 @@ export class VectorStorageService implements IVectorStorageService {
   }
 
   /**
+   * Search the PUBLIC regulatory knowledge base.
+   * This is a separate, unsecured search against the 'regulatory_kb' collection.
+   */
+  async searchRegulatoryKb(
+    embedding: number[],
+    limit: number = 5,
+    scoreThreshold: number = 0.3
+  ): Promise<Array<{ id: string; score: number; payload?: Record<string, unknown> }>> {
+    const regulatoryCollection = "regulatory_kb"; // HARDCODED for this specific function
+    console.log(`[Qdrant] Searching REGULATORY KB for ${limit} documents with threshold ${scoreThreshold}`);
+
+    try {
+      const response = await fetch(`${this.qdrantUrl}/collections/${regulatoryCollection}/points/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': this.apiKey
+        },
+        body: JSON.stringify({
+          vector: embedding,
+          limit,
+          with_payload: true,
+          score_threshold: scoreThreshold
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new ProcessingError(
+          `Failed to search regulatory KB: ${response.status} ${response.statusText}`,
+          {
+            service: 'Qdrant',
+            statusCode: response.status,
+            retryable: response.status >= 500
+          }
+        );
+      }
+
+      const result = await response.json();
+      if (result.status !== 'ok') {
+        throw new ProcessingError('Qdrant regulatory search failed', { service: 'Qdrant', retryable: true });
+      }
+
+      const results = (result.result || []).map((hit: any) => ({
+        id: String(hit.id),
+        score: hit.score,
+        payload: hit.payload || {}
+      }));
+
+      console.log(`[Qdrant] Found ${results.length} relevant regulatory documents.`);
+      return results;
+
+    } catch (error) {
+      console.error('[Qdrant] Regulatory KB search failed:', error);
+      if (error instanceof ProcessingError) throw error;
+      throw new ProcessingError(
+        `Regulatory KB search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        { service: 'Qdrant', retryable: false }
+      );
+    }
+  }
+
+  /**
    * Get collection statistics
    */
   async getCollectionStats(): Promise<{

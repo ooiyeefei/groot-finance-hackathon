@@ -4,12 +4,15 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Loader2, Trash2, MoreVertical } from 'lucide-react'
 import { useLanguage } from '@/contexts/language-context'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
+import { CitationData } from '@/lib/tools/base-tool'
+import CitationOverlay from '@/components/citations/citation-overlay'
 
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  citations?: CitationData[]
 }
 
 interface ChatInterfaceProps {
@@ -25,6 +28,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>(conversationId)
+  const [activeCitation, setActiveCitation] = useState<CitationData | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const isUpdatingFromProps = useRef(false)
@@ -37,25 +41,60 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const handleCitationClick = (citation: CitationData) => {
+    setActiveCitation(citation)
+  }
+
+  const renderContentWithCitations = (content: string, citations: CitationData[] = []) => {
+    // Parse [^1], [^2] markers and make them clickable
+    const citationRegex = /\[\^(\d+)\]/g
+    const parts = content.split(citationRegex)
+    
+    return parts.map((part, index) => {
+      if (index % 2 === 1) {
+        // This is a citation number
+        const citationIndex = parseInt(part) - 1
+        const citation = citations[citationIndex]
+        
+        if (citation) {
+          return (
+            <button
+              key={`citation-${index}`}
+              className="inline-flex items-center px-1 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer mx-0.5 transition-colors"
+              onClick={() => handleCitationClick(citation)}
+              title={`${citation.source_name} (${citation.country})`}
+            >
+              ^{part}
+            </button>
+          )
+        } else {
+          // Citation reference but no citation data available
+          return (
+            <span key={`citation-missing-${index}`} className="inline-flex items-center px-1 py-0.5 text-xs bg-gray-500 text-white rounded mx-0.5">
+              ^{part}
+            </span>
+          )
+        }
+      }
+      return part
+    })
+  }
+
   useEffect(() => {
     scrollToBottom()
   }, [messages])
 
-  // Update messages when initialMessages or conversationId changes (conversation switch)
+  // Sync conversation ID when prop changes
   useEffect(() => {
-    // Set flag to prevent feedback loop
-    isUpdatingFromProps.current = true
-    setMessages(initialMessages || [])
     setCurrentConversationId(conversationId)
-    isUpdatingFromProps.current = false
-  }, [initialMessages, conversationId])
+  }, [conversationId])
 
-  // Notify parent when messages change (but not when updating from props)
+  // Notify parent when messages change - using useEffect directly to avoid callback recreation
   useEffect(() => {
-    if (!isUpdatingFromProps.current && onMessagesUpdate) {
+    if (onMessagesUpdate && messages.length > 0) {
       onMessagesUpdate(messages)
     }
-  }, [messages]) // Remove onMessagesUpdate from deps to prevent infinite loop
+  }, [messages, onMessagesUpdate])
 
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return
@@ -101,7 +140,8 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: data.message,
-        timestamp: new Date()
+        timestamp: new Date(),
+        citations: data.citations || []
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -272,7 +312,12 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
               >
                 <div className="flex items-start justify-between px-4 py-2">
                   <div className="flex-1 mr-2">
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <div className="text-sm whitespace-pre-wrap">
+                      {message.role === 'assistant' && message.citations && message.citations.length > 0
+                        ? renderContentWithCitations(message.content, message.citations)
+                        : message.content
+                      }
+                    </div>
                     <p className={`text-xs mt-1 ${
                       message.role === 'user' ? 'text-blue-200' : 'text-gray-400'
                     }`}>
@@ -353,7 +398,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             placeholder={t.inputPlaceholder}
             className="flex-1 bg-gray-700 text-white placeholder-gray-400 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600"
             disabled={isLoading}
@@ -384,6 +429,14 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
         confirmVariant="danger"
         isLoading={isDeletingMessage}
       />
+
+      {/* Citation Overlay */}
+      <CitationOverlay 
+        citation={activeCitation}
+        isOpen={!!activeCitation}
+        onClose={() => setActiveCitation(null)} 
+      />
     </div>
   )
 }
+
