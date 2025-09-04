@@ -15,11 +15,33 @@ export interface ToolParameters {
   [key: string]: any
 }
 
+export interface BoundingBox {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+export interface CitationData {
+  id: string
+  index: number
+  source_name: string
+  country: string
+  section?: string
+  pdf_url?: string
+  page_number?: number
+  text_coordinates?: BoundingBox
+  content_snippet: string
+  confidence_score: number
+  official_url?: string
+}
+
 export interface ToolResult {
   success: boolean
   data?: string
   error?: string
   metadata?: Record<string, any>
+  citations?: CitationData[]
 }
 
 export type ModelType = 'gemini' | 'openai'
