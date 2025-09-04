@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { MessageSquare, Plus, Calendar, Clock, Search, X } from 'lucide-react'
+import { MessageSquare, Plus, Clock, Search, X, Trash2, MoreVertical } from 'lucide-react'
+import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 
 interface Conversation {
   id: string
@@ -25,6 +26,7 @@ interface ConversationSidebarProps {
   currentConversationId?: string
   onConversationSelect: (conversationId: string) => void
   onNewChat: () => void
+  onConversationDeleted?: (conversationId: string) => void
 }
 
 export default function ConversationSidebar({
@@ -32,11 +34,16 @@ export default function ConversationSidebar({
   onClose,
   currentConversationId,
   onConversationSelect,
-  onNewChat
+  onNewChat,
+  onConversationDeleted
 }: ConversationSidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   // Fetch conversations
   useEffect(() => {
@@ -58,6 +65,18 @@ export default function ConversationSidebar({
       fetchConversations()
     }
   }, [isOpen])
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setOpenMenuId(null)
+    }
+
+    if (openMenuId) {
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [openMenuId])
 
   // Filter conversations based on search query
   const filteredConversations = conversations.filter(conv =>
@@ -92,6 +111,77 @@ export default function ConversationSidebar({
   const truncateText = (text: string, maxLength: number = 60) => {
     if (text.length <= maxLength) return text
     return text.substring(0, maxLength) + '...'
+  }
+
+  // Handle delete conversation
+  const handleDeleteConversation = async () => {
+    if (!conversationToDelete) return
+
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/conversations/${conversationToDelete}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        // Remove from local state
+        setConversations(prev => prev.filter(conv => conv.id !== conversationToDelete))
+        
+        // Notify parent component if the deleted conversation is currently active
+        if (conversationToDelete === currentConversationId) {
+          onConversationDeleted?.(conversationToDelete)
+        }
+        
+        setDeleteDialogOpen(false)
+        setConversationToDelete(null)
+        setOpenMenuId(null)
+      } else {
+        console.error('Failed to delete conversation')
+        // TODO: Add toast notification for error
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error)
+      // TODO: Add toast notification for error
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  // Handle opening delete dialog
+  const handleOpenDeleteDialog = (conversationId: string, event: React.MouseEvent) => {
+    event.stopPropagation()
+    setConversationToDelete(conversationId)
+    setDeleteDialogOpen(true)
+    setOpenMenuId(null)
+  }
+
+  // Handle closing delete dialog
+  const handleCloseDeleteDialog = () => {
+    setDeleteDialogOpen(false)
+    setConversationToDelete(null)
+  }
+
+  // Toggle conversation menu
+  const toggleMenu = (conversationId: string, event: React.MouseEvent | React.KeyboardEvent) => {
+    event.stopPropagation()
+    setOpenMenuId(openMenuId === conversationId ? null : conversationId)
+  }
+
+  // Handle keyboard navigation for conversation menus
+  const handleMenuKeyDown = (conversationId: string, event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      toggleMenu(conversationId, event)
+    } else if (event.key === 'Escape') {
+      setOpenMenuId(null)
+    }
+  }
+
+  const handleDeleteKeyDown = (conversationId: string, event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      handleOpenDeleteDialog(conversationId, event as any)
+    }
   }
 
   if (!isOpen) return null
@@ -182,57 +272,102 @@ export default function ConversationSidebar({
           ) : (
             <div className="space-y-1 p-2">
               {filteredConversations.map((conversation) => (
-                <button
+                <div
                   key={conversation.id}
-                  onClick={() => {
-                    onConversationSelect(conversation.id)
-                    onClose()
-                  }}
                   className={`
-                    w-full text-left p-3 rounded-lg transition-colors
+                    relative rounded-lg transition-colors
                     ${currentConversationId === conversation.id
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                     }
                   `}
                 >
-                  <div className="flex items-start justify-between mb-1">
-                    <h4 className="font-medium text-sm leading-tight">
-                      {truncateText(conversation.title)}
-                    </h4>
-                    <div className="flex items-center ml-2 flex-shrink-0">
-                      <Clock className="w-3 h-3 mr-1 opacity-60" />
-                      <span className="text-xs opacity-60">
-                        {formatTime(conversation.updated_at)}
-                      </span>
+                  <button
+                    onClick={() => {
+                      onConversationSelect(conversation.id)
+                      onClose()
+                    }}
+                    className="w-full text-left p-3 rounded-lg pr-12"
+                  >
+                    <div className="flex flex-col space-y-1">
+                      <h4 className="font-medium text-sm leading-tight">
+                        {truncateText(conversation.title)}
+                      </h4>
+                      
+                      {conversation.latest_message && (
+                        <p className="text-xs opacity-80 leading-tight">
+                          <span className="font-medium">
+                            {conversation.latest_message.role === 'user' ? 'You' : 'AI'}:
+                          </span>{' '}
+                          {truncateText(conversation.latest_message.content, 50)}
+                        </p>
+                      )}
+                      
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center text-xs opacity-60">
+                          <MessageSquare className="w-3 h-3 mr-1" />
+                          <span>{conversation.message_count} messages</span>
+                        </div>
+                        <div className="flex items-center text-xs opacity-60">
+                          <Clock className="w-3 h-3 mr-1" />
+                          <span>{formatTime(conversation.updated_at)}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </button>
                   
-                  {conversation.latest_message && (
-                    <p className="text-xs opacity-80 leading-tight">
-                      <span className="font-medium">
-                        {conversation.latest_message.role === 'user' ? 'You' : 'AI'}:
-                      </span>{' '}
-                      {truncateText(conversation.latest_message.content, 50)}
-                    </p>
-                  )}
-                  
-                  <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center text-xs opacity-60">
-                      <MessageSquare className="w-3 h-3 mr-1" />
-                      <span>{conversation.message_count} messages</span>
-                    </div>
-                    <div className="flex items-center text-xs opacity-60">
-                      <Calendar className="w-3 h-3 mr-1" />
-                      <span>{formatTime(conversation.created_at)}</span>
-                    </div>
+                  {/* Menu Button */}
+                  <div className="absolute top-3 right-3">
+                    <button
+                      onClick={(e) => toggleMenu(conversation.id, e)}
+                      onKeyDown={(e) => handleMenuKeyDown(conversation.id, e)}
+                      className={`group/menu p-1.5 rounded-md transition-all duration-150 ease-in-out group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+                        currentConversationId === conversation.id
+                          ? 'text-white opacity-70 bg-gray-700 hover:bg-gray-600 focus:bg-gray-600'
+                          : 'text-gray-300 opacity-70 bg-gray-700 hover:bg-gray-600 focus:bg-gray-600'
+                      }`}
+                      aria-label={`Options for conversation: ${conversation.title}`}
+                      title="Conversation options"
+                      tabIndex={0}
+                    >
+                      <MoreVertical className="w-3 h-3" />
+                    </button>
+                    
+                    {/* Dropdown Menu */}
+                    {openMenuId === conversation.id && (
+                      <div className="absolute right-0 top-8 bg-gray-800 border border-gray-600 rounded-md shadow-lg z-30 min-w-[90px] overflow-hidden">
+                        <button
+                          onClick={(e) => handleOpenDeleteDialog(conversation.id, e)}
+                          onKeyDown={(e) => handleDeleteKeyDown(conversation.id, e)}
+                          className="w-full text-left px-2 py-1.5 text-xs text-red-400 hover:bg-red-900 hover:bg-opacity-30 hover:text-red-300 transition-colors flex items-center focus:outline-none focus:bg-red-900 focus:bg-opacity-30 focus:ring-2 focus:ring-red-500 focus:ring-inset"
+                          aria-label={`Delete conversation: ${conversation.title}`}
+                          tabIndex={0}
+                        >
+                          <Trash2 className="w-3 h-3 mr-1.5" />
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
         </div>
       </div>
+      
+      {/* Delete Confirmation Dialog - Moved outside sidebar to overlay entire page */}
+      <ConfirmationDialog
+        isOpen={deleteDialogOpen}
+        onClose={handleCloseDeleteDialog}
+        onConfirm={handleDeleteConversation}
+        title="Delete Conversation"
+        message="Are you sure you want to delete this conversation? This action cannot be undone and will permanently remove all messages in this chat."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        isLoading={isDeleting}
+      />
     </>
   )
 }
