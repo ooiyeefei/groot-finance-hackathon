@@ -199,7 +199,7 @@ export async function calculateFinancialAnalytics(
       calculated_at: new Date()
     };
     
-    await cacheAnalytics(emptyAnalytics);
+    // await cacheAnalytics(emptyAnalytics); // Disabled temporarily due to schema issues
     return emptyAnalytics;
   }
 
@@ -502,7 +502,7 @@ export async function calculateFinancialAnalytics(
   };
 
   // Cache the calculated analytics
-  await cacheAnalytics(analytics);
+  // await cacheAnalytics(analytics); // Disabled temporarily due to schema issues
 
   return analytics;
 }

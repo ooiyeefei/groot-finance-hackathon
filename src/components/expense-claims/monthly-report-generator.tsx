@@ -1,0 +1,345 @@
+/**
+ * Monthly Report Generator Component
+ * Implements Otto's compliance reporting with Mel's export functionality
+ */
+
+'use client'
+
+import { useState } from 'react'
+import { Download, FileText, Calendar, User, Printer } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { EXPENSE_CATEGORY_CONFIG } from '@/types/expense-claims'
+
+interface ReportData {
+  employee_name: string
+  report_month: string
+  home_currency: string
+  summary: {
+    total_amount: number
+    claim_count: number
+    approved_amount: number
+    pending_amount: number
+    rejected_amount: number
+  }
+  category_totals: Record<string, { amount: number; count: number }>
+  claims: any[]
+  generated_at: string
+}
+
+export default function MonthlyReportGenerator() {
+  const [selectedMonth, setSelectedMonth] = useState('')
+  const [selectedEmployee, setSelectedEmployee] = useState('')
+  const [reportData, setReportData] = useState<ReportData | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Generate available months (last 12 months)
+  const generateMonthOptions = () => {
+    const months = []
+    const now = new Date()
+    
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const monthValue = date.toISOString().slice(0, 7) // YYYY-MM
+      const monthLabel = date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long' 
+      })
+      months.push({ value: monthValue, label: monthLabel })
+    }
+    
+    return months
+  }
+
+  const monthOptions = generateMonthOptions()
+
+  // Mock employee list (in real app, this would come from API)
+  const employees = [
+    { id: 'current', name: 'My Reports' },
+    { id: '1', name: 'John Doe' },
+    { id: '2', name: 'Jane Smith' },
+    { id: '3', name: 'Alice Johnson' }
+  ]
+
+  const generateReport = async (format: 'json' | 'pdf' | 'csv' = 'json') => {
+    if (!selectedMonth) {
+      setError('Please select a month')
+      return
+    }
+
+    setGenerating(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams({
+        month: selectedMonth,
+        format: format
+      })
+
+      if (selectedEmployee && selectedEmployee !== 'current') {
+        params.append('employee_id', selectedEmployee)
+      }
+
+      const response = await fetch(`/api/expense-claims/reports/monthly?${params}`)
+
+      if (format === 'json') {
+        const result = await response.json()
+        if (result.success) {
+          setReportData(result.data)
+        } else {
+          setError(result.error || 'Failed to generate report')
+        }
+      } else {
+        // Handle file downloads for PDF/CSV
+        if (response.ok) {
+          const blob = await response.blob()
+          const url = window.URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          
+          const employee = selectedEmployee && selectedEmployee !== 'current' 
+            ? employees.find(e => e.id === selectedEmployee)?.name.replace(/\s+/g, '-') || 'employee'
+            : 'my'
+          
+          link.download = `expense-report-${employee}-${selectedMonth}.${format}`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          window.URL.revokeObjectURL(url)
+        } else {
+          const result = await response.json()
+          setError(result.error || 'Failed to download report')
+        }
+      }
+    } catch (error) {
+      console.error('Report generation failed:', error)
+      setError('Network error. Please try again.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Report Configuration */}
+      <Card className="bg-gray-800 border-gray-700">
+        <CardHeader>
+          <CardTitle className="text-white">Generate Monthly Report</CardTitle>
+          <CardDescription>
+            Create detailed expense reports for compliance and reimbursement processing
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error && (
+            <Alert className="bg-red-900/20 border-red-700">
+              <AlertDescription className="text-red-400">{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Month Selection */}
+            <div className="space-y-2">
+              <label className="text-white text-sm font-medium">Report Month *</label>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectValue placeholder="Select month" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600">
+                  {monthOptions.map((month) => (
+                    <SelectItem key={month.value} value={month.value} className="text-white">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        {month.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Employee Selection (for managers/finance) */}
+            <div className="space-y-2">
+              <label className="text-white text-sm font-medium">Employee</label>
+              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectValue placeholder="Select employee (optional)" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600">
+                  {employees.map((employee) => (
+                    <SelectItem key={employee.id} value={employee.id} className="text-white">
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        {employee.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Generate Buttons */}
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onClick={() => generateReport('json')}
+              disabled={generating}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Preview Report
+            </Button>
+            
+            <Button
+              onClick={() => generateReport('pdf')}
+              disabled={generating}
+              variant="outline"
+              className="border-gray-600 text-gray-300 hover:bg-gray-700"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download PDF
+            </Button>
+            
+            <Button
+              onClick={() => generateReport('csv')}
+              disabled={generating}
+              variant="outline"
+              className="border-gray-600 text-gray-300 hover:bg-gray-700"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Report Preview */}
+      {reportData && (
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-white">Monthly Expense Report</CardTitle>
+                <CardDescription>
+                  {reportData.employee_name} - {new Date(reportData.report_month + '-01').toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long' 
+                  })}
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.print()}
+                className="border-gray-600 text-gray-300"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Print
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Summary Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <ReportSummaryCard
+                title="Total Claims"
+                value={reportData.summary.claim_count.toString()}
+                variant="default"
+              />
+              <ReportSummaryCard
+                title="Total Amount"
+                value={`${reportData.summary.total_amount.toFixed(2)} ${reportData.home_currency}`}
+                variant="default"
+              />
+              <ReportSummaryCard
+                title="Approved"
+                value={`${reportData.summary.approved_amount.toFixed(2)} ${reportData.home_currency}`}
+                variant="success"
+              />
+              <ReportSummaryCard
+                title="Pending"
+                value={`${reportData.summary.pending_amount.toFixed(2)} ${reportData.home_currency}`}
+                variant="warning"
+              />
+              <ReportSummaryCard
+                title="Rejected"
+                value={`${reportData.summary.rejected_amount.toFixed(2)} ${reportData.home_currency}`}
+                variant="error"
+              />
+            </div>
+
+            {/* Category Breakdown */}
+            <div className="space-y-4">
+              <h4 className="text-white font-semibold">Category Breakdown</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(reportData.category_totals).map(([category, data]) => {
+                  const categoryConfig = EXPENSE_CATEGORY_CONFIG[category as keyof typeof EXPENSE_CATEGORY_CONFIG]
+                  
+                  if (data.count === 0) return null
+                  
+                  return (
+                    <div key={category} className="bg-gray-700 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Badge variant="secondary" className="bg-gray-600">
+                          {categoryConfig?.icon} {categoryConfig?.label}
+                        </Badge>
+                        <span className="text-gray-400 text-sm">{data.count} claims</span>
+                      </div>
+                      <div className="text-white font-semibold">
+                        {data.amount.toFixed(2)} {reportData.home_currency}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Report Metadata */}
+            <div className="border-t border-gray-700 pt-4 text-gray-400 text-sm">
+              <p>Report generated on: {new Date(reportData.generated_at).toLocaleString()}</p>
+              <p>Data as of: {new Date().toLocaleDateString()}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quick Access to Recent Reports */}
+      <Card className="bg-gray-800 border-gray-700">
+        <CardHeader>
+          <CardTitle className="text-white">Recent Reports</CardTitle>
+          <CardDescription>Quick access to previously generated reports</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-gray-400 py-8">
+            <FileText className="w-12 h-12 mx-auto mb-4" />
+            <p>No recent reports</p>
+            <p className="text-sm">Generate your first monthly report to see it here</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function ReportSummaryCard({ title, value, variant }: {
+  title: string
+  value: string
+  variant: 'default' | 'success' | 'warning' | 'error'
+}) {
+  const variantStyles = {
+    default: 'bg-gray-700 text-white',
+    success: 'bg-green-900/20 border border-green-700 text-green-400',
+    warning: 'bg-yellow-900/20 border border-yellow-700 text-yellow-400',
+    error: 'bg-red-900/20 border border-red-700 text-red-400'
+  }
+
+  return (
+    <div className={`p-4 rounded-lg ${variantStyles[variant]}`}>
+      <div className="text-xs opacity-75 mb-1">{title}</div>
+      <div className="font-semibold">{value}</div>
+    </div>
+  )
+}

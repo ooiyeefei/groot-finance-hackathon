@@ -32,10 +32,17 @@ export class GeminiService {
   private model: string
 
   constructor() {
-    this.client = new GoogleGenerativeAI(aiConfig.gemini.apiKey)
-    // ULTRA-AGGRESSIVE: Try older model with potentially fewer safety restrictions
-    this.model = 'gemini-1.5-flash'
-    console.log(`[GeminiService] ULTRA-AGGRESSIVE model override: ${this.model} (original: ${aiConfig.gemini.model})`)
+    const apiKey = aiConfig.gemini.apiKey
+    console.log(`[GeminiService] API Key loaded:`, apiKey ? `${apiKey.substring(0, 10)}...` : 'NO API KEY')
+    
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY not found in environment variables')
+    }
+    
+    this.client = new GoogleGenerativeAI(apiKey)
+    // Use Gemini 2.5 Flash for better performance and speed
+    this.model = aiConfig.gemini.model
+    console.log(`[GeminiService] Using model: ${this.model}`)
   }
 
   /**
@@ -102,19 +109,23 @@ export class GeminiService {
       // Convert messages to Gemini format
       const geminiContents = this.convertMessagesToGemini(messages, systemPrompt)
       
-      // Prepare the request - following @google/genai documentation structure
-      const requestConfig: any = {
-        model: this.model,
+      // Prepare the model configuration
+      const modelConfig: any = {
+        model: this.model
+      }
+
+      // Prepare the generation request
+      const generationRequest: any = {
         contents: geminiContents
       }
 
       // Add system instruction if provided
       if (systemPrompt) {
-        requestConfig.systemInstruction = { parts: [{ text: systemPrompt }] }
+        generationRequest.systemInstruction = { parts: [{ text: systemPrompt }] }
       }
 
-      // ULTRA-AGGRESSIVE: Disable ALL safety restrictions
-      requestConfig.safetySettings = [
+      // Disable safety restrictions for business document processing
+      generationRequest.safetySettings = [
         {
           category: HarmCategory.HARM_CATEGORY_HARASSMENT,
           threshold: HarmBlockThreshold.BLOCK_NONE
@@ -132,7 +143,7 @@ export class GeminiService {
           threshold: HarmBlockThreshold.BLOCK_NONE
         }
       ]
-      console.log(`[GeminiService] ULTRA-AGGRESSIVE: Disabled all safety restrictions`)
+      console.log(`[GeminiService] Safety restrictions disabled for document processing`)
 
       // Add function calling if tools are provided - following @google/genai docs format
       if (tools && tools.length > 0) {
@@ -145,9 +156,10 @@ export class GeminiService {
         // Only add function calling config if we actually have declarations
         if (functionDeclarations.length > 0) {
           // Correct structure based on @google/genai documentation:
-          // tools and toolConfig should be at the same level (not nested in config)
-          requestConfig.tools = [{ functionDeclarations }]
-          // ULTRA-AGGRESSIVE: For analytical queries, force get_data_records tool selection
+          // tools and toolConfig should be at the same level
+          generationRequest.tools = [{ functionDeclarations }]
+          
+          // For analytical queries, force get_data_records tool selection
           const userMessage = geminiContents.find(content => content.role === 'user')
           const firstPart = userMessage?.parts?.[0]
           const userQueryText = (firstPart && 'text' in firstPart) ? firstPart.text : ''
@@ -163,21 +175,21 @@ export class GeminiService {
           
           if (isAnalyticalQuery && tools.some(t => t.function?.name === 'get_data_records')) {
             console.log(`[GeminiService] FORCING get_data_records for analytical query: ${userQueryText}`)
-            requestConfig.toolConfig = {
+            generationRequest.toolConfig = {
               functionCallingConfig: {
                 mode: FunctionCallingMode.ANY,
                 allowedFunctionNames: ['get_data_records']
               }
             }
           } else {
-            requestConfig.toolConfig = {
+            generationRequest.toolConfig = {
               functionCallingConfig: {
                 mode: FunctionCallingMode.ANY
               }
             }
           }
-          console.log(`[GeminiService] Function calling toolConfig:`, JSON.stringify(requestConfig.toolConfig, null, 2))
-          console.log(`[GeminiService] Tools array:`, JSON.stringify(requestConfig.tools, null, 2))
+          console.log(`[GeminiService] Function calling toolConfig:`, JSON.stringify(generationRequest.toolConfig, null, 2))
+          console.log(`[GeminiService] Tools array:`, JSON.stringify(generationRequest.tools, null, 2))
           console.log(`[GeminiService] Using ${functionDeclarations.length} function declarations:`, functionDeclarations.map(f => f.name))
         } else {
           console.warn(`[GeminiService] No valid function declarations generated from ${tools.length} tools`)
@@ -185,16 +197,16 @@ export class GeminiService {
       }
 
       console.log(`[GeminiService] Final request structure:`, JSON.stringify({
-        model: requestConfig.model,
-        hasContents: !!requestConfig.contents,
-        hasSystemInstruction: !!requestConfig.systemInstruction,
-        hasTools: !!requestConfig.tools,
-        hasToolConfig: !!requestConfig.toolConfig,
-        hasSafetySettings: !!requestConfig.safetySettings
+        model: modelConfig.model,
+        hasContents: !!generationRequest.contents,
+        hasSystemInstruction: !!generationRequest.systemInstruction,
+        hasTools: !!generationRequest.tools,
+        hasToolConfig: !!generationRequest.toolConfig,
+        hasSafetySettings: !!generationRequest.safetySettings
       }, null, 2))
       
-      // ULTRA-AGGRESSIVE: Full request logging for debugging
-      console.log(`[GeminiService] ULTRA-DEBUG - Full request config:`, JSON.stringify(requestConfig, null, 2))
+      // Full request logging for debugging
+      console.log(`[GeminiService] DEBUG - Full generation request:`, JSON.stringify(generationRequest, null, 2))
 
       // Log the exact user query for debugging
       const lastUserMessage = geminiContents.find(content => content.role === 'user')
@@ -202,15 +214,17 @@ export class GeminiService {
       const userQueryText = firstPart && 'text' in firstPart ? firstPart.text : 'No user message found'
       console.log(`[GeminiService] User query:`, userQueryText)
 
-      // ULTRA-AGGRESSIVE: Test if function calling works at all with minimal setup
+      // Test function calling setup
       if (tools && tools.length > 0) {
-        console.log(`[GeminiService] TESTING: Attempting to force function calling...`)
-        console.log(`[GeminiService] TESTING: Available functions:`, tools.map(t => t.function?.name))
-        console.log(`[GeminiService] TESTING: Query that should trigger get_transactions:`, userQueryText.includes('transaction') || userQueryText.includes('invoice') || userQueryText.includes('amount') || userQueryText.includes('expense'))
+        console.log(`[GeminiService] Function calling setup - Available functions:`, tools.map(t => t.function?.name))
+        console.log(`[GeminiService] Query analysis - Contains financial keywords:`, 
+          userQueryText.includes('transaction') || userQueryText.includes('invoice') || 
+          userQueryText.includes('amount') || userQueryText.includes('expense'))
       }
 
-      const model = this.client.getGenerativeModel(requestConfig)
-      const response = await model.generateContent(requestConfig.contents)
+      // Correct API call - pass modelConfig to getGenerativeModel, generationRequest to generateContent
+      const model = this.client.getGenerativeModel(modelConfig)
+      const response = await model.generateContent(generationRequest)
 
       // Enhanced logging for debugging function calling issues
       console.log(`[GeminiService] Raw response object keys:`, Object.keys(response))
@@ -272,7 +286,9 @@ export class GeminiService {
   async healthCheck(): Promise<{ healthy: boolean; error?: string }> {
     try {
       const model = this.client.getGenerativeModel({ model: this.model })
-      const response = await model.generateContent('Hello')
+      const response = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: 'Hello' }] }]
+      })
       
       return { healthy: true }
     } catch (error) {

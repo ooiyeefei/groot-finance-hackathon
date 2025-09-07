@@ -4,23 +4,57 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { Home, FileText, CreditCard, MessageSquare, Settings, Menu, ChevronLeft } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, ChevronLeft, CheckCircle, Users, Tag } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Badge } from '@/components/ui/badge'
+
+interface UserRole {
+  employee: boolean
+  manager: boolean
+  admin: boolean
+}
 
 export default function Sidebar() {
   const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
+  const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, admin: false })
+  const [pendingApprovals, setPendingApprovals] = useState(0)
   
-  const navigation = [
+  // Base navigation items
+  const baseNavigation = [
     { name: 'Dashboard', href: '/', icon: Home },
     { name: 'Documents', href: '/documents', icon: FileText },
     { name: 'Transactions', href: '/transactions', icon: CreditCard },
+    { name: 'Expense Claims', href: '/expense-claims', icon: Receipt },
     { name: 'AI Assistant', href: '/ai-assistant', icon: MessageSquare },
-    { name: 'Settings', href: '/settings', icon: Settings },
   ]
 
-  // Load saved state from localStorage
+  // Manager-specific navigation items
+  const managerNavigation = [
+    { 
+      name: 'Approvals', 
+      href: '/manager/approvals', 
+      icon: CheckCircle,
+      badge: pendingApprovals > 0 ? pendingApprovals.toString() : undefined
+    },
+    { name: 'Team Management', href: '/manager/team', icon: Users },
+    { name: 'Categories', href: '/manager/categories', icon: Tag },
+  ]
+
+  // Settings always at the end
+  const settingsNavigation = [
+    { name: 'Settings', href: '/settings', icon: Settings }
+  ]
+
+  // Build complete navigation based on role
+  const navigation = [
+    ...baseNavigation,
+    ...(userRole.manager || userRole.admin ? managerNavigation : []),
+    ...settingsNavigation
+  ]
+
+  // Load saved state from localStorage and fetch user role
   useEffect(() => {
     const savedState = localStorage.getItem('sidebar-expanded')
     if (savedState !== null) {
@@ -37,8 +71,60 @@ export default function Sidebar() {
 
     checkMobile()
     window.addEventListener('resize', checkMobile)
+
+    // Fetch user role and permissions
+    fetchUserRole()
+    
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
+
+  // Fetch user role and pending approvals count
+  const fetchUserRole = async () => {
+    try {
+      // Get user role from employee profile
+      const roleResponse = await fetch('/api/user/role')
+      if (roleResponse.ok) {
+        const roleResult = await roleResponse.json()
+        if (roleResult.success) {
+          setUserRole(roleResult.data.permissions)
+
+          // If user is manager, fetch pending approvals count
+          if (roleResult.data.permissions.manager || roleResult.data.permissions.admin) {
+            const approvalsResponse = await fetch('/api/expense-claims/approvals')
+            if (approvalsResponse.ok) {
+              const approvalsResult = await approvalsResponse.json()
+              if (approvalsResult.success) {
+                setPendingApprovals(approvalsResult.data.stats.pending)
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch user role:', error)
+    }
+  }
+
+  // Refresh pending approvals periodically for managers
+  useEffect(() => {
+    if (userRole.manager || userRole.admin) {
+      const interval = setInterval(async () => {
+        try {
+          const response = await fetch('/api/expense-claims/approvals')
+          if (response.ok) {
+            const result = await response.json()
+            if (result.success) {
+              setPendingApprovals(result.data.stats.pending)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to refresh approvals count:', error)
+        }
+      }, 30000) // Refresh every 30 seconds
+
+      return () => clearInterval(interval)
+    }
+  }, [userRole])
 
   // Save state to localStorage
   const toggleSidebar = () => {
@@ -118,7 +204,7 @@ export default function Sidebar() {
                 <Link
                   href={item.href}
                   className={`
-                    flex items-center rounded-lg transition-colors
+                    flex items-center rounded-lg transition-colors relative
                     ${isExpanded ? 'p-3' : 'p-3 justify-center'}
                     ${isActive 
                       ? 'bg-blue-600 text-white' 
@@ -128,11 +214,24 @@ export default function Sidebar() {
                 >
                   <item.icon className={`w-5 h-5 ${isExpanded ? 'mr-3' : ''} flex-shrink-0`} />
                   <span className={`
-                    transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap
+                    transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap flex-1
                     ${isExpanded ? 'opacity-100 max-w-none' : 'opacity-0 max-w-0'}
                   `}>
                     {item.name}
                   </span>
+                  {/* Badge for notifications */}
+                  {'badge' in item && (item as any).badge && (
+                    <Badge 
+                      variant="secondary" 
+                      className={`
+                        bg-red-600 text-white text-xs px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center
+                        ${isExpanded ? 'ml-2' : 'absolute -top-1 -right-1 scale-75'}
+                        ${isExpanded ? 'opacity-100' : 'opacity-100'}
+                      `}
+                    >
+                      {(item as any).badge}
+                    </Badge>
+                  )}
                 </Link>
               )
 
@@ -144,7 +243,14 @@ export default function Sidebar() {
                         {NavItem}
                       </TooltipTrigger>
                       <TooltipContent side="right" className="ml-2">
-                        {item.name}
+                        <div className="flex items-center gap-2">
+                          {item.name}
+                          {'badge' in item && (item as any).badge && (
+                            <Badge variant="secondary" className="bg-red-600 text-white text-xs">
+                              {(item as any).badge}
+                            </Badge>
+                          )}
+                        </div>
                       </TooltipContent>
                     </Tooltip>
                   ) : (

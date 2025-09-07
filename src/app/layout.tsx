@@ -16,6 +16,20 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "FinanSEAL - Financial Co-Pilot",
   description: "Multi-modal financial assistant for Southeast Asian SMEs",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "FinanSEAL"
+  }
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: "no",
+  themeColor: "#3b82f6"
 };
 
 export default function RootLayout({
