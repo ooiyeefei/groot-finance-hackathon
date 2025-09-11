@@ -45,13 +45,6 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
   // Reset web preview state when citation changes
   useEffect(() => {
     if (citation) {
-      // Debug citation data
-      console.log('[CitationOverlay] Full citation object:', citation)
-      console.log('[CitationOverlay] pdf_url:', citation.pdf_url)
-      console.log('[CitationOverlay] official_url:', citation.official_url)
-      console.log('[CitationOverlay] Preview condition - PDF exists:', !!citation.pdf_url)
-      console.log('[CitationOverlay] Preview condition - Official URL exists:', !!citation.official_url)
-      
       setWebPreviewError(false)
       setWebPreviewLoading(true)
     }
@@ -249,34 +242,42 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                       </div>
                     </div>
                     <div className="relative">
-                      {/* PDF Embed with fallback */}
+                      {/* PDF Embed with proxy for CORS bypassing */}
                       <iframe
-                        src={`${citation.pdf_url}${citation.page_number ? `#page=${citation.page_number}` : ''}`}
+                        src={`/api/pdf-proxy?url=${encodeURIComponent(citation.pdf_url)}${citation.page_number ? `#page=${citation.page_number}` : ''}`}
                         className="w-full h-96 border-0"
                         title="PDF Document Preview"
+                        onLoad={() => {
+                          // PDF loaded successfully
+                        }}
                         onError={(e) => {
-                          console.warn('PDF iframe failed to load, showing fallback');
+                          console.warn('PDF proxy iframe failed to load, showing fallback');
                           (e.target as HTMLElement).style.display = 'none';
                           const fallback = (e.target as HTMLElement).nextElementSibling as HTMLElement;
                           if (fallback) fallback.style.display = 'block';
                         }}
                       />
-                      {/* Fallback for PDFs that can't be embedded */}
+                      {/* Enhanced fallback for PDFs that can't be embedded */}
                       <div className="hidden bg-gray-700 rounded p-8 text-center">
                         <FileText className="w-12 h-12 text-gray-500 mx-auto mb-3" />
-                        <h4 className="text-gray-300 font-medium mb-2">PDF Preview Unavailable</h4>
+                        <h4 className="text-gray-300 font-medium mb-2">PDF Preview Not Available</h4>
                         <p className="text-gray-400 text-sm mb-4">
-                          This document cannot be embedded. Click below to open in a new tab.
+                          This PDF document cannot be embedded due to security restrictions or server configuration.
                         </p>
-                        <a
-                          href={citation.pdf_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
-                        >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Open PDF Document
-                        </a>
+                        <div className="space-y-2">
+                          <a
+                            href={citation.pdf_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+                          >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Open PDF Document
+                          </a>
+                          <p className="text-xs text-gray-500 mt-2">
+                            URL: {citation.pdf_url.length > 50 ? citation.pdf_url.substring(0, 50) + '...' : citation.pdf_url}
+                          </p>
+                        </div>
                       </div>
                       
                       {/* Text Coordinates Overlay */}
@@ -326,13 +327,29 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                         </div>
                       )}
                       
-                      {/* Web Preview with Error Handling */}
+                      {/* Web Preview with Enhanced Error Handling */}
                       {!webPreviewError ? (
                         <iframe
                           src={citation.official_url}
                           className="w-full h-96 border-0"
                           title="Official Website Preview"
-                          onLoad={() => setWebPreviewLoading(false)}
+                          onLoad={(e) => {
+                            setWebPreviewLoading(false);
+                            // Additional check for iframe content accessibility
+                            const iframe = e.target as HTMLIFrameElement;
+                            setTimeout(() => {
+                              try {
+                                // Test if we can access iframe content or if it's blocked
+                                if (iframe.contentWindow && iframe.contentDocument === null) {
+                                  console.warn('Website iframe blocked by X-Frame-Options, showing fallback');
+                                  setWebPreviewError(true);
+                                }
+                              } catch (error) {
+                                console.warn('Website iframe access restricted, showing fallback');
+                                setWebPreviewError(true);
+                              }
+                            }, 1000); // Give iframe time to load
+                          }}
                           onError={() => {
                             console.warn('Website iframe failed to load, showing fallback');
                             setWebPreviewError(true);
@@ -341,23 +358,27 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                           sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
                         />
                       ) : (
-                        // Fallback for websites that can't be embedded
+                        // Enhanced fallback for websites that can't be embedded
                         <div className="bg-gray-700 rounded p-8 text-center h-96 flex flex-col justify-center">
                           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-                          <h4 className="text-gray-300 font-medium mb-2">Website Preview Restricted</h4>
+                          <h4 className="text-gray-300 font-medium mb-2">Website Preview Not Available</h4>
                           <p className="text-gray-400 text-sm mb-4 max-w-sm mx-auto">
-                            This government website cannot be embedded due to security policies.
-                            Click below to open in a new tab.
+                            This website cannot be embedded due to security policies (X-Frame-Options header).
                           </p>
-                          <a
-                            href={citation.official_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors mx-auto"
-                          >
-                            <Globe className="w-4 h-4 mr-2" />
-                            Visit Official Website
-                          </a>
+                          <div className="space-y-2">
+                            <a
+                              href={citation.official_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors mx-auto"
+                            >
+                              <Globe className="w-4 h-4 mr-2" />
+                              Visit Official Website
+                            </a>
+                            <p className="text-xs text-gray-500 mt-2">
+                              URL: {new URL(citation.official_url).hostname}
+                            </p>
+                          </div>
                         </div>
                       )}
                       

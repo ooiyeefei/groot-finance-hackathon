@@ -117,6 +117,9 @@ export class RegulatoryKnowledgeTool extends BaseTool {
           console.log(`[RegulatoryKnowledgeTool] No URL found in metadata for result ${index + 1}`);
         }
         
+        const rawText = result.payload?.text || '';
+        const cleanedText = this.cleanContentText(rawText);
+        
         const citationData = {
           id: result.id || `citation_${index + 1}`,
           index: index + 1,
@@ -131,7 +134,7 @@ export class RegulatoryKnowledgeTool extends BaseTool {
             x2: metadata.text_coordinates.x2,
             y2: metadata.text_coordinates.y2
           } : undefined,
-          content_snippet: result.payload?.text?.substring(0, 200) || '',
+          content_snippet: cleanedText.substring(0, 200) || '',
           confidence_score: result.score || 0,
           official_url: official_url
         };
@@ -166,6 +169,87 @@ export class RegulatoryKnowledgeTool extends BaseTool {
         error: `Failed to search the regulatory knowledge base: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
+  }
+
+  /**
+   * Clean content text by removing navigation elements and irrelevant webpage components
+   */
+  private cleanContentText(text: string): string {
+    if (!text || typeof text !== 'string') {
+      return text;
+    }
+
+    // Remove common navigation patterns
+    const navigationPatterns = [
+      /Jump to:\s*Select Subheading\s*expand all\s*collapse all/gi,
+      /Jump to:\s*[^\.]+/gi,
+      /expand all\s*collapse all/gi,
+      /Skip to main content/gi,
+      /Skip navigation/gi,
+      /Main navigation/gi,
+      /Site search/gi,
+      /Breadcrumb/gi,
+      /Back to top/gi,
+      /Print page/gi,
+      /Share this page/gi,
+      /Download PDF/gi,
+      /View source/gi,
+      /Last updated:/gi,
+      /Published:/gi,
+      /Page \d+ of \d+/gi,
+      /\[Skip to Content\]/gi,
+      /\[Skip to Navigation\]/gi
+    ];
+
+    // Remove table of contents patterns
+    const tocPatterns = [
+      /Table of Contents/gi,
+      /Contents:/gi,
+      /In this section:/gi,
+      /On this page:/gi,
+      /Quick links:/gi
+    ];
+
+    // Remove footer/header patterns
+    const footerHeaderPatterns = [
+      /Copyright \d{4}/gi,
+      /All rights reserved/gi,
+      /Terms of use/gi,
+      /Privacy policy/gi,
+      /Contact us/gi,
+      /Help \& support/gi,
+      /Accessibility/gi,
+      /Site map/gi
+    ];
+
+    // Apply all cleaning patterns
+    let cleanedText = text;
+    
+    [...navigationPatterns, ...tocPatterns, ...footerHeaderPatterns].forEach(pattern => {
+      cleanedText = cleanedText.replace(pattern, '');
+    });
+
+    // Clean up excessive whitespace and line breaks
+    cleanedText = cleanedText
+      .replace(/\n\s*\n\s*\n/g, '\n\n') // Multiple line breaks to double
+      .replace(/\s+/g, ' ') // Multiple spaces to single
+      .trim();
+
+    // Remove very short fragments that are likely navigation remnants
+    const lines = cleanedText.split('\n');
+    const filteredLines = lines.filter(line => {
+      const trimmedLine = line.trim();
+      // Keep lines that are substantial content (longer than 10 chars and not just navigation words)
+      if (trimmedLine.length < 10) return false;
+      
+      // Filter out common navigation words
+      const navWords = ['home', 'about', 'contact', 'help', 'search', 'menu', 'login', 'register'];
+      if (navWords.some(word => trimmedLine.toLowerCase() === word)) return false;
+      
+      return true;
+    });
+
+    return filteredLines.join('\n').trim();
   }
 
   private analyzeCountryAmbiguity(query: string, searchResults: any[]): { needsClarification: boolean; detectedCountries: string[] } {
@@ -208,7 +292,10 @@ export class RegulatoryKnowledgeTool extends BaseTool {
     return data.map((result, index) => {
       const payload = result.payload || {};
       const metadata = payload.metadata || {};
-      const text = payload.text || 'No content available.';
+      let text = payload.text || 'No content available.';
+      
+      // Clean up navigation text and irrelevant content
+      text = this.cleanContentText(text);
       
       // Enhanced source citation format
       const sourceName = metadata.source_name || 'Unknown Source';
@@ -239,7 +326,10 @@ ${metadata.official_url ? `Link: ${metadata.official_url}` : ''}`;
     return data.map((result, index) => {
       const payload = result.payload || {};
       const metadata = payload.metadata || {};
-      const text = payload.text || 'No content available.';
+      let text = payload.text || 'No content available.';
+      
+      // Clean up navigation text and irrelevant content
+      text = this.cleanContentText(text);
       
       // Enhanced source citation format with citation marker
       const sourceName = metadata.source_name || 'Unknown Source';

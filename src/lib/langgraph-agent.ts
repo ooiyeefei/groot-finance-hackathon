@@ -8,13 +8,35 @@
 import { StateGraph, END, Annotation } from "@langchain/langgraph";
 import { BaseMessage, AIMessage, ToolMessage, HumanMessage } from "@langchain/core/messages";
 import { ToolFactory } from './tools/tool-factory'
-import { ModelType } from './tools/base-tool';
+import { ModelType, CitationData } from './tools/base-tool';
 import { UserContext } from './tools/base-tool';
 import { aiConfig } from './config/ai-config';
 import { GeminiService } from './ai-services/gemini-service';
 // Using ToolFactory.getToolSchemas() directly for single source of truth
 
-// Agent State Definition with mandatory user context
+// Intent Analysis Types
+interface UserIntent {
+  primaryIntent: 'regulatory_knowledge' | 'business_setup' | 'transaction_analysis' | 'document_search' | 'compliance_check' | 'general_inquiry'
+  queryType: 'general_info' | 'procedural' | 'comparison' | 'calculation' | 'specific_case'
+  confidence: number
+  contextNeeded: {
+    country?: 'singapore' | 'malaysia' | 'thailand' | 'indonesia' | 'unknown'
+    businessType?: 'sme' | 'individual' | 'corporate' | 'startup' | 'unknown'
+    urgency?: 'high' | 'medium' | 'low'
+    specificity?: 'technical' | 'general' | 'specific'
+  }
+  missingContext: string[]
+  originalQuery: string
+}
+
+interface IntentAnalysisResult {
+  intent: UserIntent
+  requiresClarification: boolean
+  clarificationQuestions: string[]
+  skipPlanning?: boolean
+}
+
+// Agent State Definition with mandatory user context and intent analysis
 const AgentStateAnnotation = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
     reducer: (x: BaseMessage[], y: BaseMessage[]) => {
@@ -50,6 +72,37 @@ const AgentStateAnnotation = Annotation.Root({
   lastFailedTool: Annotation<string | null>({
     reducer: (x: string | null, y: string | null) => y,
     default: () => null
+  }),
+  // Intent analysis state
+  currentIntent: Annotation<UserIntent | null>({
+    reducer: (x: UserIntent | null, y: UserIntent | null) => y || x,
+    default: () => null
+  }),
+  // Clarification tracking
+  needsClarification: Annotation<boolean>({
+    reducer: (x: boolean, y: boolean) => y,
+    default: () => false
+  }),
+  clarificationQuestions: Annotation<string[]>({
+    reducer: (x: string[], y: string[]) => y.length > 0 ? y : x,
+    default: () => []
+  }),
+  // Processing phase
+  currentPhase: Annotation<'validation' | 'intent_analysis' | 'clarification' | 'execution' | 'completed'>({
+    reducer: (x: 'validation' | 'intent_analysis' | 'clarification' | 'execution' | 'completed', y: 'validation' | 'intent_analysis' | 'clarification' | 'execution' | 'completed') => y || x,
+    default: () => 'validation' as const
+  }),
+  // Citations tracking from tool results
+  citations: Annotation<CitationData[]>({
+    reducer: (x: CitationData[], y: CitationData[]) => {
+      // Accumulate citations, avoiding duplicates by id
+      const existing = x || [];
+      const newCitations = y || [];
+      const existingIds = new Set(existing.map(c => c.id));
+      const uniqueNew = newCitations.filter(c => !existingIds.has(c.id));
+      return existing.concat(uniqueNew);
+    },
+    default: () => []
   })
 });
 
@@ -223,6 +276,8 @@ Agent Reasoning:
 
 **CRITICAL: When you receive a ToolMessage containing the data you requested, your task is complete. Your ONLY remaining job is to present this information to the user in a clear, human-readable format.**
 
+**CITATION REQUIREMENT: If the ToolMessage contains citation markers like [^1], [^2], [^3] or citation data, you MUST include these citation markers in your response. Use the format: "According to [Source Name] [^1], the requirement is..." Always reference sources with their corresponding citation numbers.**
+
 **ABSOLUTE RULE: DO NOT call the same tool again with the same parameters. If the ToolMessage contains the data, synthesize your answer and finish.**
 
 **LOOP PREVENTION RULES:**
@@ -383,6 +438,8 @@ Agent Reasoning:
 
 **CRITICAL: When you receive a ToolMessage containing the data you requested, your task is complete. Your ONLY remaining job is to present this information to the user in a clear, human-readable format.**
 
+**CITATION REQUIREMENT: If the ToolMessage contains citation markers like [^1], [^2], [^3] or citation data, you MUST include these citation markers in your response. Use the format: "According to [Source Name] [^1], the requirement is..." Always reference sources with their corresponding citation numbers.**
+
 **ABSOLUTE RULE: DO NOT call the same tool again with the same parameters. If the ToolMessage contains the data, synthesize your answer and finish.**
 
 **LOOP PREVENTION RULES:**
@@ -450,10 +507,244 @@ async function validate(state: AgentState): Promise<Partial<AgentState>> {
 
   console.log(`[Validation] Security validation passed for user: ${state.userContext.userId}`);
   return {
-    securityValidated: true
+    securityValidated: true,
+    currentPhase: 'intent_analysis'
   };
 }
 
+/**
+ * LLM-Powered Intent Analysis Node
+ * Uses the existing chat agent LLM to understand user intent and generate clarification questions
+ */
+async function analyzeIntent(state: AgentState): Promise<Partial<AgentState>> {
+  console.log('[IntentAnalysis] Analyzing user intent with LLM');
+  
+  // CRITICAL: Ensure security validation passed
+  if (!state.securityValidated) {
+    console.error('[IntentAnalysis] Security validation not passed, skipping intent analysis');
+    return {
+      currentPhase: 'execution'
+    };
+  }
+
+  // Get the last user message
+  const lastMessage = state.messages[state.messages.length - 1];
+  if (!lastMessage || lastMessage._getType() !== 'human') {
+    console.log('[IntentAnalysis] No human message found, proceeding to execution');
+    return {
+      currentPhase: 'execution'
+    };
+  }
+
+  const userQuery = typeof lastMessage.content === 'string' ? lastMessage.content : '';
+  
+  // All queries go through LLM intent analysis - no hardcoded patterns
+
+  try {
+    // Use the existing chat agent LLM for intent analysis with conversation context
+    const intentAnalysisResult = await performLLMIntentAnalysis(userQuery, state.language || 'en', state);
+    
+    console.log('[IntentAnalysis] LLM analysis result:', {
+      primaryIntent: intentAnalysisResult.intent.primaryIntent,
+      confidence: intentAnalysisResult.intent.confidence,
+      requiresClarification: intentAnalysisResult.requiresClarification,
+      missingContext: intentAnalysisResult.intent.missingContext
+    });
+
+    const nextPhase = intentAnalysisResult.requiresClarification ? 'clarification' : 'execution';
+    
+    return {
+      currentIntent: intentAnalysisResult.intent,
+      needsClarification: intentAnalysisResult.requiresClarification,
+      clarificationQuestions: intentAnalysisResult.clarificationQuestions,
+      currentPhase: nextPhase
+    };
+    
+  } catch (error) {
+    console.error('[IntentAnalysis] Error during LLM intent analysis:', error);
+    // Fallback to simple execution if analysis fails
+    return {
+      currentIntent: {
+        primaryIntent: 'general_inquiry',
+        queryType: 'general_info',
+        confidence: 0.5,
+        contextNeeded: {},
+        missingContext: [],
+        originalQuery: userQuery
+      },
+      needsClarification: false,
+      clarificationQuestions: [],
+      currentPhase: 'execution'
+    };
+  }
+}
+
+/**
+ * LLM-powered intent analysis using the existing chat agent with conversation context
+ */
+async function performLLMIntentAnalysis(query: string, language: string, state?: AgentState): Promise<IntentAnalysisResult> {
+  // Build context-aware intent analysis prompt
+  let contextualPrompt = `You are an expert financial AI assistant that analyzes user queries to understand their intent and determine what context is needed.
+
+CRITICAL INSTRUCTION: You have access to conversation context. Use this information to avoid asking questions that have already been answered or addressed.`;
+
+  // Extract conversation history and facts from restored agent state
+  if (state?.currentIntent) {
+    contextualPrompt += `\n\nPREVIOUS CONVERSATION CONTEXT:
+- Original Query: "${state.currentIntent.originalQuery}"
+- Primary Intent: ${state.currentIntent.primaryIntent}
+- Confidence: ${state.currentIntent.confidence}`;
+
+    if (state.currentIntent.contextNeeded && Object.keys(state.currentIntent.contextNeeded).length > 0) {
+      contextualPrompt += `\nPreviously Identified Context: ${JSON.stringify(state.currentIntent.contextNeeded)}`;
+    }
+  }
+
+  // Add clarification questions that were already asked
+  if (state?.clarificationQuestions && state.clarificationQuestions.length > 0) {
+    contextualPrompt += `\n\nPREVIOUSLY ASKED QUESTIONS (do NOT repeat these):
+${state.clarificationQuestions.map(q => `- ${q}`).join('\n')}`;
+  }
+
+  // Extract facts from the conversation history
+  if (state?.messages && state.messages.length > 1) {
+    const conversationText = state.messages.map(msg => 
+      `${msg._getType()}: ${typeof msg.content === 'string' ? msg.content : ''}`
+    ).join('\n');
+    
+    // Look for established facts in conversation
+    if (conversationText.toLowerCase().includes('malaysia')) {
+      contextualPrompt += `\nESTABLISHED FACTS:\n- Country: Malaysia (already mentioned)`;
+    }
+    if (conversationText.toLowerCase().includes('sole proprietorship')) {
+      contextualPrompt += `\n- Business Structure: Sole Proprietorship (already confirmed)`;
+    }
+    if (conversationText.toLowerCase().includes('tech')) {
+      contextualPrompt += `\n- Industry: Technology (already confirmed)`;
+    }
+    if (conversationText.toLowerCase().includes('remotely')) {
+      contextualPrompt += `\n- Operation Mode: Remote (already confirmed)`;
+    }
+  }
+
+  contextualPrompt += `\n\nIMPORTANT: If the user appears to be answering previous clarification questions, focus on processing their answers rather than asking new questions unless critical information is still missing.`;
+
+  contextualPrompt += `
+
+Analyze the following user query and respond with a JSON object containing:
+1. primaryIntent: One of [regulatory_knowledge, business_setup, transaction_analysis, document_search, compliance_check, general_inquiry]
+2. queryType: One of [general_info, procedural, comparison, calculation, specific_case]
+3. confidence: Number between 0 and 1
+4. contextNeeded: Object with fields for country, businessType, urgency, specificity (if applicable)
+5. missingContext: Array of strings indicating what context is missing
+6. requiresClarification: Boolean indicating if clarification questions should be asked
+7. clarificationQuestions: Array of specific questions to ask the user (if requiresClarification is true)
+
+Intent Detection Rules:
+- regulatory_knowledge: Questions about GST, tax, regulations, compliance requirements
+- business_setup: Questions about starting, incorporating, registering a business
+- transaction_analysis: Questions about user's own transactions, expenses, payments
+- document_search: Questions about finding or searching documents/invoices
+- compliance_check: Questions about cross-border compliance, international requirements
+- general_inquiry: General questions, greetings, or unclear intent
+
+Context Extraction:
+- country: singapore, malaysia, thailand, indonesia (from query content)
+- businessType: sme, individual, corporate, startup (from query content)
+- urgency: high (urgent/asap), medium (soon), low (default)
+- specificity: technical (technical details), general (overview), specific (specific case)
+
+Enhanced Clarification Rules (Context-Aware):
+- ONLY ask for clarification if genuinely critical information is missing AND has not been established previously
+- Check established facts and previous questions before generating new clarification questions
+- If this is a clarification response, be more permissive and focus on processing provided information
+- Avoid asking redundant questions that overlap with previously answered topics
+- Consider the conversation history when determining if additional context is truly needed
+
+User Query: "${query}"
+
+Respond with valid JSON only, no explanations:`;
+
+  // Build headers conditionally
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  
+  if (aiConfig.chat.apiKey) {
+    headers['Authorization'] = `Bearer ${aiConfig.chat.apiKey}`;
+  }
+
+  const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: aiConfig.chat.modelId,
+      messages: [
+        { role: 'system', content: contextualPrompt }
+      ],
+      max_tokens: 1000,
+      temperature: 0.1
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Intent analysis LLM API error: ${response.status}`);
+  }
+
+  const result = await response.json();
+  const analysisText = result.choices?.[0]?.message?.content?.trim();
+  
+  if (!analysisText) {
+    throw new Error('No analysis result from LLM');
+  }
+
+  try {
+    const analysis = JSON.parse(analysisText);
+    
+    // Construct the intent analysis result
+    const intent: UserIntent = {
+      primaryIntent: analysis.primaryIntent || 'general_inquiry',
+      queryType: analysis.queryType || 'general_info',
+      confidence: analysis.confidence || 0.5,
+      contextNeeded: analysis.contextNeeded || {},
+      missingContext: analysis.missingContext || [],
+      originalQuery: query
+    };
+
+    return {
+      intent,
+      requiresClarification: analysis.requiresClarification || false,
+      clarificationQuestions: analysis.clarificationQuestions || []
+    };
+  } catch (parseError) {
+    console.error('[IntentAnalysis] Failed to parse LLM response:', analysisText);
+    throw new Error('Failed to parse intent analysis result');
+  }
+}
+
+
+/**
+ * Clarification Node - Handles clarification questions and responses
+ */
+async function handleClarification(state: AgentState): Promise<Partial<AgentState>> {
+  console.log('[Clarification] Generating clarification questions');
+  
+  if (!state.needsClarification || !state.clarificationQuestions || state.clarificationQuestions.length === 0) {
+    console.log('[Clarification] No clarification needed, proceeding to execution');
+    return {
+      currentPhase: 'execution'
+    };
+  }
+
+  // Format clarification questions
+  const clarificationMessage = "To provide you with the most accurate information, could you please clarify:\n\n" +
+    state.clarificationQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n');
+
+  return {
+    messages: [...state.messages, new AIMessage(clarificationMessage)],
+    currentPhase: 'completed'
+  };
+}
 
 /**
  * Call Model Node - The agent's "brain" with security enforcement and sanitization
@@ -476,9 +767,13 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
   if (!state.securityValidated) {
     console.error('[CallModel] Security validation not passed, refusing to process');
     return {
-      messages: [...state.messages, new AIMessage('Request cannot be processed due to security restrictions.')]
+      messages: [...state.messages, new AIMessage('Request cannot be processed due to security restrictions.')],
+      currentPhase: 'completed'
     };
   }
+
+  // Set phase to execution when we start model processing
+  console.log('[CallModel] Setting phase to execution for model processing');
 
   // MODEL-CONDITIONAL ARCHITECTURE: Detect model type for appropriate approach
   const modelType = detectModelType();
@@ -510,19 +805,10 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
     const hasUserRole = (lastMessage as any).role === 'user';
     const hasHumanContent = lastMessage && lastMessage.content && typeof lastMessage.content === 'string';
     
-    console.log(`[CallModel] SANITIZATION DEBUG - Message detection:`);
-    console.log(`  instanceof HumanMessage: ${isHumanMessage}`);
-    console.log(`  _getType() === 'human': ${hasHumanType}`);
-    console.log(`  role === 'user': ${hasUserRole}`);
-    console.log(`  has string content: ${hasHumanContent}`);
-    console.log(`  constructor name: ${lastMessage?.constructor?.name}`);
-    console.log(`  message type: ${typeof lastMessage}`);
     
     // Check if we need to sanitize - only for Gemini
     if (lastMessage && hasHumanContent) {
       const originalQuery = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
-      
-      console.log(`[CallModel] Checking for financial terms in: "${originalQuery}"`);
       
       // Check for financial trigger words
       const financialTriggers = [
@@ -537,11 +823,7 @@ async function callModel(state: AgentState): Promise<Partial<AgentState>> {
         originalQuery.toLowerCase().includes(trigger)
       );
 
-      console.log(`[CallModel] Financial terms detected: ${containsFinancialTerms}`);
-
       if (containsFinancialTerms) {
-        console.log(`[CallModel] PREPROCESSING: Sanitizing query for Gemini safety bypass`);
-        console.log(`[CallModel] Original: "${originalQuery}"`);
         
         try {
           const sanitizationPrompt = `You are a query sanitizer that removes financial terminology to bypass AI safety restrictions. Your job is to rewrite queries to be generic while preserving the core intent.
@@ -597,13 +879,9 @@ Return ONLY the sanitized query, no explanations.`;
             const sanitizedQuery = result.choices?.[0]?.message?.content?.trim();
             
             if (sanitizedQuery) {
-              console.log(`[CallModel] Sanitized: "${sanitizedQuery}"`);
               // Replace the last message with sanitized version for LLM processing only
               const sanitizedMessage = new HumanMessage(sanitizedQuery);
               processedMessages[processedMessages.length - 1] = sanitizedMessage;
-              console.log(`[CallModel] REPLACEMENT SUCCESSFUL - new last message: "${sanitizedMessage.content}"`);
-            } else {
-              console.warn('[CallModel] No sanitized query returned, using original');
             }
           } else {
             console.warn('[CallModel] Sanitization failed, using original query');
@@ -795,9 +1073,16 @@ Return ONLY the sanitized query, no explanations.`;
 
     const assistantResponse = result.choices?.[0]?.message;
 
-    // --- CHECK FOR SPECIAL 'DONE' COMMAND ---
-    if (assistantResponse?.content?.trim() === 'DONE') {
-      console.log('[CallModel] Model issued DONE command. Synthesizing final answer.');
+    // --- CHECK FOR SPECIAL 'DONE' COMMAND (Enhanced Pattern Matching) ---
+    const responseContent = assistantResponse?.content?.trim() || '';
+    const isDoneCommand = /^\s*DONE\s*[.\-\s]*$/i.test(responseContent) || 
+                         /^\s*DONE\s*$/i.test(responseContent) || 
+                         responseContent.toUpperCase() === 'DONE' ||
+                         /^DONE[\s\.\-]*$/i.test(responseContent) ||
+                         /^\**\s*DONE\s*\**$/i.test(responseContent);
+                         
+    if (isDoneCommand) {
+      console.log('[CallModel] Model issued DONE command (enhanced detection). Synthesizing final answer.');
       
       // Find the last successful tool result in the history
       const lastToolMessage = state.messages.slice().reverse().find(m => m._getType() === 'tool');
@@ -856,6 +1141,20 @@ Return ONLY the sanitized query, no explanations.`;
     // Basic content cleaning for direct command model
     if (content && typeof content === 'string') {
       content = content.trim();
+      
+      // ENHANCED: Filter out any remaining DONE commands in content
+      const isDoneResponse = /^\s*DONE\s*[.\-\s]*$/i.test(content) || 
+                            /^\s*DONE\s*$/i.test(content) || 
+                            content.toUpperCase() === 'DONE' ||
+                            /^DONE[\s\.\-]*$/i.test(content) ||
+                            /^\**\s*DONE\s*\**$/i.test(content);
+      
+      if (isDoneResponse) {
+        content = "I've completed processing your request.";
+      } else {
+        // Remove DONE at the end of responses if it appears
+        content = content.replace(/\s+DONE\s*[.\-]*\s*$/i, '').trim();
+      }
       
       // For direct command models, we expect clean output, so minimal cleaning needed
       // Just ensure we don't return empty content
@@ -944,6 +1243,7 @@ async function executeTool(state: AgentState): Promise<Partial<AgentState>> {
         const fallbackResult = await ToolFactory.executeTool(fallbackTool, parameters, state.userContext);
         
         if (fallbackResult.success) {
+          const fallbackCitations = fallbackResult.citations || [];
           const toolMessage = new ToolMessage({
             content: `[Automatic tool correction] ${fallbackResult.data}`,
             tool_call_id: toolCall.id || 'fallback_exec',
@@ -952,7 +1252,8 @@ async function executeTool(state: AgentState): Promise<Partial<AgentState>> {
           return {
             messages: [...state.messages, toolMessage],
             failureCount: 0,
-            lastFailedTool: null
+            lastFailedTool: null,
+            citations: fallbackCitations
           };
         }
       }
@@ -962,6 +1263,12 @@ async function executeTool(state: AgentState): Promise<Partial<AgentState>> {
     const result = await ToolFactory.executeTool(toolName, parameters, state.userContext);
 
     console.log(`[ExecuteTool] Tool ${toolName} execution result:`, { success: result.success });
+
+    // Extract citations from tool result if available
+    const newCitations = result.citations || [];
+    if (newCitations.length > 0) {
+      console.log(`[ExecuteTool] Extracted ${newCitations.length} citations from ${toolName}:`, newCitations.map(c => ({ id: c.id, source: c.source_name })));
+    }
 
     // Create appropriate response message
     const toolMessage = new ToolMessage({
@@ -977,7 +1284,8 @@ async function executeTool(state: AgentState): Promise<Partial<AgentState>> {
     return {
       messages: [...state.messages, toolMessage],
       failureCount: newFailureCount,
-      lastFailedTool: newLastFailedTool
+      lastFailedTool: newLastFailedTool,
+      citations: newCitations // Add citations to agent state
     };
 
   } catch (error) {
@@ -1013,9 +1321,28 @@ async function correctToolCall(state: AgentState): Promise<Partial<AgentState>> 
 }
 
 /**
- * Router Function - Determines next step in the graph with aggressive circuit breaker.
+ * Router Function - Determines next step in the graph with intelligent phase handling
  */
 function router(state: AgentState): string {
+  console.log(`[Router] Current phase: ${state.currentPhase}, Messages: ${state.messages?.length || 0}`);
+  
+  // Phase-based routing for intelligent workflow
+  if (state.currentPhase === 'validation') {
+    return 'validate';
+  }
+  
+  if (state.currentPhase === 'intent_analysis') {
+    return 'analyzeIntent';
+  }
+  
+  if (state.currentPhase === 'clarification') {
+    return 'handleClarification';
+  }
+  
+  if (state.currentPhase === 'completed') {
+    return END;
+  }
+  
   // CRITICAL: Check for empty messages array at the start.
   if (!state.messages || state.messages.length === 0) {
     return 'validate';
@@ -1176,15 +1503,19 @@ export function createFinancialAgent() {
   // Define the state graph
   const workflow = new StateGraph(AgentStateAnnotation);
 
-  // Add nodes - sanitization now handled inside callModel
+  // Add nodes with LLM-powered intent analysis and clarification
   workflow.addNode('validate', validate);
+  workflow.addNode('analyzeIntent', analyzeIntent);
+  workflow.addNode('handleClarification', handleClarification);
   workflow.addNode('callModel', callModel);
   workflow.addNode('executeTool', executeTool);
   workflow.addNode('correctToolCall', correctToolCall);
 
-  // Add edges - sanitization now handled inside callModel
+  // Add edges for intelligent workflow with phases
   workflow.addEdge("__start__", "validate" as any);
-  workflow.addEdge("validate" as any, "callModel" as any);
+  workflow.addConditionalEdges("validate" as any, router);
+  workflow.addConditionalEdges("analyzeIntent" as any, router);
+  workflow.addConditionalEdges("handleClarification" as any, router);
   workflow.addConditionalEdges("callModel" as any, router);
   workflow.addConditionalEdges("executeTool" as any, router);
   workflow.addEdge("correctToolCall" as any, "callModel" as any); // Corrective loop
@@ -1210,6 +1541,11 @@ export function createAgentState(
     userContext,
     securityValidated: false,
     failureCount: 0,
-    lastFailedTool: null
+    lastFailedTool: null,
+    currentIntent: null,
+    needsClarification: false,
+    clarificationQuestions: [],
+    currentPhase: 'validation',
+    citations: []
   };
 }

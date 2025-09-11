@@ -407,66 +407,64 @@ class RegulatoryTextProcessor:
             raise ValueError(f"Unsupported content type: {content_type}")
     
     async def _extract_text_from_html(self, html_content: str, document_id: str) -> str:
-        """Extract text from HTML content using BeautifulSoup with intelligent main content detection"""
+        """Extract text from HTML content using simple and reliable extraction logic"""
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            # Step 1: Try to find main content container using common patterns
-            main_content = None
+            # Remove obvious navigation and noise first
+            for element in soup(['script', 'style', 'nav', 'header', 'footer']):
+                element.decompose()
             
-            # Priority order of selectors for main content
-            content_selectors = [
-                'main',  # HTML5 main element
-                '[role="main"]',  # ARIA main role
-                '#main-content',  # Common ID patterns
-                '#content',
-                '#main',
-                '.main-content',  # Common class patterns
-                '.content',
-                '.main',
-                'article',  # Article elements
-                '[id*="content"]',  # Any ID containing "content"
-                '[class*="content"]',  # Any class containing "content"
-            ]
+            # Try to find main content using simple selectors
+            main_selectors = ['main', 'article', '[role="main"]', '#content', '#main-content']
             
-            for selector in content_selectors:
-                elements = soup.select(selector)
-                if elements:
-                    # Take the first match or the one with most text
-                    main_content = max(elements, key=lambda x: len(x.get_text()))
-                    logging.info(f"Found main content using selector '{selector}' for {document_id}")
-                    break
+            for selector in main_selectors:
+                main_element = soup.select_one(selector)
+                if main_element:
+                    text = main_element.get_text(separator='\n', strip=True)
+                    if len(text) > 500:  # Reasonable threshold for meaningful content
+                        logging.info(f"Found content using '{selector}': {len(text)} characters")
+                        
+                        # Basic text cleaning
+                        text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+                        text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)  # Normalize line breaks
+                        text = text.strip()
+                        
+                        return text
             
-            # Step 2: If no main content found, use body but remove common noise elements
-            if not main_content:
-                logging.info(f"No specific main content found for {document_id}, using body with noise removal")
-                main_content = soup.find('body') or soup
+            # Fallback to body content with basic noise removal
+            body = soup.find('body')
+            if body:
+                # Remove common navigation patterns from body
+                for nav_element in body.select('.nav, .menu, .navigation, .breadcrumb, .toc, .sidebar'):
+                    nav_element.decompose()
                 
-                # Remove common noise elements
-                noise_selectors = [
-                    'nav', 'header', 'footer', 'aside',  # Structural noise
-                    '.navigation', '.nav', '.menu',  # Navigation
-                    '.header', '.footer', '.sidebar',  # Layout
-                    '.advertisement', '.ads', '.ad',  # Ads
-                    '.social', '.share', '.sharing',  # Social media
-                    '.breadcrumb', '.breadcrumbs',  # Breadcrumbs
-                    'script', 'style', 'noscript',  # Code/styling
-                ]
-                
-                for selector in noise_selectors:
-                    for element in main_content.select(selector):
-                        element.decompose()
-            
-            # Step 3: Extract text from the main content
-            if main_content:
-                text = main_content.get_text(separator=' ', strip=True)
+                text = body.get_text(separator='\n', strip=True)
+                logging.info(f"Fallback to body content: {len(text)} characters")
                 
                 # Basic text cleaning
-                text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
-                text = re.sub(r'\n\s*\n', '\n\n', text)  # Normalize line breaks
+                text = re.sub(r'\s+', ' ', text)  # Normalize whitespace  
+                text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)  # Normalize line breaks
                 
-                if text.strip():
-                    logging.info(f"Successfully extracted text from HTML: {len(text)} characters")
+                # Remove common navigation text patterns
+                navigation_patterns = [
+                    r'Turn on more accessible mode.*?(?=\n|\Z)',
+                    r'Turn off more accessible mode.*?(?=\n|\Z)',
+                    r'Skip to main content.*?(?=\n|\Z)',
+                    r'Jump to:.*?(?=\n|\Z)',
+                    r'Site Map\s*\|\s*Privacy.*?(?=\n|\Z)',
+                    r'Last updated:?\s*\d+.*?(?=\n|\Z)',
+                    r'Go to next level.*?(?=\n|\Z)',
+                    r'Close menu.*?(?=\n|\Z)',
+                ]
+                
+                for pattern in navigation_patterns:
+                    text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.MULTILINE)
+                
+                text = text.strip()
+                
+                if text and len(text) > 100:
+                    logging.info(f"Successfully extracted text from HTML body: {len(text)} characters")
                     return text
             
             raise ValueError(f"No meaningful content found in HTML for {document_id}")
@@ -746,9 +744,10 @@ class RegulatoryTextProcessor:
 class CuratedRAGProcessor:
     """Main processor for curated RAG pipeline"""
     
-    def __init__(self, config_path: str = "sources.yaml"):
+    def __init__(self, config_path: str = "sources.yaml", force_reprocess: bool = False):
         self.config_path = config_path
         self.config = self._load_config()
+        self.force_reprocess = force_reprocess
         self.setup_logging()
         
         # Initialize components
@@ -762,6 +761,9 @@ class CuratedRAGProcessor:
         
         # Create output directory
         Path("output").mkdir(exist_ok=True)
+        
+        if self.force_reprocess:
+            logging.info("⚠️  FORCE REPROCESS MODE ENABLED - All documents will be reprocessed regardless of checksums")
     
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from YAML file"""
@@ -818,11 +820,13 @@ class CuratedRAGProcessor:
                     # For checksum validation, we need bytes. Convert HTML to bytes for checksum
                     checksum_content = content.encode('utf-8') if content_type == "html" else content
                     
-                    # Check if document has changed (checksum validation)
-                    if not self.checksum_manager.has_changed(document_id, checksum_content):
+                    # Check if document has changed (checksum validation) - skip if force reprocess enabled
+                    if not self.force_reprocess and not self.checksum_manager.has_changed(document_id, checksum_content):
                         logging.info(f"Document {document_id} unchanged, skipping")
                         processing_report['skipped_sources'] += 1
                         continue
+                    elif self.force_reprocess:
+                        logging.info(f"🔄 Force reprocessing {document_id} (checksum validation bypassed)")
                     
                     # Extract text
                     text = await self.text_processor.extract_text(content, content_type, document_id)
@@ -886,7 +890,15 @@ class CuratedRAGProcessor:
 
 async def main():
     """Main entry point for curated RAG processing"""
-    processor = CuratedRAGProcessor()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Curated RAG Document Processing Pipeline")
+    parser.add_argument("--force-reprocess", action="store_true", 
+                       help="Force reprocessing of all documents, ignoring checksum validation")
+    
+    args = parser.parse_args()
+    
+    processor = CuratedRAGProcessor(force_reprocess=args.force_reprocess)
     
     try:
         report = await processor.process_all_documents()
