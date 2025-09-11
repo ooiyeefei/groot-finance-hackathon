@@ -51,6 +51,18 @@ export class ToolFactory {
   }
 
   /**
+   * Get a tool instance by name
+   */
+  static getTool(name: string): BaseTool | null {
+    if (!this.hasToolType(name)) {
+      return null
+    }
+    
+    const toolFactory = this.tools.get(name as ToolName)!
+    return toolFactory()
+  }
+
+  /**
    * Execute a tool with full security validation
    */
   static async executeTool(

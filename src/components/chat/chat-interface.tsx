@@ -6,6 +6,8 @@ import { useLanguage } from '@/contexts/language-context'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { CitationData } from '@/lib/tools/base-tool'
 import CitationOverlay from '@/components/citations/citation-overlay'
+import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 
 interface Message {
   id: string
@@ -46,38 +48,67 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
   }
 
   const renderContentWithCitations = (content: string, citations: CitationData[] = []) => {
-    // Parse [^1], [^2] markers and make them clickable
-    const citationRegex = /\[\^(\d+)\]/g
-    const parts = content.split(citationRegex)
+    // First, preprocess content to replace citation markers with JSX elements
+    const processedContent = content.replace(/\[\^(\d+)\]/g, (match, citationNum) => {
+      const citationIndex = parseInt(citationNum) - 1
+      const citation = citations[citationIndex]
+      
+      if (citation) {
+        return `<cite data-citation="${citationIndex}" data-citation-num="${citationNum}" class="citation-link">[^${citationNum}]</cite>`
+      } else {
+        return `<cite data-citation-missing="${citationNum}" class="citation-missing">[^${citationNum}]</cite>`
+      }
+    })
     
-    return parts.map((part, index) => {
-      if (index % 2 === 1) {
-        // This is a citation number
-        const citationIndex = parseInt(part) - 1
-        const citation = citations[citationIndex]
+    // Custom component for rendering citations within markdown
+    const components = {
+      // Handle custom cite elements for citations
+      cite: ({ children, ...props }: any) => {
+        const citationIndex = props['data-citation']
+        const citationNum = props['data-citation-num']
+        const isMissing = props['data-citation-missing']
         
-        if (citation) {
+        if (isMissing) {
           return (
-            <button
-              key={`citation-${index}`}
-              className="inline-flex items-center px-1 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer mx-0.5 transition-colors"
-              onClick={() => handleCitationClick(citation)}
-              title={`${citation.source_name} (${citation.country})`}
-            >
-              ^{part}
-            </button>
-          )
-        } else {
-          // Citation reference but no citation data available
-          return (
-            <span key={`citation-missing-${index}`} className="inline-flex items-center px-1 py-0.5 text-xs bg-gray-500 text-white rounded mx-0.5">
-              ^{part}
+            <span className="inline-flex items-center px-1 py-0.5 text-xs bg-gray-500 text-white rounded mx-0.5">
+              {children}
             </span>
           )
         }
-      }
-      return part
-    })
+        
+        if (citationIndex !== undefined && citationNum) {
+          const citation = citations[parseInt(citationIndex)]
+          if (citation) {
+            return (
+              <button
+                className="inline-flex items-center px-1 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer mx-0.5 transition-colors"
+                onClick={() => handleCitationClick(citation)}
+                title={`${citation.source_name} (${citation.country})`}
+              >
+                ^{citationNum}
+              </button>
+            )
+          }
+        }
+        
+        return <span>{children}</span>
+      },
+      // Style markdown elements to fit chat design
+      p: ({ children, ...props }: React.ComponentProps<'p'>) => <p {...props} className="mb-2 last:mb-0">{children}</p>,
+      ul: ({ children, ...props }: React.ComponentProps<'ul'>) => <ul {...props} className="list-disc ml-4 mb-2">{children}</ul>,
+      ol: ({ children, ...props }: React.ComponentProps<'ol'>) => <ol {...props} className="list-decimal ml-4 mb-2">{children}</ol>,
+      li: ({ children, ...props }: React.ComponentProps<'li'>) => <li {...props} className="mb-1">{children}</li>,
+      strong: ({ children, ...props }: React.ComponentProps<'strong'>) => <strong {...props} className="font-semibold">{children}</strong>,
+      em: ({ children, ...props }: React.ComponentProps<'em'>) => <em {...props} className="italic">{children}</em>,
+      code: ({ children, ...props }: React.ComponentProps<'code'>) => <code {...props} className="bg-gray-800 px-1 py-0.5 rounded text-sm">{children}</code>,
+      pre: ({ children, ...props }: React.ComponentProps<'pre'>) => <pre {...props} className="bg-gray-800 p-2 rounded text-sm overflow-x-auto mb-2">{children}</pre>
+    }
+
+    return (
+      <ReactMarkdown components={components} rehypePlugins={[rehypeRaw]}>
+        {processedContent}
+      </ReactMarkdown>
+    )
   }
 
   useEffect(() => {
@@ -312,10 +343,10 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
               >
                 <div className="flex items-start justify-between px-4 py-2">
                   <div className="flex-1 mr-2">
-                    <div className="text-sm whitespace-pre-wrap">
-                      {message.role === 'assistant' && message.citations && message.citations.length > 0
+                    <div className="text-sm">
+                      {message.role === 'assistant' 
                         ? renderContentWithCitations(message.content, message.citations)
-                        : message.content
+                        : <div className="whitespace-pre-wrap">{message.content}</div>
                       }
                     </div>
                     <p className={`text-xs mt-1 ${

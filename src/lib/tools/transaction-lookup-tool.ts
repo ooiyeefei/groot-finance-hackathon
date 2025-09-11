@@ -455,7 +455,12 @@ export class TransactionLookupTool extends BaseTool {
       // Phase 1: Broad Search - Use only high-confidence filters
       console.log(`[TransactionLookupTool] Phase 1: Broad search with high-confidence filters`)
       
-      let broadQuery = this.supabase
+      // Use authenticated client for RLS enforcement
+      if (!this.authenticatedSupabase) {
+        throw new Error('Authenticated Supabase client not available')
+      }
+
+      let broadQuery = this.authenticatedSupabase
         .from('transactions')
         .select(`
           id,
@@ -470,7 +475,7 @@ export class TransactionLookupTool extends BaseTool {
           document_type,
           created_at
         `)
-        .eq('user_id', userContext.userId)
+        .eq('clerk_user_id', userContext.userId)
         .order('transaction_date', { ascending: false })
 
       // Apply high-confidence filters (dates, amounts, specific category)
@@ -542,11 +547,11 @@ export class TransactionLookupTool extends BaseTool {
         console.log(`[TransactionLookupTool] Analysis detection: ${isAnalysisQuery}`)
         console.log(`[TransactionLookupTool] Current timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
         
-        // Try to get total count with user_id
-        const { count: totalCount } = await this.supabase
+        // Try to get total count with authenticated client
+        const { count: totalCount } = await this.authenticatedSupabase!
           .from('transactions')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', userContext.userId);
+          .eq('clerk_user_id', userContext.userId);
         
         console.log(`[TransactionLookupTool] User has ${totalCount} total transactions with user_id=${userContext.userId}`)
         
