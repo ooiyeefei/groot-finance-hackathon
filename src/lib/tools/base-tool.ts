@@ -3,7 +3,7 @@
  * Enforces security-first architecture with mandatory user context validation
  */
 
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createServerSupabaseClient, createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface UserContext {
@@ -37,11 +37,13 @@ export interface CitationData {
 }
 
 export interface ToolResult {
+  toolName?: string
   success: boolean
-  data?: string
+  data?: any
   error?: string
   metadata?: Record<string, any>
   citations?: CitationData[]
+  executionTime?: number
 }
 
 export type ModelType = 'gemini' | 'openai'
@@ -64,9 +66,10 @@ export interface OpenAIToolSchema {
  */
 export abstract class BaseTool {
   protected supabase: SupabaseClient
+  protected authenticatedSupabase: SupabaseClient | null = null
 
   constructor() {
-    // Use RLS-enabled client (NOT createServiceSupabaseClient)
+    // Use basic server client for permission checks only
     this.supabase = createServerSupabaseClient()
   }
 
@@ -80,6 +83,16 @@ export abstract class BaseTool {
         return {
           success: false,
           error: 'Unauthorized: User context required'
+        }
+      }
+
+      // CRITICAL: Create authenticated client for this specific user
+      try {
+        this.authenticatedSupabase = await createAuthenticatedSupabaseClient(userContext.userId)
+      } catch (authError) {
+        return {
+          success: false,
+          error: 'Authentication failed: Unable to create authenticated database connection'
         }
       }
 
@@ -101,7 +114,7 @@ export abstract class BaseTool {
         }
       }
 
-      // Execute the tool-specific logic
+      // Execute the tool-specific logic with authenticated client
       return await this.executeInternal(parameters, userContext)
 
     } catch (error) {
@@ -141,14 +154,6 @@ export abstract class BaseTool {
 
       if (error || !user) {
         console.warn(`[${this.getToolName()}] User validation failed - user not found in users table:`, error)
-        
-        // For LangGraph Studio testing, allow if no users table or user not found
-        // In production, you might want to be more strict
-        if (userContext.userId && userContext.userId.trim().length > 0) {
-          console.log(`[${this.getToolName()}] Allowing access for testing with userId: ${userContext.userId}`)
-          return true
-        }
-        
         return false
       }
 
@@ -156,25 +161,22 @@ export abstract class BaseTool {
       return true
     } catch (error) {
       console.error(`[${this.getToolName()}] Permission check error:`, error)
-      
-      // For development/testing, be more permissive
-      if (userContext.userId && userContext.userId.trim().length > 0) {
-        console.log(`[${this.getToolName()}] Allowing access for testing despite error`)
-        return true
-      }
-      
       return false
     }
   }
 
   /**
-   * Utility method to create RLS-enabled database queries
+   * Utility method to create RLS-enabled database queries using authenticated client
    */
   protected createSecureQuery<T = any>(tableName: string, userContext: UserContext) {
-    return this.supabase
+    if (!this.authenticatedSupabase) {
+      throw new Error('Authenticated client not available - ensure execute() method created it')
+    }
+    
+    return this.authenticatedSupabase
       .from(tableName)
       .select('*')
-      .eq('user_id', userContext.userId) as any
+      .eq('clerk_user_id', userContext.userId) as any
   }
 
   /**

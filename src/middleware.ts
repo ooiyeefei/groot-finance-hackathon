@@ -5,6 +5,7 @@ const isPublicRoute = createRouteMatcher([
   '/sign-up(.*)',
   '/api/health(.*)',
   '/api/internal/(.*)', // Internal service APIs with their own authentication
+  '/api/pdf-proxy(.*)', // PDF proxy handles its own authentication for government documents
 ])
 
 export default clerkMiddleware(async (auth, req) => {
