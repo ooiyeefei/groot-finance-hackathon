@@ -176,7 +176,7 @@ export class GeminiOCRService {
    */
   private buildExpenseExtractionPrompt(): string {
     const promptConfig: ExpensePromptConfig = {
-      categories: ['travel_accommodation', 'petrol_transport', 'entertainment_meals', 'office_supplies', 'utilities_comms', 'maintenance_repairs', 'professional_services', 'marketing_advertising', 'training_development', 'other_business'],
+      categories: ['travel_accommodation', 'petrol', 'toll', 'entertainment', 'other'],
       currencies: ['SGD', 'USD', 'EUR', 'MYR', 'THB', 'IDR', 'CNY', 'VND', 'PHP'],
       dateFormat: 'YYYY-MM-DD',
       confidenceThreshold: this.config.confidenceThreshold,
@@ -211,15 +211,10 @@ REQUIRED OUTPUT: Return ONLY a valid JSON object with this exact structure:
 
 CATEGORIZATION RULES:
 - travel_accommodation: Hotels, flights, transport, accommodation, travel booking
-- petrol_transport: Fuel, gas stations, vehicle fuel, automotive services, transport costs
-- entertainment_meals: Client meals, business dining, events, team building, restaurant expenses
-- office_supplies: Office materials, stationery, equipment, supplies
-- utilities_comms: Internet, phone, utilities, communication services
-- maintenance_repairs: Vehicle maintenance, equipment repairs, facility maintenance
-- professional_services: Legal, accounting, consulting, professional fees
-- marketing_advertising: Marketing campaigns, advertising, promotional materials
-- training_development: Training courses, workshops, professional development
-- other_business: General business expenses not fitting above categories
+- petrol: Fuel, gas stations, vehicle fuel, automotive services
+- toll: Highway tolls, road charges, parking fees  
+- entertainment: Client meals, business dining, events, team building, restaurant expenses
+- other: Other legitimate business expenses
 
 EXTRACTION RULES:
 1. Extract exact amounts and dates visible on receipt
@@ -291,15 +286,10 @@ CRITICAL: Return only the JSON object, no markdown formatting or additional text
 
     const validCategories: ExpenseCategory[] = [
       'travel_accommodation', 
-      'petrol_transport', 
-      'entertainment_meals', 
-      'office_supplies', 
-      'utilities_comms', 
-      'maintenance_repairs', 
-      'professional_services', 
-      'marketing_advertising', 
-      'training_development', 
-      'other_business'
+      'petrol', 
+      'toll', 
+      'entertainment', 
+      'other'
     ]
     if (!validCategories.includes(data.suggested_category)) {
       errors.push(`Invalid category: ${data.suggested_category}`)

@@ -63,9 +63,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Extract categories from JSONB column, filter active ones, and sort
+    // Extract categories from JSONB column and sort (include inactive categories for management)
     const categories = (businessData?.custom_expense_categories || [])
-      .filter((cat: any) => cat.is_active !== false)
       .sort((a: any, b: any) => (a.sort_order || 99) - (b.sort_order || 99))
 
     return NextResponse.json({
@@ -257,6 +256,7 @@ export async function PUT(request: NextRequest) {
     updatedCategories[categoryIndex] = {
       ...updatedCategories[categoryIndex],
       category_name: body.category_name,
+      category_code: body.category_code,
       description: body.description,
       ai_keywords: body.ai_keywords || [],
       vendor_patterns: body.vendor_patterns || [],
@@ -266,7 +266,7 @@ export async function PUT(request: NextRequest) {
       policy_limit: body.policy_limit,
       requires_manager_approval: body.requires_manager_approval,
       sort_order: body.sort_order,
-      is_active: body.is_active,
+      is_active: body.is_active ?? true,
       updated_at: new Date().toISOString()
     }
 
@@ -289,6 +289,94 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: updatedCategory
+    })
+
+  } catch (error) {
+    console.error('[Categories API] Unexpected error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE - Delete existing category
+export async function DELETE(request: NextRequest) {
+  try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const body: { id: string } = await request.json()
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+    
+    if (!body.id) {
+      return NextResponse.json(
+        { success: false, error: 'Category ID is required for deletion' },
+        { status: 400 }
+      )
+    }
+
+    // Get or create employee profile and check permissions
+    const employeeProfile = await ensureEmployeeProfile(userId)
+
+    if (!employeeProfile) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to create employee profile' },
+        { status: 500 }
+      )
+    }
+
+    // Check if user has management permissions
+    const canManage = employeeProfile.role_permissions?.manager || employeeProfile.role_permissions?.admin
+    if (!canManage) {
+      return NextResponse.json(
+        { success: false, error: 'Insufficient permissions to delete categories' },
+        { status: 403 }
+      )
+    }
+
+    // Get existing categories
+    const { data: businessData } = await supabase
+      .from('businesses')
+      .select('custom_expense_categories')
+      .eq('id', employeeProfile.business_id)
+      .single()
+
+    const existingCategories = businessData?.custom_expense_categories || []
+    const categoryIndex = existingCategories.findIndex((cat: any) => cat.id === body.id)
+    
+    if (categoryIndex === -1) {
+      return NextResponse.json(
+        { success: false, error: 'Category not found' },
+        { status: 404 }
+      )
+    }
+
+    // Remove the category from the array
+    const updatedCategories = existingCategories.filter((cat: any) => cat.id !== body.id)
+
+    // Update the business with the filtered categories array
+    const { error: deleteError } = await supabase
+      .from('businesses')
+      .update({ custom_expense_categories: updatedCategories })
+      .eq('id', employeeProfile.business_id)
+
+    if (deleteError) {
+      console.error('[Categories API] Error deleting category:', deleteError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to delete category' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: { deleted_id: body.id }
     })
 
   } catch (error) {

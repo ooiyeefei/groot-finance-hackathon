@@ -15,23 +15,28 @@ export async function GET(request: NextRequest) {
     const userContext = await requirePermission('manager')
     const supabase = await createAuthenticatedSupabaseClient(userContext.userId)
 
-    // Get pending expense claims for this business
+    // Get submitted expense claims for this business (Otto's workflow: submitted → under_review → approved)
     const { data: claims, error: claimsError } = await supabase
       .from('expense_claims')
       .select(`
         *,
-        employee:employee_profiles!inner(
-          employee_id,
-          user_id
-        ),
-        document:documents(
-          original_url,
-          annotated_url
+        transaction:transactions(*),
+        employee:employee_profiles!expense_claims_employee_id_fkey(
+          id,
+          department,
+          job_title,
+          user_id,
+          business_id,
+          user:users!employee_profiles_user_id_fkey(
+            full_name,
+            email
+          )
         )
       `)
       .eq('employee.business_id', userContext.profile.business_id)
-      .eq('status', 'pending_approval')
-      .order('created_at', { ascending: false })
+      .in('status', ['submitted', 'under_review']) // Show both submitted and under review
+      .is('deleted_at', null)
+      .order('submitted_at', { ascending: true }) // Oldest submissions first
 
     if (claimsError) {
       console.error('[Approvals API] Error fetching claims:', claimsError)
@@ -41,16 +46,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get employee names from users table
-    const userIds = claims.map(claim => claim.employee.user_id)
-    const { data: users, error: usersError } = await supabase
-      .from('users')
-      .select('id, clerk_user_id, full_name, email')
-      .in('id', userIds)
-
-    if (usersError) {
-      console.error('[Approvals API] Error fetching users:', usersError)
-    }
+    // Employee details are already included in the query above via join
 
     // Get business categories from JSONB column
     const { data: businessData, error: businessError } = await supabase
@@ -67,40 +63,44 @@ export async function GET(request: NextRequest) {
 
     // Enrich claims with employee information and category data
     const enrichedClaims = claims.map(claim => {
-      const user = users?.find(u => u.id === claim.employee.user_id)
-      
       // Find the matching category from business categories
       const category = businessCategories.find((cat: any) => 
         cat.category_code === claim.expense_category || 
         cat.category_name === claim.expense_category
       )
       
+      // Get amount from transaction (converted to home currency)
+      const amount = claim.transaction?.home_currency_amount || claim.transaction?.original_amount || 0
+      
       // Check if over policy limit
-      const isOverLimit = category?.policy_limit && 
-        claim.converted_amount > category.policy_limit
+      const isOverLimit = category?.policy_limit && amount > category.policy_limit
 
       return {
         id: claim.id,
-        employee_name: user?.full_name || user?.email || 'Unknown Employee',
-        employee_id: claim.employee.employee_id,
-        description: claim.description,
+        employee_name: claim.employee?.user?.full_name || claim.employee?.user?.email || 'Unknown Employee',
+        employee_id: claim.employee.id,
+        employee_department: claim.employee.department,
+        employee_job_title: claim.employee.job_title,
+        description: claim.transaction?.description || 'Expense Claim',
         business_purpose: claim.business_purpose,
-        original_amount: claim.original_amount,
-        original_currency: claim.original_currency,
-        converted_amount: claim.converted_amount,
-        home_currency: claim.home_currency,
-        transaction_date: claim.transaction_date,
-        vendor_name: claim.vendor_name,
+        original_amount: claim.transaction?.original_amount || 0,
+        original_currency: claim.transaction?.original_currency || 'SGD',
+        converted_amount: amount,
+        home_currency: claim.transaction?.home_currency || 'SGD',
+        transaction_date: claim.transaction?.transaction_date,
+        vendor_name: claim.transaction?.vendor_name,
         expense_category: claim.expense_category,
         category_name: category?.category_name || claim.expense_category,
         status: claim.status,
-        submission_date: claim.created_at,
-        document_url: claim.document?.annotated_url || claim.document?.original_url,
-        receipt_confidence: claim.receipt_confidence,
-        notes: claim.notes,
+        submission_date: claim.submitted_at || claim.created_at,
+        document_url: null, // Documents will be handled separately if needed
+        receipt_confidence: null, // Will be extracted from transaction metadata if needed
+        notes: claim.transaction?.notes,
         requires_receipt: category?.requires_receipt || false,
         policy_limit: category?.policy_limit,
-        is_over_limit: !!isOverLimit
+        is_over_limit: !!isOverLimit,
+        transaction_id: claim.transaction_id,
+        current_approver_id: claim.current_approver_id
       }
     })
 
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
         id,
         status,
         employee_id,
-        employee_profiles!inner(business_id)
+        employee_profiles!expense_claims_employee_id_fkey(business_id)
       `)
       .eq('id', claim_id)
       .single()
@@ -190,9 +190,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (claim.status !== 'pending_approval') {
+    if (!['submitted', 'under_review', 'pending_approval'].includes(claim.status)) {
       return NextResponse.json(
-        { success: false, error: 'Claim is not in pending approval status' },
+        { success: false, error: 'Claim is not in a state that can be approved or rejected' },
         { status: 400 }
       )
     }

@@ -19,7 +19,10 @@ import {
   Calendar,
   Building,
   FileText,
-  Loader2
+  Loader2,
+  Save,
+  Clock,
+  Upload
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,11 +46,13 @@ interface ExpenseFormData {
   vendor_name: string
   reference_number?: string
   notes?: string
+  document_id?: string
+  line_items?: any[]
 }
 
 interface PreFilledExpenseFormProps {
   extractionResult: DSPyExtractionResult
-  onSubmit: (formData: ExpenseFormData) => void
+  onSubmit: (formData: ExpenseFormData) => Promise<any>
   onBack: () => void
   isSubmitting?: boolean
 }
@@ -68,11 +73,24 @@ export default function PreFilledExpenseForm({
     transaction_date: extractionResult.extractedData.transactionDate,
     vendor_name: extractionResult.extractedData.vendorName,
     reference_number: extractionResult.extractedData.receiptNumber || '',
-    notes: ''
+    notes: '',
+    document_id: extractionResult.extractedData.documentId,
+    line_items: extractionResult.extractedData.lineItems?.map(item => ({
+      description: item.description,
+      quantity: item.quantity || 1,
+      unit_price: item.unitPrice || (item.lineTotal / (item.quantity || 1)),
+      total_amount: item.lineTotal
+    })) || []
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState('form')
+  const [isDraftSaving, setIsDraftSaving] = useState(false)
+  const [isSubmittingForApproval, setIsSubmittingForApproval] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [showSubmissionChoice, setShowSubmissionChoice] = useState(false)
+  const [expenseClaimId, setExpenseClaimId] = useState<string | null>(null)
+  const [submitStep, setSubmitStep] = useState<'form' | 'draft_saved' | 'submitted'>('form')
 
   // DSPy confidence indicators for each field
   const getFieldConfidence = (fieldName: string): 'high' | 'medium' | 'low' => {
@@ -92,11 +110,11 @@ export default function PreFilledExpenseForm({
     
     if (vendor.includes('restaurant') || vendor.includes('cafe') || vendor.includes('food') || 
         items.includes('food') || items.includes('meal') || items.includes('lunch')) {
-      return 'entertainment_meals'
+      return 'entertainment'
     }
     if (vendor.includes('gas') || vendor.includes('petrol') || vendor.includes('fuel') ||
         items.includes('fuel') || items.includes('gas')) {
-      return 'petrol_transport'
+      return 'petrol'
     }
     if (vendor.includes('hotel') || vendor.includes('accommodation') ||
         items.includes('accommodation') || items.includes('room')) {
@@ -104,10 +122,10 @@ export default function PreFilledExpenseForm({
     }
     if (vendor.includes('office') || vendor.includes('supplies') ||
         items.includes('supplies') || items.includes('stationery')) {
-      return 'office_supplies'
+      return 'other'
     }
     
-    return 'other_business' // Default category
+    return 'other' // Default category
   }
 
   const validateForm = (): boolean => {
@@ -136,10 +154,76 @@ export default function PreFilledExpenseForm({
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = () => {
-    if (validateForm()) {
-      onSubmit(formData)
+  // Save as draft first
+  const handleSaveDraft = async () => {
+    if (!validateForm()) return
+    
+    try {
+      setIsDraftSaving(true)
+      setSubmitError(null)
+      
+      // Save expense claim as draft
+      const result = await onSubmit(formData)
+      
+      // Extract expense claim ID for workflow operations
+      if (result?.data?.expense_claim?.id) {
+        setExpenseClaimId(result.data.expense_claim.id)
+        setSubmitStep('draft_saved')
+        setShowSubmissionChoice(true)
+      } else {
+        // Fallback - close form if no workflow needed  
+        onBack()
+      }
+    } catch (error) {
+      console.error('Draft save error:', error)
+      setSubmitError(error instanceof Error ? error.message : 'Failed to save expense claim')
+    } finally {
+      setIsDraftSaving(false)
     }
+  }
+
+  // Submit for manager approval
+  const handleSubmitForApproval = async () => {
+    if (!expenseClaimId) return
+    
+    try {
+      setIsSubmittingForApproval(true)
+      setSubmitError(null)
+      
+      const response = await fetch(`/api/expense-claims/${expenseClaimId}/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'submit' })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to submit for approval')
+      }
+      
+      const result = await response.json()
+      console.log('Successfully submitted for approval:', result)
+      
+      setSubmitStep('submitted')
+      
+      // Close form after successful submission
+      setTimeout(() => {
+        onBack()
+      }, 2000)
+      
+    } catch (error) {
+      console.error('Approval submission error:', error)
+      setSubmitError(error instanceof Error ? error.message : 'Failed to submit for approval')
+    } finally {
+      setIsSubmittingForApproval(false)
+    }
+  }
+
+  // Keep as draft - just close the form
+  const handleKeepAsDraft = () => {
+    onBack()
   }
 
   const FieldConfidenceBadge = ({ confidence }: { confidence: 'high' | 'medium' | 'low' }) => {
@@ -166,7 +250,7 @@ export default function PreFilledExpenseForm({
           Review Extracted Data
         </h3>
         <p className="text-gray-400">
-          DSPy has pre-filled your expense form. Please review and edit as needed.
+          AI has pre-filled your expense form. Please review and edit as needed.
         </p>
       </div>
 
@@ -182,7 +266,7 @@ export default function PreFilledExpenseForm({
               <Brain className="w-6 h-6 text-purple-400" />
               <div>
                 <div className="text-white font-medium">
-                  DSPy Extraction: {extractionResult.extractedData.extractionQuality} quality
+                  AI Extraction: {extractionResult.extractedData.extractionQuality} quality
                 </div>
                 <div className="text-gray-400 text-sm">
                   Confidence: {Math.round(extractionResult.extractedData.confidenceScore * 100)}%
@@ -204,7 +288,7 @@ export default function PreFilledExpenseForm({
           <AlertCircle className="w-4 h-4" />
           <AlertDescription className="text-blue-400">
             <div className="space-y-1">
-              <div className="font-medium">DSPy Suggestions:</div>
+              <div className="font-medium">AI Suggestions:</div>
               {extractionResult.suggestedCorrections.map((suggestion, index) => (
                 <div key={index} className="text-sm">• {suggestion}</div>
               ))}
@@ -220,7 +304,7 @@ export default function PreFilledExpenseForm({
             Expense Form
           </TabsTrigger>
           <TabsTrigger value="reasoning" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-            DSPy Reasoning
+            AI Analysis
           </TabsTrigger>
         </TabsList>
 
@@ -407,7 +491,7 @@ export default function PreFilledExpenseForm({
             <CardHeader>
               <CardTitle className="text-purple-400 flex items-center gap-2">
                 <Brain className="w-5 h-5" />
-                DSPy Chain-of-Thought Reasoning
+                AI Analysis Reasoning
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -424,35 +508,131 @@ export default function PreFilledExpenseForm({
         </TabsContent>
       </Tabs>
 
-      {/* Action Buttons */}
-      <div className="flex gap-3 pt-4">
-        <Button 
-          variant="outline" 
-          onClick={onBack}
-          disabled={isSubmitting}
-          className="border-gray-600 text-gray-300"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
-        <Button 
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className="flex-1 bg-green-600 hover:bg-green-700"
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Submitting...
-            </>
-          ) : (
-            <>
-              <Send className="w-4 h-4 mr-2" />
-              Submit Expense Claim
-            </>
-          )}
-        </Button>
-      </div>
+      {/* Submission Error */}
+      {submitError && (
+        <Alert className="bg-red-900/20 border-red-700">
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription className="text-red-400">
+            {submitError}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Action Buttons - Mel's Two-Step UX */}
+      {submitStep === 'form' && (
+        <div className="flex gap-3 pt-4">
+          <Button 
+            variant="outline" 
+            onClick={onBack}
+            disabled={isDraftSaving}
+            className="border-gray-600 text-gray-300"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <Button 
+            onClick={handleSaveDraft}
+            disabled={isDraftSaving || isSubmitting}
+            className="flex-1 bg-blue-600 hover:bg-blue-700"
+          >
+            {isDraftSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving Draft...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save & Continue
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* Draft Saved - Submission Choice */}
+      {submitStep === 'draft_saved' && showSubmissionChoice && (
+        <Card className="bg-blue-900/20 border-blue-700">
+          <CardContent className="p-6">
+            <div className="text-center mb-6">
+              <CheckCircle className="w-16 h-16 mx-auto text-green-500 mb-4" />
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Expense Claim Saved Successfully
+              </h3>
+              <p className="text-gray-400">
+                Choose what to do next with your expense claim:
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Keep as Draft */}
+              <div className="p-4 bg-gray-700 rounded-lg border border-gray-600">
+                <div className="flex items-center mb-2">
+                  <Clock className="w-5 h-5 text-yellow-500 mr-2" />
+                  <h4 className="font-medium text-white">Keep as Draft</h4>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Save for later editing. You can submit for approval anytime.
+                </p>
+                <Button 
+                  onClick={handleKeepAsDraft}
+                  variant="outline"
+                  className="w-full border-gray-600 text-gray-300"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Keep as Draft
+                </Button>
+              </div>
+              
+              {/* Submit for Approval */}
+              <div className="p-4 bg-gray-700 rounded-lg border border-gray-600">
+                <div className="flex items-center mb-2">
+                  <Upload className="w-5 h-5 text-green-500 mr-2" />
+                  <h4 className="font-medium text-white">Submit for Approval</h4>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Send to your manager for review and approval immediately.
+                </p>
+                <Button 
+                  onClick={handleSubmitForApproval}
+                  disabled={isSubmittingForApproval}
+                  className="w-full bg-green-600 hover:bg-green-700"
+                >
+                  {isSubmittingForApproval ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      Submit for Approval
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Successfully Submitted */}
+      {submitStep === 'submitted' && (
+        <Card className="bg-green-900/20 border-green-700">
+          <CardContent className="p-6 text-center">
+            <CheckCircle className="w-16 h-16 mx-auto text-green-500 mb-4" />
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Submitted for Approval
+            </h3>
+            <p className="text-gray-400 mb-4">
+              Your expense claim has been sent to your manager for review.
+            </p>
+            <p className="text-sm text-green-400">
+              You will be notified when a decision is made.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

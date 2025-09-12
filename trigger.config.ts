@@ -29,7 +29,7 @@ export default defineConfig({
         // Path to requirements.txt file
         requirementsFile: "./requirements.txt",
         // Python binary path for development (uses virtual environment)  
-        devPythonBinaryPath: "./venv/bin/python3",
+        devPythonBinaryPath: "/Users/yooi/Documents/code/personal/finanseal-cc/finanseal-claims/venv/bin/python3",
       }),
     ],
   },

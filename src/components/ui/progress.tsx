@@ -1,6 +1,6 @@
 /**
  * Progress Component
- * Simple progress bar for DSPy processing visualization
+ * Simple progress bar for receipt processing visualization
  */
 
 'use client'

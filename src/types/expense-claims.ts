@@ -15,18 +15,13 @@ export type ExpenseStatus =
   | 'reimbursed'      // Admin processed
   | 'paid'            // Payment completed
 
-// Updated expense categories to match database schema
+// Updated expense categories to match database constraint
 export type ExpenseCategory = 
   | 'travel_accommodation'  // Travel & Accommodation
-  | 'petrol_transport'     // Petrol & Transportation
-  | 'entertainment_meals'  // Entertainment & Meals
-  | 'office_supplies'      // Office Supplies
-  | 'utilities_comms'      // Utilities & Communications
-  | 'maintenance_repairs'  // Maintenance & Repairs
-  | 'professional_services' // Professional Services
-  | 'marketing_advertising' // Marketing & Advertising
-  | 'training_development' // Training & Development
-  | 'other_business'       // Other Business Expenses
+  | 'petrol'               // Petrol & Transportation  
+  | 'toll'                 // Toll & Road charges
+  | 'entertainment'        // Entertainment & Meals
+  | 'other'                // Other Business Expenses
 
 // Kevin's workflow state machine
 export interface WorkflowTransition {
@@ -269,7 +264,7 @@ export const EXPENSE_WORKFLOW_TRANSITIONS: WorkflowTransition[] = [
   { from: 'approved', to: 'rejected', requiredRole: 'admin' }
 ]
 
-// Mel's category display configuration
+// Mel's category display configuration (simplified to match database)
 export const EXPENSE_CATEGORY_CONFIG: Record<ExpenseCategory, {
   label: string
   icon: string
@@ -278,69 +273,34 @@ export const EXPENSE_CATEGORY_CONFIG: Record<ExpenseCategory, {
   requires_receipt_over?: number
 }> = {
   travel_accommodation: {
-    label: 'Travelling & Accommodation',
+    label: 'Travel & Accommodation',
     icon: '✈️',
     description: 'Business travel, hotels, flights, accommodation',
     policy_limit: 2000,
     requires_receipt_over: 50
   },
-  petrol_transport: {
+  petrol: {
     label: 'Petrol & Transportation',
     icon: '⛽',
-    description: 'Fuel, automotive, parking, tolls, and transport costs',
+    description: 'Fuel, automotive, parking, and transport costs',
     policy_limit: 500,
     requires_receipt_over: 25
   },
-  entertainment_meals: {
+  toll: {
+    label: 'Toll & Road Charges',
+    icon: '🛣️',
+    description: 'Highway tolls, road charges, parking fees',
+    policy_limit: 200,
+    requires_receipt_over: 10
+  },
+  entertainment: {
     label: 'Entertainment & Meals',
     icon: '🍽️',
     description: 'Client meals, business dining, and entertainment',
     policy_limit: 1000,
     requires_receipt_over: 25
   },
-  office_supplies: {
-    label: 'Office Supplies',
-    icon: '📁',
-    description: 'Office materials, stationery, and equipment',
-    policy_limit: 500,
-    requires_receipt_over: 25
-  },
-  utilities_comms: {
-    label: 'Utilities & Communications',
-    icon: '📞',
-    description: 'Internet, phone, utilities, and communication services',
-    policy_limit: 300,
-    requires_receipt_over: 25
-  },
-  maintenance_repairs: {
-    label: 'Maintenance & Repairs',
-    icon: '🔧',
-    description: 'Equipment repairs, maintenance, and facility costs',
-    policy_limit: 800,
-    requires_receipt_over: 50
-  },
-  professional_services: {
-    label: 'Professional Services',
-    icon: '💼',
-    description: 'Legal, accounting, consulting, and professional fees',
-    policy_limit: 2000,
-    requires_receipt_over: 100
-  },
-  marketing_advertising: {
-    label: 'Marketing & Advertising',
-    icon: '📢',
-    description: 'Marketing campaigns, advertising, and promotional materials',
-    policy_limit: 1500,
-    requires_receipt_over: 50
-  },
-  training_development: {
-    label: 'Training & Development',
-    icon: '📚',
-    description: 'Training courses, workshops, and professional development',
-    policy_limit: 1000,
-    requires_receipt_over: 50
-  },
-  other_business: {
+  other: {
     label: 'Other Business Expenses',
     icon: '📋',
     description: 'Other legitimate business expenses',

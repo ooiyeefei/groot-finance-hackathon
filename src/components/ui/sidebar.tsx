@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, ChevronLeft, CheckCircle, Users, Tag } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, ChevronLeft, Users } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 
@@ -19,7 +19,6 @@ export default function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, admin: false })
-  const [pendingApprovals, setPendingApprovals] = useState(0)
   
   // Base navigation items
   const baseNavigation = [
@@ -32,14 +31,7 @@ export default function Sidebar() {
 
   // Manager-specific navigation items
   const managerNavigation = [
-    { 
-      name: 'Approvals', 
-      href: '/manager/approvals', 
-      icon: CheckCircle,
-      badge: pendingApprovals > 0 ? pendingApprovals.toString() : undefined
-    },
     { name: 'Team Management', href: '/manager/team', icon: Users },
-    { name: 'Categories', href: '/manager/categories', icon: Tag },
   ]
 
   // Settings always at the end
@@ -87,17 +79,6 @@ export default function Sidebar() {
         const roleResult = await roleResponse.json()
         if (roleResult.success) {
           setUserRole(roleResult.data.permissions)
-
-          // If user is manager, fetch pending approvals count
-          if (roleResult.data.permissions.manager || roleResult.data.permissions.admin) {
-            const approvalsResponse = await fetch('/api/expense-claims/approvals')
-            if (approvalsResponse.ok) {
-              const approvalsResult = await approvalsResponse.json()
-              if (approvalsResult.success) {
-                setPendingApprovals(approvalsResult.data.stats.pending)
-              }
-            }
-          }
         }
       }
     } catch (error) {
@@ -105,26 +86,6 @@ export default function Sidebar() {
     }
   }
 
-  // Refresh pending approvals periodically for managers
-  useEffect(() => {
-    if (userRole.manager || userRole.admin) {
-      const interval = setInterval(async () => {
-        try {
-          const response = await fetch('/api/expense-claims/approvals')
-          if (response.ok) {
-            const result = await response.json()
-            if (result.success) {
-              setPendingApprovals(result.data.stats.pending)
-            }
-          }
-        } catch (error) {
-          console.error('Failed to refresh approvals count:', error)
-        }
-      }, 30000) // Refresh every 30 seconds
-
-      return () => clearInterval(interval)
-    }
-  }, [userRole])
 
   // Save state to localStorage
   const toggleSidebar = () => {

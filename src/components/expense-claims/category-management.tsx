@@ -10,12 +10,10 @@ import { Plus, Edit, Trash2, Tag, DollarSign, AlertCircle, CheckCircle, Loader2,
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import ConfirmationDialog from '@/components/ui/confirmation-dialog'
+import CategoryFormModal, { CategoryFormData } from '@/components/expense-claims/category-form-modal'
 
 interface ExpenseCategory {
   id: string
@@ -35,20 +33,6 @@ interface ExpenseCategory {
   is_default: boolean
 }
 
-interface CategoryFormData {
-  category_name: string
-  category_code: string
-  description: string
-  parent_category_id: string
-  ai_keywords: string
-  vendor_patterns: string
-  tax_treatment: 'deductible' | 'non_deductible' | 'partial'
-  requires_receipt: boolean
-  receipt_threshold: number
-  policy_limit: number
-  requires_manager_approval: boolean
-  sort_order: number
-}
 
 interface CategoryManagementProps {
   userRole: {
@@ -64,23 +48,18 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
   const [showForm, setShowForm] = useState(false)
   const [editingCategory, setEditingCategory] = useState<ExpenseCategory | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [formData, setFormData] = useState<CategoryFormData>({
-    category_name: '',
-    category_code: '',
-    description: '',
-    parent_category_id: '',
-    ai_keywords: '',
-    vendor_patterns: '',
-    tax_treatment: 'deductible',
-    requires_receipt: false,
-    receipt_threshold: 0,
-    policy_limit: 0,
-    requires_manager_approval: true,
-    sort_order: 99
-  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean
+    isLoading: boolean
+    category: ExpenseCategory | null
+  }>({
+    isOpen: false,
+    isLoading: false,
+    category: null
+  })
 
   // Check permissions
   const canManage = userRole.manager || userRole.admin
@@ -110,18 +89,11 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleFormSubmit = async (formData: CategoryFormData) => {
     setSaving(true)
     setError(null)
 
     try {
-      // Validate required fields
-      if (!formData.category_name || !formData.category_code) {
-        setError('Category name and code are required')
-        return
-      }
-
       const submitData = {
         ...formData,
         id: editingCategory?.id,
@@ -145,14 +117,15 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
         setSuccess(editingCategory ? 'Category updated successfully' : 'Category created successfully')
         setShowForm(false)
         setEditingCategory(null)
-        resetForm()
         fetchCategories()
       } else {
         setError(result.error || 'Failed to save category')
+        throw new Error(result.error || 'Failed to save category')
       }
     } catch (error) {
       console.error('Failed to save category:', error)
       setError('Network error while saving category')
+      throw error // Re-throw to let modal handle the error state
     } finally {
       setSaving(false)
     }
@@ -160,40 +133,64 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
 
   const handleEdit = (category: ExpenseCategory) => {
     setEditingCategory(category)
-    setFormData({
-      category_name: category.category_name,
-      category_code: category.category_code,
-      description: category.description || '',
-      parent_category_id: category.parent_category_id || '',
-      ai_keywords: category.ai_keywords.join(', '),
-      vendor_patterns: category.vendor_patterns.join(', '),
-      tax_treatment: category.tax_treatment,
-      requires_receipt: category.requires_receipt,
-      receipt_threshold: category.receipt_threshold || 0,
-      policy_limit: category.policy_limit || 0,
-      requires_manager_approval: true,
-      sort_order: category.sort_order
-    })
     setShowForm(true)
+    setError(null)
+    setSuccess(null)
   }
 
-  const resetForm = () => {
-    setFormData({
-      category_name: '',
-      category_code: '',
-      description: '',
-      parent_category_id: '',
-      ai_keywords: '',
-      vendor_patterns: '',
-      tax_treatment: 'deductible',
-      requires_receipt: false,
-      receipt_threshold: 0,
-      policy_limit: 0,
-      requires_manager_approval: true,
-      sort_order: 99
+  const handleDelete = (category: ExpenseCategory) => {
+    setDeleteConfirmation({
+      isOpen: true,
+      isLoading: false,
+      category: category
     })
-    setEditingCategory(null)
   }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmation.category) return
+
+    setDeleteConfirmation(prev => ({ ...prev, isLoading: true }))
+
+    try {
+      setError(null)
+
+      const response = await fetch('/api/expense-categories', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id: deleteConfirmation.category.id })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setSuccess('Category deleted successfully')
+        fetchCategories()
+        setDeleteConfirmation({
+          isOpen: false,
+          isLoading: false,
+          category: null
+        })
+      } else {
+        setError(result.error || 'Failed to delete category')
+        setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
+      }
+    } catch (error) {
+      console.error('Failed to delete category:', error)
+      setError('Network error while deleting category')
+      setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
+    }
+  }
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation({
+      isOpen: false,
+      isLoading: false,
+      category: null
+    })
+  }
+
 
   const filteredCategories = categories.filter(category =>
     category.category_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -228,7 +225,12 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
               </CardDescription>
             </div>
             <Button
-              onClick={() => setShowForm(true)}
+              onClick={() => {
+                setEditingCategory(null)
+                setShowForm(true)
+                setError(null)
+                setSuccess(null)
+              }}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -331,19 +333,25 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                         )}
                       </div>
 
-                      {!category.is_default && (
-                        <div className="flex gap-2 pt-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEdit(category)}
-                            className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-600"
-                          >
-                            <Edit className="w-3 h-3 mr-1" />
-                            Edit
-                          </Button>
-                        </div>
-                      )}
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(category)}
+                          className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-600"
+                        >
+                          <Edit className="w-3 h-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDelete(category)}
+                          className="border-red-600 text-red-400 hover:bg-red-600/20"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -353,204 +361,33 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
         </CardContent>
       </Card>
 
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={deleteConfirmation.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Category"
+        message={`Are you sure you want to delete the category "${deleteConfirmation.category?.category_name}"? This action cannot be undone and may affect existing expense claims.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        isLoading={deleteConfirmation.isLoading}
+      />
+
       {/* Category Form Modal */}
-      {showForm && (
-        <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <CardTitle className="text-white">
-              {editingCategory ? 'Edit Category' : 'Add New Category'}
-            </CardTitle>
-            <CardDescription className="text-gray-400">
-              Configure expense category settings and auto-categorization rules
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Basic Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="category_name" className="text-white">Category Name *</Label>
-                  <Input
-                    id="category_name"
-                    value={formData.category_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, category_name: e.target.value }))}
-                    placeholder="e.g., Travel & Accommodation"
-                    className="bg-gray-700 border-gray-600 text-white"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="category_code" className="text-white">Category Code *</Label>
-                  <Input
-                    id="category_code"
-                    value={formData.category_code}
-                    onChange={(e) => setFormData(prev => ({ ...prev, category_code: e.target.value.toUpperCase() }))}
-                    placeholder="e.g., TRAVEL"
-                    className="bg-gray-700 border-gray-600 text-white font-mono"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="description" className="text-white">Description</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Brief description of this category"
-                  className="bg-gray-700 border-gray-600 text-white"
-                  rows={2}
-                />
-              </div>
-
-              {/* Auto-Categorization */}
-              <div className="space-y-4">
-                <Label className="text-white text-lg">Auto-Categorization Rules</Label>
-                
-                <div>
-                  <Label htmlFor="ai_keywords" className="text-white">Keywords (comma-separated)</Label>
-                  <Input
-                    id="ai_keywords"
-                    value={formData.ai_keywords}
-                    onChange={(e) => setFormData(prev => ({ ...prev, ai_keywords: e.target.value }))}
-                    placeholder="travel, hotel, flight, accommodation"
-                    className="bg-gray-700 border-gray-600 text-white"
-                  />
-                  <p className="text-gray-400 text-sm mt-1">
-                    Keywords found in receipt descriptions will auto-categorize to this category
-                  </p>
-                </div>
-
-                <div>
-                  <Label htmlFor="vendor_patterns" className="text-white">Vendor Patterns (comma-separated)</Label>
-                  <Input
-                    id="vendor_patterns"
-                    value={formData.vendor_patterns}
-                    onChange={(e) => setFormData(prev => ({ ...prev, vendor_patterns: e.target.value }))}
-                    placeholder="*airline*, *hotel*, booking.com"
-                    className="bg-gray-700 border-gray-600 text-white"
-                  />
-                  <p className="text-gray-400 text-sm mt-1">
-                    Use * as wildcards. Vendor names matching these patterns will auto-categorize
-                  </p>
-                </div>
-              </div>
-
-              {/* Policy Configuration */}
-              <div className="space-y-4">
-                <Label className="text-white text-lg">Policy Settings</Label>
-                
-                <div>
-                  <Label htmlFor="tax_treatment" className="text-white">Tax Treatment</Label>
-                  <Select
-                    value={formData.tax_treatment}
-                    onValueChange={(value: 'deductible' | 'non_deductible' | 'partial') => 
-                      setFormData(prev => ({ ...prev, tax_treatment: value }))
-                    }
-                  >
-                    <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="deductible">Fully Deductible</SelectItem>
-                      <SelectItem value="partial">Partially Deductible</SelectItem>
-                      <SelectItem value="non_deductible">Non-Deductible</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="requires_receipt"
-                    checked={formData.requires_receipt}
-                    onCheckedChange={(checked) => 
-                      setFormData(prev => ({ ...prev, requires_receipt: !!checked }))
-                    }
-                  />
-                  <Label htmlFor="requires_receipt" className="text-gray-300">
-                    Requires receipt attachment
-                  </Label>
-                </div>
-
-                {formData.requires_receipt && (
-                  <div>
-                    <Label htmlFor="receipt_threshold" className="text-white">Receipt Required Above Amount</Label>
-                    <Input
-                      id="receipt_threshold"
-                      type="number"
-                      step="0.01"
-                      value={formData.receipt_threshold}
-                      onChange={(e) => setFormData(prev => ({ ...prev, receipt_threshold: Number(e.target.value) }))}
-                      placeholder="0.00"
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <Label htmlFor="policy_limit" className="text-white">Policy Limit (SGD)</Label>
-                  <Input
-                    id="policy_limit"
-                    type="number"
-                    step="0.01"
-                    value={formData.policy_limit}
-                    onChange={(e) => setFormData(prev => ({ ...prev, policy_limit: Number(e.target.value) }))}
-                    placeholder="0.00 (0 = no limit)"
-                    className="bg-gray-700 border-gray-600 text-white"
-                  />
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="requires_manager_approval"
-                    checked={true}
-                    disabled={true}
-                  />
-                  <Label htmlFor="requires_manager_approval" className="text-gray-500">
-                    Always requires manager approval (enforced)
-                  </Label>
-                </div>
-
-              </div>
-
-              {/* Form Actions */}
-              <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setShowForm(false)
-                    resetForm()
-                  }}
-                  className="border-gray-600 text-gray-300 hover:bg-gray-700"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={saving}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      {editingCategory ? 'Update' : 'Create'} Category
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+      <CategoryFormModal
+        isOpen={showForm}
+        onClose={() => {
+          setShowForm(false)
+          setEditingCategory(null)
+          setError(null)
+          setSuccess(null)
+        }}
+        onSubmit={handleFormSubmit}
+        editingCategory={editingCategory}
+        isLoading={saving}
+        error={error}
+      />
     </div>
   )
 }

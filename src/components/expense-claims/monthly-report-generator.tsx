@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Download, FileText, Calendar, User, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -36,6 +36,10 @@ export default function MonthlyReportGenerator() {
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [employees, setEmployees] = useState([
+    { id: 'current', name: 'My Reports' }
+  ])
+  const [loadingEmployees, setLoadingEmployees] = useState(false)
 
   // Generate available months (last 12 months)
   const generateMonthOptions = () => {
@@ -57,13 +61,35 @@ export default function MonthlyReportGenerator() {
 
   const monthOptions = generateMonthOptions()
 
-  // Mock employee list (in real app, this would come from API)
-  const employees = [
-    { id: 'current', name: 'My Reports' },
-    { id: '1', name: 'John Doe' },
-    { id: '2', name: 'Jane Smith' },
-    { id: '3', name: 'Alice Johnson' }
-  ]
+  // Fetch employees from API
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        setLoadingEmployees(true)
+        const response = await fetch('/api/user/team')
+        const result = await response.json()
+        
+        if (result.success && result.data.length > 0) {
+          const teamMembers = result.data.map((member: any) => ({
+            id: member.id || member.user_id,
+            name: member.full_name || member.email || 'Unknown Employee'
+          }))
+          
+          setEmployees([
+            { id: 'current', name: 'My Reports' },
+            ...teamMembers
+          ])
+        }
+      } catch (error) {
+        console.error('Failed to fetch employees:', error)
+        // Keep default "My Reports" only if API fails
+      } finally {
+        setLoadingEmployees(false)
+      }
+    }
+
+    fetchEmployees()
+  }, [])
 
   const generateReport = async (format: 'json' | 'pdf' | 'csv' = 'json') => {
     if (!selectedMonth) {

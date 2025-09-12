@@ -90,7 +90,7 @@ export class ExpenseCategorizer {
     const text = `${vendorName} ${description}`.toLowerCase()
     
     let bestMatch: CategorySuggestion = {
-      category: 'other_business',
+      category: 'other',
       confidence: 0.1,
       reasoning: 'No clear pattern match found'
     }
@@ -157,7 +157,7 @@ export class ExpenseCategorizer {
 
       // Petrol & Automotive
       {
-        category: 'petrol_transport',
+        category: 'petrol',
         keywords: [
           'petron', 'shell', 'esso', 'caltex', 'mobil', 'bp',
           'fuel', 'petrol', 'gasoline', 'diesel', 'gas station',
@@ -174,7 +174,7 @@ export class ExpenseCategorizer {
 
       // Toll & Parking (part of transport)
       {
-        category: 'petrol_transport',
+        category: 'petrol',
         keywords: [
           'toll', 'erp', 'parking', 'carpark', 'viaduct',
           'expressway', 'highway', 'plus', 'touch n go',
@@ -192,7 +192,7 @@ export class ExpenseCategorizer {
 
       // Entertainment & Dining
       {
-        category: 'entertainment_meals',
+        category: 'entertainment',
         keywords: [
           'restaurant', 'cafe', 'coffee', 'dining', 'food court',
           'hawker', 'kopitiam', 'bar', 'pub', 'ktv', 'karaoke',
@@ -211,7 +211,7 @@ export class ExpenseCategorizer {
 
       // Other/General Business
       {
-        category: 'other_business',
+        category: 'other',
         keywords: [
           'office', 'stationery', 'supplies', 'equipment',
           'software', 'license', 'subscription', 'internet',
@@ -235,15 +235,10 @@ export class ExpenseCategorizer {
   getCategoryDescription(category: ExpenseCategory): string {
     const descriptions: Record<ExpenseCategory, string> = {
       travel_accommodation: 'Travel, accommodation, and business trips',
-      petrol_transport: 'Fuel, automotive, parking, tolls, and transport costs',
-      entertainment_meals: 'Client meals, business dining, and entertainment',
-      office_supplies: 'Office materials, stationery, and equipment',
-      utilities_comms: 'Internet, phone, utilities, and communication services',
-      maintenance_repairs: 'Equipment repairs, maintenance, and facility costs',
-      professional_services: 'Legal, accounting, consulting, and professional fees',
-      marketing_advertising: 'Marketing campaigns, advertising, and promotional materials',
-      training_development: 'Training courses, workshops, and professional development',
-      other_business: 'General business expenses and miscellaneous items'
+      petrol: 'Fuel, automotive, parking, and transport costs',
+      toll: 'Highway tolls, road charges, and parking fees',
+      entertainment: 'Client meals, business dining, and entertainment',
+      other: 'Other legitimate business expenses'
     }
 
     return descriptions[category] || 'Unknown expense category'
@@ -264,17 +259,17 @@ export class ExpenseCategorizer {
 
     // High-value transaction warnings
     if (sgdAmount > 500) {
-      if (category === 'entertainment_meals') {
+      if (category === 'entertainment') {
         warnings.push('High-value entertainment expense may require manager approval')
       }
-      if (category === 'other_business' && sgdAmount > 1000) {
+      if (category === 'other' && sgdAmount > 1000) {
         warnings.push('High-value miscellaneous expense requires detailed justification')
       }
     }
 
     // Category-specific validations
     switch (category) {
-      case 'petrol_transport':
+      case 'petrol':
         if (sgdAmount > 300) {
           warnings.push('High fuel expense - may require fuel card verification')
         }

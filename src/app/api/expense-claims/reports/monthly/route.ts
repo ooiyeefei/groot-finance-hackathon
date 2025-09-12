@@ -129,15 +129,10 @@ export async function GET(request: NextRequest) {
     // Calculate category totals
     const categoryTotals: Record<ExpenseCategory, { amount: number; count: number }> = {
       travel_accommodation: { amount: 0, count: 0 },
-      petrol_transport: { amount: 0, count: 0 },
-      entertainment_meals: { amount: 0, count: 0 },
-      office_supplies: { amount: 0, count: 0 },
-      utilities_comms: { amount: 0, count: 0 },
-      maintenance_repairs: { amount: 0, count: 0 },
-      professional_services: { amount: 0, count: 0 },
-      marketing_advertising: { amount: 0, count: 0 },
-      training_development: { amount: 0, count: 0 },
-      other_business: { amount: 0, count: 0 }
+      petrol: { amount: 0, count: 0 },
+      toll: { amount: 0, count: 0 },
+      entertainment: { amount: 0, count: 0 },
+      other: { amount: 0, count: 0 }
     }
 
     // Process each claim for statistics

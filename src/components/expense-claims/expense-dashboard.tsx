@@ -5,14 +5,14 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import DSPyExpenseSubmissionFlow from './dspy-expense-submission-flow'
-import BulkApprovalQueue from './bulk-approval-queue'
+import ExpenseApprovalDashboard from '../manager/expense-approval-dashboard'
 import ExpenseAnalytics from './expense-analytics'
 import MonthlyReportGenerator from './monthly-report-generator'
 import GoogleSheetsExport from './google-sheets-export'
@@ -46,49 +46,50 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
   const [showSubmissionForm, setShowSubmissionForm] = useState(false)
 
   // Fetch dashboard data and user role
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const response = await fetch('/api/expense-claims/dashboard', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/expense-claims/dashboard', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        const result = await response.json()
-        
-        if (result.success) {
-          setDashboardData(result.data)
-        } else {
-          throw new Error(result.error || 'Failed to fetch dashboard data')
-        }
-      } catch (error) {
-        console.error('Failed to fetch dashboard data:', error)
-        // Set minimal fallback data so UI doesn't break
-        setDashboardData({
-          role: { employee: true, manager: false, admin: false },
-          summary: {
-            total_claims: 0,
-            pending_approval: 0,
-            approved_amount: 0,
-            rejected_count: 0
-          },
-          recent_claims: []
-        })
-      } finally {
-        setLoading(false)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
-    }
 
+      const result = await response.json()
+      
+      if (result.success) {
+        setDashboardData(result.data)
+      } else {
+        throw new Error(result.error || 'Failed to fetch dashboard data')
+      }
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error)
+      // Set minimal fallback data so UI doesn't break
+      setDashboardData({
+        role: { employee: true, manager: false, admin: false },
+        summary: {
+          total_claims: 0,
+          pending_approval: 0,
+          approved_amount: 0,
+          rejected_count: 0
+        },
+        recent_claims: []
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
     if (userId) {
       fetchDashboardData()
     }
-  }, [userId])
+  }, [userId, fetchDashboardData])
 
   if (loading) {
     return <ExpenseDashboardSkeleton />
@@ -130,24 +131,24 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
 
         {/* Role-specific quick actions */}
         <div className="flex gap-3">
-          {!dashboardData.role.admin && !dashboardData.role.manager && (
-            <>
-              <Button
-                onClick={() => setShowSubmissionForm(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <Camera className="w-4 h-4 mr-2" />
-                Capture Receipt
-              </Button>
-              <Button
-                variant="outline"
-                className="border-gray-600 text-gray-300 hover:bg-gray-800"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Manual Entry
-              </Button>
-            </>
-          )}
+          {/* Everyone can submit expense claims */}
+          <Button
+            onClick={() => setShowSubmissionForm(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            <Camera className="w-4 h-4 mr-2" />
+            Capture Receipt
+          </Button>
+          <Button
+            variant="outline"
+            className="border-gray-600 text-gray-300 hover:bg-gray-800"
+            onClick={() => setShowSubmissionForm(true)}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Manual Entry
+          </Button>
+          
+          {/* Manager-specific actions */}
           {dashboardData.role.manager && (
             <Button
               onClick={() => setActiveTab('approvals')}
@@ -157,6 +158,8 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
               Review Claims
             </Button>
           )}
+          
+          {/* Admin-specific actions */}
           {dashboardData.role.admin && (
             <Button
               onClick={() => setActiveTab('reimbursements')}
@@ -233,7 +236,7 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
 
         {dashboardData.role.manager && (
           <TabsContent value="approvals" className="space-y-4">
-            <BulkApprovalQueue />
+            <ExpenseApprovalDashboard />
           </TabsContent>
         )}
 
@@ -268,11 +271,59 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
       {/* DSPy Expense Submission Flow */}
       {showSubmissionForm && (
         <DSPyExpenseSubmissionFlow 
-          onClose={() => setShowSubmissionForm(false)}
-          onSubmit={(data) => {
-            console.log('New DSPy expense claim:', data)
+          onClose={() => {
             setShowSubmissionForm(false)
-            // TODO: Refresh dashboard data
+            // Refresh dashboard when form closes
+            fetchDashboardData()
+          }}
+          onSubmit={async (data) => {
+            try {
+              console.log('Submitting expense claim:', data)
+              
+              // Transform form data to API format
+              const requestBody = {
+                description: data.description,
+                business_purpose: data.business_purpose,
+                expense_category: data.expense_category,
+                original_amount: data.original_amount,
+                original_currency: data.original_currency,
+                transaction_date: data.transaction_date,
+                vendor_name: data.vendor_name,
+                reference_number: data.reference_number || undefined,
+                notes: data.notes || undefined,
+                document_id: data.document_id || undefined,
+                line_items: data.line_items || []
+              }
+              
+              const response = await fetch('/api/expense-claims', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+              })
+              
+              if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Failed to submit expense claim')
+              }
+              
+              const result = await response.json()
+              console.log('Expense claim created successfully:', result)
+              
+              // Close the form after successful submission
+              setShowSubmissionForm(false)
+              
+              // Refresh dashboard data to show new claim
+              fetchDashboardData()
+              
+              // Return result for any additional processing
+              return result
+              
+            } catch (error) {
+              console.error('Error submitting expense claim:', error)
+              throw error // Let the form handle the error display
+            }
           }}
         />
       )}
@@ -308,52 +359,114 @@ function EmployeeDashboardContent({ data, onNewClaim }: { data: DashboardData; o
         </CardContent>
       </Card>
 
-      {/* Recent Claims */}
+      {/* My Expense Claims with Status Visibility */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">Recent Claims</CardTitle>
-          <CardDescription>Your latest expense submissions</CardDescription>
+          <CardTitle className="text-white flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            My Expense Claims
+          </CardTitle>
+          <CardDescription>Track your expense claims through the approval workflow</CardDescription>
         </CardHeader>
         <CardContent>
           {data.recent_claims.length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               <FileText className="w-12 h-12 mx-auto mb-4" />
-              <p>No recent claims</p>
+              <p>No expense claims yet</p>
               <p className="text-sm">Submit your first expense claim to get started</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {data.recent_claims.slice(0, 5).map((claim: any) => (
-                <div key={claim.id} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
-                  <div className="flex-1">
-                    <p className="text-white text-sm font-medium">
-                      {claim.transaction?.description || 'Expense Claim'}
-                    </p>
-                    <p className="text-gray-400 text-xs">
-                      {claim.expense_category?.replace('_', ' ').toUpperCase()} • 
-                      {new Date(claim.created_at).toLocaleDateString()}
+                <div key={claim.id} className="p-4 bg-gray-700 rounded-lg border border-gray-600">
+                  {/* Claim Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <p className="text-white font-medium">
+                        {claim.transaction?.description || claim.description || 'Expense Claim'}
+                      </p>
+                      <p className="text-gray-400 text-sm">
+                        {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} • 
+                        {new Date(claim.transaction?.transaction_date || claim.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-white font-semibold">
+                        {claim.transaction?.original_currency} ${parseFloat(claim.transaction?.original_amount || '0').toFixed(2)}
+                      </p>
+                      {claim.transaction?.home_currency_amount && claim.transaction.original_amount !== claim.transaction.home_currency_amount && (
+                        <p className="text-gray-400 text-sm">
+                          ≈ SGD ${parseFloat(claim.transaction.home_currency_amount).toFixed(2)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Status and Progress */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Badge 
+                        className={`text-xs px-2 py-1 ${
+                          claim.status_display?.color === 'green' ? 'bg-green-600 text-white' :
+                          claim.status_display?.color === 'blue' ? 'bg-blue-600 text-white' :
+                          claim.status_display?.color === 'yellow' ? 'bg-yellow-600 text-white' :
+                          claim.status_display?.color === 'red' ? 'bg-red-600 text-white' :
+                          claim.status_display?.color === 'purple' ? 'bg-purple-600 text-white' :
+                          'bg-gray-600 text-white'
+                        }`}
+                      >
+                        {claim.status_display?.label || claim.status?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                      </Badge>
+                      
+                      {claim.current_approver_name && ['submitted', 'under_review', 'pending_approval'].includes(claim.status) && (
+                        <span className="text-xs text-gray-400">
+                          With: {claim.current_approver_name}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Workflow Progress Bar */}
+                    <div className="w-full bg-gray-600 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          claim.status === 'rejected' ? 'bg-red-500' : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${claim.workflow_progress || 0}%` }}
+                      />
+                    </div>
+                    
+                    <p className="text-xs text-gray-400">
+                      {claim.status_display?.description}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-white text-sm font-medium">
-                      ${parseFloat(claim.transaction?.home_amount || '0').toFixed(2)}
-                    </p>
-                    <Badge 
-                      variant={
-                        claim.status === 'approved' ? 'default' : 
-                        claim.status === 'rejected' ? 'destructive' : 
-                        'secondary'
-                      }
-                      className="text-xs"
-                    >
-                      {claim.status.replace('_', ' ')}
-                    </Badge>
-                  </div>
+                  
+                  {/* Action buttons for draft claims */}
+                  {claim.status === 'draft' && (
+                    <div className="mt-3 flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="text-xs border-gray-600 text-gray-300 hover:bg-gray-600"
+                      >
+                        <Edit3 className="w-3 h-3 mr-1" />
+                        Edit
+                      </Button>
+                      <Button 
+                        size="sm"
+                        className="text-xs bg-blue-600 hover:bg-blue-700"
+                      >
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Submit
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
+              
               {data.recent_claims.length > 5 && (
                 <Button variant="ghost" className="w-full text-blue-400 hover:text-blue-300">
-                  View all claims
+                  <FileText className="w-4 h-4 mr-2" />
+                  View all {data.recent_claims.length} claims
                 </Button>
               )}
             </div>
@@ -389,13 +502,13 @@ function ManagerDashboardContent({ data }: { data: DashboardData }) {
                       {claim.employee?.full_name || 'Unknown Employee'}
                     </p>
                     <p className="text-gray-400 text-xs">
-                      {claim.transaction?.description || 'Expense Claim'} • 
+                      {claim.description || 'Expense Claim'} • 
                       {claim.expense_category?.replace('_', ' ').toUpperCase()}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-white text-sm font-medium">
-                      ${parseFloat(claim.transaction?.home_amount || '0').toFixed(2)}
+                      ${parseFloat(claim.converted_amount || '0').toFixed(2)} {claim.home_currency}
                     </p>
                     <p className="text-gray-400 text-xs">
                       {new Date(claim.created_at).toLocaleDateString()}
@@ -428,25 +541,100 @@ function ManagerDashboardContent({ data }: { data: DashboardData }) {
 }
 
 function AdminDashboardContent({ data }: { data: DashboardData }) {
+  // Separate personal claims from company claims
+  const personalClaims = data.recent_claims.filter((claim: any) => claim._is_personal)
+  const companyClaims = data.recent_claims.filter((claim: any) => !claim._is_personal)
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Reimbursement Queue */}
-      <Card className="bg-gray-800 border-gray-700">
-        <CardHeader>
-          <CardTitle className="text-white">Reimbursement Queue</CardTitle>
-          <CardDescription>Approved claims ready for payment</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {data.recent_claims.length === 0 ? (
-            <div className="text-center text-gray-400 py-8">
-              <CheckCircle className="w-12 h-12 mx-auto mb-4" />
-              <p>No pending reimbursements</p>
-            </div>
-          ) : (
+    <div className="grid grid-cols-1 gap-6">
+      {/* Personal Claims Section - Show if admin has personal claims */}
+      {personalClaims.length > 0 && (
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <User className="w-5 h-5" />
+              My Personal Claims
+            </CardTitle>
+            <CardDescription>Your own expense claims</CardDescription>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-3">
-              {data.recent_claims.slice(0, 5).map((claim: any) => (
-                <div key={claim.id} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
-                  <div className="flex-1">
+              {personalClaims.slice(0, 3).map((claim: any) => (
+                <div key={claim.id} className="p-3 bg-gray-700 rounded-lg border border-gray-600">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <p className="text-white font-medium text-sm">
+                        {claim.transaction?.description || claim.description || 'Expense Claim'}
+                      </p>
+                      <p className="text-gray-400 text-xs">
+                        {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} • 
+                        {new Date(claim.transaction?.transaction_date || claim.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-white font-semibold text-sm">
+                        ${parseFloat(claim.transaction?.home_currency_amount || '0').toFixed(2)}
+                      </p>
+                      <Badge 
+                        className={`text-xs px-2 py-1 ${
+                          claim.status_display?.color === 'green' ? 'bg-green-600 text-white' :
+                          claim.status_display?.color === 'blue' ? 'bg-blue-600 text-white' :
+                          claim.status_display?.color === 'yellow' ? 'bg-yellow-600 text-white' :
+                          claim.status_display?.color === 'red' ? 'bg-red-600 text-white' :
+                          'bg-gray-600 text-white'
+                        }`}
+                      >
+                        {claim.status_display?.label || claim.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  {/* Workflow Progress Bar */}
+                  <div className="w-full bg-gray-600 rounded-full h-1.5">
+                    <div 
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        claim.status === 'rejected' ? 'bg-red-500' : 'bg-blue-500'
+                      }`}
+                      style={{ width: `${claim.workflow_progress || 0}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+              {personalClaims.length > 3 && (
+                <Button variant="ghost" className="w-full text-blue-400 hover:text-blue-300 text-sm">
+                  View all {personalClaims.length} personal claims
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Company-wide content */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Reimbursement Queue */}
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-white">Reimbursement Queue</CardTitle>
+            <CardDescription>Approved claims ready for payment</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {companyClaims.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">
+                <CheckCircle className="w-12 h-12 mx-auto mb-4" />
+                <p>No pending reimbursements</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {companyClaims.slice(0, 5).map((claim: any) => (
+                <button 
+                  key={claim.id} 
+                  className="w-full flex items-center justify-between p-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onClick={() => {
+                    // TODO: Navigate to claim details or open modal
+                    console.log('Clicked claim:', claim.id)
+                  }}
+                >
+                  <div className="flex-1 text-left">
                     <p className="text-white text-sm font-medium">
                       {claim.employee?.full_name || 'Unknown Employee'}
                     </p>
@@ -457,34 +645,35 @@ function AdminDashboardContent({ data }: { data: DashboardData }) {
                   </div>
                   <div className="text-right">
                     <p className="text-white text-sm font-medium">
-                      ${parseFloat(claim.transaction?.home_amount || '0').toFixed(2)}
+                      ${parseFloat(claim.transaction?.home_currency_amount || '0').toFixed(2)}
                     </p>
                     <p className="text-green-400 text-xs">
                       Approved {new Date(claim.approval_date || claim.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                </div>
-              ))}
-              {data.recent_claims.length > 5 && (
-                <Button variant="ghost" className="w-full text-blue-400 hover:text-blue-300">
-                  View all reimbursements
-                </Button>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </button>
+                ))}
+                {companyClaims.length > 5 && (
+                  <Button variant="ghost" className="w-full text-blue-400 hover:text-blue-300">
+                    View all reimbursements
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Company Analytics */}
-      <Card className="bg-gray-800 border-gray-700">
-        <CardHeader>
-          <CardTitle className="text-white">Company Overview</CardTitle>
-          <CardDescription>Enterprise expense analytics</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ExpenseAnalytics scope="company" />
-        </CardContent>
-      </Card>
+        {/* Company Analytics */}
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-white">Company Overview</CardTitle>
+            <CardDescription>Enterprise expense analytics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ExpenseAnalytics scope="company" />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

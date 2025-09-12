@@ -36,6 +36,10 @@ const nextConfig = {
   experimental: {
     typedRoutes: false,
   },
+
+  // Disable React StrictMode in development to prevent double-firing
+  // This prevents useEffect from running twice in development mode
+  reactStrictMode: false,
 };
 
 export default nextConfig;

@@ -32,10 +32,10 @@ export class GeminiService {
   private model: string
 
   constructor() {
-    const apiKey = aiConfig.gemini.apiKey
+    const apiKey = process.env.GEMINI_API_KEY || aiConfig.gemini.apiKey
     console.log(`[GeminiService] API Key loaded:`, apiKey ? `${apiKey.substring(0, 10)}...` : 'NO API KEY')
     
-    if (!apiKey) {
+    if (!apiKey || apiKey.trim() === '') {
       throw new Error('GEMINI_API_KEY not found in environment variables')
     }
     

@@ -40,6 +40,7 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.1.2",
     "rehype-raw": "^7.0.0",
+    "resend": "^6.0.2",
     "sharp": "^0.34.3",
     "tailwind-merge": "^3.3.1",
     "zod": "^3.23.8"
@@ -56,5 +57,8 @@
     "eslint-config-next": "15.4.6",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "trigger.dev": {
+    "endpointId": "proj_qjsdxdsoxmrgplspwuwj"
   }
 }

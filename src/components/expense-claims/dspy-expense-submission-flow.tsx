@@ -158,7 +158,7 @@ export default function DSPyExpenseSubmissionFlow({
   const StepIndicator = () => {
     const steps = [
       { id: 'upload', label: 'Upload', description: 'Receipt capture' },
-      { id: 'processing', label: 'Process', description: 'DSPy extraction' },
+      { id: 'processing', label: 'Process', description: 'Data extraction' },
       { id: 'form', label: 'Review', description: 'Pre-filled form' }
     ]
 
@@ -212,7 +212,7 @@ export default function DSPyExpenseSubmissionFlow({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
           <div>
-            <h2 className="text-xl font-semibold text-white">DSPy Expense Submission</h2>
+            <h2 className="text-xl font-semibold text-white">Expense Submission</h2>
             <p className="text-gray-400 text-sm">
               Intelligent receipt processing with Chain-of-Thought AI
             </p>
@@ -293,7 +293,7 @@ export default function DSPyExpenseSubmissionFlow({
                 )}
               </div>
               <div>
-                Powered by DSPy Chain-of-Thought AI
+                Powered by AI Receipt Analysis
               </div>
             </div>
           </div>

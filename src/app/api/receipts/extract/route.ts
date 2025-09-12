@@ -7,10 +7,10 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 import { tasks } from '@trigger.dev/sdk/v3'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
-// Gemini Vision Pro configuration
+// Gemini configuration using official SDK
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent'
 
 interface GeminiExtractionResult {
   vendor_name: string | null
@@ -201,8 +201,7 @@ export async function POST(request: NextRequest) {
           processing_status: geminiResult.requires_validation ? 'requires_validation' : 'completed',
           confidence_score: geminiResult.confidence_score,
           extracted_data: geminiResult,
-          ocr_data: geminiResult, // Backward compatibility
-          ocr_metadata: {
+          processing_metadata: {
             extraction_method: geminiResult.extraction_method,
             confidence_score: geminiResult.confidence_score,
             extracted_data: geminiResult,
@@ -299,6 +298,14 @@ export async function POST(request: NextRequest) {
 }
 
 async function processWithGeminiVision(imageData: string, mimeType: string): Promise<GeminiExtractionResult> {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY not found in environment variables')
+  }
+
+  // Initialize Google AI SDK
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+
   const prompt = `
 Analyze this receipt/invoice image and extract structured financial data. You are an expert OCR system specialized in Southeast Asian receipts (Thailand, Singapore, Malaysia, Indonesia, Philippines, Vietnam).
 
@@ -338,56 +345,39 @@ Important guidelines:
 4. Set requires_validation to true if confidence < 0.85
 5. Include line_items only if clearly itemized on receipt
 6. Detect currency symbols: $ (SGD/USD), ฿ (THB), RM (MYR), Rp (IDR), ₱ (PHP), ₫ (VND), ¥ (CNY), € (EUR)
-7. Add fields to missing_fields array if not clearly visible
-8. For dates, convert to ISO format (YYYY-MM-DD)
-9. Leave suggested_category, category_confidence, and category_reason as null (will be populated by auto-categorization system)
+7. For receipt_number, search thoroughly for ANY of these patterns (case-insensitive):
+   - "Receipt No", "Receipt Number", "Receipt #", "REC NO", "REC#"
+   - "Reference No", "Ref No", "REF#", "Reference Number"
+   - "Invoice No", "Invoice Number", "INV NO", "INV#"
+   - "Transaction ID", "Trans ID", "TXN ID", "Transaction No"
+   - "Batch No", "Batch Number", "BATCH#"
+   - "Order No", "Order Number", "ORD#"
+   - "Bill No", "Bill Number", "BILL#"
+   - "Voucher No", "Voucher Number"
+   - Any standalone number sequence that appears to be a receipt identifier (look for 6+ digit numbers)
+   - Check both top and bottom of receipt - receipt numbers often appear multiple times
+8. Add fields to missing_fields array if not clearly visible
+9. For dates, convert to ISO format (YYYY-MM-DD)
+10. Leave suggested_category, category_confidence, and category_reason as null (will be populated by auto-categorization system)
 
 Return ONLY the JSON object, no additional text or explanation.`
 
-  const requestBody = {
-    contents: [{
-      parts: [
-        { text: prompt },
-        {
-          inline_data: {
-            mime_type: mimeType,
-            data: imageData
-          }
-        }
-      ]
-    }],
-    generationConfig: {
-      temperature: 0.1,
-      topK: 32,
-      topP: 1,
-      maxOutputTokens: 2048,
-    }
-  }
-
-  const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error('[Gemini API] Request failed:', response.status, errorText)
-    throw new Error(`Gemini API request failed: ${response.status}`)
-  }
-
-  const result = await response.json()
-  
-  if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
-    console.error('[Gemini API] Invalid response structure:', result)
-    throw new Error('Invalid Gemini API response')
-  }
-
-  const extractedText = result.candidates[0].content.parts[0].text
-  
   try {
+    // Convert base64 to proper format for Google AI SDK
+    const imagePart = {
+      inlineData: {
+        data: imageData,
+        mimeType: mimeType,
+      },
+    }
+
+    // Generate content using the official SDK
+    const result = await model.generateContent([prompt, imagePart])
+    const response = await result.response
+    const extractedText = response.text()
+    
+    console.log('[Gemini SDK] Raw response:', extractedText)
+    
     // Clean up the response text to extract JSON
     const jsonStart = extractedText.indexOf('{')
     const jsonEnd = extractedText.lastIndexOf('}')
@@ -423,8 +413,7 @@ Return ONLY the JSON object, no additional text or explanation.`
     }
     
   } catch (parseError) {
-    console.error('[Gemini API] Failed to parse JSON response:', parseError)
-    console.error('[Gemini API] Raw response:', extractedText)
+    console.error('[Gemini SDK] Failed to parse JSON response:', parseError)
     throw new Error('Failed to parse Gemini extraction result')
   }
 }

@@ -52,9 +52,10 @@ export interface ExtractedReceiptData {
   missingFields: string[] // Fields that couldn't be extracted
   
   // Processing Metadata
-  processingMethod: 'gemini_ocr' | 'manual_entry'
+  processingMethod: 'gemini_ocr' | 'dspy' | 'manual_entry'
   modelUsed?: string // e.g., "gemini-2.5-flash"
   processingTimestamp: string // ISO 8601
+  documentId?: string // Link to uploaded document
 }
 
 /**

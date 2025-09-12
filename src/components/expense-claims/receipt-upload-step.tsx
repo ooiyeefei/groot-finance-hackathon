@@ -130,7 +130,7 @@ export default function ReceiptUploadStep({
           <Alert className="bg-blue-900/20 border-blue-700">
             <AlertCircle className="w-4 h-4" />
             <AlertDescription className="text-blue-400">
-              Processing receipt with DSPy extraction engine...
+              Processing receipt with AI extraction...
             </AlertDescription>
           </Alert>
         )}
@@ -145,7 +145,7 @@ export default function ReceiptUploadStep({
         <Camera className="w-16 h-16 mx-auto text-blue-500 mb-4" />
         <h3 className="text-lg font-semibold text-white mb-2">Upload Receipt</h3>
         <p className="text-gray-400">
-          Capture or upload your receipt for automatic DSPy-powered data extraction
+          Capture or upload your receipt for automatic data extraction
         </p>
       </div>
 

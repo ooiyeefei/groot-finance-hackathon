@@ -88,6 +88,12 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   
+  // Debug: Try both Clerk ID and Supabase UUID to see which one works
+  console.log('[Supabase Client] Setting RLS context with:', {
+    clerkUserId: authenticatedClerkUserId,
+    supabaseUuid: supabaseUserUuid
+  })
+  
   // Set up RLS context with Supabase UUID (not Clerk ID)
   await supabase.rpc('set_user_context', { user_id: supabaseUserUuid })
   

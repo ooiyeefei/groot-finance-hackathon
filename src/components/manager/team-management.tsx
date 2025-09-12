@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Users, UserCheck, AlertCircle } from 'lucide-react'
+import InvitationDialog, { type InvitationFormData } from '@/components/ui/invitation-dialog'
+import { Users, UserCheck, AlertCircle, UserPlus } from 'lucide-react'
 
 interface TeamMember {
   id: string
@@ -29,6 +30,8 @@ export default function TeamManagement() {
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showInviteDialog, setShowInviteDialog] = useState(false)
+  const [inviting, setInviting] = useState(false)
 
   useEffect(() => {
     fetchTeamMembers()
@@ -80,6 +83,36 @@ export default function TeamManagement() {
     }
   }
 
+  const handleInviteUser = async (invitationData: InvitationFormData) => {
+    setInviting(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch('/api/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(invitationData)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setMessage({ 
+          type: 'success', 
+          text: `Invitation sent to ${invitationData.email} successfully${data.warning ? ` (${data.warning})` : ''}` 
+        })
+        setShowInviteDialog(false)
+        await fetchTeamMembers() // Refresh to show any pending invitations
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to send invitation' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Network error sending invitation' })
+    } finally {
+      setInviting(false)
+    }
+  }
+
   const getCurrentRole = (permissions: TeamMember['role_permissions']): string => {
     if (permissions.admin) return 'admin'
     if (permissions.manager) return 'manager'
@@ -112,16 +145,26 @@ export default function TeamManagement() {
   }
 
   return (
-    <Card className="bg-gray-800 border-gray-700">
-      <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
-          <Users className="w-5 h-5" />
-          Team Management
-          <Badge variant="secondary" className="ml-2">
-            {teamMembers.length} members
-          </Badge>
-        </CardTitle>
-      </CardHeader>
+    <>
+      <Card className="bg-gray-800 border-gray-700">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-white flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Team Management
+              <Badge variant="secondary" className="ml-2">
+                {teamMembers.length} members
+              </Badge>
+            </CardTitle>
+            <Button
+              onClick={() => setShowInviteDialog(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Invite User
+            </Button>
+          </div>
+        </CardHeader>
       <CardContent className="space-y-4">
         {message && (
           <Alert className={`${message.type === 'success' ? 'border-green-600 bg-green-900/20' : 'border-red-600 bg-red-900/20'}`}>
@@ -206,5 +249,14 @@ export default function TeamManagement() {
         </div>
       </CardContent>
     </Card>
+
+    {/* Invitation Dialog */}
+    <InvitationDialog
+      isOpen={showInviteDialog}
+      onClose={() => setShowInviteDialog(false)}
+      onInvite={handleInviteUser}
+      isLoading={inviting}
+    />
+    </>
   )
 }
