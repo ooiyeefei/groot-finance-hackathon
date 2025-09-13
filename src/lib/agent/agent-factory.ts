@@ -1,27 +1,21 @@
-// src/lib/langgraph-agent.ts
-
 /**
- * LangGraph Financial Co-pilot Agent
- * Architecture with user context validation and RLS enforcement
+ * Agent Factory - Creates and compiles the LangGraph Financial Agent
  */
 
 import { StateGraph } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
-import { ToolFactory } from './tools/tool-factory';
-import { UserContext } from './tools/base-tool';
+import { UserContext } from '../tools/base-tool';
+import { ToolFactory } from '../tools/tool-factory';
+import { AgentStateAnnotation, AgentState } from './types';
+import { router } from './router';
 
-// Import from extracted modules
-import { AgentStateAnnotation, AgentState, UserIntent, IntentAnalysisResult } from './agent/types';
-import { router } from './agent/router';
-import { validate } from './agent/nodes/validation-node';
-import { analyzeIntent } from './agent/nodes/intent-node';
-import { handleClarification } from './agent/nodes/clarification-node';
-import { callModel } from './agent/nodes/model-node';
-import { executeTool, correctToolCall } from './agent/nodes/tool-nodes';
-import { topicGuardrail, handleOffTopic } from './agent/nodes/guardrail-nodes';
-
-// Export types for backward compatibility
-export type { AgentState, UserIntent, IntentAnalysisResult };
+// Import node functions
+import { topicGuardrail, handleOffTopic } from './nodes/guardrail-nodes';
+import { validate } from './nodes/validation-node';
+import { analyzeIntent } from './nodes/intent-node';
+import { handleClarification } from './nodes/clarification-node';
+import { callModel } from './nodes/model-node';
+import { executeTool, correctToolCall } from './nodes/tool-nodes';
 
 /**
  * Create and compile the LangGraph application

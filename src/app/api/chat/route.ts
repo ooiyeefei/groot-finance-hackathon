@@ -413,17 +413,22 @@ export async function POST(request: NextRequest) {
       try {
         // Restore the complete saved agent state
         agentState = isClarificationResponse.originalState as ReturnType<typeof createAgentState>
-        
+
+        // CRITICAL FIX: Preserve userContext from current request to prevent validation loop
+        // The restored state may not have valid userContext, causing infinite validation failures
+        agentState.userContext = userContext
+        console.log('[Chat API] 🔒 Preserved userContext from current request to prevent validation loop')
+
         // Update with new message and clarification response flag
         agentState.messages = conversationHistory.concat([new HumanMessage(message)])
-        
+
         // Optionally enhance with newly extracted facts (additive, not replacement)
         const extractedFacts = extractEstablishedFacts(message)
         if (Object.keys(extractedFacts).length > 0) {
           console.log(`[Chat API] Enhancing restored state with newly extracted facts:`, extractedFacts)
           // Note: Facts are managed through database metadata, not agent state
         }
-        
+
         // CRITICAL FIX: Reset phase from 'completed' to 'execution' for clarification responses
         // This prevents the router from immediately ending the conversation
         if (agentState.currentPhase === 'completed') {
