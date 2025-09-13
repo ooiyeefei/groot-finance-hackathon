@@ -124,10 +124,10 @@ export class TransactionLookupTool extends BaseTool {
   getDescription(modelType: ModelType = 'openai'): string {
     if (modelType === 'gemini') {
       // Detailed instructions for Gemini - explicitly mention Supabase transactions table
-      return 'FINANCIAL DATA RETRIEVAL TOOL that queries the Supabase transactions table for numerical analysis and record retrieval. Use this to find highest/largest, lowest/smallest, totals, averages, or any specific values from the user\'s financial transactions stored in the database. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. CRITICAL: When users mention document types like "invoice", "receipt", "bill", "statement", "contract" - use the document_type parameter for precise database filtering instead of the generic query parameter. This ensures fast, accurate results by querying the transactions table directly. Examples: "largest invoice" → use document_type:"invoice" + analysis; "receipt from last month" → use document_type:"receipt" + dateRange. Perfect for answering questions about maximum values, minimum values, totals, counts, and finding specific document types from the user\'s transaction records.'
+      return 'CRITICAL: Use this function to retrieve user financial transaction records. This is the ONLY way to access transaction data from the Supabase database. This tool MUST be called whenever a user asks about their spending, purchases, payments, transactions, or financial history over any period of time. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. CRITICAL: When users mention document types like "invoice", "receipt", "bill", "statement", "contract" - use the document_type parameter for precise database filtering. Examples: "largest invoice" → use document_type:"invoice"; "transactions in past 60 days" → use dateRange:"past_60_days"; "receipt from last month" → use document_type:"receipt" + dateRange. This tool handles ALL transaction queries including time periods, vendor searches, and amount analysis.'
     } else {
       // Rich, descriptive description for OpenAI-compatible models
-      return 'Transaction Lookup and Analysis Tool - Search, filter, and analyze financial transactions with intelligent query processing. This tool can find specific transactions, calculate totals and averages, identify highest/lowest amounts, and perform complex financial analysis. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. CRITICAL: When users mention document types like "invoice", "receipt", "bill", "statement", "contract" - use the document_type parameter for precise database filtering instead of the generic query parameter. For analysis queries like "largest transaction", "biggest expense", "highest amount" - you MUST include query: "largest transaction" or similar meaningful search terms. Examples: "largest invoice" → use document_type:"invoice" + query:"largest"; "what is my biggest transaction in past 60 days" → use dateRange:"past_60_days" + query:"biggest transaction"; "receipt from last month" → use document_type:"receipt" + dateRange. Perfect for answering questions like "What is my largest invoice?" or "Show me all receipts from this vendor".'
+      return 'CRITICAL: Use this function to retrieve a user\'s financial transactions. This is the ONLY way to access transaction data. This tool MUST be called whenever a user asks about their spending, purchases, payments, transactions, or transaction history over any period of time. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. CRITICAL: When users mention document types like "invoice", "receipt", "bill", "statement", "contract" - use the document_type parameter for precise database filtering instead of the generic query parameter. Examples: "largest invoice" → use document_type:"invoice"; "what are my transactions in past 60 days" → use dateRange:"past_60_days" with empty query; "receipt from last month" → use document_type:"receipt" + dateRange. This tool handles ALL transaction queries including time periods, vendor searches, and amount analysis.'
     }
   }
 
@@ -326,6 +326,7 @@ export class TransactionLookupTool extends BaseTool {
       if (params.dateRange) {
         console.log(`[TransactionLookupTool] DETERMINISTIC: Calculating dates for range: ${params.dateRange}`)
         const today = new Date() // Current date - reliable!
+
         
         // NEW LOGIC: Handle month_year patterns (e.g., "june_2024") and month-only patterns (e.g., "june")
         const monthYearMatch = params.dateRange.match(/^(\w+)_(\d{4})$/)
@@ -475,7 +476,7 @@ export class TransactionLookupTool extends BaseTool {
           document_type,
           created_at
         `)
-        .eq('clerk_user_id', userContext.userId)
+        .eq('user_id', userContext.userId)
         .order('transaction_date', { ascending: false })
 
       // Apply high-confidence filters (dates, amounts, specific category)
@@ -551,22 +552,13 @@ export class TransactionLookupTool extends BaseTool {
         const { count: totalCount } = await this.authenticatedSupabase!
           .from('transactions')
           .select('*', { count: 'exact', head: true })
-          .eq('clerk_user_id', userContext.userId);
+          .eq('user_id', userContext.userId);
         
         console.log(`[TransactionLookupTool] User has ${totalCount} total transactions with user_id=${userContext.userId}`)
         
-        // If no transactions with user_id, try clerk_user_id (fallback check)
+        // User has no transactions with the provided user_id
         if (totalCount === 0) {
-          const { count: clerkIdCount } = await this.supabase
-            .from('transactions')
-            .select('*', { count: 'exact', head: true })
-            .eq('clerk_user_id', userContext.userId);
-          
-          console.log(`[TransactionLookupTool] FALLBACK: User has ${clerkIdCount || 0} total transactions with clerk_user_id=${userContext.userId}`)
-          
-          if ((clerkIdCount || 0) > 0) {
-            console.error(`[TransactionLookupTool] ⚠️ COLUMN MISMATCH DETECTED: Transactions exist under clerk_user_id but query uses user_id`)
-          }
+          console.log(`[TransactionLookupTool] User has no transactions in the database with user_id=${userContext.userId}`)
         }
         
         return {
