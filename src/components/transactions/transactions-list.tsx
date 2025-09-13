@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Search, Filter, Plus, Eye, Edit, Trash2, RefreshCw, Calendar, Building, DollarSign } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Search, Filter, Plus, Eye, Edit, Trash2, RefreshCw, Calendar, Building, DollarSign, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import CategorySelector from './CategorySelector'
@@ -11,6 +11,7 @@ import { formatCurrency, getTransactionTypeColor, getTransactionTypeIcon } from 
 
 interface TransactionsListProps {
   transactions: Transaction[]
+  totalTransactions?: number // Total count in user's account (unfiltered)
   isLoading: boolean
   error: string | null
   onRefresh: () => void
@@ -21,6 +22,7 @@ interface TransactionsListProps {
 
 export default function TransactionsList({
   transactions,
+  totalTransactions,
   isLoading,
   error,
   onRefresh,
@@ -33,6 +35,8 @@ export default function TransactionsList({
   const [selectedType, setSelectedType] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     isOpen: boolean
     transaction: Transaction | null
@@ -115,6 +119,98 @@ export default function TransactionsList({
 
   const uniqueCategories = [...new Set(transactions.map(t => t.category))]
   const transactionTypes = ['income', 'expense', 'transfer']
+
+  // Detect if any filters are active
+  const hasActiveFilters = !!(searchQuery || selectedCategory || selectedType || dateFrom || dateTo)
+
+  // Generate appropriate results summary text
+  const generateResultsSummary = () => {
+    const displayedStart = startIndex + 1
+    const displayedEnd = Math.min(endIndex, filteredTransactions.length)
+    const filteredCount = filteredTransactions.length
+    const totalCount = totalTransactions || transactions.length
+
+    if (!hasActiveFilters) {
+      // No filters active - show simple total display
+      return `Displaying ${displayedStart}-${displayedEnd} of ${totalCount} total transactions`
+    } else {
+      // Filters active - show filtered vs total context
+      if (filteredCount === totalCount) {
+        // All transactions match filters
+        return `Displaying ${displayedStart}-${displayedEnd} of ${totalCount} transactions`
+      } else {
+        // Some transactions filtered out
+        return `Displaying ${displayedStart}-${displayedEnd} of ${filteredCount} matching transactions (filtered from ${totalCount} total)`
+      }
+    }
+  }
+
+  // Generate active filter pills for display
+  const getActiveFilters = () => {
+    const filters: Array<{ label: string; value: string; onRemove: () => void }> = []
+
+    if (searchQuery) {
+      filters.push({
+        label: 'Search',
+        value: searchQuery,
+        onRemove: () => setSearchQuery('')
+      })
+    }
+
+    if (selectedCategory) {
+      filters.push({
+        label: 'Category',
+        value: formatCategoryName(selectedCategory),
+        onRemove: () => setSelectedCategory('')
+      })
+    }
+
+    if (selectedType) {
+      filters.push({
+        label: 'Type',
+        value: formatCategoryName(selectedType),
+        onRemove: () => setSelectedType('')
+      })
+    }
+
+    if (dateFrom) {
+      filters.push({
+        label: 'From',
+        value: new Date(dateFrom).toLocaleDateString(),
+        onRemove: () => setDateFrom('')
+      })
+    }
+
+    if (dateTo) {
+      filters.push({
+        label: 'To',
+        value: new Date(dateTo).toLocaleDateString(),
+        onRemove: () => setDateTo('')
+      })
+    }
+
+    return filters
+  }
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTransactions = filteredTransactions.slice(startIndex, endIndex)
+
+  // Reset to first page when filters change
+  const resetPagination = () => setCurrentPage(1)
+
+  // Handle items per page change
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage)
+    setCurrentPage(1)
+  }
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, selectedCategory, selectedType, dateFrom, dateTo])
 
   if (error) {
     return (
@@ -223,25 +319,82 @@ export default function TransactionsList({
         </div>
       </div>
 
-      {/* Results Summary */}
+      {/* Active Filter Pills */}
+      {hasActiveFilters && (
+        <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Filter className="w-4 h-4 text-blue-400" />
+            <span className="text-sm text-gray-400">Active filters:</span>
+            {getActiveFilters().map((filter, index) => (
+              <div
+                key={index}
+                className="inline-flex items-center gap-1 bg-blue-600/20 text-blue-300 px-2 py-1 rounded-full text-xs border border-blue-600/30"
+              >
+                <span className="text-gray-400">{filter.label}:</span>
+                <span>{filter.value}</span>
+                <button
+                  onClick={filter.onRemove}
+                  className="ml-1 hover:bg-blue-600/30 rounded-full p-0.5 transition-colors"
+                  title={`Remove ${filter.label} filter`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => {
+                setSearchQuery('')
+                setSelectedCategory('')
+                setSelectedType('')
+                setDateFrom('')
+                setDateTo('')
+                resetPagination()
+              }}
+              className="text-xs text-gray-400 hover:text-white transition-colors ml-2"
+            >
+              Clear all filters
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Results Summary and Pagination Controls */}
       <div className="flex items-center justify-between text-sm text-gray-400">
-        <span>
-          Showing {filteredTransactions.length} of {transactions.length} transactions
-        </span>
-        {(searchQuery || selectedCategory || selectedType || dateFrom || dateTo) && (
-          <button
-            onClick={() => {
-              setSearchQuery('')
-              setSelectedCategory('')
-              setSelectedType('')
-              setDateFrom('')
-              setDateTo('')
-            }}
-            className="text-blue-400 hover:text-blue-300"
-          >
-            Clear filters
-          </button>
-        )}
+        <div className="flex items-center gap-4">
+          <span>
+            {generateResultsSummary()}
+          </span>
+          <div className="flex items-center gap-2">
+            <span>Show:</span>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+              className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value={10}>10</option>
+              <option value={30}>30</option>
+              <option value={50}>50</option>
+            </select>
+            <span>per page</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {(searchQuery || selectedCategory || selectedType || dateFrom || dateTo) && (
+            <button
+              onClick={() => {
+                setSearchQuery('')
+                setSelectedCategory('')
+                setSelectedType('')
+                setDateFrom('')
+                setDateTo('')
+                resetPagination()
+              }}
+              className="text-blue-400 hover:text-blue-300"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Transactions List */}
@@ -266,7 +419,7 @@ export default function TransactionsList({
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredTransactions.map((transaction) => (
+          {paginatedTransactions.map((transaction) => (
             <div
               key={transaction.id}
               className="bg-gray-800 rounded-lg border border-gray-700 p-4 hover:bg-gray-750 transition-colors"
@@ -370,6 +523,64 @@ export default function TransactionsList({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination Navigation */}
+      {filteredTransactions.length > 0 && totalPages > 1 && (
+        <div className="flex items-center justify-between bg-gray-800 rounded-lg border border-gray-700 p-4">
+          <div className="text-sm text-gray-400">
+            Page {currentPage} of {totalPages}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            {/* Page numbers */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = currentPage - 2 + i
+                }
+
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 py-1 text-sm rounded transition-colors ${
+                      pageNum === currentPage
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-400 hover:text-white hover:bg-gray-600'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                )
+              })}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Next Page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 

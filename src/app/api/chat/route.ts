@@ -424,8 +424,19 @@ export async function POST(request: NextRequest) {
           // Note: Facts are managed through database metadata, not agent state
         }
         
+        // CRITICAL FIX: Reset phase from 'completed' to 'execution' for clarification responses
+        // This prevents the router from immediately ending the conversation
+        if (agentState.currentPhase === 'completed') {
+          agentState.currentPhase = 'execution'
+          console.log('[Chat API] 🔄 Reset currentPhase from "completed" to "execution" for clarification processing')
+        }
+
+        // Reset clarification flags so agent can proceed with execution
+        agentState.needsClarification = false
+        agentState.isClarificationResponse = true
+
         console.log('[Chat API] ✅ Successfully restored agent state with conversation memory')
-        
+
       } catch (error) {
         console.error('[Chat API] ❌ Failed to restore agent state, falling back to new state:', error)
         // Fallback to new state if restoration fails

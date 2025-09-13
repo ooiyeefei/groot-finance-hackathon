@@ -18,6 +18,7 @@ import { GeminiService } from './ai-services/gemini-service';
 interface UserIntent {
   primaryIntent: 'regulatory_knowledge' | 'business_setup' | 'transaction_analysis' | 'document_search' | 'compliance_check' | 'general_inquiry'
   queryType: 'general_info' | 'procedural' | 'comparison' | 'calculation' | 'specific_case'
+  queryCategory: 'personal_data' | 'general_knowledge' | 'other'
   confidence: number
   contextNeeded: {
     country?: 'singapore' | 'malaysia' | 'thailand' | 'indonesia' | 'unknown'
@@ -103,6 +104,16 @@ const AgentStateAnnotation = Annotation.Root({
       return existing.concat(uniqueNew);
     },
     default: () => []
+  }),
+  // Topic guardrail validation
+  isTopicAllowed: Annotation<boolean>({
+    reducer: (x: boolean, y: boolean) => y,
+    default: () => true
+  }),
+  // Clarification response detection
+  isClarificationResponse: Annotation<boolean>({
+    reducer: (x: boolean, y: boolean) => y,
+    default: () => false
   })
 });
 
@@ -214,63 +225,82 @@ Verify: "Does this tool call only search for what I need, without pollution?"
 3. **No Hallucination Rule**: Never invent specifics not in user request
 4. **Analysis Post-Processing**: Handle "largest", "smallest" etc. after getting results
 
-### CHAIN-OF-THOUGHT REQUIREMENT
-Always show: "1. Decompose: [temporal] [analytical] [content] 2. Map: [parameters] 3. Validate: [clean?] 4. Execute"
+### CRITICAL EXECUTION REQUIREMENT
 
-### EXECUTION REQUIREMENT
-**CRITICAL:** After completing your reasoning, you MUST make an actual function call to the get_transactions tool. Do NOT just describe the tool call - execute it. The reasoning is your internal monologue; the function call is your action.
+**You are an expert financial assistant. Your primary function is to help users by accessing their financial data through available tools.**
 
-### DEFINITIVE EXAMPLES
+### Core Logic
+1. Analyze the user's query to determine their intent.
+2. **IF** the user's query requires accessing personal data (like transactions, vendors, documents, spending history, etc.), you **MUST** use a tool.
+3. **ELSE IF** the user's query is a general question that does not require personal data (e.g., "what is a 401k?", "how do I save money?"), you may answer directly.
+
+### Tool Usage Rules
+- When a tool is required, your response **MUST** be only the JSON for the tool call.
+- Do not add any conversational text, acknowledgements, or explanations like "I will look that up for you" or "Here are the transactions I found".
+- Your internal reasoning process (monologue) is for your eyes only and must never be part of the final output.
+
+**WHAT NOT TO DO - BAD EXAMPLE:**
+User: "what are the transactions i had in the past 30 days"
+❌ BAD Response: "1. Decompose: [temporal: past 30 days] [analytical: list all] [content: none] 2. Map: dateRange="past_30_days", query="", no_filters_needed 3. Validate: Clean - temporal words NOT in query 4. Execute: get_transactions({"dateRange": "past_30_days", "query": ""})"
+
+✅ CORRECT Response: [MAKE ACTUAL FUNCTION CALL WITHOUT ANY CONVERSATIONAL TEXT]
+
+### EXECUTION EXAMPLES
 
 **EXAMPLE 1 - Temporal Analysis with Empty Query**
 User: "what's the largest transaction in june?"
-Agent Reasoning:
-1. Decompose: [temporal: june] [analytical: largest] [content: none] 
-2. Map: dateRange="june_${new Date().getFullYear()}", query="", analytical_intent="largest"
-3. Validate: Clean - no temporal contamination in query
-4. Execute: get_transactions(dateRange="june_${new Date().getFullYear()}", query="")
 
-**Then immediately make the function call:** get_transactions({"dateRange": "june_${new Date().getFullYear()}", "query": ""})
+<thinking>
+1. Decompose: [temporal: june] [analytical: largest] [content: none]
+2. Map: This maps to get_transactions tool. The dateRange should be for June. The "largest" analysis will be handled after I get the results.
+3. Validate: Clean query, no temporal contamination.
+4. Execute: I need to call get_transactions with June date range.
+</thinking>
 
-**EXAMPLE 2 - All Transactions in Period**  
+
+**EXAMPLE 2 - All Transactions in Period**
 User: "what are the transactions i have in the past 60 days?"
-Agent Reasoning:
-1. Decompose: [temporal: past 60 days] [analytical: list all] [content: none]
-2. Map: dateRange="past_60_days", query="", no_filters_needed
-3. Validate: Clean - temporal words NOT in query
-4. Execute: get_transactions(dateRange="past_60_days", query="")
 
-**Then immediately make the function call:** get_transactions({"dateRange": "past_60_days", "query": ""})
+<thinking>
+1. Decompose: [temporal: past 60 days] [analytical: list all] [content: none]
+2. Map: This maps to get_transactions tool. The dateRange parameter should be "past_60_days". The query is empty as no specific content is being searched for.
+3. Validate: Clean. The temporal words are handled by the dateRange parameter.
+4. Execute: I will call get_transactions with the specified date range.
+</thinking>
+
 
 **EXAMPLE 3 - Vendor Search with Time Constraint**
 User: "show me all McDonald's transactions this year"
-Agent Reasoning:
-1. Decompose: [temporal: this year] [analytical: list all] [content: McDonald's]
-2. Map: dateRange="this_year", query="McDonald's"
-3. Validate: Clean - only vendor name in query
-4. Execute: get_transactions(dateRange="this_year", query="McDonald's")
 
-**Then immediately make the function call:** get_transactions({"dateRange": "this_year", "query": "McDonald's"})
+<thinking>
+1. Decompose: [temporal: this year] [analytical: list all] [content: McDonald's]
+2. Map: This maps to get_transactions with dateRange="this_year" and query="McDonald's"
+3. Validate: Clean - only vendor name in query, no temporal contamination.
+4. Execute: I will call get_transactions with year constraint and vendor filter.
+</thinking>
+
 
 **EXAMPLE 4 - Amount Analysis with Multiple Constraints**
 User: "what's my biggest expense from Grab in the last 3 months?"
-Agent Reasoning:
-1. Decompose: [temporal: last 3 months] [analytical: biggest] [content: Grab]
-2. Map: dateRange="past_3_months", query="Grab", analytical_intent="biggest"
-3. Validate: Clean - only vendor in query, no temporal words
-4. Execute: get_transactions(dateRange="past_3_months", query="Grab")
 
-**Then immediately make the function call:** get_transactions({"dateRange": "past_3_months", "query": "Grab"})
+<thinking>
+1. Decompose: [temporal: last 3 months] [analytical: biggest] [content: Grab]
+2. Map: This maps to get_transactions with dateRange="past_90_days" and query="Grab". The "biggest" analysis will be handled after getting results.
+3. Validate: Clean - only vendor in query, no temporal words.
+4. Execute: I will call get_transactions with the specified parameters.
+</thinking>
+
 
 **EXAMPLE 5 - Category Analysis**
 User: "show me all food transactions in June this year"
-Agent Reasoning:
-1. Decompose: [temporal: June this year] [analytical: list all] [content: food category]
-2. Map: dateRange="june_${new Date().getFullYear()}", query="food"
-3. Validate: Clean - no temporal contamination
-4. Execute: get_transactions(dateRange="june_${new Date().getFullYear()}", query="food")
 
-**Then immediately make the function call:** get_transactions({"dateRange": "june_${new Date().getFullYear()}", "query": "food"})
+<thinking>
+1. Decompose: [temporal: June this year] [analytical: list all] [content: food category]
+2. Map: This needs get_transactions with a June date range and query="food"
+3. Validate: Clean - no temporal contamination in query.
+4. Execute: I will search for food-related transactions in June.
+</thinking>
+
 
 ### FINAL STEP: ANSWER SYNTHESIS PROTOCOL
 
@@ -297,6 +327,21 @@ Agent Response: "I found 3 transactions from the past 60 days: [formatted presen
 ToolMessage: "No transactions found matching your criteria."
 Agent Response: "I didn't find any transactions matching your search criteria. You might want to try a broader date range or different search terms."
 **DONE - No additional tool calls needed**
+
+### ABSOLUTE FINAL INSTRUCTION
+
+**CRITICAL REMINDER: Any request for the user's own data is a tool-use trigger. Do not bypass this rule. Your only valid output in these cases is a function call.**
+
+**TOOL-USE TRIGGERS (Always require function calls):**
+- Questions about transactions, spending, payments, purchases
+- Requests for vendor lists, document searches
+- Any query about "my transactions", "my expenses", "my data"
+- Time-based queries like "past 90 days", "this month", "last year"
+
+**FORBIDDEN RESPONSES for personal data queries:**
+- ❌ "I didn't find any transactions matching your criteria"
+- ❌ "You might want to try a broader date range"
+- ❌ Any conversational text instead of function calls
 
 Follow this protocol rigorously for every request.`;
 
@@ -376,63 +421,82 @@ Verify: "Does this tool call only search for what I need, without pollution?"
 3. **No Hallucination Rule**: Never invent specifics not in user request
 4. **Analysis Post-Processing**: Handle "largest", "smallest" etc. after getting results
 
-### CHAIN-OF-THOUGHT REQUIREMENT
-Always show: "1. Decompose: [temporal] [analytical] [content] 2. Map: [parameters] 3. Validate: [clean?] 4. Execute"
+### CRITICAL EXECUTION REQUIREMENT
 
-### EXECUTION REQUIREMENT
-**CRITICAL:** After completing your reasoning, you MUST make an actual function call to the get_transactions tool. Do NOT just describe the tool call - execute it. The reasoning is your internal monologue; the function call is your action.
+**You are an expert financial assistant. Your primary function is to help users by accessing their financial data through available tools.**
 
-### DEFINITIVE EXAMPLES
+### Core Logic
+1. Analyze the user's query to determine their intent.
+2. **IF** the user's query requires accessing personal data (like transactions, vendors, documents, spending history, etc.), you **MUST** use a tool.
+3. **ELSE IF** the user's query is a general question that does not require personal data (e.g., "what is a 401k?", "how do I save money?"), you may answer directly.
+
+### Tool Usage Rules
+- When a tool is required, your response **MUST** be only the JSON for the tool call.
+- Do not add any conversational text, acknowledgements, or explanations like "I will look that up for you" or "Here are the transactions I found".
+- Your internal reasoning process (monologue) is for your eyes only and must never be part of the final output.
+
+**WHAT NOT TO DO - BAD EXAMPLE:**
+User: "what are the transactions i had in the past 30 days"
+❌ BAD Response: "1. Decompose: [temporal: past 30 days] [analytical: list all] [content: none] 2. Map: dateRange="past_30_days", query="", no_filters_needed 3. Validate: Clean - temporal words NOT in query 4. Execute: get_transactions({"dateRange": "past_30_days", "query": ""})"
+
+✅ CORRECT Response: [MAKE ACTUAL FUNCTION CALL WITHOUT ANY CONVERSATIONAL TEXT]
+
+### EXECUTION EXAMPLES
 
 **EXAMPLE 1 - Temporal Analysis with Empty Query**
 User: "what's the largest transaction in june?"
-Agent Reasoning:
-1. Decompose: [temporal: june] [analytical: largest] [content: none] 
-2. Map: dateRange="june_${new Date().getFullYear()}", query="", analytical_intent="largest"
-3. Validate: Clean - no temporal contamination in query
-4. Execute: get_transactions({"dateRange": "june_${new Date().getFullYear()}", "query": ""})
 
-**Then immediately make the function call:** get_transactions({"dateRange": "june_${new Date().getFullYear()}", "query": ""})
+<thinking>
+1. Decompose: [temporal: june] [analytical: largest] [content: none]
+2. Map: This maps to get_transactions tool. The dateRange should be for June. The "largest" analysis will be handled after I get the results.
+3. Validate: Clean query, no temporal contamination.
+4. Execute: I need to call get_transactions with June date range.
+</thinking>
 
-**EXAMPLE 2 - All Transactions in Period**  
+
+**EXAMPLE 2 - All Transactions in Period**
 User: "what are the transactions i have in the past 60 days?"
-Agent Reasoning:
-1. Decompose: [temporal: past 60 days] [analytical: list all] [content: none]
-2. Map: dateRange="past_60_days", query="", no_filters_needed
-3. Validate: Clean - temporal words NOT in query
-4. Execute: get_transactions({"dateRange": "past_60_days", "query": ""})
 
-**Then immediately make the function call:** get_transactions({"dateRange": "past_60_days", "query": ""})
+<thinking>
+1. Decompose: [temporal: past 60 days] [analytical: list all] [content: none]
+2. Map: This maps to get_transactions tool. The dateRange parameter should be "past_60_days". The query is empty as no specific content is being searched for.
+3. Validate: Clean. The temporal words are handled by the dateRange parameter.
+4. Execute: I will call get_transactions with the specified date range.
+</thinking>
+
 
 **EXAMPLE 3 - Vendor Search with Time Constraint**
 User: "show me all McDonald's transactions this year"
-Agent Reasoning:
-1. Decompose: [temporal: this year] [analytical: list all] [content: McDonald's]
-2. Map: dateRange="this_year", query="McDonald's"
-3. Validate: Clean - only vendor name in query
-4. Execute: get_transactions({"dateRange": "this_year", "query": "McDonald's"})
 
-**Then immediately make the function call:** get_transactions({"dateRange": "this_year", "query": "McDonald's"})
+<thinking>
+1. Decompose: [temporal: this year] [analytical: list all] [content: McDonald's]
+2. Map: This maps to get_transactions with dateRange="this_year" and query="McDonald's"
+3. Validate: Clean - only vendor name in query, no temporal contamination.
+4. Execute: I will call get_transactions with year constraint and vendor filter.
+</thinking>
+
 
 **EXAMPLE 4 - Amount Analysis with Multiple Constraints**
 User: "what's my biggest expense from Grab in the last 3 months?"
-Agent Reasoning:
-1. Decompose: [temporal: last 3 months] [analytical: biggest] [content: Grab]
-2. Map: dateRange="past_3_months", query="Grab", analytical_intent="biggest"
-3. Validate: Clean - only vendor in query, no temporal words
-4. Execute: get_transactions({"dateRange": "past_3_months", "query": "Grab"})
 
-**Then immediately make the function call:** get_transactions({"dateRange": "past_3_months", "query": "Grab"})
+<thinking>
+1. Decompose: [temporal: last 3 months] [analytical: biggest] [content: Grab]
+2. Map: This maps to get_transactions with dateRange="past_90_days" and query="Grab". The "biggest" analysis will be handled after getting results.
+3. Validate: Clean - only vendor in query, no temporal words.
+4. Execute: I will call get_transactions with the specified parameters.
+</thinking>
+
 
 **EXAMPLE 5 - Category Analysis**
 User: "show me all food transactions in June this year"
-Agent Reasoning:
-1. Decompose: [temporal: June this year] [analytical: list all] [content: food category]
-2. Map: dateRange="june_${new Date().getFullYear()}", query="food"
-3. Validate: Clean - no temporal contamination
-4. Execute: get_transactions({"dateRange": "june_${new Date().getFullYear()}", "query": "food"})
 
-**Then immediately make the function call:** get_transactions({"dateRange": "june_${new Date().getFullYear()}", "query": "food"})
+<thinking>
+1. Decompose: [temporal: June this year] [analytical: list all] [content: food category]
+2. Map: This needs get_transactions with a June date range and query="food"
+3. Validate: Clean - no temporal contamination in query.
+4. Execute: I will search for food-related transactions in June.
+</thinking>
+
 
 ### FINAL STEP: ANSWER SYNTHESIS PROTOCOL
 
@@ -474,12 +538,164 @@ Agent Response: "I didn't find any transactions matching your search criteria. Y
 }
 
 /**
- * Validation Node - MANDATORY first step
+ * Topic Guardrail Node - MANDATORY first step
+ * Uses LLM to classify if the query is financial/business-related
+ * Bypasses guardrail for clarification responses to avoid blocking legitimate follow-ups
+ */
+async function topicGuardrail(state: AgentState): Promise<Partial<AgentState>> {
+  console.log('[TopicGuardrail] Validating topic relevance');
+  
+  // Get the last user message
+  const lastMessage = state.messages[state.messages.length - 1];
+  if (!lastMessage || lastMessage._getType() !== 'human') {
+    console.log('[TopicGuardrail] No human message found, allowing by default');
+    return {
+      isTopicAllowed: true,
+      isClarificationResponse: false
+    };
+  }
+
+  const userQuery = typeof lastMessage.content === 'string' ? lastMessage.content : '';
+  
+  // Skip guardrail for very short responses (likely clarification answers)
+  if (userQuery.length < 10) {
+    console.log('[TopicGuardrail] Short response detected, likely clarification - allowing');
+    return {
+      isTopicAllowed: true,
+      isClarificationResponse: true
+    };
+  }
+
+  try {
+    // Build context-aware topic classification prompt
+    const topicClassificationPrompt = `You are a topic classification system for a financial co-pilot chatbot designed for Southeast Asian SMEs.
+
+CLASSIFICATION RULES:
+1. ALLOWED topics (respond with "ALLOWED"):
+   - Tax, GST, VAT questions for Singapore, Malaysia, Thailand, Indonesia
+   - Business setup, incorporation, compliance
+   - Financial analysis, transactions, expenses, accounting
+   - Cross-border commerce, import/export regulations
+   - Invoice processing, document management
+   - Regulatory compliance, licensing requirements
+   - Business banking, payments, currency conversion
+   - General business operations and management
+
+2. NOT ALLOWED topics (respond with "BLOCKED"):
+   - Personal conversations, casual chat
+   - Non-business advice (health, relationships, travel for leisure)
+   - Technical support unrelated to finance/business
+   - Entertainment, sports, politics, news
+   - Academic subjects unrelated to business
+   - Creative writing, storytelling
+   - General AI capabilities or meta-discussions
+
+3. CLARIFICATION responses (respond with "CLARIFICATION"):
+   - Short answers to previous business questions
+   - Simple confirmations like "Yes", "No", "Singapore", "Sole Proprietorship"
+   - Providing additional details asked for in business context
+   - Follow-up answers to clarification questions
+
+IMPORTANT: Consider conversation context. If this appears to be answering a clarification question about business/finance, classify as CLARIFICATION.
+
+User Query: "${userQuery}"
+
+Respond with exactly one word: ALLOWED, BLOCKED, or CLARIFICATION`;
+
+    // Build headers conditionally
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (aiConfig.chat.apiKey) {
+      headers['Authorization'] = `Bearer ${aiConfig.chat.apiKey}`;
+    }
+
+    const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: aiConfig.chat.modelId,
+        messages: [
+          { role: 'system', content: topicClassificationPrompt }
+        ],
+        max_tokens: 10,
+        temperature: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      console.error('[TopicGuardrail] LLM API error, allowing by default');
+      return {
+        isTopicAllowed: true,
+        isClarificationResponse: false
+      };
+    }
+
+    const result = await response.json();
+    const classification = result.choices?.[0]?.message?.content?.trim().toUpperCase();
+    
+    console.log(`[TopicGuardrail] Classification result: ${classification} for query: "${userQuery.substring(0, 50)}..."`);
+
+    if (classification === 'BLOCKED') {
+      return {
+        isTopicAllowed: false,
+        isClarificationResponse: false
+      };
+    } else if (classification === 'CLARIFICATION') {
+      return {
+        isTopicAllowed: true,
+        isClarificationResponse: true
+      };
+    } else {
+      // ALLOWED or any other response defaults to allowed
+      return {
+        isTopicAllowed: true,
+        isClarificationResponse: false
+      };
+    }
+    
+  } catch (error) {
+    console.error('[TopicGuardrail] Error during topic classification:', error);
+    // Fail open - allow by default on errors to avoid blocking legitimate queries
+    return {
+      isTopicAllowed: true,
+      isClarificationResponse: false
+    };
+  }
+}
+
+/**
+ * Off-Topic Handler Node
+ * Provides multi-language rejection messages for off-topic queries
+ */
+async function handleOffTopic(state: AgentState): Promise<Partial<AgentState>> {
+  console.log('[HandleOffTopic] Generating off-topic rejection message');
+  
+  const language = state.language || 'en';
+  
+  const rejectionMessages = {
+    en: "I'm a financial co-pilot designed to help Southeast Asian SMEs with tax, compliance, and business questions. I can assist with:\n\n• GST/VAT questions for Singapore, Malaysia, Thailand, Indonesia\n• Business setup and incorporation\n• Financial analysis and transaction management\n• Cross-border commerce and regulations\n• Invoice processing and document management\n\nPlease ask me something related to your business or financial needs!",
+    
+    th: "ฉันเป็นโคไพล็อตด้านการเงินที่ออกแบบมาเพื่อช่วยเหลือ SMEs ในเอเชียตะวันออกเฉียงใต้เรื่องภาษี การปฏิบัติตามกฎระเบียบ และคำถามทางธุรกิจ ฉันสามารถช่วยได้ในเรื่อง:\n\n• คำถามเกี่ยวกับ GST/VAT สำหรับสิงคโปร์ มาเลเซีย ไทย อินโดนีเซีย\n• การจัดตั้งธุรกิจและการจดทะเบียน\n• การวิเคราะห์ทางการเงินและการจัดการธุรกรรม\n• การค้าข้ามแดนและกฎระเบียบ\n• การประมวลผลใบแจ้งหนี้และการจัดการเอกสาร\n\nกรุณาถามฉันเกี่ยวกับความต้องการทางธุรกิจหรือการเงินของคุณ!",
+    
+    id: "Saya adalah kopilot keuangan yang dirancang untuk membantu UKM Asia Tenggara dengan pertanyaan pajak, kepatuhan, dan bisnis. Saya dapat membantu dengan:\n\n• Pertanyaan GST/PPN untuk Singapura, Malaysia, Thailand, Indonesia\n• Pendirian bisnis dan pendirian badan hukum\n• Analisis keuangan dan manajemen transaksi\n• Perdagangan lintas batas dan regulasi\n• Pemrosesan faktur dan manajemen dokumen\n\nSilakan tanyakan sesuatu yang berkaitan dengan kebutuhan bisnis atau keuangan Anda!"
+  };
+
+  const message = rejectionMessages[language as keyof typeof rejectionMessages] || rejectionMessages.en;
+
+  return {
+    messages: [...state.messages, new AIMessage(message)],
+    currentPhase: 'completed'
+  };
+}
+
+/**
+ * Validation Node - MANDATORY security step
  * Validates user context and permissions before any agent action
  */
 async function validate(state: AgentState): Promise<Partial<AgentState>> {
   console.log('[Validation] Validating user context and permissions');
-  console.log('[DEBUG] User Context:', JSON.stringify(state.userContext, null, 2));
 
   // CRITICAL: Validate user context exists
   if (!state.userContext || !state.userContext.userId) {
@@ -543,20 +759,31 @@ async function analyzeIntent(state: AgentState): Promise<Partial<AgentState>> {
   try {
     // Use the existing chat agent LLM for intent analysis with conversation context
     const intentAnalysisResult = await performLLMIntentAnalysis(userQuery, state.language || 'en', state);
-    
+
     console.log('[IntentAnalysis] LLM analysis result:', {
       primaryIntent: intentAnalysisResult.intent.primaryIntent,
+      queryCategory: intentAnalysisResult.intent.queryCategory,
       confidence: intentAnalysisResult.intent.confidence,
       requiresClarification: intentAnalysisResult.requiresClarification,
       missingContext: intentAnalysisResult.intent.missingContext
     });
 
-    const nextPhase = intentAnalysisResult.requiresClarification ? 'clarification' : 'execution';
-    
+    // DETERMINISTIC OVERRIDE: Personal data queries always skip clarification
+    let finalRequiresClarification = intentAnalysisResult.requiresClarification;
+    let finalClarificationQuestions = intentAnalysisResult.clarificationQuestions;
+
+    if (intentAnalysisResult.intent.queryCategory === 'personal_data') {
+      console.log('[IntentAnalysis] OVERRIDE: Personal data query detected, skipping clarification');
+      finalRequiresClarification = false;
+      finalClarificationQuestions = [];
+    }
+
+    const nextPhase = finalRequiresClarification ? 'clarification' : 'execution';
+
     return {
       currentIntent: intentAnalysisResult.intent,
-      needsClarification: intentAnalysisResult.requiresClarification,
-      clarificationQuestions: intentAnalysisResult.clarificationQuestions,
+      needsClarification: finalRequiresClarification,
+      clarificationQuestions: finalClarificationQuestions,
       currentPhase: nextPhase
     };
     
@@ -567,6 +794,7 @@ async function analyzeIntent(state: AgentState): Promise<Partial<AgentState>> {
       currentIntent: {
         primaryIntent: 'general_inquiry',
         queryType: 'general_info',
+        queryCategory: 'other',
         confidence: 0.5,
         contextNeeded: {},
         missingContext: [],
@@ -634,11 +862,12 @@ ${state.clarificationQuestions.map(q => `- ${q}`).join('\n')}`;
 Analyze the following user query and respond with a JSON object containing:
 1. primaryIntent: One of [regulatory_knowledge, business_setup, transaction_analysis, document_search, compliance_check, general_inquiry]
 2. queryType: One of [general_info, procedural, comparison, calculation, specific_case]
-3. confidence: Number between 0 and 1
-4. contextNeeded: Object with fields for country, businessType, urgency, specificity (if applicable)
-5. missingContext: Array of strings indicating what context is missing
-6. requiresClarification: Boolean indicating if clarification questions should be asked
-7. clarificationQuestions: Array of specific questions to ask the user (if requiresClarification is true)
+3. queryCategory: One of [personal_data, general_knowledge, other] - CRITICAL for routing
+4. confidence: Number between 0 and 1
+5. contextNeeded: Object with fields for country, businessType, urgency, specificity (if applicable)
+6. missingContext: Array of strings indicating what context is missing
+7. requiresClarification: Boolean indicating if clarification questions should be asked
+8. clarificationQuestions: Array of specific questions to ask the user (if requiresClarification is true)
 
 Intent Detection Rules:
 - regulatory_knowledge: Questions about GST, tax, regulations, compliance requirements
@@ -647,6 +876,18 @@ Intent Detection Rules:
 - document_search: Questions about finding or searching documents/invoices
 - compliance_check: Questions about cross-border compliance, international requirements
 - general_inquiry: General questions, greetings, or unclear intent
+
+Query Category Rules (CRITICAL FOR ROUTING):
+- personal_data: User asking about THEIR OWN data (transactions, documents, vendors)
+  * Keywords: "my", "I", "me", "show me", "what is my", "find my", "my transactions", "my largest", "my documents"
+  * Examples: "What's my largest transaction?", "Show me my transactions in June", "Find my invoices from ABC Corp"
+  * ACTION: Skip clarification and go directly to tool execution
+- general_knowledge: User asking about general business/regulatory information
+  * Keywords: "what are", "how does", "explain", "requirements for", "GST rules", "tax rate", "how to register"
+  * Examples: "What are GST registration requirements?", "How does OVR work?", "What's the tax rate in Singapore?"
+  * ACTION: May require clarification for country/business context
+- other: Greetings, unclear requests, or non-business queries
+  * Examples: "Hello", "Thanks", unclear or ambiguous requests
 
 Context Extraction:
 - country: singapore, malaysia, thailand, indonesia (from query content)
@@ -705,6 +946,7 @@ Respond with valid JSON only, no explanations:`;
     const intent: UserIntent = {
       primaryIntent: analysis.primaryIntent || 'general_inquiry',
       queryType: analysis.queryType || 'general_info',
+      queryCategory: analysis.queryCategory || 'other',
       confidence: analysis.confidence || 0.5,
       contextNeeded: analysis.contextNeeded || {},
       missingContext: analysis.missingContext || [],
@@ -1232,7 +1474,6 @@ async function executeTool(state: AgentState): Promise<Partial<AgentState>> {
     // ### DEBUGGING: Log the exact parameters and user context before execution
     console.log(`[ExecuteTool] Executing tool: ${toolName} for user: ${state.userContext.userId}`);
     console.log(`[DEBUG] Parameters: ${JSON.stringify(parameters, null, 2)}`);
-    console.log(`[DEBUG] User Context: ${JSON.stringify(state.userContext, null, 2)}`);
 
     // Check for repeated failures and try fallback tool
     if (state.failureCount && state.failureCount >= 2 && state.lastFailedTool === toolName) {
@@ -1324,7 +1565,34 @@ async function correctToolCall(state: AgentState): Promise<Partial<AgentState>> 
  * Router Function - Determines next step in the graph with intelligent phase handling
  */
 function router(state: AgentState): string {
-  console.log(`[Router] Current phase: ${state.currentPhase}, Messages: ${state.messages?.length || 0}`);
+  console.log(`[Router] Current phase: ${state.currentPhase}, Messages: ${state.messages?.length || 0}, Topic allowed: ${state.isTopicAllowed}, Is clarification: ${state.isClarificationResponse}`);
+  
+  // CRITICAL: Check for empty messages array at the start.
+  if (!state.messages || state.messages.length === 0) {
+    return 'topicGuardrail';
+  }
+
+  // Check if we have a new human message that needs topic classification
+  const lastMessage = state.messages[state.messages.length - 1];
+  const isHumanMessage = lastMessage && lastMessage._getType() === 'human';
+  
+  // Topic Guardrail Logic - First priority for new human messages
+  if (isHumanMessage) {
+    // Check if we need to classify the topic (topic classification not done yet)
+    if (state.isTopicAllowed === undefined) {
+      console.log('[Router] New human message requires topic classification');
+      return 'topicGuardrail';
+    }
+    
+    // If topic was classified as not allowed, handle off-topic
+    if (state.isTopicAllowed === false) {
+      console.log('[Router] Topic not allowed, routing to handleOffTopic');
+      return 'handleOffTopic';
+    }
+    
+    // Topic is allowed, continue with normal flow
+    console.log('[Router] Topic allowed, proceeding with normal workflow');
+  }
   
   // Phase-based routing for intelligent workflow
   if (state.currentPhase === 'validation') {
@@ -1341,11 +1609,6 @@ function router(state: AgentState): string {
   
   if (state.currentPhase === 'completed') {
     return END;
-  }
-  
-  // CRITICAL: Check for empty messages array at the start.
-  if (!state.messages || state.messages.length === 0) {
-    return 'validate';
   }
 
   // FIXED CIRCUIT BREAKER: Count messages within the current turn only, not total conversation history
@@ -1410,21 +1673,21 @@ function router(state: AgentState): string {
     return END;
   }
 
-  // Get the last message from the state.
-  const lastMessage = state.messages[state.messages.length - 1] as any;
+  // Get the current message from the state.
+  const currentMessage = state.messages[state.messages.length - 1] as any;
   
   // PRIMARY FIX: Check if the raw LLM response has an empty tool_calls array and a tool_calls finish reason.
-  if (lastMessage.finish_reason === 'tool_calls' && (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0)) {
+  if (currentMessage.finish_reason === 'tool_calls' && (!currentMessage.tool_calls || currentMessage.tool_calls.length === 0)) {
     console.log('[Router] Incomplete tool call detected. Routing for correction.');
     return 'correctToolCall';
   }
 
   // Now, proceed with the regular routing logic based on the message type.
-  const messageType = lastMessage._getType ? lastMessage._getType() : lastMessage.type;
+  const messageType = currentMessage._getType ? currentMessage._getType() : currentMessage.type;
 
   if (messageType === 'ai') {
     // If the message is a valid tool call (not incomplete), execute it.
-    if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
+    if (currentMessage.tool_calls && currentMessage.tool_calls.length > 0) {
       console.log('[Router] Valid tool call detected. Routing to execute tool.');
       return 'executeTool';
     }
@@ -1436,7 +1699,7 @@ function router(state: AgentState): string {
 
   if (messageType === 'tool') {
     // Enhanced circuit breaker - prevent infinite loops
-    const toolMessage = lastMessage as ToolMessage;
+    const toolMessage = currentMessage as ToolMessage;
     const contentStr = typeof toolMessage.content === 'string' ? toolMessage.content : '';
     const isFailure = !contentStr || contentStr.includes('error') || contentStr.includes('failed') || contentStr.includes('timeout');
     
@@ -1503,7 +1766,9 @@ export function createFinancialAgent() {
   // Define the state graph
   const workflow = new StateGraph(AgentStateAnnotation);
 
-  // Add nodes with LLM-powered intent analysis and clarification
+  // Add nodes with topic guardrail, LLM-powered intent analysis and clarification
+  workflow.addNode('topicGuardrail', topicGuardrail);
+  workflow.addNode('handleOffTopic', handleOffTopic);
   workflow.addNode('validate', validate);
   workflow.addNode('analyzeIntent', analyzeIntent);
   workflow.addNode('handleClarification', handleClarification);
@@ -1511,8 +1776,10 @@ export function createFinancialAgent() {
   workflow.addNode('executeTool', executeTool);
   workflow.addNode('correctToolCall', correctToolCall);
 
-  // Add edges for intelligent workflow with phases
-  workflow.addEdge("__start__", "validate" as any);
+  // Add edges for intelligent workflow with topic guardrails and phases
+  workflow.addEdge("__start__", "topicGuardrail" as any);
+  workflow.addConditionalEdges("topicGuardrail" as any, router);
+  workflow.addConditionalEdges("handleOffTopic" as any, router);
   workflow.addConditionalEdges("validate" as any, router);
   workflow.addConditionalEdges("analyzeIntent" as any, router);
   workflow.addConditionalEdges("handleClarification" as any, router);
@@ -1546,6 +1813,8 @@ export function createAgentState(
     needsClarification: false,
     clarificationQuestions: [],
     currentPhase: 'validation',
-    citations: []
+    citations: [],
+    isTopicAllowed: true,
+    isClarificationResponse: false
   };
 }
