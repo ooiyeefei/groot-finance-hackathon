@@ -6,10 +6,11 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { 
   CheckCircle, 
   AlertCircle, 
+  AlertTriangle,
   Edit3, 
   Brain, 
   Send, 
@@ -34,7 +35,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DSPyExtractionResult } from '@/types/expense-extraction'
-import { EXPENSE_CATEGORY_CONFIG } from '@/types/expense-claims'
+import { useExpenseCategories, DynamicExpenseCategory } from '@/hooks/use-expense-categories'
 
 interface ExpenseFormData {
   description: string
@@ -63,11 +64,14 @@ export default function PreFilledExpenseForm({
   onBack,
   isSubmitting = false 
 }: PreFilledExpenseFormProps) {
+  // Fetch dynamic categories
+  const { categories, loading: categoriesLoading, error: categoriesError } = useExpenseCategories()
+  
   // Initialize form with DSPy extracted data
   const [formData, setFormData] = useState<ExpenseFormData>({
     description: extractionResult.extractedData.lineItems?.[0]?.description || 'Business expense',
     business_purpose: '', // This needs user input
-    expense_category: inferExpenseCategory(extractionResult),
+    expense_category: inferExpenseCategory(extractionResult, categories),
     original_amount: extractionResult.extractedData.totalAmount,
     original_currency: extractionResult.extractedData.currency,
     transaction_date: extractionResult.extractedData.transactionDate,
@@ -92,6 +96,115 @@ export default function PreFilledExpenseForm({
   const [expenseClaimId, setExpenseClaimId] = useState<string | null>(null)
   const [submitStep, setSubmitStep] = useState<'form' | 'draft_saved' | 'submitted'>('form')
 
+  // Duplicate detection state
+  const [duplicateCheck, setDuplicateCheck] = useState({
+    isChecking: false,
+    isDuplicate: false,
+    matchType: null as 'exact' | 'near' | 'reference_conflict' | null,
+    duplicateData: null as any,
+    message: '',
+    variance: null as any
+  })
+
+  // Re-categorize when categories are loaded for the first time
+  useEffect(() => {
+    if (categories.length > 0 && !formData.expense_category) {
+      const newCategory = inferExpenseCategory(extractionResult, categories)
+      if (newCategory) {
+        setFormData(prev => ({
+          ...prev,
+          expense_category: newCategory
+        }))
+      }
+    }
+  }, [categories, extractionResult, formData.expense_category])
+
+  // Debounced duplicate checking function
+  const checkForDuplicates = useCallback(async (
+    reference_number: string, 
+    transaction_date: string, 
+    original_amount: number,
+    vendor_name: string
+  ) => {
+    if (!reference_number || !transaction_date || !original_amount) {
+      setDuplicateCheck(prev => ({ ...prev, isChecking: false, isDuplicate: false, message: '' }))
+      return
+    }
+
+    setDuplicateCheck(prev => ({ ...prev, isChecking: true }))
+
+    try {
+      const response = await fetch('/api/expense-claims/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference_number,
+          transaction_date,
+          original_amount,
+          vendor_name,
+          expense_category: formData.expense_category
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success && result.isDuplicate) {
+        const duplicate = result.duplicateData
+        let message = ''
+        
+        switch (result.matchType) {
+          case 'exact':
+            message = `This appears to be a duplicate of an expense submitted on ${new Date(duplicate.created_at).toLocaleDateString()} for ${duplicate.currency} ${duplicate.amount}. Status: ${duplicate.status.toUpperCase()}.`
+            break
+          case 'near':
+            message = `Similar expense found: ${duplicate.reference_number} from ${new Date(duplicate.transaction_date).toLocaleDateString()} for ${duplicate.currency} ${duplicate.amount}. Please verify this is not a duplicate.`
+            break
+          case 'reference_conflict':
+            message = result.warning || 'Same reference number found with different vendor. Please verify this is not a duplicate.'
+            break
+        }
+
+        setDuplicateCheck({
+          isChecking: false,
+          isDuplicate: true,
+          matchType: result.matchType,
+          duplicateData: duplicate,
+          message,
+          variance: result.variance || null
+        })
+      } else {
+        setDuplicateCheck({
+          isChecking: false,
+          isDuplicate: false,
+          matchType: null,
+          duplicateData: null,
+          message: '',
+          variance: null
+        })
+      }
+    } catch (error) {
+      console.error('Duplicate check failed:', error)
+      // Fail open - don't block user if check fails
+      setDuplicateCheck(prev => ({ ...prev, isChecking: false }))
+    }
+  }, [formData.expense_category])
+
+  // Debounced effect for duplicate checking
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (formData.reference_number && formData.transaction_date && formData.original_amount) {
+        checkForDuplicates(
+          formData.reference_number,
+          formData.transaction_date,
+          formData.original_amount,
+          formData.vendor_name
+        )
+      }
+    }, 800) // 800ms debounce
+
+    return () => clearTimeout(timeoutId)
+  }, [formData.reference_number, formData.transaction_date, formData.original_amount, formData.vendor_name, checkForDuplicates])
+
   // DSPy confidence indicators for each field
   const getFieldConfidence = (fieldName: string): 'high' | 'medium' | 'low' => {
     const confidence = extractionResult.extractedData.confidenceScore
@@ -103,29 +216,52 @@ export default function PreFilledExpenseForm({
     return 'low'
   }
 
-  // Auto-categorize based on vendor name and line items
-  function inferExpenseCategory(result: DSPyExtractionResult): string {
+  // Auto-categorize based on vendor name and line items using dynamic categories
+  function inferExpenseCategory(result: DSPyExtractionResult, availableCategories: DynamicExpenseCategory[]): string {
+    if (!availableCategories.length) {
+      // Fallback if no categories loaded yet
+      return ''
+    }
+
     const vendor = result.extractedData.vendorName.toLowerCase()
     const items = result.extractedData.lineItems.map(item => item.description.toLowerCase()).join(' ')
+    const searchText = `${vendor} ${items}`
     
-    if (vendor.includes('restaurant') || vendor.includes('cafe') || vendor.includes('food') || 
-        items.includes('food') || items.includes('meal') || items.includes('lunch')) {
-      return 'entertainment'
-    }
-    if (vendor.includes('gas') || vendor.includes('petrol') || vendor.includes('fuel') ||
-        items.includes('fuel') || items.includes('gas')) {
-      return 'petrol'
-    }
-    if (vendor.includes('hotel') || vendor.includes('accommodation') ||
-        items.includes('accommodation') || items.includes('room')) {
-      return 'travel_accommodation'
-    }
-    if (vendor.includes('office') || vendor.includes('supplies') ||
-        items.includes('supplies') || items.includes('stationery')) {
-      return 'other'
+    let bestMatch: { category: string; confidence: number } = { category: '', confidence: 0 }
+    
+    // Check each category's vendor patterns and AI keywords
+    for (const category of availableCategories) {
+      let matchScore = 0
+      
+      // Check vendor patterns (if any)
+      if (category.vendor_patterns) {
+        for (const pattern of category.vendor_patterns) {
+          if (searchText.includes(pattern.toLowerCase())) {
+            matchScore += 0.4 // High weight for vendor patterns
+          }
+        }
+      }
+      
+      // Check AI keywords (if any)
+      if (category.ai_keywords) {
+        for (const keyword of category.ai_keywords) {
+          if (searchText.includes(keyword.toLowerCase())) {
+            matchScore += 0.3 // Medium weight for AI keywords
+          }
+        }
+      }
+      
+      // Update best match if this category scores higher
+      if (matchScore > bestMatch.confidence) {
+        bestMatch = {
+          category: category.category_code,
+          confidence: matchScore
+        }
+      }
     }
     
-    return 'other' // Default category
+    // Return best match if confidence is reasonable, otherwise return first available category
+    return bestMatch.confidence > 0.2 ? bestMatch.category : availableCategories[0]?.category_code || ''
   }
 
   const validateForm = (): boolean => {
@@ -150,8 +286,65 @@ export default function PreFilledExpenseForm({
       newErrors.transaction_date = 'Date is required'
     }
 
+    // Block submission if exact duplicates are detected
+    if (duplicateCheck.isDuplicate && duplicateCheck.matchType === 'exact') {
+      newErrors.duplicate = 'Duplicate expense detected. Please review existing expense or use different reference number.'
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
+  }
+
+  // Handle direct submission for approval (streamlined UX)
+  const handleSubmitDirectly = async () => {
+    if (!validateForm()) return
+    
+    try {
+      setIsSubmittingForApproval(true)
+      setSubmitError(null)
+      
+      // Step 1: Save expense claim as draft
+      const draftResult = await onSubmit(formData)
+      
+      console.log('[Pre-filled Form] Draft result:', draftResult)
+      console.log('[Pre-filled Form] Expected path:', draftResult?.data?.expense_claim?.id)
+      
+      if (!draftResult?.data?.expense_claim?.id) {
+        throw new Error('Failed to create expense claim')
+      }
+      
+      const claimId = draftResult.data.expense_claim.id
+      
+      // Step 2: Immediately submit for approval
+      const response = await fetch(`/api/expense-claims/${claimId}/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'submit' })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to submit for approval')
+      }
+      
+      const submitResult = await response.json()
+      console.log('Successfully submitted for approval:', submitResult)
+      
+      setSubmitStep('submitted')
+      
+      // Close form after successful submission
+      setTimeout(() => {
+        onBack()
+      }, 2000)
+      
+    } catch (error) {
+      console.error('Direct submission error:', error)
+      setSubmitError(error instanceof Error ? error.message : 'Failed to submit expense claim')
+    } finally {
+      setIsSubmittingForApproval(false)
+    }
   }
 
   // Save as draft first
@@ -282,6 +475,66 @@ export default function PreFilledExpenseForm({
         </CardContent>
       </Card>
 
+      {/* Duplicate Detection Warning */}
+      {(duplicateCheck.isChecking || duplicateCheck.isDuplicate) && (
+        <Alert className={`border ${
+          duplicateCheck.matchType === 'exact' ? 'border-red-600 bg-red-900/20' :
+          duplicateCheck.matchType === 'near' ? 'border-yellow-600 bg-yellow-900/20' :
+          duplicateCheck.matchType === 'reference_conflict' ? 'border-orange-600 bg-orange-900/20' :
+          'border-blue-600 bg-blue-900/20'
+        }`}>
+          <div className="flex items-center gap-3">
+            {duplicateCheck.isChecking ? (
+              <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+            ) : (
+              <AlertTriangle className={`h-5 w-5 ${
+                duplicateCheck.matchType === 'exact' ? 'text-red-400' :
+                duplicateCheck.matchType === 'near' ? 'text-yellow-400' :
+                'text-orange-400'
+              }`} />
+            )}
+            <AlertDescription className="text-white flex-1">
+              {duplicateCheck.isChecking ? (
+                <div>
+                  <strong>Checking for duplicates...</strong>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Verifying reference number, date, and amount against existing expenses.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <strong className={
+                    duplicateCheck.matchType === 'exact' ? 'text-red-300' :
+                    duplicateCheck.matchType === 'near' ? 'text-yellow-300' :
+                    'text-orange-300'
+                  }>
+                    {duplicateCheck.matchType === 'exact' ? 'Duplicate Detected!' :
+                     duplicateCheck.matchType === 'near' ? 'Similar Expense Found' :
+                     'Reference Number Conflict'}
+                  </strong>
+                  <p className="text-sm text-gray-300 mt-1">
+                    {duplicateCheck.message}
+                  </p>
+                  {duplicateCheck.duplicateData && (
+                    <div className="mt-2 p-2 bg-gray-800/50 rounded text-xs">
+                      <strong>Existing Expense:</strong> {duplicateCheck.duplicateData.description || 'N/A'} |{' '}
+                      <strong>Status:</strong> {duplicateCheck.duplicateData.status?.toUpperCase()} |{' '}
+                      <strong>Created:</strong> {new Date(duplicateCheck.duplicateData.created_at).toLocaleDateString()}
+                    </div>
+                  )}
+                  {duplicateCheck.variance && (
+                    <div className="mt-1 text-xs text-gray-400">
+                      Amount difference: {duplicateCheck.duplicateData.currency} {duplicateCheck.variance.amountDifference?.toFixed(2)} |{' '}
+                      Date difference: {Math.round(duplicateCheck.variance.dateDifferenceInDays)} days
+                    </div>
+                  )}
+                </div>
+              )}
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
+
       {/* Suggested Corrections */}
       {extractionResult.suggestedCorrections && extractionResult.suggestedCorrections.length > 0 && (
         <Alert className="bg-blue-900/20 border-blue-700">
@@ -397,11 +650,25 @@ export default function PreFilledExpenseForm({
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent className="bg-gray-700 border-gray-600">
-                      {Object.entries(EXPENSE_CATEGORY_CONFIG).map(([key, config]) => (
-                        <SelectItem key={key} value={key} className="text-white">
-                          {config.icon} {config.label}
+                      {categoriesLoading ? (
+                        <SelectItem value="" className="text-gray-400" disabled>
+                          Loading categories...
                         </SelectItem>
-                      ))}
+                      ) : categoriesError ? (
+                        <SelectItem value="" className="text-red-400" disabled>
+                          Error loading categories
+                        </SelectItem>
+                      ) : categories.length > 0 ? (
+                        categories.map((category) => (
+                          <SelectItem key={category.category_code} value={category.category_code} className="text-white">
+                            {category.category_name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="" className="text-gray-400" disabled>
+                          No categories available
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   {errors.expense_category && <p className="text-red-400 text-sm">{errors.expense_category}</p>}
@@ -518,32 +785,52 @@ export default function PreFilledExpenseForm({
         </Alert>
       )}
 
-      {/* Action Buttons - Mel's Two-Step UX */}
+      {/* Action Buttons - Streamlined UX */}
       {submitStep === 'form' && (
         <div className="flex gap-3 pt-4">
           <Button 
             variant="outline" 
             onClick={onBack}
-            disabled={isDraftSaving}
+            disabled={isDraftSaving || isSubmittingForApproval}
             className="border-gray-600 text-gray-300"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
+          
           <Button 
+            variant="outline"
             onClick={handleSaveDraft}
-            disabled={isDraftSaving || isSubmitting}
-            className="flex-1 bg-blue-600 hover:bg-blue-700"
+            disabled={isDraftSaving || isSubmittingForApproval}
+            className="border-gray-600 text-gray-300"
           >
             {isDraftSaving ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Saving Draft...
+                Saving...
               </>
             ) : (
               <>
                 <Save className="w-4 h-4 mr-2" />
-                Save & Continue
+                Save Draft
+              </>
+            )}
+          </Button>
+          
+          <Button 
+            onClick={handleSubmitDirectly}
+            disabled={isDraftSaving || isSubmittingForApproval}
+            className="flex-1 bg-green-600 hover:bg-green-700"
+          >
+            {isSubmittingForApproval ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4 mr-2" />
+                Submit for Approval
               </>
             )}
           </Button>

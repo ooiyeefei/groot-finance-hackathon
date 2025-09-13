@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { getCurrentUserContext } from '@/lib/rbac'
 import { emailService } from '@/lib/services/email-service'
 import type { CreateInvitationRequest } from '@/types/invitations'
@@ -48,12 +48,20 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    // Map new role system to legacy user_role enum values
+    const legacyRoleMapping: Record<string, string> = {
+      'employee': 'member',
+      'manager': 'admin', 
+      'admin': 'owner'
+    }
+
+    // Use service client to avoid schema cache issues with confirmation_token
+    const supabase = createServiceSupabaseClient()
 
     // Check if user already exists in the business (either confirmed or invited)
     const { data: existingUser } = await supabase
       .from('users')
-      .select('id, clerk_user_id, invited_at')
+      .select('id, clerk_user_id, created_at')
       .eq('business_id', userContext.profile.business_id)
       .ilike('email', email)
       .single()
@@ -64,7 +72,7 @@ export async function POST(request: NextRequest) {
           success: false, 
           error: 'User is already a member of this business' 
         }, { status: 409 })
-      } else if (existingUser.invited_at) {
+      } else {
         return NextResponse.json({ 
           success: false, 
           error: 'Pending invitation already exists for this email' 
@@ -72,21 +80,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate invitation token
-    const invitationToken = crypto.randomUUID()
-
     // Create invitation record in users table
     const { data: invitation, error: insertError } = await supabase
       .from('users')
       .insert({
         email: email.toLowerCase(),
         business_id: userContext.profile.business_id,
-        invited_by: userId,
-        invited_at: new Date().toISOString(),
-        confirmation_token: invitationToken,
-        role: role === 'admin' ? 'admin' : 'member', // Map to existing role enum
+        invited_by: userId, // Use invited_by to identify invitations
+        role: legacyRoleMapping[role], // Map to legacy enum: employee->member, manager->admin, admin->owner
         full_name: null, // Will be filled when user signs up
-        home_currency: 'SGD' // Default, user can change later
+        home_currency: 'SGD', // Default, user can change later
+        clerk_user_id: null, // Explicitly set to null for pending invitations
+        // Note: created_at will be auto-generated and used as invitation timestamp
       })
       .select('*')
       .single()
@@ -113,15 +118,15 @@ export async function POST(request: NextRequest) {
       ? `${inviterUser.firstName} ${inviterUser.lastName}`
       : inviterUser.emailAddresses[0]?.emailAddress || 'Team Admin'
 
-    // Send invitation email
-    const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${invitationToken}`
+    // Send invitation email using the user ID as the token
+    const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${invitation.id}`
     
     const emailResult = await emailService.sendInvitation({
       email,
       businessName: business?.name || 'FinanSEAL Business',
       inviterName,
-      role,
-      invitationToken,
+      role, // Keep using the modern role for email content
+      invitationToken: invitation.id, // Use user ID as token
       invitationUrl
     })
 
@@ -170,7 +175,8 @@ export async function GET(request: NextRequest) {
       }, { status: 403 })
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    // Use service client to avoid schema cache issues with confirmation_token
+    const supabase = createServiceSupabaseClient()
 
     // Get query parameters
     const { searchParams } = new URL(request.url)
@@ -181,10 +187,10 @@ export async function GET(request: NextRequest) {
     // Build query - get pending invitations (invited but no clerk_user_id yet)
     let query = supabase
       .from('users')
-      .select('id, email, invited_at, invited_by, role, full_name, confirmation_token, clerk_user_id', { count: 'exact' })
+      .select('id, email, created_at, invited_by, role, full_name, clerk_user_id', { count: 'exact' })
       .eq('business_id', userContext.profile.business_id)
-      .not('invited_at', 'is', null) // Has been invited
-      .order('invited_at', { ascending: false })
+      .not('invited_by', 'is', null) // Has been invited (invited_by is set)
+      .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
     // Filter by status if provided
@@ -210,9 +216,9 @@ export async function GET(request: NextRequest) {
       email: invitation.email,
       role: invitation.role,
       status: invitation.clerk_user_id ? 'accepted' : 'pending',
-      invited_at: invitation.invited_at,
+      invited_at: invitation.created_at, // Use created_at as invited_at
       invited_by: invitation.invited_by,
-      invitation_token: invitation.confirmation_token
+      invitation_token: invitation.id // Use user ID as token
     })) || []
 
     return NextResponse.json({ 

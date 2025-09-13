@@ -30,7 +30,11 @@ interface ReportData {
   generated_at: string
 }
 
-export default function MonthlyReportGenerator() {
+interface MonthlyReportGeneratorProps {
+  personalOnly?: boolean
+}
+
+export default function MonthlyReportGenerator({ personalOnly = false }: MonthlyReportGeneratorProps) {
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedEmployee, setSelectedEmployee] = useState('')
   const [reportData, setReportData] = useState<ReportData | null>(null)
@@ -61,8 +65,15 @@ export default function MonthlyReportGenerator() {
 
   const monthOptions = generateMonthOptions()
 
-  // Fetch employees from API
+  // Fetch employees from API (only if not personal mode)
   useEffect(() => {
+    if (personalOnly) {
+      // In personal mode, only show current user
+      setEmployees([{ id: 'current', name: 'My Reports' }])
+      setSelectedEmployee('current')
+      return
+    }
+
     const fetchEmployees = async () => {
       try {
         setLoadingEmployees(true)
@@ -89,7 +100,7 @@ export default function MonthlyReportGenerator() {
     }
 
     fetchEmployees()
-  }, [])
+  }, [personalOnly])
 
   const generateReport = async (format: 'json' | 'pdf' | 'csv' = 'json') => {
     if (!selectedMonth) {

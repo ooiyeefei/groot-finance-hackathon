@@ -17,6 +17,7 @@ import ExpenseAnalytics from './expense-analytics'
 import MonthlyReportGenerator from './monthly-report-generator'
 import GoogleSheetsExport from './google-sheets-export'
 import CategoryManagement from './category-management'
+import ExpenseEditModal from './expense-edit-modal'
 
 interface ExpenseDashboardProps {
   userId: string
@@ -44,6 +45,8 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [showSubmissionForm, setShowSubmissionForm] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingClaimId, setEditingClaimId] = useState<string | null>(null)
 
   // Fetch dashboard data and user role
   const fetchDashboardData = useCallback(async () => {
@@ -91,6 +94,29 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
     }
   }, [userId, fetchDashboardData])
 
+  // Debug modal state changes
+  useEffect(() => {
+    console.log('Modal state changed - showEditModal:', showEditModal, 'editingClaimId:', editingClaimId)
+  }, [showEditModal, editingClaimId])
+
+  // Handle edit modal
+  const handleEditClaim = (claimId: string) => {
+    console.log('Edit claim clicked:', claimId)
+    setEditingClaimId(claimId)
+    setShowEditModal(true)
+    console.log('Modal state set - showEditModal:', true, 'editingClaimId:', claimId)
+  }
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false)
+    setEditingClaimId(null)
+  }
+
+  const handleEditSave = () => {
+    // Refresh dashboard data after successful edit
+    fetchDashboardData()
+  }
+
   if (loading) {
     return <ExpenseDashboardSkeleton />
   }
@@ -108,7 +134,7 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
     } else if (role.manager) {
       return <ManagerDashboardContent data={dashboardData} />
     } else {
-      return <EmployeeDashboardContent data={dashboardData} onNewClaim={() => setShowSubmissionForm(true)} />
+      return <EmployeeDashboardContent data={dashboardData} onNewClaim={() => setShowSubmissionForm(true)} onEditClaim={handleEditClaim} />
     }
   }
 
@@ -327,12 +353,22 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
           }}
         />
       )}
+
+      {/* Expense Edit Modal */}
+      {showEditModal && editingClaimId ? (
+        <ExpenseEditModal
+          expenseClaimId={editingClaimId}
+          isOpen={showEditModal}
+          onClose={handleCloseEditModal}
+          onSave={handleEditSave}
+        />
+      ) : null}
     </div>
   )
 }
 
 // Role-specific dashboard content components
-function EmployeeDashboardContent({ data, onNewClaim }: { data: DashboardData; onNewClaim: () => void }) {
+function EmployeeDashboardContent({ data, onNewClaim, onEditClaim }: { data: DashboardData; onNewClaim: () => void; onEditClaim: (claimId: string) => void }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Quick Actions */}
@@ -440,13 +476,14 @@ function EmployeeDashboardContent({ data, onNewClaim }: { data: DashboardData; o
                     </p>
                   </div>
                   
-                  {/* Action buttons for draft claims */}
-                  {claim.status === 'draft' && (
+                  {/* Action buttons - TEMPORARILY ALWAYS SHOW FOR TESTING */}
+                  {true && (
                     <div className="mt-3 flex gap-2">
                       <Button 
                         size="sm" 
                         variant="outline"
                         className="text-xs border-gray-600 text-gray-300 hover:bg-gray-600"
+                        onClick={() => onEditClaim(claim.id)}
                       >
                         <Edit3 className="w-3 h-3 mr-1" />
                         Edit

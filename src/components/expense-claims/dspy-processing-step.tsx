@@ -34,6 +34,7 @@ interface DSPyProcessingStepProps {
   onExtractionComplete: (result: DSPyExtractionResult) => void
   onRetry: () => void
   onSkip: () => void
+  onProcessingStateChange?: (isProcessing: boolean) => void
 }
 
 interface ProcessingStep {
@@ -49,7 +50,8 @@ export default function DSPyProcessingStep({
   file, 
   onExtractionComplete, 
   onRetry, 
-  onSkip 
+  onSkip,
+  onProcessingStateChange
 }: DSPyProcessingStepProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [extractionResult, setExtractionResult] = useState<DSPyExtractionResult | null>(null)
@@ -100,6 +102,11 @@ export default function DSPyProcessingStep({
       status: 'pending'
     }
   ])
+
+  // Notify parent component when processing state changes
+  useEffect(() => {
+    onProcessingStateChange?.(isProcessing)
+  }, [isProcessing])
 
   // Start DSPy extraction when component mounts - with proper cleanup to prevent double-firing
   useEffect(() => {

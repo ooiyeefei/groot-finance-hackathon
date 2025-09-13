@@ -9,7 +9,6 @@ import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { EXPENSE_CATEGORY_CONFIG } from '@/types/expense-claims'
 
 interface ExpenseAnalyticsProps {
   scope: 'personal' | 'department' | 'company'
@@ -24,6 +23,7 @@ interface AnalyticsData {
   }[]
   category_breakdown: {
     category: string
+    category_name?: string  // Dynamic category name from admin config
     amount: number
     percentage: number
     count: number
@@ -124,15 +124,19 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {data.category_breakdown.map((item, index) => {
-            const categoryConfig = EXPENSE_CATEGORY_CONFIG[item.category as keyof typeof EXPENSE_CATEGORY_CONFIG]
-            
-            return (
+          {data.category_breakdown.length === 0 ? (
+            <div className="text-center text-gray-400 py-8">
+              <PieChart className="w-12 h-12 mx-auto mb-4" />
+              <p>No category data available</p>
+              <p className="text-sm">Submit some expense claims to see category breakdown</p>
+            </div>
+          ) : (
+            data.category_breakdown.map((item, index) => (
               <div key={item.category} className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="bg-gray-700 text-gray-300">
-                      {categoryConfig?.icon} {categoryConfig?.label}
+                      📊 {item.category_name || item.category}
                     </Badge>
                     <span className="text-gray-400 text-sm">({item.count} claims)</span>
                   </div>
@@ -146,12 +150,12 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
                 <div className="w-full bg-gray-700 rounded-full h-2">
                   <div 
                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${item.percentage}%` }}
+                    style={{ width: `${Math.max(item.percentage, 2)}%` }}
                   ></div>
                 </div>
               </div>
-            )
-          })}
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -163,33 +167,41 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {data.monthly_trends.map((month, index) => (
-              <div key={month.month} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
-                <div>
-                  <div className="text-white font-medium">
-                    {new Date(month.month + '-01').toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'long' 
-                    })}
-                  </div>
-                  <div className="text-gray-400 text-sm">{month.claim_count} claims</div>
-                </div>
-                
-                <div className="text-right">
-                  <div className="text-white font-semibold">${month.total_amount.toFixed(2)}</div>
-                  <div className={`text-sm flex items-center ${
-                    month.change_percent >= 0 ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {month.change_percent >= 0 ? (
-                      <TrendingUp className="w-3 h-3 mr-1" />
-                    ) : (
-                      <TrendingDown className="w-3 h-3 mr-1" />
-                    )}
-                    {month.change_percent > 0 ? '+' : ''}{month.change_percent.toFixed(1)}%
-                  </div>
-                </div>
+            {data.monthly_trends.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">
+                <TrendingUp className="w-12 h-12 mx-auto mb-4" />
+                <p>No trend data available</p>
+                <p className="text-sm">Submit expense claims over multiple months to see trends</p>
               </div>
-            ))}
+            ) : (
+              data.monthly_trends.map((month, index) => (
+                <div key={month.month} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                  <div>
+                    <div className="text-white font-medium">
+                      {new Date(month.month + '-01').toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long' 
+                      })}
+                    </div>
+                    <div className="text-gray-400 text-sm">{month.claim_count} claims</div>
+                  </div>
+                  
+                  <div className="text-right">
+                    <div className="text-white font-semibold">${month.total_amount.toFixed(2)}</div>
+                    <div className={`text-sm flex items-center ${
+                      month.change_percent >= 0 ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {month.change_percent >= 0 ? (
+                        <TrendingUp className="w-3 h-3 mr-1" />
+                      ) : (
+                        <TrendingDown className="w-3 h-3 mr-1" />
+                      )}
+                      {month.change_percent > 0 ? '+' : ''}{month.change_percent.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

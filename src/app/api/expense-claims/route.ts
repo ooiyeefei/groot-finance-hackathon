@@ -131,6 +131,56 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Server-side duplicate detection (final validation before creation)
+    if (reference_number) {
+      console.log(`[Expense Claims API] Performing server-side duplicate check for: ${reference_number}`)
+      
+      // Check for exact duplicates that would violate business rules
+      const { data: existingTransactions, error: duplicateError } = await supabase
+        .from('transactions')
+        .select(`
+          id,
+          reference_number,
+          transaction_date,
+          original_amount,
+          vendor_name,
+          description,
+          expense_claims!inner (
+            id,
+            status
+          )
+        `)
+        .eq('user_id', userId)
+        .eq('reference_number', reference_number)
+        .eq('transaction_date', transaction_date)
+        .eq('original_amount', original_amount)
+
+      if (duplicateError) {
+        console.error('[Expense Claims API] Duplicate check error:', duplicateError)
+        // Continue processing - don't block on duplicate check failure
+      } else if (existingTransactions && existingTransactions.length > 0) {
+        const existing = existingTransactions[0]
+        const existingClaim = existing.expense_claims[0]
+        
+        console.log(`[Expense Claims API] Duplicate detected: ${existing.id} (status: ${existingClaim.status})`)
+        return NextResponse.json({
+          success: false,
+          error: 'duplicate_detected',
+          duplicateData: {
+            claimId: existingClaim.id,
+            transactionId: existing.id,
+            reference_number: existing.reference_number,
+            transaction_date: existing.transaction_date,
+            amount: existing.original_amount,
+            vendor_name: existing.vendor_name,
+            description: existing.description,
+            status: existingClaim.status
+          },
+          message: `This expense has already been submitted (Reference: ${reference_number}, Date: ${transaction_date}, Amount: ${original_amount}). Please check your existing claims.`
+        }, { status: 409 })
+      }
+    }
+
     // Create transaction record (Otto's approach: expense claims are transactions)
     const { data: transaction, error: transactionError } = await supabase
       .from('transactions')

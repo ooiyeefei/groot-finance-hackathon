@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, ChevronLeft, Users } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, ChevronLeft, Users, CheckCircle } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 
@@ -31,7 +31,8 @@ export default function Sidebar() {
 
   // Manager-specific navigation items
   const managerNavigation = [
-    { name: 'Team Management', href: '/manager/team', icon: Users },
+    { name: 'Approvals', href: '/manager/approvals', icon: CheckCircle },
+    { name: 'Team Management', href: '/manager/teams', icon: Users },
   ]
 
   // Settings always at the end

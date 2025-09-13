@@ -8,13 +8,120 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { createClient } from '@supabase/supabase-js';
 import { createGeminiOCRService } from '@/lib/services/gemini-ocr-service';
-import { createExpenseCategorizer } from '@/lib/services/expense-categorizer';
+import { DynamicExpenseCategory } from '@/hooks/use-expense-categories';
 
 // Initialize Supabase client with service role key for background processing
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// Helper function to fetch enabled categories directly from database (for background jobs)
+async function fetchEnabledCategoriesFromDB(businessId: string): Promise<DynamicExpenseCategory[]> {
+  try {
+    const { data: businessData, error } = await supabase
+      .from('businesses')
+      .select('custom_expense_categories')
+      .eq('id', businessId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching categories from DB:', error);
+      return [];
+    }
+
+    // Extract only enabled categories and sort by sort_order
+    const allCategories = businessData?.custom_expense_categories || [];
+    const enabledCategories = allCategories
+      .filter((category: any) => category.is_active !== false) // Default to enabled if not specified
+      .sort((a: any, b: any) => (a.sort_order || 99) - (b.sort_order || 99))
+      .map((category: any) => ({
+        id: category.id || category.category_code,
+        category_name: category.category_name,
+        category_code: category.category_code,
+        description: category.description,
+        vendor_patterns: category.vendor_patterns || [],
+        ai_keywords: category.ai_keywords || []
+      }));
+
+    return enabledCategories;
+  } catch (error) {
+    console.error('Failed to fetch categories from database:', error);
+    return [];
+  }
+}
+
+// Dynamic categorization function for background jobs
+function categorizeExpenseWithDynamicCategories(
+  geminiData: any,
+  categories: DynamicExpenseCategory[]
+): { category: string; confidence: number; reasoning: string } {
+  if (!categories.length) {
+    return {
+      category: '',
+      confidence: 0.1,
+      reasoning: 'No categories available for categorization'
+    };
+  }
+
+  const vendorName = geminiData.vendor_name || '';
+  const description = geminiData.description || '';
+  const text = `${vendorName} ${description}`.toLowerCase();
+  
+  let bestMatch = {
+    category: categories[0].category_code,
+    confidence: 0.1,
+    reasoning: 'No pattern matches found'
+  };
+
+  // Check each category's vendor patterns and AI keywords
+  for (const category of categories) {
+    let matchScore = 0;
+    const matchReasons: string[] = [];
+    
+    // Check vendor patterns (if any)
+    if (category.vendor_patterns && category.vendor_patterns.length > 0) {
+      for (const pattern of category.vendor_patterns) {
+        if (text.includes(pattern.toLowerCase())) {
+          matchScore += 0.4; // High weight for vendor patterns
+          matchReasons.push(`vendor pattern: "${pattern}"`);
+        }
+      }
+    }
+    
+    // Check AI keywords (if any)  
+    if (category.ai_keywords && category.ai_keywords.length > 0) {
+      for (const keyword of category.ai_keywords) {
+        if (text.includes(keyword.toLowerCase())) {
+          matchScore += 0.3; // Medium weight for AI keywords
+          matchReasons.push(`keyword: "${keyword}"`);
+        }
+      }
+    }
+    
+    // Update best match if this category scores higher
+    if (matchScore > bestMatch.confidence) {
+      bestMatch = {
+        category: category.category_code,
+        confidence: Math.min(matchScore, 0.95), // Cap confidence for pattern matching
+        reasoning: matchReasons.length > 0 
+          ? `Matched ${matchReasons.join(', ')}`
+          : 'Pattern match detected'
+      };
+    }
+  }
+
+  // Return best match, with fallback to first category if confidence is too low
+  if (bestMatch.confidence < 0.2) {
+    return {
+      category: categories[0].category_code,
+      confidence: 0.15,
+      reasoning: `Defaulted to "${categories[0].category_name}" - no clear pattern match`
+    };
+  }
+
+  return bestMatch;
+}
 
 // Transform Gemini OCR response to match existing document structure
 function transformGeminiToDocumentFormat(geminiData: any, enhancedCategory: any) {
@@ -98,10 +205,16 @@ export const processDocumentOCR = task({
     console.log(`✅ Starting Gemini OCR process for document: ${payload.documentId}`);
 
     try {
-      // Step 1: Fetch document record and create signed URL
+      // Step 1: Fetch document record and user's business ID
       const { data: documentRecord, error: fetchError } = await supabase
         .from('documents')
-        .select('file_name, file_type, file_size')
+        .select(`
+          file_name, 
+          file_type, 
+          file_size, 
+          user_id,
+          employee_profiles!inner(business_id)
+        `)
         .eq('id', payload.documentId)
         .single();
 
@@ -161,11 +274,17 @@ export const processDocumentOCR = task({
       console.log(`✅ Gemini processing completed in ${geminiResult.processing_time_ms}ms`);
       console.log(`📊 Confidence: ${(geminiData.confidence_score * 100).toFixed(1)}%, Category: ${geminiData.suggested_category}`);
 
-      // Step 6: Enhanced categorization using pattern matching
-      const categorizer = createExpenseCategorizer();
-      const enhancedCategory = categorizer.categorizePexpense(geminiData);
+      // Step 6: Fetch business categories and perform dynamic categorization
+      const businessId = (documentRecord as any).employee_profiles?.business_id;
+      if (!businessId) {
+        throw new Error('Unable to determine business ID for categorization');
+      }
       
-      console.log(`🏷️ Enhanced categorization: ${enhancedCategory.category} (${(enhancedCategory.confidence * 100).toFixed(1)}% confidence)`);
+      const businessCategories = await fetchEnabledCategoriesFromDB(businessId);
+      const enhancedCategory = categorizeExpenseWithDynamicCategories(geminiData, businessCategories);
+      
+      console.log(`🏷️ Dynamic categorization: ${enhancedCategory.category} (${(enhancedCategory.confidence * 100).toFixed(1)}% confidence)`);
+      console.log(`📋 Available categories: ${businessCategories.map(c => c.category_name).join(', ')}`);
 
       // Step 7: Transform Gemini response to match existing document structure
       const transformedResult = transformGeminiToDocumentFormat(geminiData, enhancedCategory);

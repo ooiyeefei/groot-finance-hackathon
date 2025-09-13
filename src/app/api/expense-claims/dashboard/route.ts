@@ -137,6 +137,12 @@ export async function GET(request: NextRequest) {
       console.log(`[Expense Dashboard API] Found ${employeeIds.length} employees in business`)
       console.log(`[Expense Dashboard API] Employee IDs:`, employeeIds)
       console.log(`[Expense Dashboard API] Current user's employee_id: ${employeeProfile.id}`)
+    console.log(`[Expense Dashboard API] Full employee profile:`, {
+      id: employeeProfile.id,
+      user_id: employeeProfile.user_id,
+      employee_id: employeeProfile.employee_id,
+      role_permissions: employeeProfile.role_permissions
+    })
       
       // Now get all claims for these employees - using service client to bypass RLS
       const { data: simpleClaims, error: simpleError } = await adminSupabase
@@ -209,6 +215,7 @@ export async function GET(request: NextRequest) {
         .from('expense_claims')
         .select(`
           *,
+          transaction:transactions(*),
           employee:employee_profiles!expense_claims_employee_id_fkey(
             department, 
             business_id,
@@ -328,6 +335,7 @@ export async function GET(request: NextRequest) {
         .from('expense_claims')
         .select(`
           *,
+          transaction:transactions(*),
           employee:employee_profiles!expense_claims_employee_id_fkey(
             department, 
             business_id,

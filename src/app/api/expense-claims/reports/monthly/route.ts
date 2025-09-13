@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { 
   MonthlyExpenseReport, 
   ExpenseCategory,
@@ -35,13 +35,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = createServiceSupabaseClient()
 
-    // Get user's employee profile
+    // Get user's employee profile using Clerk user ID
     const { data: userProfile, error: profileError } = await supabase
       .from('employee_profiles')
       .select('*')
-      .eq('user_id', userId)
+      .eq('clerk_user_id', userId)
       .single()
 
     if (profileError || !userProfile) {

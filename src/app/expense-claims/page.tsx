@@ -7,7 +7,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import ExpenseDashboard from '@/components/expense-claims/expense-dashboard'
+import PersonalExpenseDashboard from '@/components/expense-claims/personal-expense-dashboard'
 
 export default async function ExpenseClaimsPage() {
   // Server-side authentication check
@@ -29,14 +29,14 @@ export default async function ExpenseClaimsPage() {
         {/* Header */}
         <HeaderWithUser 
           title="Expense Claims" 
-          subtitle={`Manage your expense claims${user?.firstName ? `, ${user.firstName}` : ''} - Quick receipt capture and approval workflow`}
+          subtitle={`Submit and track your expense claims${user?.firstName ? `, ${user.firstName}` : ''} - Quick receipt capture and status tracking`}
         />
         
         {/* Main Content Area */}
         <main className="flex-1 overflow-auto p-4 sm:p-6">
           <div className="max-w-7xl mx-auto">
-            {/* Role-Adaptive Expense Dashboard */}
-            <ExpenseDashboard userId={userId} />
+            {/* Personal Expense Dashboard */}
+            <PersonalExpenseDashboard userId={userId} />
           </div>
         </main>
       </div>

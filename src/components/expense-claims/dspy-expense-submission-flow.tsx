@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { X, ArrowLeft, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -16,7 +16,7 @@ import DSPyProcessingStep from './dspy-processing-step'
 import PreFilledExpenseForm from './pre-filled-expense-form'
 
 interface DSPyExpenseSubmissionFlowProps {
-  onClose: () => void
+  onClose: (hasBackgroundProcessing?: boolean) => void
   onSubmit: (formData: any) => void
 }
 
@@ -28,6 +28,7 @@ interface FlowState {
   extractionResult: DSPyExtractionResult | null
   error: string | null
   isSubmitting: boolean
+  isBackgroundProcessing: boolean
 }
 
 export default function DSPyExpenseSubmissionFlow({ 
@@ -39,7 +40,8 @@ export default function DSPyExpenseSubmissionFlow({
     uploadedFile: null,
     extractionResult: null,
     error: null,
-    isSubmitting: false
+    isSubmitting: false,
+    isBackgroundProcessing: false
   })
 
   // DSPy Flow: Step 1 → Step 2 (Upload → Processing)
@@ -71,6 +73,14 @@ export default function DSPyExpenseSubmissionFlow({
       currentStep: 'form'
     }))
   }
+
+  // Track background processing state from DSPyProcessingStep
+  const handleProcessingStateChange = useCallback((isProcessing: boolean) => {
+    setFlowState(prev => ({
+      ...prev,
+      isBackgroundProcessing: isProcessing
+    }))
+  }, [])
 
   // DSPy Flow: Skip processing and go directly to manual form
   const handleSkipToManualForm = () => {
@@ -114,7 +124,8 @@ export default function DSPyExpenseSubmissionFlow({
     setFlowState(prev => ({ ...prev, isSubmitting: true }))
     
     try {
-      await onSubmit(formData)
+      const result = await onSubmit(formData)
+      return result  // Return the result so PreFilledExpenseForm can access it
     } catch (error) {
       console.error('Submission failed:', error)
       setFlowState(prev => ({ 
@@ -122,6 +133,7 @@ export default function DSPyExpenseSubmissionFlow({
         error: 'Failed to submit expense claim. Please try again.',
         isSubmitting: false 
       }))
+      throw error  // Re-throw so PreFilledExpenseForm can handle it
     }
   }
 
@@ -232,7 +244,12 @@ export default function DSPyExpenseSubmissionFlow({
                 {flowState.extractionResult.extractedData.extractionQuality} quality
               </Badge>
             )}
-            <Button variant="ghost" size="sm" onClick={onClose} disabled={flowState.isSubmitting}>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => onClose(flowState.isBackgroundProcessing)} 
+              disabled={flowState.isSubmitting}
+            >
               <X className="w-4 h-4" />
             </Button>
           </div>
@@ -261,6 +278,7 @@ export default function DSPyExpenseSubmissionFlow({
               onExtractionComplete={handleExtractionComplete}
               onRetry={handleRetryProcessing}
               onSkip={handleSkipToManualForm}
+              onProcessingStateChange={handleProcessingStateChange}
             />
           )}
 
