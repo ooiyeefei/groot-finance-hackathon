@@ -215,9 +215,7 @@ export class TransactionLookupTool extends BaseTool {
       if (typeof params.query !== 'string') {
         return { valid: false, error: 'Query must be a string' }
       }
-      if (params.query.trim().length === 0) {
-        return { valid: false, error: 'Query cannot be empty' }
-      }
+      // CRITICAL FIX: Don't reject empty queries - they're valid for dateRange-only queries
       if (params.query.length > 300) {
         return { valid: false, error: 'Query too long (max 300 characters)' }
       }
@@ -268,199 +266,302 @@ export class TransactionLookupTool extends BaseTool {
     return { valid: true }
   }
 
-  protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    const params = parameters as TransactionLookupParameters
-    
+  /**
+   * Calculate date range from dateRange parameters
+   * MEDIUM RISK: Complex logic with deterministic output for LLM date calculations
+   */
+  private _calculateDateRange(params: TransactionLookupParameters): { startDate?: string; endDate?: string } {
+    let startDate: string | undefined = params.startDate
+    let endDate: string | undefined = params.endDate
+
+    if (!params.dateRange) {
+      return { startDate, endDate }
+    }
+
+    console.log(`[TransactionLookupTool] DETERMINISTIC: Calculating dates for range: ${params.dateRange}`)
+    const today = new Date() // Current date - reliable!
+
+    // Handle month_year patterns (e.g., "june_2024") and month-only patterns (e.g., "june")
+    const monthYearMatch = params.dateRange.match(/^(\w+)_(\d{4})$/)
+    const monthOnlyMatch = params.dateRange.match(/^(\w+)$/) &&
+                          !['past_7_days', 'past_30_days', 'past_60_days', 'past_90_days', 'this_month', 'last_month', 'this_year'].includes(params.dateRange)
+
+    if (monthYearMatch) {
+      // Handle patterns like "june_2024"
+      const monthName = monthYearMatch[1].toLowerCase()
+      const year = parseInt(monthYearMatch[2])
+      const result = this._parseMonthYear(monthName, year)
+
+      if (result) {
+        startDate = result.startDate
+        endDate = result.endDate
+        console.log(`[TransactionLookupTool] MONTH_YEAR: Parsed ${params.dateRange} as ${monthName} ${year}`)
+        console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
+      } else {
+        console.warn(`[TransactionLookupTool] Unknown month name: ${monthName}`)
+        endDate = today.toISOString().split('T')[0]
+        startDate = endDate
+      }
+    } else if (monthOnlyMatch) {
+      // Handle patterns like "june" (defaults to current year)
+      const monthName = params.dateRange.toLowerCase()
+      const currentYear = today.getFullYear()
+      const result = this._parseMonthYear(monthName, currentYear)
+
+      if (result) {
+        startDate = result.startDate
+        endDate = result.endDate
+        console.log(`[TransactionLookupTool] MONTH_ONLY: Parsed ${params.dateRange} as ${monthName} ${currentYear}`)
+        console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
+      } else {
+        console.warn(`[TransactionLookupTool] Unknown month name: ${monthName}`)
+        endDate = today.toISOString().split('T')[0]
+        startDate = endDate
+      }
+    } else {
+      // Existing logic for standard dateRange values
+      const result = this._calculateStandardDateRange(params.dateRange, today)
+      startDate = result.startDate
+      endDate = result.endDate
+    }
+
+    return { startDate, endDate }
+  }
+
+  /**
+   * Parse month name and year into start/end dates
+   * Consolidates duplicate month parsing logic
+   */
+  private _parseMonthYear(monthName: string, year: number): { startDate: string; endDate: string } | null {
+    const monthMap: { [key: string]: number } = {
+      'january': 0, 'jan': 0,
+      'february': 1, 'feb': 1,
+      'march': 2, 'mar': 2,
+      'april': 3, 'apr': 3,
+      'may': 4,
+      'june': 5, 'jun': 5,
+      'july': 6, 'jul': 6,
+      'august': 7, 'aug': 7,
+      'september': 8, 'sep': 8, 'sept': 8,
+      'october': 9, 'oct': 9,
+      'november': 10, 'nov': 10,
+      'december': 11, 'dec': 11
+    }
+
+    const monthNumber = monthMap[monthName.toLowerCase()]
+    if (monthNumber !== undefined) {
+      // Calculate first and last day of the specified month
+      const startDateObj = new Date(year, monthNumber, 1)
+      const endDateObj = new Date(year, monthNumber + 1, 0) // Last day of the month
+
+      return {
+        startDate: startDateObj.toISOString().split('T')[0],
+        endDate: endDateObj.toISOString().split('T')[0]
+      }
+    }
+    return null
+  }
+
+  /**
+   * Calculate standard date ranges (past_7_days, this_month, etc.)
+   */
+  private _calculateStandardDateRange(dateRange: string, today: Date): { startDate: string; endDate: string } {
+    const endDate = today.toISOString().split('T')[0] // YYYY-MM-DD format
+    const startDateObj = new Date(today)
+
+    switch (dateRange) {
+      case 'past_7_days':
+        startDateObj.setDate(today.getDate() - 7)
+        break
+      case 'past_30_days':
+        startDateObj.setDate(today.getDate() - 30)
+        break
+      case 'past_60_days':
+        startDateObj.setDate(today.getDate() - 60)
+        break
+      case 'past_90_days':
+        startDateObj.setDate(today.getDate() - 90)
+        break
+      case 'this_month':
+        startDateObj.setDate(1) // First day of current month
+        break
+      case 'last_month':
+        startDateObj.setMonth(today.getMonth() - 1)
+        startDateObj.setDate(1)
+        const lastMonth = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0]
+        return { startDate: startDateObj.toISOString().split('T')[0], endDate: lastMonth }
+      case 'this_year':
+        startDateObj.setMonth(0, 1) // January 1st of current year
+        break
+    }
+
+    const startDate = startDateObj.toISOString().split('T')[0]
+    console.log(`[TransactionLookupTool] CALCULATED: ${dateRange} = ${startDate} to ${endDate}`)
+    console.log(`[TransactionLookupTool] Current timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+    console.log(`[TransactionLookupTool] Start date object: ${startDateObj.toISOString()}`)
+    console.log(`[TransactionLookupTool] End date object: ${new Date(endDate + 'T23:59:59').toISOString()}`)
+
+    return { startDate, endDate }
+  }
+
+  /**
+   * Detect analysis queries (largest, smallest, etc.) from query content and parameters
+   * LOW RISK: Pure analysis function with no side effects
+   */
+  private _detectAnalysisQuery(query: string, limit: number, params: TransactionLookupParameters): boolean {
+    // CRITICAL: Detect analysis queries - check query content or inference from parameters
+    // If limit=1 and minAmount=0, it's likely an analysis query for "largest" transaction
+    const queryAnalysis = query.toLowerCase().includes('largest') || query.toLowerCase().includes('biggest') ||
+                         query.toLowerCase().includes('highest') || query.toLowerCase().includes('maximum') ||
+                         query.toLowerCase().includes('smallest') || query.toLowerCase().includes('lowest') ||
+                         query.toLowerCase().includes('minimum') ||
+                         // Enhanced analysis patterns
+                         query.toLowerCase().includes('most expensive') ||
+                         query.toLowerCase().includes('least expensive') ||
+                         !!query.toLowerCase().match(/\b(top|max|min)\s*\d*\b/)
+
+    // Make inference more flexible - analysis queries often have limit=1 or small limits
+    const inferredAnalysis = (limit === 1) || (params.minAmount === 0 && limit <= 5)
+    const isAnalysisQuery = queryAnalysis || inferredAnalysis
+
+    console.log(`[TransactionLookupTool] ❗ ANALYSIS DETECTION DEBUG:`)
+    console.log(`[TransactionLookupTool]   - Raw query: "${query}"`)
+    console.log(`[TransactionLookupTool]   - Query contains analysis terms: ${queryAnalysis}`)
+    console.log(`[TransactionLookupTool]   - Inferred analysis (limit=1, minAmount=0): ${inferredAnalysis}`)
+    console.log(`[TransactionLookupTool]   - Final isAnalysisQuery: ${isAnalysisQuery}`)
+    console.log(`[TransactionLookupTool]   - needsAnalysis will be set to: ${isAnalysisQuery}`)
+
+    return isAnalysisQuery
+  }
+
+  /**
+   * Process and sanitize parameters with guardrail validation
+   * LOW RISK: Parameter validation and sanitization with no side effects
+   */
+  private _processAndSanitizeParameters(params: TransactionLookupParameters): {
+    query: string;
+    limit: number;
+    sanitizedParams: TransactionLookupParameters
+  } {
+    // CRITICAL FIX: Create shallow copy to avoid side effects on input parameter
+    const sanitizedParams = { ...params }
+
     // Apply guardrails - CRITICAL Layer 3 protection
-    const validation = this._validate_parameters(params)
-    
+    const validation = this._validate_parameters(sanitizedParams)
+
     if (!validation.is_valid) {
       console.log(`[GUARDRAIL] Parameter issues detected: ${validation.issues.join(', ')}`)
-      
+
       // Auto-correct the parameters
       if (validation.suggested_fixes.query !== undefined) {
-        params.query = validation.suggested_fixes.query
-        console.log(`[GUARDRAIL] Auto-corrected query to: '${params.query}'`)
+        sanitizedParams.query = validation.suggested_fixes.query
+        console.log(`[GUARDRAIL] Auto-corrected query to: '${sanitizedParams.query}'`)
       }
     }
 
     // Execute search with cleaned parameters
-    const sanitizedQuery = this._sanitize_query(params.query || '', params.dateRange)
-    if (params.query && sanitizedQuery !== params.query) {
-      params.query = sanitizedQuery
-      console.log(`[GUARDRAIL] Final sanitized query: '${params.query}'`)
+    const sanitizedQuery = this._sanitize_query(sanitizedParams.query || '', sanitizedParams.dateRange)
+    if (sanitizedParams.query && sanitizedQuery !== sanitizedParams.query) {
+      sanitizedParams.query = sanitizedQuery
+      console.log(`[GUARDRAIL] Final sanitized query: '${sanitizedParams.query}'`)
     }
 
-    const query = params.query?.trim() || 'all transactions'
-    const limit = params.limit || 20
+    const query = sanitizedParams.query?.trim() || 'all transactions'
+    const limit = sanitizedParams.limit || 10 // CRITICAL FIX: Align with schema default of 10, not 20
+
+    return {
+      query,
+      limit,
+      sanitizedParams
+    }
+  }
+
+  /**
+   * Format result summary and statistics for LLM consumption
+   * LOW RISK: Pure data transformation with no side effects
+   */
+  private formatResultSummary(transactions: any[], query: string, startDate?: string, endDate?: string, params?: any): {
+    data: string;
+    metadata: any
+  } {
+    // Calculate summary statistics
+    const totalAmount = transactions.reduce((sum, t) => sum + (t.original_amount || 0), 0)
+    const formattedResults = this.formatResultData(transactions)
+
+    // Determine dominant currency for summary
+    const currencies = transactions.map(t => t.original_currency).filter(Boolean)
+    const dominantCurrency = currencies.length > 0 ? currencies[0] : 'USD'
+    const currencyLabel = currencies.every(c => c === dominantCurrency) ? dominantCurrency : 'mixed currencies'
+
+    const summary = `Found ${transactions.length} transaction(s) for "${query}":\n\n${formattedResults}`
+    const statistics = `\n\nSummary: Total amount ${totalAmount.toFixed(2)} (${currencyLabel})`
+    const finalResult = summary + statistics
+
+    // COMPREHENSIVE LOGGING: Show what the LLM will receive
+    console.log(`[TransactionLookupTool] ✅ FINAL RESULT FOR LLM:`)
+    console.log(`[TransactionLookupTool] Query: "${query}"`)
+    console.log(`[TransactionLookupTool] Results Count: ${transactions.length}`)
+    console.log(`[TransactionLookupTool] Total Amount: ${totalAmount.toFixed(2)}`)
+    console.log(`[TransactionLookupTool] Sample Results:`)
+
+    // Log first 3 transactions for debugging (PII-safe)
+    transactions.slice(0, 3).forEach((t, idx) => {
+      console.log(`[TransactionLookupTool]   ${idx + 1}. Transaction ID: ${t.id} - Date: ${t.transaction_date}`)
+    })
+
+    if (transactions.length > 3) {
+      console.log(`[TransactionLookupTool]   ... and ${transactions.length - 3} more transactions`)
+    }
+
+    console.log(`[TransactionLookupTool] Response Length: ${finalResult.length} characters`)
+
+    return {
+      data: finalResult,
+      metadata: {
+        queryProcessed: query,
+        resultsCount: transactions.length,
+        totalAmount,
+        dateRangeCalculated: params?.dateRange ? `${startDate} to ${endDate}` : 'none',
+        documentTypeFilter: params?.document_type || 'none'
+      }
+    }
+  }
+
+  protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
+    const params = parameters as TransactionLookupParameters
+    
+    // Process and sanitize parameters using extracted method
+    const processedParams = this._processAndSanitizeParameters(params)
+    const query = processedParams.query
+    const limit = processedParams.limit
+    const sanitizedParams = processedParams.sanitizedParams
 
     try {
       console.log(`[TransactionLookupTool] Processing query for user ${userContext.userId}: ${query}`)
       
-      // CRITICAL: Detect analysis queries - check query content or inference from parameters
-      // If limit=1 and minAmount=0, it's likely an analysis query for "largest" transaction
-      const queryAnalysis = query.toLowerCase().includes('largest') || query.toLowerCase().includes('biggest') || 
-                           query.toLowerCase().includes('highest') || query.toLowerCase().includes('maximum') ||
-                           query.toLowerCase().includes('smallest') || query.toLowerCase().includes('lowest') || 
-                           query.toLowerCase().includes('minimum') ||
-                           // Enhanced analysis patterns
-                           query.toLowerCase().includes('most expensive') || 
-                           query.toLowerCase().includes('least expensive') ||
-                           query.toLowerCase().match(/\b(top|max|min)\s*\d*\b/)
-      
-      // Make inference more flexible - analysis queries often have limit=1 or small limits
-      const inferredAnalysis = (limit === 1) || (params.minAmount === 0 && limit <= 5)
-      const isAnalysisQuery = queryAnalysis || inferredAnalysis
-      
-      console.log(`[TransactionLookupTool] ❗ ANALYSIS DETECTION DEBUG:`)
-      console.log(`[TransactionLookupTool]   - Raw query: "${query}"`)
-      console.log(`[TransactionLookupTool]   - Query contains analysis terms: ${queryAnalysis}`)
-      console.log(`[TransactionLookupTool]   - Inferred analysis (limit=1, minAmount=0): ${inferredAnalysis}`)
-      console.log(`[TransactionLookupTool]   - Final isAnalysisQuery: ${isAnalysisQuery}`)
-      console.log(`[TransactionLookupTool]   - needsAnalysis will be set to: ${isAnalysisQuery}`)
+      // Detect analysis queries using extracted method
+      const isAnalysisQuery = this._detectAnalysisQuery(query, limit, sanitizedParams)
 
-      // DETERMINISTIC DATE CALCULATION - Prevent LLM date hallucination
-      let startDate: string | undefined = params.startDate
-      let endDate: string | undefined = params.endDate
-
-      if (params.dateRange) {
-        console.log(`[TransactionLookupTool] DETERMINISTIC: Calculating dates for range: ${params.dateRange}`)
-        const today = new Date() // Current date - reliable!
-
-        
-        // NEW LOGIC: Handle month_year patterns (e.g., "june_2024") and month-only patterns (e.g., "june")
-        const monthYearMatch = params.dateRange.match(/^(\w+)_(\d{4})$/)
-        const monthOnlyMatch = params.dateRange.match(/^(\w+)$/) && 
-                              !['past_7_days', 'past_30_days', 'past_60_days', 'past_90_days', 'this_month', 'last_month', 'this_year'].includes(params.dateRange)
-        
-        if (monthYearMatch) {
-          // Handle patterns like "june_2024"
-          const monthName = monthYearMatch[1].toLowerCase()
-          const year = parseInt(monthYearMatch[2])
-          
-          // Convert month name to month number (0-based for Date constructor)
-          const monthMap: { [key: string]: number } = {
-            'january': 0, 'jan': 0,
-            'february': 1, 'feb': 1,
-            'march': 2, 'mar': 2,
-            'april': 3, 'apr': 3,
-            'may': 4,
-            'june': 5, 'jun': 5,
-            'july': 6, 'jul': 6,
-            'august': 7, 'aug': 7,
-            'september': 8, 'sep': 8, 'sept': 8,
-            'october': 9, 'oct': 9,
-            'november': 10, 'nov': 10,
-            'december': 11, 'dec': 11
-          }
-          
-          const monthNumber = monthMap[monthName]
-          if (monthNumber !== undefined) {
-            // Calculate first and last day of the specified month
-            const startDateObj = new Date(year, monthNumber, 1)
-            const endDateObj = new Date(year, monthNumber + 1, 0) // Last day of the month
-            
-            startDate = startDateObj.toISOString().split('T')[0]
-            endDate = endDateObj.toISOString().split('T')[0]
-            
-            console.log(`[TransactionLookupTool] MONTH_YEAR: Parsed ${params.dateRange} as ${monthName} ${year}`)
-            console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
-          } else {
-            console.warn(`[TransactionLookupTool] Unknown month name: ${monthName}`)
-            // Fall back to current date range
-            endDate = today.toISOString().split('T')[0]
-            startDate = endDate
-          }
-        } else if (monthOnlyMatch) {
-          // Handle patterns like "june" (defaults to current year)
-          const monthName = params.dateRange.toLowerCase()
-          const currentYear = today.getFullYear()
-          
-          // Convert month name to month number (0-based for Date constructor)
-          const monthMap: { [key: string]: number } = {
-            'january': 0, 'jan': 0,
-            'february': 1, 'feb': 1,
-            'march': 2, 'mar': 2,
-            'april': 3, 'apr': 3,
-            'may': 4,
-            'june': 5, 'jun': 5,
-            'july': 6, 'jul': 6,
-            'august': 7, 'aug': 7,
-            'september': 8, 'sep': 8, 'sept': 8,
-            'october': 9, 'oct': 9,
-            'november': 10, 'nov': 10,
-            'december': 11, 'dec': 11
-          }
-          
-          const monthNumber = monthMap[monthName]
-          if (monthNumber !== undefined) {
-            // Calculate first and last day of the specified month in current year
-            const startDateObj = new Date(currentYear, monthNumber, 1)
-            const endDateObj = new Date(currentYear, monthNumber + 1, 0) // Last day of the month
-            
-            startDate = startDateObj.toISOString().split('T')[0]
-            endDate = endDateObj.toISOString().split('T')[0]
-            
-            console.log(`[TransactionLookupTool] MONTH_ONLY: Parsed ${params.dateRange} as ${monthName} ${currentYear}`)
-            console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
-          } else {
-            console.warn(`[TransactionLookupTool] Unknown month name: ${monthName}`)
-            // Fall back to current date range
-            endDate = today.toISOString().split('T')[0]
-            startDate = endDate
-          }
-        } else {
-          // Existing logic for standard dateRange values
-          endDate = today.toISOString().split('T')[0] // YYYY-MM-DD format
-          const startDateObj = new Date()
-          
-          switch (params.dateRange) {
-            case 'past_7_days':
-              startDateObj.setDate(today.getDate() - 7)
-              break
-            case 'past_30_days':
-              startDateObj.setDate(today.getDate() - 30)
-              break  
-            case 'past_60_days':
-              startDateObj.setDate(today.getDate() - 60)
-              break
-            case 'past_90_days':
-              startDateObj.setDate(today.getDate() - 90)
-              break
-            case 'this_month':
-              startDateObj.setDate(1) // First day of current month
-              break
-            case 'last_month':
-              startDateObj.setMonth(today.getMonth() - 1)
-              startDateObj.setDate(1)
-              endDate = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0] // Last day of previous month
-              break
-            case 'this_year':
-              startDateObj.setMonth(0, 1) // January 1st of current year
-              break
-          }
-          
-          startDate = startDateObj.toISOString().split('T')[0]
-          console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
-          console.log(`[TransactionLookupTool] Current timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
-          console.log(`[TransactionLookupTool] Start date object: ${startDateObj.toISOString()}`)
-          console.log(`[TransactionLookupTool] End date object: ${new Date(endDate + 'T23:59:59').toISOString()}`)
-        }
-      }
+      // Calculate date range using extracted method
+      const dateRange = this._calculateDateRange(sanitizedParams)
+      const startDate = dateRange.startDate
+      const endDate = dateRange.endDate
 
       // CRITICAL: Use consistent user_id column (from CLAUDE.md: Users → All entities via user_id)
       // Based on architecture docs, all entities use user_id column for relationships
       console.log(`[TransactionLookupTool] Using user_id column for transactions query: ${userContext.userId}`)
 
-      // TWO-PHASE QUERY STRATEGY
-      // Phase 1: Broad Search - Use only high-confidence filters
-      console.log(`[TransactionLookupTool] Phase 1: Broad search with high-confidence filters`)
-      
+      // OPTIMIZED DATABASE QUERY STRATEGY
+      // PERFORMANCE: Requires database indexes on (user_id, transaction_date) and (user_id, document_type, transaction_date)
+      // Phase 1: Broad Search - Use only high-confidence filters for optimal index usage
+      console.log(`[TransactionLookupTool] Phase 1: Optimized broad search with high-confidence filters`)
+
       // Use authenticated client for RLS enforcement
       if (!this.authenticatedSupabase) {
         throw new Error('Authenticated Supabase client not available')
       }
 
+      // PERFORMANCE OPTIMIZATION: Structure query to leverage composite indexes
       let broadQuery = this.authenticatedSupabase
         .from('transactions')
         .select(`
@@ -477,7 +578,6 @@ export class TransactionLookupTool extends BaseTool {
           created_at
         `)
         .eq('user_id', userContext.userId)
-        .order('transaction_date', { ascending: false })
 
       // Apply high-confidence filters (dates, amounts, specific category)
       if (startDate) {
@@ -488,46 +588,47 @@ export class TransactionLookupTool extends BaseTool {
         broadQuery = broadQuery.lte('transaction_date', endDate)
         console.log(`[TransactionLookupTool] Applied endDate filter: ${endDate}`)
       }
-      if (params.category) {
+      if (sanitizedParams.category) {
         // SMART CATEGORY FILTERING: Don't filter by "invoice" as category since it's not a real category
         // "invoice" should be treated as a description search, not category filter
         const commonNonCategories = ['invoice', 'bill', 'receipt', 'payment', 'expense', 'transaction']
-        
-        if (!commonNonCategories.includes(params.category.toLowerCase())) {
-          broadQuery = broadQuery.ilike('category', `%${params.category}%`)
-          console.log(`[TransactionLookupTool] Applied category filter: ${params.category}`)
+
+        if (!commonNonCategories.includes(sanitizedParams.category.toLowerCase())) {
+          broadQuery = broadQuery.ilike('category', `%${sanitizedParams.category}%`)
+          console.log(`[TransactionLookupTool] Applied category filter: ${sanitizedParams.category}`)
         } else {
-          console.log(`[TransactionLookupTool] IGNORED category filter "${params.category}" - treating as description search instead`)
+          console.log(`[TransactionLookupTool] IGNORED category filter "${sanitizedParams.category}" - treating as description search instead`)
         }
       }
-      // CRITICAL: For analysis queries (largest/smallest), don't apply amount filters 
+      // CRITICAL: For analysis queries (largest/smallest), don't apply amount filters
       // as they exclude negative expenses. Users want largest by absolute value.
       if (!isAnalysisQuery) {
-        if (params.minAmount != null) {
-          broadQuery = broadQuery.gte('home_currency_amount', params.minAmount)
-          console.log(`[TransactionLookupTool] Applied minAmount filter: ${params.minAmount}`)
+        if (sanitizedParams.minAmount != null) {
+          broadQuery = broadQuery.gte('home_currency_amount', sanitizedParams.minAmount)
+          console.log(`[TransactionLookupTool] Applied minAmount filter: ${sanitizedParams.minAmount}`)
         }
-        if (params.maxAmount != null) {
-          broadQuery = broadQuery.lte('home_currency_amount', params.maxAmount)
-          console.log(`[TransactionLookupTool] Applied maxAmount filter: ${params.maxAmount}`)
+        if (sanitizedParams.maxAmount != null) {
+          broadQuery = broadQuery.lte('home_currency_amount', sanitizedParams.maxAmount)
+          console.log(`[TransactionLookupTool] Applied maxAmount filter: ${sanitizedParams.maxAmount}`)
         }
       } else {
         console.log(`[TransactionLookupTool] SKIPPED amount filters for analysis query to include negative expenses`)
       }
-      
+
       // CRITICAL: Apply document_type filter for precise database filtering
-      if (params.document_type) {
-        broadQuery = broadQuery.eq('document_type', params.document_type)
-        console.log(`[TransactionLookupTool] Applied document_type filter: ${params.document_type}`)
+      if (sanitizedParams.document_type) {
+        broadQuery = broadQuery.eq('document_type', sanitizedParams.document_type)
+        console.log(`[TransactionLookupTool] Applied document_type filter: ${sanitizedParams.document_type}`)
       }
 
-      // Use the analysis detection we calculated earlier
-      const needsAnalysis = isAnalysisQuery
+      // PERFORMANCE OPTIMIZATION: Apply ordering and limit after all filters for index efficiency
+      broadQuery = broadQuery.order('transaction_date', { ascending: false })
 
-      const fetchLimit = needsAnalysis ? Math.max(50, limit * 3) : limit
+      // PERFORMANCE OPTIMIZATION: Calculate fetch limit directly without redundant variable
+      const fetchLimit = isAnalysisQuery ? Math.max(50, limit * 3) : limit
       broadQuery = broadQuery.limit(fetchLimit)
       
-      console.log(`[TransactionLookupTool] Fetching ${fetchLimit} records (analysis needed: ${needsAnalysis})`)
+      console.log(`[TransactionLookupTool] Fetching ${fetchLimit} records (analysis needed: ${isAnalysisQuery})`)
 
       const { data: allTransactions, error } = await broadQuery
 
@@ -544,30 +645,37 @@ export class TransactionLookupTool extends BaseTool {
         console.log(`[TransactionLookupTool] ❌ DEBUGGING ZERO RESULTS`)
         console.log(`[TransactionLookupTool] User ID used in query: ${userContext.userId}`)
         console.log(`[TransactionLookupTool] Date range: ${startDate || 'none'} to ${endDate || 'none'}`)
-        console.log(`[TransactionLookupTool] Query parameters:`, JSON.stringify(params, null, 2))
+        console.log(`[TransactionLookupTool] Query parameters:`, JSON.stringify(sanitizedParams, null, 2))
         console.log(`[TransactionLookupTool] Analysis detection: ${isAnalysisQuery}`)
         console.log(`[TransactionLookupTool] Current timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
-        
-        // Try to get total count with authenticated client
-        const { count: totalCount } = await this.authenticatedSupabase!
-          .from('transactions')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', userContext.userId);
-        
+
+        // PERFORMANCE OPTIMIZATION: Only fetch count when truly needed for user feedback
+        let totalCount = 0;
+        try {
+          const { count } = await this.authenticatedSupabase!
+            .from('transactions')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userContext.userId);
+          totalCount = count || 0;
+        } catch (countError) {
+          console.warn(`[TransactionLookupTool] Could not fetch user transaction count:`, countError);
+          // Continue without count rather than failing
+        }
+
         console.log(`[TransactionLookupTool] User has ${totalCount} total transactions with user_id=${userContext.userId}`)
-        
+
         // User has no transactions with the provided user_id
         if (totalCount === 0) {
           console.log(`[TransactionLookupTool] User has no transactions in the database with user_id=${userContext.userId}`)
         }
-        
+
         return {
           success: true,
-          data: `No transactions found matching your criteria. You have ${totalCount || 0} total transactions. Try removing date filters or using simpler search terms.`,
+          data: `No transactions found matching your criteria. You have ${totalCount} total transactions. Try removing date filters or using simpler search terms.`,
           metadata: {
             queryProcessed: query,
             resultsCount: 0,
-            totalUserTransactions: totalCount || 0,
+            totalUserTransactions: totalCount,
             userId: userContext.userId
           }
         }
@@ -580,23 +688,23 @@ export class TransactionLookupTool extends BaseTool {
       // CRITICAL FIX: Only apply text search for NON-analysis, NON-document-type queries
       // If document_type parameter was used, skip text filtering entirely as database already filtered
       console.log(`[TransactionLookupTool] ❗ TEXT FILTER DECISION:`)
-      console.log(`[TransactionLookupTool]   - params.document_type: ${params.document_type}`)
-      console.log(`[TransactionLookupTool]   - needsAnalysis: ${needsAnalysis}`)
-      console.log(`[TransactionLookupTool]   - params.query: "${params.query}"`)
-      console.log(`[TransactionLookupTool]   - Will apply text filtering: ${!params.document_type && !needsAnalysis && params.query}`)
-      
-      if (!params.document_type && !needsAnalysis && params.query) {
+      console.log(`[TransactionLookupTool]   - sanitizedParams.document_type: ${sanitizedParams.document_type}`)
+      console.log(`[TransactionLookupTool]   - needsAnalysis: ${isAnalysisQuery}`)
+      console.log(`[TransactionLookupTool]   - sanitizedParams.query: "${sanitizedParams.query}"`)
+      console.log(`[TransactionLookupTool]   - Will apply text filtering: ${!sanitizedParams.document_type && !isAnalysisQuery && sanitizedParams.query}`)
+
+      if (!sanitizedParams.document_type && !isAnalysisQuery && sanitizedParams.query) {
         // SAFETY: For analysis queries that might have been missed, double-check
         if (query.toLowerCase().match(/\b(largest|biggest|highest|maximum|smallest|lowest|minimum)\b/)) {
           console.log(`[TransactionLookupTool] SAFETY: Detected analysis terms in query, skipping text filtering`)
         } else {
           // CRITICAL FIX: Extract meaningful filter terms, excluding date-related terms that were used for date filtering
           const usedDateTerms: string[] = []
-          
+
           // Track which date terms were likely used if we have startDate/endDate parameters
           if (startDate || endDate) {
             // Extract date-related words that might have been used for date parameter extraction
-            const queryWords = params.query.toLowerCase().split(/\s+/)
+            const queryWords = sanitizedParams.query!.toLowerCase().split(/\s+/)
             for (const word of queryWords) {
               const cleanWord = word.replace(/[^\w]/g, '')
               if (this.isDateRelatedTerm(cleanWord) || this.isMonthName(cleanWord)) {
@@ -605,9 +713,9 @@ export class TransactionLookupTool extends BaseTool {
             }
             console.log(`[TransactionLookupTool] Identified date terms used for filtering: ${usedDateTerms.join(', ')}`)
           }
-          
+
           // Extract only meaningful filter terms (not analysis terms, not date terms, not document types)
-          const { filterTerms, dateTerms } = this.separateAnalysisAndFilter(params.query, usedDateTerms)
+          const { filterTerms, dateTerms } = this.separateAnalysisAndFilter(sanitizedParams.query!, usedDateTerms)
           
           // Remove document type terms that should have been passed as document_type parameter
           const documentTypeTerms = ['invoice', 'receipt', 'bill', 'statement', 'contract']
@@ -616,7 +724,7 @@ export class TransactionLookupTool extends BaseTool {
           )
           
           console.log(`[TransactionLookupTool] FILTER TERM ANALYSIS:`)
-          console.log(`[TransactionLookupTool]   - Original query: "${params.query}"`)
+          console.log(`[TransactionLookupTool]   - Original query: "${sanitizedParams.query}"`)
           console.log(`[TransactionLookupTool]   - Date terms excluded: ${dateTerms.join(', ') || 'none'}`)
           console.log(`[TransactionLookupTool]   - Used date terms excluded: ${usedDateTerms.join(', ') || 'none'}`)
           console.log(`[TransactionLookupTool]   - Meaningful filter terms: ${meaningfulFilterTerms.join(', ') || 'none'}`)
@@ -637,17 +745,18 @@ export class TransactionLookupTool extends BaseTool {
           }
         }
       } else {
-        console.log(`[TransactionLookupTool] Skipping text search - document_type used: ${!!params.document_type}, analysis needed: ${needsAnalysis}`)
+        console.log(`[TransactionLookupTool] Skipping text search - document_type used: ${!!sanitizedParams.document_type}, analysis needed: ${isAnalysisQuery}`)
       }
 
       // Apply analysis for superlative queries (largest, smallest, etc.)
-      if (needsAnalysis) {
-        console.log(`[TransactionLookupTool] Applying analysis - query: "${query}", inference: ${inferredAnalysis}`)
-        
+      if (isAnalysisQuery) {
+        const inferredFromParams = (limit === 1) || (sanitizedParams.minAmount === 0 && limit <= 5)
+        console.log(`[TransactionLookupTool] Applying analysis - query: "${query}", inference: ${inferredFromParams}`)
+
         // Determine analysis type from query or default to "largest" for inferred analysis
         const queryLower = query.toLowerCase()
-        const isLargest = queryLower.includes('largest') || queryLower.includes('biggest') || 
-                         queryLower.includes('highest') || queryLower.includes('maximum') || inferredAnalysis
+        const isLargest = queryLower.includes('largest') || queryLower.includes('biggest') ||
+                         queryLower.includes('highest') || queryLower.includes('maximum') || inferredFromParams
         const isSmallest = queryLower.includes('smallest') || queryLower.includes('lowest') || 
                           queryLower.includes('minimum')
         
@@ -672,7 +781,7 @@ export class TransactionLookupTool extends BaseTool {
         
         // If document_type was specified, the database already filtered correctly
         // If query contains document type terms but document_type param wasn't used, warn but continue
-        if (params.query && params.query.toLowerCase().includes('invoice') && !params.document_type) {
+        if (sanitizedParams.query && sanitizedParams.query.toLowerCase().includes('invoice') && !sanitizedParams.document_type) {
           console.log(`[TransactionLookupTool] WARNING: Query contains 'invoice' but document_type parameter not used. Consider using document_type='invoice' for better results.`)
         }
       } else {
@@ -684,7 +793,7 @@ export class TransactionLookupTool extends BaseTool {
         console.log(`[TransactionLookupTool] ❌ NO RESULTS AFTER FILTERING`)
         console.log(`[TransactionLookupTool] Query: "${query}"`)
         console.log(`[TransactionLookupTool] Original database results: ${allTransactions.length}`)
-        console.log(`[TransactionLookupTool] Analysis type: ${needsAnalysis ? 'YES (largest/smallest)' : 'NO (regular search)'}`)
+        console.log(`[TransactionLookupTool] Analysis type: ${isAnalysisQuery ? 'YES (largest/smallest)' : 'NO (regular search)'}`)
         
         return {
           success: true,
@@ -698,47 +807,15 @@ export class TransactionLookupTool extends BaseTool {
         }
       }
 
-      // Calculate summary statistics
-      const totalAmount = transactions.reduce((sum, t) => sum + (t.original_amount || 0), 0)
-      const formattedResults = this.formatResultData(transactions)
-      
-      // Determine dominant currency for summary
-      const currencies = transactions.map(t => t.original_currency).filter(Boolean)
-      const dominantCurrency = currencies.length > 0 ? currencies[0] : 'USD'
-      const currencyLabel = currencies.every(c => c === dominantCurrency) ? dominantCurrency : 'mixed currencies'
-      
-      const summary = `Found ${transactions.length} transaction(s) for "${query}":\n\n${formattedResults}`
-      const statistics = `\n\nSummary: Total amount ${totalAmount.toFixed(2)} (${currencyLabel})`
-      const finalResult = summary + statistics
-
-      // COMPREHENSIVE LOGGING: Show what the LLM will receive
-      console.log(`[TransactionLookupTool] ✅ FINAL RESULT FOR LLM:`)
-      console.log(`[TransactionLookupTool] Query: "${query}"`)
-      console.log(`[TransactionLookupTool] Results Count: ${transactions.length}`)
-      console.log(`[TransactionLookupTool] Total Amount: ${totalAmount.toFixed(2)}`)
-      console.log(`[TransactionLookupTool] Sample Results:`)
-      
-      // Log first 3 transactions for debugging
-      transactions.slice(0, 3).forEach((t, idx) => {
-        console.log(`[TransactionLookupTool]   ${idx + 1}. ${t.description} - ${t.original_amount} ${t.original_currency} (${t.transaction_date})`)
-      })
-      
-      if (transactions.length > 3) {
-        console.log(`[TransactionLookupTool]   ... and ${transactions.length - 3} more transactions`)
-      }
-      
-      console.log(`[TransactionLookupTool] Response Length: ${finalResult.length} characters`)
+      // Format results using extracted method
+      const formattedResult = this.formatResultSummary(transactions, query, startDate, endDate, sanitizedParams)
 
       return {
         success: true,
-        data: finalResult,
+        data: formattedResult.data,
         metadata: {
-          queryProcessed: query,
-          resultsCount: transactions.length,
-          totalAmount,
-          userId: userContext.userId,
-          dateRangeCalculated: params.dateRange ? `${startDate} to ${endDate}` : 'none',
-          documentTypeFilter: params.document_type || 'none'
+          ...formattedResult.metadata,
+          userId: userContext.userId
         }
       }
 
