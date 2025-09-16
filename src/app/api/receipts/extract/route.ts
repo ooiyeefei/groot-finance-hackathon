@@ -7,7 +7,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 import { tasks } from '@trigger.dev/sdk/v3'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 
 // Gemini configuration using official SDK
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
@@ -303,8 +303,7 @@ async function processWithGeminiVision(imageData: string, mimeType: string): Pro
   }
 
   // Initialize Google AI SDK
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+  const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY })
 
   const prompt = `
 Analyze this receipt/invoice image and extract structured financial data. You are an expert OCR system specialized in Southeast Asian receipts (Thailand, Singapore, Malaysia, Indonesia, Philippines, Vietnam).
@@ -372,9 +371,11 @@ Return ONLY the JSON object, no additional text or explanation.`
     }
 
     // Generate content using the official SDK
-    const result = await model.generateContent([prompt, imagePart])
-    const response = await result.response
-    const extractedText = response.text()
+    const result = await genAI.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [prompt, imagePart]
+    })
+    const extractedText = result.text || ''
     
     console.log('[Gemini SDK] Raw response:', extractedText)
     

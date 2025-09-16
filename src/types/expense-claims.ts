@@ -59,6 +59,7 @@ export interface ExpenseClaim {
   id: string
   transaction_id: string
   employee_id: string
+  business_id: string
   
   // Otto's 7-stage workflow
   status: ExpenseStatus
@@ -67,11 +68,15 @@ export interface ExpenseClaim {
   reimbursement_date?: string
   payment_date?: string
   
-  // Approver tracking
-  current_approver_id?: string
+  // Approver tracking (Enhanced with new DB fields)
+  current_approver_id?: string // References users.id (TEXT type)
   approved_by_ids: string[]
   rejected_by_id?: string
   rejection_reason?: string
+  
+  // Otto's compliance enhancements (NEW)
+  risk_score: number // 0-100 calculated risk score
+  business_purpose_details: Record<string, any> // Extended JSONB details
   
   // Policy and compliance (Otto's requirements)
   policy_violations?: PolicyViolation[]
@@ -125,11 +130,11 @@ export interface CreateExpenseClaimRequest {
   original_currency: SupportedCurrency
   transaction_date: string
   vendor_name?: string
+  vendor_id?: string // NEW: Link to vendors table
   
   // Optional fields
   reference_number?: string
   notes?: string
-  document_id?: string // Link to receipt/document
   
   // Line items for detailed expenses
   line_items?: ExpenseLineItemRequest[]
@@ -347,7 +352,10 @@ export const EXPENSE_VALIDATION_RULES: ExpenseValidationRule[] = [
       const categoryConfig = EXPENSE_CATEGORY_CONFIG[claim.expense_category]
       const requiresReceipt = claim.transaction.original_amount > (categoryConfig.requires_receipt_over || 25)
       
-      if (requiresReceipt && !claim.transaction.document_id) {
+      // Check for receipt via business_purpose_details.file_upload instead of document_id
+      const hasReceipt = claim.business_purpose_details?.file_upload?.file_path
+
+      if (requiresReceipt && !hasReceipt) {
         violations.push({
           type: 'missing_receipt',
           severity: 'medium',
@@ -360,3 +368,97 @@ export const EXPENSE_VALIDATION_RULES: ExpenseValidationRule[] = [
     }
   }
 ]
+
+// ============================================================================
+// NEW: Otto's Compliance Enhancement Types (Hybrid Architecture)
+// ============================================================================
+
+// Vendor Management (New Table)
+export interface Vendor {
+  id: string
+  business_id: string
+  name: string
+  verification_status: 'unverified' | 'pending' | 'verified' | 'rejected'
+  risk_level: 'low' | 'medium' | 'high'
+  metadata: Record<string, any> // JSONB for contact info, tax IDs, etc.
+  created_at: string
+  updated_at: string
+}
+
+// Audit Events (New Table - Consolidated Audit Trail)
+export interface AuditEvent {
+  id: number // BIGSERIAL
+  business_id: string
+  actor_user_id?: string // Can be null for system events
+  event_type: string // e.g., 'expense.submitted', 'expense.approved', 'policy.overridden'
+  target_entity_type: string // e.g., 'expense_claim', 'transaction', 'vendor'
+  target_entity_id: string
+  details: Record<string, any> // JSONB for event-specific context
+  created_at: string
+}
+
+// API Request types for new entities
+export interface CreateVendorRequest {
+  name: string
+  verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected'
+  risk_level?: 'low' | 'medium' | 'high'
+  metadata?: Record<string, any>
+}
+
+export interface UpdateVendorRequest extends Partial<CreateVendorRequest> {
+  id?: never // Prevent ID updates
+}
+
+export interface CreateAuditEventRequest {
+  event_type: string
+  target_entity_type: string
+  target_entity_id: string
+  details?: Record<string, any>
+}
+
+// Enhanced expense claim request types with new fields
+export interface CreateExpenseClaimRequestEnhanced extends CreateExpenseClaimRequest {
+  business_purpose_details?: Record<string, any>
+  current_approver_id?: string
+}
+
+export interface UpdateExpenseClaimRequestEnhanced extends UpdateExpenseClaimRequest {
+  business_purpose_details?: Record<string, any>
+  current_approver_id?: string
+  risk_score?: number // Usually calculated, but allow manual override
+}
+
+// Risk Assessment Types
+export interface RiskAssessment {
+  score: number // 0-100
+  factors: RiskFactor[]
+  assessment_date: string
+  calculated_by: 'system' | 'manual'
+}
+
+export interface RiskFactor {
+  type: 'amount' | 'vendor' | 'policy_violation' | 'velocity'
+  weight: number
+  description: string
+  value: number
+}
+
+// Vendor verification workflow
+export interface VendorVerificationRequest {
+  vendor_id: string
+  verification_status: 'pending' | 'verified' | 'rejected'
+  verification_notes?: string
+}
+
+// Policy Override (using AuditEvent with specific event_type)
+export interface PolicyOverrideEvent extends Omit<AuditEvent, 'event_type' | 'details'> {
+  event_type: 'policy.overridden'
+  details: {
+    policy_violation_code: string
+    violation_description: string
+    justification: string
+    override_authority: 'manager' | 'admin' | 'super_admin'
+    original_value?: any
+    override_value?: any
+  }
+}

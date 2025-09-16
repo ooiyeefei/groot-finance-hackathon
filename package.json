@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.30.0",
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^1.19.0",
     "@huggingface/inference": "^4.6.1",
     "@langchain/core": "^0.3.70",
     "@langchain/langgraph": "^0.4.5",

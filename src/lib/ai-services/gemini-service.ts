@@ -3,7 +3,7 @@
  * Implements Google Gemini API with function calling support
  */
 
-import { GoogleGenerativeAI, FunctionDeclaration, FunctionCallingMode, HarmCategory, HarmBlockThreshold, SchemaType } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 import { aiConfig } from '../config/ai-config'
 import { OpenAIToolSchema } from '../tools/base-tool'
 
@@ -28,7 +28,7 @@ export interface GeminiResponse {
 }
 
 export class GeminiService {
-  private client: GoogleGenerativeAI
+  private client: GoogleGenAI
   private model: string
 
   constructor() {
@@ -39,7 +39,7 @@ export class GeminiService {
       throw new Error('GEMINI_API_KEY not found in environment variables')
     }
     
-    this.client = new GoogleGenerativeAI(apiKey)
+    this.client = new GoogleGenAI({ apiKey })
     // Use Gemini 2.5 Flash for better performance and speed
     this.model = aiConfig.gemini.model
     console.log(`[GeminiService] Using model: ${this.model}`)
@@ -48,12 +48,12 @@ export class GeminiService {
   /**
    * Convert OpenAI tool schema to Gemini function declaration
    */
-  private convertToolToGeminiFunctionDeclaration(toolSchema: OpenAIToolSchema): FunctionDeclaration {
+  private convertToolToGeminiFunctionDeclaration(toolSchema: OpenAIToolSchema): any {
     return {
       name: toolSchema.function.name,
       description: toolSchema.function.description,
       parameters: {
-        type: SchemaType.OBJECT,
+        type: 'OBJECT',
         properties: toolSchema.function.parameters.properties,
         required: toolSchema.function.parameters.required || []
       }
@@ -127,20 +127,20 @@ export class GeminiService {
       // Disable safety restrictions for business document processing
       generationRequest.safetySettings = [
         {
-          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.BLOCK_NONE
+          category: 'HARM_CATEGORY_HARASSMENT',
+          threshold: 'BLOCK_NONE'
         },
         {
-          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-          threshold: HarmBlockThreshold.BLOCK_NONE
+          category: 'HARM_CATEGORY_HATE_SPEECH',
+          threshold: 'BLOCK_NONE'
         },
         {
-          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-          threshold: HarmBlockThreshold.BLOCK_NONE
+          category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+          threshold: 'BLOCK_NONE'
         },
         {
-          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-          threshold: HarmBlockThreshold.BLOCK_NONE
+          category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+          threshold: 'BLOCK_NONE'
         }
       ]
       console.log(`[GeminiService] Safety restrictions disabled for document processing`)
@@ -177,14 +177,14 @@ export class GeminiService {
             console.log(`[GeminiService] FORCING get_data_records for analytical query: ${userQueryText}`)
             generationRequest.toolConfig = {
               functionCallingConfig: {
-                mode: FunctionCallingMode.ANY,
+                mode: 'ANY',
                 allowedFunctionNames: ['get_data_records']
               }
             }
           } else {
             generationRequest.toolConfig = {
               functionCallingConfig: {
-                mode: FunctionCallingMode.ANY
+                mode: 'ANY'
               }
             }
           }
@@ -222,26 +222,28 @@ export class GeminiService {
           userQueryText.includes('amount') || userQueryText.includes('expense'))
       }
 
-      // Correct API call - pass modelConfig to getGenerativeModel, generationRequest to generateContent
-      const model = this.client.getGenerativeModel(modelConfig)
-      const response = await model.generateContent(generationRequest)
+      // Correct API call using new SDK pattern
+      const response = await this.client.models.generateContent({
+        model: this.model,
+        ...generationRequest
+      })
 
       // Enhanced logging for debugging function calling issues
       console.log(`[GeminiService] Raw response object keys:`, Object.keys(response))
-      console.log(`[GeminiService] Response candidates:`, response.response?.candidates?.length || 0)
-      if (response.response?.promptFeedback) {
-        console.log(`[GeminiService] Prompt feedback:`, JSON.stringify(response.response.promptFeedback, null, 2))
-        if (response.response.promptFeedback.safetyRatings) {
-          console.log(`[GeminiService] Safety ratings:`, JSON.stringify(response.response.promptFeedback.safetyRatings, null, 2))
+      console.log(`[GeminiService] Response candidates:`, response.candidates?.length || 0)
+      if (response.promptFeedback) {
+        console.log(`[GeminiService] Prompt feedback:`, JSON.stringify(response.promptFeedback, null, 2))
+        if (response.promptFeedback.safetyRatings) {
+          console.log(`[GeminiService] Safety ratings:`, JSON.stringify(response.promptFeedback.safetyRatings, null, 2))
         }
       }
       
       // Log the exact response text for debugging
-      const responseText = response.response?.text() || 'No text response'
+      const responseText = response.text || 'No text response'
       console.log(`[GeminiService] Response text:`, responseText)
 
       // Check for function calls
-      const functionCalls = response.response?.functionCalls?.() || []
+      const functionCalls = response.functionCalls || []
       if (functionCalls.length > 0) {
         console.log(`[GeminiService] Function calls detected: ${functionCalls.length}`)
         
@@ -285,8 +287,8 @@ export class GeminiService {
    */
   async healthCheck(): Promise<{ healthy: boolean; error?: string }> {
     try {
-      const model = this.client.getGenerativeModel({ model: this.model })
-      const response = await model.generateContent({
+      const response = await this.client.models.generateContent({
+        model: this.model,
         contents: [{ role: 'user', parts: [{ text: 'Hello' }] }]
       })
       

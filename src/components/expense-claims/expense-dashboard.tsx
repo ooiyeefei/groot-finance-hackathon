@@ -317,7 +317,7 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
                 vendor_name: data.vendor_name,
                 reference_number: data.reference_number || undefined,
                 notes: data.notes || undefined,
-                document_id: data.document_id || undefined,
+                // document_id removed - using business_purpose_details for file tracking
                 line_items: data.line_items || []
               }
               

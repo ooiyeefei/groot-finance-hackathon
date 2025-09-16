@@ -351,10 +351,19 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     }
   }
   
-  // Extract reference number from entities
-  const refEntity = findEntity(['invoice', 'receipt', 'reference', 'number', 'id'])
-  if (refEntity) {
-    mappedData.reference_number = refEntity.value
+  // Extract reference number - prioritize invoice_number from structured DSPy data
+  if (summary && (summary as any).invoice_number?.value) {
+    // Use invoice_number from DSPy processing as the reference number
+    mappedData.reference_number = (summary as any).invoice_number.value
+  } else if (summary && (summary as any).reference_numbers?.value) {
+    // Fallback to reference_numbers if invoice_number is not available
+    mappedData.reference_number = (summary as any).reference_numbers.value
+  } else {
+    // Fallback to entity extraction for legacy documents
+    const refEntity = findEntity(['invoice', 'receipt', 'reference', 'number', 'id'])
+    if (refEntity) {
+      mappedData.reference_number = refEntity.value
+    }
   }
 
   // Generate description from vendor and document name

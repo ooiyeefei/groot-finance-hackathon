@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
 import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { currencyService } from '@/lib/currency-service'
+import { SupportedCurrency } from '@/types/transaction'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -73,6 +75,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           home_currency,
           transaction_date,
           vendor_name,
+          vendor_id,
           reference_number,
           notes
         )
@@ -213,19 +216,49 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Update the associated transaction (only transaction-specific fields)
+    // Prepare transaction update data with currency conversion
+    const transactionUpdateData: any = {
+      description: body.description,
+      original_amount: body.original_amount,
+      original_currency: body.original_currency,
+      home_currency: body.home_currency,
+      transaction_date: body.transaction_date,
+      vendor_name: body.vendor_name,
+      vendor_id: body.vendor_id, // NEW: Support vendor_id updates
+      reference_number: body.reference_number,
+      notes: body.notes,
+      updated_at: new Date().toISOString()
+    }
+
+    // Calculate home currency amount if currencies are different
+    if (body.original_currency !== body.home_currency && body.original_amount > 0) {
+      console.log(`[Individual Claim API PUT] Converting ${body.original_amount} ${body.original_currency} to ${body.home_currency}`)
+
+      try {
+        // Use currency service directly instead of HTTP request
+        const conversion = await currencyService.convertAmount(
+          body.original_amount,
+          body.original_currency as SupportedCurrency,
+          body.home_currency as SupportedCurrency
+        )
+
+        transactionUpdateData.home_currency_amount = conversion.converted_amount
+        transactionUpdateData.exchange_rate = conversion.exchange_rate
+        console.log(`[Individual Claim API PUT] Converted to ${conversion.converted_amount} ${body.home_currency} (rate: ${conversion.exchange_rate})`)
+      } catch (conversionError) {
+        console.log(`[Individual Claim API PUT] Currency conversion error: ${conversionError}, setting home currency amount same as original`)
+        transactionUpdateData.home_currency_amount = body.original_amount
+      }
+    } else {
+      // Same currency - just copy the amount
+      transactionUpdateData.home_currency_amount = body.original_amount
+      console.log(`[Individual Claim API PUT] Same currency (${body.original_currency}), no conversion needed`)
+    }
+
+    // Update the associated transaction (with currency conversion)
     const { error: transactionError } = await supabase
       .from('transactions')
-      .update({
-        description: body.description,
-        original_amount: body.original_amount,
-        original_currency: body.original_currency,
-        transaction_date: body.transaction_date,
-        vendor_name: body.vendor_name,
-        reference_number: body.reference_number,
-        notes: body.notes,
-        updated_at: new Date().toISOString()
-      })
+      .update(transactionUpdateData)
       .eq('id', existingClaim.transaction_id)
 
     if (transactionError) {
@@ -237,13 +270,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Update the expense claim (business_purpose and expense_category are here)
+    const updateData: any = {
+      business_purpose: body.business_purpose,
+      expense_category: body.expense_category,
+      updated_at: new Date().toISOString()
+    }
+    
+    // Include enhanced fields if provided
+    if (body.business_purpose_details) {
+      updateData.business_purpose_details = body.business_purpose_details
+    }
+    
     const { error: expenseClaimError } = await supabase
       .from('expense_claims')
-      .update({
-        business_purpose: body.business_purpose,
-        expense_category: body.expense_category,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', id)
 
     if (expenseClaimError) {

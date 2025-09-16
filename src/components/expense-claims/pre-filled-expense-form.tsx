@@ -47,7 +47,7 @@ interface ExpenseFormData {
   vendor_name: string
   reference_number?: string
   notes?: string
-  document_id?: string
+  // document_id removed - using business_purpose_details for file tracking
   line_items?: any[]
 }
 
@@ -78,7 +78,7 @@ export default function PreFilledExpenseForm({
     vendor_name: extractionResult.extractedData.vendorName,
     reference_number: extractionResult.extractedData.receiptNumber || '',
     notes: '',
-    document_id: extractionResult.extractedData.documentId,
+    // document_id removed - file info stored in business_purpose_details
     line_items: extractionResult.extractedData.lineItems?.map(item => ({
       description: item.description,
       quantity: item.quantity || 1,
@@ -788,21 +788,19 @@ export default function PreFilledExpenseForm({
       {/* Action Buttons - Streamlined UX */}
       {submitStep === 'form' && (
         <div className="flex gap-3 pt-4">
-          <Button 
-            variant="outline" 
+          <button
             onClick={onBack}
             disabled={isDraftSaving || isSubmittingForApproval}
-            className="border-gray-600 text-gray-300"
+            className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
-          </Button>
+          </button>
           
-          <Button 
-            variant="outline"
+          <button
             onClick={handleSaveDraft}
             disabled={isDraftSaving || isSubmittingForApproval}
-            className="border-gray-600 text-gray-300"
+            className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
           >
             {isDraftSaving ? (
               <>
@@ -815,12 +813,12 @@ export default function PreFilledExpenseForm({
                 Save Draft
               </>
             )}
-          </Button>
+          </button>
           
-          <Button 
+          <button
             onClick={handleSubmitDirectly}
             disabled={isDraftSaving || isSubmittingForApproval}
-            className="flex-1 bg-green-600 hover:bg-green-700"
+            className="flex-1 inline-flex items-center justify-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
           >
             {isSubmittingForApproval ? (
               <>
@@ -833,7 +831,7 @@ export default function PreFilledExpenseForm({
                 Submit for Approval
               </>
             )}
-          </Button>
+          </button>
         </div>
       )}
 
@@ -861,14 +859,13 @@ export default function PreFilledExpenseForm({
                 <p className="text-sm text-gray-400 mb-4">
                   Save for later editing. You can submit for approval anytime.
                 </p>
-                <Button 
+                <button
                   onClick={handleKeepAsDraft}
-                  variant="outline"
-                  className="w-full border-gray-600 text-gray-300"
+                  className="w-full inline-flex items-center justify-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 text-sm font-medium rounded-md transition-colors"
                 >
                   <Save className="w-4 h-4 mr-2" />
                   Keep as Draft
-                </Button>
+                </button>
               </div>
               
               {/* Submit for Approval */}
@@ -880,10 +877,10 @@ export default function PreFilledExpenseForm({
                 <p className="text-sm text-gray-400 mb-4">
                   Send to your manager for review and approval immediately.
                 </p>
-                <Button 
+                <button
                   onClick={handleSubmitForApproval}
                   disabled={isSubmittingForApproval}
-                  className="w-full bg-green-600 hover:bg-green-700"
+                  className="w-full inline-flex items-center justify-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
                 >
                   {isSubmittingForApproval ? (
                     <>
@@ -896,7 +893,7 @@ export default function PreFilledExpenseForm({
                       Submit for Approval
                     </>
                   )}
-                </Button>
+                </button>
               </div>
             </div>
           </CardContent>

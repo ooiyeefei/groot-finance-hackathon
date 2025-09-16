@@ -5,7 +5,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 
 interface ComplianceAnalysisParameters {
   transaction_id: string
@@ -365,13 +365,14 @@ Base your analysis strictly on the regulatory knowledge provided above.`
         throw new Error('GEMINI_API_KEY not configured for RAG analysis')
       }
 
-      const genAI = new GoogleGenerativeAI(apiKey)
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+      const genAI = new GoogleGenAI({ apiKey })
 
-      const result = await model.generateContent(prompt)
-      const response = await result.response
+      const result = await genAI.models.generateContent({
+        model: 'gemini-1.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      })
       
-      return response.text()
+      return result.text || ''
       
     } catch (error) {
       console.error('[CrossBorderTaxComplianceTool] RAG analysis generation failed:', error)

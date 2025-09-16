@@ -6,10 +6,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { 
-  X, 
-  Edit3, 
-  Save, 
+import {
+  X,
+  Edit3,
+  Save,
+  Send,
   ArrowLeft,
   Tag,
   DollarSign,
@@ -18,7 +19,8 @@ import {
   FileText,
   Loader2,
   AlertCircle,
-  Trash2
+  Trash2,
+  RotateCcw
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,6 +31,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { useExpenseCategories } from '@/hooks/use-expense-categories'
+import { useHomeCurrency } from '@/components/settings/currency-settings'
+import { formatCurrency } from '@/hooks/use-transactions'
+import { SupportedCurrency } from '@/types/transaction'
 
 interface ExpenseEditFormData {
   description: string
@@ -36,6 +41,7 @@ interface ExpenseEditFormData {
   expense_category: string
   original_amount: number
   original_currency: string
+  home_currency: string
   transaction_date: string
   vendor_name: string
   reference_number?: string
@@ -48,26 +54,34 @@ interface ExpenseEditModalProps {
   onClose: () => void
   onSave: () => void
   onDelete?: () => void
+  onReprocess?: () => void
 }
 
-export default function ExpenseEditModal({ 
-  expenseClaimId, 
-  isOpen, 
-  onClose, 
+const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
+  'THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP'
+]
+
+export default function ExpenseEditModal({
+  expenseClaimId,
+  isOpen,
+  onClose,
   onSave,
-  onDelete 
+  onDelete,
+  onReprocess
 }: ExpenseEditModalProps) {
   console.log('ExpenseEditModal render called - isOpen:', isOpen, 'expenseClaimId:', expenseClaimId)
-  
-  // Fetch dynamic categories
+
+  // Fetch dynamic categories and user home currency
   const { categories, loading: categoriesLoading, error: categoriesError } = useExpenseCategories()
-  
+  const userHomeCurrency = useHomeCurrency()
+
   const [formData, setFormData] = useState<ExpenseEditFormData>({
     description: '',
     business_purpose: '',
     expense_category: '',
     original_amount: 0,
     original_currency: 'SGD',
+    home_currency: userHomeCurrency,
     transaction_date: '',
     vendor_name: '',
     reference_number: '',
@@ -76,11 +90,61 @@ export default function ExpenseEditModal({
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saveError, setSaveError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isReprocessing, setIsReprocessing] = useState(false)
+  const [claimStatus, setClaimStatus] = useState<string>('')
+  const [processingStatus, setProcessingStatus] = useState<string>('')
+  const [previewAmount, setPreviewAmount] = useState<number | null>(null)
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null)
+
+  // Update currencies when user's home currency preference loads/changes
+  useEffect(() => {
+    if (userHomeCurrency && userHomeCurrency !== 'USD') {
+      setFormData(prev => ({
+        ...prev,
+        home_currency: userHomeCurrency
+      }))
+    }
+  }, [userHomeCurrency])
+
+  // Fetch exchange rate preview when currencies change
+  useEffect(() => {
+    if (formData.original_currency !== formData.home_currency && formData.original_amount > 0) {
+      fetchExchangeRatePreview()
+    } else {
+      setPreviewAmount(null)
+      setExchangeRate(null)
+    }
+  }, [formData.original_currency, formData.home_currency, formData.original_amount])
+
+  const fetchExchangeRatePreview = async () => {
+    try {
+      const response = await fetch('/api/currency/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: formData.original_amount,
+          from_currency: formData.original_currency,
+          to_currency: formData.home_currency
+        })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.data) {
+          setPreviewAmount(result.data.conversion.converted_amount)
+          setExchangeRate(result.data.conversion.exchange_rate)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch exchange rate:', error)
+    }
+  }
 
   const loadExpenseClaim = useCallback(async () => {
     try {
@@ -108,21 +172,35 @@ export default function ExpenseEditModal({
 
       const result = await response.json()
       const claim = result.data
-      
+
       if (!claim) {
         throw new Error('Expense claim not found')
       }
 
+      // Capture claim status and processing status for reprocessing logic
+      setClaimStatus(claim.status || '')
+      setProcessingStatus(claim.processing_status || '')
+
       // Populate form with existing data
+      // Priority: transaction data (if exists) > extracted data (from DSPy) > defaults
       setFormData({
-        description: claim.transaction?.description || '',
-        business_purpose: claim.transaction?.business_purpose || '',
-        expense_category: claim.transaction?.expense_category || 'other',
-        original_amount: claim.transaction?.original_amount || 0,
-        original_currency: claim.transaction?.original_currency || 'SGD',
-        transaction_date: claim.transaction?.transaction_date?.split('T')[0] || '',
-        vendor_name: claim.transaction?.vendor_name || '',
-        reference_number: claim.transaction?.reference_number || '',
+        description: claim.transaction?.description ||
+                    claim.description || '',
+        business_purpose: claim.transaction?.business_purpose ||
+                         claim.business_purpose || '',
+        expense_category: claim.transaction?.expense_category ||
+                         claim.expense_category || 'other',
+        original_amount: claim.transaction?.original_amount ||
+                        claim.total_amount || 0,
+        original_currency: claim.transaction?.original_currency ||
+                          claim.currency || 'SGD',
+        home_currency: claim.transaction?.home_currency || userHomeCurrency,
+        transaction_date: (claim.transaction?.transaction_date?.split('T')[0]) ||
+                         claim.transaction_date || '',
+        vendor_name: claim.transaction?.vendor_name ||
+                    claim.vendor_name || '',
+        reference_number: claim.transaction?.reference_number ||
+                         claim.reference_number || '',
         notes: claim.transaction?.notes || ''
       })
     } catch (error) {
@@ -166,36 +244,88 @@ export default function ExpenseEditModal({
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSave = async () => {
+  const handleSave = async (action: 'draft' | 'submit' = 'draft') => {
     if (!validateForm()) return
-    
-    try {
-      setSaving(true)
-      setSaveError(null)
-      
-      // Update the expense claim
-      const response = await fetch(`/api/expense-claims/${expenseClaimId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to update expense claim')
+    try {
+      if (action === 'draft') {
+        setSaving(true)
+      } else {
+        setSubmitting(true)
+      }
+      setSaveError(null)
+
+      if (action === 'submit') {
+        // For submit action, first save the draft data, then submit to workflow
+        console.log('Submitting expense claim through workflow submission endpoint')
+
+        // Step 1: Save the current form data as draft
+        const updateData = {
+          ...formData,
+          status: 'draft' // Keep as draft during save
+        }
+
+        const updateResponse = await fetch(`/api/expense-claims/${expenseClaimId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updateData)
+        })
+
+        if (!updateResponse.ok) {
+          const errorData = await updateResponse.json()
+          throw new Error(errorData.error || 'Failed to save expense claim before submission')
+        }
+
+        // Step 2: Submit to workflow using the proper submission endpoint
+        const submitResponse = await fetch(`/api/expense-claims/${expenseClaimId}/submit`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ action: 'submit' })
+        })
+
+        const submitResult = await submitResponse.json()
+
+        if (!submitResponse.ok) {
+          throw new Error(submitResult.error || 'Failed to submit expense claim to workflow')
+        }
+
+        console.log('Expense claim submitted to workflow successfully:', submitResult.data.message)
+      } else {
+        // For draft action, just save the data
+        const updateData = {
+          ...formData,
+          status: 'draft'
+        }
+
+        const response = await fetch(`/api/expense-claims/${expenseClaimId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updateData)
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to save expense claim as draft')
+        }
+
+        console.log('Expense claim saved as draft successfully')
       }
 
-      console.log('Expense claim updated successfully')
       onSave()
       onClose()
-      
+
     } catch (error) {
-      console.error('Save error:', error)
-      setSaveError(error instanceof Error ? error.message : 'Failed to save expense claim')
+      console.error('Save/Submit error:', error)
+      setSaveError(error instanceof Error ? error.message : `Failed to ${action === 'submit' ? 'submit' : 'save'} expense claim`)
     } finally {
       setSaving(false)
+      setSubmitting(false)
     }
   }
 
@@ -245,6 +375,28 @@ export default function ExpenseEditModal({
       setShowDeleteConfirm(false)
     }
   }, [isDeleting])
+
+  // Handle reprocess click
+  const handleReprocessClick = useCallback(async () => {
+    if (!onReprocess) return
+
+    try {
+      setIsReprocessing(true)
+      setSaveError(null)
+
+      // Call parent reprocess handler
+      await onReprocess()
+
+      console.log('Expense claim reprocessing initiated successfully')
+      onClose()
+
+    } catch (error) {
+      console.error('Reprocess error:', error)
+      setSaveError(error instanceof Error ? error.message : 'Failed to reprocess expense claim')
+    } finally {
+      setIsReprocessing(false)
+    }
+  }, [onReprocess, onClose])
 
   // Don't render if modal is not open
   if (!isOpen) {
@@ -353,15 +505,15 @@ export default function ExpenseEditModal({
                           className="bg-gray-600 border-gray-500 text-white flex-1"
                           placeholder="0.00"
                         />
-                        <Select 
-                          value={formData.original_currency} 
-                          onValueChange={(value) => setFormData({...formData, original_currency: value})}
+                        <Select
+                          value={formData.original_currency}
+                          onValueChange={(value) => setFormData({...formData, original_currency: value as SupportedCurrency})}
                         >
                           <SelectTrigger className="bg-gray-600 border-gray-500 text-white w-24">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="bg-gray-700 border-gray-600">
-                            {['SGD', 'USD', 'EUR', 'MYR', 'THB', 'IDR', 'CNY', 'VND', 'PHP'].map(currency => (
+                            {SUPPORTED_CURRENCIES.map(currency => (
                               <SelectItem key={currency} value={currency} className="text-white">{currency}</SelectItem>
                             ))}
                           </SelectContent>
@@ -369,7 +521,37 @@ export default function ExpenseEditModal({
                       </div>
                       {errors.original_amount && <p className="text-red-400 text-sm">{errors.original_amount}</p>}
                     </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-white">Home Currency</Label>
+                      <Select
+                        value={formData.home_currency}
+                        onValueChange={(value) => setFormData({...formData, home_currency: value as SupportedCurrency})}
+                      >
+                        <SelectTrigger className="bg-gray-600 border-gray-500 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-700 border-gray-600">
+                          {SUPPORTED_CURRENCIES.map(currency => (
+                            <SelectItem key={currency} value={currency} className="text-white">{currency}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
+
+                  {/* Exchange Rate Preview */}
+                  {previewAmount !== null && exchangeRate !== null && (
+                    <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
+                      <div className="text-sm text-blue-300 mb-1">Currency Conversion Preview:</div>
+                      <div className="text-white font-medium">
+                        {formatCurrency(previewAmount, formData.home_currency as SupportedCurrency)}
+                      </div>
+                      <div className="text-xs text-blue-400">
+                        Rate: 1 {formData.original_currency} = {exchangeRate.toFixed(6)} {formData.home_currency}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -400,11 +582,11 @@ export default function ExpenseEditModal({
                         </SelectTrigger>
                         <SelectContent className="bg-gray-700 border-gray-600">
                           {categoriesLoading ? (
-                            <SelectItem value="" className="text-gray-400" disabled>
+                            <SelectItem value="loading" className="text-gray-400" disabled>
                               Loading categories...
                             </SelectItem>
                           ) : categoriesError ? (
-                            <SelectItem value="" className="text-red-400" disabled>
+                            <SelectItem value="error" className="text-red-400" disabled>
                               Error loading categories
                             </SelectItem>
                           ) : categories.length > 0 ? (
@@ -414,7 +596,7 @@ export default function ExpenseEditModal({
                               </SelectItem>
                             ))
                           ) : (
-                            <SelectItem value="" className="text-gray-400" disabled>
+                            <SelectItem value="empty" className="text-gray-400" disabled>
                               No categories available
                             </SelectItem>
                           )}
@@ -477,44 +659,82 @@ export default function ExpenseEditModal({
         {/* Footer */}
         {!loading && !loadError && (
           <div className="p-6 border-t border-gray-700">
-            <div className="flex gap-3">
-              <Button 
-                variant="outline" 
+            <div className="flex items-center justify-center space-x-2">
+              <button
                 onClick={onClose}
-                disabled={saving}
-                className="border-gray-600 text-gray-300"
+                disabled={saving || submitting}
+                className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
               >
-                <ArrowLeft className="w-4 h-4 mr-2" />
+                <ArrowLeft className="w-4 h-4 mr-1.5" />
                 Cancel
-              </Button>
+              </button>
               {onDelete && (
-                <Button 
-                  variant="outline"
+                <button
                   onClick={handleDeleteClick}
-                  disabled={saving}
-                  className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                  disabled={saving || submitting || isReprocessing}
+                  className="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
+                  <Trash2 className="w-4 h-4 mr-1.5" />
                   Delete
-                </Button>
+                </button>
               )}
-              <Button 
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              {onReprocess && (processingStatus === 'failed' || processingStatus === 'completed') && (
+                <button
+                  onClick={handleReprocessClick}
+                  disabled={saving || submitting || isReprocessing}
+                  className={`inline-flex items-center px-3 py-1.5 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50 ${
+                    processingStatus === 'failed'
+                      ? 'bg-orange-600 hover:bg-orange-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  {isReprocessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                      {processingStatus === 'failed' ? 'Reprocessing...' : 'Re-extracting...'}
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-1.5" />
+                      {processingStatus === 'failed' ? 'Reprocess' : 'Re-extract'}
+                    </>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={() => handleSave('draft')}
+                disabled={saving || submitting || isReprocessing}
+                className="inline-flex items-center px-4 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
               >
                 {saving ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
                     Saving...
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    <Save className="w-4 h-4 mr-1.5" />
+                    Save Draft
                   </>
                 )}
-              </Button>
+              </button>
+              <button
+                onClick={() => handleSave('submit')}
+                disabled={saving || submitting || isReprocessing}
+                className="inline-flex items-center px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-1.5" />
+                    Submit
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}

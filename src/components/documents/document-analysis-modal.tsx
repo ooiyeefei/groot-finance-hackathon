@@ -35,6 +35,76 @@ interface Document {
         confidence: number
         bbox?: number[]
       }
+      vendor_address?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      vendor_contact?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      vendor_tax_id?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      customer_name?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      customer_address?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      customer_contact?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      document_number?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      purchase_order_number?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      reference_numbers?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      due_date?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      delivery_date?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      payment_terms?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      payment_method?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      bank_details?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
       total_amount?: {
         value: string
         confidence: number
@@ -44,6 +114,36 @@ interface Document {
         value: string
         confidence: number
         bbox?: number[]
+      }
+      currency?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+    }
+    document_specific_data?: {
+      invoice_data?: {
+        invoice_number?: string
+        customer_info?: {
+          name?: string
+        }
+        payment_terms?: string
+        due_date?: string
+      }
+      receipt_data?: {
+        receipt_number?: string
+        payment_method?: string
+        cashier_id?: string
+      }
+      transport_data?: {
+        trip_id?: string
+        pickup_location?: string
+        dropoff_location?: string
+      }
+      bill_data?: {
+        account_number?: string
+        billing_period?: string
+        due_date?: string
       }
     }
     financial_entities?: Array<{
@@ -55,6 +155,11 @@ interface Document {
     }>
     line_items?: Array<{
       description?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      item_description?: {
         value: string
         confidence: number
         bbox?: number[]
@@ -84,12 +189,23 @@ interface Document {
         confidence: number
         bbox?: number[]
       }
+      amount?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
+      total_amount?: {
+        value: string
+        confidence: number
+        bbox?: number[]
+      }
     }>
     metadata: {
       pageCount?: number
       wordCount: number
       language?: string
       processingMethod?: 'ocr' | 'text_extraction'
+      dspy_confidence?: number
       layoutElements?: Array<{
         bbox?: number[]
         category?: string
@@ -345,16 +461,141 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
     const summary = document.extracted_data.document_summary
     
     if (summary) {
+      // Vendor information
       if (summary.vendor_name?.bbox) {
         const [x1, y1, x2, y2] = summary.vendor_name.bbox
         boundingBoxes.push({
           x1, y1, x2, y2,
-          category: 'Vendor',
+          category: 'Vendor Name',
           text: summary.vendor_name.value,
           entityKey: 'vendor_name'
         })
       }
       
+      if (summary.vendor_address?.bbox) {
+        const [x1, y1, x2, y2] = summary.vendor_address.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Vendor Address',
+          text: summary.vendor_address.value,
+          entityKey: 'vendor_address'
+        })
+      }
+      
+      if (summary.vendor_contact?.bbox) {
+        const [x1, y1, x2, y2] = summary.vendor_contact.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Vendor Contact',
+          text: summary.vendor_contact.value,
+          entityKey: 'vendor_contact'
+        })
+      }
+      
+      if (summary.vendor_tax_id?.bbox) {
+        const [x1, y1, x2, y2] = summary.vendor_tax_id.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Tax ID',
+          text: summary.vendor_tax_id.value,
+          entityKey: 'vendor_tax_id'
+        })
+      }
+      
+      // Customer information
+      if (summary.customer_name?.bbox) {
+        const [x1, y1, x2, y2] = summary.customer_name.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Customer Name',
+          text: summary.customer_name.value,
+          entityKey: 'customer_name'
+        })
+      }
+      
+      if (summary.customer_address?.bbox) {
+        const [x1, y1, x2, y2] = summary.customer_address.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Customer Address',
+          text: summary.customer_address.value,
+          entityKey: 'customer_address'
+        })
+      }
+      
+      if (summary.customer_contact?.bbox) {
+        const [x1, y1, x2, y2] = summary.customer_contact.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Customer Contact',
+          text: summary.customer_contact.value,
+          entityKey: 'customer_contact'
+        })
+      }
+      
+      // Document identifiers
+      if (summary.document_number?.bbox) {
+        const [x1, y1, x2, y2] = summary.document_number.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Document Number',
+          text: summary.document_number.value,
+          entityKey: 'document_number'
+        })
+      }
+      
+      if (summary.purchase_order_number?.bbox) {
+        const [x1, y1, x2, y2] = summary.purchase_order_number.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'PO Number',
+          text: summary.purchase_order_number.value,
+          entityKey: 'purchase_order_number'
+        })
+      }
+      
+      if (summary.reference_numbers?.bbox) {
+        const [x1, y1, x2, y2] = summary.reference_numbers.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Reference Numbers',
+          text: summary.reference_numbers.value,
+          entityKey: 'reference_numbers'
+        })
+      }
+      
+      // Payment information
+      if (summary.payment_terms?.bbox) {
+        const [x1, y1, x2, y2] = summary.payment_terms.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Payment Terms',
+          text: summary.payment_terms.value,
+          entityKey: 'payment_terms'
+        })
+      }
+      
+      if (summary.payment_method?.bbox) {
+        const [x1, y1, x2, y2] = summary.payment_method.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Payment Method',
+          text: summary.payment_method.value,
+          entityKey: 'payment_method'
+        })
+      }
+      
+      if (summary.bank_details?.bbox) {
+        const [x1, y1, x2, y2] = summary.bank_details.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Bank Details',
+          text: summary.bank_details.value,
+          entityKey: 'bank_details'
+        })
+      }
+      
+      // Financial and date information
       if (summary.total_amount?.bbox) {
         const [x1, y1, x2, y2] = summary.total_amount.bbox
         boundingBoxes.push({
@@ -372,6 +613,26 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
           category: 'Date',
           text: summary.transaction_date.value,
           entityKey: 'transaction_date'
+        })
+      }
+      
+      if (summary.due_date?.bbox) {
+        const [x1, y1, x2, y2] = summary.due_date.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Due Date',
+          text: summary.due_date.value,
+          entityKey: 'due_date'
+        })
+      }
+      
+      if (summary.delivery_date?.bbox) {
+        const [x1, y1, x2, y2] = summary.delivery_date.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Delivery Date',
+          text: summary.delivery_date.value,
+          entityKey: 'delivery_date'
         })
       }
       
@@ -620,9 +881,9 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <span className="ml-2 text-green-400 capitalize">{document.processing_status}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400">Confidence:</span>
+                  <span className="text-gray-400">DSPy Confidence:</span>
                   <span className="ml-2 text-white">
-                    {document.confidence_score ? `${Math.round(document.confidence_score * 100)}%` : 'N/A'}
+                    {document.extracted_data?.metadata?.dspy_confidence ? `${Math.round(document.extracted_data.metadata.dspy_confidence * 100)}%` : 'N/A'}
                   </span>
                 </div>
                 <div>
@@ -678,9 +939,6 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           <div className="text-sm text-white font-medium">
                             {document.extracted_data.document_summary.document_type.value}
                           </div>
-                          <div className="text-xs text-gray-500">
-                            Confidence: {Math.round((document.extracted_data.document_summary.document_type.confidence || 0) * 100)}%
-                          </div>
                         </div>
                       )}
                       
@@ -694,9 +952,6 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           <div className="text-sm text-white font-medium">
                             {document.extracted_data.document_summary.vendor_name.value}
                           </div>
-                          <div className="text-xs text-gray-500">
-                            Confidence: {Math.round((document.extracted_data.document_summary.vendor_name.confidence || 0) * 100)}%
-                          </div>
                         </div>
                       )}
                       
@@ -708,10 +963,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         >
                           <div className="text-xs text-gray-400 mb-1">Amount</div>
                           <div className="text-sm text-green-400 font-medium">
-                            ${document.extracted_data.document_summary.total_amount.value}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            Confidence: {Math.round((document.extracted_data.document_summary.total_amount.confidence || 0) * 100)}%
+                            {document.extracted_data.document_summary.currency?.value || 'SGD'} {document.extracted_data.document_summary.total_amount.value}
                           </div>
                         </div>
                       )}
@@ -726,8 +978,354 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           <div className="text-sm text-white font-medium">
                             {document.extracted_data.document_summary.transaction_date.value}
                           </div>
-                          <div className="text-xs text-gray-500">
-                            Confidence: {Math.round((document.extracted_data.document_summary.transaction_date.confidence || 0) * 100)}%
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Vendor Information - Always show if we have document summary */}
+                {document.extracted_data?.document_summary && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Vendor Information
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('vendor_address')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Address</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.vendor_address?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('vendor_contact')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Contact</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.vendor_contact?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('vendor_tax_id')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Tax ID / Registration</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.vendor_tax_id?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Customer Information - Always show if we have document summary */}
+                {document.extracted_data?.document_summary && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Customer Information
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('customer_name')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Customer Name</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.customer_name?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('customer_address')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Customer Address</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.customer_address?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('customer_contact')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Customer Contact</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.customer_contact?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Document Identifiers - Always show if we have document summary */}
+                {document.extracted_data?.document_summary && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Document Identifiers & Dates
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('document_number')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Document Number</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.document_number?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('purchase_order_number')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">PO Number</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.purchase_order_number?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('reference_numbers')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Reference Numbers</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.reference_numbers?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('due_date')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Due Date</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.due_date?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('delivery_date')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Delivery Date</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.delivery_date?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment Information - Always show if we have document summary */}
+                {document.extracted_data?.document_summary && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Payment Information
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('payment_terms')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Payment Terms</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.payment_terms?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('payment_method')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Payment Method</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.payment_method?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500 md:col-span-2"
+                        onMouseEnter={() => setHoveredEntity('bank_details')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Bank Details</div>
+                        <div className="text-sm text-white font-medium">
+                          {document.extracted_data.document_summary.bank_details?.value || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Document-Specific Information */}
+                {document.extracted_data?.document_specific_data && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Document-Specific Information
+                    </h4>
+                    
+                    <div className="space-y-4">
+                      {/* Invoice Data */}
+                      {document.extracted_data.document_specific_data.invoice_data && (
+                        <div className="bg-gray-900 rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-blue-400 mb-2">Invoice Details</h5>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            {document.extracted_data.document_specific_data.invoice_data.invoice_number && (
+                              <div>
+                                <span className="text-gray-400">Invoice Number:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.invoice_data.invoice_number}
+                                </span>
+                              </div>
+                            )}
+                            {document.extracted_data.document_specific_data.invoice_data.customer_info?.name && (
+                              <div>
+                                <span className="text-gray-400">Customer:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.invoice_data.customer_info.name}
+                                </span>
+                              </div>
+                            )}
+                            {document.extracted_data.document_specific_data.invoice_data.payment_terms && (
+                              <div>
+                                <span className="text-gray-400">Payment Terms:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.invoice_data.payment_terms}
+                                </span>
+                              </div>
+                            )}
+                            {document.extracted_data.document_specific_data.invoice_data.due_date && (
+                              <div>
+                                <span className="text-gray-400">Due Date:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.invoice_data.due_date}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Receipt Data */}
+                      {document.extracted_data.document_specific_data.receipt_data && (
+                        <div className="bg-gray-900 rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-green-400 mb-2">Receipt Details</h5>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            {document.extracted_data.document_specific_data.receipt_data.receipt_number && (
+                              <div>
+                                <span className="text-gray-400">Receipt Number:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.receipt_data.receipt_number}
+                                </span>
+                              </div>
+                            )}
+                            {document.extracted_data.document_specific_data.receipt_data.payment_method && (
+                              <div>
+                                <span className="text-gray-400">Payment Method:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.receipt_data.payment_method}
+                                </span>
+                              </div>
+                            )}
+                            {document.extracted_data.document_specific_data.receipt_data.cashier_id && (
+                              <div>
+                                <span className="text-gray-400">Cashier ID:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.receipt_data.cashier_id}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Transport Data */}
+                      {document.extracted_data.document_specific_data.transport_data && (
+                        <div className="bg-gray-900 rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-yellow-400 mb-2">Transport Details</h5>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            {document.extracted_data.document_specific_data.transport_data.trip_id && (
+                              <div>
+                                <span className="text-gray-400">Trip ID:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.transport_data.trip_id}
+                                </span>
+                              </div>
+                            )}
+                            {document.extracted_data.document_specific_data.transport_data.pickup_location && (
+                              <div>
+                                <span className="text-gray-400">Pickup:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.transport_data.pickup_location}
+                                </span>
+                              </div>
+                            )}
+                            {document.extracted_data.document_specific_data.transport_data.dropoff_location && (
+                              <div>
+                                <span className="text-gray-400">Dropoff:</span>
+                                <span className="ml-2 text-white font-medium">
+                                  {document.extracted_data.document_specific_data.transport_data.dropoff_location}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -754,7 +1352,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           <div className="text-xs text-gray-400 mb-1">{entity.label}</div>
                           <div className="text-sm text-white font-medium">{entity.value}</div>
                           <div className="text-xs text-gray-500">
-                            {entity.category} • Confidence: {Math.round((entity.confidence || 0) * 100)}%
+                            {entity.category}
                           </div>
                         </div>
                       ))}
@@ -793,12 +1391,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_description`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
-                                  {item.description?.value || 'N/A'}
-                                  {item.description?.confidence && (
-                                    <div className="text-xs text-gray-500">
-                                      {Math.round(item.description.confidence * 100)}% conf
-                                    </div>
-                                  )}
+                                  {item.description?.value || item.item_description?.value || 'N/A'}
                                 </td>
                                 <td 
                                   className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
@@ -806,11 +1399,6 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {item.item_code?.value || '-'}
-                                  {item.item_code?.confidence && (
-                                    <div className="text-xs text-gray-500">
-                                      {Math.round(item.item_code.confidence * 100)}% conf
-                                    </div>
-                                  )}
                                 </td>
                                 <td 
                                   className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"
@@ -825,11 +1413,6 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {item.unit_measurement?.value || '-'}
-                                  {item.unit_measurement?.confidence && (
-                                    <div className="text-xs text-gray-500">
-                                      {Math.round(item.unit_measurement.confidence * 100)}% conf
-                                    </div>
-                                  )}
                                 </td>
                                 <td 
                                   className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"
@@ -843,7 +1426,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_line_total`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
-                                  {item.line_total?.value || 'N/A'}
+                                  {item.line_total?.value || item.amount?.value || item.total_amount?.value || 'N/A'}
                                 </td>
                               </tr>
                             ))}

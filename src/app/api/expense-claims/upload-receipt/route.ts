@@ -1,13 +1,17 @@
 /**
  * Expense Claims Receipt Upload API
- * Extends existing OCR system with expense-specific document classification
+ * Creates expense claim record directly with processing status tracking
+ * Unlike documents API, this creates expense_claims records that go through the workflow
  */
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
 import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
 import { tasks } from '@trigger.dev/sdk/v3'
+
+// Simple in-memory deduplication store (in production, use Redis)
+const recentRequests = new Map<string, number>()
 
 // Upload and process expense receipt (Mel's mobile-first approach)
 export async function POST(request: NextRequest) {
@@ -22,6 +26,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('receipt') as File
+    const businessPurpose = formData.get('business_purpose') as string
     const expenseCategory = formData.get('expense_category') as string
 
     if (!file) {
@@ -31,8 +36,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate expense category if provided (optional for OCR processing)
-    if (expenseCategory && !['travel_accommodation', 'petrol', 'toll', 'entertainment', 'other'].includes(expenseCategory)) {
+    if (!businessPurpose || !expenseCategory) {
+      return NextResponse.json(
+        { success: false, error: 'Business purpose and expense category are required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate expense category
+    if (!['travel_accommodation', 'petrol', 'toll', 'entertainment', 'other'].includes(expenseCategory)) {
       return NextResponse.json(
         { success: false, error: 'Invalid expense category provided' },
         { status: 400 }
@@ -56,17 +68,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get or create employee profile (handles Clerk ID -> UUID mapping)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const serviceSupabase = createServiceSupabaseClient()
+
+    // Get employee profile
     const employeeProfile = await ensureEmployeeProfile(userId)
-    
     if (!employeeProfile) {
       return NextResponse.json(
-        { success: false, error: 'Employee profile not found' },
-        { status: 404 }
+        { success: false, error: 'Failed to create employee profile' },
+        { status: 500 }
       )
     }
-    
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+
+    console.log(`[Expense Receipt API] Processing receipt upload for user ${userId}`)
+    console.log(`[Expense Receipt API] File: ${file.name}, Category: ${expenseCategory}`)
 
     // Generate unique file path for Supabase Storage
     const fileExtension = file.name.split('.').pop()
@@ -89,88 +104,227 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create document record with Supabase UUID
-    const { data: document, error: documentError } = await supabase
-      .from('documents')
+    // Create preliminary transaction record (will be updated when DSPy processing completes)
+    const { data: transaction, error: transactionError } = await supabase
+      .from('transactions')
       .insert({
-        user_id: employeeProfile.user_id, // Use Supabase UUID, not Clerk ID
-        file_name: file.name,
-        file_size: file.size,
-        file_type: file.type,
-        storage_path: filePath,
-        processing_status: 'pending',
-        document_type: 'receipt', // Set as receipt for expense claims
+        user_id: userId,
+        transaction_type: 'expense',
+        category: 'administrative_expenses',
+        subcategory: expenseCategory,
+        description: `Expense from ${file.name}`,
+        original_currency: 'SGD', // Will be updated from OCR
+        original_amount: 0, // Will be updated from OCR
+        home_currency: 'SGD',
+        home_currency_amount: 0,
+        exchange_rate: 1,
+        exchange_rate_date: new Date().toISOString().split('T')[0],
+        transaction_date: new Date().toISOString().split('T')[0], // Will be updated from OCR
+        created_by_method: 'document_extract',
         processing_metadata: {
-          expense_category: expenseCategory || 'auto_detect', // Let Gemini suggest if not provided
-          upload_source: 'expense_claims_mobile',
-          employee_id: employeeProfile.id
+          expense_category: expenseCategory,
+          business_purpose: businessPurpose,
+          employee_profile_id: employeeProfile.id,
+          created_via: 'expense_receipt_upload',
+          file_path: filePath,
+          file_name: file.name,
+          processing_stage: 'ocr_extraction'
         }
       })
       .select()
       .single()
 
-    if (documentError) {
-      console.error('[Expense Receipt Upload API] Document creation failed:', documentError)
-      
+    if (transactionError || !transaction) {
+      console.error('[Expense Receipt API] Failed to create transaction:', transactionError)
+
       // Cleanup uploaded file
       await supabase.storage
         .from('documents')
         .remove([filePath])
-        
+
       return NextResponse.json(
-        { success: false, error: 'Failed to create document record' },
+        { success: false, error: 'Failed to create transaction record' },
         { status: 500 }
       )
     }
 
-    // Get public URL for the uploaded file
-    const { data: publicUrlData } = supabase.storage
-      .from('documents')
-      .getPublicUrl(filePath)
+    // Create expense claim record with processing status
+    const claimMonth = new Date().toISOString().split('T')[0].substring(0, 7) + '-01' // YYYY-MM-01
 
-    if (!publicUrlData?.publicUrl) {
-      console.error('[Expense Receipt Upload API] Failed to get public URL')
-      return NextResponse.json(
-        { success: false, error: 'Failed to process uploaded file' },
-        { status: 500 }
-      )
-    }
-
-    console.log(`[Expense Receipt Upload API] Uploaded receipt ${document.id} for user ${userId}`)
-
-    // Trigger Gemini OCR processing for expense receipt
-    try {
-      // Trigger Gemini OCR task with correct parameters
-      await tasks.trigger('process-document-ocr', {
-        documentId: document.id,
-        imageStoragePath: filePath, // Use storage path instead of public URL
-        expenseCategory: expenseCategory
-      })
-      
-      console.log(`[Expense Receipt Upload API] Triggered Gemini OCR processing for document ${document.id}`)
-    } catch (triggerError) {
-      console.error('[Expense Receipt Upload API] Failed to trigger OCR:', triggerError)
-      // Don't fail the upload, user can manually enter data
-    }
-
-    // Return immediate response (non-blocking as per existing pattern)
-    return NextResponse.json({
-      success: true,
-      data: {
-        document: {
-          id: document.id,
-          file_name: document.file_name,
-          file_size: document.file_size,
-          file_type: document.file_type,
-          processing_status: document.processing_status,
-          document_type: document.document_type,
-          expense_category: expenseCategory,
-          public_url: publicUrlData.publicUrl,
-          created_at: document.created_at
-        }
+    const expenseClaimData = {
+      transaction_id: transaction.id,
+      employee_id: employeeProfile.id,
+      business_id: employeeProfile.business_id,
+      status: 'draft', // Start in draft status
+      business_purpose: businessPurpose,
+      business_purpose_details: {
+        category_reason: businessPurpose,
+        file_upload: {
+          original_filename: file.name,
+          file_path: filePath,
+          file_size: file.size,
+          file_type: file.type
+        },
+        processing_source: 'receipt_upload'
       },
-      message: 'Receipt uploaded successfully. OCR processing started.'
-    }, { status: 202 }) // 202 Accepted - processing started
+      expense_category: expenseCategory,
+      claim_month: claimMonth,
+      risk_score: 0, // Will be calculated after OCR
+      current_approver_id: null,
+
+      // Processing status fields (new)
+      processing_status: 'processing',
+      processing_started_at: new Date().toISOString(),
+      processing_metadata: {
+        file_info: {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          path: filePath
+        },
+        extraction_method: 'dspy',
+        processing_stage: 'ocr_extraction',
+        started_at: new Date().toISOString()
+      }
+    }
+
+    const { data: expenseClaim, error: claimError } = await serviceSupabase
+      .from('expense_claims')
+      .insert(expenseClaimData)
+      .select()
+      .single()
+
+    if (claimError || !expenseClaim) {
+      console.error('[Expense Receipt API] Failed to create expense claim:', claimError)
+
+      // Cleanup uploaded file and transaction
+      await supabase.storage
+        .from('documents')
+        .remove([filePath])
+
+      return NextResponse.json(
+        { success: false, error: 'Failed to create expense claim record' },
+        { status: 500 }
+      )
+    }
+
+    console.log(`[Expense Receipt API] Created expense claim ${expenseClaim.id} for receipt processing`)
+
+    // Prepare image data for DSPy processing
+    const fileBuffer = await file.arrayBuffer()
+    const fileBase64 = Buffer.from(fileBuffer).toString('base64')
+    const receiptImageData = {
+      base64: fileBase64,
+      mimeType: file.type,
+      filename: file.name
+    }
+
+    // Generate deduplication key
+    const idempotentKey = `expense-receipt-v1-${userId}-${file.name}-${file.size}`
+    const now = Date.now()
+
+    // Check for duplicates
+    const existingTime = recentRequests.get(idempotentKey)
+    if (existingTime && (now - existingTime) < 30 * 1000) {
+      console.log(`[Expense Receipt API] Duplicate request detected - returning existing claim`)
+      return NextResponse.json({
+        success: true,
+        data: {
+          expense_claim_id: expenseClaim.id,
+          transaction_id: transaction.id,
+          processing_status: 'processing',
+          task_id: `duplicate-${idempotentKey}`,
+          message: 'Processing receipt data...'
+        }
+      })
+    }
+
+    recentRequests.set(idempotentKey, now)
+    const requestId = `${idempotentKey}-${now}`
+
+    // Trigger DSPy extraction with expense claim context
+    try {
+      const taskHandle = await tasks.trigger('dspy-receipt-extraction', {
+        receiptText: null,
+        receiptImageData: receiptImageData,
+        receiptImageUrl: null,
+        expenseClaimId: expenseClaim.id, // Pass expense claim ID instead of document ID
+        transactionId: transaction.id,
+        userId,
+        businessPurpose,
+        expenseCategory,
+        imageMetadata: {
+          confidence: 0.85,
+          quality: 'good',
+          textLength: 0
+        },
+        forcedProcessingMethod: 'auto',
+        requestId
+      })
+
+      console.log(`[Expense Receipt API] DSPy task triggered: ${taskHandle.id}`)
+
+      // Update expense claim with task ID for polling
+      await serviceSupabase
+        .from('expense_claims')
+        .update({
+          processing_metadata: {
+            ...expenseClaimData.processing_metadata,
+            task_id: requestId,
+            trigger_task_id: taskHandle.id,
+            started_at: new Date().toISOString()
+          }
+        })
+        .eq('id', expenseClaim.id)
+
+      // Log audit event
+      await serviceSupabase
+        .from('audit_events')
+        .insert({
+          business_id: employeeProfile.business_id,
+          actor_user_id: userId,
+          event_type: 'expense_claim.receipt_uploaded',
+          target_entity_type: 'expense_claim',
+          target_entity_id: expenseClaim.id,
+          details: {
+            expense_category: expenseCategory,
+            business_purpose: businessPurpose.substring(0, 100),
+            file_name: file.name,
+            file_size: file.size,
+            processing_method: 'dspy_extraction'
+          }
+        })
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          expense_claim_id: expenseClaim.id,
+          transaction_id: transaction.id,
+          processing_status: 'processing',
+          task_id: requestId,
+          message: 'Receipt uploaded successfully. Extracting data...'
+        }
+      })
+
+    } catch (taskError) {
+      console.error(`[Expense Receipt API] Task trigger failed:`, taskError)
+
+      // Update expense claim to failed status
+      await serviceSupabase
+        .from('expense_claims')
+        .update({
+          processing_status: 'failed',
+          failed_at: new Date().toISOString(),
+          error_message: taskError instanceof Error ? taskError.message : 'Task trigger failed'
+        })
+        .eq('id', expenseClaim.id)
+
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to start receipt processing',
+        expense_claim_id: expenseClaim.id
+      }, { status: 500 })
+    }
 
   } catch (error) {
     console.error('[Expense Receipt Upload API] Unexpected error:', error)
@@ -184,7 +338,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get OCR extraction results for expense receipt
+// Get expense claim processing status and extraction results
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth()
@@ -196,70 +350,88 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const documentId = searchParams.get('document_id')
+    const expenseClaimId = searchParams.get('expense_claim_id')
 
-    if (!documentId) {
+    if (!expenseClaimId) {
       return NextResponse.json(
-        { success: false, error: 'document_id parameter is required' },
+        { success: false, error: 'expense_claim_id parameter is required' },
         { status: 400 }
       )
     }
 
-    // Get or create employee profile (handles Clerk ID -> UUID mapping)
     const employeeProfile = await ensureEmployeeProfile(userId)
-    
     if (!employeeProfile) {
       return NextResponse.json(
         { success: false, error: 'Employee profile not found' },
         { status: 404 }
       )
     }
-    
+
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    // Get document with OCR results using Supabase UUID
-    const { data: document, error: documentError } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('id', documentId)
-      .eq('user_id', employeeProfile.user_id) // Use Supabase UUID, not Clerk ID
+    // Get expense claim with transaction data
+    const { data: expenseClaim, error: claimError } = await supabase
+      .from('expense_claims')
+      .select(`
+        *,
+        transaction:transactions(*)
+      `)
+      .eq('id', expenseClaimId)
+      .eq('employee_id', employeeProfile.id) // Ensure user can only access their own claims
       .single()
 
-    if (documentError || !document) {
+    if (claimError || !expenseClaim) {
       return NextResponse.json(
-        { success: false, error: 'Document not found' },
+        { success: false, error: 'Expense claim not found' },
         { status: 404 }
       )
     }
 
-    // Parse Gemini OCR data for expense-specific fields
-    const extractedData = document.extracted_data || {}
-    const documentSummary = extractedData.document_summary || {}
-    const metadata = extractedData.metadata || {}
+    const transaction = expenseClaim.transaction
+    const processingMetadata = expenseClaim.processing_metadata || {}
+    const fileInfo = processingMetadata.file_info || {}
 
-    // Map Gemini OCR results to expense claim format
+    // Get file URL if available
+    let fileUrl = null
+    if (fileInfo.path) {
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(fileInfo.path)
+      fileUrl = urlData?.publicUrl || null
+    }
+
+    // Map expense claim data for frontend
     const expenseData = {
-      vendor_name: documentSummary.vendor_name?.value || null,
-      total_amount: parseFloat(documentSummary.total_amount?.value) || null,
-      currency: documentSummary.currency?.value || 'SGD',
-      transaction_date: documentSummary.transaction_date?.value || null,
-      description: extractedData.text || document.file_name,
-      line_items: extractedData.line_items || [],
-      confidence_score: (document.confidence_score || 0) * 100, // Convert to percentage
-      processing_status: document.processing_status,
-      
-      // Expense-specific extracted data from Gemini
-      expense_category: documentSummary.suggested_category?.value || document.processing_metadata?.expense_category || 'other',
-      category_confidence: (documentSummary.suggested_category?.confidence || 0) * 100,
-      business_purpose: null, // To be filled by user
-      
-      // Gemini-specific metadata
-      processing_method: metadata.processingMethod || 'gemini_ocr',
-      requires_validation: metadata.requires_validation || false,
-      category_reasoning: metadata.category_reasoning || '',
-      gemini_model: document.processing_metadata?.gemini_model || 'gemini-2.5-flash',
-      
-      // Quality indicators for error handling UX
+      expense_claim_id: expenseClaim.id,
+      processing_status: expenseClaim.processing_status,
+      processing_complete: expenseClaim.processing_status === 'completed',
+
+      // Transaction data (extracted from OCR or default values)
+      vendor_name: transaction.vendor_name || null,
+      total_amount: transaction.original_amount || 0,
+      currency: transaction.original_currency || 'SGD',
+      transaction_date: transaction.transaction_date || null,
+      description: transaction.description || '',
+
+      // Expense claim specific
+      business_purpose: expenseClaim.business_purpose || '',
+      expense_category: expenseClaim.expense_category || 'other',
+      status: expenseClaim.status,
+      risk_score: expenseClaim.risk_score || 0,
+
+      // File info
+      file_info: fileInfo,
+      file_url: fileUrl,
+
+      // Processing metadata
+      processing_method: processingMetadata.extraction_method || 'dspy',
+      task_id: processingMetadata.task_id || null,
+      started_at: expenseClaim.processing_started_at,
+      processed_at: expenseClaim.processed_at,
+      error_message: expenseClaim.error_message,
+
+      // Quality indicators
+      extraction_quality: expenseClaim.processing_status === 'completed' ? 'high' : 'pending',
       missing_fields: [] as string[]
     }
 
@@ -270,39 +442,17 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: {
-        document_id: document.id,
-        processing_complete: document.processing_status === 'completed',
-        extraction_quality: expenseData.confidence_score >= 80 ? 'high' : expenseData.confidence_score >= 60 ? 'medium' : 'low',
-        expense_data: expenseData,
-        gemini_metadata: {
-          processing_time_ms: document.processing_metadata?.processing_time_ms,
-          category_suggestion: document.processing_metadata?.category_suggestion,
-          requires_validation: expenseData.requires_validation,
-          model_used: expenseData.gemini_model
-        },
-        raw_extracted_data: extractedData, // For debugging/manual correction
-        public_url: await getPublicUrl(supabase, document.storage_path)
-      }
+      data: expenseData
     })
 
   } catch (error) {
-    console.error('[Expense Receipt OCR API] Unexpected error:', error)
+    console.error('[Expense Receipt Status API] Unexpected error:', error)
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to get OCR results'
+        error: 'Failed to get expense claim status'
       },
       { status: 500 }
     )
   }
-}
-
-// Helper function to get public URL
-async function getPublicUrl(supabase: any, storagePath: string): Promise<string | null> {
-  const { data } = supabase.storage
-    .from('documents')
-    .getPublicUrl(storagePath)
-    
-  return data?.publicUrl || null
 }

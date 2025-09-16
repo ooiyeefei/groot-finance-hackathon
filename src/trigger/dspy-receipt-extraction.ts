@@ -10,15 +10,35 @@ import { python } from "@trigger.dev/python";
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client with service role key for background processing
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const createSupabaseClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL environment variable is missing');
+  }
+
+  if (!supabaseKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is missing');
+  }
+
+  console.log(`🔗 Connecting to Supabase: ${supabaseUrl.substring(0, 30)}...`);
+
+  return createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    }
+  });
+};
+
+const supabase = createSupabaseClient();
 
 export const dspyReceiptExtraction = task({
   id: "dspy-receipt-extraction",
-  run: async (payload: { 
-    receiptText?: string; 
+  maxDuration: 180, // 3 minutes - should be sufficient for DSPy processing
+  run: async (payload: {
+    receiptText?: string;
     receiptImageData?: {
       base64: string;
       mimeType: string;
@@ -26,6 +46,7 @@ export const dspyReceiptExtraction = task({
     };
     receiptImageUrl?: string;
     documentId?: string;
+    expenseClaimId?: string; // New parameter for expense claim updates
     userId?: string;
     imageMetadata?: {
       confidence?: number;
@@ -39,13 +60,47 @@ export const dspyReceiptExtraction = task({
     console.log(`📝 Receipt text length: ${payload.receiptText?.length || 0} chars`);
     console.log(`🖼️ Image URL provided: ${!!payload.receiptImageUrl}`);
     console.log(`📄 Document ID: ${payload.documentId}`);
+    console.log(`💰 Expense Claim ID: ${payload.expenseClaimId}`);
     console.log(`🔍 Request ID: ${payload.requestId}`);
 
     try {
-      // Step 1: Run DSPy extraction using Python inline code
+      // Step 1: Fetch business categories for enhanced categorization (if expense claim provided)
+      let businessCategories: any[] = [];
+      if (payload.expenseClaimId) {
+        console.log(`🏢 Fetching business categories for enhanced DSPy categorization`);
+
+        // Get the expense claim and its business_id
+        const { data: expenseClaim, error: fetchError } = await supabase
+          .from('expense_claims')
+          .select('id, transaction_id, business_id')
+          .eq('id', payload.expenseClaimId)
+          .single();
+
+        if (!fetchError && expenseClaim?.business_id) {
+          const { data: business, error: businessError } = await supabase
+            .from('businesses')
+            .select('custom_expense_categories')
+            .eq('id', expenseClaim.business_id)
+            .single();
+
+          if (!businessError && business?.custom_expense_categories) {
+            businessCategories = (business.custom_expense_categories as any[])
+              .filter(cat => cat.is_active)
+              .map(cat => ({
+                code: cat.category_code,
+                name: cat.category_name,
+                vendor_patterns: cat.vendor_patterns || [],
+                ai_keywords: cat.ai_keywords || []
+              }));
+            console.log(`📋 Found ${businessCategories.length} active business categories for DSPy`);
+          }
+        }
+      }
+
+      // Step 2: Run DSPy extraction using Python inline code with business categories
       console.log("🐍 Running DSPy extraction with Python runtime...");
-      
-      // Step 1: Determine processing complexity with hybrid classification
+
+      // Step 2: Determine processing complexity with hybrid classification
       console.log("🔍 Running hybrid complexity classification...");
       
       const result = await python.runInline(`
@@ -133,6 +188,7 @@ class ExtractedReceiptData(BaseModel):
     tax_amount: Optional[float] = Field(None, description="Total tax amount")
     receipt_number: Optional[str] = Field(None, description="Receipt or invoice number")
     line_items: List[ExtractedLineItem] = Field(default_factory=list, description="Individual purchased items")
+    selected_category: Optional[str] = Field(None, description="Selected expense category name from available business categories")
     extraction_quality: Literal['high', 'medium', 'low'] = Field(..., description="Quality assessment")
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Confidence score from 0.0 to 1.0")
     missing_fields: List[str] = Field(default_factory=list, description="Fields that couldn't be extracted")
@@ -167,19 +223,22 @@ class DSPyExtractionResult(BaseModel):
 class SimpleReceiptSignature(dspy.Signature):
     """Fast structured extraction for clear receipts with known vendors"""
     receipt_text: str = dspy.InputField(desc="OCR text from receipt")
-    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data")
+    available_categories: str = dspy.InputField(desc="JSON list of available expense categories with names and codes")
+    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with selected category")
 
 class GuidedReceiptSignature(dspy.Signature):
     """Guided structured extraction with reasoning for unclear receipts"""
-    receipt_text: str = dspy.InputField(desc="OCR text from receipt") 
+    receipt_text: str = dspy.InputField(desc="OCR text from receipt")
+    available_categories: str = dspy.InputField(desc="JSON list of available expense categories with names and codes")
     reasoning: ExtractionReasoning = dspy.OutputField(desc="Step-by-step reasoning process")
-    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data")
+    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with selected category")
 
 class ComplexReceiptSignature(dspy.Signature):
     """Full chain-of-thought structured extraction for complex receipts"""
     receipt_text: str = dspy.InputField(desc="Raw OCR text from receipt")
-    reasoning: ExtractionReasoning = dspy.OutputField(desc="Detailed step-by-step reasoning")  
-    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data")
+    available_categories: str = dspy.InputField(desc="JSON list of available expense categories with names and codes")
+    reasoning: ExtractionReasoning = dspy.OutputField(desc="Detailed step-by-step reasoning")
+    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with selected category")
 
 # Hybrid Receipt Classification System
 class HybridReceiptClassifier:
@@ -292,8 +351,8 @@ class AdaptiveReceiptExtractor(dspy.Module):
         # Performance tracking for continuous learning
         self.processing_history = []
     
-    def forward(self, receipt_text: str, image_metadata: Dict[str, Any] = None, 
-                forced_method: Optional[str] = None) -> DSPyExtractionResult:
+    def forward(self, receipt_text: str, image_metadata: Dict[str, Any] = None,
+                forced_method: Optional[str] = None, business_categories: List[Dict] = None) -> DSPyExtractionResult:
         """Adaptive processing with intelligent routing"""
         
         start_time = datetime.now()
@@ -326,11 +385,11 @@ class AdaptiveReceiptExtractor(dspy.Module):
         # Stage 2: Adaptive DSPy processing with Pure Structured Output
         try:
             if classification.processing_method == 'fast_dspy':
-                result = self._process_simple_structured(receipt_text, classification)
+                result = self._process_simple_structured(receipt_text, classification, business_categories)
             elif classification.processing_method == 'guided_dspy':
-                result = self._process_guided_structured(receipt_text, classification)  
+                result = self._process_guided_structured(receipt_text, classification, business_categories)
             else:  # chain_of_thought
-                result = self._process_complex_structured(receipt_text, classification)
+                result = self._process_complex_structured(receipt_text, classification, business_categories)
                 
             processing_time = (datetime.now() - start_time).total_seconds()
             
@@ -344,69 +403,90 @@ class AdaptiveReceiptExtractor(dspy.Module):
             # Fallback to complex processing if simple/guided fails
             if classification.processing_method != 'chain_of_thought':
                 print("🔄 Falling back to complex processing...")
-                return self._process_complex_structured(receipt_text, classification)
+                return self._process_complex_structured(receipt_text, classification, business_categories)
             else:
                 raise e
     
-    def _process_simple_structured(self, receipt_text: str, classification: ComplexityClassification) -> DSPyExtractionResult:
+    def _process_simple_structured(self, receipt_text: str, classification: ComplexityClassification, business_categories: List[Dict] = None) -> DSPyExtractionResult:
         """Fast structured processing for simple receipts with pure structured output"""
         
         print("🚀 Running simple structured DSPy processing...", file=sys.stderr)
         
         try:
-            prediction = self.simple_extractor(receipt_text=receipt_text)
+            # Prepare categories for LLM
+            categories_json = self._format_categories_for_llm(business_categories)
+
+            prediction = self.simple_extractor(
+                receipt_text=receipt_text,
+                available_categories=categories_json
+            )
             extracted_data = prediction.extracted_data
-            
+
             print(f"✅ Simple extraction completed: {extracted_data.vendor_name}, {extracted_data.total_amount} {extracted_data.currency}", file=sys.stderr)
-            
+            print(f"🎯 Selected category: {extracted_data.selected_category}", file=sys.stderr)
+
             # Basic validation without assertions - NO hardcoded fallbacks
-            if (not extracted_data.vendor_name or 
+            if (not extracted_data.vendor_name or
                 extracted_data.vendor_name.strip() == "" or
                 extracted_data.total_amount <= 0):
                 print("⚠️ Simple extraction quality issues, trying guided processing", file=sys.stderr)
-                return self._process_guided_structured(receipt_text, classification)
-            
+                return self._process_guided_structured(receipt_text, classification, business_categories)
+
             return self._build_structured_result(prediction, classification, 'simple')
         except Exception as e:
             print(f"❌ Simple processing failed: {e}", file=sys.stderr)
             # Fallback to guided processing if simple fails
-            return self._process_guided_structured(receipt_text, classification)
+            return self._process_guided_structured(receipt_text, classification, business_categories)
         
-    def _process_guided_structured(self, receipt_text: str, classification: ComplexityClassification) -> DSPyExtractionResult:
+    def _process_guided_structured(self, receipt_text: str, classification: ComplexityClassification, business_categories: List[Dict] = None) -> DSPyExtractionResult:
         """Guided structured processing for medium complexity with pure structured output"""
         
         print("🧭 Running guided structured DSPy processing...", file=sys.stderr)
         
         try:
-            prediction = self.guided_extractor(receipt_text=receipt_text)
+            # Prepare categories for LLM
+            categories_json = self._format_categories_for_llm(business_categories)
+
+            prediction = self.guided_extractor(
+                receipt_text=receipt_text,
+                available_categories=categories_json
+            )
             extracted_data = prediction.extracted_data
-            
+
             print(f"✅ Guided extraction completed: {extracted_data.vendor_name}, {extracted_data.total_amount} {extracted_data.currency}", file=sys.stderr)
-            
+            print(f"🎯 Selected category: {extracted_data.selected_category}", file=sys.stderr)
+
             # Basic validation without assertions
-            if (not extracted_data.vendor_name or 
+            if (not extracted_data.vendor_name or
                 extracted_data.vendor_name.strip() == "" or
                 extracted_data.total_amount <= 0):
                 print("⚠️ Guided extraction quality issues, falling back to complex processing", file=sys.stderr)
-                return self._process_complex_structured(receipt_text, classification)
-            
+                return self._process_complex_structured(receipt_text, classification, business_categories)
+
             return self._build_structured_result(prediction, classification, 'guided')
         except Exception as e:
             print(f"❌ Guided processing failed: {e}", file=sys.stderr)
             # Fallback to complex processing if guided fails
-            return self._process_complex_structured(receipt_text, classification)
+            return self._process_complex_structured(receipt_text, classification, business_categories)
         
-    def _process_complex_structured(self, receipt_text: str, classification: ComplexityClassification) -> DSPyExtractionResult:
+    def _process_complex_structured(self, receipt_text: str, classification: ComplexityClassification, business_categories: List[Dict] = None) -> DSPyExtractionResult:
         """Full chain-of-thought structured processing for complex receipts with pure structured output"""
         
         print("🧠 Running complex structured DSPy processing...", file=sys.stderr)
         
         try:
-            prediction = self.complex_extractor(receipt_text=receipt_text)
+            # Prepare categories for LLM
+            categories_json = self._format_categories_for_llm(business_categories)
+
+            prediction = self.complex_extractor(
+                receipt_text=receipt_text,
+                available_categories=categories_json
+            )
             extracted_data = prediction.extracted_data
-            
+
             print(f"✅ Complex extraction completed: {extracted_data.vendor_name}, {extracted_data.total_amount} {extracted_data.currency}", file=sys.stderr)
-            
+            print(f"🎯 Selected category: {extracted_data.selected_category}", file=sys.stderr)
+
             # Even if extraction quality is poor, return the result for complex processing
             # This is the final fallback, so we accept whatever we got
             return self._build_structured_result(prediction, classification, 'complex')
@@ -494,7 +574,32 @@ class AdaptiveReceiptExtractor(dspy.Module):
     
     # 🚀 Modern DSPy Implementation: No Manual Parsing Needed!
     # With JSONAdapter + Pydantic, all parsing is handled automatically by DSPy
-    
+
+    def _format_categories_for_llm(self, business_categories: List[Dict] = None) -> str:
+        """Format business categories as JSON for LLM to select from"""
+        if not business_categories:
+            # Provide fallback categories if no business categories available
+            fallback_categories = [
+                {"category_name": "Office Supplies", "category_code": "office_supplies"},
+                {"category_name": "Business Meals & Entertainment", "category_code": "entertainment"},
+                {"category_name": "Transportation & Travel", "category_code": "transport"},
+                {"category_name": "Other Business Expenses", "category_code": "other"}
+            ]
+            print("🔄 No business categories provided, using fallback categories", file=sys.stderr)
+            return json.dumps(fallback_categories)
+
+        # Format business categories for LLM selection
+        formatted_categories = [
+            {
+                "category_name": cat['name'],
+                "category_code": cat['code']
+            }
+            for cat in business_categories
+        ]
+
+        print(f"📋 Formatted {len(formatted_categories)} business categories for LLM selection", file=sys.stderr)
+        return json.dumps(formatted_categories)
+
     def _normalize_quality(self, quality_str: str) -> str:
         quality_lower = quality_str.lower().strip()
         if quality_lower in ['high', 'medium', 'low']:
@@ -799,8 +904,116 @@ class DSPyReceiptExtractor(dspy.Module):
         
         return suggestions
 
+# Smart categorization helper function with business categories priority
+def _categorize_expense(vendor_name: str, line_items: List, business_categories: List[Dict] = None) -> str:
+    """Categorize expense based on business categories first, then fallback to generic patterns"""
+    vendor_lower = vendor_name.lower()
+
+    # Priority 1: Use business-specific categories if available
+    if business_categories:
+        print(f"🎯 Checking {len(business_categories)} business categories for vendor: {vendor_name}", file=sys.stderr)
+
+        for category in business_categories:
+            # Check vendor patterns first (more specific)
+            if category.get('vendor_patterns'):
+                for pattern in category['vendor_patterns']:
+                    if pattern.lower() in vendor_lower:
+                        print(f"✅ Matched vendor pattern '{pattern}' -> {category['name']} ({category['code']})", file=sys.stderr)
+                        return category['code']
+
+            # Check AI keywords
+            if category.get('ai_keywords'):
+                for keyword in category['ai_keywords']:
+                    if keyword.lower() in vendor_lower:
+                        print(f"✅ Matched AI keyword '{keyword}' -> {category['name']} ({category['code']})", file=sys.stderr)
+                        return category['code']
+
+        print(f"🔍 No business category match found for '{vendor_name}', using fallback", file=sys.stderr)
+
+    # Priority 2: Fallback to generic categorization patterns with business category codes
+    # Check line items for food-related content
+    line_items_text = ' '.join([item.description.lower() if hasattr(item, 'description') and item.description else '' for item in line_items])
+    has_food_items = any(word in line_items_text for word in ['tea', 'rice', 'chicken', 'pork', 'seafood', 'soup', 'noodle', 'meal', 'food', 'dining'])
+
+    # Food & Restaurant patterns - use business category code
+    food_keywords = ['restaurant', 'cafe', 'coffee', 'mcdonald', 'kfc', 'starbucks', 'pizza',
+                     'food', 'dinner', 'lunch', 'breakfast', 'kitchen', 'cuisine', 'bar',
+                     'mansion', 'seafood', 'chicken', 'rice', 'noodle', 'tea', 'dining']
+
+    # Transportation patterns
+    transport_keywords = ['grab', 'taxi', 'uber', 'bus', 'train', 'mrt', 'lrt', 'parking',
+                         'toll', 'fuel', 'petrol', 'gas', 'shell', 'esso', 'caltex']
+
+    # Office supplies patterns
+    office_keywords = ['office', 'supplies', 'stationery', 'paper', 'pen', 'printer',
+                      'computer', 'laptop', 'software', '7-eleven', 'guardian', 'watson']
+
+    # Accommodation patterns
+    accommodation_keywords = ['hotel', 'accommodation', 'lodging', 'inn', 'resort', 'airbnb']
+
+    # Categorization logic using business categories
+    # Try to match vendor/items to business category keywords, otherwise use generic fallback
+    if business_categories:
+        # Try to find a matching business category for the expense type
+        if any(keyword in vendor_lower for keyword in food_keywords) or has_food_items:
+            # Look for food/entertainment categories first
+            for category in business_categories:
+                keywords = (category.get('ai_keywords', []) + category.get('vendor_patterns', []))
+                if any('food' in kw.lower() or 'meal' in kw.lower() or 'restaurant' in kw.lower() or 'entertainment' in kw.lower() for kw in keywords):
+                    print(f"✅ Matched business category for food/entertainment: {category['name']} ({category['code']})", file=sys.stderr)
+                    return category['code']
+
+        elif any(keyword in vendor_lower for keyword in transport_keywords):
+            # Look for transport/petrol categories
+            for category in business_categories:
+                keywords = (category.get('ai_keywords', []) + category.get('vendor_patterns', []))
+                if any('transport' in kw.lower() or 'petrol' in kw.lower() or 'fuel' in kw.lower() or 'travel' in kw.lower() for kw in keywords):
+                    print(f"✅ Matched business category for transport: {category['name']} ({category['code']})", file=sys.stderr)
+                    return category['code']
+
+        elif any(keyword in vendor_lower for keyword in accommodation_keywords):
+            # Look for accommodation/travel categories
+            for category in business_categories:
+                keywords = (category.get('ai_keywords', []) + category.get('vendor_patterns', []))
+                if any('accommodation' in kw.lower() or 'hotel' in kw.lower() or 'travel' in kw.lower() for kw in keywords):
+                    print(f"✅ Matched business category for accommodation: {category['name']} ({category['code']})", file=sys.stderr)
+                    return category['code']
+
+        # If no specific match, return the first available business category
+        if business_categories:
+            fallback_category = business_categories[0]
+            print(f"🎯 Using fallback business category: {fallback_category['name']} ({fallback_category['code']})", file=sys.stderr)
+            return fallback_category['code']
+
+    # Ultimate fallback if no business categories available
+    return 'other'
+
+# Smart business purpose generator
+def _generate_business_purpose(vendor_name: str, category: str, line_items: List) -> str:
+    """Generate appropriate business purpose based on expense details"""
+
+    category_purposes = {
+        'entertainment': f"Business meal/entertainment at {vendor_name}",
+        'transport': f"Business transportation expense - {vendor_name}",
+        'accommodation': f"Business accommodation at {vendor_name}",
+        'office_supplies': f"Office supplies purchase from {vendor_name}",
+        'other': f"Business expense at {vendor_name}"
+    }
+
+    base_purpose = category_purposes.get(category, f"Business expense at {vendor_name}")
+
+    # Add context from line items for entertainment
+    if category == 'entertainment' and line_items:
+        item_count = len(line_items)
+        if item_count > 3:
+            base_purpose += f" - group dining ({item_count} items)"
+        elif any('tea' in (item.description.lower() if hasattr(item, 'description') and item.description else '') for item in line_items):
+            base_purpose += " - business meeting with refreshments"
+
+    return base_purpose
+
 # Main extraction function with adaptive processing
-def extract_receipt_data(receipt_text: str, image_metadata: Dict[str, Any] = None, forced_method: str = None) -> dict:
+def extract_receipt_data(receipt_text: str, image_metadata: Dict[str, Any] = None, forced_method: str = None, business_categories: List[Dict] = None) -> dict:
     start_time = datetime.now()
     
     try:
@@ -825,9 +1038,10 @@ def extract_receipt_data(receipt_text: str, image_metadata: Dict[str, Any] = Non
         
         # Run the adaptive extraction with hybrid classification
         result = extractor.forward(
-            receipt_text=receipt_text, 
+            receipt_text=receipt_text,
             image_metadata=final_metadata,
-            forced_method=forced_method  # Allow manual override or auto-detection
+            forced_method=forced_method,  # Allow manual override or auto-detection
+            business_categories=business_categories  # Pass business categories for LLM selection
         )
         
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
@@ -841,6 +1055,28 @@ def extract_receipt_data(receipt_text: str, image_metadata: Dict[str, Any] = Non
         print(f"🎯 Confidence: {extracted_data.confidence_score * 100:.1f}%", file=sys.stderr)
         print(f"⚡ Processing time: {processing_time}ms", file=sys.stderr)
         
+        # Use LLM-selected category from DSPy extraction
+        suggested_category = None
+        if extracted_data.selected_category and business_categories:
+            # Find the category_code from the selected category_name
+            for category in business_categories:
+                if category['name'] == extracted_data.selected_category:
+                    suggested_category = category['code']
+                    print(f"✅ Matched LLM-selected category '{extracted_data.selected_category}' to code: {suggested_category}", file=sys.stderr)
+                    break
+
+            if not suggested_category:
+                print(f"⚠️ LLM selected category '{extracted_data.selected_category}' not found in business categories, using fallback", file=sys.stderr)
+                # Fallback: use first business category or 'other'
+                suggested_category = business_categories[0]['code'] if business_categories else 'other'
+        else:
+            # Fallback if no LLM selection or no business categories
+            print("🔄 No LLM category selection, using fallback logic", file=sys.stderr)
+            suggested_category = _categorize_expense(extracted_data.vendor_name, extracted_data.line_items, business_categories)
+
+        # Generate smart business purpose
+        business_purpose = _generate_business_purpose(extracted_data.vendor_name, suggested_category, extracted_data.line_items)
+
         # Convert to JSON-serializable format
         output_data = {
             "success": True,
@@ -849,6 +1085,8 @@ def extract_receipt_data(receipt_text: str, image_metadata: Dict[str, Any] = Non
             "currency": extracted_data.currency,
             "transaction_date": extracted_data.transaction_date,
             "description": f"{extracted_data.vendor_name} - {extracted_data.transaction_date}",
+            "suggested_category": suggested_category,
+            "business_purpose": business_purpose,
             "line_items": [
                 {
                     "description": item.description,
@@ -904,7 +1142,7 @@ def main():
     try:
         # Extract input parameters with comprehensive logging
         receipt_text = ${JSON.stringify((payload.receiptText || '').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/"/g, '\\"'))}
-        receipt_image_data = ${JSON.stringify(payload.receiptImageData || null)}
+        receipt_image_data = ${payload.receiptImageData ? JSON.stringify(payload.receiptImageData) : 'None'}
         
         image_metadata = {
             'confidence': ${payload.imageMetadata?.confidence || 0.7},
@@ -914,6 +1152,10 @@ def main():
         forced_method = ${JSON.stringify(payload.forcedProcessingMethod || 'auto')}
         if forced_method == "auto":
             forced_method = None
+
+        # Business categories for enhanced categorization
+        business_categories = ${JSON.stringify(businessCategories)}
+        print(f"🏢 Received {len(business_categories)} business categories from Node.js", file=sys.stderr)
         
         # If no receipt text provided, extract from image using DSPy+Gemini multimodal OCR
         if not receipt_text and receipt_image_data:
@@ -995,7 +1237,7 @@ Return only the extracted text without any analysis or interpretation."""
             
             with redirect_stdout(dummy_stdout):
                 print("🛡️ DSPy processing protected from stdout pollution", file=sys.stderr)
-                extraction_result = extract_receipt_data(receipt_text, image_metadata, forced_method)
+                extraction_result = extract_receipt_data(receipt_text, image_metadata, forced_method, business_categories)
                 
             # Check what was captured (for debugging)
             captured_output = dummy_stdout.getvalue()
@@ -1157,6 +1399,160 @@ else:
         console.log(`✅ Document ${payload.documentId} updated successfully`);
       }
 
+      // Step 4: Update expense claim and linked transaction if expenseClaimId provided
+      if (payload.expenseClaimId) {
+        console.log(`💰 Updating expense claim ${payload.expenseClaimId} with DSPy results`);
+
+        // First, get the expense claim and its linked transaction_id
+        console.log(`🔍 Attempting to fetch expense claim from Supabase...`);
+
+        let expenseClaim: any;
+
+        try {
+          const { data: fetchedExpenseClaim, error: fetchError } = await supabase
+            .from('expense_claims')
+            .select('id, transaction_id, business_id')
+            .eq('id', payload.expenseClaimId)
+            .single();
+
+          if (fetchError) {
+            console.error('Supabase query error details:', {
+              message: fetchError.message,
+              details: fetchError.details,
+              hint: fetchError.hint,
+              code: fetchError.code
+            });
+            throw new Error(`Supabase query failed: ${fetchError.message}`);
+          }
+
+          if (!fetchedExpenseClaim) {
+            throw new Error(`Expense claim not found: ${payload.expenseClaimId}`);
+          }
+
+          expenseClaim = fetchedExpenseClaim;
+          console.log(`✅ Successfully fetched expense claim: ${expenseClaim.id}`);
+        } catch (networkError) {
+          console.error('Network/connection error when accessing Supabase:', {
+            message: networkError instanceof Error ? networkError.message : String(networkError),
+            stack: networkError instanceof Error ? networkError.stack : undefined,
+            type: typeof networkError
+          });
+
+          // Re-throw with more context
+          throw new Error(`Failed to connect to database: ${networkError instanceof Error ? networkError.message : 'Unknown network error'}`);
+        }
+
+        // Use the category determined by DSPy with business categories context
+        const autoCategory = extractionResult.suggested_category || 'other';
+        console.log(`🎯 Using DSPy-determined category: ${autoCategory}`);
+
+        // Update the linked transaction (financial data per Otto's guidance)
+        if (expenseClaim.transaction_id) {
+          console.log(`💳 Updating transaction ${expenseClaim.transaction_id} with financial data`);
+
+          // Get user's home currency preference
+          let userHomeCurrency = 'SGD'; // Default
+          try {
+            const { data: userProfile } = await supabase
+              .from('users')
+              .select('home_currency')
+              .eq('id', payload.userId)
+              .single();
+
+            if (userProfile?.home_currency) {
+              userHomeCurrency = userProfile.home_currency;
+              console.log(`👤 User home currency: ${userHomeCurrency}`);
+            }
+          } catch (error) {
+            console.log(`⚠️ Could not get user home currency, using default: ${userHomeCurrency}`);
+          }
+
+          // Prepare transaction update data
+          const transactionUpdateData: any = {
+            description: extractionResult.description,
+            original_amount: extractionResult.total_amount,
+            original_currency: extractionResult.currency,
+            home_currency: userHomeCurrency,
+            transaction_date: extractionResult.transaction_date,
+            vendor_name: extractionResult.vendor_name,
+            reference_number: extractionResult.receipt_number || null,
+            updated_at: new Date().toISOString()
+          };
+
+          // Calculate home currency amount if currencies are different
+          if (extractionResult.currency !== userHomeCurrency) {
+            console.log(`💱 Converting ${extractionResult.total_amount} ${extractionResult.currency} to ${userHomeCurrency}`);
+
+            try {
+              // Call currency conversion API
+              const conversionResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3005'}/api/currency/convert`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  amount: extractionResult.total_amount,
+                  from_currency: extractionResult.currency,
+                  to_currency: userHomeCurrency
+                })
+              });
+
+              if (conversionResponse.ok) {
+                const conversionResult = await conversionResponse.json();
+                if (conversionResult.success && conversionResult.data) {
+                  transactionUpdateData.home_currency_amount = conversionResult.data.conversion.converted_amount;
+                  transactionUpdateData.exchange_rate = conversionResult.data.conversion.exchange_rate;
+                  console.log(`✅ Converted to ${conversionResult.data.conversion.converted_amount} ${userHomeCurrency} (rate: ${conversionResult.data.conversion.exchange_rate})`);
+                }
+              } else {
+                console.log(`⚠️ Currency conversion failed, setting home currency amount same as original`);
+                transactionUpdateData.home_currency_amount = extractionResult.total_amount;
+              }
+            } catch (conversionError) {
+              console.log(`⚠️ Currency conversion error: ${conversionError}, setting home currency amount same as original`);
+              transactionUpdateData.home_currency_amount = extractionResult.total_amount;
+            }
+          } else {
+            // Same currency - just copy the amount
+            transactionUpdateData.home_currency_amount = extractionResult.total_amount;
+            console.log(`💰 Same currency (${extractionResult.currency}), no conversion needed`);
+          }
+
+          const { error: transactionUpdateError } = await supabase
+            .from('transactions')
+            .update(transactionUpdateData)
+            .eq('id', expenseClaim.transaction_id);
+
+          if (transactionUpdateError) {
+            console.error('Failed to update transaction:', transactionUpdateError);
+            throw new Error(`Failed to update transaction: ${transactionUpdateError.message}`);
+          }
+
+          console.log(`✅ Transaction ${expenseClaim.transaction_id} updated successfully with currency conversion`);
+        }
+
+        // Update the expense claim (workflow data per Otto's guidance)
+        const { error: expenseUpdateError } = await supabase
+          .from('expense_claims')
+          .update({
+            processing_status: extractionResult.requires_validation ?
+              'requires_validation' : 'completed',
+            confidence_score: extractionResult.confidence_score,
+            processed_at: new Date().toISOString(),
+            error_message: null,
+            failed_at: null,
+            // Workflow fields only (not financial data - that's in transactions)
+            business_purpose: extractionResult.business_purpose || `Business expense at ${extractionResult.vendor_name}`,
+            expense_category: autoCategory
+          })
+          .eq('id', payload.expenseClaimId);
+
+        if (expenseUpdateError) {
+          console.error('Failed to update expense claim:', expenseUpdateError);
+          throw new Error(`Failed to update expense claim: ${expenseUpdateError.message}`);
+        }
+
+        console.log(`✅ Expense claim ${payload.expenseClaimId} updated successfully with auto-category: ${autoCategory}`);
+      }
+
       return {
         success: true,
         data: extractionResult,
@@ -1181,7 +1577,19 @@ else:
           })
           .eq('id', payload.documentId);
       }
-      
+
+      // Update expense claim status to failed if expenseClaimId provided
+      if (payload.expenseClaimId) {
+        await supabase
+          .from('expense_claims')
+          .update({
+            processing_status: 'failed',
+            error_message: error instanceof Error ? error.message : 'DSPy processing failed',
+            failed_at: new Date().toISOString()
+          })
+          .eq('id', payload.expenseClaimId);
+      }
+
       throw error;
     }
   },

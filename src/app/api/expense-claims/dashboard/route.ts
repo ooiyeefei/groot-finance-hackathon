@@ -9,12 +9,30 @@ import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '
 import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
 
 // Helper function to get user-friendly status display information
-function getStatusDisplayInfo(status: string) {
+function getStatusDisplayInfo(status: string, processingStatus?: string) {
+  // If processing status is active, show processing info instead
+  if (processingStatus === 'processing') {
+    return {
+      label: 'Processing...',
+      color: 'blue',
+      description: 'Receipt is being analyzed by AI',
+      isProcessing: true
+    }
+  }
+
+  if (processingStatus === 'failed') {
+    return {
+      label: 'Processing Failed',
+      color: 'red',
+      description: 'Receipt processing failed - please try manual entry'
+    }
+  }
+
   const statusMap: Record<string, { label: string; color: string; description: string }> = {
     'draft': {
       label: 'Draft',
       color: 'gray',
-      description: 'Expense claim is being prepared'
+      description: 'Ready for review - click Edit to modify or Submit to proceed'
     },
     'submitted': {
       label: 'Submitted',
@@ -234,11 +252,7 @@ export async function GET(request: NextRequest) {
         .from('expense_claims')
         .select(`
           *,
-          transaction:transactions(*),
-          current_approver:employee_profiles!expense_claims_current_approver_id_fkey(
-            role_permissions,
-            user:users!employee_profiles_user_id_fkey(full_name)
-          )
+          transaction:transactions(*)
         `)
         .eq('employee_id', employeeProfile.id)
         .is('deleted_at', null)
@@ -248,35 +262,53 @@ export async function GET(request: NextRequest) {
       // Add personal claims to the dashboard data
       if (adminPersonalClaims && adminPersonalClaims.length > 0) {
         console.log(`[Expense Dashboard API] Admin personal claims found: ${adminPersonalClaims.length}`)
-        
-        // Update summary to include personal claims
-        const personalTotalClaims = adminPersonalClaims.length
-        const personalPendingApproval = adminPersonalClaims.filter(claim => 
-          ['submitted', 'under_review', 'pending_approval'].includes(claim.status)
-        ).length
-        const personalApprovedAmount = adminPersonalClaims
-          .filter(claim => ['approved', 'reimbursed', 'paid'].includes(claim.status))
-          .reduce((sum, claim) => sum + parseFloat(claim.transaction?.home_currency_amount || '0'), 0)
-        const personalRejectedCount = adminPersonalClaims.filter(claim => claim.status === 'rejected').length
 
-        // Add personal claims to totals (not replace, add to existing company totals)
-        dashboardData.summary.total_claims += personalTotalClaims
-        dashboardData.summary.pending_approval += personalPendingApproval
-        dashboardData.summary.approved_amount += personalApprovedAmount
-        dashboardData.summary.rejected_count += personalRejectedCount
+        // Check if admin is already counted in business employees to avoid double-counting
+        const adminIsInBusinessEmployees = employeeIds.includes(employeeProfile.id)
+
+        console.log(`[Expense Dashboard API] Admin employee_id ${employeeProfile.id} in business employees: ${adminIsInBusinessEmployees}`)
+        console.log(`[Expense Dashboard API] Business employee_ids: ${JSON.stringify(employeeIds)}`)
+
+        if (!adminIsInBusinessEmployees) {
+          // Admin is not in business employees list, so add their claims to totals
+          const additionalTotalClaims = adminPersonalClaims.length
+          const additionalPendingApproval = adminPersonalClaims.filter(claim =>
+            ['submitted', 'under_review', 'pending_approval'].includes(claim.status)
+          ).length
+          const additionalApprovedAmount = adminPersonalClaims
+            .filter(claim => ['approved', 'reimbursed', 'paid'].includes(claim.status))
+            .reduce((sum, claim) => sum + parseFloat(claim.transaction?.home_currency_amount || '0'), 0)
+          const additionalRejectedCount = adminPersonalClaims.filter(claim => claim.status === 'rejected').length
+
+          console.log(`[Expense Dashboard API] Adding admin's ${additionalTotalClaims} personal claims to totals`)
+
+          dashboardData.summary.total_claims += additionalTotalClaims
+          dashboardData.summary.pending_approval += additionalPendingApproval
+          dashboardData.summary.approved_amount += additionalApprovedAmount
+          dashboardData.summary.rejected_count += additionalRejectedCount
+        } else {
+          console.log(`[Expense Dashboard API] Admin claims already counted in business totals - skipping addition`)
+        }
 
         // For recent_claims in admin view, prioritize approved claims for reimbursement, but also include personal drafts
-        const personalClaimsForDisplay = adminPersonalClaims.map(claim => ({
-          ...claim,
-          // Add status display information for personal claims
-          status_display: getStatusDisplayInfo(claim.status),
-          workflow_progress: getWorkflowProgress(claim.status),
-          current_approver_name: claim.current_approver?.user?.full_name || null,
-          _is_personal: true // Flag to identify personal claims in UI
-        }))
+        const personalClaimsForDisplay = adminPersonalClaims.map(claim => {
+          const statusDisplay = getStatusDisplayInfo(claim.status, claim.processing_status)
+          console.log(`[Dashboard API Admin] Claim ${claim.id}: status=${claim.status}, processing_status=${claim.processing_status}, status_display=${JSON.stringify(statusDisplay)}`)
+          return {
+            ...claim,
+            // Add status display information for personal claims
+            status_display: statusDisplay,
+            workflow_progress: getWorkflowProgress(claim.status),
+            current_approver_name: null, // Removed invalid foreign key relationship
+            _is_personal: true // Flag to identify personal claims in UI
+          }
+        })
 
         // Combine with existing recent claims but put personal claims first
-        dashboardData.recent_claims = [...personalClaimsForDisplay, ...(dashboardData.recent_claims || [])].slice(0, 10)
+        // Remove duplicates by claim ID before combining
+        const existingClaimIds = new Set((dashboardData.recent_claims || []).map((claim: any) => claim.id))
+        const uniquePersonalClaims = personalClaimsForDisplay.filter((claim: any) => !existingClaimIds.has(claim.id))
+        dashboardData.recent_claims = [...uniquePersonalClaims, ...(dashboardData.recent_claims || [])].slice(0, 10)
       }
 
     } else if (isManager) {
@@ -358,11 +390,7 @@ export async function GET(request: NextRequest) {
         .from('expense_claims')
         .select(`
           *,
-          transaction:transactions(*),
-          current_approver:employee_profiles!expense_claims_current_approver_id_fkey(
-            role_permissions,
-            user:users!employee_profiles_user_id_fkey(full_name)
-          )
+          transaction:transactions(*)
         `)
         .eq('employee_id', employeeProfile.id)
         .is('deleted_at', null)
@@ -397,15 +425,19 @@ export async function GET(request: NextRequest) {
         dashboardData.recent_claims = userClaims
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
           .slice(0, 10)
-          .map(claim => ({
-            ...claim,
-            // Add status display information
-            status_display: getStatusDisplayInfo(claim.status),
-            // Add workflow progress information
-            workflow_progress: getWorkflowProgress(claim.status),
-            // Add approver information
-            current_approver_name: claim.current_approver?.user?.full_name || null
-          }))
+          .map(claim => {
+            const statusDisplay = getStatusDisplayInfo(claim.status, claim.processing_status)
+            console.log(`[Dashboard API] Claim ${claim.id}: status=${claim.status}, processing_status=${claim.processing_status}, status_display=${JSON.stringify(statusDisplay)}`)
+            return {
+              ...claim,
+              // Add status display information
+              status_display: statusDisplay,
+              // Add workflow progress information
+              workflow_progress: getWorkflowProgress(claim.status),
+              // Add approver information
+              current_approver_name: null // Removed invalid foreign key relationship
+            }
+          })
       }
     }
 

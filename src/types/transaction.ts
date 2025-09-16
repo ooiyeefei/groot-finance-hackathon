@@ -88,7 +88,8 @@ export interface Transaction {
   
   // Business context
   transaction_date: string // ISO date
-  vendor_name?: string
+  vendor_name?: string // Legacy field, being phased out
+  vendor_id?: string // NEW: Reference to vendors table for data integrity
   vendor_details?: Record<string, any>
   
   // Transaction status and workflow
@@ -151,7 +152,8 @@ export interface CreateTransactionRequest {
   original_currency: SupportedCurrency
   original_amount: number
   home_currency: SupportedCurrency
-  vendor_name?: string
+  vendor_name?: string // Legacy field for backward compatibility
+  vendor_id?: string // NEW: Link to vendors table
   reference_number?: string
   status?: 'pending' | 'awaiting_payment' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
   due_date?: string // ISO date

@@ -19,6 +19,36 @@ import {
 } from '@/types/expense-claims'
 import { SupportedCurrency } from '@/types/transaction'
 
+// Otto's risk scoring algorithm
+function calculateRiskScore(amount: number, category: ExpenseCategory, employee: any): number {
+  let score = 0
+  
+  // Amount-based risk (0-40 points)
+  if (amount > 5000) score += 40
+  else if (amount > 2000) score += 30
+  else if (amount > 1000) score += 20
+  else if (amount > 500) score += 10
+  
+  // Category-based risk (0-30 points)
+  const categoryRisk = {
+    'entertainment': 30,
+    'travel_accommodation': 25,
+    'other': 20,
+    'petrol': 10,
+    'toll': 5
+  }
+  score += categoryRisk[category] || 0
+  
+  // Employee limit check (0-30 points)
+  if (employee.expense_limit && amount > employee.expense_limit) {
+    score += 30
+  } else if (employee.expense_limit && amount > employee.expense_limit * 0.8) {
+    score += 15
+  }
+  
+  return Math.min(score, 100) // Cap at 100
+}
+
 // Create new expense claim
 export async function POST(request: NextRequest) {
   try {
@@ -39,9 +69,9 @@ export async function POST(request: NextRequest) {
       original_currency,
       transaction_date,
       vendor_name,
+      vendor_id, // NEW: Support for vendor_id from vendors table
       reference_number,
       notes,
-      document_id,
       line_items = []
     } = body
 
@@ -186,13 +216,12 @@ export async function POST(request: NextRequest) {
       .from('transactions')
       .insert({
         user_id: userId,
-        document_id: document_id || null,
         transaction_type: 'expense',
         category: 'administrative_expenses', // Map to IFRS category
         subcategory: expense_category,
         description,
         reference_number,
-        document_type: document_id ? 'receipt' : null,
+        document_type: null, // No document_id dependency
         original_currency,
         original_amount,
         home_currency: userHomeCurrency,
@@ -201,8 +230,9 @@ export async function POST(request: NextRequest) {
         exchange_rate_date: exchangeRateDate,
         transaction_date,
         vendor_name,
+        vendor_id, // NEW: Link to vendors table
         notes,
-        created_by_method: document_id ? 'document_extract' : 'manual',
+        created_by_method: 'manual', // Unified approach - use business_purpose_details for file tracking
         processing_metadata: {
           expense_category,
           business_purpose,
@@ -253,14 +283,27 @@ export async function POST(request: NextRequest) {
     const transactionDate = new Date(transaction_date)
     const claimMonth = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), 1).toISOString().split('T')[0] // YYYY-MM-01 format
 
+    // Otto's enhanced compliance fields
+    const riskScore = calculateRiskScore(original_amount, expense_category, employeeProfile)
+    
     const expenseClaimData = {
       transaction_id: transaction.id,
       employee_id: employeeProfile.id,
       business_id: employeeProfile.business_id,
       status: 'draft', // Start in draft status
       business_purpose,
+      business_purpose_details: {
+        category_reason: business_purpose,
+        original_submission: body,
+        risk_factors: {
+          amount_threshold: original_amount > 1000,
+          category_risk: ['travel_accommodation', 'entertainment'].includes(expense_category)
+        }
+      },
       expense_category,
-      claim_month: claimMonth
+      claim_month: claimMonth,
+      risk_score: riskScore,
+      current_approver_id: null // Will be set when submitted
     }
 
     // Use service role client to bypass RLS for expense claim creation (much simpler!)
@@ -279,7 +322,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[Expense Claims API] Created expense claim ${expenseClaim.id}`)
+    // Log audit event for compliance tracking
+    await serviceSupabase
+      .from('audit_events')
+      .insert({
+        business_id: employeeProfile.business_id,
+        actor_user_id: userId,
+        event_type: 'expense_claim.created',
+        target_entity_type: 'expense_claim',
+        target_entity_id: expenseClaim.id,
+        details: {
+          expense_category,
+          original_amount,
+          original_currency,
+          risk_score: riskScore,
+          vendor_name,
+          business_purpose_summary: business_purpose.substring(0, 100),
+          created_from: 'manual_entry' // Unified approach
+        }
+      })
+
+    console.log(`[Expense Claims API] Created expense claim ${expenseClaim.id} with risk score ${riskScore}`)
 
     return NextResponse.json({
       success: true,
@@ -349,8 +412,7 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         transaction:transactions(*),
-        employee:employee_profiles!expense_claims_employee_id_fkey(*),
-        current_approver:employee_profiles!expense_claims_current_approver_id_fkey(*)
+        employee:employee_profiles!expense_claims_employee_id_fkey(*)
       `)
 
     // Apply role-based filtering (Kevin's RLS approach)

@@ -108,18 +108,16 @@ export default function ReceiptUploadStep({
                   {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
                 </p>
                 <div className="mt-2">
-                  <Button
+                  <button
                     onClick={() => {
                       setSelectedFile(null)
                       setPreviewUrl(null)
                     }}
-                    variant="outline"
-                    size="sm"
-                    className="border-gray-600 text-gray-300 hover:bg-gray-600"
                     disabled={isProcessing}
+                    className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
                   >
                     Choose Different File
-                  </Button>
+                  </button>
                 </div>
               </div>
             </div>
@@ -162,42 +160,40 @@ export default function ReceiptUploadStep({
 
       {/* Upload Options - DSPy-inspired clean design */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Button
+        <button
           onClick={handleCameraCapture}
-          className="h-32 bg-blue-600 hover:bg-blue-700 flex flex-col items-center justify-center space-y-3"
           disabled={isProcessing}
+          className="h-32 bg-blue-600 hover:bg-blue-700 text-white flex flex-col items-center justify-center space-y-3 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
         >
           <Camera className="w-10 h-10" />
           <div className="text-center">
             <div className="font-medium">Use Camera</div>
             <div className="text-xs opacity-80">Capture receipt photo</div>
           </div>
-        </Button>
+        </button>
 
-        <Button
+        <button
           onClick={handleFileUpload}
-          variant="outline"
-          className="h-32 border-gray-600 hover:bg-gray-700 flex flex-col items-center justify-center space-y-3"
           disabled={isProcessing}
+          className="h-32 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 flex flex-col items-center justify-center space-y-3 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
         >
           <Upload className="w-10 h-10" />
           <div className="text-center">
             <div className="font-medium">Upload File</div>
             <div className="text-xs opacity-80">Select from device</div>
           </div>
-        </Button>
+        </button>
       </div>
 
       {/* DSPy Flow: Allow manual entry option */}
       <div className="text-center">
-        <Button 
-          variant="ghost" 
-          onClick={onSkip} 
-          className="text-gray-400 hover:text-white"
+        <button
+          onClick={onSkip}
           disabled={isProcessing}
+          className="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
         >
           Skip receipt upload and enter details manually
-        </Button>
+        </button>
       </div>
 
       {/* Hidden file input */}

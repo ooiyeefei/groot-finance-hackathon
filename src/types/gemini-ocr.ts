@@ -35,6 +35,11 @@ export interface GeminiOCRResponse {
   processing_metadata?: {
     model_used: string
     processing_time_ms: number
+    timestamp?: string
+    retry_attempts_used?: string | number
+    timeout_config?: number
+    temperature_config?: number
+    confidence_threshold?: number
     image_dimensions?: {
       width: number
       height: number
@@ -44,9 +49,11 @@ export interface GeminiOCRResponse {
 
 export interface GeminiOCRError {
   error: string
-  error_type: 'api_error' | 'parsing_error' | 'validation_error' | 'rate_limit_error'
+  error_type: 'api_error' | 'parsing_error' | 'validation_error' | 'rate_limit_error' | 'invalid_input' | 'unexpected_error' | 'timeout_error' | 'auth_error' | 'parsing_exception' | 'validation_exception'
   retry_after?: number
   raw_response?: string
+  debug_info?: Record<string, any>
+  validation_errors?: string[]
 }
 
 export interface GeminiProcessingResult {

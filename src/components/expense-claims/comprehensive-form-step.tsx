@@ -40,7 +40,8 @@ interface ComprehensiveExpenseData {
   reference_number?: string
   receipt_number?: string
   notes?: string
-  document_id?: string
+  // document_id removed - using business_purpose_details for file tracking
+  business_purpose_details?: Record<string, any>
   tax_amount?: number
   tax_rate?: number
   line_items: LineItem[]
@@ -124,7 +125,9 @@ export default function ComprehensiveFormStep({
   // Policy compliance check
   const categoryConfig = EXPENSE_CATEGORY_CONFIG[formData.expense_category as keyof typeof EXPENSE_CATEGORY_CONFIG]
   const exceedsLimit = categoryConfig?.policy_limit && formData.original_amount > categoryConfig.policy_limit
-  const needsReceipt = categoryConfig?.requires_receipt_over && formData.original_amount > categoryConfig.requires_receipt_over && !formData.document_id
+  // Check for receipt via business_purpose_details instead of document_id
+  const hasReceipt = formData.business_purpose_details?.file_upload?.file_path
+  const needsReceipt = categoryConfig?.requires_receipt_over && formData.original_amount > categoryConfig.requires_receipt_over && !hasReceipt
 
   return (
     <div className="space-y-6">

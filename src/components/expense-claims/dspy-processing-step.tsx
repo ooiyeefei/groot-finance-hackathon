@@ -35,6 +35,9 @@ interface DSPyProcessingStepProps {
   onRetry: () => void
   onSkip: () => void
   onProcessingStateChange?: (isProcessing: boolean) => void
+  processingClaimId?: string | null
+  processingClaim?: any
+  updateClaimStatus?: (claimId: string, updates: any) => void
 }
 
 interface ProcessingStep {
@@ -46,12 +49,15 @@ interface ProcessingStep {
   reasoning?: string
 }
 
-export default function DSPyProcessingStep({ 
-  file, 
-  onExtractionComplete, 
-  onRetry, 
+export default function DSPyProcessingStep({
+  file,
+  onExtractionComplete,
+  onRetry,
   onSkip,
-  onProcessingStateChange
+  onProcessingStateChange,
+  processingClaimId,
+  processingClaim,
+  updateClaimStatus
 }: DSPyProcessingStepProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [extractionResult, setExtractionResult] = useState<DSPyExtractionResult | null>(null)
@@ -131,13 +137,23 @@ export default function DSPyProcessingStep({
         // Check if aborted before making request
         if (signal.aborted) return
 
+        // Update processing claim status if available
+        if (processingClaimId && updateClaimStatus) {
+          updateClaimStatus(processingClaimId, {
+            status: 'processing',
+            progress: 5
+          })
+        }
+
         // Start actual DSPy processing with hybrid classification immediately
         const formData = new FormData()
         formData.append('receipt', file)
+        formData.append('business_purpose', 'Receipt processing - details to be reviewed')
+        formData.append('expense_category', 'other')
 
         // Start both the DSPy API call and progress simulation in parallel
         const [response] = await Promise.all([
-          fetch('/api/receipts/extract-dspy-sync', {
+          fetch('/api/expense-claims/upload-receipt', {
             method: 'POST',
             body: formData,
             signal // Pass AbortController signal to prevent duplicate requests
@@ -164,68 +180,71 @@ export default function DSPyProcessingStep({
         if (!isMounted || signal.aborted) return
 
         // Check if processing is complete or still running
-        if (!result.data.processing_complete) {
+        if (result.data.processing_status === 'processing') {
           const taskId = result.data.task_id
-          console.log(`[DSPy Processing] Task started in background, task_id: ${taskId}`)
-          console.log(`[DSPy Processing] Starting polling for task completion...`)
-          
-          // Start polling for task completion
-          await pollTaskCompletion(taskId, signal)
+          const expenseClaimId = result.data.expense_claim_id
+          console.log(`[DSPy Processing] Expense claim created: ${expenseClaimId}, task_id: ${taskId}`)
+          console.log(`[DSPy Processing] Starting polling for expense claim completion...`)
+
+          // Update processing claim with task ID for tracking
+          if (processingClaimId && updateClaimStatus) {
+            updateClaimStatus(processingClaimId, {
+              status: 'extracting',
+              progress: 60,
+              taskId: taskId,
+              expenseClaimId: expenseClaimId
+            })
+          }
+
+          // Start polling for expense claim completion
+          await pollExpenseClaimCompletion(expenseClaimId, signal)
           return
         }
 
-        // Processing is complete, transform DSPy result to match expected format
-        const extractionResult = {
-          thinking: {
-            step1_vendor_analysis: `Identified vendor: ${result.data.expense_data?.vendor_name || 'Unknown'}`,
-            step2_date_identification: `Found date: ${result.data.expense_data?.transaction_date || 'Not found'}`, 
-            step3_amount_parsing: `Extracted amount: ${result.data.expense_data?.total_amount || 0} ${result.data.expense_data?.currency || 'SGD'}`,
-            step4_tax_calculation: `Tax analysis: ${result.data.expense_data?.tax_amount ? `${result.data.expense_data.tax_amount} tax detected` : 'No tax information found'}`,
-            step5_line_items_extraction: `Line items: ${result.data.expense_data?.line_items?.length || 0} items extracted`,
-            step6_validation_checks: `Validation complete. Confidence: ${Math.round((result.data.confidence_score || 0) * 100)}%`,
-            final_confidence_assessment: `Overall processing confidence: ${Math.round((result.data.confidence_score || 0) * 100)}%`
-          },
-          extractedData: {
-            vendorName: result.data.expense_data?.vendor_name || '',
-            totalAmount: result.data.expense_data?.total_amount || 0,
-            currency: result.data.expense_data?.currency || 'SGD',
-            transactionDate: result.data.expense_data?.transaction_date || '',
-            description: result.data.expense_data?.description || '',
-            receiptNumber: result.data.expense_data?.receipt_number || '',
-            lineItems: (result.data.expense_data?.line_items || []).map((item: any) => ({
-              description: item.description || '',
-              quantity: item.quantity || null,
-              unitPrice: item.unit_price || null,
-              lineTotal: item.total_amount || 0
-            })),
-            confidenceScore: result.data.confidence_score || 0.7,
-            extractionQuality: (result.data.confidence_score > 0.9 ? 'high' : result.data.confidence_score > 0.7 ? 'medium' : 'low') as 'high' | 'medium' | 'low',
-            missingFields: result.data.expense_data?.missing_fields || [],
-            processingMethod: 'dspy' as const,
-            processingTimestamp: new Date().toISOString(),
-            documentId: result.data.document_id // Include document ID for linking
-          },
-          processingComplete: result.data.processing_complete,
-          needsManualReview: result.data.requires_validation || false,
-          suggestedCorrections: []
-        }
-        
-        // Update steps with actual reasoning
-        setProcessingSteps(prev => prev.map(step => ({
-          ...step,
-          status: 'completed',
-          reasoning: extractionResult.thinking[step.id as keyof typeof extractionResult.thinking] || 'Processing completed'
-        })))
+        // Processing completed immediately - unusual but handle gracefully
+        if (result.data.processing_status === 'completed') {
+          console.log(`[DSPy Processing] Expense claim completed immediately!`)
 
-        setExtractionResult(extractionResult)
-        onExtractionComplete(extractionResult)
+          // Transform the result using our new function
+          const extractionResult = transformClaimDataToExtractionResult(result.data)
+
+          // Update processing claim to completed status
+          if (processingClaimId && updateClaimStatus) {
+            updateClaimStatus(processingClaimId, {
+              status: 'completed',
+              progress: 100,
+              extractionResult: extractionResult
+            })
+          }
+
+          // Update steps with actual reasoning
+          setProcessingSteps(prev => prev.map(step => ({
+            ...step,
+            status: 'completed',
+            reasoning: extractionResult.thinking[step.id as keyof typeof extractionResult.thinking] || 'Processing completed'
+          })))
+
+          setExtractionResult(extractionResult)
+          onExtractionComplete(extractionResult)
+          return
+        }
       } catch (err) {
         // Don't set error if request was aborted
         if (signal.aborted) return
         
         console.error('Receipt extraction failed:', err)
         if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Processing failed')
+          const errorMessage = err instanceof Error ? err.message : 'Processing failed'
+
+          // Update processing claim to failed status
+          if (processingClaimId && updateClaimStatus) {
+            updateClaimStatus(processingClaimId, {
+              status: 'failed',
+              error: errorMessage
+            })
+          }
+
+          setError(errorMessage)
           setProcessingSteps(prev => prev.map((step, index) => ({
             ...step,
             status: index <= currentStep ? 'failed' : 'pending'
@@ -247,45 +266,54 @@ export default function DSPyProcessingStep({
     }
   }, [file]) // Only depend on file, not isProcessing to avoid infinite loops
 
-  // Poll for task completion using the task status API
-  const pollTaskCompletion = async (taskId: string, signal: AbortSignal) => {
+  // Poll for expense claim completion using the expense claim status API
+  const pollExpenseClaimCompletion = async (expenseClaimId: string, signal: AbortSignal) => {
     const maxAttempts = 120 // 2 minutes max polling (2 second intervals)
     let attempts = 0
 
     while (attempts < maxAttempts && !signal.aborted) {
       try {
         await new Promise(resolve => setTimeout(resolve, 2000)) // Poll every 2 seconds
-        
+
         if (signal.aborted) return
 
-        const statusResponse = await fetch(`/api/tasks/${taskId}/status`, { signal })
-        
+        const statusResponse = await fetch(`/api/expense-claims/upload-receipt?expense_claim_id=${expenseClaimId}`, { signal })
+
         if (!statusResponse.ok) {
-          throw new Error('Failed to check task status')
+          throw new Error('Failed to check expense claim status')
         }
 
         const statusResult = await statusResponse.json()
-        
+
         if (!statusResult.success) {
-          throw new Error(statusResult.error || 'Task status check failed')
+          throw new Error(statusResult.error || 'Expense claim status check failed')
         }
 
-        const taskData = statusResult.data
+        const claimData = statusResult.data
 
         // Update progress indication during polling
-        if (taskData.status === 'running' || taskData.status === 'waiting') {
-          console.log(`[DSPy Processing] Task ${taskId} still running... (${attempts * 2}s elapsed)`)
+        if (claimData.processing_status === 'processing') {
+          console.log(`[DSPy Processing] Expense claim ${expenseClaimId} still processing... (${attempts * 2}s elapsed)`)
           attempts++
           continue
         }
 
-        // Task completed successfully
-        if (taskData.processing_complete && taskData.is_success && taskData.extraction_result) {
-          console.log(`[DSPy Processing] Task ${taskId} completed successfully!`)
-          
+        // Processing completed successfully
+        if (claimData.processing_complete) {
+          console.log(`[DSPy Processing] Expense claim ${expenseClaimId} completed successfully!`)
+
           // Transform the result to match expected format
-          const extractionResult = transformTaskResultToExtractionResult(taskData.extraction_result)
-          
+          const extractionResult = transformClaimDataToExtractionResult(claimData)
+
+          // Update processing claim to completed status
+          if (processingClaimId && updateClaimStatus) {
+            updateClaimStatus(processingClaimId, {
+              status: 'completed',
+              progress: 100,
+              extractionResult: extractionResult
+            })
+          }
+
           // Update steps with actual reasoning
           setProcessingSteps(prev => prev.map(step => ({
             ...step,
@@ -298,18 +326,18 @@ export default function DSPyProcessingStep({
           return
         }
 
-        // Task failed
-        if (taskData.status === 'failed') {
-          throw new Error(taskData.error || 'Receipt processing failed')
+        // Processing failed
+        if (claimData.processing_status === 'failed') {
+          throw new Error(claimData.error_message || 'Receipt processing failed')
         }
 
         attempts++
       } catch (pollError) {
         if (signal.aborted) return
-        
+
         console.error('[DSPy Processing] Polling error:', pollError)
         attempts++
-        
+
         // If we've tried many times, give up
         if (attempts >= 10) {
           throw new Error('Unable to check processing status. Please try again.')
@@ -323,41 +351,36 @@ export default function DSPyProcessingStep({
     }
   }
 
-  // Transform Trigger.dev task result to DSPy extraction result format
-  const transformTaskResultToExtractionResult = (taskResult: any) => {
+  // Transform expense claim data to DSPy extraction result format
+  const transformClaimDataToExtractionResult = (claimData: any) => {
     return {
       thinking: {
-        step1_vendor_analysis: taskResult.reasoning_steps?.step1_vendor_analysis || `Identified vendor: ${taskResult.vendor_name}`,
-        step2_date_identification: taskResult.reasoning_steps?.step2_date_identification || `Found date: ${taskResult.transaction_date}`, 
-        step3_amount_parsing: taskResult.reasoning_steps?.step3_amount_parsing || `Extracted amount: ${taskResult.total_amount} ${taskResult.currency}`,
-        step4_tax_calculation: taskResult.reasoning_steps?.step4_tax_calculation || `Tax analysis: ${taskResult.tax_amount ? `${taskResult.tax_amount} tax detected` : 'No tax information found'}`,
-        step5_line_items_extraction: taskResult.reasoning_steps?.step5_line_items_extraction || `Line items: ${taskResult.line_items?.length || 0} items extracted`,
-        step6_validation_checks: taskResult.reasoning_steps?.step6_validation_checks || `Validation complete. Confidence: ${Math.round((taskResult.confidence_score || 0) * 100)}%`,
-        final_confidence_assessment: taskResult.reasoning_steps?.final_confidence_assessment || `Overall processing confidence: ${Math.round((taskResult.confidence_score || 0) * 100)}%`
+        step1_vendor_analysis: `Identified vendor: ${claimData.vendor_name || 'Unknown'}`,
+        step2_date_identification: `Found date: ${claimData.transaction_date || 'Not found'}`,
+        step3_amount_parsing: `Extracted amount: ${claimData.total_amount || 0} ${claimData.currency || 'SGD'}`,
+        step4_tax_calculation: `Tax analysis: No tax information found`,
+        step5_line_items_extraction: `Line items: 0 items extracted`,
+        step6_validation_checks: `Validation complete. Confidence: ${Math.round((claimData.extraction_quality === 'high' ? 0.9 : claimData.extraction_quality === 'medium' ? 0.7 : 0.5) * 100)}%`,
+        final_confidence_assessment: `Overall processing confidence: ${Math.round((claimData.extraction_quality === 'high' ? 0.9 : claimData.extraction_quality === 'medium' ? 0.7 : 0.5) * 100)}%`
       },
       extractedData: {
-        vendorName: taskResult.vendor_name || '',
-        totalAmount: taskResult.total_amount || 0,
-        currency: taskResult.currency || 'SGD',
-        transactionDate: taskResult.transaction_date || '',
-        description: taskResult.description || '',
-        receiptNumber: taskResult.receipt_number || '',
-        lineItems: (taskResult.line_items || []).map((item: any) => ({
-          description: item.description || '',
-          quantity: item.quantity || null,
-          unitPrice: item.unit_price || null,
-          lineTotal: item.total_amount || 0
-        })),
-        confidenceScore: taskResult.confidence_score || 0.7,
-        extractionQuality: (taskResult.confidence_score > 0.9 ? 'high' : taskResult.confidence_score > 0.7 ? 'medium' : 'low') as 'high' | 'medium' | 'low',
-        missingFields: taskResult.missing_fields || [],
-        processingMethod: 'dspy' as const,
-        processingTimestamp: new Date().toISOString(),
-        documentId: taskResult.document_id
+        vendorName: claimData.vendor_name || '',
+        totalAmount: claimData.total_amount || 0,
+        currency: claimData.currency || 'SGD',
+        transactionDate: claimData.transaction_date || '',
+        description: claimData.description || '',
+        receiptNumber: '',
+        lineItems: [],
+        confidenceScore: claimData.extraction_quality === 'high' ? 0.9 : claimData.extraction_quality === 'medium' ? 0.7 : 0.5,
+        extractionQuality: claimData.extraction_quality || 'medium' as 'high' | 'medium' | 'low',
+        missingFields: claimData.missing_fields || [],
+        processingMethod: claimData.processing_method || 'dspy' as const,
+        processingTimestamp: claimData.processed_at || new Date().toISOString(),
+        documentId: claimData.expense_claim_id
       },
-      processingComplete: true,
-      needsManualReview: taskResult.requires_validation || false,
-      suggestedCorrections: taskResult.suggested_corrections || []
+      processingComplete: claimData.processing_complete || false,
+      needsManualReview: claimData.missing_fields?.length > 0 || false,
+      suggestedCorrections: []
     }
   }
 

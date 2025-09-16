@@ -46,8 +46,7 @@ export async function PATCH(
       .select(`
         *,
         transaction:transactions(*),
-        employee:employee_profiles!expense_claims_employee_id_fkey(*),
-        current_approver:employee_profiles!expense_claims_current_approver_id_fkey(*)
+        employee:employee_profiles!expense_claims_employee_id_fkey(*)
       `)
       .eq('id', claimId)
       .single()
@@ -205,8 +204,7 @@ export async function PATCH(
       .select(`
         *,
         transaction:transactions(*),
-        employee:employee_profiles!expense_claims_employee_id_fkey(*),
-        current_approver:employee_profiles!expense_claims_current_approver_id_fkey(*)
+        employee:employee_profiles!expense_claims_employee_id_fkey(*)
       `)
       .single()
 
@@ -236,6 +234,26 @@ export async function PATCH(
         console.error('[Expense Claims Status API] Failed to create audit record:', auditError)
       }
     }
+
+    // Log status change in consolidated audit trail (Otto's enhanced compliance)
+    await supabase
+      .from('audit_events')
+      .insert({
+        business_id: expenseClaim.business_id,
+        actor_user_id: userId,
+        event_type: `expense_claim.${action}`,
+        target_entity_type: 'expense_claim',
+        target_entity_id: claimId,
+        details: {
+          previous_status: expenseClaim.status,
+          new_status: targetStatus,
+          action_comment: comment,
+          expense_amount: expenseClaim.transaction?.original_amount,
+          currency: expenseClaim.transaction?.original_currency,
+          approver_role: requiredRole,
+          risk_score: expenseClaim.risk_score
+        }
+      })
 
     // TODO: Send real-time notifications (Kevin's WebSocket system)
     // await notificationService.broadcastStatusUpdate(claimId, targetStatus)

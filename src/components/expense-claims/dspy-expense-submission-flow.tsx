@@ -6,11 +6,12 @@
 
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { X, ArrowLeft, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DSPyExtractionResult } from '@/types/expense-extraction'
+import { useExpenseClaimProcessing } from '@/hooks/use-expense-claim-processing'
 import ReceiptUploadStep from './receipt-upload-step'
 import DSPyProcessingStep from './dspy-processing-step'
 import PreFilledExpenseForm from './pre-filled-expense-form'
@@ -29,19 +30,30 @@ interface FlowState {
   error: string | null
   isSubmitting: boolean
   isBackgroundProcessing: boolean
+  processingClaimId: string | null
 }
 
-export default function DSPyExpenseSubmissionFlow({ 
-  onClose, 
-  onSubmit 
+export default function DSPyExpenseSubmissionFlow({
+  onClose,
+  onSubmit
 }: DSPyExpenseSubmissionFlowProps) {
+  const {
+    processingClaims,
+    addProcessingClaim,
+    updateClaimStatus,
+    removeProcessingClaim,
+    getProcessingClaim,
+    hasActiveProcessing
+  } = useExpenseClaimProcessing()
+
   const [flowState, setFlowState] = useState<FlowState>({
     currentStep: 'upload',
     uploadedFile: null,
     extractionResult: null,
     error: null,
     isSubmitting: false,
-    isBackgroundProcessing: false
+    isBackgroundProcessing: false,
+    processingClaimId: null
   })
 
   // DSPy Flow: Step 1 → Step 2 (Upload → Processing)
@@ -50,18 +62,22 @@ export default function DSPyExpenseSubmissionFlow({
     if (file.type.startsWith('error/')) {
       setFlowState(prev => ({
         ...prev,
-        error: file.type === 'error/validation' 
+        error: file.type === 'error/validation'
           ? 'Please select a valid image (JPEG, PNG, WebP) or PDF file'
           : 'File size must be less than 10MB'
       }))
       return
     }
 
+    // Add to processing queue
+    const claimId = addProcessingClaim(file)
+
     setFlowState(prev => ({
       ...prev,
       uploadedFile: file,
       currentStep: 'processing',
-      error: null
+      error: null,
+      processingClaimId: claimId
     }))
   }
 
@@ -81,6 +97,37 @@ export default function DSPyExpenseSubmissionFlow({
       isBackgroundProcessing: isProcessing
     }))
   }, [])
+
+  // Monitor processing claim status and update flow accordingly
+  useEffect(() => {
+    if (!flowState.processingClaimId) return
+
+    const claim = getProcessingClaim(flowState.processingClaimId)
+    if (!claim) return
+
+    // Update background processing state
+    const isActivelyProcessing = ['uploading', 'processing', 'extracting'].includes(claim.status)
+    if (flowState.isBackgroundProcessing !== isActivelyProcessing) {
+      setFlowState(prev => ({
+        ...prev,
+        isBackgroundProcessing: isActivelyProcessing
+      }))
+    }
+
+    // Handle completion
+    if (claim.status === 'completed' && claim.extractionResult && flowState.currentStep === 'processing') {
+      handleExtractionComplete(claim.extractionResult)
+    }
+
+    // Handle failure
+    if (claim.status === 'failed' && flowState.currentStep === 'processing') {
+      setFlowState(prev => ({
+        ...prev,
+        error: claim.error || 'Processing failed',
+        isBackgroundProcessing: false
+      }))
+    }
+  }, [processingClaims, flowState.processingClaimId, flowState.isBackgroundProcessing, flowState.currentStep])
 
   // DSPy Flow: Skip processing and go directly to manual form
   const handleSkipToManualForm = () => {
@@ -157,12 +204,18 @@ export default function DSPyExpenseSubmissionFlow({
   }
 
   const handleRetryProcessing = () => {
+    // Clean up existing processing claim if any
+    if (flowState.processingClaimId) {
+      removeProcessingClaim(flowState.processingClaimId)
+    }
+
     setFlowState(prev => ({
       ...prev,
       currentStep: 'upload',
       uploadedFile: null,
       extractionResult: null,
-      error: null
+      error: null,
+      processingClaimId: null
     }))
   }
 
@@ -230,28 +283,34 @@ export default function DSPyExpenseSubmissionFlow({
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Show background processing indicator */}
+            {hasActiveProcessing && (
+              <Badge variant="secondary" className="bg-purple-600 animate-pulse">
+                {processingClaims.length} processing...
+              </Badge>
+            )}
+
             {flowState.extractionResult && (
-              <Badge 
-                variant="secondary" 
+              <Badge
+                variant="secondary"
                 className={
-                  flowState.extractionResult.extractedData.extractionQuality === 'high' 
-                    ? 'bg-green-600' 
-                    : flowState.extractionResult.extractedData.extractionQuality === 'medium' 
-                    ? 'bg-yellow-600' 
+                  flowState.extractionResult.extractedData.extractionQuality === 'high'
+                    ? 'bg-green-600'
+                    : flowState.extractionResult.extractedData.extractionQuality === 'medium'
+                    ? 'bg-yellow-600'
                     : 'bg-red-600'
                 }
               >
                 {flowState.extractionResult.extractedData.extractionQuality} quality
               </Badge>
             )}
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => onClose(flowState.isBackgroundProcessing)} 
+            <button
+              onClick={() => onClose(hasActiveProcessing || flowState.isBackgroundProcessing)}
               disabled={flowState.isSubmitting}
+              className="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               <X className="w-4 h-4" />
-            </Button>
+            </button>
           </div>
         </div>
 
@@ -279,6 +338,9 @@ export default function DSPyExpenseSubmissionFlow({
               onRetry={handleRetryProcessing}
               onSkip={handleSkipToManualForm}
               onProcessingStateChange={handleProcessingStateChange}
+              processingClaimId={flowState.processingClaimId}
+              processingClaim={flowState.processingClaimId ? getProcessingClaim(flowState.processingClaimId) : undefined}
+              updateClaimStatus={updateClaimStatus}
             />
           )}
 
@@ -299,15 +361,13 @@ export default function DSPyExpenseSubmissionFlow({
             <div className="flex justify-between items-center text-sm text-gray-400">
               <div className="flex items-center gap-2">
                 {flowState.currentStep === 'processing' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
                     onClick={handleBack}
-                    className="text-gray-400 hover:text-white"
+                    className="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors"
                   >
                     <ArrowLeft className="w-4 h-4 mr-1" />
                     Change File
-                  </Button>
+                  </button>
                 )}
               </div>
               <div>

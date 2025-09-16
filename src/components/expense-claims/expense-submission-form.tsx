@@ -32,7 +32,7 @@ interface ExpenseFormData {
   vendor_name: string
   reference_number?: string
   notes?: string
-  document_id?: string
+  // document_id removed - using business_purpose_details for file tracking
 }
 
 interface OCRResult {
@@ -230,7 +230,8 @@ export default function ExpenseSubmissionForm({ onClose, onSubmit }: ExpenseSubm
           }
 
           try {
-            const ocrResponse = await fetch(`/api/expense-claims/upload-receipt?document_id=${documentId}`)
+            // OCR handling updated to use business_purpose_details approach
+            const ocrResponse = await fetch(`/api/expense-claims/upload-receipt`)
             const ocrData = await ocrResponse.json()
 
             if (ocrData.success && ocrData.data.processing_complete) {
@@ -244,7 +245,7 @@ export default function ExpenseSubmissionForm({ onClose, onSubmit }: ExpenseSubm
                 original_currency: extractedData.currency || prev.original_currency,
                 transaction_date: extractedData.transaction_date || prev.transaction_date,
                 description: extractedData.description || prev.description,
-                document_id: documentId
+                // document_id removed - file info stored in business_purpose_details
               }))
 
               setOcrResult(extractedData)

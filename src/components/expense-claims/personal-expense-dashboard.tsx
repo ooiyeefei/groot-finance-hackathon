@@ -7,7 +7,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2 } from 'lucide-react'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -45,6 +45,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   const [deletingClaimId, setDeletingClaimId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [toastType, setToastType] = useState<'success' | 'error'>('success')
 
   // Fetch personal dashboard data
   const fetchDashboardData = useCallback(async () => {
@@ -110,15 +111,18 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       const result = await response.json()
       
       if (response.ok && result.success) {
+        setToastType('success')
         setToastMessage('Expense claim deleted successfully')
         fetchDashboardData() // Refresh data
         setShowDeleteConfirm(false)
         setDeletingClaimId(null)
       } else {
+        setToastType('error')
         setToastMessage(`Failed to delete claim: ${result.error}`)
       }
     } catch (error) {
       console.error('Error deleting claim:', error)
+      setToastType('error')
       setToastMessage('An error occurred while deleting the claim')
     } finally {
       setIsDeleting(false)
@@ -137,6 +141,28 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       fetchDashboardData()
     }
   }, [userId, fetchDashboardData])
+
+  // Polling for processing status updates
+  useEffect(() => {
+    if (!dashboardData?.recent_claims) return
+
+    // Check if any claims are processing
+    const hasProcessingClaims = dashboardData.recent_claims.some(claim =>
+      claim.processing_status === 'processing'
+    )
+
+    if (hasProcessingClaims) {
+      console.log('[Dashboard Polling] Starting polling for processing claims')
+      const interval = setInterval(() => {
+        fetchDashboardData()
+      }, 3000) // Poll every 3 seconds
+
+      return () => {
+        console.log('[Dashboard Polling] Stopping polling')
+        clearInterval(interval)
+      }
+    }
+  }, [dashboardData?.recent_claims, fetchDashboardData])
 
   // Auto-hide toast after 3 seconds
   useEffect(() => {
@@ -235,8 +261,8 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          <PersonalOverviewContent 
-            data={dashboardData} 
+          <PersonalOverviewContent
+            data={dashboardData}
             onNewClaim={() => setShowSubmissionForm(true)}
             setActiveTab={setActiveTab}
             fetchDashboardData={fetchDashboardData}
@@ -246,17 +272,22 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
             setDetailsClaimId={setDetailsClaimId}
             setShowDetailsModal={setShowDetailsModal}
             deleteClaim={handleDeleteClick}
+            setToastMessage={setToastMessage}
+            setToastType={setToastType}
           />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-4">
-          <PersonalHistoryContent 
-            data={dashboardData} 
+          <PersonalHistoryContent
+            data={dashboardData}
             setEditingClaimId={setEditingClaimId}
             setShowEditModal={setShowEditModal}
             setDetailsClaimId={setDetailsClaimId}
             setShowDetailsModal={setShowDetailsModal}
             deleteClaim={handleDeleteClick}
+            fetchDashboardData={fetchDashboardData}
+            setToastMessage={setToastMessage}
+            setToastType={setToastType}
           />
         </TabsContent>
 
@@ -301,7 +332,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
                 vendor_name: data.vendor_name,
                 reference_number: data.reference_number || undefined,
                 notes: data.notes || undefined,
-                document_id: data.document_id || undefined,
+                // document_id removed - using business_purpose_details for file tracking
                 line_items: data.line_items || []
               }
               
@@ -359,6 +390,26 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
             // Refresh dashboard data after deletion
             fetchDashboardData()
           }}
+          onReprocess={async () => {
+            // Reprocess the failed expense claim
+            try {
+              const response = await fetch(`/api/expense-claims/${editingClaimId}/process`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              })
+
+              if (!response.ok) {
+                throw new Error('Failed to reprocess expense claim')
+              }
+
+              console.log('Expense claim reprocessing initiated')
+              // Refresh dashboard to show updated status
+              fetchDashboardData()
+            } catch (error) {
+              console.error('Failed to reprocess expense claim:', error)
+              throw error
+            }
+          }}
         />
       )}
 
@@ -390,11 +441,11 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-4 right-4 z-50 max-w-md">
-          <div className="bg-green-600 text-white px-6 py-4 rounded-lg shadow-lg flex items-center justify-between">
+          <div className={`${toastType === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-6 py-4 rounded-lg shadow-lg flex items-center justify-between`}>
             <span className="text-sm font-medium">{toastMessage}</span>
             <button
               onClick={() => setToastMessage(null)}
-              className="ml-4 text-green-100 hover:text-white"
+              className={`ml-4 ${toastType === 'success' ? 'text-green-100 hover:text-white' : 'text-red-100 hover:text-white'}`}
             >
               ×
             </button>
@@ -406,7 +457,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 }
 
 // Personal Overview Content
-function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboardData, setShowSubmissionForm, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim }: { 
+function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboardData, setShowSubmissionForm, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, setToastMessage, setToastType }: {
   data: PersonalDashboardData
   onNewClaim: () => void
   setActiveTab: (tab: string) => void
@@ -417,6 +468,8 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
   setDetailsClaimId: (id: string | null) => void
   setShowDetailsModal: (show: boolean) => void
   deleteClaim: (claimId: string) => void
+  setToastMessage: (message: string | null) => void
+  setToastType: (type: 'success' | 'error') => void
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -463,143 +516,21 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
             </div>
           ) : (
             <div className="space-y-3">
-              {data.recent_claims.slice(0, 5).map((claim: any) => (
-                <div key={claim.id} className="p-3 bg-gray-700 rounded-lg border border-gray-600">
-                  {/* Claim Header */}
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <p className="text-white font-medium text-sm">
-                        {claim.transaction?.description || claim.description || 'Expense Claim'}
-                      </p>
-                      <p className="text-gray-400 text-xs">
-                        {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} • 
-                        {new Date(claim.transaction?.transaction_date || claim.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-white font-semibold text-sm">
-                        {claim.transaction?.original_currency || 'SGD'} {parseFloat(claim.transaction?.original_amount || '0').toFixed(2)}
-                      </p>
-                      {claim.transaction?.home_currency_amount && claim.transaction.original_amount !== claim.transaction.home_currency_amount && (
-                        <p className="text-gray-400 text-xs">
-                          ≈ SGD {parseFloat(claim.transaction.home_currency_amount).toFixed(2)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Status and Progress */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Badge 
-                        className={`text-xs px-2 py-1 ${
-                          claim.status_display?.color === 'green' ? 'bg-green-600 text-white' :
-                          claim.status_display?.color === 'blue' ? 'bg-blue-600 text-white' :
-                          claim.status_display?.color === 'yellow' ? 'bg-yellow-600 text-white' :
-                          claim.status_display?.color === 'red' ? 'bg-red-600 text-white' :
-                          claim.status_display?.color === 'purple' ? 'bg-purple-600 text-white' :
-                          'bg-gray-600 text-white'
-                        }`}
-                      >
-                        {claim.status_display?.label || claim.status?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                      </Badge>
-                      
-                      {claim.current_approver_name && ['submitted', 'under_review', 'pending_approval'].includes(claim.status) && (
-                        <span className="text-xs text-gray-400">
-                          With: {claim.current_approver_name}
-                        </span>
-                      )}
-                    </div>
-                    
-                    {/* Workflow Progress Bar */}
-                    <div className="w-full bg-gray-600 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-300 ${
-                          claim.status === 'rejected' ? 'bg-red-500' : 'bg-blue-500'
-                        }`}
-                        style={{ width: `${claim.workflow_progress || 0}%` }}
-                      />
-                    </div>
-                    
-                    <p className="text-xs text-gray-400">
-                      {claim.status_display?.description}
-                    </p>
-                  </div>
-                  
-                  {/* Action buttons for draft claims */}
-                  {claim.status === 'draft' && (
-                    <div className="mt-3 flex gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        className="text-xs border-gray-600 text-gray-300 hover:bg-gray-600"
-                        onClick={() => {
-                          // Open the edit modal for this claim
-                          setEditingClaimId(claim.id)
-                          setShowEditModal(true)
-                          console.log('Edit claim:', claim.id)
-                        }}
-                      >
-                        <Edit3 className="w-3 h-3 mr-1" />
-                        Edit
-                      </Button>
-                      <Button 
-                        size="sm"
-                        variant="outline"
-                        className="text-xs border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
-                        onClick={() => deleteClaim(claim.id)}
-                      >
-                        <Trash2 className="w-3 h-3 mr-1" />
-                        Delete
-                      </Button>
-                      <Button 
-                        size="sm"
-                        className="text-xs bg-blue-600 hover:bg-blue-700"
-                        onClick={async () => {
-                          try {
-                            const response = await fetch(`/api/expense-claims/${claim.id}/submit`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ action: 'submit' })
-                            })
-                            
-                            const result = await response.json()
-                            
-                            if (response.ok && result.success) {
-                              console.log('Claim submitted successfully:', result.data.message)
-                              fetchDashboardData() // Refresh data
-                            } else {
-                              console.error('Submit failed:', result.error)
-                              alert(`Failed to submit claim: ${result.error}`)
-                            }
-                          } catch (error) {
-                            console.error('Failed to submit claim:', error)
-                            alert('Failed to submit claim. Please try again.')
-                          }
-                        }}
-                      >
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Submit
-                      </Button>
-                    </div>
-                  )}
-                  
-                  {/* View Details button for all claims */}
-                  <div className="mt-3 flex justify-end">
-                    <Button 
-                      size="sm" 
-                      variant="ghost"
-                      className="text-xs text-blue-400 hover:text-blue-300 hover:bg-gray-600"
-                      onClick={() => {
-                        setDetailsClaimId(claim.id)
-                        setShowDetailsModal(true)
-                      }}
-                    >
-                      <Eye className="w-3 h-3 mr-1" />
-                      View Details
-                    </Button>
-                  </div>
-                </div>
+              {data.recent_claims.slice(0, 5).map((claim: any, index: number) => (
+                <ExpenseClaimCard
+                  key={`overview-${claim.id}-${index}`}
+                  claim={claim}
+                  index={index}
+                  context="overview"
+                  setEditingClaimId={setEditingClaimId}
+                  setShowEditModal={setShowEditModal}
+                  setDetailsClaimId={setDetailsClaimId}
+                  setShowDetailsModal={setShowDetailsModal}
+                  deleteClaim={deleteClaim}
+                  fetchDashboardData={fetchDashboardData}
+                  setToastMessage={setToastMessage}
+                  setToastType={setToastType}
+                />
               ))}
               
               {data.recent_claims.length > 5 && (
@@ -620,14 +551,250 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
   )
 }
 
-// Personal History Content
-function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim }: { 
+// Unified Expense Claim Card Component
+function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType }: {
+  claim: any
+  index: number
+  context: 'overview' | 'history'
+  setEditingClaimId: (id: string | null) => void
+  setShowEditModal: (show: boolean) => void
+  setDetailsClaimId: (id: string | null) => void
+  setShowDetailsModal: (show: boolean) => void
+  deleteClaim: (claimId: string) => void
+  fetchDashboardData: () => void
+  setToastMessage: (message: string | null) => void
+  setToastType: (type: 'success' | 'error') => void
+}) {
+  return (
+    <div key={`${context}-${claim.id}-${index}`} className={`p-${context === 'overview' ? '3' : '4'} bg-gray-700 rounded-lg border border-gray-600 ${context === 'history' ? 'hover:border-gray-500 transition-colors' : ''}`}>
+      {/* Claim Header */}
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex-1">
+          <p className="text-white font-medium text-sm">
+            {claim.transaction?.description || claim.description || 'Expense Claim'}
+          </p>
+          <p className="text-gray-400 text-xs">
+            {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} •
+            {new Date(claim.transaction?.transaction_date || claim.created_at).toLocaleDateString()}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-white font-semibold text-sm">
+            {claim.transaction?.original_currency || 'SGD'} {parseFloat(claim.transaction?.original_amount || '0').toFixed(2)}
+          </p>
+          {claim.transaction?.home_currency_amount &&
+           claim.transaction.original_currency !== claim.transaction.home_currency && (
+            <p className="text-gray-400 text-xs">
+              ≈ {claim.transaction.home_currency} {parseFloat(claim.transaction.home_currency_amount).toFixed(2)}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Status and Progress */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between flex-wrap gap-1">
+          {/* Primary Status Badge */}
+          <div className="flex items-center gap-2">
+            <Badge
+              className={`text-xs px-2 py-1 flex items-center gap-1 ${
+                // UNIFIED LOGIC: Priority API status_display > processing states > fallback
+                claim.status_display?.color === 'green' ? 'bg-green-600 text-white' :
+                claim.status_display?.color === 'blue' ? 'bg-blue-600 text-white' :
+                claim.status_display?.color === 'yellow' ? 'bg-yellow-600 text-white' :
+                claim.status_display?.color === 'red' ? 'bg-red-600 text-white' :
+                claim.status_display?.color === 'purple' ? 'bg-purple-600 text-white' :
+                (claim.processing_status === 'completed' && claim.status === 'draft') ? 'bg-blue-600 text-white' :
+                'bg-gray-600 text-white'
+              }`}
+            >
+              {claim.status_display?.isProcessing && (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              )}
+              {/* UNIFIED PRIORITY: API status_display > custom processing states > fallback */}
+              {claim.status_display?.label ||
+                (claim.processing_status === 'completed' && claim.status === 'draft' ? 'Ready to Submit' :
+                 claim.status?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()))
+              }
+            </Badge>
+
+            {/* Secondary Processing Status Badge - Show BOTH workflow status AND processing status */}
+            {claim.processing_status && claim.processing_status !== 'pending' && (
+              claim.processing_status === 'failed' ||
+              claim.processing_status === 'processing' ||
+              (claim.processing_status === 'completed' && claim.status === 'draft')
+            ) && (
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${
+                  claim.processing_status === 'failed' ? 'bg-red-100 text-red-800 border border-red-200' :
+                  claim.processing_status === 'processing' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                  claim.processing_status === 'completed' ? 'bg-green-100 text-green-800 border border-green-200' :
+                  'bg-gray-100 text-gray-800 border border-gray-200'
+                }`}
+              >
+                {claim.processing_status === 'processing' && (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                )}
+                {claim.processing_status === 'failed' ? 'AI Processing Failed' :
+                 claim.processing_status === 'processing' ? 'AI Processing' :
+                 claim.processing_status === 'completed' ? 'AI Processing Complete' :
+                 `AI: ${claim.processing_status}`
+                }
+              </span>
+            )}
+          </div>
+
+          {claim.current_approver_name && ['submitted', 'under_review', 'pending_approval'].includes(claim.status) && (
+            <span className="text-xs text-gray-400">
+              With: {claim.current_approver_name}
+            </span>
+          )}
+        </div>
+
+        {/* Workflow Progress Bar */}
+        <div className="w-full bg-gray-600 rounded-full h-2">
+          <div
+            className={`h-2 rounded-full transition-all duration-300 ${
+              claim.status === 'rejected' ? 'bg-red-500' : 'bg-blue-500'
+            }`}
+            style={{ width: `${claim.workflow_progress || 0}%` }}
+          />
+        </div>
+
+        <p className="text-xs text-gray-400">
+          {/* UNIFIED PRIORITY: API status_display > custom processing states */}
+          {claim.status_display?.description ||
+            (claim.processing_status === 'completed' && claim.status === 'draft'
+              ? 'Manual entry completed - click Submit to enter approval workflow'
+              : 'Status pending update')
+          }
+        </p>
+      </div>
+
+      {/* Action buttons - Unified row for all claim states */}
+      <div className="mt-3 flex items-center space-x-2">
+        {/* Draft claim actions */}
+        {claim.status === 'draft' && (
+          <>
+            <button
+              onClick={() => {
+                setEditingClaimId(claim.id)
+                setShowEditModal(true)
+              }}
+              className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 text-sm font-medium rounded-md transition-colors"
+            >
+              <Edit3 className="w-4 h-4 mr-1.5" />
+              Edit
+            </button>
+            <button
+              onClick={() => deleteClaim(claim.id)}
+              className="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Delete
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch(`/api/expense-claims/${claim.id}/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'submit' })
+                  })
+
+                  const result = await response.json()
+
+                  if (response.ok && result.success) {
+                    console.log('Claim submitted successfully:', result.data.message)
+                    fetchDashboardData() // Refresh data
+                  } else {
+                    console.error('Submit failed:', result.error)
+                    alert(`Failed to submit claim: ${result.error}`)
+                  }
+                } catch (error) {
+                  console.error('Failed to submit claim:', error)
+                  alert('Failed to submit claim. Please try again.')
+                }
+              }}
+              className="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
+            >
+              <CheckCircle className="w-4 h-4 mr-1.5" />
+              Submit
+            </button>
+          </>
+        )}
+
+        {/* Reprocess button for failed claims and completed AI processing (exclude submitted workflow states) */}
+        {(claim.processing_status === 'failed' || claim.processing_status === 'completed') &&
+         claim.status !== 'pending' &&
+         !['submitted', 'under_review', 'pending_approval'].includes(claim.status) && (
+          <button
+            onClick={async () => {
+              try {
+                const response = await fetch(`/api/expense-claims/${claim.id}/process`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                })
+
+                const result = await response.json()
+
+                if (!response.ok) {
+                  throw new Error(result.error || 'Failed to reprocess expense claim')
+                }
+
+                console.log('Expense claim reprocessing initiated')
+                setToastType('success')
+                setToastMessage(claim.processing_status === 'failed' ?
+                  'Expense claim reprocessing initiated successfully' :
+                  'AI re-extraction initiated successfully')
+                fetchDashboardData() // Refresh data to show updated status
+              } catch (error) {
+                console.error('Failed to reprocess expense claim:', error)
+                const errorMessage = error instanceof Error ? error.message : 'Failed to reprocess expense claim. Please try again.'
+                setToastType('error')
+                setToastMessage(errorMessage)
+              }
+            }}
+            className={`inline-flex items-center px-3 py-1.5 text-white text-sm font-medium rounded-md transition-colors ${
+              claim.processing_status === 'failed'
+                ? 'bg-orange-600 hover:bg-orange-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            <RotateCcw className="w-4 h-4 mr-1.5" />
+            {claim.processing_status === 'failed' ? 'Reprocess' : 'Re-extract'}
+          </button>
+        )}
+
+        {/* View Details button for all non-draft claims */}
+        {claim.status !== 'draft' && (
+          <button
+            onClick={() => {
+              setDetailsClaimId(claim.id)
+              setShowDetailsModal(true)
+            }}
+            className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
+          >
+            <Eye className="w-4 h-4 mr-1.5" />
+            View Details
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Personal History Content - Now uses unified card
+function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType }: {
   data: PersonalDashboardData
   setEditingClaimId: (id: string | null) => void
   setShowEditModal: (show: boolean) => void
   setDetailsClaimId: (id: string | null) => void
   setShowDetailsModal: (show: boolean) => void
   deleteClaim: (claimId: string) => void
+  fetchDashboardData: () => void
+  setToastMessage: (message: string | null) => void
+  setToastType: (type: 'success' | 'error') => void
 }) {
   return (
     <Card className="bg-gray-800 border-gray-700">
@@ -644,77 +811,21 @@ function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, set
           </div>
         ) : (
           <div className="space-y-4">
-            {data.recent_claims.map((claim: any) => (
-              <div key={claim.id} className="p-4 bg-gray-700 rounded-lg border border-gray-600 hover:border-gray-500 transition-colors">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-white font-medium">
-                      {claim.transaction?.description || claim.description || 'Expense Claim'}
-                    </p>
-                    <p className="text-gray-400 text-sm">
-                      {new Date(claim.created_at).toLocaleDateString()} • 
-                      {claim.expense_category?.replace('_', ' ').toUpperCase()}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white font-semibold">
-                      {claim.transaction?.original_currency || 'SGD'} {parseFloat(claim.transaction?.original_amount || '0').toFixed(2)}
-                    </p>
-                    <Badge 
-                      className={`text-xs ${
-                        claim.status === 'approved' ? 'bg-green-600' :
-                        claim.status === 'rejected' ? 'bg-red-600' :
-                        claim.status === 'submitted' ? 'bg-blue-600' :
-                        'bg-gray-600'
-                      }`}
-                    >
-                      {claim.status?.replace('_', ' ').toUpperCase()}
-                    </Badge>
-                  </div>
-                </div>
-                
-                {/* Action buttons */}
-                <div className="flex gap-2 justify-end">
-                  {claim.status === 'draft' ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs border-gray-600 text-gray-300 hover:bg-gray-600"
-                        onClick={() => {
-                          setEditingClaimId(claim.id)
-                          setShowEditModal(true)
-                        }}
-                      >
-                        <Edit3 className="w-3 h-3 mr-1" />
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
-                        onClick={() => deleteClaim(claim.id)}
-                      >
-                        <Trash2 className="w-3 h-3 mr-1" />
-                        Delete
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-xs text-blue-400 hover:text-blue-300 hover:bg-gray-600"
-                      onClick={() => {
-                        setDetailsClaimId(claim.id)
-                        setShowDetailsModal(true)
-                      }}
-                    >
-                      <Eye className="w-3 h-3 mr-1" />
-                      View Details
-                    </Button>
-                  )}
-                </div>
-              </div>
+            {data.recent_claims.map((claim: any, index: number) => (
+              <ExpenseClaimCard
+                key={`history-${claim.id}-${index}`}
+                claim={claim}
+                index={index}
+                context="history"
+                setEditingClaimId={setEditingClaimId}
+                setShowEditModal={setShowEditModal}
+                setDetailsClaimId={setDetailsClaimId}
+                setShowDetailsModal={setShowDetailsModal}
+                deleteClaim={deleteClaim}
+                fetchDashboardData={fetchDashboardData}
+                setToastMessage={setToastMessage}
+                setToastType={setToastType}
+              />
             ))}
           </div>
         )}
