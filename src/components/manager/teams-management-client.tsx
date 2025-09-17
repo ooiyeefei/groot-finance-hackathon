@@ -40,13 +40,14 @@ interface TeamMember {
 interface PendingInvitation {
   id: string
   email: string
-  role: 'employee' | 'manager' | 'admin'
+  role: 'member' | 'admin' | 'owner' // Use backend role values
   department?: string
   job_title?: string
   invited_by: string
-  created_at: string
+  invited_at: string // Changed from created_at to match API response
   expires_at: string
-  status: 'pending' | 'accepted' | 'expired'
+  accepted_at?: string
+  status: 'pending' | 'accepted' | 'expired' | 'cancelled'
 }
 
 type UserRole = 'employee' | 'manager' | 'admin'
@@ -270,6 +271,16 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     if (permissions.admin) return 'admin'
     if (permissions.manager) return 'manager'
     return 'employee'
+  }
+
+  // Map backend invitation roles to display roles
+  const mapInvitationRoleToDisplay = (backendRole: string): UserRole => {
+    switch (backendRole) {
+      case 'owner': return 'admin'
+      case 'admin': return 'manager'
+      case 'member': return 'employee'
+      default: return 'employee'
+    }
   }
 
   const getRoleColor = (role: UserRole) => {
@@ -606,7 +617,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
               ) : (
                 <div className="space-y-4">
                   {pendingInvitations.map((invitation) => {
-                    const RoleIcon = getRoleIcon(invitation.role)
+                    const displayRole = mapInvitationRoleToDisplay(invitation.role)
+                    const RoleIcon = getRoleIcon(displayRole)
                     
                     return (
                       <Card key={invitation.id} className="bg-gray-700 border-gray-600">
@@ -615,9 +627,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
                                 <h4 className="text-white font-medium">{invitation.email}</h4>
-                                <Badge variant="outline" className={getRoleColor(invitation.role)}>
+                                <Badge variant="outline" className={getRoleColor(displayRole)}>
                                   <RoleIcon className="w-3 h-3 mr-1" />
-                                  {invitation.role}
+                                  {displayRole}
                                 </Badge>
                                 <Badge className={getInvitationStatusColor(invitation.status)}>
                                   {invitation.status}
@@ -639,7 +651,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                 )}
                                 <div className="flex items-center gap-1">
                                   <Calendar className="w-3 h-3" />
-                                  <span>Sent {new Date(invitation.created_at).toLocaleDateString()}</span>
+                                  <span>Sent {new Date(invitation.invited_at).toLocaleDateString()}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Calendar className="w-3 h-3" />
