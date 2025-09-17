@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Enrich with Clerk user data
+    // Enrich with Clerk user data and manager information
     const enrichedProfiles = await Promise.all(
       profiles.map(async (profile) => {
         try {
@@ -50,11 +50,38 @@ export async function GET(request: NextRequest) {
             }
           }
 
+          // Get manager information if assigned
+          let managerName = null
+          if (profile.manager_id) {
+            const { data: managerData } = await supabase
+              .from('users')
+              .select('full_name, clerk_user_id')
+              .eq('id', profile.manager_id)
+              .single()
+
+            if (managerData) {
+              if (managerData.clerk_user_id) {
+                try {
+                  const managerClerk = await (await clerkClient()).users.getUser(managerData.clerk_user_id)
+                  managerName = managerClerk.firstName && managerClerk.lastName
+                    ? `${managerClerk.firstName} ${managerClerk.lastName}`
+                    : managerData.full_name
+                } catch (error) {
+                  console.warn(`Failed to fetch manager Clerk data:`, error)
+                  managerName = managerData.full_name
+                }
+              } else {
+                managerName = managerData.full_name
+              }
+            }
+          }
+
           return {
             ...profile,
             full_name: userData?.full_name,
             email: userData?.email,
-            clerk_user: clerkUser
+            clerk_user: clerkUser,
+            manager_name: managerName
           }
         } catch (error) {
           console.warn(`Failed to enrich profile ${profile.id}:`, error)
