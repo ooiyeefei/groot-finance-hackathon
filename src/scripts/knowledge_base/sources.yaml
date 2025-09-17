@@ -380,6 +380,472 @@ regulatory_sources:
     priority: "high"
     topics: ["local_company", "incorporation_guide", "sdn_bhd", "private_company"]
 
+  - id: th_rd_english_main_2025
+    country: thailand
+    tax_type: all
+    source_name: 'Thai Revenue Department Main English Portal'
+    url: https://www.rd.go.th/english
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - revenue_department
+    - tax_information
+    - vat
+    - corporate_tax
+    - personal_tax
+
+  - id: th_rd_personal_tax_guide_2025_en
+    country: thailand
+    tax_type: personal_tax
+    source_name: 'Personal Income Tax Guide (English)'
+    url: https://www.rd.go.th/english/6045.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - personal_income_tax
+    - tax_rates
+    - deductions
+    - withholding_tax
+
+  - id: id_djp_indonesian_portal_2025
+    country: indonesia
+    tax_type: all
+    source_name: 'DJP Indonesian Language Portal'
+    url: https://www.pajak.go.id/id
+    document_version: 2025.latest
+    language: id
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - dirjen_pajak
+    - pajak_penghasilan
+    - ppn
+    - pph_badan
+    - kepatuhan_pajak
+
+  - id: th_mof_official_website_2025
+    country: thailand
+    tax_type: all
+    source_name: 'Ministry of Finance Thailand: Official Website'
+    url: https://www.mof.go.th/en/
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-01-16'
+    priority: high
+    topics:
+    - ministry_finance
+    - tax_policy
+    - fiscal_policy
+    - government_regulations
+    - taxation
+
+  - id: id_bi_official_website_2025
+    country: indonesia
+    tax_type: financial_regulations
+    source_name: 'Bank Indonesia: Official Website'
+    url: https://www.bi.go.id/
+    document_version: 2025.latest
+    language: id
+    last_checked_date: '2025-01-16'
+    priority: high
+    topics:
+    - central_banking
+    - monetary_policy
+    - foreign_exchange
+    - financial_regulations
+
+  - id: id_djp_official_website_2025
+    country: indonesia
+    tax_type: all
+    source_name: 'Directorate General of Taxes: Official Website'
+    url: https://www.pajak.go.id/
+    document_version: 2025.latest
+    language: id
+    last_checked_date: '2025-01-16'
+    priority: high
+    topics:
+    - directorate_general_taxes
+    - pajak_penghasilan
+    - ppn
+    - pph_badan
+    - kepatuhan_pajak
+
+  # Additional Thailand Revenue Department Sources - Comprehensive Tax Law Coverage
+  - id: th_revenue_code_english_2025
+    country: thailand
+    tax_type: all
+    source_name: 'Thai Revenue Code (English Translation)'
+    url: https://www.rd.go.th/english/37695.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - revenue_code
+    - tax_law
+    - legal_framework
+    - comprehensive_tax_guide
+    - official_translation
+
+  - id: th_tax_identification_guide_2025
+    country: thailand
+    tax_type: administrative
+    source_name: 'Tax Identification Number (TIN) Guide'
+    url: https://www.rd.go.th/english/21987.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - tax_identification
+    - tin
+    - taxpayer_registration
+    - personal_identification
+    - administrative_procedures
+
+  # Double Taxation Agreements (DTAs) - Critical for Cross-Border Tax Planning
+  - id: th_sg_dta_2025
+    country: thailand
+    tax_type: international_tax
+    source_name: 'Singapore-Thailand Double Taxation Agreement'
+    url: https://www.rd.go.th/fileadmin/download/nation/singapore_e_revise1.pdf
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - double_taxation_agreement
+    - dta
+    - singapore_thailand
+    - cross_border_tax
+    - withholding_tax
+    - permanent_establishment
+
+  - id: th_my_dta_2025
+    country: thailand
+    tax_type: international_tax
+    source_name: 'Thailand-Malaysia Double Taxation Agreement'
+    url: https://www.rd.go.th/fileadmin/download/nation/malaysia251151_e.pdf
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - double_taxation_agreement
+    - dta
+    - thailand_malaysia
+    - cross_border_tax
+    - withholding_tax
+    - permanent_establishment
+
+  - id: th_id_dta_2025
+    country: thailand
+    tax_type: international_tax
+    source_name: 'Thailand-Indonesia Double Taxation Agreement'
+    url: https://www.rd.go.th/fileadmin/download/nation/indonesia_020354_e.pdf
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - double_taxation_agreement
+    - dta
+    - thailand_indonesia
+    - cross_border_tax
+    - withholding_tax
+    - permanent_establishment
+
+  - id: th_withholding_tax_rates_dta_2025
+    country: thailand
+    tax_type: withholding_tax
+    source_name: 'Withholding Tax Rates for Royalties under Thailand DTAs'
+    url: https://www.rd.go.th/english/29163.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - withholding_tax_rates
+    - royalties
+    - dta_benefits
+    - intellectual_property
+    - cross_border_payments
+
+  - id: th_dta_faq_2025
+    country: thailand
+    tax_type: international_tax
+    source_name: 'Double Taxation Agreement FAQ'
+    url: https://www.rd.go.th/english/23520.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - dta_faq
+    - treaty_benefits
+    - application_procedures
+    - eligibility_requirements
+    - international_tax
+
+  - id: th_licensing_manual_2025
+    country: thailand
+    tax_type: administrative
+    source_name: 'Revenue Department Licensing Manual (English)'
+    url: https://www.rd.go.th/fileadmin/images/images_licensing_manual/EN_Licensing_Manual_23072567_Interactive.pdf
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - licensing_procedures
+    - administrative_guide
+    - compliance_requirements
+    - business_operations
+    - regulatory_procedures
+
+  - id: th_corporate_income_tax_2025
+    country: thailand
+    tax_type: corporate_tax
+    source_name: 'Corporate Income Tax Guide'
+    url: https://www.rd.go.th/english/6044.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - corporate_income_tax
+    - business_tax
+    - tax_rates
+    - deductions
+    - filing_requirements
+
+  - id: th_petroleum_income_tax_2025
+    country: thailand
+    tax_type: petroleum_tax
+    source_name: 'Petroleum Income Tax (PT) Guide'
+    url: https://www.rd.go.th/english/38686.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - petroleum_income_tax
+    - natural_resources
+    - special_business_tax
+    - energy_sector
+    - extractive_industries
+
+  - id: th_foreign_company_tax_guide_2025
+    country: thailand
+    tax_type: corporate_tax
+    source_name: 'Income Tax Guide for Foreign Companies'
+    url: https://www.rd.go.th/english/20470.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - foreign_company_tax
+    - international_business
+    - cross_border_operations
+    - non_resident_tax
+    - business_establishment
+
+  # Transfer Pricing Documentation - Critical for MNEs
+  - id: th_transfer_pricing_guide_2025
+    country: thailand
+    tax_type: transfer_pricing
+    source_name: 'Determination of Market Price for Multinational Enterprises'
+    url: https://www.rd.go.th/english/15205.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - transfer_pricing
+    - market_price_determination
+    - multinational_enterprises
+    - documentation_requirements
+    - arm_length_principle
+
+  - id: th_transfer_pricing_methods_2025
+    country: thailand
+    tax_type: transfer_pricing
+    source_name: 'Transfer Pricing Methodologies'
+    url: https://www.rd.go.th/english/15203.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - transfer_pricing_methods
+    - comparable_uncontrolled_price
+    - cost_plus_method
+    - resale_price_method
+    - profit_split_method
+
+  - id: th_transfer_pricing_documentation_2025
+    country: thailand
+    tax_type: transfer_pricing
+    source_name: 'Transfer Pricing Documentation Requirements'
+    url: https://www.rd.go.th/english/15201.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - transfer_pricing_documentation
+    - documentation_requirements
+    - compliance_obligations
+    - record_keeping
+    - audit_preparation
+
+  - id: th_advance_pricing_arrangement_2025
+    country: thailand
+    tax_type: transfer_pricing
+    source_name: 'Advance Pricing Arrangement (APA) Guidelines'
+    url: https://www.rd.go.th/fileadmin/download/APA/Guideline_on_APA_process_EN_18032568.pdf
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - advance_pricing_arrangement
+    - apa
+    - transfer_pricing_certainty
+    - dispute_prevention
+    - bilateral_apa
+
+  - id: th_transfer_pricing_regulations_2025
+    country: thailand
+    tax_type: transfer_pricing
+    source_name: 'Transfer Pricing Regulations Overview'
+    url: https://www.rd.go.th/english/9460.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - transfer_pricing_regulations
+    - legal_framework
+    - compliance_requirements
+    - penalties
+    - enforcement
+
+  - id: th_mutual_agreement_procedure_2025
+    country: thailand
+    tax_type: international_tax
+    source_name: 'Mutual Agreement Procedure (MAP)'
+    url: https://www.rd.go.th/english/9410.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - mutual_agreement_procedure
+    - map
+    - dispute_resolution
+    - treaty_disputes
+    - competent_authority
+
+  - id: th_tax_treaty_network_2025
+    country: thailand
+    tax_type: international_tax
+    source_name: 'Thailand Tax Treaty Network'
+    url: https://www.rd.go.th/english/6007.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - tax_treaty_network
+    - bilateral_agreements
+    - treaty_benefits
+    - international_tax_planning
+    - cross_border_investment
+
+  # Additional Validated Thailand Sources from Golden Template
+  - id: th_business_tax_guide_2025_en
+    country: thailand
+    tax_type: business_tax
+    source_name: 'Specific Business Tax Guide (English)'
+    url: https://www.rd.go.th/english/6049.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - specific_business_tax
+    - financial_institutions
+    - real_estate
+    - service_business
+
+  - id: th_withholding_tax_guide_2025_en
+    country: thailand
+    tax_type: withholding_tax
+    source_name: 'Withholding Tax Guide (English)'
+    url: https://www.rd.go.th/english/6055.html
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - withholding_tax
+    - cross_border_payments
+    - non_resident_tax
+    - dta_benefits
+
+  - id: th_dbd_english_portal_2025
+    country: thailand
+    tax_type: business_registration
+    source_name: 'Department of Business Development English Portal'
+    url: https://www.dbd.go.th/en
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - business_registration
+    - company_incorporation
+    - foreign_business_license
+    - trade_registration
+
+  - id: th_boi_investment_guide_2025
+    country: thailand
+    tax_type: investment_incentives
+    source_name: 'Thailand Investment Guide 2025'
+    url: https://www.boi.go.th/upload/content/BOI-home_5fc6725e85c1d.pdf
+    document_version: '2025'
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - investment_promotion
+    - tax_incentives
+    - foreign_investment
+    - boi_privileges
+
+  # Additional Validated Indonesia Sources from Golden Template
+  - id: id_kemenkeu_english_portal_2025
+    country: indonesia
+    tax_type: all
+    source_name: 'Ministry of Finance English Portal'
+    url: https://www.kemenkeu.go.id/en
+    document_version: 2025.latest
+    language: en
+    last_checked_date: '2025-09-16'
+    priority: high
+    topics:
+    - ministry_finance
+    - tax_policy
+    - fiscal_policy
+    - government_regulations
+    - taxation
+
 # Processing Configuration for Curated RAG Pipeline
 processing_config:
   chunk_size: 512
