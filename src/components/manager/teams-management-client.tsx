@@ -435,39 +435,28 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         </Alert>
       )}
 
-      {/* Header Actions */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-white mb-2">Teams Management</h2>
-          <p className="text-gray-400">Manage team members, roles, and send invitations</p>
-        </div>
-
-        <Button 
-          onClick={() => setShowInviteDialog(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
-        >
-          <UserPlus className="w-4 h-4 mr-2" />
-          Invite Team Member
-        </Button>
-        
-        <InvitationDialog
-          isOpen={showInviteDialog}
-          onClose={() => setShowInviteDialog(false)}
-          onInvite={sendInvitation}
-          isLoading={inviteLoading}
-        />
-      </div>
 
       {/* Role Information */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <Shield className="w-5 h-5" />
-            Role Permissions
-          </CardTitle>
-          <CardDescription className="text-gray-400">
-            Understanding role permissions and capabilities
-          </CardDescription>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Shield className="w-5 h-5" />
+                Role Permissions
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Understanding role permissions and capabilities
+              </CardDescription>
+            </div>
+            <Button
+              onClick={() => setShowInviteDialog(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Invite Team Member
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -511,6 +500,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
           </div>
         </CardContent>
       </Card>
+
+      {/* Invitation Dialog */}
+      <InvitationDialog
+        isOpen={showInviteDialog}
+        onClose={() => setShowInviteDialog(false)}
+        onInvite={sendInvitation}
+        isLoading={inviteLoading}
+      />
 
       {/* Teams and Invitations Tabs */}
       <Tabs defaultValue="members" className="space-y-4">

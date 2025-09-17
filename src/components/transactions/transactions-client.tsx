@@ -10,6 +10,7 @@ import TransactionDetailModal from '@/components/transactions/transaction-detail
 import DocumentAnalysisModal from '@/components/documents/document-analysis-modal'
 import { useTransactions } from '@/hooks/use-transactions'
 import { Transaction } from '@/types/transaction'
+import { Plus } from 'lucide-react'
 
 export default function TransactionsClient() {
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -93,18 +94,9 @@ export default function TransactionsClient() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <HeaderWithUser 
-          title="Transactions" 
+        <HeaderWithUser
+          title="Transactions"
           subtitle="View and manage your financial transactions across multiple currencies"
-          actions={
-            <ActionButton
-              onClick={() => setShowCreateModal(true)}
-              variant="primary"
-              aria-label="Add new transaction"
-            >
-              Add Transaction
-            </ActionButton>
-          }
         />
         
         {/* Main Content Area */}
@@ -153,6 +145,15 @@ export default function TransactionsClient() {
           onClose={() => setSelectedDocument(null)}
         />
       )}
+
+      {/* Floating Action Button */}
+      <button
+        onClick={() => setShowCreateModal(true)}
+        className="fixed bottom-6 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all duration-200 ease-in-out flex items-center justify-center"
+        aria-label="Add new transaction"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
     </div>
   )
 }

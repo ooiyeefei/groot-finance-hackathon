@@ -217,130 +217,107 @@ export default function ExpenseApprovalDashboard() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {claims.map((claim) => {
-              const riskLevel = getRiskLevel(claim)
-              const isProcessing = processingClaims.has(claim.id)
+          <Card className="bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-white">Pending Approvals</CardTitle>
+              <CardDescription>Claims requiring immediate attention</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="space-y-0">
+                {claims.map((claim, index) => {
+                  const riskLevel = getRiskLevel(claim)
+                  const isProcessing = processingClaims.has(claim.id)
 
-              return (
-                <Card key={claim.id} className="bg-gray-800 border-gray-700">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-white text-lg">{claim.description}</CardTitle>
-                        <CardDescription className="text-gray-400">
-                          By {claim.employee_name} • {new Date(claim.submission_date).toLocaleDateString()}
-                        </CardDescription>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${getRiskColor(riskLevel)}`} />
-                        <Badge variant="outline" className={getStatusColor(claim.status)}>
-                          {claim.status.replace('_', ' ')}
-                        </Badge>
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="space-y-4">
-                    {/* Amount and Category */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-gray-400" />
-                        <span className="text-white font-semibold">
-                          {claim.original_amount} {claim.original_currency}
-                        </span>
-                        {claim.original_currency !== claim.home_currency && (
-                          <span className="text-gray-400 text-sm">
-                            (${claim.converted_amount.toFixed(2)})
+                  return (
+                    <div
+                      key={claim.id}
+                      className={`p-4 flex items-center justify-between hover:bg-gray-700/30 transition-colors ${
+                        index !== claims.length - 1 ? 'border-b border-gray-700' : ''
+                      }`}
+                    >
+                      {/* Left Section - Employee & Description */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <div className={`w-2 h-2 rounded-full ${getRiskColor(riskLevel)}`} />
+                          <p className="text-white font-medium text-sm truncate">
+                            {claim.employee_name}
+                          </p>
+                          <Badge variant="outline" className={`${getStatusColor(claim.status)} text-xs`}>
+                            {claim.status.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                        <p className="text-gray-300 text-sm mb-1 truncate">{claim.description}</p>
+                        <div className="flex items-center gap-4 text-xs text-gray-400">
+                          <span className="flex items-center gap-1">
+                            <Tag className="w-3 h-3" />
+                            {claim.category_name}
                           </span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(claim.submission_date).toLocaleDateString()}
+                          </span>
+                          {(claim.is_over_limit || (claim.receipt_confidence && claim.receipt_confidence < 80)) && (
+                            <span className="flex items-center gap-1 text-red-400">
+                              <AlertCircle className="w-3 h-3" />
+                              Risk
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Center Section - Amount */}
+                      <div className="text-right px-4">
+                        <p className="text-white font-semibold text-sm">
+                          {claim.original_amount} {claim.original_currency}
+                        </p>
+                        {claim.original_currency !== claim.home_currency && (
+                          <p className="text-gray-400 text-xs">
+                            ${claim.converted_amount.toFixed(2)}
+                          </p>
                         )}
                       </div>
+
+                      {/* Right Section - Actions */}
                       <div className="flex items-center gap-2">
-                        <Tag className="w-4 h-4 text-gray-400" />
-                        <span className="text-gray-300">{claim.category_name}</span>
+                        <Button
+                          size="sm"
+                          onClick={() => setSelectedClaim(claim)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 h-7"
+                        >
+                          <Eye className="w-3 h-3 mr-1" />
+                          Review
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          onClick={() => handleApproval(claim.id, 'approve')}
+                          disabled={isProcessing}
+                          className="bg-green-600 hover:bg-green-700 text-white text-xs px-2 py-1 h-7"
+                        >
+                          {isProcessing ? (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                          )}
+                          Approve
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          onClick={() => handleApproval(claim.id, 'reject')}
+                          disabled={isProcessing}
+                          className="bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-1 h-7"
+                        >
+                          <XCircle className="w-3 h-3 mr-1" />
+                          Reject
+                        </Button>
                       </div>
                     </div>
-
-                    {/* Vendor and Date */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-400" />
-                        <span className="text-gray-300">{claim.vendor_name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        <span className="text-gray-300">
-                          {new Date(claim.transaction_date).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Business Purpose */}
-                    <div>
-                      <p className="text-gray-400 text-sm">Business Purpose:</p>
-                      <p className="text-gray-300">{claim.business_purpose}</p>
-                    </div>
-
-                    {/* Risk Indicators */}
-                    {(claim.is_over_limit || (claim.receipt_confidence && claim.receipt_confidence < 80)) && (
-                      <div className="space-y-2">
-                        {claim.is_over_limit && (
-                          <div className="flex items-center gap-2 text-red-400 text-sm">
-                            <AlertCircle className="w-4 h-4" />
-                            <span>Exceeds policy limit (${claim.policy_limit})</span>
-                          </div>
-                        )}
-                        {claim.receipt_confidence && claim.receipt_confidence < 80 && (
-                          <div className="flex items-center gap-2 text-yellow-400 text-sm">
-                            <AlertCircle className="w-4 h-4" />
-                            <span>Low OCR confidence ({claim.receipt_confidence}%)</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex gap-3 pt-4 border-t border-gray-700">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSelectedClaim(claim)}
-                        className="border-gray-600 text-gray-300 hover:bg-gray-700"
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        Review
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        onClick={() => handleApproval(claim.id, 'approve')}
-                        disabled={isProcessing}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {isProcessing ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                        )}
-                        Approve
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleApproval(claim.id, 'reject')}
-                        disabled={isProcessing}
-                        className="border-red-600 text-red-400 hover:bg-red-600/20"
-                      >
-                        <XCircle className="w-4 h-4 mr-2" />
-                        Reject
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Review Modal */}

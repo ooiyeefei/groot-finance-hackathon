@@ -184,32 +184,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-white mb-2">My Expense Claims</h2>
-          <p className="text-gray-400">Submit and track your expense claims</p>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="flex gap-3">
-          <Button
-            onClick={() => setShowSubmissionForm(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            <Camera className="w-4 h-4 mr-2" />
-            Capture Receipt
-          </Button>
-          <Button
-            variant="outline"
-            className="border-gray-600 text-gray-300 hover:bg-gray-800"
-            onClick={() => setShowSubmissionForm(true)}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Manual Entry
-          </Button>
-        </div>
-      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -479,22 +453,23 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
           <CardTitle className="text-white">Quick Actions</CardTitle>
           <CardDescription>Submit new expense claims</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Button 
-            onClick={onNewClaim}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white justify-start"
-          >
-            <Camera className="w-4 h-4 mr-2" />
-            Capture Receipt with Camera
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={onNewClaim}
-            className="w-full border-gray-600 text-gray-300 hover:bg-gray-700 justify-start"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Manual Entry
-          </Button>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Button
+              onClick={onNewClaim}
+              className="bg-blue-600 hover:bg-blue-700 text-white justify-center"
+            >
+              <Camera className="w-4 h-4 mr-2" />
+              Capture Receipt with Camera
+            </Button>
+            <Button
+              onClick={onNewClaim}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-900 justify-center"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Manual Entry
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

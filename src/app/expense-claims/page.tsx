@@ -36,7 +36,7 @@ export default async function ExpenseClaimsPage() {
         {/* Header */}
         <HeaderWithUser
           title="Expense Claims"
-          subtitle={`Submit and track your expense claims${user?.firstName ? `, ${user.firstName}` : ''} - Quick receipt capture and status tracking`}
+          subtitle=""
         />
 
         {/* Main Content Area */}

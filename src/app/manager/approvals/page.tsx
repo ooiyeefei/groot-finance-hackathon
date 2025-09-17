@@ -27,9 +27,9 @@ export default async function ApprovalsPage() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <HeaderWithUser 
-          title="Expense Approvals" 
-          subtitle={`Company expense management and approval workflows${user?.firstName ? `, ${user.firstName}` : ''}`}
+        <HeaderWithUser
+          title="Expense Approvals"
+          subtitle=""
         />
         
         {/* Main Content Area */}

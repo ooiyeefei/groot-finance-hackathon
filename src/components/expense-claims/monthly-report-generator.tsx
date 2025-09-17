@@ -83,7 +83,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
         if (result.success && result.data.length > 0) {
           const teamMembers = result.data.map((member: any) => ({
             id: member.id || member.user_id,
-            name: member.full_name || member.email || 'Unknown Employee'
+            name: member.full_name || member.email || `Employee ID: ${member.id || member.user_id}`
           }))
           
           setEmployees([

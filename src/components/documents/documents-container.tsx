@@ -43,17 +43,7 @@ export default function DocumentsContainer() {
       {/* Business Document Upload */}
       <div>
         <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Upload Business Documents
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-400 text-sm mb-4">
-              Upload general business documents for processing and storage.
-              For expense receipts, use the expense claims section.
-            </p>
+          <CardContent className="pt-6">
 
             <FileUploadZone
               onUploadSuccess={handleBusinessDocumentSuccess}
@@ -68,16 +58,7 @@ export default function DocumentsContainer() {
       {/* Documents List */}
       <div>
         <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Business Documents
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-400 text-sm mb-4">
-              Your uploaded business documents and their processing status.
-            </p>
+          <CardContent className="pt-6">
 
             <DocumentsList
               key={refreshTrigger}

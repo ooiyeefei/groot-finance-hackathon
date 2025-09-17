@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
 
       return {
         id: claim.id,
-        employee_name: claim.employee?.user?.full_name || claim.employee?.user?.email || 'Unknown Employee',
+        employee_name: claim.employee?.user?.full_name || claim.employee?.user?.email || `Employee ID: ${claim.employee_id}`,
         employee_id: claim.employee.id,
         employee_department: claim.employee.department,
         employee_job_title: claim.employee.job_title,

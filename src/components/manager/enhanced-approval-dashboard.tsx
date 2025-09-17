@@ -102,41 +102,6 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-white mb-2">
-            {dashboardData.role.admin ? 'Business Administration' : 'Team Management'}
-          </h2>
-          <p className="text-gray-400">
-            {dashboardData.role.admin 
-              ? 'Company-wide expense management, approvals, and financial operations' 
-              : 'Review team expense claims and manage department workflows'
-            }
-          </p>
-        </div>
-
-        {/* Management Actions */}
-        <div className="flex gap-3">
-          <Button
-            onClick={() => setActiveTab('approvals')}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
-            <CheckCircle className="w-4 h-4 mr-2" />
-            Review Claims ({dashboardData.summary.pending_approval})
-          </Button>
-          
-          {dashboardData.role.admin && (
-            <Button
-              onClick={() => setActiveTab('reimbursements')}
-              className="bg-purple-600 hover:bg-purple-700 text-white"
-            >
-              <DollarSign className="w-4 h-4 mr-2" />
-              Process Payments
-            </Button>
-          )}
-        </div>
-      </div>
 
       {/* Management Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -255,7 +220,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                 >
                   <div className="flex-1 text-left">
                     <p className="text-white text-sm font-medium">
-                      {claim.employee?.full_name || 'Unknown Employee'}
+                      {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                     </p>
                     <p className="text-gray-400 text-xs">
                       {claim.transaction?.description || claim.description} • 
@@ -351,7 +316,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-white font-medium text-sm">
-                          {claim.employee?.full_name || 'Unknown Employee'}
+                          {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                         </p>
                         <p className="text-gray-400 text-xs">
                           {claim.employee?.department || 'No Department'} • 
