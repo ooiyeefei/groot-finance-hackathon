@@ -8,10 +8,12 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useAuth, useUser } from '@clerk/nextjs'
-import { Loader2, CheckCircle, AlertCircle, UserPlus } from 'lucide-react'
+import { Loader2, CheckCircle, AlertCircle, UserPlus, User } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface InvitationData {
   email: string
@@ -30,20 +32,27 @@ function AcceptInvitationContent() {
   const [invitation, setInvitation] = useState<InvitationData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [showNameForm, setShowNameForm] = useState(false)
+  const [fullName, setFullName] = useState('')
+  const [nameError, setNameError] = useState<string | null>(null)
 
   const token = searchParams.get('token')
 
-  const handleAcceptInvitation = async () => {
+  const handleAcceptInvitation = async (name?: string) => {
     if (!token) return
 
     setAccepting(true)
     setError(null)
+    setNameError(null)
 
     try {
       const response = await fetch('/api/invitations/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({
+          token,
+          fullName: name || fullName
+        })
       })
 
       const result = await response.json()
@@ -98,16 +107,26 @@ function AcceptInvitationContent() {
 
   // Auto-accept invitation if user is already signed in and email matches
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !user || !invitation || accepting || success) return
+    if (!isLoaded || !isSignedIn || !user || !invitation || accepting || success || showNameForm) return
 
     const userEmail = user.emailAddresses[0]?.emailAddress
-    
+
     if (userEmail?.toLowerCase() === invitation.email.toLowerCase()) {
-      handleAcceptInvitation()
+      // Check if user has a full name from Clerk
+      const hasName = user.firstName && user.lastName
+      const clerkFullName = hasName ? `${user.firstName} ${user.lastName}` : ''
+
+      if (hasName) {
+        // User has name in Clerk, proceed with invitation acceptance
+        handleAcceptInvitation(clerkFullName)
+      } else {
+        // User needs to provide their name first
+        setShowNameForm(true)
+      }
     } else if (userEmail) {
       setError(`This invitation is for ${invitation.email}, but you are signed in as ${userEmail}. Please sign out and create an account with the invited email.`)
     }
-  }, [isLoaded, isSignedIn, user, invitation, accepting, success, handleAcceptInvitation])
+  }, [isLoaded, isSignedIn, user, invitation, accepting, success, showNameForm])
 
   const handleSignUp = () => {
     // Redirect to signup with pre-filled email and return URL
@@ -122,6 +141,23 @@ function AcceptInvitationContent() {
     } catch (err) {
       console.error('Sign out error:', err)
     }
+  }
+
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setNameError(null)
+
+    if (!fullName.trim()) {
+      setNameError('Please enter your full name')
+      return
+    }
+
+    if (fullName.trim().length < 2) {
+      setNameError('Name must be at least 2 characters long')
+      return
+    }
+
+    handleAcceptInvitation(fullName.trim())
   }
 
   if (loading) {
@@ -193,6 +229,76 @@ function AcceptInvitationContent() {
     )
   }
 
+  if (showNameForm && isSignedIn) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <User className="w-5 h-5 text-blue-500" />
+              Complete Your Profile
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleNameSubmit} className="space-y-4">
+              <div className="text-gray-300 mb-4">
+                <p className="mb-2">Welcome to <strong>{invitation?.businessName}</strong>!</p>
+                <p className="text-sm text-gray-400">Please enter your full name to complete your profile setup.</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fullName" className="text-gray-300">
+                  Full Name
+                </Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                  autoFocus
+                />
+                {nameError && (
+                  <Alert className="bg-red-900/20 border-red-700">
+                    <AlertCircle className="w-4 h-4" />
+                    <AlertDescription className="text-red-400">
+                      {nameError}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                {accepting ? (
+                  <Button disabled className="w-full">
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Completing Setup...
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    className="w-full bg-green-600 hover:bg-green-700"
+                  >
+                    Complete Profile & Join Team
+                  </Button>
+                )}
+                <Button
+                  onClick={handleSignOut}
+                  variant="outline"
+                  className="w-full border-gray-600 text-gray-300"
+                  type="button"
+                >
+                  Sign Out & Use Different Account
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-md bg-gray-800 border-gray-700">
@@ -229,8 +335,8 @@ function AcceptInvitationContent() {
                 </Button>
               ) : (
                 <>
-                  <Button 
-                    onClick={handleAcceptInvitation}
+                  <Button
+                    onClick={() => handleAcceptInvitation()}
                     className="w-full bg-green-600 hover:bg-green-700"
                   >
                     Accept Invitation

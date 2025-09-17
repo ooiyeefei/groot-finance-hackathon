@@ -52,26 +52,39 @@ export async function GET(request: NextRequest) {
 
           // Get manager information if assigned
           let managerName = null
+          let managerUserId = null
           if (profile.manager_id) {
-            const { data: managerData } = await supabase
-              .from('users')
-              .select('full_name, clerk_user_id')
+            // First get the manager's employee profile to get the user_id
+            const { data: managerProfile } = await supabase
+              .from('employee_profiles')
+              .select('user_id')
               .eq('id', profile.manager_id)
               .single()
 
-            if (managerData) {
-              if (managerData.clerk_user_id) {
-                try {
-                  const managerClerk = await (await clerkClient()).users.getUser(managerData.clerk_user_id)
-                  managerName = managerClerk.firstName && managerClerk.lastName
-                    ? `${managerClerk.firstName} ${managerClerk.lastName}`
-                    : managerData.full_name
-                } catch (error) {
-                  console.warn(`Failed to fetch manager Clerk data:`, error)
+            if (managerProfile) {
+              managerUserId = managerProfile.user_id
+
+              // Then get the user data for the manager
+              const { data: managerData } = await supabase
+                .from('users')
+                .select('full_name, clerk_user_id')
+                .eq('id', managerProfile.user_id)
+                .single()
+
+              if (managerData) {
+                if (managerData.clerk_user_id) {
+                  try {
+                    const managerClerk = await (await clerkClient()).users.getUser(managerData.clerk_user_id)
+                    managerName = managerClerk.firstName && managerClerk.lastName
+                      ? `${managerClerk.firstName} ${managerClerk.lastName}`
+                      : managerData.full_name
+                  } catch (error) {
+                    console.warn(`Failed to fetch manager Clerk data:`, error)
+                    managerName = managerData.full_name
+                  }
+                } else {
                   managerName = managerData.full_name
                 }
-              } else {
-                managerName = managerData.full_name
               }
             }
           }
@@ -81,7 +94,8 @@ export async function GET(request: NextRequest) {
             full_name: userData?.full_name,
             email: userData?.email,
             clerk_user: clerkUser,
-            manager_name: managerName
+            manager_name: managerName,
+            manager_user_id: managerUserId
           }
         } catch (error) {
           console.warn(`Failed to enrich profile ${profile.id}:`, error)

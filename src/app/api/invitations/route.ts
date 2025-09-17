@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     // Map new role system to legacy user_role enum values
     const legacyRoleMapping: Record<string, string> = {
       'employee': 'member',
-      'manager': 'admin', 
+      'manager': 'admin',
       'admin': 'owner'
     }
 
@@ -68,14 +68,14 @@ export async function POST(request: NextRequest) {
 
     if (existingUser) {
       if (existingUser.clerk_user_id) {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'User is already a member of this business' 
+        return NextResponse.json({
+          success: false,
+          error: 'User is already a member of this business'
         }, { status: 409 })
       } else {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Pending invitation already exists for this email' 
+        return NextResponse.json({
+          success: false,
+          error: 'Pending invitation already exists for this email'
         }, { status: 409 })
       }
     }
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
         role: legacyRoleMapping[role], // Map to legacy enum: employee->member, manager->admin, admin->owner
         full_name: null, // Will be filled when user signs up
         home_currency: 'SGD', // Default, user can change later
-        clerk_user_id: null, // Explicitly set to null for pending invitations
+        clerk_user_id: null, // Explicitly set to null for pending invitations (now allowed)
         // Note: created_at will be auto-generated and used as invitation timestamp
       })
       .select('*')
@@ -133,10 +133,11 @@ export async function POST(request: NextRequest) {
     if (!emailResult.success) {
       // If email fails, we should still return the invitation but with a warning
       console.error('[Invitations API] Email sending failed:', emailResult.error)
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         invitation,
-        warning: 'Invitation created but email delivery failed. Please share the link manually.'
+        emailFailed: true,
+        warning: `Invitation created but email delivery failed: ${emailResult.error}. Please share the invitation link manually or try resending.`
       })
     }
 

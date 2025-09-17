@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, Shield, Mail, Calendar, Briefcase, Loader2, ShieldAlert, AlertCircle, CheckCircle, Crown, UserCheck, UserPlus, Send, Plus } from 'lucide-react'
+import { Users, Shield, Mail, Calendar, Briefcase, Loader2, ShieldAlert, AlertCircle, CheckCircle, Crown, UserCheck, UserPlus, Send, Plus, Trash2, Edit3, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -33,20 +33,18 @@ interface TeamMember {
   }
   created_at: string
   clerk_user?: any
-  manager_id?: string // For employee-manager association
+  manager_id?: string // For employee-manager association (employee_profiles.id)
   manager_name?: string // Display name of assigned manager
+  manager_user_id?: string // Manager's user_id for Select component
 }
 
 interface PendingInvitation {
   id: string
   email: string
-  role: 'employee' | 'manager' | 'admin'
-  department?: string
-  job_title?: string
+  role: 'member' | 'admin' | 'owner' // Use backend role values
   invited_by: string
-  created_at: string
-  expires_at: string
-  status: 'pending' | 'accepted' | 'expired'
+  invited_at: string // Changed from created_at to match API response
+  status: 'pending' | 'accepted'
 }
 
 type UserRole = 'employee' | 'manager' | 'admin'
@@ -65,6 +63,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   const [success, setSuccess] = useState<string | null>(null)
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [inviteLoading, setInviteLoading] = useState(false)
+  const [editingName, setEditingName] = useState<Set<string>>(new Set())
+  const [editingNameValue, setEditingNameValue] = useState<string>('')
   const router = useRouter()
 
 
@@ -227,7 +227,13 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(`Invitation sent to ${data.email}`)
+        if (result.emailFailed && result.warning) {
+          // Email failed but invitation was created
+          setError(result.warning)
+        } else {
+          // Success with email sent
+          setSuccess(`Invitation sent to ${data.email}`)
+        }
         setShowInviteDialog(false)
         await fetchPendingInvitations() // Refresh invitations list
       } else {
@@ -266,10 +272,103 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     }
   }
 
+  const deleteInvitation = async (invitationId: string) => {
+    try {
+      setError(null)
+      setSuccess(null)
+
+      const response = await fetch(`/api/invitations/${invitationId}`, {
+        method: 'DELETE'
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setSuccess('Invitation deleted successfully')
+        await fetchPendingInvitations()
+      } else {
+        setError(result.error || 'Failed to delete invitation')
+      }
+    } catch (error) {
+      console.error('Failed to delete invitation:', error)
+      setError('Network error while deleting invitation')
+    }
+  }
+
+  const startEditingName = (memberId: string, currentName: string) => {
+    setEditingName(prev => new Set([...prev, memberId]))
+    setEditingNameValue(currentName || '')
+  }
+
+  const cancelEditingName = (memberId: string) => {
+    setEditingName(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(memberId)
+      return newSet
+    })
+    setEditingNameValue('')
+  }
+
+  const updateUserName = async (memberId: string, isCurrentUser: boolean = false) => {
+    if (!editingNameValue.trim()) {
+      setError('Please enter a valid name')
+      return
+    }
+
+    if (editingNameValue.trim().length < 2) {
+      setError('Name must be at least 2 characters long')
+      return
+    }
+
+    try {
+      setUpdating(prev => new Set([...prev, memberId]))
+      setError(null)
+      setSuccess(null)
+
+      const response = await fetch('/api/user/update-name', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: isCurrentUser ? undefined : memberId,
+          full_name: editingNameValue.trim()
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setSuccess('Name updated successfully')
+        cancelEditingName(memberId)
+        await fetchTeamMembers() // Refresh the list
+      } else {
+        setError(result.error || 'Failed to update name')
+      }
+    } catch (error) {
+      console.error('Failed to update name:', error)
+      setError('Network error while updating name')
+    } finally {
+      setUpdating(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(memberId)
+        return newSet
+      })
+    }
+  }
+
   const getRoleDisplay = (permissions: any): UserRole => {
     if (permissions.admin) return 'admin'
     if (permissions.manager) return 'manager'
     return 'employee'
+  }
+
+  // Map backend invitation roles to display roles
+  const mapInvitationRoleToDisplay = (backendRole: string): UserRole => {
+    switch (backendRole) {
+      case 'owner': return 'admin'
+      case 'admin': return 'manager'
+      case 'member': return 'employee'
+      default: return 'employee'
+    }
   }
 
   const getRoleColor = (role: UserRole) => {
@@ -455,12 +554,55 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                             <div className="flex items-center gap-4">
                               <div className="flex-1">
                                 <div className="flex items-center gap-3">
-                                  <h4 className="text-white font-medium">
-                                    {member.clerk_user?.firstName && member.clerk_user?.lastName 
-                                      ? `${member.clerk_user.firstName} ${member.clerk_user.lastName}`
-                                      : member.full_name || 'Unknown User'
-                                    }
-                                  </h4>
+                                  {editingName.has(member.id) ? (
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        value={editingNameValue}
+                                        onChange={(e) => setEditingNameValue(e.target.value)}
+                                        className="bg-gray-600 border-gray-500 text-white h-8 w-48"
+                                        placeholder="Enter full name"
+                                        autoFocus
+                                      />
+                                      <Button
+                                        size="sm"
+                                        onClick={() => updateUserName(member.user_id, member.user_id === userId)}
+                                        disabled={updating.has(member.id)}
+                                        className="h-8 px-2 bg-green-600 hover:bg-green-700"
+                                      >
+                                        <Save className="w-3 h-3" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => cancelEditingName(member.id)}
+                                        className="h-8 px-2 border-gray-600"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="text-white font-medium">
+                                        {member.clerk_user?.firstName && member.clerk_user?.lastName
+                                          ? `${member.clerk_user.firstName} ${member.clerk_user.lastName}`
+                                          : member.full_name || 'Unknown User'
+                                        }
+                                      </h4>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => startEditingName(
+                                          member.id,
+                                          member.clerk_user?.firstName && member.clerk_user?.lastName
+                                            ? `${member.clerk_user.firstName} ${member.clerk_user.lastName}`
+                                            : member.full_name || ''
+                                        )}
+                                        className="h-6 px-1 border-gray-600 hover:bg-gray-700"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  )}
                                   <Badge variant="outline" className={getRoleColor(currentRole)}>
                                     <RoleIcon className="w-3 h-3 mr-1" />
                                     {currentRole}
@@ -486,12 +628,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                     <Calendar className="w-3 h-3" />
                                     <span>Joined {new Date(member.created_at).toLocaleDateString()}</span>
                                   </div>
-                                  {member.manager_name && (
-                                    <div className="flex items-center gap-1">
-                                      <Shield className="w-3 h-3" />
-                                      <span>Manager: {member.manager_name}</span>
-                                    </div>
-                                  )}
                                 </div>
                               </div>
                             </div>
@@ -535,7 +671,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                 <div className="min-w-[140px]">
                                   <Label className="text-gray-400 text-sm">Manager</Label>
                                   <Select
-                                    value={member.manager_id || 'none'}
+                                    value={member.manager_user_id || 'none'}
                                     onValueChange={(managerId: string) => assignManager(member.user_id, managerId)}
                                     disabled={isUpdating}
                                   >
@@ -606,7 +742,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
               ) : (
                 <div className="space-y-4">
                   {pendingInvitations.map((invitation) => {
-                    const RoleIcon = getRoleIcon(invitation.role)
+                    const displayRole = mapInvitationRoleToDisplay(invitation.role)
+                    const RoleIcon = getRoleIcon(displayRole)
                     
                     return (
                       <Card key={invitation.id} className="bg-gray-700 border-gray-600">
@@ -615,9 +752,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
                                 <h4 className="text-white font-medium">{invitation.email}</h4>
-                                <Badge variant="outline" className={getRoleColor(invitation.role)}>
+                                <Badge variant="outline" className={getRoleColor(displayRole)}>
                                   <RoleIcon className="w-3 h-3 mr-1" />
-                                  {invitation.role}
+                                  {displayRole}
                                 </Badge>
                                 <Badge className={getInvitationStatusColor(invitation.status)}>
                                   {invitation.status}
@@ -625,40 +762,34 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                               </div>
                               
                               <div className="flex items-center gap-4 text-sm text-gray-400">
-                                {invitation.department && (
-                                  <div className="flex items-center gap-1">
-                                    <Users className="w-3 h-3" />
-                                    <span>{invitation.department}</span>
-                                  </div>
-                                )}
-                                {invitation.job_title && (
-                                  <div className="flex items-center gap-1">
-                                    <Briefcase className="w-3 h-3" />
-                                    <span>{invitation.job_title}</span>
-                                  </div>
-                                )}
                                 <div className="flex items-center gap-1">
                                   <Calendar className="w-3 h-3" />
-                                  <span>Sent {new Date(invitation.created_at).toLocaleDateString()}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
-                                  <span>Expires {new Date(invitation.expires_at).toLocaleDateString()}</span>
+                                  <span>Sent {new Date(invitation.invited_at).toLocaleDateString()}</span>
                                 </div>
                               </div>
                             </div>
 
                             <div className="flex items-center gap-2">
                               {invitation.status === 'pending' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => resendInvitation(invitation.id)}
-                                  className="border-gray-600 text-gray-300 hover:bg-gray-600"
-                                >
-                                  <Send className="w-3 h-3 mr-1" />
-                                  Resend
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => resendInvitation(invitation.id)}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                  >
+                                    <Send className="w-3 h-3 mr-1" />
+                                    Resend
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => deleteInvitation(invitation.id)}
+                                    className="border-red-600 text-red-400 hover:bg-red-900/20"
+                                  >
+                                    <Trash2 className="w-3 h-3 mr-1" />
+                                    Delete
+                                  </Button>
+                                </>
                               )}
                             </div>
                           </div>
