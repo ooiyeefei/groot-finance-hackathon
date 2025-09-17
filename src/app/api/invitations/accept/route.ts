@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { token } = body
+    const { token, fullName } = body
 
     if (!token) {
       return NextResponse.json({ 
@@ -143,14 +143,22 @@ export async function POST(request: NextRequest) {
       }, { status: 403 })
     }
 
+    // Determine the full name to save
+    let finalFullName = null
+    if (fullName && fullName.trim()) {
+      // Use provided full name from the form
+      finalFullName = fullName.trim()
+    } else if (clerkUser.firstName && clerkUser.lastName) {
+      // Fall back to Clerk name if available
+      finalFullName = `${clerkUser.firstName} ${clerkUser.lastName}`
+    }
+
     // Update the invitation record to associate with Clerk user
     const { error: updateError } = await supabase
       .from('users')
       .update({
         clerk_user_id: userId,
-        full_name: clerkUser.firstName && clerkUser.lastName 
-          ? `${clerkUser.firstName} ${clerkUser.lastName}`
-          : null,
+        full_name: finalFullName,
         updated_at: new Date().toISOString()
       })
       .eq('id', token)

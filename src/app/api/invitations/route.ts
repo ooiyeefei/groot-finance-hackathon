@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Use service client to avoid schema cache issues with confirmation_token
     const supabase = createServiceSupabaseClient()
 
-    // Check if user already exists in the business
+    // Check if user already exists in the business (either confirmed or invited)
     const { data: existingUser } = await supabase
       .from('users')
       .select('id, clerk_user_id, created_at')
@@ -67,41 +67,31 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existingUser) {
-      return NextResponse.json({
-        success: false,
-        error: 'User is already a member of this business'
-      }, { status: 409 })
+      if (existingUser.clerk_user_id) {
+        return NextResponse.json({
+          success: false,
+          error: 'User is already a member of this business'
+        }, { status: 409 })
+      } else {
+        return NextResponse.json({
+          success: false,
+          error: 'Pending invitation already exists for this email'
+        }, { status: 409 })
+      }
     }
 
-    // Check if pending invitation already exists
-    const { data: existingInvitation } = await supabase
-      .from('invitations')
-      .select('id, status')
-      .eq('business_id', userContext.profile.business_id)
-      .ilike('email', email)
-      .eq('status', 'pending')
-      .single()
-
-    if (existingInvitation) {
-      return NextResponse.json({
-        success: false,
-        error: 'Pending invitation already exists for this email'
-      }, { status: 409 })
-    }
-
-    // Create invitation record in invitations table
+    // Create invitation record in users table
     const { data: invitation, error: insertError } = await supabase
-      .from('invitations')
+      .from('users')
       .insert({
         email: email.toLowerCase(),
         business_id: userContext.profile.business_id,
-        invited_by: userId,
+        invited_by: userId, // Use invited_by to identify invitations
         role: legacyRoleMapping[role], // Map to legacy enum: employee->member, manager->admin, admin->owner
-        employee_id,
-        department,
-        job_title,
-        status: 'pending',
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
+        full_name: null, // Will be filled when user signs up
+        home_currency: 'SGD', // Default, user can change later
+        clerk_user_id: null, // Explicitly set to null for pending invitations (now allowed)
+        // Note: created_at will be auto-generated and used as invitation timestamp
       })
       .select('*')
       .single()
@@ -128,25 +118,26 @@ export async function POST(request: NextRequest) {
       ? `${inviterUser.firstName} ${inviterUser.lastName}`
       : inviterUser.emailAddresses[0]?.emailAddress || 'Team Admin'
 
-    // Send invitation email using the invitation token
-    const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${invitation.invitation_token}`
+    // Send invitation email using the user ID as the token
+    const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${invitation.id}`
     
     const emailResult = await emailService.sendInvitation({
       email,
       businessName: business?.name || 'FinanSEAL Business',
       inviterName,
       role, // Keep using the modern role for email content
-      invitationToken: invitation.invitation_token, // Use invitation token
+      invitationToken: invitation.id, // Use user ID as token
       invitationUrl
     })
 
     if (!emailResult.success) {
       // If email fails, we should still return the invitation but with a warning
       console.error('[Invitations API] Email sending failed:', emailResult.error)
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         invitation,
-        warning: 'Invitation created but email delivery failed. Please share the link manually.'
+        emailFailed: true,
+        warning: `Invitation created but email delivery failed: ${emailResult.error}. Please share the invitation link manually or try resending.`
       })
     }
 
@@ -194,17 +185,20 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    // Build query - get invitations from invitations table
+    // Build query - get pending invitations (invited but no clerk_user_id yet)
     let query = supabase
-      .from('invitations')
-      .select('id, email, role, employee_id, department, job_title, invited_by, status, expires_at, accepted_at, created_at, invitation_token', { count: 'exact' })
+      .from('users')
+      .select('id, email, created_at, invited_by, role, full_name, clerk_user_id', { count: 'exact' })
       .eq('business_id', userContext.profile.business_id)
+      .not('invited_by', 'is', null) // Has been invited (invited_by is set)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
     // Filter by status if provided
-    if (status) {
-      query = query.eq('status', status)
+    if (status === 'pending') {
+      query = query.is('clerk_user_id', null) // Not yet accepted
+    } else if (status === 'accepted') {
+      query = query.not('clerk_user_id', 'is', null) // Has accepted
     }
 
     const { data: invitations, error, count } = await query
@@ -222,14 +216,10 @@ export async function GET(request: NextRequest) {
       id: invitation.id,
       email: invitation.email,
       role: invitation.role,
-      department: invitation.department,
-      job_title: invitation.job_title,
-      status: invitation.status,
-      invited_at: invitation.created_at,
-      expires_at: invitation.expires_at,
-      accepted_at: invitation.accepted_at,
+      status: invitation.clerk_user_id ? 'accepted' : 'pending',
+      invited_at: invitation.created_at, // Use created_at as invited_at
       invited_by: invitation.invited_by,
-      invitation_token: invitation.invitation_token
+      invitation_token: invitation.id // Use user ID as token
     })) || []
 
     return NextResponse.json({ 

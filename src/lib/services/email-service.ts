@@ -36,7 +36,7 @@ class EmailService {
 
     this.config = {
       apiKey,
-      fromEmail: process.env.RESEND_FROM_EMAIL || 'noreply@notifications.helloqroot.com',
+      fromEmail: process.env.RESEND_FROM_EMAIL || 'noreply@notifications.hellogroot.com',
       appUrl: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     }
 
