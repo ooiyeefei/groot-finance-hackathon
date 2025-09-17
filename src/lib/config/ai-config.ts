@@ -60,16 +60,18 @@ function validateConfig(): void {
   }
 }
 
-// Initialize and export configuration (skip validation in development mode if variables are missing)
-if (process.env.NODE_ENV === 'production') {
-  validateConfig()
-} else {
-  // In development, warn but don't fail
-  try {
+// Initialize and export configuration (only validate on server-side)
+if (typeof window === 'undefined') { // Server-side only
+  if (process.env.NODE_ENV === 'production') {
     validateConfig()
-  } catch (error) {
-    console.warn('⚠️  AI Configuration Warning (development mode):', error instanceof Error ? error.message : error)
-    console.warn('Document processing may fail until environment variables are properly configured.')
+  } else {
+    // In development, warn but don't fail
+    try {
+      validateConfig()
+    } catch (error) {
+      console.warn('⚠️  AI Configuration Warning (development mode):', error instanceof Error ? error.message : error)
+      console.warn('Document processing may fail until environment variables are properly configured.')
+    }
   }
 }
 
@@ -90,7 +92,7 @@ export const aiConfig: AIConfig = {
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || '',
-    model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-001'
+    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash'
   },
   qdrant: {
     url: process.env.QDRANT_URL!,

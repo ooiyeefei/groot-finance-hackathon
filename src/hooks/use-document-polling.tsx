@@ -132,7 +132,19 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
       const response = await fetch('/api/documents/list')
       if (response.ok) {
         const result = await response.json()
-        setDocuments(result.data || [])
+        const newDocuments = result.data || []
+        setDocuments(newDocuments)
+        
+        // Clean up processingDocuments set: remove documents that are no longer processing
+        setProcessingDocuments(prev => {
+          const newSet = new Set(prev)
+          newDocuments.forEach((doc: Document) => {
+            if (doc.processing_status !== 'processing' && doc.processing_status !== 'ocr_processing') {
+              newSet.delete(doc.id)
+            }
+          })
+          return newSet
+        })
       } else {
         console.error('Failed to fetch documents')
       }
@@ -179,6 +191,8 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
         : doc
     ))
     
+    let processingStartedSuccessfully = false
+    
     try {
       const response = await fetch(`/api/documents/${documentId}/process`, {
         method: 'POST',
@@ -193,6 +207,10 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
         // Processing was successfully queued - keep status as 'processing'
         // The actual completion will be detected by polling
         console.log('Document processing started successfully')
+        processingStartedSuccessfully = true
+        
+        // Immediately fetch latest status from server to ensure consistency
+        await fetchDocuments()
       } else if (response.status === 409) {
         // Document is already being processed - revert to actual status from server
         console.log('Document is already being processed')
@@ -217,13 +235,17 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
           : doc
       ))
     } finally {
-      setProcessingDocuments(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(documentId)
-        return newSet
-      })
+      // Only remove from processingDocuments if processing failed to start
+      // If processing started successfully, keep it in the set until polling detects completion
+      if (!processingStartedSuccessfully) {
+        setProcessingDocuments(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(documentId)
+          return newSet
+        })
+      }
     }
-  }, [calculateOverallConfidence])
+  }, [calculateOverallConfidence, fetchDocuments])
 
   // Delete a document
   const deleteDocument = useCallback(async (documentId: string) => {

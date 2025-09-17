@@ -2,7 +2,7 @@
 
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus } from 'lucide-react'
+import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus, Loader2 } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocumentPolling } from '@/hooks/use-document-polling'
 import DocumentStatusBadge from './document-status-badge'
@@ -427,8 +427,12 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                       className="inline-flex items-center px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
                       title="Reprocess this document"
                     >
-                      <RotateCcw className="w-4 h-4 mr-1.5" />
-                      Reprocess
+                      {processingDocuments.has(document.id) ? (
+                        <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="w-4 h-4 mr-1.5" />
+                      )}
+                      {processingDocuments.has(document.id) ? 'Processing...' : 'Reprocess'}
                     </button>
                   )}
                   
