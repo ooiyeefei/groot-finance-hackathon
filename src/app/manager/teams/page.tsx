@@ -27,9 +27,9 @@ export default async function TeamsManagementPage() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <HeaderWithUser 
-          title="Teams Management" 
-          subtitle={`Manage team members, roles, permissions, and invitations${user?.firstName ? `, ${user.firstName}` : ''}`}
+        <HeaderWithUser
+          title="Teams Management"
+          subtitle=""
         />
         
         {/* Main Content Area */}

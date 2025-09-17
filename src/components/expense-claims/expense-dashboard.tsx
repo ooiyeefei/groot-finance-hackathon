@@ -536,7 +536,7 @@ function ManagerDashboardContent({ data }: { data: DashboardData }) {
                 <div key={claim.id} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
                   <div className="flex-1">
                     <p className="text-white text-sm font-medium">
-                      {claim.employee?.full_name || 'Unknown Employee'}
+                      {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                     </p>
                     <p className="text-gray-400 text-xs">
                       {claim.description || 'Expense Claim'} • 
@@ -673,7 +673,7 @@ function AdminDashboardContent({ data }: { data: DashboardData }) {
                 >
                   <div className="flex-1 text-left">
                     <p className="text-white text-sm font-medium">
-                      {claim.employee?.full_name || 'Unknown Employee'}
+                      {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                     </p>
                     <p className="text-gray-400 text-xs">
                       {claim.employee?.department || 'No Department'} • 

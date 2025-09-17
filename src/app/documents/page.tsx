@@ -20,9 +20,9 @@ export default async function DocumentsPage() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <HeaderWithUser 
-          title="Documents" 
-          subtitle="Upload and manage your financial documents for AI-powered processing"
+        <HeaderWithUser
+          title="Documents"
+          subtitle=""
         />
         
         {/* Main Content Area */}
