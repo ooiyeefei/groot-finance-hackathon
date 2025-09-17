@@ -33,6 +33,8 @@ interface TeamMember {
   }
   created_at: string
   clerk_user?: any
+  manager_id?: string // For employee-manager association
+  manager_name?: string // Display name of assigned manager
 }
 
 interface PendingInvitation {
@@ -160,6 +162,48 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         return newSet
       })
     }
+  }
+
+  const assignManager = async (employeeId: string, managerId: string) => {
+    try {
+      setUpdating(prev => new Set([...prev, employeeId]))
+      setError(null)
+      setSuccess(null)
+
+      const response = await fetch('/api/user/assign-manager', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: employeeId,
+          manager_id: managerId === 'none' ? null : managerId
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setSuccess(`Manager assignment updated successfully`)
+        await fetchTeamMembers() // Refresh the list
+      } else {
+        setError(result.error || 'Failed to assign manager')
+      }
+    } catch (error) {
+      console.error('Failed to assign manager:', error)
+      setError('Network error while assigning manager')
+    } finally {
+      setUpdating(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(employeeId)
+        return newSet
+      })
+    }
+  }
+
+  // Get list of managers and admins for assignment dropdown
+  const getAvailableManagers = () => {
+    return teamMembers.filter(member =>
+      member.role_permissions.manager || member.role_permissions.admin
+    )
   }
 
   const sendInvitation = async (data: InvitationFormData) => {
@@ -442,6 +486,12 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                     <Calendar className="w-3 h-3" />
                                     <span>Joined {new Date(member.created_at).toLocaleDateString()}</span>
                                   </div>
+                                  {member.manager_name && (
+                                    <div className="flex items-center gap-1">
+                                      <Shield className="w-3 h-3" />
+                                      <span>Manager: {member.manager_name}</span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -479,6 +529,46 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   </SelectContent>
                                 </Select>
                               </div>
+
+                              {/* Manager Assignment - Only show for employees */}
+                              {currentRole === 'employee' && (
+                                <div className="min-w-[140px]">
+                                  <Label className="text-gray-400 text-sm">Manager</Label>
+                                  <Select
+                                    value={member.manager_id || 'none'}
+                                    onValueChange={(managerId: string) => assignManager(member.user_id, managerId)}
+                                    disabled={isUpdating}
+                                  >
+                                    <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8">
+                                      <SelectValue placeholder="Assign manager" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-gray-700 border-gray-600">
+                                      <SelectItem value="none" className="text-white">
+                                        No Manager
+                                      </SelectItem>
+                                      {getAvailableManagers().map((manager) => (
+                                        <SelectItem
+                                          key={manager.user_id}
+                                          value={manager.user_id}
+                                          className="text-white"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            {manager.role_permissions.admin ? (
+                                              <Crown className="w-3 h-3" />
+                                            ) : (
+                                              <Shield className="w-3 h-3" />
+                                            )}
+                                            {manager.clerk_user?.firstName && manager.clerk_user?.lastName
+                                              ? `${manager.clerk_user.firstName} ${manager.clerk_user.lastName}`
+                                              : manager.full_name || manager.email || 'Unknown'
+                                            }
+                                          </div>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
 
                               {isUpdating && (
                                 <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
