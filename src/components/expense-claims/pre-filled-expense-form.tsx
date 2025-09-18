@@ -651,11 +651,11 @@ export default function PreFilledExpenseForm({
                     </SelectTrigger>
                     <SelectContent className="bg-gray-700 border-gray-600">
                       {categoriesLoading ? (
-                        <SelectItem value="" className="text-gray-400" disabled>
+                        <SelectItem value="loading" className="text-gray-400" disabled>
                           Loading categories...
                         </SelectItem>
                       ) : categoriesError ? (
-                        <SelectItem value="" className="text-red-400" disabled>
+                        <SelectItem value="error" className="text-red-400" disabled>
                           Error loading categories
                         </SelectItem>
                       ) : categories.length > 0 ? (
@@ -665,7 +665,7 @@ export default function PreFilledExpenseForm({
                           </SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="" className="text-gray-400" disabled>
+                        <SelectItem value="no-categories" className="text-gray-400" disabled>
                           No categories available
                         </SelectItem>
                       )}

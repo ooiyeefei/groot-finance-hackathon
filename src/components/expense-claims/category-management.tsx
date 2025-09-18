@@ -282,9 +282,9 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredCategories.map((category) => (
-                <Card key={category.id} className="bg-gray-700 border-gray-600">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
+                <Card key={category.id} className="bg-gray-700 border-gray-600 flex flex-col">
+                  <CardContent className="p-4 flex flex-col h-full">
+                    <div className="space-y-3 flex-1">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h4 className="text-white font-medium">{category.category_name}</h4>
@@ -293,12 +293,14 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                             <p className="text-gray-400 text-sm mt-1">{category.description}</p>
                           )}
                         </div>
-                        {!category.is_active && (
-                          <Badge variant="secondary" className="text-xs">Inactive</Badge>
-                        )}
-                        {category.is_default && (
-                          <Badge variant="outline" className="text-xs">Default</Badge>
-                        )}
+                        <div className="flex gap-1">
+                          {!category.is_active && (
+                            <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                          )}
+                          {category.is_default && (
+                            <Badge variant="outline" className="text-xs text-white border-white">Default</Badge>
+                          )}
+                        </div>
                       </div>
 
                       <div className="space-y-2">
@@ -306,24 +308,18 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                           <DollarSign className="w-3 h-3" />
                           <span className="capitalize">{category.tax_treatment.replace('_', ' ')}</span>
                         </div>
-                        
-                        {category.requires_receipt && (
-                          <div className="text-xs text-yellow-400">
-                            Receipt required {category.receipt_threshold && `(>${category.receipt_threshold})`}
-                          </div>
-                        )}
 
-                        {category.requires_manager_approval && (
-                          <div className="text-xs text-orange-400">
-                            Manager approval required
-                          </div>
-                        )}
+                        <div className={`text-xs ${category.requires_receipt ? 'text-yellow-400' : 'text-gray-500'}`}>
+                          Receipt {category.requires_receipt ? 'required' : 'not required'} {category.receipt_threshold && category.requires_receipt && `(>$${category.receipt_threshold})`}
+                        </div>
 
-                        {category.policy_limit && (
-                          <div className="text-xs text-red-400">
-                            Limit: ${category.policy_limit}
-                          </div>
-                        )}
+                        <div className={`text-xs ${category.requires_manager_approval ? 'text-orange-400' : 'text-gray-500'}`}>
+                          Manager approval {category.requires_manager_approval ? 'required' : 'not required'}
+                        </div>
+
+                        <div className="text-xs text-red-400">
+                          Policy limit: ${category.policy_limit || 0}
+                        </div>
 
                         {category.ai_keywords.length > 0 && (
                           <div className="text-xs text-gray-400">
@@ -332,26 +328,24 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                           </div>
                         )}
                       </div>
+                    </div>
 
-                      <div className="flex gap-2 pt-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEdit(category)}
-                          className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-600"
-                        >
-                          <Edit className="w-3 h-3 mr-1" />
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDelete(category)}
-                          className="border-red-600 text-red-400 hover:bg-red-600/20"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
+                    <div className="flex gap-2 pt-4 border-t border-gray-600 mt-4">
+                      <Button
+                        size="sm"
+                        onClick={() => handleEdit(category)}
+                        className="flex-1 bg-blue-600 text-white hover:bg-blue-700 border-0"
+                      >
+                        <Edit className="w-3 h-3 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleDelete(category)}
+                        className="bg-red-600 text-white hover:bg-red-700 border-0"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

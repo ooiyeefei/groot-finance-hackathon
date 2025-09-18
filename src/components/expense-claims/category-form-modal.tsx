@@ -351,13 +351,29 @@ export default function CategoryFormModal({
                   <Checkbox
                     id="requires_receipt"
                     checked={formData.requires_receipt}
-                    onCheckedChange={(checked) => 
+                    onCheckedChange={(checked) =>
                       setFormData(prev => ({ ...prev, requires_receipt: !!checked }))
                     }
                     disabled={isLoading}
+                    className="border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
                   />
                   <Label htmlFor="requires_receipt" className="text-gray-300">
                     Requires receipt attachment
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="requires_manager_approval"
+                    checked={formData.requires_manager_approval}
+                    onCheckedChange={(checked) =>
+                      setFormData(prev => ({ ...prev, requires_manager_approval: !!checked }))
+                    }
+                    disabled={isLoading}
+                    className="border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                  />
+                  <Label htmlFor="requires_manager_approval" className="text-gray-300">
+                    Requires manager approval
                   </Label>
                 </div>
 
@@ -437,7 +453,7 @@ export default function CategoryFormModal({
                 variant="outline"
                 onClick={handleClose}
                 disabled={isLoading}
-                className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                className="bg-gray-600 text-white hover:bg-gray-500 border-gray-600"
               >
                 Cancel
               </Button>

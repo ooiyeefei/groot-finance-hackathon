@@ -19,6 +19,7 @@ import PreFilledExpenseForm from './pre-filled-expense-form'
 interface DSPyExpenseSubmissionFlowProps {
   onClose: (hasBackgroundProcessing?: boolean) => void
   onSubmit: (formData: any) => void
+  initialStep?: FlowStep // Allow starting from a specific step
 }
 
 type FlowStep = 'upload' | 'processing' | 'form'
@@ -35,7 +36,8 @@ interface FlowState {
 
 export default function DSPyExpenseSubmissionFlow({
   onClose,
-  onSubmit
+  onSubmit,
+  initialStep = 'upload'
 }: DSPyExpenseSubmissionFlowProps) {
   const {
     processingClaims,
@@ -47,14 +49,51 @@ export default function DSPyExpenseSubmissionFlow({
   } = useExpenseClaimProcessing()
 
   const [flowState, setFlowState] = useState<FlowState>({
-    currentStep: 'upload',
+    currentStep: initialStep,
     uploadedFile: null,
-    extractionResult: null,
+    extractionResult: initialStep === 'form' ? null : null, // Will be set by useEffect if starting with form
     error: null,
     isSubmitting: false,
     isBackgroundProcessing: false,
     processingClaimId: null
   })
+
+  // Initialize extraction result for manual entry (when starting with 'form' step)
+  useEffect(() => {
+    if (initialStep === 'form' && !flowState.extractionResult) {
+      const fallbackResult: DSPyExtractionResult = {
+        thinking: {
+          step1_vendor_analysis: 'Manual entry - no automated analysis performed',
+          step2_date_identification: 'Manual entry - user will provide date',
+          step3_amount_parsing: 'Manual entry - user will provide amount',
+          step4_tax_calculation: 'Manual entry - user will provide tax details',
+          step5_line_items_extraction: 'Manual entry - user will provide line items',
+          step6_validation_checks: 'Manual entry - user responsible for accuracy',
+          final_confidence_assessment: 'Manual entry mode - no confidence scoring available'
+        },
+        extractedData: {
+          vendorName: '',
+          transactionDate: new Date().toISOString().split('T')[0],
+          totalAmount: 0,
+          currency: 'SGD',
+          lineItems: [],
+          extractionQuality: 'low',
+          confidenceScore: 0.0,
+          missingFields: ['vendorName', 'transactionDate', 'totalAmount'],
+          processingMethod: 'manual_entry',
+          processingTimestamp: new Date().toISOString()
+        },
+        processingComplete: true,
+        needsManualReview: true,
+        suggestedCorrections: ['All fields require manual input']
+      }
+
+      setFlowState(prev => ({
+        ...prev,
+        extractionResult: fallbackResult
+      }))
+    }
+  }, [initialStep, flowState.extractionResult])
 
   // DSPy Flow: Step 1 → Step 2 (Upload → Processing)
   const handleFileSelected = (file: File) => {

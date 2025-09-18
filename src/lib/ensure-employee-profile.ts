@@ -5,6 +5,7 @@
 
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 import { syncRoleToClerk } from '@/lib/rbac'
+import { getDefaultExpenseCategories } from '@/lib/default-expense-categories'
 
 export interface EmployeeProfile {
   id: string
@@ -155,10 +156,10 @@ export async function ensureEmployeeProfile(userId: string): Promise<EmployeePro
         .from('businesses')
         .insert({
           name: businessName,
-          email: userEmail,
-          country: 'SG', // Default to Singapore
-          currency: 'SGD',
-          business_type: 'personal',
+          slug: `${userEmail?.split('@')[0]}-business-${Date.now()}`, // Generate unique slug
+          country_code: 'SG', // Use correct column name
+          home_currency: 'SGD', // Use correct column name
+          custom_expense_categories: getDefaultExpenseCategories(), // Add default expense categories
           created_at: new Date().toISOString()
         })
         .select('id')

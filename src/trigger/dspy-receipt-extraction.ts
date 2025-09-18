@@ -36,7 +36,10 @@ const supabase = createSupabaseClient();
 
 export const dspyReceiptExtraction = task({
   id: "dspy-receipt-extraction",
-  maxDuration: 180, // 3 minutes - should be sufficient for DSPy processing
+  maxDuration: 180, // 3 minutes - with vLLM fallback system
+  retry: {
+    maxAttempts: 1, // No retries - we have vLLM fallback internally
+  },
   run: async (payload: {
     receiptText?: string;
     receiptImageData?: {
@@ -100,9 +103,9 @@ export const dspyReceiptExtraction = task({
       // Step 2: Run DSPy extraction using Python inline code with business categories
       console.log("🐍 Running DSPy extraction with Python runtime...");
 
-      // Step 2: Determine processing complexity with hybrid classification
-      console.log("🔍 Running hybrid complexity classification...");
-      
+      // Step 2: Run optimized DSPy extraction (simplified processing)
+      console.log("🔍 Running streamlined DSPy extraction...");
+
       const result = await python.runInline(`
 # Hybrid DSPy Receipt Extraction with Adaptive Processing  
 import dspy
@@ -190,10 +193,12 @@ class ExtractedReceiptData(BaseModel):
     line_items: List[ExtractedLineItem] = Field(default_factory=list, description="Individual purchased items")
     selected_category: Optional[str] = Field(None, description="Selected expense category name from available business categories")
     extraction_quality: Literal['high', 'medium', 'low'] = Field(..., description="Quality assessment")
-    confidence_score: float = Field(..., ge=0.0, le=1.0, description="Confidence score from 0.0 to 1.0")
+    confidence_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence score from 0.0 to 1.0")
+    dspy_confidence: float = Field(..., ge=0.0, le=1.0, description="DSPy model confidence from 0.0 to 1.0")
     missing_fields: List[str] = Field(default_factory=list, description="Fields that couldn't be extracted")
     processing_method: Literal['dspy', 'manual_entry'] = Field(default='dspy')
     model_used: Optional[str] = Field(None, description="AI model used for extraction")
+    backend_used: Optional[str] = Field(None, description="Backend used: gemini_dspy or vllm_dspy")
 
 class ExtractionReasoning(BaseModel):
     step1_vendor_analysis: str = Field(..., description="Reasoning for vendor identification")
@@ -677,6 +682,18 @@ class GeminiLM(dspy.LM):
         # DSPy expects a list of string completions
         return [response_text]
 
+# Enhanced DSPy Signature with confidence scoring for multi-stage processing
+class ReceiptExtractionSignature(dspy.Signature):
+    """Extract key information from receipt text with confidence scoring for quality assessment"""
+    receipt_text: str = dspy.InputField(desc="Raw text extracted from receipt")
+    vendor_name: str = dspy.OutputField(desc="Name of the merchant or store")
+    transaction_date: str = dspy.OutputField(desc="Transaction date in YYYY-MM-DD format")
+    total_amount: str = dspy.OutputField(desc="Total amount as string")
+    currency: str = dspy.OutputField(desc="Currency code (SGD, MYR, THB, etc.)")
+    receipt_number: str = dspy.OutputField(desc="Receipt or invoice number if available")
+    confidence_score: str = dspy.OutputField(desc="Overall confidence score from 0.0 to 1.0")
+    dspy_confidence: str = dspy.OutputField(desc="DSPy model confidence from 0.0 to 1.0 for fallback decision")
+
 # Modern DSPy Extractor with Structured Output
 class DSPyReceiptExtractor(dspy.Module):
     def __init__(self):
@@ -1012,41 +1029,205 @@ def _generate_business_purpose(vendor_name: str, category: str, line_items: List
 
     return base_purpose
 
-# Main extraction function with adaptive processing
+# Legacy function - now redirects to multi-stage processing
 def extract_receipt_data(receipt_text: str, image_metadata: Dict[str, Any] = None, forced_method: str = None, business_categories: List[Dict] = None) -> dict:
+    """Legacy function - redirects to new multi-stage system"""
+    print("⚠️ Legacy extract_receipt_data called, redirecting to multi-stage system", file=sys.stderr)
+    return run_multi_stage_receipt_processing(receipt_text, business_categories or [])
+        
+def run_multi_stage_receipt_processing(receipt_text, business_categories):
+    """Run the comprehensive multi-stage receipt processing system"""
     start_time = datetime.now()
-    
-    try:
-        if not receipt_text.strip():
-            raise ValueError("No receipt text provided for DSPy processing")
-        
-        print(f"Processing receipt text: {len(receipt_text)} characters", file=sys.stderr)
-        
-        # Initialize the Adaptive DSPy extractor with hybrid classification
-        extractor = AdaptiveReceiptExtractor(model_name="gemini-2.5-flash")
-        
-        # Prepare image metadata from payload if available
-        if image_metadata is None:
-            image_metadata = {}
-        
-        # Merge with defaults
-        final_metadata = {
-            'confidence': image_metadata.get('confidence', 0.7),
-            'quality': image_metadata.get('quality', 'acceptable'),
-            'textLength': len(receipt_text)
+
+    if not receipt_text.strip():
+        return {
+            "success": False,
+            "error": "No receipt text provided for DSPy processing"
         }
-        
-        # Run the adaptive extraction with hybrid classification
-        result = extractor.forward(
-            receipt_text=receipt_text,
-            image_metadata=final_metadata,
-            forced_method=forced_method,  # Allow manual override or auto-detection
-            business_categories=business_categories  # Pass business categories for LLM selection
-        )
-        
-        processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
-        
-        extracted_data = result.extracted_data
+
+    print(f"Processing receipt text: {len(receipt_text)} characters", file=sys.stderr)
+
+    # Multi-Stage Processing: Gemini Primary + vLLM Fallback
+    print("🏆 Starting Tier 2: Comprehensive Multi-Stage Receipt Processing", file=sys.stderr)
+
+    gemini_result = None
+    vllm_result = None
+    gemini_error_details = None
+    vllm_error_details = None
+
+    # Stage 1: Try Gemini DSPy (Primary)
+    print("🥇 Stage 1: Gemini Primary DSPy Processing", file=sys.stderr)
+    try:
+            gemini_extractor = DSPyReceiptExtractor()
+
+            # Configure Gemini LM for receipt processing
+            api_key = os.getenv('GEMINI_API_KEY')
+            if not api_key:
+                raise ValueError("GEMINI_API_KEY not found in environment")
+
+            gemini_lm = GeminiLanguageModel(model="gemini-2.5-flash", api_key=api_key)
+
+            with dspy.context(lm=gemini_lm):
+                print("📞 Calling Gemini DSPy for receipt extraction...", file=sys.stderr)
+                gemini_result = gemini_extractor.forward(receipt_text=receipt_text)
+
+                if gemini_result and hasattr(gemini_result, 'extracted_data'):
+                    gemini_result.extracted_data.backend_used = 'gemini_dspy'
+                    gemini_result.extracted_data.model_used = 'gemini-2.5-flash'
+                    print("✅ Gemini DSPy extraction completed successfully", file=sys.stderr)
+                else:
+                    raise ValueError("Gemini returned invalid result structure")
+
+        except Exception as gemini_error:
+            gemini_error_details = {
+                "error_type": type(gemini_error).__name__,
+                "error_message": str(gemini_error),
+                "stage": "gemini_dspy"
+            }
+            print(f"❌ Gemini DSPy failed: {gemini_error_details['error_type']}: {gemini_error_details['error_message']}", file=sys.stderr)
+            gemini_result = None
+
+        # Stage 2: vLLM Fallback (if Gemini failed or low confidence)
+        vllm_endpoint = os.getenv('OCR_ENDPOINT_URL')
+        should_try_vllm = False
+
+        if not gemini_result:
+            print("🔄 Gemini failed, triggering vLLM fallback", file=sys.stderr)
+            should_try_vllm = True
+        elif gemini_result and hasattr(gemini_result, 'extracted_data'):
+            gemini_confidence = getattr(gemini_result.extracted_data, 'dspy_confidence', 0.0)
+            if isinstance(gemini_confidence, str):
+                try:
+                    gemini_confidence = float(gemini_confidence)
+                except:
+                    gemini_confidence = 0.0
+
+            if gemini_confidence < 0.75:
+                print(f"🔄 Gemini confidence {gemini_confidence:.2f} < 0.75, triggering vLLM fallback", file=sys.stderr)
+                should_try_vllm = True
+            else:
+                print(f"✅ Gemini confidence {gemini_confidence:.2f} >= 0.75, skipping vLLM", file=sys.stderr)
+
+        if should_try_vllm and vllm_endpoint:
+            print("🥈 Stage 2: vLLM Skywork Fallback Processing", file=sys.stderr)
+            try:
+                vllm_model = os.getenv('OCR_MODEL_NAME', 'brandonbeiler/Skywork-R1V3-38B-FP8-Dynamic')
+                print(f"🔧 Configuring vLLM: {vllm_endpoint}, model: {vllm_model}", file=sys.stderr)
+
+                skywork_lm = dspy.LM(
+                    model=f"openai/{vllm_model}",
+                    api_base=vllm_endpoint,
+                    api_key="dummy-key"
+                )
+
+                vllm_extractor = DSPyReceiptExtractor()
+
+                with dspy.context(lm=skywork_lm):
+                    print("📞 Calling vLLM Skywork DSPy for receipt extraction...", file=sys.stderr)
+                    vllm_result = vllm_extractor.forward(receipt_text=receipt_text)
+
+                    if vllm_result and hasattr(vllm_result, 'extracted_data'):
+                        vllm_result.extracted_data.backend_used = 'vllm_dspy'
+                        vllm_result.extracted_data.model_used = vllm_model
+                        print("✅ vLLM DSPy extraction completed successfully", file=sys.stderr)
+                    else:
+                        raise ValueError("vLLM returned invalid result structure")
+
+            except Exception as vllm_error:
+                vllm_error_details = {
+                    "error_type": type(vllm_error).__name__,
+                    "error_message": str(vllm_error),
+                    "stage": "vllm_dspy"
+                }
+                print(f"❌ vLLM DSPy failed: {vllm_error_details['error_type']}: {vllm_error_details['error_message']}", file=sys.stderr)
+                vllm_result = None
+        elif not vllm_endpoint:
+            vllm_error_details = "No vLLM endpoint configured (OCR_ENDPOINT_URL not set)"
+
+        # Stage 3: Smart Selection with Quality Scoring
+        print("🎯 Stage 3: Smart Selection with Quality Scoring", file=sys.stderr)
+
+        def score_receipt_quality(result_data):
+            """Score receipt extraction quality"""
+            if not result_data or not hasattr(result_data, 'extracted_data'):
+                return 0
+
+            data = result_data.extracted_data
+            score = 0
+
+            # Core fields (40 points)
+            if getattr(data, 'vendor_name', '') and getattr(data, 'vendor_name', '') != 'Unknown':
+                score += 15
+            if getattr(data, 'total_amount', 0) > 0:
+                score += 15
+            if getattr(data, 'transaction_date', '') and len(getattr(data, 'transaction_date', '')) >= 8:
+                score += 10
+
+            # DSPy confidence (30 points)
+            dspy_conf = getattr(data, 'dspy_confidence', 0.0)
+            if isinstance(dspy_conf, str):
+                try:
+                    dspy_conf = float(dspy_conf)
+                except:
+                    dspy_conf = 0.0
+            score += int(dspy_conf * 30)
+
+            # Overall confidence (20 points)
+            overall_conf = getattr(data, 'confidence_score', 0.0)
+            if isinstance(overall_conf, str):
+                try:
+                    overall_conf = float(overall_conf)
+                except:
+                    overall_conf = 0.0
+            score += int(overall_conf * 20)
+
+            # Missing fields penalty (10 points)
+            missing = len(getattr(data, 'missing_fields', []))
+            score += max(0, 10 - missing * 2)
+
+            return min(score, 100)
+
+        gemini_score = score_receipt_quality(gemini_result) if gemini_result else 0
+        vllm_score = score_receipt_quality(vllm_result) if vllm_result else 0
+
+        print(f"🏆 Quality scores: Gemini={gemini_score}, vLLM={vllm_score}", file=sys.stderr)
+
+        # Select best result
+        if not gemini_result and not vllm_result:
+            error_details = {
+                'gemini_error': gemini_error_details,
+                'vllm_error': vllm_error_details
+            }
+            raise RuntimeError(f"Both Gemini and vLLM processing failed: {error_details}")
+
+        # Use Gemini if significantly better or vLLM unavailable
+        if gemini_score > vllm_score and gemini_result:
+            print(f"✅ Using Gemini result (better quality score: {gemini_score})", file=sys.stderr)
+            result = gemini_result
+        elif vllm_score > gemini_score and vllm_result:
+            print(f"✅ Using vLLM result (better quality score: {vllm_score})", file=sys.stderr)
+            result = vllm_result
+        elif gemini_result:
+            print(f"✅ Using Gemini result (fallback, score: {gemini_score})", file=sys.stderr)
+            result = gemini_result
+        elif vllm_result:
+            print(f"✅ Using vLLM result (fallback, score: {vllm_score})", file=sys.stderr)
+            result = vllm_result
+    else:
+        raise RuntimeError("No valid results from either backend")
+
+    processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+
+    extracted_data = result.extracted_data
+
+    # Return the result in the expected format
+    return {
+        "success": True,
+        "data": extracted_data.dict() if hasattr(extracted_data, 'dict') else extracted_data,
+        "processing_time_ms": processing_time,
+        "confidence_score": getattr(extracted_data, 'confidence_score', 0.8),
+        "backend_used": getattr(extracted_data, 'backend_used', 'unknown')
+    }
         
         print(f"✅ DSPy extraction completed successfully", file=sys.stderr)
         print(f"🏪 Vendor: {extracted_data.vendor_name}", file=sys.stderr)
@@ -1157,7 +1338,7 @@ def main():
         business_categories = ${JSON.stringify(businessCategories)}
         print(f"🏢 Received {len(business_categories)} business categories from Node.js", file=sys.stderr)
         
-        # If no receipt text provided, extract from image using DSPy+Gemini multimodal OCR
+        # Handle image-only uploads: Add OCR preprocessing before multi-stage processing
         if not receipt_text and receipt_image_data:
             print("🖼️ No text provided, performing OCR with DSPy+Gemini multimodal...", file=sys.stderr)
             
@@ -1197,9 +1378,70 @@ Preserve the layout and formatting as much as possible.
 Return only the extracted text without any analysis or interpretation."""
                 
                 print("🤖 Calling Gemini 2.5 Flash for OCR extraction...", file=sys.stderr)
-                
-                # Generate OCR text using Gemini multimodal
-                response = model.generate_content([ocr_prompt, image])
+
+                # Enhanced debugging and timeout handling
+                import time
+                import threading
+                from datetime import datetime
+
+                max_retries = 2
+                attempt_timeout = 60  # 1 minute per attempt
+
+                def timeout_monitor(attempt_num, start_time):
+                    """Monitor timeout progress"""
+                    checkpoints = [10, 20, 30, 45, 55]  # Seconds to report progress
+                    for checkpoint in checkpoints:
+                        time.sleep(checkpoint - (checkpoints[checkpoints.index(checkpoint)-1] if checkpoint != checkpoints[0] else 0))
+                        elapsed = time.time() - start_time
+                        print(f"⏱️ OCR attempt {attempt_num}: {elapsed:.1f}s elapsed (still processing...)", file=sys.stderr)
+
+                for attempt in range(max_retries + 1):
+                    attempt_start = time.time()
+                    try:
+                        print(f"🔄 OCR attempt {attempt + 1}/{max_retries + 1} started at {datetime.now().strftime('%H:%M:%S')}", file=sys.stderr)
+                        print(f"📊 Image size: {len(image_bytes) / 1024:.1f} KB", file=sys.stderr)
+
+                        # Start timeout monitor in background
+                        monitor_thread = threading.Thread(target=timeout_monitor, args=(attempt + 1, attempt_start))
+                        monitor_thread.daemon = True
+                        monitor_thread.start()
+
+                        # Call Gemini with enhanced config for reliability
+                        response = model.generate_content(
+                            [ocr_prompt, image],
+                            generation_config={
+                                'max_output_tokens': 2000,
+                                'temperature': 0.1,
+                                'candidate_count': 1
+                            }
+                        )
+
+                        attempt_time = time.time() - attempt_start
+                        print(f"✅ OCR attempt {attempt + 1} succeeded in {attempt_time:.1f}s", file=sys.stderr)
+                        break
+
+                    except Exception as retry_error:
+                        attempt_time = time.time() - attempt_start
+                        error_type = type(retry_error).__name__
+
+                        print(f"❌ OCR attempt {attempt + 1} failed after {attempt_time:.1f}s: {error_type}", file=sys.stderr)
+                        print(f"🔍 Error details: {str(retry_error)[:200]}...", file=sys.stderr)
+
+                        # Check error type for specific handling
+                        if 'timeout' in str(retry_error).lower():
+                            print(f"⏰ Timeout detected on attempt {attempt + 1}", file=sys.stderr)
+                        elif 'quota' in str(retry_error).lower() or 'limit' in str(retry_error).lower():
+                            print(f"🚫 Quota/rate limit hit on attempt {attempt + 1}", file=sys.stderr)
+                        elif 'network' in str(retry_error).lower() or 'connection' in str(retry_error).lower():
+                            print(f"🌐 Network issue detected on attempt {attempt + 1}", file=sys.stderr)
+
+                        if attempt < max_retries:
+                            wait_time = (attempt + 1) * 3  # 3, 6 seconds
+                            print(f"⏳ Retrying in {wait_time} seconds...", file=sys.stderr)
+                            time.sleep(wait_time)
+                        else:
+                            print(f"🚨 All OCR attempts failed, raising final error", file=sys.stderr)
+                            raise retry_error
                 
                 if response.text:
                     receipt_text = response.text.strip()
@@ -1237,7 +1479,8 @@ Return only the extracted text without any analysis or interpretation."""
             
             with redirect_stdout(dummy_stdout):
                 print("🛡️ DSPy processing protected from stdout pollution", file=sys.stderr)
-                extraction_result = extract_receipt_data(receipt_text, image_metadata, forced_method, business_categories)
+                # Use new multi-stage processing system
+                extraction_result = run_multi_stage_receipt_processing(receipt_text, business_categories)
                 
             # Check what was captured (for debugging)
             captured_output = dummy_stdout.getvalue()

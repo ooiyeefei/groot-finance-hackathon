@@ -46,6 +46,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   const [isDeleting, setIsDeleting] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [toastType, setToastType] = useState<'success' | 'error'>('success')
+  const [submissionMode, setSubmissionMode] = useState<'camera' | 'manual'>('camera')
 
   // Fetch personal dashboard data
   const fetchDashboardData = useCallback(async () => {
@@ -237,7 +238,10 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         <TabsContent value="overview" className="space-y-4">
           <PersonalOverviewContent
             data={dashboardData}
-            onNewClaim={() => setShowSubmissionForm(true)}
+            onNewClaim={(mode: 'camera' | 'manual' = 'camera') => {
+              setSubmissionMode(mode)
+              setShowSubmissionForm(true)
+            }}
             setActiveTab={setActiveTab}
             fetchDashboardData={fetchDashboardData}
             setShowSubmissionForm={setShowSubmissionForm}
@@ -272,7 +276,8 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 
       {/* DSPy Expense Submission Flow */}
       {showSubmissionForm && (
-        <DSPyExpenseSubmissionFlow 
+        <DSPyExpenseSubmissionFlow
+          initialStep={submissionMode === 'manual' ? 'form' : 'upload'}
           onClose={(hasBackgroundProcessing = false) => {
             setShowSubmissionForm(false)
             
@@ -433,7 +438,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 // Personal Overview Content
 function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboardData, setShowSubmissionForm, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, setToastMessage, setToastType }: {
   data: PersonalDashboardData
-  onNewClaim: () => void
+  onNewClaim: (mode: 'camera' | 'manual') => void
   setActiveTab: (tab: string) => void
   fetchDashboardData: () => void
   setShowSubmissionForm: (show: boolean) => void
@@ -456,14 +461,14 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Button
-              onClick={onNewClaim}
+              onClick={() => onNewClaim('camera')}
               className="bg-blue-600 hover:bg-blue-700 text-white justify-center"
             >
               <Camera className="w-4 h-4 mr-2" />
               Capture Receipt with Camera
             </Button>
             <Button
-              onClick={onNewClaim}
+              onClick={() => onNewClaim('manual')}
               className="bg-gray-200 hover:bg-gray-300 text-gray-900 justify-center"
             >
               <Plus className="w-4 h-4 mr-2" />

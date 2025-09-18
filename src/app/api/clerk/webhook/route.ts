@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Webhook } from 'svix'
 import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { syncRoleToClerk } from '@/lib/rbac'
+import { getDefaultExpenseCategories } from '@/lib/default-expense-categories'
 
 // Clerk webhook event types
 interface ClerkUser {
@@ -175,15 +176,15 @@ async function handleUserCreated(user: ClerkUser) {
     // SCENARIO 2: Direct signup - create new user with personal business
     console.log(`[Clerk Webhook] SCENARIO 2: Creating new user from direct signup: ${email}`)
 
-    // Create personal business for direct signup
+    // Create personal business for direct signup using correct schema
     const { data: newBusiness, error: businessError } = await supabase
       .from('businesses')
       .insert({
         name: fullName ? `${fullName}'s Business` : `${email.split('@')[0]}'s Business`,
-        email: email,
-        country: 'SG', // Default to Singapore
-        currency: 'SGD',
-        business_type: 'personal',
+        slug: `${email.split('@')[0]}-business-${Date.now()}`, // Generate unique slug
+        country_code: 'SG', // Use correct column name
+        home_currency: 'SGD', // Use correct column name
+        custom_expense_categories: getDefaultExpenseCategories(), // Add default expense categories
         created_at: new Date().toISOString()
       })
       .select('id')
