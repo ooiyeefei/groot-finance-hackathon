@@ -137,10 +137,29 @@ export async function POST(request: NextRequest) {
 
     // Verify email matches invitation
     if (!userEmail || userEmail.toLowerCase() !== invitation.email.toLowerCase()) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Email address does not match invitation' 
+      return NextResponse.json({
+        success: false,
+        error: 'Email address does not match invitation'
       }, { status: 403 })
+    }
+
+    // Check if user already has records in Supabase (existing user accepting cross-business invitation)
+    const { data: existingUserRecord } = await supabase
+      .from('users')
+      .select('id, business_id, role')
+      .eq('clerk_user_id', userId)
+      .single()
+
+    if (existingUserRecord && existingUserRecord.id !== invitation.id) {
+      // User already exists with different business - handle cross-business invitation
+      console.log(`[Invitation Accept] Existing user ${userEmail} accepting cross-business invitation`)
+
+      // For now, we'll prevent cross-business memberships to keep it simple
+      // TODO: Implement multi-business support in future
+      return NextResponse.json({
+        success: false,
+        error: 'You already belong to another business. Multi-business support is not yet available.'
+      }, { status: 409 })
     }
 
     // Determine the full name to save

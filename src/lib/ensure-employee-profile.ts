@@ -141,12 +141,91 @@ export async function ensureEmployeeProfile(userId: string): Promise<EmployeePro
       }
     }
 
-    console.log(`[Employee Profile] No invitation found for user ${userId}, cannot create profile without business assignment`)
-    
-    // DO NOT create random business assignments
-    // Users must be invited to join a business or have admin create them manually
-    console.error('[Employee Profile] User has no invitation and no existing business - profile creation requires invitation')
-    return null
+    // SCENARIO 3: Direct signup (existing Clerk user without Supabase records)
+    // Create personal business and user record automatically
+    console.log(`[Employee Profile] No invitation found for user ${userId}, creating personal business for direct signup`)
+
+    try {
+      // Create personal business for direct signup
+      const businessName = clerkUser.firstName && clerkUser.lastName
+        ? `${clerkUser.firstName} ${clerkUser.lastName}'s Business`
+        : `${userEmail?.split('@')[0]}'s Business`
+
+      const { data: newBusiness, error: businessError } = await supabase
+        .from('businesses')
+        .insert({
+          name: businessName,
+          email: userEmail,
+          country: 'SG', // Default to Singapore
+          currency: 'SGD',
+          business_type: 'personal',
+          created_at: new Date().toISOString()
+        })
+        .select('id')
+        .single()
+
+      if (businessError) {
+        console.error('[Employee Profile] Error creating personal business:', businessError)
+        return null
+      }
+
+      // Create user record for direct signup
+      const { data: newUser, error: userError } = await supabase
+        .from('users')
+        .insert({
+          clerk_user_id: userId,
+          email: userEmail,
+          full_name: clerkUser.firstName && clerkUser.lastName
+            ? `${clerkUser.firstName} ${clerkUser.lastName}`
+            : null,
+          business_id: newBusiness.id,
+          role: 'admin', // Direct signups are admins of their personal business
+          home_currency: 'SGD',
+          created_at: new Date().toISOString()
+        })
+        .select('id')
+        .single()
+
+      if (userError) {
+        console.error('[Employee Profile] Error creating user record:', userError)
+        return null
+      }
+
+      // Create employee profile for direct signup (admin of their own business)
+      const rolePermissions = {
+        employee: true,
+        manager: true,
+        admin: true
+      }
+
+      const { data: newProfile, error: profileError } = await supabase
+        .from('employee_profiles')
+        .insert({
+          user_id: newUser.id,
+          business_id: newBusiness.id,
+          employee_id: `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+          department: 'General',
+          job_title: 'Administrator',
+          role_permissions: rolePermissions
+        })
+        .select('*')
+        .single()
+
+      if (profileError) {
+        console.error('[Employee Profile] Error creating employee profile:', profileError)
+        return null
+      }
+
+      // Sync role to Clerk metadata
+      await syncRoleToClerk(userId, rolePermissions)
+
+      console.log(`[Employee Profile] Successfully created direct signup: ${userEmail} → Business: ${newBusiness.id}`)
+      return newProfile as EmployeeProfile
+
+    } catch (error) {
+      console.error('[Employee Profile] Error creating direct signup profile:', error)
+      return null
+    }
 
   } catch (error) {
     console.error('[Employee Profile] Error ensuring employee profile:', error)

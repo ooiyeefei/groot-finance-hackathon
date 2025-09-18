@@ -80,6 +80,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Check if user has existing Clerk account with personal business (different from current business)
+    const { data: existingClerkUser } = await supabase
+      .from('users')
+      .select('id, clerk_user_id, business_id, role, full_name')
+      .ilike('email', email)
+      .not('clerk_user_id', 'is', null) // Has Clerk account
+      .neq('business_id', userContext.profile.business_id) // Different business
+      .single()
+
+    if (existingClerkUser) {
+      // User already has Clerk account with personal business
+      // We'll create invitation that can be accepted to join this business
+      console.log(`[Invitation] User ${email} has existing Clerk account, creating cross-business invitation`)
+    }
+
     // Create invitation record in users table
     const { data: invitation, error: insertError } = await supabase
       .from('users')
