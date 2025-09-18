@@ -15,6 +15,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/trigger(.*)', // Trigger.dev CLI integration endpoint
   '/api/internal/(.*)', // Internal service APIs with their own authentication
   '/api/pdf-proxy(.*)', // PDF proxy handles its own authentication for government documents
+  '/api/clerk/webhook(.*)', // Clerk webhook for user synchronization
   '/manifest.json', // PWA manifest file should be publicly accessible
 ])
 
