@@ -145,6 +145,10 @@ function transformToDocumentFormat(dspyData: any, enhancedCategory: any, process
       value: dspyData.document_summary?.vendor_name || dspyData.vendor_name || ''
     },
     {
+      type: 'document_number',
+      value: dspyData.document_number || ''
+    },
+    {
       type: 'total_amount',
       value: String(dspyData.document_summary?.total_amount || dspyData.total_amount || '0')
     },
@@ -187,10 +191,8 @@ function transformToDocumentFormat(dspyData: any, enhancedCategory: any, process
       customer_address: { value: dspyData.customer_address || '' },
       customer_contact: { value: dspyData.customer_contact || '' },
 
-      // Document identifiers
+      // Document identifiers - standardized single field from DSPy
       document_number: { value: dspyData.document_number || '' },
-      purchase_order_number: { value: dspyData.purchase_order_number || '' },
-      reference_numbers: { value: dspyData.reference_numbers || '' },
 
       // Financial information
       total_amount: { value: String(dspyData.document_summary?.total_amount || dspyData.total_amount || '0') },
@@ -693,25 +695,24 @@ print(json.dumps(result))
       
       console.log(`🏷️ Category: ${enhancedCategory.category} (${(enhancedCategory.confidence * 100).toFixed(1)}%)`);
 
-      // Step 6: Transform to existing format
-      const processingMethod = finalExtractionData.backend_used || 'dspy_processing';
-      
-      // Log line items before transformation for debugging
-      if (finalExtractionData.line_items && finalExtractionData.line_items.length > 0) {
-        console.log(`🔍 Raw line items before transformation:`, JSON.stringify(finalExtractionData.line_items, null, 2));
-      }
-      
-      const transformedResult = transformToDocumentFormat(finalExtractionData, enhancedCategory, processingMethod);
-      
-      // Log line items after transformation for debugging
-      if (transformedResult.line_items && transformedResult.line_items.length > 0) {
-        console.log(`🔍 Transformed line items:`, JSON.stringify(transformedResult.line_items, null, 2));
-      }
+      // Step 6: Store raw DSPy structure directly (simplified approach)
+      console.log(`🔍 Storing raw DSPy structure directly, no transformation needed`);
 
-      // Step 7: Update database
+      // Add enhanced category to the DSPy result for business logic
+      const finalDspyResult = {
+        ...finalExtractionData,
+        // Add business categorization directly to DSPy structure
+        suggested_category: enhancedCategory.category,
+        category_confidence: enhancedCategory.confidence,
+        category_reasoning: enhancedCategory.reasoning,
+        // Keep processing metadata in the main structure
+        processing_method: finalExtractionData.backend_used || 'dspy_processing'
+      };
+
+      // Step 7: Update database with raw DSPy structure
       const { error: updateError } = await supabase.from('documents').update({
         processing_status: 'completed',
-        extracted_data: transformedResult,
+        extracted_data: finalDspyResult, // Store raw DSPy structure directly
         confidence_score: finalExtractionData.confidence_score,
         processed_at: new Date().toISOString(),
         error_message: null,
@@ -887,25 +888,24 @@ print(json.dumps(result))
           
           console.log(`🏷️ vLLM Category: ${enhancedCategory.category} (${(enhancedCategory.confidence * 100).toFixed(1)}%)`);
 
-          // Transform vLLM result to existing format
-          const vllmProcessingMethod = vllmExtractionData.backend_used || 'vllm_fallback';
-          
-          // Log vLLM line items before transformation for debugging
-          if (vllmExtractionData.line_items && vllmExtractionData.line_items.length > 0) {
-            console.log(`🔍 vLLM Raw line items before transformation:`, JSON.stringify(vllmExtractionData.line_items, null, 2));
-          }
-          
-          const vllmTransformedResult = transformToDocumentFormat(vllmExtractionData, enhancedCategory, vllmProcessingMethod);
-          
-          // Log vLLM line items after transformation for debugging
-          if (vllmTransformedResult.line_items && vllmTransformedResult.line_items.length > 0) {
-            console.log(`🔍 vLLM Transformed line items:`, JSON.stringify(vllmTransformedResult.line_items, null, 2));
-          }
+          // Store vLLM DSPy structure directly (simplified approach)
+          console.log(`🔍 Storing vLLM DSPy structure directly, no transformation needed`);
 
-          // Update database with vLLM results
+          // Add enhanced category to the vLLM DSPy result for business logic
+          const finalVllmDspyResult = {
+            ...vllmExtractionData,
+            // Add business categorization directly to DSPy structure
+            suggested_category: enhancedCategory.category,
+            category_confidence: enhancedCategory.confidence,
+            category_reasoning: enhancedCategory.reasoning,
+            // Keep processing metadata in the main structure
+            processing_method: vllmExtractionData.backend_used || 'vllm_fallback'
+          };
+
+          // Update database with vLLM raw DSPy structure
           const { error: vllmUpdateError } = await supabase.from('documents').update({
             processing_status: 'completed',
-            extracted_data: vllmTransformedResult,
+            extracted_data: finalVllmDspyResult, // Store raw DSPy structure directly
             confidence_score: vllmExtractionData.confidence_score,
             processed_at: new Date().toISOString(),
             error_message: null,

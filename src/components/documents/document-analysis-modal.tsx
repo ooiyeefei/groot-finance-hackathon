@@ -605,6 +605,37 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
           entityKey: 'total_amount'
         })
       }
+
+      // Tax-related financial fields (type-safe access)
+      if ((summary as any).subtotal_amount?.bbox) {
+        const [x1, y1, x2, y2] = (summary as any).subtotal_amount.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Subtotal',
+          text: (summary as any).subtotal_amount.value,
+          entityKey: 'subtotal_amount'
+        })
+      }
+
+      if ((summary as any).tax_amount?.bbox) {
+        const [x1, y1, x2, y2] = (summary as any).tax_amount.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Tax Amount',
+          text: (summary as any).tax_amount.value,
+          entityKey: 'tax_amount'
+        })
+      }
+
+      if ((summary as any).discount_amount?.bbox) {
+        const [x1, y1, x2, y2] = (summary as any).discount_amount.bbox
+        boundingBoxes.push({
+          x1, y1, x2, y2,
+          category: 'Discount',
+          text: (summary as any).discount_amount.value,
+          entityKey: 'discount_amount'
+        })
+      }
       
       if (summary.transaction_date?.bbox) {
         const [x1, y1, x2, y2] = summary.transaction_date.bbox
@@ -738,10 +769,38 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
     return boundingBoxes
   }
 
+  // Helper function to safely get field values from both old and new data structures
+  const getFieldValue = (fieldName: string, fallbackField?: string): string => {
+    const extractedData = document.extracted_data as any;
+
+    if (!extractedData) return '';
+
+    // First, try direct field access (new raw DSPy structure)
+    if (extractedData[fieldName]) {
+      return extractedData[fieldName];
+    }
+
+    // Then try fallback field if provided
+    if (fallbackField && extractedData[fallbackField]) {
+      return extractedData[fallbackField];
+    }
+
+    // Finally, try nested document_summary structure (old format)
+    if (extractedData.document_summary?.[fieldName]?.value) {
+      return extractedData.document_summary[fieldName].value;
+    }
+
+    if (fallbackField && extractedData.document_summary?.[fallbackField]?.value) {
+      return extractedData.document_summary[fallbackField].value;
+    }
+
+    return '';
+  }
+
   // Filter bounding boxes based on hover state
   const getFilteredBoundingBoxes = () => {
     if (!hoveredEntity) return []
-    
+
     const allBoxes = generateBoundingBoxes()
     return allBoxes.filter(box => box.entityKey === hoveredEntity)
   }
@@ -915,8 +974,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Document Summary */}
-                {document.extracted_data?.document_summary && (
+                {/* Document Summary - DSPy Structure */}
+                {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
@@ -927,56 +986,56 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         </span>
                       )}
                     </h4>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {document.extracted_data.document_summary.document_type && (
-                        <div 
+                      {getFieldValue('document_type') && (
+                        <div
                           className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                           onMouseEnter={() => setHoveredEntity('document_type')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
                           <div className="text-xs text-gray-400 mb-1">Document Type</div>
                           <div className="text-sm text-white font-medium">
-                            {document.extracted_data.document_summary.document_type.value}
+                            {getFieldValue('document_type')}
                           </div>
                         </div>
                       )}
-                      
-                      {document.extracted_data.document_summary.vendor_name && (
-                        <div 
+
+                      {getFieldValue('vendor_name') && (
+                        <div
                           className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                           onMouseEnter={() => setHoveredEntity('vendor_name')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
                           <div className="text-xs text-gray-400 mb-1">Vendor</div>
                           <div className="text-sm text-white font-medium">
-                            {document.extracted_data.document_summary.vendor_name.value}
+                            {getFieldValue('vendor_name')}
                           </div>
                         </div>
                       )}
-                      
-                      {document.extracted_data.document_summary.total_amount && (
-                        <div 
+
+                      {getFieldValue('total_amount') && (
+                        <div
                           className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                           onMouseEnter={() => setHoveredEntity('total_amount')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
                           <div className="text-xs text-gray-400 mb-1">Amount</div>
                           <div className="text-sm text-green-400 font-medium">
-                            {document.extracted_data.document_summary.currency?.value || 'SGD'} {document.extracted_data.document_summary.total_amount.value}
+                            {getFieldValue('currency') || 'SGD'} {getFieldValue('total_amount')}
                           </div>
                         </div>
                       )}
-                      
-                      {document.extracted_data.document_summary.transaction_date && (
-                        <div 
+
+                      {getFieldValue('document_date', 'transaction_date') && (
+                        <div
                           className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                           onMouseEnter={() => setHoveredEntity('transaction_date')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
                           <div className="text-xs text-gray-400 mb-1">Date</div>
                           <div className="text-sm text-white font-medium">
-                            {document.extracted_data.document_summary.transaction_date.value}
+                            {getFieldValue('document_date', 'transaction_date')}
                           </div>
                         </div>
                       )}
@@ -984,49 +1043,49 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Vendor Information - Always show if we have document summary */}
-                {document.extracted_data?.document_summary && (
+                {/* Vendor Information - DSPy Structure */}
+                {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       Vendor Information
                     </h4>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div 
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('vendor_address')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Address</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.vendor_address?.value || (
+                          {getFieldValue('vendor_address') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
                       </div>
-                      
-                      <div 
+
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('vendor_contact')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Contact</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.vendor_contact?.value || (
+                          {getFieldValue('vendor_contact') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
                       </div>
-                      
-                      <div 
+
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('vendor_tax_id')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Tax ID / Registration</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.vendor_tax_id?.value || (
+                          {getFieldValue('vendor_tax_id') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
@@ -1035,8 +1094,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Customer Information - Always show if we have document summary */}
-                {document.extracted_data?.document_summary && (
+                {/* Customer Information - DSPy Structure */}
+                {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
@@ -1044,40 +1103,40 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div 
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('customer_name')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Customer Name</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.customer_name?.value || (
+                          {getFieldValue('customer_name') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
                       </div>
-                      
-                      <div 
+
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('customer_address')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Customer Address</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.customer_address?.value || (
+                          {getFieldValue('customer_address') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
                       </div>
-                      
-                      <div 
+
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('customer_contact')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Customer Contact</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.customer_contact?.value || (
+                          {getFieldValue('customer_contact') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
@@ -1086,75 +1145,36 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Document Identifiers - Always show if we have document summary */}
-                {document.extracted_data?.document_summary && (
+                {/* Document Identifiers - DSPy Structure */}
+                {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
-                      Document Identifiers & Dates
+                      Document Information
                     </h4>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div 
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('document_number')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Document Number</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.document_number?.value || (
+                          {getFieldValue('document_number') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
                       </div>
-                      
-                      <div 
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
-                        onMouseEnter={() => setHoveredEntity('purchase_order_number')}
-                        onMouseLeave={() => setHoveredEntity(null)}
-                      >
-                        <div className="text-xs text-gray-400 mb-1">PO Number</div>
-                        <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.purchase_order_number?.value || (
-                            <span className="text-gray-500 italic">Not extracted</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div 
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
-                        onMouseEnter={() => setHoveredEntity('reference_numbers')}
-                        onMouseLeave={() => setHoveredEntity(null)}
-                      >
-                        <div className="text-xs text-gray-400 mb-1">Reference Numbers</div>
-                        <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.reference_numbers?.value || (
-                            <span className="text-gray-500 italic">Not extracted</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div 
+
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('due_date')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Due Date</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.due_date?.value || (
-                            <span className="text-gray-500 italic">Not extracted</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div 
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
-                        onMouseEnter={() => setHoveredEntity('delivery_date')}
-                        onMouseLeave={() => setHoveredEntity(null)}
-                      >
-                        <div className="text-xs text-gray-400 mb-1">Delivery Date</div>
-                        <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.delivery_date?.value || (
+                          {getFieldValue('due_date') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
@@ -1163,8 +1183,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Payment Information - Always show if we have document summary */}
-                {document.extracted_data?.document_summary && (
+                {/* Payment Information - DSPy Structure */}
+                {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <DollarSign className="w-4 h-4 mr-2" />
@@ -1172,40 +1192,91 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div 
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('payment_terms')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Payment Terms</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.payment_terms?.value || (
+                          {getFieldValue('payment_terms') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
                       </div>
-                      
-                      <div 
+
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
                         onMouseEnter={() => setHoveredEntity('payment_method')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Payment Method</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.payment_method?.value || (
+                          {getFieldValue('payment_method') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
                       </div>
-                      
-                      <div 
+
+                      <div
                         className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500 md:col-span-2"
                         onMouseEnter={() => setHoveredEntity('bank_details')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-gray-400 mb-1">Bank Details</div>
                         <div className="text-sm text-white font-medium">
-                          {document.extracted_data.document_summary.bank_details?.value || (
+                          {getFieldValue('bank_details') || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tax Information - DSPy Structure */}
+                {document.extracted_data && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Tax & Financial Breakdown
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('subtotal_amount')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Subtotal</div>
+                        <div className="text-sm text-white font-medium">
+                          {getFieldValue('subtotal_amount') || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('tax_amount')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Tax Amount</div>
+                        <div className="text-sm text-orange-400 font-medium">
+                          {getFieldValue('tax_amount') || (
+                            <span className="text-gray-500 italic">Not extracted</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div
+                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        onMouseEnter={() => setHoveredEntity('discount_amount')}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                      >
+                        <div className="text-xs text-gray-400 mb-1">Discount</div>
+                        <div className="text-sm text-blue-400 font-medium">
+                          {getFieldValue('discount_amount') || (
                             <span className="text-gray-500 italic">Not extracted</span>
                           )}
                         </div>
@@ -1386,47 +1457,76 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             {document.extracted_data.line_items.map((item, index) => (
                               <tr key={index} className="hover:bg-gray-800">
                                 <td className="px-3 py-2 text-gray-400">{index + 1}</td>
-                                <td 
+                                <td
                                   className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_description`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
-                                  {item.description?.value || item.item_description?.value || 'N/A'}
+                                  {(() => {
+                                    // Handle both legacy nested structure and raw DSPy structure
+                                    if (item.description?.value) return item.description.value;
+                                    if (item.item_description?.value) return item.item_description.value;
+                                    if (typeof item.description === 'string') return item.description;
+                                    return 'N/A';
+                                  })()}
                                 </td>
-                                <td 
+                                <td
                                   className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_item_code`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
-                                  {item.item_code?.value || '-'}
+                                  {(() => {
+                                    if (item.item_code?.value) return item.item_code.value;
+                                    if (typeof item.item_code === 'string') return item.item_code;
+                                    return '-';
+                                  })()}
                                 </td>
-                                <td 
+                                <td
                                   className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_quantity`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
-                                  {item.quantity?.value || 'N/A'}
+                                  {(() => {
+                                    if (item.quantity?.value) return item.quantity.value;
+                                    if (typeof (item as any).quantity === 'number') return (item as any).quantity.toString();
+                                    return 'N/A';
+                                  })()}
                                 </td>
-                                <td 
+                                <td
                                   className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_unit_measurement`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
-                                  {item.unit_measurement?.value || '-'}
+                                  {(() => {
+                                    if (item.unit_measurement?.value) return item.unit_measurement.value;
+                                    if (typeof (item as any).unit_of_measure === 'string') return (item as any).unit_of_measure;
+                                    return '-';
+                                  })()}
                                 </td>
-                                <td 
+                                <td
                                   className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_unit_price`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
-                                  {item.unit_price?.value || 'N/A'}
+                                  {(() => {
+                                    if (item.unit_price?.value) return item.unit_price.value;
+                                    if (typeof (item as any).unit_price === 'number') return (item as any).unit_price.toString();
+                                    if (typeof (item as any).unit_price === 'string') return (item as any).unit_price;
+                                    return 'N/A';
+                                  })()}
                                 </td>
-                                <td 
+                                <td
                                   className="px-3 py-2 text-right text-green-400 font-medium cursor-pointer hover:bg-blue-900/30 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_line_total`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
-                                  {item.line_total?.value || item.amount?.value || item.total_amount?.value || 'N/A'}
+                                  {(() => {
+                                    if (item.line_total?.value) return item.line_total.value;
+                                    if (item.amount?.value) return item.amount.value;
+                                    if (item.total_amount?.value) return item.total_amount.value;
+                                    if (typeof (item as any).line_total === 'number') return (item as any).line_total.toString();
+                                    return 'N/A';
+                                  })()}
                                 </td>
                               </tr>
                             ))}

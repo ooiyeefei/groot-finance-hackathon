@@ -255,12 +255,83 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
 
   // Map basic transaction information
   mappedData.transaction_type = 'expense' // Most documents are expenses
-  
-  // Try to extract from structured document_summary first, then fall back to entities
-  const summary = document.extracted_data.document_summary || 
-                 document.extracted_data.metadata?.layoutElements?.document_summary
-                 
-  if (summary) {
+
+  const extractedData = document.extracted_data as any
+
+  // Declare summary variable for use throughout function
+  let summary: any = null
+
+  // Check if this is raw DSPy structure (new format) or legacy structure
+  const isRawDSPy = extractedData.vendor_name || extractedData.total_amount || extractedData.document_type
+
+  if (isRawDSPy) {
+    // Handle raw DSPy structure directly
+
+    // Extract document type
+    if (extractedData.document_type) {
+      const docType = extractedData.document_type.toLowerCase()
+      if (docType.includes('invoice')) {
+        mappedData.document_type = 'invoice'
+      } else if (docType.includes('receipt')) {
+        mappedData.document_type = 'receipt'
+      } else if (docType.includes('bill')) {
+        mappedData.document_type = 'bill'
+      } else if (docType.includes('statement')) {
+        mappedData.document_type = 'statement'
+      } else if (docType.includes('contract')) {
+        mappedData.document_type = 'contract'
+      } else {
+        mappedData.document_type = 'other'
+      }
+    }
+
+    // Set transaction status based on document type
+    if (mappedData.document_type) {
+      if (mappedData.document_type === 'receipt') {
+        mappedData.status = 'paid'
+      } else if (mappedData.document_type === 'invoice') {
+        mappedData.status = 'awaiting_payment'
+      } else if (mappedData.document_type === 'bill') {
+        mappedData.status = 'awaiting_payment'
+      } else {
+        mappedData.status = 'paid'
+      }
+    } else {
+      mappedData.status = 'paid'
+    }
+
+    // Extract vendor name
+    if (extractedData.vendor_name) {
+      mappedData.vendor_name = extractedData.vendor_name
+    }
+
+    // Extract amount and currency
+    if (extractedData.total_amount) {
+      mappedData.original_amount = parseFloat(extractedData.total_amount) || parseAmount(String(extractedData.total_amount))
+
+      // Use currency from DSPy extraction
+      if (extractedData.currency) {
+        mappedData.original_currency = extractedData.currency as SupportedCurrency
+      } else {
+        // Fallback to currency detection
+        const currencyFromText = detectCurrency(document.extracted_data.text)
+        mappedData.original_currency = currencyFromText
+      }
+    }
+
+    // Extract transaction date (DSPy uses document_date, not transaction_date)
+    if (extractedData.document_date) {
+      mappedData.transaction_date = parseDate(extractedData.document_date)
+    } else if (extractedData.transaction_date) {
+      // Legacy fallback
+      mappedData.transaction_date = parseDate(extractedData.transaction_date)
+    }
+  } else {
+    // Handle legacy document_summary structure
+    summary = document.extracted_data.document_summary ||
+              document.extracted_data.metadata?.layoutElements?.document_summary
+
+    if (summary) {
     // Extract document type from OCR - this bridges the context gap!
     if ((summary as any).document_type?.value) {
       const docType = (summary as any).document_type.value.toLowerCase()
@@ -315,12 +386,13 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
       mappedData.original_currency = currencyFromAmount !== 'USD' ? currencyFromAmount : currencyFromText
     }
     
-    // Extract transaction date
-    if (summary.transaction_date?.value) {
-      mappedData.transaction_date = parseDate(summary.transaction_date.value)
+      // Extract transaction date
+      if (summary.transaction_date?.value) {
+        mappedData.transaction_date = parseDate(summary.transaction_date.value)
+      }
     }
   }
-  
+
   // Fallback to entity extraction if structured data is not available
   if (!mappedData.vendor_name) {
     const vendorEntity = findEntity(['vendor', 'vendor_name', 'company', 'business'])
@@ -351,16 +423,24 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     }
   }
   
-  // Extract reference number - prioritize invoice_number from structured DSPy data
-  if (summary && (summary as any).invoice_number?.value) {
-    // Use invoice_number from DSPy processing as the reference number
+  // Extract reference number - use standardized document_number field from DSPy
+  // (extractedData is already declared above)
+
+  // First, try raw DSPy structure (new format)
+  if (extractedData.document_number) {
+    mappedData.reference_number = extractedData.document_number
+  } else if (summary && (summary as any).document_number?.value) {
+    // Fallback to nested document_summary structure
+    mappedData.reference_number = (summary as any).document_number.value
+  } else if (summary && (summary as any).invoice_number?.value) {
+    // Legacy support for old invoice_number field
     mappedData.reference_number = (summary as any).invoice_number.value
   } else if (summary && (summary as any).reference_numbers?.value) {
-    // Fallback to reference_numbers if invoice_number is not available
+    // Legacy support for old reference_numbers field
     mappedData.reference_number = (summary as any).reference_numbers.value
   } else {
-    // Fallback to entity extraction for legacy documents
-    const refEntity = findEntity(['invoice', 'receipt', 'reference', 'number', 'id'])
+    // Final fallback to entity extraction for very old documents
+    const refEntity = findEntity(['invoice', 'receipt', 'reference', 'number', 'id', 'document_number'])
     if (refEntity) {
       mappedData.reference_number = refEntity.value
     }
@@ -379,21 +459,25 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
   // Note: vendor_details is not part of CreateTransactionRequest
 
   // Extract structured line items from OCR data
-  // Try to get line items from the correct location
-  const lineItemsSource = document.extracted_data.line_items || 
-                         document.extracted_data.metadata?.layoutElements?.line_items || 
-                         []
+  // For raw DSPy structure, line items are directly available
+  // For legacy structure, try different locations
+  const lineItemsSource = (extractedData.line_items && Array.isArray(extractedData.line_items)) ?
+                         extractedData.line_items :
+                         (document.extracted_data.line_items ||
+                          document.extracted_data.metadata?.layoutElements?.line_items ||
+                          [])
   
   if (lineItemsSource && lineItemsSource.length > 0) {
     const lineItems: CreateLineItemRequest[] = []
     
-    lineItemsSource.forEach((structuredItem, index) => {
-      const description = structuredItem.description?.value || `Item ${index + 1}`
-      const itemCode = structuredItem.item_code?.value || undefined
-      const quantity = parseFloat(structuredItem.quantity?.value || '1') || 1
-      const unitMeasurement = structuredItem.unit_measurement?.value || undefined
-      const unitPrice = parseAmount(structuredItem.unit_price?.value || '0')
-      const lineTotal = parseAmount(structuredItem.line_total?.value || '0')
+    lineItemsSource.forEach((structuredItem: any, index: number) => {
+      // Handle both raw DSPy format (direct values) and legacy format (nested .value)
+      const description = structuredItem.description?.value || structuredItem.description || `Item ${index + 1}`
+      const itemCode = structuredItem.item_code?.value || structuredItem.item_code || undefined
+      const quantity = parseFloat(structuredItem.quantity?.value || structuredItem.quantity || '1') || 1
+      const unitMeasurement = structuredItem.unit_measurement?.value || structuredItem.unit_of_measure || structuredItem.unit_measurement || undefined
+      const unitPrice = parseAmount(structuredItem.unit_price?.value || structuredItem.unit_price || '0')
+      const lineTotal = parseAmount(structuredItem.line_total?.value || structuredItem.line_total || '0')
       
       // Calculate unit price from line total if unit price is 0 but line total exists
       const finalUnitPrice = unitPrice > 0 ? unitPrice : (lineTotal > 0 && quantity > 0 ? lineTotal / quantity : 0)
@@ -432,22 +516,37 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
  * Checks if a document has sufficient data for transaction creation
  */
 export function canCreateTransactionFromDocument(document: DocumentData): boolean {
-  if (!document.extracted_data?.entities) {
+  if (!document.extracted_data) {
     return false
   }
 
-  const entities = document.extracted_data.entities
-  
-  // Check if we have at least an amount or vendor
-  const hasAmount = entities.some(entity => 
-    entity.type.toLowerCase().includes('amount') || 
-    entity.type.toLowerCase().includes('total')
-  )
-  
-  const hasVendor = entities.some(entity => 
-    entity.type.toLowerCase().includes('vendor') || 
-    entity.type.toLowerCase().includes('company')
-  )
+  const extractedData = document.extracted_data as any
 
-  return hasAmount || hasVendor
+  // Check raw DSPy structure first (new format)
+  const hasAmountDSPy = extractedData.total_amount || extractedData.document_summary?.total_amount?.value
+  const hasVendorDSPy = extractedData.vendor_name || extractedData.document_summary?.vendor_name?.value
+
+  if (hasAmountDSPy || hasVendorDSPy) {
+    return true
+  }
+
+  // Fallback to legacy entities format (old format)
+  if (extractedData.entities && Array.isArray(extractedData.entities)) {
+    const entities = extractedData.entities
+
+    // Check if we have at least an amount or vendor
+    const hasAmount = entities.some((entity: any) =>
+      entity.type.toLowerCase().includes('amount') ||
+      entity.type.toLowerCase().includes('total')
+    )
+
+    const hasVendor = entities.some((entity: any) =>
+      entity.type.toLowerCase().includes('vendor') ||
+      entity.type.toLowerCase().includes('company')
+    )
+
+    return hasAmount || hasVendor
+  }
+
+  return false
 }

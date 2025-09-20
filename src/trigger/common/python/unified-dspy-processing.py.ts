@@ -51,13 +51,20 @@ class IndustryContext(str, Enum):
 class CurrencyCode(str, Enum):
     SGD = "SGD"  # Singapore Dollar
     USD = "USD"  # US Dollar
+    EUR = "EUR"  # Euro
+    GBP = "GBP"  # British Pound
+    JPY = "JPY"  # Japanese Yen
     MYR = "MYR"  # Malaysian Ringgit
     THB = "THB"  # Thai Baht
     IDR = "IDR"  # Indonesian Rupiah
     PHP = "PHP"  # Philippine Peso
     VND = "VND"  # Vietnamese Dong
     CNY = "CNY"  # Chinese Yuan
-    EUR = "EUR"  # Euro
+    INR = "INR"  # Indian Rupee
+    AUD = "AUD"  # Australian Dollar
+    CAD = "CAD"  # Canadian Dollar
+    CHF = "CHF"  # Swiss Franc
+    HKD = "HKD"  # Hong Kong Dollar
 
 # =============================================================================
 # PYDANTIC MODELS FOR STRUCTURED OUTPUT
@@ -90,10 +97,8 @@ class DocumentSummary(BaseModel):
     customer_address: Optional[str] = Field(None, description="Bill-to or delivery address")
     customer_contact: Optional[str] = Field(None, description="Customer contact information")
 
-    # Document identifiers
-    invoice_number: Optional[str] = Field(None, description="Primary invoice identifier found as 'Inv. No', 'Invoice No.', 'PO Number', 'D/O Number', 'No.', or similar vendor-specific patterns. Examples: 'I-2506/1729', 'SLWL2412/02719', 'I-24120428', 'INV-2024-001'")
-    purchase_order_number: Optional[str] = Field(None, description="PO number or customer reference")
-    reference_numbers: Optional[str] = Field(None, description="Other general reference numbers like customer account numbers, A/C numbers, or secondary identifiers. Examples: 'Customer account: 300-C0006', 'A/C No. 3000/M39', 'Ref: ACC-789'")
+    # Document identifiers - STANDARDIZED TO SINGLE FIELD
+    document_number: Optional[str] = Field(None, description="Primary document identifier - can be Invoice No., Receipt No., PO Number, D/O Number, Reference No., or any vendor-specific document identifier. Extract the main document reference number regardless of its label. Examples: 'REF/2020-21/017', 'INV-2024-001', 'I-2506/1729', 'SLWL2412/02719', 'PO-123456'")
 
     # Dates - CONSISTENT FIELD NAME
     document_date: Optional[str] = Field(None, description="Document issue date converted to YYYY-MM-DD format. Extract from various patterns like '31/12/2024', '31-Dec-2024', 'December 31, 2024', or '2024-12-31'")
@@ -101,7 +106,7 @@ class DocumentSummary(BaseModel):
     delivery_date: Optional[str] = Field(None, description="Delivery or service date in YYYY-MM-DD format")
 
     # Financial totals
-    currency: CurrencyCode = Field(..., description="Currency code")
+    currency: CurrencyCode = Field(..., description="Currency code in ISO 4217 format. Analyze the document context including vendor location, customer location, and business addresses to determine the correct currency (e.g., INR for India, USD for US, SGD for Singapore). Do not assume generic '$' symbols - use geographic and contextual clues.")
     total_amount: float = Field(..., description="Final total amount")
     subtotal_amount: Optional[float] = Field(None, description="Subtotal before tax")
     tax_amount: Optional[float] = Field(None, description="Total tax amount")
@@ -132,6 +137,17 @@ class ExtractCompleteDocument(dspy.Signature):
 
     Focus on completeness - capture document numbers, addresses, contact details, and all line items.
     Use structured Pydantic output for type safety and validation.
+
+    CRITICAL for currency detection: Analyze the geographic context carefully:
+    - India (addresses with cities like Mumbai, Delhi, Bengaluru, etc.) → INR
+    - Singapore (addresses mentioning Singapore) → SGD
+    - Malaysia (addresses with KL, Selangor, etc.) → MYR
+    - Thailand (Thai text, Bangkok addresses) → THB
+    - Indonesia (Jakarta, Surabaya addresses) → IDR
+    - Philippines (Manila, Cebu addresses) → PHP
+    - US (American addresses, states) → USD
+
+    Do NOT assume '$' means SGD - use contextual clues from addresses and business locations.
     Provide confidence score for extraction quality.
     """
     document_image: dspy.Image = dspy.InputField(desc="Business document image to process")
@@ -256,10 +272,8 @@ def process_document_single_stage(document_image, lm_client: dspy.LM, processing
                 "customer_address": doc_summary.customer_address or '',
                 "customer_contact": doc_summary.customer_contact or '',
 
-                # Document identifiers
-                "invoice_number": doc_summary.invoice_number or '',
-                "purchase_order_number": doc_summary.purchase_order_number or '',
-                "reference_numbers": doc_summary.reference_numbers or '',
+                # Document identifiers - STANDARDIZED SINGLE FIELD
+                "document_number": doc_summary.document_number or '',
 
                 # Additional dates
                 "due_date": doc_summary.due_date or '',
@@ -512,58 +526,54 @@ def _normalize_industry_context(raw_value: str) -> str:
     return 'general'
 
 def _normalize_currency_code(raw_value: str) -> str:
-    """Smart mapping of currency variations to valid enum values."""
+    """
+    Intelligent currency detection without hardcoded assumptions.
+    Let DSPy/Gemini handle contextual inference instead of rigid mappings.
+    """
     if not raw_value:
-        return 'SGD'
+        return 'USD'  # More neutral default
 
     # Convert to uppercase and strip
     normalized = raw_value.strip().upper()
 
-    # Currency mappings for common variations and symbols
-    currency_mappings = {
-        # Symbol mappings
-        '$': 'SGD',  # Default to SGD for generic dollar symbol
-        'S$': 'SGD',
-        'SGD$': 'SGD',
-        'RM': 'MYR',
-        'MYR': 'MYR',
-        '฿': 'THB',
-        'THB': 'THB',
-        'BAHT': 'THB',
-        'RP': 'IDR',
-        'IDR': 'IDR',
-        'RUPIAH': 'IDR',
-        '₱': 'PHP',
-        'PHP': 'PHP',
-        'PESO': 'PHP',
-        'PESOS': 'PHP',
-        '₫': 'VND',
-        'VND': 'VND',
-        'DONG': 'VND',
-        '¥': 'CNY',
-        'CNY': 'CNY',
-        'YUAN': 'CNY',
-        'RMB': 'CNY',
-        '€': 'EUR',
-        'EUR': 'EUR',
-        'EURO': 'EUR',
-        'US$': 'USD',
-        'USD': 'USD',
-        'DOLLAR': 'USD',
-        'DOLLARS': 'USD'
+    # Only handle EXPLICIT currency codes and unambiguous symbols
+    explicit_currency_mappings = {
+        # Explicit codes - no ambiguity
+        'SGD': 'SGD', 'USD': 'USD', 'EUR': 'EUR', 'GBP': 'GBP', 'JPY': 'JPY',
+        'MYR': 'MYR', 'THB': 'THB', 'IDR': 'IDR', 'PHP': 'PHP', 'VND': 'VND',
+        'CNY': 'CNY', 'INR': 'INR', 'AUD': 'AUD', 'CAD': 'CAD', 'CHF': 'CHF', 'HKD': 'HKD',
+
+        # Unambiguous prefixed symbols
+        'S$': 'SGD', 'US$': 'USD', 'A$': 'AUD', 'C$': 'CAD', 'HK$': 'HKD',
+
+        # Unique symbols
+        '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₹': 'INR',
+        '฿': 'THB', '₱': 'PHP', '₫': 'VND',
+        'RM': 'MYR', 'RP': 'IDR',
+
+        # Alternative names (unambiguous)
+        'SINGAPORE DOLLAR': 'SGD', 'US DOLLAR': 'USD', 'EURO': 'EUR',
+        'BRITISH POUND': 'GBP', 'JAPANESE YEN': 'JPY', 'INDIAN RUPEE': 'INR',
+        'THAI BAHT': 'THB', 'MALAYSIAN RINGGIT': 'MYR',
+        'INDONESIAN RUPIAH': 'IDR', 'PHILIPPINE PESO': 'PHP', 'VIETNAMESE DONG': 'VND'
     }
 
     # Check exact matches first
-    if normalized in currency_mappings:
-        return currency_mappings[normalized]
+    if normalized in explicit_currency_mappings:
+        return explicit_currency_mappings[normalized]
 
     # Check if any valid currency code is contained in the input
-    valid_currencies = ['SGD', 'USD', 'MYR', 'THB', 'IDR', 'PHP', 'VND', 'CNY', 'EUR']
-    for valid_currency in valid_currencies:
-        if valid_currency in normalized:
-            return valid_currency
+    all_currencies = ['SGD', 'USD', 'EUR', 'GBP', 'JPY', 'MYR', 'THB', 'IDR', 'PHP', 'VND', 'CNY', 'INR', 'AUD', 'CAD', 'CHF', 'HKD']
+    for currency in all_currencies:
+        if currency in normalized:
+            return currency
 
-    # Fallback to SGD (most common in SEA)
-    return 'SGD'
+    # For ambiguous '$' symbol, return USD as more common globally
+    # (Let Gemini use context to determine the actual currency)
+    if '$' in normalized:
+        return 'USD'
+
+    # Fallback to USD (more globally neutral than SGD)
+    return 'USD'
 
 `;
