@@ -988,11 +988,15 @@ def _generate_business_purpose(vendor_name: str, category: str, line_items: List
 def extract_receipt_data(receipt_text: str, image_metadata: Dict[str, Any] = None, forced_method: str = None, business_categories: List[Dict] = None) -> dict:
     """Legacy function - redirects to new multi-stage system"""
     print("⚠️ Legacy extract_receipt_data called, redirecting to multi-stage system", file=sys.stderr)
-    return run_multi_stage_receipt_processing(receipt_text, business_categories or [])
+    return run_multi_stage_receipt_processing(receipt_text, business_categories or [], image_metadata, forced_method)
         
-def run_multi_stage_receipt_processing(receipt_text, business_categories):
+def run_multi_stage_receipt_processing(receipt_text, business_categories, image_metadata=None, forced_method=None):
     """Run the comprehensive multi-stage receipt processing system"""
     start_time = datetime.now()
+
+    # Set default image metadata if not provided
+    if image_metadata is None:
+        image_metadata = {'confidence': 0.7, 'quality': 'acceptable'}
 
     if not receipt_text.strip():
         return {
@@ -1024,12 +1028,12 @@ def run_multi_stage_receipt_processing(receipt_text, business_categories):
                 business_categories=business_categories
             )
 
-                if gemini_result and hasattr(gemini_result, 'extracted_data'):
-                    gemini_result.extracted_data.backend_used = 'gemini_dspy'
-                    gemini_result.extracted_data.model_used = 'gemini-2.5-flash'
-                    print("✅ Gemini DSPy extraction completed successfully", file=sys.stderr)
-                else:
-                    raise ValueError("Gemini returned invalid result structure")
+            if gemini_result and hasattr(gemini_result, 'extracted_data'):
+                gemini_result.extracted_data.backend_used = 'gemini_dspy'
+                gemini_result.extracted_data.model_used = 'gemini-2.5-flash'
+                print("✅ Gemini DSPy extraction completed successfully", file=sys.stderr)
+            else:
+                raise ValueError("Gemini returned invalid result structure")
 
         except Exception as gemini_error:
             gemini_error_details = {
@@ -1454,7 +1458,7 @@ Return only the extracted text without any analysis or interpretation."""
             with redirect_stdout(dummy_stdout):
                 print("🛡️ DSPy processing protected from stdout pollution", file=sys.stderr)
                 # Use new multi-stage processing system
-                extraction_result = run_multi_stage_receipt_processing(receipt_text, business_categories)
+                extraction_result = run_multi_stage_receipt_processing(receipt_text, business_categories, image_metadata, forced_method)
                 
             # Check what was captured (for debugging)
             captured_output = dummy_stdout.getvalue()
