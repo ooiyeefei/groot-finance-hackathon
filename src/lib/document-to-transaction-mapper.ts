@@ -48,8 +48,19 @@ interface DocumentData {
   id: string
   file_name: string
   extracted_data?: {
-    text: string
-    entities: ExtractedEntity[]
+    // DSPy direct fields (new format)
+    text?: string
+    vendor_name?: string
+    document_type?: string
+    total_amount?: string | number
+    currency?: string
+    document_date?: string
+    transaction_date?: string
+    document_number?: string
+    line_items?: any[]
+
+    // Legacy support (for backward compatibility)
+    entities?: ExtractedEntity[]
     document_summary?: {
       document_type?: {
         value: string
@@ -79,7 +90,6 @@ interface DocumentData {
       confidence: number
       bbox?: number[]
     }>
-    line_items?: StructuredLineItem[]
     metadata?: {
       pageCount?: number
       wordCount: number
@@ -278,23 +288,25 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
   const extractedData = document.extracted_data as any
 
   console.log(`[Transaction Mapper] Extracted data structure:`, {
-    isRawDSPy: !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type),
+    isDSPyFormat: !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type),
     hasDocumentSummary: !!extractedData.document_summary,
-    hasEntities: !!(extractedData.entities && Array.isArray(extractedData.entities)),
+    hasLegacyEntities: !!(extractedData.entities && Array.isArray(extractedData.entities)),
     vendorName: extractedData.vendor_name || 'none',
     totalAmount: extractedData.total_amount || 'none',
+    currency: extractedData.currency || 'none',
     lineItems: extractedData.line_items ? `${extractedData.line_items.length} items` : 'none'
   });
 
   // Declare summary variable for use throughout function
   let summary: any = null
 
-  // Check if this is raw DSPy structure (new format) or legacy structure
-  const isRawDSPy = extractedData.vendor_name || extractedData.total_amount || extractedData.document_type
+  // Check if this is DSPy structure (new format) or legacy structure
+  // Priority: DSPy direct fields > document_summary > entities
+  const isDSPyFormat = !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type)
 
-  if (isRawDSPy) {
-    // Handle raw DSPy structure directly
-    console.log(`[Transaction Mapper] Processing raw DSPy structure`);
+  if (isDSPyFormat) {
+    // Handle DSPy structure directly (new format)
+    console.log(`[Transaction Mapper] Processing DSPy structure`);
 
     // Extract document type
     if (extractedData.document_type) {
@@ -416,7 +428,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
       
       // Detect currency from amount text or document text
       const currencyFromAmount = detectCurrency(summary.total_amount.value)
-      const currencyFromText = detectCurrency(document.extracted_data.text)
+      const currencyFromText = detectCurrency(document.extracted_data.text || '')
       mappedData.original_currency = currencyFromAmount !== 'USD' ? currencyFromAmount : currencyFromText
     }
     
@@ -442,7 +454,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
       
       // Detect currency from amount text or document text
       const currencyFromAmount = detectCurrency(amountEntity.value)
-      const currencyFromText = detectCurrency(document.extracted_data.text)
+      const currencyFromText = detectCurrency(document.extracted_data.text || '')
       mappedData.original_currency = currencyFromAmount !== 'USD' ? currencyFromAmount : currencyFromText
     }
   }
@@ -610,15 +622,25 @@ export function canCreateTransactionFromDocument(document: DocumentData): boolea
 
   const extractedData = document.extracted_data as any
 
-  // Check raw DSPy structure first (new format)
-  const hasAmountDSPy = extractedData.total_amount || extractedData.document_summary?.total_amount?.value
-  const hasVendorDSPy = extractedData.vendor_name || extractedData.document_summary?.vendor_name?.value
+  // Check DSPy structure first (new format) - priority check
+  const hasAmountDSPy = extractedData.total_amount
+  const hasVendorDSPy = extractedData.vendor_name
 
   if (hasAmountDSPy || hasVendorDSPy) {
+    console.log('[Transaction Mapper] Document can create transaction - DSPy format detected');
     return true
   }
 
-  // Fallback to legacy entities format (old format)
+  // Fallback to legacy document_summary structure
+  const hasAmountLegacy = extractedData.document_summary?.total_amount?.value
+  const hasVendorLegacy = extractedData.document_summary?.vendor_name?.value
+
+  if (hasAmountLegacy || hasVendorLegacy) {
+    console.log('[Transaction Mapper] Document can create transaction - legacy document_summary format detected');
+    return true
+  }
+
+  // Final fallback to legacy entities format (oldest format)
   if (extractedData.entities && Array.isArray(extractedData.entities)) {
     const entities = extractedData.entities
 
@@ -633,8 +655,12 @@ export function canCreateTransactionFromDocument(document: DocumentData): boolea
       entity.type.toLowerCase().includes('company')
     )
 
-    return hasAmount || hasVendor
+    if (hasAmount || hasVendor) {
+      console.log('[Transaction Mapper] Document can create transaction - legacy entities format detected');
+      return true
+    }
   }
 
+  console.log('[Transaction Mapper] Document cannot create transaction - insufficient data in any format');
   return false
 }

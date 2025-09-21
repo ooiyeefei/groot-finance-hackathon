@@ -333,10 +333,9 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
                       </div>
                     </div>
                   </div>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    className="border-green-600 text-green-400 hover:bg-green-600 hover:text-white"
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white"
                   >
                     Process
                   </Button>
@@ -608,9 +607,8 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                 <div className="flex gap-3 pt-4 border-t border-gray-700">
                   <Button
                     size="sm"
-                    variant="outline"
                     onClick={() => setSelectedClaim(claim)}
-                    className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     <Eye className="w-4 h-4 mr-2" />
                     Review
@@ -632,10 +630,9 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 
                   <Button
                     size="sm"
-                    variant="outline"
                     onClick={() => handleApproval(claim.id, 'reject')}
                     disabled={isProcessing}
-                    className="border-red-600 text-red-400 hover:bg-red-600/20"
+                    className="bg-red-600 hover:bg-red-700 text-white"
                   >
                     <XCircle className="w-4 h-4 mr-2" />
                     Reject

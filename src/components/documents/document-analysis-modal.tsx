@@ -18,8 +18,22 @@ interface Document {
   processed_at?: string
   error_message?: string
   extracted_data?: {
-    text: string
-    entities: Array<{
+    text?: string
+
+    // DSPy direct fields (new format)
+    vendor_name?: string
+    document_type?: string
+    total_amount?: string | number
+    currency?: string
+    document_date?: string
+    transaction_date?: string
+    document_number?: string
+    line_items?: any[]
+    dspy_confidence?: number
+    confidence_score?: number
+
+    // Legacy support (for backward compatibility)
+    entities?: Array<{
       type: string
       value: string
       confidence: number
@@ -153,53 +167,7 @@ interface Document {
       confidence: number
       bbox?: number[]
     }>
-    line_items?: Array<{
-      description?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
-      item_description?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
-      item_code?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
-      quantity?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
-      unit_measurement?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
-      unit_price?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
-      line_total?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
-      amount?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
-      total_amount?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
-    }>
+    // line_items moved to DSPy direct fields above for consistency
     metadata: {
       pageCount?: number
       wordCount: number
@@ -360,15 +328,44 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   }, [document])
 
   const handleTranslate = async () => {
-    if (!document.extracted_data?.text) return
+    if (!document.extracted_data) return
 
     setIsTranslating(true)
     try {
       // Prepare comprehensive text for translation including structured elements
-      let textToTranslate = document.extracted_data.text
+      let textToTranslate = document.extracted_data.text || ''
+
+      // Handle DSPy structure - extract relevant text for translation
+      const extractedData = document.extracted_data
+      if (!textToTranslate && extractedData) {
+        // Build text from direct DSPy fields
+        let dspyText = []
+
+        if (extractedData.vendor_name) dspyText.push(`Vendor: ${extractedData.vendor_name}`)
+        if (extractedData.document_number) dspyText.push(`Document Number: ${extractedData.document_number}`)
+        if (extractedData.total_amount) {
+          const currency = extractedData.currency || 'SGD'
+          dspyText.push(`Amount: ${extractedData.total_amount} ${currency}`)
+        }
+        if (extractedData.transaction_date) dspyText.push(`Date: ${extractedData.transaction_date}`)
+
+        // Fallback: try legacy document_summary structure
+        if (dspyText.length === 0 && extractedData.document_summary) {
+          const summary = extractedData.document_summary
+          if (summary.vendor_name?.value) dspyText.push(`Vendor: ${summary.vendor_name.value}`)
+          if (summary.document_number?.value) dspyText.push(`Document Number: ${summary.document_number.value}`)
+          if (summary.total_amount?.value && summary.currency?.value) {
+            dspyText.push(`Amount: ${summary.total_amount.value} ${summary.currency.value}`)
+          }
+          if (summary.transaction_date?.value) dspyText.push(`Date: ${summary.transaction_date.value}`)
+        }
+
+        textToTranslate = dspyText.join('\n')
+
+        console.log('[DocumentAnalysis] Translation text prepared from DSPy structure:', textToTranslate)
+      }
 
       // If we have structured financial data, format it properly for translation
-      const extractedData = document.extracted_data
       if (extractedData.financial_entities || extractedData.line_items) {
         let structuredText = ''
         
@@ -769,29 +766,29 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
     return boundingBoxes
   }
 
-  // Helper function to safely get field values from both old and new data structures
+  // Helper function to safely get field values from DSPy structure
   const getFieldValue = (fieldName: string, fallbackField?: string): string => {
     const extractedData = document.extracted_data as any;
 
     if (!extractedData) return '';
 
-    // First, try direct field access (new raw DSPy structure)
+    // DSPy stores values directly (e.g., vendor_name, total_amount, document_date)
     if (extractedData[fieldName]) {
-      return extractedData[fieldName];
+      return String(extractedData[fieldName]);
     }
 
-    // Then try fallback field if provided
+    // Try fallback field if provided (e.g., document_date -> transaction_date)
     if (fallbackField && extractedData[fallbackField]) {
-      return extractedData[fallbackField];
+      return String(extractedData[fallbackField]);
     }
 
-    // Finally, try nested document_summary structure (old format)
-    if (extractedData.document_summary?.[fieldName]?.value) {
-      return extractedData.document_summary[fieldName].value;
-    }
-
-    if (fallbackField && extractedData.document_summary?.[fallbackField]?.value) {
-      return extractedData.document_summary[fallbackField].value;
+    // Legacy fallback: try nested document_summary structure for backward compatibility
+    if (extractedData.document_summary && extractedData.document_summary[fieldName]) {
+      const summaryValue = extractedData.document_summary[fieldName];
+      if (typeof summaryValue === 'object' && summaryValue.value) {
+        return String(summaryValue.value);
+      }
+      return String(summaryValue);
     }
 
     return '';
@@ -903,7 +900,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Translate Button */}
                 <button
                   onClick={handleTranslate}
-                  disabled={isTranslating || !document.extracted_data?.text}
+                  disabled={isTranslating || !document.extracted_data}
                   className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white py-1.5 px-3 rounded-md text-xs font-medium transition-colors flex items-center justify-center"
                 >
                   {isTranslating ? (
@@ -940,21 +937,25 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <span className="ml-2 text-green-400 capitalize">{document.processing_status}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400">DSPy Confidence:</span>
+                  <span className="text-gray-400">AI Confidence:</span>
                   <span className="ml-2 text-white">
-                    {document.extracted_data?.metadata?.dspy_confidence ? `${Math.round(document.extracted_data.metadata.dspy_confidence * 100)}%` : 'N/A'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-400">Entities:</span>
-                  <span className="ml-2 text-white">
-                    {document.extracted_data?.entities?.length || 0}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-400">Words:</span>
-                  <span className="ml-2 text-white">
-                    {document.extracted_data?.metadata?.wordCount || 0}
+                    {(() => {
+                      // Try multiple possible confidence score locations for robust access
+                      const aiConfidence = document.extracted_data?.dspy_confidence ||
+                                         document.extracted_data?.confidence_score ||
+                                         document.confidence_score ||
+                                         // Legacy fallback
+                                         document.extracted_data?.metadata?.dspy_confidence;
+
+                      console.log('[DocumentAnalysis] AI Confidence debug:', {
+                        aiConfidence,
+                        extracted_data_keys: document.extracted_data ? Object.keys(document.extracted_data) : null,
+                        hasDirectDspyConfidence: !!(document.extracted_data?.dspy_confidence),
+                        hasConfidenceScore: !!(document.extracted_data?.confidence_score)
+                      });
+
+                      return aiConfidence ? `${Math.round(aiConfidence * 100)}%` : 'N/A';
+                    })()}
                   </span>
                 </div>
               </div>
@@ -1570,10 +1571,20 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           if (cleanText.length < 50 || /^(I |Let |Looking |Okay |This |From |Based )/i.test(cleanText)) {
                             // Generate comprehensive text from all structured data
                             const parts = [];
-                            const summary = document.extracted_data.document_summary;
-                            
-                            // Document Summary
-                            if (summary) {
+                            const extractedData = document.extracted_data;
+
+                            // Direct DSPy fields
+                            if (extractedData.document_type) parts.push(`Document Type: ${extractedData.document_type}`);
+                            if (extractedData.vendor_name) parts.push(`Vendor: ${extractedData.vendor_name}`);
+                            if (extractedData.transaction_date) parts.push(`Date: ${extractedData.transaction_date}`);
+                            if (extractedData.total_amount) {
+                              const currency = extractedData.currency || 'SGD';
+                              parts.push(`Total Amount: ${extractedData.total_amount} ${currency}`);
+                            }
+
+                            // Fallback: Legacy document_summary structure
+                            if (parts.length === 0 && extractedData.document_summary) {
+                              const summary = extractedData.document_summary;
                               if (summary.document_type?.value) parts.push(`Document Type: ${summary.document_type.value}`);
                               if (summary.vendor_name?.value) parts.push(`Vendor: ${summary.vendor_name.value}`);
                               if (summary.transaction_date?.value) parts.push(`Date: ${summary.transaction_date.value}`);

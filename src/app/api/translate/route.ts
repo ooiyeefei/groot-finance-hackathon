@@ -31,6 +31,17 @@ export async function POST(request: NextRequest) {
       throw new Error('SEA-LION endpoint or model ID not configured')
     }
 
+    // Ensure proper URL format with protocol
+    let sealionUrl = SEALION_ENDPOINT_URL
+    if (!sealionUrl.startsWith('http://') && !sealionUrl.startsWith('https://')) {
+      sealionUrl = `https://${sealionUrl}`
+    }
+
+    // Ensure proper endpoint path - remove trailing /v1 if present to avoid duplication
+    if (sealionUrl.endsWith('/v1')) {
+      sealionUrl = sealionUrl.slice(0, -3)
+    }
+
     // Create translation prompt with strict instructions
     const prompt = `You are a professional translator. Translate the following text from ${sourceLanguage} to ${targetLanguage}. Maintain the original meaning and context, especially for financial terms and amounts.
 
@@ -42,19 +53,15 @@ ${text}
 Translation (${targetLanguage}):`
 
     // Call SEA-LION model directly via endpoint
-    const response = await fetch(`${SEALION_ENDPOINT_URL}/chat/completions`, {
+    console.log(`[Translation] Calling SEA-LION at: ${sealionUrl}/v1/completions`)
+    const response = await fetch(`${sealionUrl}/v1/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: SEALION_MODEL_ID,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
+        prompt: prompt,
         max_tokens: 4000,
         temperature: 0.1,
         stop: ['</s>', '\n\nSource text', '\n\nTranslation']
@@ -66,7 +73,7 @@ Translation (${targetLanguage}):`
     }
 
     const result = await response.json()
-    let translatedText = result.choices?.[0]?.message?.content || 'Translation failed'
+    let translatedText = result.choices?.[0]?.text || result.choices?.[0]?.message?.content || 'Translation failed'
 
     // Clean the response to extract only the final translation
     if (translatedText && translatedText !== 'Translation failed') {

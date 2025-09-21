@@ -127,164 +127,14 @@ function categorizeExpenseWithDynamicCategories(
   return bestMatch;
 }
 
-// Transform DSPy result to existing document format for backward compatibility
-function transformToDocumentFormat(dspyData: any, enhancedCategory: any, processingMethod: string) {
-  // Get DSPy confidence score from signature output
-  const dspyConfidence = dspyData.dspy_confidence;
-
-  console.log(`🎯 DSPy confidence score: ${dspyConfidence || 'None'}`);
-
-  // Build entities array WITHOUT confidence values (frontend will not display them)
-  const entities = [
-    {
-      type: 'document_type',
-      value: dspyData.document_summary?.document_type || dspyData.document_type || 'unknown'
-    },
-    {
-      type: 'vendor_name',
-      value: dspyData.document_summary?.vendor_name || dspyData.vendor_name || ''
-    },
-    {
-      type: 'document_number',
-      value: dspyData.document_number || ''
-    },
-    {
-      type: 'total_amount',
-      value: String(dspyData.document_summary?.total_amount || dspyData.total_amount || '0')
-    },
-    {
-      type: 'transaction_date',
-      value: dspyData.document_summary?.document_date || dspyData.transaction_date || ''
-    },
-    {
-      type: 'currency',
-      value: dspyData.document_summary?.currency || dspyData.currency || 'SGD'
-    },
-    {
-      type: 'suggested_category',
-      value: enhancedCategory.category
-    },
-    {
-      type: 'processing_method',
-      value: processingMethod
-    }
-  ];
-
-  return {
-    text: [
-      `Vendor: ${dspyData.document_summary?.vendor_name || dspyData.vendor_name || 'Unknown'}`,
-      `Amount: ${dspyData.document_summary?.total_amount || dspyData.total_amount || 0} ${dspyData.document_summary?.currency || dspyData.currency || 'SGD'}`,
-      `Date: ${dspyData.document_summary?.document_date || dspyData.transaction_date || 'Unknown'}`,
-      `Category: ${enhancedCategory.category}`,
-      `Processing: ${processingMethod}`
-    ].filter(Boolean).join('\n'),
-    entities,
-    document_summary: {
-      // Core vendor information - no confidence values displayed
-      vendor_name: { value: dspyData.document_summary?.vendor_name || dspyData.vendor_name },
-      vendor_address: { value: dspyData.vendor_address || '' },
-      vendor_contact: { value: dspyData.vendor_contact || '' },
-      vendor_tax_id: { value: dspyData.vendor_tax_id || '' },
-
-      // Customer information
-      customer_name: { value: dspyData.customer_name || '' },
-      customer_address: { value: dspyData.customer_address || '' },
-      customer_contact: { value: dspyData.customer_contact || '' },
-
-      // Document identifiers - standardized single field from DSPy
-      document_number: { value: dspyData.document_number || '' },
-
-      // Financial information
-      total_amount: { value: String(dspyData.document_summary?.total_amount || dspyData.total_amount || '0') },
-      currency: { value: dspyData.document_summary?.currency || dspyData.currency || 'SGD' },
-      subtotal_amount: { value: String(dspyData.subtotal_amount || '') },
-      tax_amount: { value: String(dspyData.tax_amount || '') },
-      discount_amount: { value: String(dspyData.discount_amount || '') },
-
-      // Dates
-      transaction_date: { value: dspyData.document_summary?.document_date || dspyData.transaction_date },
-      due_date: { value: dspyData.due_date || '' },
-      delivery_date: { value: dspyData.delivery_date || '' },
-
-      // Payment information
-      payment_terms: { value: dspyData.payment_terms || '' },
-      payment_method: { value: dspyData.payment_method || '' },
-      bank_details: { value: dspyData.bank_details || '' },
-
-      // Document classification
-      document_type: { value: dspyData.document_summary?.document_type || dspyData.document_type || 'unknown' },
-      industry_context: { value: dspyData.industry_context || 'general' },
-
-      // Categorization (business logic only - no confidence display)
-      suggested_category: { value: enhancedCategory.category }
-    },
-    // Transform line items to match frontend expected structure
-    line_items: (() => {
-      // Parse line items from JSON string if available
-      let lineItemsArray = dspyData.line_items || [];
-      
-      // If we have line_items_json instead, parse it
-      if (!lineItemsArray.length && dspyData.line_items_json) {
-        try {
-          lineItemsArray = JSON.parse(dspyData.line_items_json);
-        } catch (e) {
-          console.warn('Failed to parse line_items_json:', e);
-          lineItemsArray = [];
-        }
-      }
-      
-      return lineItemsArray.map((item: any, index: number) => ({
-        description: item.description ? {
-          value: String(item.description),
-          bbox: null
-        } : null,
-        item_code: item.item_code ? {
-          value: String(item.item_code),
-          bbox: null
-        } : null,
-        quantity: item.quantity !== undefined ? {
-          value: String(item.quantity),
-          bbox: null
-        } : null,
-        unit_measurement: item.unit_of_measure ? {
-          value: String(item.unit_of_measure),
-          bbox: null
-        } : null,
-        unit_price: item.unit_price !== undefined ? {
-          value: String(item.unit_price),
-          bbox: null
-        } : null,
-        line_total: item.line_total !== undefined ? {
-          value: String(item.line_total),
-          bbox: null
-        } : null
-      }));
-    })(),
-    metadata: {
-      pageCount: 1,
-      wordCount: (() => {
-        // Calculate word count from extracted text
-        const textContent = [
-          dspyData.document_summary?.vendor_name || dspyData.vendor_name || '',
-          dspyData.document_summary?.total_amount || dspyData.total_amount || '',
-          dspyData.document_summary?.document_date || dspyData.transaction_date || '',
-          enhancedCategory.category || ''
-        ].join(' ').split(/\s+/).filter(word => word.length > 0);
-        return textContent.length;
-      })(),
-      language: 'en',
-      processingMethod: processingMethod,
-      dspy_confidence: dspyConfidence, // DSPy confidence score for fallback logic
-      requires_validation: dspyData.requires_validation,
-      category_reasoning: enhancedCategory.reasoning
-    }
-  };
-}
 
 export const processDocumentOCR = task({
   id: "process-document-ocr",
   run: async (payload: { documentId: string; imageStoragePath: string; expenseCategory?: string }) => {
-    console.log(`✅ Starting Clean DSPy OCR process for document: ${payload.documentId}`);
+    console.log(`🚀 Starting DSPy Document OCR extraction`);
+    console.log(`📄 Document ID: ${payload.documentId}`);
+    console.log(`🖼️ Image storage path: ${payload.imageStoragePath}`);
+    console.log(`🏷️ Expense category: ${payload.expenseCategory || 'Not provided'}`);
 
     // Declare variables at function scope for catch block access
     let processedImageBase64: string = '';
@@ -330,6 +180,7 @@ export const processDocumentOCR = task({
       console.log(`🖼️ Image prepared: ${Math.round(imageBuffer.byteLength / 1024)}KB`);
 
       // Step 3: Process with DSPy Common Services
+      console.log(`🐍 Starting DSPy processing with Python runtime...`);
       const dspyResult = await python.runInline(`
 # =============================================================================
 # CLEAN DSPy PROCESSING USING COMMON SERVICES
@@ -685,31 +536,33 @@ print(json.dumps(result))
       console.log(`💰 Amount: ${finalExtractionData.document_summary?.total_amount || finalExtractionData.total_amount}`);
 
       // Step 5: Business categorization
+      console.log(`🏢 Performing business categorization...`);
       const businessId = docRecord.business_id;
       if (!businessId) {
         throw new Error('Unable to determine business ID for categorization');
       }
+      console.log(`🏢 Business ID: ${businessId}`);
       
       const businessCategories = await fetchEnabledCategoriesFromDB(businessId);
       const enhancedCategory = categorizeExpenseWithDynamicCategories(finalExtractionData, businessCategories);
       
       console.log(`🏷️ Category: ${enhancedCategory.category} (${(enhancedCategory.confidence * 100).toFixed(1)}%)`);
 
-      // Step 6: Store raw DSPy structure directly (simplified approach)
-      console.log(`🔍 Storing raw DSPy structure directly, no transformation needed`);
+      // Step 6: Prepare final DSPy result with business categorization
+      console.log(`🔄 Preparing final DSPy result with business categorization`);
 
-      // Add enhanced category to the DSPy result for business logic
+      // Store raw DSPy output directly with business categorization enhancements
       const finalDspyResult = {
-        ...finalExtractionData,
-        // Add business categorization directly to DSPy structure
+        ...finalExtractionData, // All raw DSPy fields (vendor_name, total_amount, currency, etc.)
+        // Add business categorization
         suggested_category: enhancedCategory.category,
         category_confidence: enhancedCategory.confidence,
         category_reasoning: enhancedCategory.reasoning,
-        // Keep processing metadata in the main structure
         processing_method: finalExtractionData.backend_used || 'dspy_processing'
       };
 
       // Step 7: Update database with raw DSPy structure
+      console.log(`💾 Updating database with extraction results...`);
       const { error: updateError } = await supabase.from('documents').update({
         processing_status: 'completed',
         extracted_data: finalDspyResult, // Store raw DSPy structure directly
@@ -878,31 +731,33 @@ print(json.dumps(result))
           console.log(`💰 Amount: ${vllmExtractionData.document_summary?.total_amount || vllmExtractionData.total_amount}`);
 
           // Business categorization for vLLM result
+          console.log(`🏢 Performing business categorization (vLLM fallback)...`);
           const businessId = docRecord.business_id;
           if (!businessId) {
             throw new Error('Unable to determine business ID for categorization');
           }
-          
+          console.log(`🏢 Business ID: ${businessId}`);
+
           const businessCategories = await fetchEnabledCategoriesFromDB(businessId);
           const enhancedCategory = categorizeExpenseWithDynamicCategories(vllmExtractionData, businessCategories);
           
           console.log(`🏷️ vLLM Category: ${enhancedCategory.category} (${(enhancedCategory.confidence * 100).toFixed(1)}%)`);
 
-          // Store vLLM DSPy structure directly (simplified approach)
-          console.log(`🔍 Storing vLLM DSPy structure directly, no transformation needed`);
+          // Prepare final vLLM DSPy result with business categorization
+          console.log(`🔄 Preparing final vLLM DSPy result with business categorization`);
 
-          // Add enhanced category to the vLLM DSPy result for business logic
+          // Store raw vLLM DSPy output directly with business categorization enhancements
           const finalVllmDspyResult = {
-            ...vllmExtractionData,
-            // Add business categorization directly to DSPy structure
+            ...vllmExtractionData, // All raw DSPy fields (vendor_name, total_amount, currency, etc.)
+            // Add business categorization
             suggested_category: enhancedCategory.category,
             category_confidence: enhancedCategory.confidence,
             category_reasoning: enhancedCategory.reasoning,
-            // Keep processing metadata in the main structure
             processing_method: vllmExtractionData.backend_used || 'vllm_fallback'
           };
 
           // Update database with vLLM raw DSPy structure
+          console.log(`💾 Updating database with vLLM fallback results...`);
           const { error: vllmUpdateError } = await supabase.from('documents').update({
             processing_status: 'completed',
             extracted_data: finalVllmDspyResult, // Store raw DSPy structure directly
