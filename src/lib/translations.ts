@@ -27,6 +27,12 @@ export interface TranslationKeys {
   loading: string
   error: string
   retry: string
+
+  // Financial Disclaimers
+  chatDisclaimer: string
+  ocrDocumentDisclaimer: string
+  ocrReceiptDisclaimer: string
+  generalDisclaimer: string
 }
 
 export const translations: Record<SupportedLanguage, TranslationKeys> = {
@@ -51,7 +57,13 @@ export const translations: Record<SupportedLanguage, TranslationKeys> = {
     // Common
     loading: 'Loading...',
     error: 'Error',
-    retry: 'Try again'
+    retry: 'Try again',
+
+    // Financial Disclaimers
+    chatDisclaimer: 'AI Assistant provides general guidance based on your data. Not professional financial advice. Consult advisors for investment decisions.',
+    ocrDocumentDisclaimer: 'AI extracted this data from your document. Please verify accuracy before proceeding with financial decisions.',
+    ocrReceiptDisclaimer: 'AI extracted this data from your receipt. Please verify all amounts and details before submission.',
+    generalDisclaimer: 'FinanSEAL is a financial management tool. For professional advice, consult qualified advisors.'
   },
   
   th: {
@@ -75,7 +87,13 @@ export const translations: Record<SupportedLanguage, TranslationKeys> = {
     // Common
     loading: 'กำลังโหลด...',
     error: 'ข้อผิดพลาด',
-    retry: 'ลองอีกครั้ง'
+    retry: 'ลองอีกครั้ง',
+
+    // Financial Disclaimers
+    chatDisclaimer: 'ผู้ช่วย AI ให้คำแนะนำทั่วไปจากข้อมูลของคุณ ไม่ใช่คำแนะนำทางการเงินแบบมืออาชีพ ปรึกษาที่ปรึกษาสำหรับการตัดสินใจการลงทุน',
+    ocrDocumentDisclaimer: 'AI ดึงข้อมูลนี้จากเอกสารของคุณ โปรดตรวจสอบความถูกต้องก่อนดำเนินการตัดสินใจทางการเงิน',
+    ocrReceiptDisclaimer: 'AI ดึงข้อมูลนี้จากใบเสร็จของคุณ โปรดตรวจสอบจำนวนเงินและรายละเอียดทั้งหมดก่อนส่ง',
+    generalDisclaimer: 'FinanSEAL เป็นเครื่องมือจัดการทางการเงิน สำหรับคำแนะนำมืออาชีพ ปรึกษาที่ปรึกษาที่มีคุณสมบัติ'
   },
   
   id: {
@@ -99,7 +117,13 @@ export const translations: Record<SupportedLanguage, TranslationKeys> = {
     // Common
     loading: 'Memuat...',
     error: 'Kesalahan',
-    retry: 'Coba lagi'
+    retry: 'Coba lagi',
+
+    // Financial Disclaimers
+    chatDisclaimer: 'Asisten AI memberikan panduan umum berdasarkan data Anda. Bukan nasihat keuangan profesional. Konsultasikan dengan penasihat untuk keputusan investasi.',
+    ocrDocumentDisclaimer: 'AI mengekstrak data ini dari dokumen Anda. Harap verifikasi akurasi sebelum melanjutkan keputusan keuangan.',
+    ocrReceiptDisclaimer: 'AI mengekstrak data ini dari tanda terima Anda. Harap verifikasi semua jumlah dan detail sebelum pengiriman.',
+    generalDisclaimer: 'FinanSEAL adalah alat manajemen keuangan. Untuk nasihat profesional, konsultasikan dengan penasihat yang berkualifikasi.'
   }
 }
 

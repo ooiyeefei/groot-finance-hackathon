@@ -6,6 +6,7 @@ import { useLanguage } from '@/contexts/language-context'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { CitationData } from '@/lib/tools/base-tool'
 import CitationOverlay from '@/components/citations/citation-overlay'
+import { ChatDisclaimer } from '@/components/ui/financial-disclaimer'
 import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 
@@ -302,6 +303,11 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
         <div className="text-xs text-gray-500">
           {currentConversationId ? t.connected : t.newChat}
         </div>
+      </div>
+
+      {/* Financial Disclaimer Banner */}
+      <div className="px-4 pt-2">
+        <ChatDisclaimer />
       </div>
 
       {/* Messages Area */}

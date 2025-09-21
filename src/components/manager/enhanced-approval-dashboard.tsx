@@ -297,11 +297,11 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
                 <span className="text-white font-medium">Select All ({data.recent_claims.filter(claim => claim.status === 'approved').length} claims)</span>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white">
                   <DollarSign className="w-4 h-4 mr-2" />
                   Process Selected
                 </Button>
-                <Button size="sm" variant="outline" className="border-gray-600 text-gray-300">
+                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
                   Export List
                 </Button>
               </div>

@@ -233,18 +233,16 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             <Button
               onClick={() => generateReport('pdf')}
               disabled={generating}
-              variant="outline"
-              className="border-gray-600 text-gray-300 hover:bg-gray-700"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               <Download className="w-4 h-4 mr-2" />
               Download PDF
             </Button>
-            
+
             <Button
               onClick={() => generateReport('csv')}
               disabled={generating}
-              variant="outline"
-              className="border-gray-600 text-gray-300 hover:bg-gray-700"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               <Download className="w-4 h-4 mr-2" />
               Export CSV

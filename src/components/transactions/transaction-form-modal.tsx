@@ -64,7 +64,7 @@ export default function TransactionFormModal({
     category: transaction?.category || prefilledData?.category || getDefaultCategory(initialTransactionType),
     subcategory: transaction?.subcategory || prefilledData?.subcategory || '',
     vendor_name: transaction?.vendor_name || prefilledData?.vendor_name || '',
-    reference_number: transaction?.reference_number || prefilledData?.reference_number || '',
+    document_number: transaction?.reference_number || prefilledData?.reference_number || '',
     document_type: transaction?.document_type || prefilledData?.document_type || undefined,
     status: transaction?.status || prefilledData?.status || 'pending',
     due_date: transaction?.due_date?.split('T')[0] || '',
@@ -174,6 +174,7 @@ export default function TransactionFormModal({
     try {
       const submitData: CreateTransactionRequest = {
         ...formData,
+        reference_number: formData.document_number, // Map document_number to reference_number for API
         line_items: lineItems
           .filter(item => 
             item.description && item.quantity && item.unit_price
@@ -436,14 +437,14 @@ export default function TransactionFormModal({
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     <Hash className="w-4 h-4 inline mr-1" />
-                    Reference Number
+                    Document Number
                   </label>
                   <input
                     type="text"
-                    value={formData.reference_number}
-                    onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })}
+                    value={formData.document_number}
+                    onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Invoice number, receipt ID, etc."
+                    placeholder="Document number, reference ID, etc."
                   />
                 </div>
 

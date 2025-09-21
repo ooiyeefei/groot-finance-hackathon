@@ -178,17 +178,15 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
             <Label className="text-white">Export Format</Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button
-                variant={exportConfig.format === 'csv' ? 'default' : 'outline'}
                 onClick={() => setExportConfig(prev => ({ ...prev, format: 'csv' }))}
-                className="justify-start"
+                className={`justify-start ${exportConfig.format === 'csv' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'border-gray-600 text-gray-300 hover:bg-gray-700'}`}
               >
                 <Download className="w-4 h-4 mr-2" />
                 Download CSV
               </Button>
               <Button
-                variant={exportConfig.format === 'google_sheets' ? 'default' : 'outline'}
                 onClick={() => setExportConfig(prev => ({ ...prev, format: 'google_sheets' }))}
-                className="justify-start"
+                className={`justify-start ${exportConfig.format === 'google_sheets' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'border-gray-600 text-gray-300 hover:bg-gray-700'}`}
               >
                 <FileSpreadsheet className="w-4 h-4 mr-2" />
                 Google Sheets Format
@@ -277,7 +275,7 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
           <Button
             onClick={handleExport}
             disabled={isExporting}
-            className="w-full bg-green-600 hover:bg-green-700"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
           >
             {isExporting ? (
               <>

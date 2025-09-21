@@ -114,28 +114,47 @@ interface DocumentData {
  * Maps extracted document data to transaction form data
  */
 export function mapDocumentToTransaction(document: DocumentData): Partial<CreateTransactionRequest> {
-  if (!document.extracted_data?.entities) {
+  console.log(`[Transaction Mapper] Starting mapping for document:`, {
+    documentId: document.id,
+    fileName: document.file_name,
+    hasExtractedData: !!document.extracted_data,
+    extractedDataKeys: document.extracted_data ? Object.keys(document.extracted_data) : 'none'
+  });
+
+  if (!document.extracted_data) {
+    console.log(`[Transaction Mapper] No extracted data found, returning empty mapping`);
     return {}
   }
 
-  const entities = document.extracted_data.entities
   const mappedData: Partial<CreateTransactionRequest> = {}
 
-  // Helper function to find entity by type
+  // Helper function to find entity by type (for legacy format)
   const findEntity = (types: string[]) => {
-    return entities.find(entity => 
-      types.some(type => 
+    if (!document.extracted_data?.entities) return null;
+    return document.extracted_data.entities.find(entity =>
+      types.some(type =>
         entity.type.toLowerCase().includes(type.toLowerCase()) ||
         type.toLowerCase().includes(entity.type.toLowerCase())
       )
     )
   }
 
-  // Helper function to parse amount from string
-  const parseAmount = (value: string): number => {
-    const cleaned = value.replace(/[^\d.,]/g, '').replace(',', '.')
-    const parsed = parseFloat(cleaned)
-    return isNaN(parsed) ? 0 : parsed
+  // Helper function to parse amount from string or number
+  const parseAmount = (value: string | number | undefined | null): number => {
+    if (value === null || value === undefined || value === '') {
+      return 0;
+    }
+
+    // If it's already a number, return it directly
+    if (typeof value === 'number') {
+      return isNaN(value) ? 0 : value;
+    }
+
+    // Convert to string and clean it
+    const stringValue = String(value);
+    const cleaned = stringValue.replace(/[^\d.,]/g, '').replace(',', '.');
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
   }
 
   // Helper function to detect currency from text
@@ -258,6 +277,15 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
 
   const extractedData = document.extracted_data as any
 
+  console.log(`[Transaction Mapper] Extracted data structure:`, {
+    isRawDSPy: !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type),
+    hasDocumentSummary: !!extractedData.document_summary,
+    hasEntities: !!(extractedData.entities && Array.isArray(extractedData.entities)),
+    vendorName: extractedData.vendor_name || 'none',
+    totalAmount: extractedData.total_amount || 'none',
+    lineItems: extractedData.line_items ? `${extractedData.line_items.length} items` : 'none'
+  });
+
   // Declare summary variable for use throughout function
   let summary: any = null
 
@@ -266,6 +294,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
 
   if (isRawDSPy) {
     // Handle raw DSPy structure directly
+    console.log(`[Transaction Mapper] Processing raw DSPy structure`);
 
     // Extract document type
     if (extractedData.document_type) {
@@ -283,6 +312,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
       } else {
         mappedData.document_type = 'other'
       }
+      console.log(`[Transaction Mapper] Mapped document type: ${mappedData.document_type}`);
     }
 
     // Set transaction status based on document type
@@ -303,31 +333,35 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     // Extract vendor name
     if (extractedData.vendor_name) {
       mappedData.vendor_name = extractedData.vendor_name
+      console.log(`[Transaction Mapper] Mapped vendor: ${mappedData.vendor_name}`);
     }
 
     // Extract amount and currency
     if (extractedData.total_amount) {
-      mappedData.original_amount = parseFloat(extractedData.total_amount) || parseAmount(String(extractedData.total_amount))
+      mappedData.original_amount = parseAmount(extractedData.total_amount)
 
       // Use currency from DSPy extraction
       if (extractedData.currency) {
         mappedData.original_currency = extractedData.currency as SupportedCurrency
       } else {
         // Fallback to currency detection
-        const currencyFromText = detectCurrency(document.extracted_data.text)
+        const currencyFromText = detectCurrency(document.extracted_data?.text || '')
         mappedData.original_currency = currencyFromText
       }
+      console.log(`[Transaction Mapper] Mapped amount: ${mappedData.original_amount} ${mappedData.original_currency}`);
     }
 
     // Extract transaction date (DSPy uses document_date, not transaction_date)
     if (extractedData.document_date) {
       mappedData.transaction_date = parseDate(extractedData.document_date)
+      console.log(`[Transaction Mapper] Mapped date: ${mappedData.transaction_date}`);
     } else if (extractedData.transaction_date) {
       // Legacy fallback
       mappedData.transaction_date = parseDate(extractedData.transaction_date)
     }
   } else {
     // Handle legacy document_summary structure
+    console.log(`[Transaction Mapper] Processing legacy document_summary structure`);
     summary = document.extracted_data.document_summary ||
               document.extracted_data.metadata?.layoutElements?.document_summary
 
@@ -424,11 +458,10 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
   }
   
   // Extract reference number - use standardized document_number field from DSPy
-  // (extractedData is already declared above)
-
   // First, try raw DSPy structure (new format)
   if (extractedData.document_number) {
     mappedData.reference_number = extractedData.document_number
+    console.log(`[Transaction Mapper] Mapped reference number from DSPy: ${mappedData.reference_number}`);
   } else if (summary && (summary as any).document_number?.value) {
     // Fallback to nested document_summary structure
     mappedData.reference_number = (summary as any).document_number.value
@@ -452,25 +485,56 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
 
   // Categorize transaction
   mappedData.category = categorizeTransaction(
-    document.extracted_data.text, 
+    document.extracted_data?.text || '',
     mappedData.vendor_name
   )
+  console.log(`[Transaction Mapper] Mapped category: ${mappedData.category}`);
 
   // Note: vendor_details is not part of CreateTransactionRequest
 
   // Extract structured line items from OCR data
   // For raw DSPy structure, line items are directly available
   // For legacy structure, try different locations
-  const lineItemsSource = (extractedData.line_items && Array.isArray(extractedData.line_items)) ?
-                         extractedData.line_items :
-                         (document.extracted_data.line_items ||
-                          document.extracted_data.metadata?.layoutElements?.line_items ||
-                          [])
-  
+  let lineItemsSource = null;
+
+  console.log(`[Transaction Mapper] Debug - extractedData structure:`, {
+    hasDirectLineItems: !!(extractedData.line_items && Array.isArray(extractedData.line_items)),
+    extractedDataLineItems: extractedData.line_items ? extractedData.line_items.length : 'none',
+    documentLineItems: document.extracted_data.line_items ? document.extracted_data.line_items.length : 'none',
+    metadataLineItems: document.extracted_data.metadata?.layoutElements?.line_items ? document.extracted_data.metadata?.layoutElements?.line_items.length : 'none'
+  });
+
+  // Priority order for raw DSPy: direct line_items first, then nested paths
+  if (extractedData.line_items && Array.isArray(extractedData.line_items) && extractedData.line_items.length > 0) {
+    lineItemsSource = extractedData.line_items;
+    console.log(`[Transaction Mapper] Using direct extractedData.line_items (${lineItemsSource.length} items)`);
+  } else if (document.extracted_data.line_items && Array.isArray(document.extracted_data.line_items) && document.extracted_data.line_items.length > 0) {
+    lineItemsSource = document.extracted_data.line_items;
+    console.log(`[Transaction Mapper] Using document.extracted_data.line_items (${lineItemsSource.length} items)`);
+  } else if (document.extracted_data.metadata?.layoutElements?.line_items && Array.isArray(document.extracted_data.metadata?.layoutElements?.line_items) && document.extracted_data.metadata.layoutElements.line_items.length > 0) {
+    lineItemsSource = document.extracted_data.metadata?.layoutElements?.line_items;
+    console.log(`[Transaction Mapper] Using metadata line_items (${lineItemsSource.length} items)`);
+  } else {
+    lineItemsSource = [];
+    console.log(`[Transaction Mapper] No line items found in any location`);
+  }
+
+  console.log(`[Transaction Mapper] Line items detection: Found ${lineItemsSource?.length || 0} items`);
+  if (lineItemsSource && lineItemsSource.length > 0) {
+    console.log('[Transaction Mapper] First line item structure:', JSON.stringify(lineItemsSource[0], null, 2));
+  }
   if (lineItemsSource && lineItemsSource.length > 0) {
     const lineItems: CreateLineItemRequest[] = []
     
     lineItemsSource.forEach((structuredItem: any, index: number) => {
+      console.log(`[Transaction Mapper] Processing line item ${index + 1}:`, {
+        raw: structuredItem,
+        description_raw: structuredItem.description,
+        item_code_raw: structuredItem.item_code,
+        quantity_raw: structuredItem.quantity,
+        unit_price_raw: structuredItem.unit_price,
+        line_total_raw: structuredItem.line_total
+      });
       // Handle both raw DSPy format (direct values) and legacy format (nested .value)
       const description = structuredItem.description?.value || structuredItem.description || `Item ${index + 1}`
       const itemCode = structuredItem.item_code?.value || structuredItem.item_code || undefined
@@ -478,12 +542,21 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
       const unitMeasurement = structuredItem.unit_measurement?.value || structuredItem.unit_of_measure || structuredItem.unit_measurement || undefined
       const unitPrice = parseAmount(structuredItem.unit_price?.value || structuredItem.unit_price || '0')
       const lineTotal = parseAmount(structuredItem.line_total?.value || structuredItem.line_total || '0')
-      
       // Calculate unit price from line total if unit price is 0 but line total exists
       const finalUnitPrice = unitPrice > 0 ? unitPrice : (lineTotal > 0 && quantity > 0 ? lineTotal / quantity : 0)
-      
+
+      console.log(`[Transaction Mapper] Processed line item ${index + 1}:`, {
+        description,
+        itemCode,
+        quantity,
+        unitPrice,
+        lineTotal,
+        finalUnitPrice,
+        passesValidation: !!(description && quantity > 0 && finalUnitPrice > 0)
+      });
+
       if (description && quantity > 0 && finalUnitPrice > 0) {
-        lineItems.push({
+        const lineItem = {
           description: description.trim(),
           item_code: itemCode,
           quantity: quantity,
@@ -491,13 +564,19 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
           unit_price: finalUnitPrice,
           tax_rate: 0, // TODO: Extract tax rate from OCR if available
           item_category: mappedData.category || 'cost_of_goods_sold'
-        })
+        };
+        lineItems.push(lineItem);
+        console.log(`[Transaction Mapper] Added line item ${index + 1} to array:`, lineItem);
+      } else {
+        console.log(`[Transaction Mapper] Skipped line item ${index + 1} - failed validation`);
       }
     })
     
     mappedData.line_items = lineItems
+    console.log(`[Transaction Mapper] Final mapped line items (${lineItems.length} items):`, lineItems);
   } else {
     // Fallback: create single line item from total amount if no structured line items
+    console.log(`[Transaction Mapper] No line items found, creating fallback from total amount: ${mappedData.original_amount}`);
     if (mappedData.original_amount && mappedData.original_amount > 0) {
       mappedData.line_items = [{
         description: mappedData.description || 'Extracted from document',
@@ -506,8 +585,17 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
         tax_rate: 0,
         item_category: mappedData.category || 'administrative_expenses'
       }]
+      console.log(`[Transaction Mapper] Created fallback line item:`, mappedData.line_items[0]);
     }
   }
+
+  console.log(`[Transaction Mapper] Final mapped data summary:`, {
+    vendor: mappedData.vendor_name,
+    amount: mappedData.original_amount,
+    currency: mappedData.original_currency,
+    lineItemsCount: mappedData.line_items?.length || 0,
+    hasLineItems: !!(mappedData.line_items && mappedData.line_items.length > 0)
+  });
 
   return mappedData
 }

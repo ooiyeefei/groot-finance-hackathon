@@ -7,13 +7,14 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { 
-  CheckCircle, 
-  AlertCircle, 
+import Link from 'next/link'
+import {
+  CheckCircle,
+  AlertCircle,
   AlertTriangle,
-  Edit3, 
-  Brain, 
-  Send, 
+  Edit3,
+  Brain,
+  Send,
   ArrowLeft,
   Tag,
   DollarSign,
@@ -23,7 +24,8 @@ import {
   Loader2,
   Save,
   Clock,
-  Upload
+  Upload,
+  ExternalLink
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,6 +38,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DSPyExtractionResult } from '@/types/expense-extraction'
 import { useExpenseCategories, DynamicExpenseCategory } from '@/hooks/use-expense-categories'
+import { ReceiptOCRDisclaimer } from '@/components/ui/financial-disclaimer'
 
 interface ExpenseFormData {
   description: string
@@ -76,7 +79,7 @@ export default function PreFilledExpenseForm({
     original_currency: extractionResult.extractedData.currency,
     transaction_date: extractionResult.extractedData.transactionDate,
     vendor_name: extractionResult.extractedData.vendorName,
-    reference_number: extractionResult.extractedData.receiptNumber || '',
+    reference_number: extractionResult.extractedData.receiptNumber || extractionResult.extractedData.invoiceNumber || '',
     notes: '',
     // document_id removed - file info stored in business_purpose_details
     line_items: extractionResult.extractedData.lineItems?.map(item => ({
@@ -445,7 +448,24 @@ export default function PreFilledExpenseForm({
         <p className="text-gray-400">
           AI has pre-filled your expense form. Please review and edit as needed.
         </p>
+
+        {/* View Document Analysis Link - Following mel-ux-designer recommendations */}
+        {extractionResult.extractedData.documentId && (
+          <div className="mt-4 flex justify-center">
+            <Link
+              href={`/documents/${extractionResult.extractedData.documentId}/analysis`}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-400 hover:text-blue-300 bg-blue-900/20 hover:bg-blue-900/30 border border-blue-700/50 hover:border-blue-600 rounded-lg transition-all duration-200 group"
+            >
+              <FileText className="w-4 h-4" />
+              View Document Analysis
+              <ExternalLink className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+            </Link>
+          </div>
+        )}
       </div>
+
+      {/* Receipt OCR Disclaimer */}
+      <ReceiptOCRDisclaimer />
 
       {/* Extraction Quality Summary */}
       <Card className={`border ${
