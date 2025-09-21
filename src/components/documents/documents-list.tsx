@@ -12,6 +12,7 @@ import TransactionFormModal from '@/components/transactions/transaction-form-mod
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { mapDocumentToTransaction, canCreateTransactionFromDocument } from '@/lib/document-to-transaction-mapper'
 import { CreateTransactionRequest } from '@/types/transaction'
+import ExtractedInfoTags from './ExtractedInfoTags'
 
 interface DocumentsListProps {
   onRefresh?: () => void
@@ -462,119 +463,12 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                 </div>
               </div>
             </div>
-            
-            {/* Show extracted information for completed documents */}
+
+            {/* Show extracted information for completed documents using cleaner ExtractedInfoTags component */}
             {document.processing_status === 'completed' && document.extracted_data && (
               <div className="mt-4 pt-4 border-t border-gray-600">
                 <h5 className="text-sm font-medium text-gray-300 mb-2">Extracted Information</h5>
-                <div className="flex flex-wrap gap-2">
-                  {/* Document Summary */}
-                  {document.extracted_data.document_summary && (
-                    <>
-                      {document.extracted_data.document_summary.vendor_name && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-blue-600/20 text-blue-300 border border-blue-500/30">
-                          <span className="font-medium">Vendor:</span>
-                          <span className="ml-1">{document.extracted_data.document_summary.vendor_name.value}</span>
-                        </span>
-                      )}
-                      {document.extracted_data.document_summary.total_amount && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-green-600/20 text-green-300 border border-green-500/30">
-                          <span className="font-medium">Amount:</span>
-                          <span className="ml-1">{document.extracted_data.document_summary.total_amount.value}</span>
-                        </span>
-                      )}
-                      {document.extracted_data.document_summary.transaction_date && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-purple-600/20 text-purple-300 border border-purple-500/30">
-                          <span className="font-medium">Date:</span>
-                          <span className="ml-1">{document.extracted_data.document_summary.transaction_date.value}</span>
-                        </span>
-                      )}
-                    </>
-                  )}
-                  
-                  {/* Line Items Summary */}
-                  {document.extracted_data.line_items && document.extracted_data.line_items.length > 0 && (
-                    <>
-                      <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-orange-600/20 text-orange-300 border border-orange-500/30">
-                        <span className="font-medium">Items:</span>
-                        <span className="ml-1">{document.extracted_data.line_items.length}</span>
-                      </span>
-                      {/* Show first few line items with new fields */}
-                      {document.extracted_data.line_items.slice(0, 3).map((item, index) => (
-                        <div key={`line-${index}`} className="flex flex-wrap gap-1">
-                          {item.description && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-600/50 text-gray-300 border border-gray-500">
-                              <span className="font-medium text-yellow-300">Item:</span>
-                              <span className="ml-1">{item.description.value}</span>
-                            </span>
-                          )}
-                          {item.item_code && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-indigo-600/20 text-indigo-300 border border-indigo-500/30">
-                              <span className="font-medium">Code:</span>
-                              <span className="ml-1">{item.item_code.value}</span>
-                            </span>
-                          )}
-                          {item.unit_measurement && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-teal-600/20 text-teal-300 border border-teal-500/30">
-                              <span className="font-medium">Unit:</span>
-                              <span className="ml-1">{item.unit_measurement.value}</span>
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                      {document.extracted_data.line_items.length > 3 && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs text-gray-400">
-                          +{document.extracted_data.line_items.length - 3} more items
-                        </span>
-                      )}
-                    </>
-                  )}
-                  
-                  {/* Financial Entities */}
-                  {document.extracted_data.financial_entities && document.extracted_data.financial_entities.length > 0 && (
-                    <>
-                      {document.extracted_data.financial_entities.slice(0, 3).map((entity, index) => (
-                        <span
-                          key={`financial-${index}`}
-                          className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-emerald-600/20 text-emerald-300 border border-emerald-500/30"
-                          title={`${entity.category} • Confidence: ${Math.round(entity.confidence * 100)}%`}
-                        >
-                          <span className="font-medium">{entity.label}:</span>
-                          <span className="ml-1">{entity.value}</span>
-                        </span>
-                      ))}
-                      {document.extracted_data.financial_entities.length > 3 && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs text-gray-400">
-                          +{document.extracted_data.financial_entities.length - 3} more
-                        </span>
-                      )}
-                    </>
-                  )}
-                  
-                  {/* Legacy entities fallback */}
-                  {document.extracted_data.entities && document.extracted_data.entities.length > 0 && 
-                   !document.extracted_data.document_summary && 
-                   !document.extracted_data.line_items && 
-                   !document.extracted_data.financial_entities && (
-                    <>
-                      {document.extracted_data.entities.slice(0, 5).map((entity, index) => (
-                        <span
-                          key={`legacy-${index}`}
-                          className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-600/50 text-gray-300 border border-gray-500"
-                          title={`Confidence: ${Math.round(entity.confidence * 100)}%`}
-                        >
-                          <span className="font-medium text-blue-300">{entity.type}:</span>
-                          <span className="ml-1">{entity.value}</span>
-                        </span>
-                      ))}
-                      {document.extracted_data.entities.length > 5 && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs text-gray-400">
-                          +{document.extracted_data.entities.length - 5} more
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
+                <ExtractedInfoTags extractedData={document.extracted_data} />
               </div>
             )}
           </div>
