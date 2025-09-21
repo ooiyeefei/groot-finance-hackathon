@@ -103,16 +103,17 @@ export const dspyReceiptExtraction = task({
       // Step 2: Run DSPy extraction using Python inline code with business categories
       console.log("🐍 Running DSPy extraction with Python runtime...");
 
-      // Step 2: Run optimized DSPy extraction (simplified processing)
-      console.log("🔍 Running streamlined DSPy extraction...");
+      // Step 2: Run optimized DSPy extraction with direct multimodal processing
+      console.log("🔍 Running direct multimodal DSPy extraction...");
 
       const result = await python.runInline(`
-# Hybrid DSPy Receipt Extraction with Adaptive Processing  
+# Direct Multimodal DSPy Receipt Extraction - No OCR Preprocessing
 import dspy
 import os
 import json
 import re
 import sys
+import base64
 from typing import Optional, List, Literal, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -124,7 +125,7 @@ SEASIA_VENDOR_PATTERNS = {
     # Major chains - Simple processing
     "7-ELEVEN": {"confidence": 0.98, "category": "retail", "complexity": "simple"},
     "STARBUCKS": {"confidence": 0.98, "category": "entertainment", "complexity": "simple"},
-    "MCDONALD'S": {"confidence": 0.98, "category": "entertainment", "complexity": "simple"},
+    "MCDONALDS": {"confidence": 0.98, "category": "entertainment", "complexity": "simple"},
     "KFC": {"confidence": 0.98, "category": "entertainment", "complexity": "simple"},
     "SHELL": {"confidence": 0.97, "category": "petrol", "complexity": "simple"},
     "ESSO": {"confidence": 0.97, "category": "petrol", "complexity": "simple"},
@@ -221,20 +222,20 @@ class DSPyExtractionResult(BaseModel):
 
 class SimpleReceiptSignature(dspy.Signature):
     """Fast structured extraction for clear receipts with known vendors"""
-    receipt_text: str = dspy.InputField(desc="OCR text from receipt")
+    receipt_image: dspy.Image = dspy.InputField(desc="Receipt image for multimodal analysis")
     available_categories: str = dspy.InputField(desc="JSON list of available expense categories with names and codes")
     extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with selected category. For currency: analyze vendor location, address, currency symbols, and context to determine the correct ISO 4217 currency code (e.g., INR for India, USD for US, SGD for Singapore, etc.)")
 
 class GuidedReceiptSignature(dspy.Signature):
     """Guided structured extraction with reasoning for unclear receipts"""
-    receipt_text: str = dspy.InputField(desc="OCR text from receipt")
+    receipt_image: dspy.Image = dspy.InputField(desc="Receipt image for multimodal analysis")
     available_categories: str = dspy.InputField(desc="JSON list of available expense categories with names and codes")
     reasoning: ExtractionReasoning = dspy.OutputField(desc="Step-by-step reasoning process")
     extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with selected category. For currency: intelligently analyze vendor location, address, currency symbols, and regional context to determine the correct ISO 4217 currency code")
 
 class ComplexReceiptSignature(dspy.Signature):
     """Full chain-of-thought structured extraction for complex receipts"""
-    receipt_text: str = dspy.InputField(desc="Raw OCR text from receipt")
+    receipt_image: dspy.Image = dspy.InputField(desc="Receipt image for multimodal analysis")
     available_categories: str = dspy.InputField(desc="JSON list of available expense categories with names and codes")
     reasoning: ExtractionReasoning = dspy.OutputField(desc="Detailed step-by-step reasoning")
     extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with selected category. For currency: use comprehensive analysis of vendor location, address, currency symbols, regional context, and business registration details to determine the most accurate ISO 4217 currency code")
@@ -329,20 +330,17 @@ class AdaptiveReceiptExtractor(dspy.Module):
     
     def __init__(self, model_name: str = "gemini-2.5-flash"):
         super().__init__()
-        
-        # 🔧 Configure DSPy with proper LM and JSONAdapter
-        # Use DSPy's built-in Gemini integration with proper model format
-        api_key = os.getenv('GEMINI_API_KEY')
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY environment variable not found")
-        
-        # Configure with DSPy's native Gemini integration - use "gemini/" prefix
-        lm = dspy.LM(f"gemini/{model_name}", api_key=api_key)
-        dspy.settings.configure(lm=lm, adapter=dspy.JSONAdapter())
-        
+
+        # Store model name for reference but don't configure DSPy here
+        # DSPy configuration is handled externally (Gemini primary or vLLM context)
+        self.model_name = model_name
+
+        # Store reference for multimodal handling
+        self.current_image_data = None
+
         # Initialize different extractors for different complexity levels - all use structured output
         self.simple_extractor = dspy.Predict(SimpleReceiptSignature)
-        self.guided_extractor = dspy.ChainOfThought(GuidedReceiptSignature) 
+        self.guided_extractor = dspy.ChainOfThought(GuidedReceiptSignature)
         self.complex_extractor = dspy.ChainOfThought(ComplexReceiptSignature)
         
         # Hybrid classifier
@@ -351,7 +349,7 @@ class AdaptiveReceiptExtractor(dspy.Module):
         # Performance tracking for continuous learning
         self.processing_history = []
     
-    def forward(self, receipt_text: str, image_metadata: Dict[str, Any] = None,
+    def forward(self, receipt_input: str, image_data: Optional[Dict[str, Any]] = None, image_metadata: Dict[str, Any] = None,
                 forced_method: Optional[str] = None, business_categories: List[Dict] = None) -> DSPyExtractionResult:
         """Adaptive processing with intelligent routing"""
         
@@ -360,7 +358,20 @@ class AdaptiveReceiptExtractor(dspy.Module):
         if image_metadata is None:
             image_metadata = {'confidence': 0.7, 'quality': 'acceptable'}
         
-        # Stage 1: Fast classification (unless forced)
+        # Store image data for multimodal processing
+        if image_data and image_data.get('base64'):
+            self.current_image_data = image_data
+            print("🖼️ Stored image data for multimodal processing", file=sys.stderr)
+
+        # Prepare dspy.Image for multimodal processing
+        dspy_image = self._prepare_multimodal_input(receipt_input, image_data)
+
+        if not dspy_image:
+            raise Exception("Failed to process receipt image - no valid image data provided for multimodal analysis")
+
+        # Stage 1: Fast classification (unless forced) - use text for classification if available
+        classification_text = receipt_input if receipt_input and len(receipt_input.strip()) > 50 else ""
+
         if forced_method:
             if forced_method == 'simple':
                 classification = ComplexityClassification(
@@ -369,7 +380,7 @@ class AdaptiveReceiptExtractor(dspy.Module):
                 )
             elif forced_method == 'complex':
                 classification = ComplexityClassification(
-                    level='complex', confidence=1.0, reasoning="Forced complex processing", 
+                    level='complex', confidence=1.0, reasoning="Forced complex processing",
                     processing_method='chain_of_thought', estimated_time=4.5
                 )
             else:
@@ -378,18 +389,25 @@ class AdaptiveReceiptExtractor(dspy.Module):
                     processing_method='guided_dspy', estimated_time=3.0
                 )
         else:
-            classification = self.classifier.fast_classify(receipt_text, image_metadata)
+            # Use text for classification if available, otherwise assume medium complexity for images
+            if classification_text:
+                classification = self.classifier.fast_classify(classification_text, image_metadata)
+            else:
+                classification = ComplexityClassification(
+                    level='medium', confidence=0.8, reasoning="Image-only input, using guided processing",
+                    processing_method='guided_dspy', estimated_time=3.0
+                )
         
         print(f"🎯 Classification: {classification.level} ({classification.processing_method}) - {classification.reasoning}")
         
-        # Stage 2: Adaptive DSPy processing with Pure Structured Output
+        # Stage 2: Adaptive DSPy processing with Pure Structured Output using dspy.Image
         try:
             if classification.processing_method == 'fast_dspy':
-                result = self._process_simple_structured(receipt_text, classification, business_categories)
+                result = self._process_simple_structured(dspy_image, classification, business_categories)
             elif classification.processing_method == 'guided_dspy':
-                result = self._process_guided_structured(receipt_text, classification, business_categories)
+                result = self._process_guided_structured(dspy_image, classification, business_categories)
             else:  # chain_of_thought
-                result = self._process_complex_structured(receipt_text, classification, business_categories)
+                result = self._process_complex_structured(dspy_image, classification, business_categories)
                 
             processing_time = (datetime.now() - start_time).total_seconds()
             
@@ -403,21 +421,46 @@ class AdaptiveReceiptExtractor(dspy.Module):
             # Fallback to complex processing if simple/guided fails
             if classification.processing_method != 'chain_of_thought':
                 print("🔄 Falling back to complex processing...")
-                return self._process_complex_structured(receipt_text, classification, business_categories)
+                return self._process_complex_structured(receipt_data, classification, business_categories)
             else:
                 raise e
     
-    def _process_simple_structured(self, receipt_text: str, classification: ComplexityClassification, business_categories: List[Dict] = None) -> DSPyExtractionResult:
+    def _prepare_multimodal_input(self, receipt_input: str, image_data: Optional[Dict[str, Any]] = None):
+        """Prepare input for DSPy processing - now supporting true multimodal processing with dspy.Image"""
+
+        # With DSPy Image support, we create a dspy.Image object from PIL Image
+        if image_data and image_data.get('base64'):
+            import base64
+            import io
+            from PIL import Image
+
+            try:
+                # Convert base64 to PIL Image, then to dspy.Image
+                image_bytes = base64.b64decode(image_data['base64'])
+                pil_image = Image.open(io.BytesIO(image_bytes))
+                dspy_image = dspy.Image.from_PIL(pil_image)
+
+                print("🖼️ Created dspy.Image from PIL for multimodal processing", file=sys.stderr)
+                return dspy_image
+
+            except Exception as img_error:
+                print(f"⚠️ Failed to create dspy.Image, falling back to text-only: {img_error}", file=sys.stderr)
+                return None
+
+        # Fallback to None if no image available
+        return None
+
+    def _process_simple_structured(self, receipt_image, classification: ComplexityClassification, business_categories: List[Dict] = None) -> DSPyExtractionResult:
         """Fast structured processing for simple receipts with pure structured output"""
-        
+
         print("🚀 Running simple structured DSPy processing...", file=sys.stderr)
-        
+
         try:
             # Prepare categories for LLM
             categories_json = self._format_categories_for_llm(business_categories)
 
             prediction = self.simple_extractor(
-                receipt_text=receipt_text,
+                receipt_image=receipt_image,
                 available_categories=categories_json
             )
             extracted_data = prediction.extracted_data
@@ -430,25 +473,25 @@ class AdaptiveReceiptExtractor(dspy.Module):
                 extracted_data.vendor_name.strip() == "" or
                 extracted_data.total_amount <= 0):
                 print("⚠️ Simple extraction quality issues, trying guided processing", file=sys.stderr)
-                return self._process_guided_structured(receipt_text, classification, business_categories)
+                return self._process_guided_structured(receipt_image, classification, business_categories)
 
             return self._build_structured_result(prediction, classification, 'simple')
         except Exception as e:
             print(f"❌ Simple processing failed: {e}", file=sys.stderr)
             # Fallback to guided processing if simple fails
-            return self._process_guided_structured(receipt_text, classification, business_categories)
-        
-    def _process_guided_structured(self, receipt_text: str, classification: ComplexityClassification, business_categories: List[Dict] = None) -> DSPyExtractionResult:
+            return self._process_guided_structured(receipt_image, classification, business_categories)
+
+    def _process_guided_structured(self, receipt_image, classification: ComplexityClassification, business_categories: List[Dict] = None) -> DSPyExtractionResult:
         """Guided structured processing for medium complexity with pure structured output"""
-        
+
         print("🧭 Running guided structured DSPy processing...", file=sys.stderr)
-        
+
         try:
             # Prepare categories for LLM
             categories_json = self._format_categories_for_llm(business_categories)
 
             prediction = self.guided_extractor(
-                receipt_text=receipt_text,
+                receipt_image=receipt_image,
                 available_categories=categories_json
             )
             extracted_data = prediction.extracted_data
@@ -461,25 +504,25 @@ class AdaptiveReceiptExtractor(dspy.Module):
                 extracted_data.vendor_name.strip() == "" or
                 extracted_data.total_amount <= 0):
                 print("⚠️ Guided extraction quality issues, falling back to complex processing", file=sys.stderr)
-                return self._process_complex_structured(receipt_text, classification, business_categories)
+                return self._process_complex_structured(receipt_image, classification, business_categories)
 
             return self._build_structured_result(prediction, classification, 'guided')
         except Exception as e:
             print(f"❌ Guided processing failed: {e}", file=sys.stderr)
             # Fallback to complex processing if guided fails
-            return self._process_complex_structured(receipt_text, classification, business_categories)
-        
-    def _process_complex_structured(self, receipt_text: str, classification: ComplexityClassification, business_categories: List[Dict] = None) -> DSPyExtractionResult:
+            return self._process_complex_structured(receipt_image, classification, business_categories)
+
+    def _process_complex_structured(self, receipt_image, classification: ComplexityClassification, business_categories: List[Dict] = None) -> DSPyExtractionResult:
         """Full chain-of-thought structured processing for complex receipts with pure structured output"""
-        
+
         print("🧠 Running complex structured DSPy processing...", file=sys.stderr)
-        
+
         try:
             # Prepare categories for LLM
             categories_json = self._format_categories_for_llm(business_categories)
 
             prediction = self.complex_extractor(
-                receipt_text=receipt_text,
+                receipt_image=receipt_image,
                 available_categories=categories_json
             )
             extracted_data = prediction.extracted_data
@@ -620,7 +663,106 @@ class AdaptiveReceiptExtractor(dspy.Module):
         
         return suggestions
 
-# Gemini LM wrapper for DSPy  
+# Multimodal Gemini LM wrapper for DSPy with image support
+class MultimodalGeminiLM(dspy.LM):
+    def __init__(self, model_name: str = "gemini-2.5-flash", api_key: str = None):
+        # Call parent constructor first
+        super().__init__(model_name)
+
+        if not api_key:
+            api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable not found")
+
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel(model_name)
+        self.model_name = model_name
+        self.history = []
+
+        # Store current image data for multimodal processing
+        self.current_image_data = None
+
+    def set_image_data(self, image_data: Optional[Dict[str, Any]]):
+        """Set current image data for multimodal processing"""
+        self.current_image_data = image_data
+
+    def basic_request(self, prompt: str, **kwargs) -> str:
+        """Core generation logic with multimodal support"""
+        try:
+            # Prepare content for Gemini
+            content_parts = [prompt]
+
+            # Add image if available for multimodal processing
+            if self.current_image_data and self.current_image_data.get('base64'):
+                import base64
+                import io
+
+                try:
+                    # Decode base64 image data
+                    image_bytes = base64.b64decode(self.current_image_data['base64'])
+
+                    # Try using PIL if available for better compatibility
+                    try:
+                        from PIL import Image
+                        image = Image.open(io.BytesIO(image_bytes))
+                        content_parts.append(image)
+                        print("🖼️ Added PIL image to Gemini multimodal request", file=sys.stderr)
+                    except ImportError:
+                        # Fallback to raw image data
+                        image_part = {
+                            "mime_type": self.current_image_data.get('mimeType', 'image/jpeg'),
+                            "data": self.current_image_data['base64']
+                        }
+                        content_parts.append(image_part)
+                        print("🖼️ Added raw image data to Gemini multimodal request", file=sys.stderr)
+                except Exception as img_error:
+                    print(f"⚠️ Image processing failed, using text-only: {img_error}", file=sys.stderr)
+
+            # Generate response with multimodal content
+            response = self.model.generate_content(
+                content_parts,
+                generation_config={
+                    'max_output_tokens': 4000,
+                    'temperature': 0.1,
+                    'candidate_count': 1
+                },
+                **kwargs
+            )
+
+            # Extract text response
+            if hasattr(response, 'text') and response.text:
+                return response.text
+            elif hasattr(response, 'parts') and response.parts:
+                return response.parts[0].text if response.parts[0].text else ""
+            else:
+                return ""
+
+        except Exception as e:
+            print(f"❌ Multimodal Gemini generation error: {e}", file=sys.stderr)
+            return ""
+
+    def __call__(self, messages, **kwargs) -> list:
+        """DSPy entry point with multimodal support"""
+        # Handle different input formats
+        if isinstance(messages, str):
+            prompt = messages
+        elif isinstance(messages, list) and len(messages) > 0:
+            last_message = messages[-1]
+            if isinstance(last_message, dict) and 'content' in last_message:
+                prompt = last_message['content']
+            elif isinstance(last_message, str):
+                prompt = last_message
+            else:
+                prompt = ' '.join(str(msg.get('content', msg) if isinstance(msg, dict) else msg) for msg in messages)
+        else:
+            raise TypeError(f"Unsupported input type for 'messages': {type(messages)} - {messages}")
+
+        # Call multimodal generation
+        response_text = self.basic_request(prompt, **kwargs)
+        return [response_text]
+
+# Legacy Gemini LM wrapper for compatibility
 class GeminiLM(dspy.LM):
     def __init__(self, model_name: str = "gemini-2.5-flash"):
         # Call parent constructor first
@@ -990,21 +1132,22 @@ def extract_receipt_data(receipt_text: str, image_metadata: Dict[str, Any] = Non
     print("⚠️ Legacy extract_receipt_data called, redirecting to multi-stage system", file=sys.stderr)
     return run_multi_stage_receipt_processing(receipt_text, business_categories or [], image_metadata, forced_method)
         
-def run_multi_stage_receipt_processing(receipt_text, business_categories, image_metadata=None, forced_method=None):
-    """Run the comprehensive multi-stage receipt processing system"""
+def run_multi_stage_receipt_processing(receipt_input, business_categories, image_data=None, image_metadata=None, forced_method=None):
+    """Run the comprehensive multi-stage receipt processing system with direct multimodal support"""
     start_time = datetime.now()
 
     # Set default image metadata if not provided
     if image_metadata is None:
         image_metadata = {'confidence': 0.7, 'quality': 'acceptable'}
 
-    if not receipt_text.strip():
+    # Validate inputs - now supports both text and image inputs
+    if not receipt_input and not (image_data and image_data.get('base64')):
         return {
             "success": False,
-            "error": "No receipt text provided for DSPy processing"
+            "error": "No receipt text or image data provided for DSPy processing"
         }
 
-    print(f"Processing receipt text: {len(receipt_text)} characters", file=sys.stderr)
+    print(f"Processing receipt input: {len(receipt_input) if receipt_input else 0} characters, Image: {bool(image_data)}", file=sys.stderr)
 
     # Multi-Stage Processing: Gemini Primary + vLLM Fallback
     print("🏆 Starting Tier 2: Comprehensive Multi-Stage Receipt Processing", file=sys.stderr)
@@ -1018,11 +1161,26 @@ def run_multi_stage_receipt_processing(receipt_text, business_categories, image_
         # Stage 1: Try Gemini DSPy (Primary) - Using Modern AdaptiveReceiptExtractor
         print("🥇 Stage 1: Gemini Primary DSPy Processing", file=sys.stderr)
         try:
+            # Configure DSPy for Gemini primary processing (direct API, not Vertex AI)
+            api_key = os.getenv('GEMINI_API_KEY')
+            if not api_key:
+                raise ValueError("GEMINI_API_KEY environment variable not found")
+
+            # Use standard dspy.LM with Gemini for multimodal processing (following DSPy best practices)
+            gemini_lm = dspy.LM(
+                model="gemini/gemini-2.5-flash",
+                api_key=api_key,
+                temperature=0.1,
+                max_tokens=4000
+            )
+            dspy.settings.configure(lm=gemini_lm, adapter=dspy.JSONAdapter())
+
             gemini_extractor = AdaptiveReceiptExtractor(model_name="gemini-2.5-flash")
 
-            print("📞 Calling Gemini DSPy for receipt extraction...", file=sys.stderr)
-            gemini_result = gemini_extractor.forward(
-                receipt_text=receipt_text,
+            print("📞 Calling Gemini DSPy for direct multimodal receipt extraction...", file=sys.stderr)
+            gemini_result = gemini_extractor(
+                receipt_input=receipt_input,
+                image_data=image_data,
                 image_metadata=image_metadata,
                 forced_method=forced_method,
                 business_categories=business_categories
@@ -1077,13 +1235,14 @@ def run_multi_stage_receipt_processing(receipt_text, business_categories, image_
                     api_key="dummy-key"
                 )
 
-                # Use AdaptiveReceiptExtractor with vLLM backend
-                vllm_extractor = AdaptiveReceiptExtractor(model_name="dummy")  # Model name not used with context override
+                # Use same AdaptiveReceiptExtractor with vLLM backend via context override
+                vllm_extractor = AdaptiveReceiptExtractor(model_name=vllm_model)
 
-                with dspy.context(lm=skywork_lm):
-                    print("📞 Calling vLLM Skywork DSPy for receipt extraction...", file=sys.stderr)
-                    vllm_result = vllm_extractor.forward(
-                        receipt_text=receipt_text,
+                with dspy.context(lm=skywork_lm, adapter=dspy.JSONAdapter()):
+                    print("📞 Calling vLLM Skywork DSPy for multimodal receipt extraction...", file=sys.stderr)
+                    vllm_result = vllm_extractor(
+                        receipt_input=receipt_input,
+                        image_data=image_data,
                         image_metadata=image_metadata,
                         forced_method=forced_method,
                         business_categories=business_categories
@@ -1106,6 +1265,9 @@ def run_multi_stage_receipt_processing(receipt_text, business_categories, image_
                 vllm_result = None
         elif not vllm_endpoint:
             vllm_error_details = "No vLLM endpoint configured (OCR_ENDPOINT_URL not set)"
+            print(f"⚠️ vLLM fallback not available: {vllm_error_details}", file=sys.stderr)
+        else:
+            print(f"ℹ️ vLLM fallback not needed - Gemini succeeded", file=sys.stderr)
 
         # Stage 3: Smart Selection with Quality Scoring
         print("🎯 Stage 3: Smart Selection with Quality Scoring", file=sys.stderr)
@@ -1227,7 +1389,8 @@ def run_multi_stage_receipt_processing(receipt_text, business_categories, image_
                     "description": item.description,
                     "quantity": item.quantity,
                     "unit_price": item.unit_price,
-                    "total_amount": item.line_total
+                    "line_total": item.line_total,
+                    "total_amount": item.line_total  # Keep both for compatibility
                 }
                 for item in extracted_data.line_items
             ],
@@ -1315,155 +1478,47 @@ def main():
         # Business categories for enhanced categorization
         business_categories = json.loads(r'''${JSON.stringify(businessCategories)}''')
         print(f"🏢 Received {len(business_categories)} business categories from Node.js", file=sys.stderr)
-        
-        # Handle image-only uploads: Add OCR preprocessing before multi-stage processing
-        if not receipt_text and receipt_image_data:
-            print("🖼️ No text provided, performing OCR with DSPy+Gemini multimodal...", file=sys.stderr)
-            
-            # Use Gemini 2.5 Flash multimodal capabilities for OCR
-            import base64
-            
-            try:
-                # Configure Gemini for OCR extraction
-                api_key = os.getenv('GEMINI_API_KEY')
-                if not api_key:
-                    raise ValueError("GEMINI_API_KEY environment variable not found for OCR")
-                
-                import google.generativeai as genai
-                genai.configure(api_key=api_key)
-                
-                # Use Gemini 2.5 Flash for multimodal OCR
-                model = genai.GenerativeModel('gemini-2.5-flash')
-                
-                # Prepare image data for Gemini
-                image_bytes = base64.b64decode(receipt_image_data['base64'])
-                
-                # Create the image part for Gemini  
-                import io
-                try:
-                    from PIL import Image
-                except ImportError:
-                    print("❌ PIL (Pillow) not available, using image bytes directly", file=sys.stderr)
-                    # Fallback: pass raw bytes to Gemini
-                    image = {"mime_type": receipt_image_data['mimeType'], "data": receipt_image_data['base64']}
-                else:
-                    image = Image.open(io.BytesIO(image_bytes))
-                
-                # OCR prompt for Gemini
-                ocr_prompt = """Extract ALL text from this receipt image exactly as it appears. 
-Include all numbers, dates, merchant names, addresses, item descriptions, and amounts.
-Preserve the layout and formatting as much as possible.
-Return only the extracted text without any analysis or interpretation."""
-                
-                print("🤖 Calling Gemini 2.5 Flash for OCR extraction...", file=sys.stderr)
 
-                # Enhanced debugging and timeout handling
-                import time
-                import threading
-                from datetime import datetime
-
-                max_retries = 2
-                attempt_timeout = 60  # 1 minute per attempt
-
-                def timeout_monitor(attempt_num, start_time):
-                    """Monitor timeout progress"""
-                    checkpoints = [10, 20, 30, 45, 55]  # Seconds to report progress
-                    for checkpoint in checkpoints:
-                        time.sleep(checkpoint - (checkpoints[checkpoints.index(checkpoint)-1] if checkpoint != checkpoints[0] else 0))
-                        elapsed = time.time() - start_time
-                        print(f"⏱️ OCR attempt {attempt_num}: {elapsed:.1f}s elapsed (still processing...)", file=sys.stderr)
-
-                for attempt in range(max_retries + 1):
-                    attempt_start = time.time()
-                    try:
-                        print(f"🔄 OCR attempt {attempt + 1}/{max_retries + 1} started at {datetime.now().strftime('%H:%M:%S')}", file=sys.stderr)
-                        print(f"📊 Image size: {len(image_bytes) / 1024:.1f} KB", file=sys.stderr)
-
-                        # Start timeout monitor in background
-                        monitor_thread = threading.Thread(target=timeout_monitor, args=(attempt + 1, attempt_start))
-                        monitor_thread.daemon = True
-                        monitor_thread.start()
-
-                        # Call Gemini with enhanced config for reliability
-                        response = model.generate_content(
-                            [ocr_prompt, image],
-                            generation_config={
-                                'max_output_tokens': 2000,
-                                'temperature': 0.1,
-                                'candidate_count': 1
-                            }
-                        )
-
-                        attempt_time = time.time() - attempt_start
-                        print(f"✅ OCR attempt {attempt + 1} succeeded in {attempt_time:.1f}s", file=sys.stderr)
-                        break
-
-                    except Exception as retry_error:
-                        attempt_time = time.time() - attempt_start
-                        error_type = type(retry_error).__name__
-
-                        print(f"❌ OCR attempt {attempt + 1} failed after {attempt_time:.1f}s: {error_type}", file=sys.stderr)
-                        print(f"🔍 Error details: {str(retry_error)[:200]}...", file=sys.stderr)
-
-                        # Check error type for specific handling
-                        if 'timeout' in str(retry_error).lower():
-                            print(f"⏰ Timeout detected on attempt {attempt + 1}", file=sys.stderr)
-                        elif 'quota' in str(retry_error).lower() or 'limit' in str(retry_error).lower():
-                            print(f"🚫 Quota/rate limit hit on attempt {attempt + 1}", file=sys.stderr)
-                        elif 'network' in str(retry_error).lower() or 'connection' in str(retry_error).lower():
-                            print(f"🌐 Network issue detected on attempt {attempt + 1}", file=sys.stderr)
-
-                        if attempt < max_retries:
-                            wait_time = (attempt + 1) * 3  # 3, 6 seconds
-                            print(f"⏳ Retrying in {wait_time} seconds...", file=sys.stderr)
-                            time.sleep(wait_time)
-                        else:
-                            print(f"🚨 All OCR attempts failed, raising final error", file=sys.stderr)
-                            raise retry_error
-                
-                if response.text:
-                    receipt_text = response.text.strip()
-                    print(f"✅ OCR completed: extracted {len(receipt_text)} characters", file=sys.stderr)
-                    print(f"📝 First 200 chars: {receipt_text[:200]}...", file=sys.stderr)
-                else:
-                    raise ValueError("Gemini OCR returned empty response")
-                    
-            except Exception as ocr_error:
-                print(f"❌ OCR extraction failed: {str(ocr_error)}", file=sys.stderr)
-                raise ValueError(f"Failed to extract text from image: {str(ocr_error)}")
-        elif not receipt_text:
-            raise ValueError("No receipt text or image data provided for processing")
+        # Direct multimodal DSPy processing - no OCR preprocessing needed
+        print("🔍 Using direct multimodal DSPy processing (no OCR preprocessing)", file=sys.stderr)
             
         print(f"📝 Receipt text length: {len(receipt_text)} chars", file=sys.stderr)
+        print(f"🖼️ Image data available: {bool(receipt_image_data)}", file=sys.stderr)
         print(f"🖼️ Image metadata: {json.dumps(image_metadata)}", file=sys.stderr)
         print(f"🔧 Forced method: {forced_method}", file=sys.stderr)
-        
-        # Validate inputs
-        if not receipt_text.strip():
+
+        # Validate inputs - now supports both text and image
+        if not receipt_text and not receipt_image_data:
             response = ScriptResponse(
                 success=False,
-                error="No receipt text provided for DSPy processing",
-                debug_info={"input_length": len(receipt_text)}
+                error="No receipt text or image data provided for DSPy processing",
+                debug_info={"text_length": len(receipt_text) if receipt_text else 0, "has_image": bool(receipt_image_data)}
             )
         else:
             # CRITICAL: Redirect stdout during DSPy processing to prevent pollution
-            print("🔍 Starting DSPy extraction with stdout protection...", file=sys.stderr)
-            
+            print("🔍 Starting direct multimodal DSPy extraction with stdout protection...", file=sys.stderr)
+
             import io
             from contextlib import redirect_stdout
-            
+
             # Capture any stdout pollution from DSPy/dependencies
             dummy_stdout = io.StringIO()
-            
+
             with redirect_stdout(dummy_stdout):
                 print("🛡️ DSPy processing protected from stdout pollution", file=sys.stderr)
-                # Use new multi-stage processing system
-                extraction_result = run_multi_stage_receipt_processing(receipt_text, business_categories, image_metadata, forced_method)
+                # Use new direct multimodal processing system
+                extraction_result = run_multi_stage_receipt_processing(
+                    receipt_input=receipt_text or "",
+                    business_categories=business_categories,
+                    image_data=receipt_image_data,
+                    image_metadata=image_metadata,
+                    forced_method=forced_method
+                )
                 
             # Check what was captured (for debugging)
             captured_output = dummy_stdout.getvalue()
             if captured_output.strip():
-                print(f"🚨 Captured stdout pollution ({len(captured_output)} chars): {captured_output[:200]}...", file=sys.stderr)
+                print("🚨 Captured stdout pollution (" + str(len(captured_output)) + " chars): " + repr(captured_output[:200]) + "...", file=sys.stderr)
             else:
                 print("✅ No stdout pollution detected", file=sys.stderr)
             
@@ -1737,6 +1792,14 @@ else:
             console.log(`💰 Same currency (${extractionResult.currency}), no conversion needed`);
           }
 
+          // Also store the full DSPy extraction result in processing_metadata for later access
+          transactionUpdateData.processing_metadata = {
+            extraction_method: 'dspy',
+            confidence_score: extractionResult.confidence_score,
+            extracted_data: extractionResult,
+            processing_time_ms: extractionResult.processing_time_ms
+          };
+
           const { error: transactionUpdateError } = await supabase
             .from('transactions')
             .update(transactionUpdateData)
@@ -1748,6 +1811,51 @@ else:
           }
 
           console.log(`✅ Transaction ${expenseClaim.transaction_id} updated successfully with currency conversion`);
+
+          // Save line items to line_items table if they exist
+          if (extractionResult.line_items && extractionResult.line_items.length > 0) {
+            console.log(`📋 Saving ${extractionResult.line_items.length} line items to database`);
+
+            // First, delete any existing line items for this transaction to avoid duplicates
+            const { error: deleteError } = await supabase
+              .from('line_items')
+              .delete()
+              .eq('transaction_id', expenseClaim.transaction_id);
+
+            if (deleteError) {
+              console.warn(`⚠️ Warning: Could not delete existing line items: ${deleteError.message}`);
+            }
+
+            // Insert new line items (currency inherited from transaction)
+            const lineItemsData = extractionResult.line_items.map((item: any, index: number) => ({
+              transaction_id: expenseClaim.transaction_id,
+              item_description: item.description,
+              quantity: item.quantity || 1,
+              unit_price: item.unit_price || 0,
+              total_amount: item.total_amount || item.line_total || 0,
+              currency: extractionResult.currency, // Required field - inherit from transaction
+              tax_amount: 0, // DSPy doesn't extract individual item tax amounts yet
+              tax_rate: 0,
+              item_category: null,
+              item_code: null,
+              unit_measurement: null,
+              line_order: index + 1,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }));
+
+            const { error: lineItemsError } = await supabase
+              .from('line_items')
+              .insert(lineItemsData);
+
+            if (lineItemsError) {
+              console.error('Failed to insert line items:', lineItemsError);
+              // Don't fail the entire process, just log the warning
+              console.warn(`⚠️ Line items could not be saved: ${lineItemsError.message}`);
+            } else {
+              console.log(`✅ Successfully saved ${extractionResult.line_items.length} line items to database`);
+            }
+          }
         }
 
         // Update the expense claim (workflow data per Otto's guidance)

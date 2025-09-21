@@ -33,18 +33,34 @@ export default function CurrencySettings({ onCurrencyChange }: CurrencySettingsP
   const loadCurrencyPreference = async () => {
     try {
       setIsLoading(true)
-      
-      // Try to get from localStorage first (immediate response)
+
+      // Load user's home currency from Supabase profile
+      const response = await fetch('/api/user/profile')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data?.home_currency) {
+          const currency = data.data.home_currency as SupportedCurrency
+          if (SUPPORTED_CURRENCIES.some(c => c.code === currency)) {
+            setHomeCurrency(currency)
+            // Sync to localStorage for immediate access in other components
+            localStorage.setItem('homeCurrency', currency)
+          }
+        }
+      } else {
+        // Fallback to localStorage if API fails
+        const stored = localStorage.getItem('homeCurrency')
+        if (stored && SUPPORTED_CURRENCIES.some(c => c.code === stored)) {
+          setHomeCurrency(stored as SupportedCurrency)
+        }
+      }
+
+    } catch (error) {
+      console.error('Failed to load currency preference:', error)
+      // Fallback to localStorage on error
       const stored = localStorage.getItem('homeCurrency')
       if (stored && SUPPORTED_CURRENCIES.some(c => c.code === stored)) {
         setHomeCurrency(stored as SupportedCurrency)
       }
-
-      // TODO: In the future, this could load from user profile in database
-      // For now, we'll use localStorage as the source of truth
-      
-    } catch (error) {
-      console.error('Failed to load currency preference:', error)
     } finally {
       setIsLoading(false)
     }
@@ -53,22 +69,27 @@ export default function CurrencySettings({ onCurrencyChange }: CurrencySettingsP
   const saveCurrencyPreference = async (currency: SupportedCurrency) => {
     try {
       setIsSaving(true)
-      
-      // Save to localStorage immediately
+
+      // Save to Supabase database first
+      const response = await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ home_currency: currency })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save currency preference to database')
+      }
+
+      // Save to localStorage for immediate access
       localStorage.setItem('homeCurrency', currency)
-      
-      // TODO: In the future, this could save to user profile in database
-      // const response = await fetch('/api/user/preferences', {
-      //   method: 'PATCH',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ homeCurrency: currency })
-      // })
-      
+
       setLastSaved(new Date())
       onCurrencyChange?.(currency)
-      
+
     } catch (error) {
       console.error('Failed to save currency preference:', error)
+      throw error // Re-throw to show user error
     } finally {
       setIsSaving(false)
     }
@@ -144,13 +165,42 @@ export default function CurrencySettings({ onCurrencyChange }: CurrencySettingsP
 
 // Hook to get current user's home currency preference
 export function useHomeCurrency(): SupportedCurrency {
-  const [homeCurrency, setHomeCurrency] = useState<SupportedCurrency>('USD')
+  const [homeCurrency, setHomeCurrency] = useState<SupportedCurrency>('SGD') // Default to SGD to match database default
 
   useEffect(() => {
-    const stored = localStorage.getItem('homeCurrency')
-    if (stored && SUPPORTED_CURRENCIES.some(c => c.code === stored)) {
-      setHomeCurrency(stored as SupportedCurrency)
+    const loadUserCurrency = async () => {
+      try {
+        // Try to load from API first
+        const response = await fetch('/api/user/profile')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.data?.home_currency) {
+            const currency = data.data.home_currency as SupportedCurrency
+            if (SUPPORTED_CURRENCIES.some(c => c.code === currency)) {
+              setHomeCurrency(currency)
+              // Sync to localStorage for consistency
+              localStorage.setItem('homeCurrency', currency)
+              return
+            }
+          }
+        }
+
+        // Fallback to localStorage if API fails
+        const stored = localStorage.getItem('homeCurrency')
+        if (stored && SUPPORTED_CURRENCIES.some(c => c.code === stored)) {
+          setHomeCurrency(stored as SupportedCurrency)
+        }
+      } catch (error) {
+        console.error('Failed to load user currency:', error)
+        // Fallback to localStorage on error
+        const stored = localStorage.getItem('homeCurrency')
+        if (stored && SUPPORTED_CURRENCIES.some(c => c.code === stored)) {
+          setHomeCurrency(stored as SupportedCurrency)
+        }
+      }
     }
+
+    loadUserCurrency()
 
     // Listen for changes to localStorage (from other tabs or settings page)
     const handleStorageChange = (e: StorageEvent) => {

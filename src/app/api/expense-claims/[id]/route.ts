@@ -60,7 +60,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       supabase = await createAuthenticatedSupabaseClient(userId)
     }
 
-    // Fetch the expense claim with related transaction data
+    // Fetch the expense claim with related transaction data and line items
     // Note: business_purpose and expense_category are in expense_claims, not transactions
     let claimQuery = supabase
       .from('expense_claims')
@@ -77,7 +77,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           vendor_name,
           vendor_id,
           reference_number,
-          notes
+          notes,
+          processing_metadata,
+          line_items(
+            id,
+            item_description,
+            quantity,
+            unit_price,
+            total_amount
+          )
         )
       `)
       .eq('id', id)
@@ -105,6 +113,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // business_purpose and expense_category are in expense_claims, but frontend expects them in transaction
     const transformedClaim = {
       ...claim,
+      // Include extracted_data from transaction's processing_metadata if available
+      extracted_data: claim.transaction?.processing_metadata?.extracted_data || null,
       transaction: claim.transaction ? {
         ...claim.transaction,
         business_purpose: claim.business_purpose,  // Move from expense_claims to transaction object
@@ -185,7 +195,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           transaction_date,
           vendor_name,
           reference_number,
-          notes
+          notes,
+          line_items(
+            id,
+            description,
+            quantity,
+            unit_price,
+            total_amount
+          )
         )
       `)
       .eq('id', id)
@@ -269,6 +286,53 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    // Handle line items updates if provided
+    if (body.line_items && Array.isArray(body.line_items)) {
+      console.log(`[Individual Claim API PUT] Updating ${body.line_items.length} line items`)
+
+      // First, delete existing line items for this transaction to avoid duplicates
+      const { error: deleteLineItemsError } = await supabase
+        .from('line_items')
+        .delete()
+        .eq('transaction_id', existingClaim.transaction_id)
+
+      if (deleteLineItemsError) {
+        console.warn(`[Individual Claim API PUT] Warning: Could not delete existing line items: ${deleteLineItemsError.message}`)
+      }
+
+      // Insert updated line items (only if there are items to insert)
+      if (body.line_items.length > 0) {
+        const lineItemsData = body.line_items.map((item: any, index: number) => ({
+          transaction_id: existingClaim.transaction_id,
+          item_description: item.description || 'Item',
+          quantity: item.quantity || 1,
+          unit_price: item.unit_price || 0,
+          total_amount: item.total_amount || 0,
+          currency: body.original_currency, // Required field - inherit from transaction
+          tax_amount: 0,
+          tax_rate: 0,
+          item_category: null,
+          item_code: item.item_code || null,
+          unit_measurement: item.unit_measurement || null,
+          line_order: index + 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }))
+
+        const { error: lineItemsError } = await supabase
+          .from('line_items')
+          .insert(lineItemsData)
+
+        if (lineItemsError) {
+          console.error('Error inserting updated line items:', lineItemsError)
+          console.warn(`[Individual Claim API PUT] Line items could not be saved: ${lineItemsError.message}`)
+          // Don't fail the entire operation, just log the warning
+        } else {
+          console.log(`[Individual Claim API PUT] Successfully updated ${body.line_items.length} line items`)
+        }
+      }
+    }
+
     // Update the expense claim (business_purpose and expense_category are here)
     const updateData: any = {
       business_purpose: body.business_purpose,
@@ -294,7 +358,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Fetch the updated claim to return
+    // Fetch the updated claim to return (including line items)
     const { data: updatedClaim, error: refetchError } = await supabase
       .from('expense_claims')
       .select(`
@@ -309,7 +373,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           transaction_date,
           vendor_name,
           reference_number,
-          notes
+          notes,
+          line_items(
+            id,
+            item_description,
+            quantity,
+            unit_price,
+            total_amount,
+            item_code,
+            unit_measurement
+          )
         )
       `)
       .eq('id', id)

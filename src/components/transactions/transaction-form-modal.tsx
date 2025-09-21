@@ -77,7 +77,7 @@ export default function TransactionFormModal({
 
   // Update currencies when user's home currency preference loads/changes
   useEffect(() => {
-    if (userHomeCurrency && userHomeCurrency !== 'USD') { // Only update if different from default
+    if (userHomeCurrency) {
       setFormData(prev => ({
         ...prev,
         // Only update if not already set by transaction or prefilled data
@@ -381,11 +381,13 @@ export default function TransactionFormModal({
                       onChange={(e) => setFormData({ ...formData, original_currency: e.target.value as SupportedCurrency })}
                       className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      {SUPPORTED_CURRENCIES.map(currency => (
-                        <option key={currency} value={currency}>
-                          {currency}
-                        </option>
-                      ))}
+                      {[userHomeCurrency, ...SUPPORTED_CURRENCIES]
+                        .filter((currency, index, array) => currency && array.indexOf(currency) === index) // Remove duplicates and nulls
+                        .map(currency => (
+                          <option key={currency} value={currency}>
+                            {currency}
+                          </option>
+                        ))}
                     </select>
                   </div>
                 </div>
@@ -399,11 +401,13 @@ export default function TransactionFormModal({
                     onChange={(e) => setFormData({ ...formData, home_currency: e.target.value as SupportedCurrency })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {SUPPORTED_CURRENCIES.map(currency => (
-                      <option key={currency} value={currency}>
-                        {currency}
-                      </option>
-                    ))}
+                    {[userHomeCurrency, ...SUPPORTED_CURRENCIES]
+                      .filter((currency, index, array) => currency && array.indexOf(currency) === index) // Remove duplicates and nulls
+                      .map(currency => (
+                        <option key={currency} value={currency}>
+                          {currency}
+                        </option>
+                      ))}
                   </select>
                 </div>
 

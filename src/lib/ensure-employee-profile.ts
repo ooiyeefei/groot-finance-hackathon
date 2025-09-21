@@ -20,6 +20,7 @@ export interface EmployeeProfile {
     manager: boolean
     admin: boolean
   }
+  home_currency?: string // User's preferred home currency
   created_at: string
   updated_at: string
 }

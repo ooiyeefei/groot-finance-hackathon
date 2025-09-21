@@ -38,6 +38,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DSPyExtractionResult } from '@/types/expense-extraction'
 import { useExpenseCategories, DynamicExpenseCategory } from '@/hooks/use-expense-categories'
+import { useHomeCurrency } from '@/components/settings/currency-settings'
 import { ReceiptOCRDisclaimer } from '@/components/ui/financial-disclaimer'
 
 interface ExpenseFormData {
@@ -61,14 +62,15 @@ interface PreFilledExpenseFormProps {
   isSubmitting?: boolean
 }
 
-export default function PreFilledExpenseForm({ 
-  extractionResult, 
-  onSubmit, 
+export default function PreFilledExpenseForm({
+  extractionResult,
+  onSubmit,
   onBack,
-  isSubmitting = false 
+  isSubmitting = false
 }: PreFilledExpenseFormProps) {
-  // Fetch dynamic categories
+  // Fetch dynamic categories and user home currency
   const { categories, loading: categoriesLoading, error: categoriesError } = useExpenseCategories()
+  const userHomeCurrency = useHomeCurrency()
   
   // Initialize form with DSPy extracted data
   const [formData, setFormData] = useState<ExpenseFormData>({
@@ -83,10 +85,10 @@ export default function PreFilledExpenseForm({
     notes: '',
     // document_id removed - file info stored in business_purpose_details
     line_items: extractionResult.extractedData.lineItems?.map(item => ({
-      description: item.description,
+      description: item.description || 'Item',
       quantity: item.quantity || 1,
       unit_price: item.unitPrice || (item.lineTotal / (item.quantity || 1)),
-      total_amount: item.lineTotal
+      total_amount: item.lineTotal || 0
     })) || []
   })
 
@@ -631,9 +633,11 @@ export default function PreFilledExpenseForm({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-gray-700 border-gray-600">
-                        {['SGD', 'USD', 'EUR', 'MYR', 'THB', 'IDR', 'CNY', 'VND', 'PHP'].map(currency => (
-                          <SelectItem key={currency} value={currency} className="text-white">{currency}</SelectItem>
-                        ))}
+                        {[userHomeCurrency, 'SGD', 'USD', 'EUR', 'MYR', 'THB', 'IDR', 'CNY', 'VND', 'PHP']
+                          .filter((currency, index, array) => currency && array.indexOf(currency) === index) // Remove duplicates and nulls
+                          .map(currency => (
+                            <SelectItem key={currency} value={currency} className="text-white">{currency}</SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -744,26 +748,47 @@ export default function PreFilledExpenseForm({
           </Card>
 
           {/* Line Items Display */}
-          {extractionResult.extractedData.lineItems.length > 0 && (
+          {formData.line_items && formData.line_items.length > 0 && (
             <Card className="bg-gray-700 border-gray-600">
               <CardHeader>
-                <CardTitle className="text-white">Extracted Line Items</CardTitle>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <DollarSign className="w-5 h-5" />
+                  Line Items ({formData.line_items.length})
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  {extractionResult.extractedData.lineItems.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center bg-gray-600 p-2 rounded">
-                      <span className="text-white">{item.description}</span>
-                      <span className="text-gray-300">
-                        {item.quantity && `${item.quantity}x `}
-                        ${item.lineTotal.toFixed(2)}
+                <div className="space-y-3">
+                  {/* Line Items Table Header */}
+                  <div className="grid grid-cols-4 gap-2 text-xs font-medium text-gray-400 uppercase tracking-wide border-b border-gray-600 pb-2">
+                    <span>Description</span>
+                    <span className="text-center">Qty</span>
+                    <span className="text-right">Unit Price</span>
+                    <span className="text-right">Total</span>
+                  </div>
+
+                  {/* Line Items Rows */}
+                  {formData.line_items.map((item, index) => (
+                    <div key={index} className="grid grid-cols-4 gap-2 items-center bg-gray-600/50 p-3 rounded-lg border border-gray-600">
+                      <span className="text-white font-medium truncate" title={item.description}>
+                        {item.description || 'Item'}
+                      </span>
+                      <span className="text-gray-300 text-center">
+                        {item.quantity || 1}
+                      </span>
+                      <span className="text-gray-300 text-right">
+                        {formData.original_currency} {(item.unit_price || 0).toFixed(2)}
+                      </span>
+                      <span className="text-white font-medium text-right">
+                        {formData.original_currency} {(item.total_amount || 0).toFixed(2)}
                       </span>
                     </div>
                   ))}
-                  <div className="flex justify-between items-center bg-blue-900/20 p-2 rounded border border-blue-700">
-                    <span className="text-blue-300 font-medium">Total</span>
-                    <span className="text-blue-300 font-bold">
-                      ${extractionResult.extractedData.totalAmount.toFixed(2)}
+
+                  {/* Total Summary */}
+                  <div className="grid grid-cols-4 gap-2 items-center bg-blue-900/20 p-3 rounded-lg border border-blue-700 mt-4">
+                    <span className="text-blue-300 font-medium col-span-3">Total Amount</span>
+                    <span className="text-blue-300 font-bold text-right text-lg">
+                      {formData.original_currency} {formData.original_amount.toFixed(2)}
                     </span>
                   </div>
                 </div>

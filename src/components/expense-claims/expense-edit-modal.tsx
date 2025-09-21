@@ -20,7 +20,8 @@ import {
   Loader2,
   AlertCircle,
   Trash2,
-  RotateCcw
+  RotateCcw,
+  Plus
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +47,21 @@ interface ExpenseEditFormData {
   vendor_name: string
   reference_number?: string
   notes?: string
+  line_items?: Array<{
+    description: string
+    quantity: number
+    unit_price: number
+    total_amount: number
+  }>
+}
+
+interface LineItem {
+  description: string
+  quantity: number
+  unit_price: number
+  total_amount: number
+  item_code?: string
+  unit_measurement?: string
 }
 
 interface ExpenseEditModalProps {
@@ -80,12 +96,13 @@ export default function ExpenseEditModal({
     business_purpose: '',
     expense_category: '',
     original_amount: 0,
-    original_currency: 'SGD',
-    home_currency: userHomeCurrency,
+    original_currency: userHomeCurrency || 'SGD', // Use user's home currency as default
+    home_currency: userHomeCurrency || 'SGD',
     transaction_date: '',
     vendor_name: '',
     reference_number: '',
-    notes: ''
+    notes: '',
+    line_items: []
   })
 
   const [loading, setLoading] = useState(true)
@@ -101,13 +118,16 @@ export default function ExpenseEditModal({
   const [processingStatus, setProcessingStatus] = useState<string>('')
   const [previewAmount, setPreviewAmount] = useState<number | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
+  const [lineItems, setLineItems] = useState<LineItem[]>([])
 
   // Update currencies when user's home currency preference loads/changes
   useEffect(() => {
-    if (userHomeCurrency && userHomeCurrency !== 'USD') {
+    if (userHomeCurrency) {
       setFormData(prev => ({
         ...prev,
-        home_currency: userHomeCurrency
+        home_currency: userHomeCurrency,
+        // Also update original_currency if it's still at default and form is empty
+        ...(prev.original_amount === 0 && prev.vendor_name === '' ? { original_currency: userHomeCurrency } : {})
       }))
     }
   }, [userHomeCurrency])
@@ -144,6 +164,44 @@ export default function ExpenseEditModal({
     } catch (error) {
       console.error('Failed to fetch exchange rate:', error)
     }
+  }
+
+  // Line item management functions
+  const addLineItem = () => {
+    const newItem: LineItem = {
+      description: '',
+      quantity: 1,
+      unit_price: 0,
+      total_amount: 0,
+      item_code: '',
+      unit_measurement: ''
+    }
+    setLineItems([...lineItems, newItem])
+  }
+
+  const updateLineItem = (index: number, field: keyof LineItem, value: any) => {
+    const updated = [...lineItems]
+    updated[index] = { ...updated[index], [field]: value }
+
+    // Recalculate total_amount when quantity or unit_price changes
+    if (field === 'quantity' || field === 'unit_price') {
+      updated[index].total_amount = (updated[index].quantity || 0) * (updated[index].unit_price || 0)
+    }
+
+    setLineItems(updated)
+
+    // Update form total amount based on line items
+    const newTotal = updated.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+    setFormData(prev => ({ ...prev, original_amount: newTotal }))
+  }
+
+  const removeLineItem = (index: number) => {
+    const updated = lineItems.filter((_, i) => i !== index)
+    setLineItems(updated)
+
+    // Update form total amount
+    const newTotal = updated.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+    setFormData(prev => ({ ...prev, original_amount: newTotal }))
   }
 
   const loadExpenseClaim = useCallback(async () => {
@@ -183,6 +241,64 @@ export default function ExpenseEditModal({
 
       // Populate form with existing data
       // Priority: transaction data (if exists) > extracted data (from DSPy) > defaults
+
+      // Extract line items from various sources with proper data structure
+      let lineItems: Array<{ description: string; quantity: number; unit_price: number; total_amount: number }> = []
+
+      // Debug logging to see what data we're getting
+      console.log('[ExpenseEditModal] Raw claim data for line items:', {
+        hasDirectLineItems: !!(claim.line_items && Array.isArray(claim.line_items)),
+        directLineItemsCount: claim.line_items ? claim.line_items.length : 0,
+        hasTransactionLineItems: !!(claim.transaction?.line_items && Array.isArray(claim.transaction.line_items)),
+        transactionLineItemsCount: claim.transaction?.line_items ? claim.transaction.line_items.length : 0,
+        hasExtractedLineItems: !!(claim.extracted_data?.line_items && Array.isArray(claim.extracted_data.line_items)),
+        extractedLineItemsCount: claim.extracted_data?.line_items ? claim.extracted_data.line_items.length : 0,
+        sampleDirectLineItem: claim.line_items?.[0] || null,
+        sampleTransactionLineItem: claim.transaction?.line_items?.[0] || null,
+        sampleExtractedLineItem: claim.extracted_data?.line_items?.[0] || null
+      })
+
+      // Try to get line items from various sources
+      if (claim.line_items && Array.isArray(claim.line_items)) {
+        // Direct from expense claim API response
+        console.log('[ExpenseEditModal] Using direct line items from claim')
+        lineItems = claim.line_items.map((item: any) => ({
+          description: item.description || 'Item',
+          quantity: item.quantity || 1,
+          unit_price: item.unit_price || item.unitPrice || 0,
+          total_amount: item.total_amount || item.line_total || item.lineTotal || 0,
+          item_code: item.item_code || '',
+          unit_measurement: item.unit_measurement || ''
+        }))
+      } else if (claim.transaction?.line_items && Array.isArray(claim.transaction.line_items)) {
+        // From linked transaction
+        console.log('[ExpenseEditModal] Using line items from linked transaction')
+        lineItems = claim.transaction.line_items.map((item: any) => ({
+          description: item.description || item.item_description || 'Item',
+          quantity: item.quantity || 1,
+          unit_price: item.unit_price || item.unitPrice || 0,
+          total_amount: item.total_amount || item.line_total || item.lineTotal || 0,
+          item_code: item.item_code || '',
+          unit_measurement: item.unit_measurement || ''
+        }))
+      } else if (claim.extracted_data?.line_items && Array.isArray(claim.extracted_data.line_items)) {
+        // From DSPy extraction result
+        console.log('[ExpenseEditModal] Using line items from extracted data')
+        lineItems = claim.extracted_data.line_items.map((item: any) => ({
+          description: item.description || 'Item',
+          quantity: item.quantity || 1,
+          unit_price: item.unit_price || item.unitPrice || 0,
+          total_amount: item.total_amount || item.line_total || item.lineTotal || 0,
+          item_code: item.item_code || '',
+          unit_measurement: item.unit_measurement || ''
+        }))
+      }
+
+      console.log('[ExpenseEditModal] Final processed line items:', lineItems)
+
+      // Set line items state
+      setLineItems(lineItems)
+
       setFormData({
         description: claim.transaction?.description ||
                     claim.description || '',
@@ -193,7 +309,7 @@ export default function ExpenseEditModal({
         original_amount: claim.transaction?.original_amount ||
                         claim.total_amount || 0,
         original_currency: claim.transaction?.original_currency ||
-                          claim.currency || 'SGD',
+                          claim.currency || userHomeCurrency || 'SGD',
         home_currency: claim.transaction?.home_currency || userHomeCurrency,
         transaction_date: (claim.transaction?.transaction_date?.split('T')[0]) ||
                          claim.transaction_date || '',
@@ -201,7 +317,9 @@ export default function ExpenseEditModal({
                     claim.vendor_name || '',
         reference_number: claim.transaction?.reference_number ||
                          claim.reference_number || '',
-        notes: claim.transaction?.notes || ''
+        notes: claim.transaction?.notes || '',
+        // Use the extracted and normalized line items
+        line_items: lineItems
       })
     } catch (error) {
       console.error('Error loading expense claim:', error)
@@ -262,6 +380,7 @@ export default function ExpenseEditModal({
         // Step 1: Save the current form data as draft
         const updateData = {
           ...formData,
+          line_items: lineItems, // Include editable line items
           status: 'draft' // Keep as draft during save
         }
 
@@ -298,6 +417,7 @@ export default function ExpenseEditModal({
         // For draft action, just save the data
         const updateData = {
           ...formData,
+          line_items: lineItems, // Include editable line items
           status: 'draft'
         }
 
@@ -650,6 +770,153 @@ export default function ExpenseEditModal({
                       />
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Editable Line Items */}
+              <Card className="bg-gray-700 border-gray-600">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <DollarSign className="w-5 h-5" />
+                      Line Items ({lineItems.length})
+                    </CardTitle>
+                    <Button
+                      type="button"
+                      onClick={addLineItem}
+                      variant="outline"
+                      size="sm"
+                      className="bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Item
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {lineItems.length > 0 ? (
+                    <div className="bg-gray-800 rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-900">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                              <th className="px-3 py-2 text-center text-gray-400 font-medium">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-700">
+                            {lineItems.map((item, index) => (
+                              <tr key={index} className="hover:bg-gray-700">
+                                <td className="px-3 py-2 text-gray-400">{index + 1}</td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    type="text"
+                                    value={item.description || ''}
+                                    onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                                    className="w-full px-2 py-1 bg-gray-600 border-gray-500 text-white text-sm"
+                                    placeholder="Item description"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    type="text"
+                                    value={item.item_code || ''}
+                                    onChange={(e) => updateLineItem(index, 'item_code', e.target.value)}
+                                    className="w-full px-2 py-1 bg-gray-600 border-gray-500 text-white text-sm"
+                                    placeholder="SKU"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={item.quantity || ''}
+                                    onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
+                                    className="w-full px-2 py-1 bg-gray-600 border-gray-500 text-white text-sm text-right"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    type="text"
+                                    value={item.unit_measurement || ''}
+                                    onChange={(e) => updateLineItem(index, 'unit_measurement', e.target.value)}
+                                    className="w-full px-2 py-1 bg-gray-600 border-gray-500 text-white text-sm"
+                                    placeholder="kg, pkt"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={item.unit_price || ''}
+                                    onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                                    className="w-full px-2 py-1 bg-gray-600 border-gray-500 text-white text-sm text-right"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-right text-green-400 font-medium">
+                                  {formatCurrency(item.total_amount || 0, formData.original_currency as SupportedCurrency)}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <Button
+                                    type="button"
+                                    onClick={() => removeLineItem(index)}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-600"
+                                    title="Remove item"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-400">
+                      <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No line items added yet</p>
+                      <p className="text-xs mt-1">Click &quot;Add Item&quot; to start adding line items</p>
+                    </div>
+                  )}
+
+                  {/* Transaction Summary */}
+                  {lineItems.length > 0 && (
+                    <div className="bg-gray-800 rounded-lg p-4 border border-gray-600 mt-4">
+                      <h5 className="text-sm font-medium text-white mb-3">Transaction Summary</h5>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Items Count:</span>
+                          <span className="text-white">{lineItems.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Subtotal:</span>
+                          <span className="text-white">
+                            {formatCurrency(
+                              lineItems.reduce((sum, item) => sum + (item.total_amount || 0), 0),
+                              formData.original_currency as SupportedCurrency
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between font-medium border-t border-gray-600 pt-2">
+                          <span className="text-blue-300">Total Amount:</span>
+                          <span className="text-blue-300 text-lg">
+                            {formatCurrency(formData.original_amount, formData.original_currency as SupportedCurrency)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>

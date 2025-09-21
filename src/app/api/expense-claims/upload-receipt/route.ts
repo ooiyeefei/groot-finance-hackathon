@@ -104,6 +104,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get user's home currency from users table
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('home_currency')
+      .eq('clerk_user_id', userId)
+      .single()
+
+    const userHomeCurrency = userProfile?.home_currency || 'SGD'
+
     // Create preliminary transaction record (will be updated when DSPy processing completes)
     const { data: transaction, error: transactionError } = await supabase
       .from('transactions')
@@ -113,9 +122,9 @@ export async function POST(request: NextRequest) {
         category: 'administrative_expenses',
         subcategory: expenseCategory,
         description: `Expense from ${file.name}`,
-        original_currency: 'SGD', // Will be updated from OCR
+        original_currency: userHomeCurrency, // Will be updated from OCR if different
         original_amount: 0, // Will be updated from OCR
-        home_currency: 'SGD',
+        home_currency: userHomeCurrency,
         home_currency_amount: 0,
         exchange_rate: 1,
         exchange_rate_date: new Date().toISOString().split('T')[0],
@@ -369,6 +378,15 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
+    // Get user's home currency from users table
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('home_currency')
+      .eq('clerk_user_id', userId)
+      .single()
+
+    const userHomeCurrency = userProfile?.home_currency || 'SGD'
+
     // Get expense claim with transaction data
     const { data: expenseClaim, error: claimError } = await supabase
       .from('expense_claims')
@@ -400,7 +418,17 @@ export async function GET(request: NextRequest) {
       fileUrl = urlData?.publicUrl || null
     }
 
-    // Map expense claim data for frontend
+    // Get raw DSPy extraction result from transaction processing_metadata
+    const rawDspyData = transaction?.processing_metadata?.extracted_data || null
+    const dspyLineItems = rawDspyData?.line_items || []
+
+    console.log(`[Expense Receipt Status API] DSPy data check:`, {
+      hasDspyData: !!rawDspyData,
+      lineItemsCount: dspyLineItems.length,
+      sampleLineItem: dspyLineItems[0] || null
+    })
+
+    // Map expense claim data for frontend with raw DSPy structure preserved
     const expenseData = {
       expense_claim_id: expenseClaim.id,
       processing_status: expenseClaim.processing_status,
@@ -409,7 +437,7 @@ export async function GET(request: NextRequest) {
       // Transaction data (extracted from OCR or default values)
       vendor_name: transaction.vendor_name || null,
       total_amount: transaction.original_amount || 0,
-      currency: transaction.original_currency || 'SGD',
+      currency: transaction.original_currency || userHomeCurrency,
       transaction_date: transaction.transaction_date || null,
       description: transaction.description || '',
 
@@ -418,6 +446,9 @@ export async function GET(request: NextRequest) {
       expense_category: expenseClaim.expense_category || 'other',
       status: expenseClaim.status,
       risk_score: expenseClaim.risk_score || 0,
+
+      // Raw DSPy line items data (preserve original structure)
+      line_items: dspyLineItems,
 
       // File info
       file_info: fileInfo,
