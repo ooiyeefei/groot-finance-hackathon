@@ -1477,8 +1477,10 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
-                                    if (item.item_code?.value) return item.item_code.value;
+                                    // Handle new DSPy flat structure first (item_code as direct string)
                                     if (typeof item.item_code === 'string') return item.item_code;
+                                    // Legacy nested structure fallback
+                                    if (item.item_code?.value) return item.item_code.value;
                                     return '-';
                                   })()}
                                 </td>
@@ -1488,8 +1490,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
-                                    if (item.quantity?.value) return item.quantity.value;
+                                    // Handle new DSPy flat structure first (quantity as direct number/string)
                                     if (typeof (item as any).quantity === 'number') return (item as any).quantity.toString();
+                                    if (typeof (item as any).quantity === 'string') return (item as any).quantity;
+                                    // Legacy nested structure fallback
+                                    if (item.quantity?.value) return item.quantity.value;
                                     return 'N/A';
                                   })()}
                                 </td>
@@ -1499,7 +1504,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
+                                    // Handle new DSPy flat structure first (unit_measurement as direct string)
+                                    if (typeof item.unit_measurement === 'string') return item.unit_measurement;
+                                    // Legacy nested structure fallback
                                     if (item.unit_measurement?.value) return item.unit_measurement.value;
+                                    // Alternative field names
                                     if (typeof (item as any).unit_of_measure === 'string') return (item as any).unit_of_measure;
                                     return '-';
                                   })()}
@@ -1510,9 +1519,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
-                                    if (item.unit_price?.value) return item.unit_price.value;
+                                    // Handle new DSPy flat structure first (unit_price as direct number/string)
                                     if (typeof (item as any).unit_price === 'number') return (item as any).unit_price.toString();
                                     if (typeof (item as any).unit_price === 'string') return (item as any).unit_price;
+                                    // Legacy nested structure fallback
+                                    if (item.unit_price?.value) return item.unit_price.value;
                                     return 'N/A';
                                   })()}
                                 </td>
@@ -1522,10 +1533,16 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
+                                    // Handle new DSPy flat structure first (line_total as direct number/string)
+                                    if (typeof (item as any).line_total === 'number') return (item as any).line_total.toString();
+                                    if (typeof (item as any).line_total === 'string') return (item as any).line_total;
+                                    // Alternative direct fields
+                                    if (typeof (item as any).total_amount === 'number') return (item as any).total_amount.toString();
+                                    if (typeof (item as any).amount === 'number') return (item as any).amount.toString();
+                                    // Legacy nested structure fallback
                                     if (item.line_total?.value) return item.line_total.value;
                                     if (item.amount?.value) return item.amount.value;
                                     if (item.total_amount?.value) return item.total_amount.value;
-                                    if (typeof (item as any).line_total === 'number') return (item as any).line_total.toString();
                                     return 'N/A';
                                   })()}
                                 </td>

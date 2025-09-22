@@ -9,10 +9,13 @@ import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
 import { createClient } from '@supabase/supabase-js';
 import { DynamicExpenseCategory } from '@/hooks/use-expense-categories';
-import { IFRS_CATEGORIES_FOR_DSPY } from '@/lib/constants/ifrs-categories';
+import {
+  mapExpenseCategoryToAccounting,
+  ACCOUNTING_CATEGORIES
+} from '@/lib/expense-category-mapper';
+import { IFRS_CATEGORIES_FOR_DSPY, IFRS_CATEGORIES } from '@/lib/constants/ifrs-categories';
 
-// Import unified DSPy processing (consolidated from separate schema/signature/service files)
-import { unifiedDspyScript } from './common/python/unified-dspy-processing.py';
+// Note: DSPy processing function defined directly in Python inline code below
 
 // Initialize Supabase client with service role key for background processing
 const supabase = createClient(
@@ -128,6 +131,106 @@ function categorizeExpenseWithDynamicCategories(
   return bestMatch;
 }
 
+// IFRS accounting category auto-categorization using pattern matching (fallback only)
+function categorizeWithIFRSAccountingCategories(
+  extractionData: any
+): { category_code: string; category_name: string; confidence: number; reasoning: string } {
+  // Extract text data for pattern matching
+  const vendorName = extractionData.vendor_name || extractionData.document_summary?.vendor_name || '';
+  const documentType = extractionData.document_type || extractionData.document_summary?.document_type || '';
+  const industryContext = extractionData.industry_context || extractionData.document_summary?.industry_context || '';
+  const description = extractionData.description || '';
+
+  // Combine text for pattern matching
+  const text = `${vendorName} ${documentType} ${industryContext} ${description}`.toLowerCase();
+
+  // IFRS category patterns based on Otto's IFRS recommendations
+  const ifrsPatterns = [
+    {
+      category_code: 'travel_entertainment',
+      category_name: 'Travel & Entertainment',
+      patterns: ['flight', 'airline', 'hotel', 'accommodation', 'airbnb', 'taxi', 'uber', 'grab', 'travel', 'booking', 'restaurant', 'food', 'meal', 'dining', 'cafe', 'coffee', 'lunch', 'dinner'],
+      confidence_base: 0.8
+    },
+    {
+      category_code: 'utilities_communications',
+      category_name: 'Utilities & Communications',
+      patterns: ['electricity', 'water', 'internet', 'phone', 'telecommunications', 'utility', 'power', 'gas'],
+      confidence_base: 0.85
+    },
+    {
+      category_code: 'marketing_advertising',
+      category_name: 'Marketing & Advertising',
+      patterns: ['advertising', 'promotion', 'facebook', 'google ads', 'social media', 'banner', 'marketing services', 'marketing agency'],
+      confidence_base: 0.8
+    },
+    {
+      category_code: 'software_subscriptions',
+      category_name: 'Software & Subscriptions',
+      patterns: ['software', 'subscription', 'saas', 'cloud', 'license', 'app', 'digital'],
+      confidence_base: 0.85
+    },
+    {
+      category_code: 'professional_services',
+      category_name: 'Professional Services',
+      patterns: ['consulting', 'legal', 'accounting', 'audit', 'lawyer', 'consultant', 'professional'],
+      confidence_base: 0.85
+    },
+    {
+      category_code: 'rent_facilities',
+      category_name: 'Rent & Facilities',
+      patterns: ['rent', 'lease', 'facility', 'office space', 'warehouse'],
+      confidence_base: 0.9
+    },
+    {
+      category_code: 'insurance',
+      category_name: 'Insurance',
+      patterns: ['insurance', 'policy', 'coverage', 'premium'],
+      confidence_base: 0.9
+    },
+    {
+      category_code: 'taxes_licenses',
+      category_name: 'Taxes & Licenses',
+      patterns: ['tax', 'license', 'permit', 'registration', 'government fee'],
+      confidence_base: 0.9
+    }
+  ];
+
+  let bestMatch = {
+    category_code: 'administrative_expenses',
+    category_name: 'Administrative Expenses',
+    confidence: 0.1,
+    reasoning: 'No clear pattern match - defaulted to administrative expenses'
+  };
+
+  // Check each IFRS pattern
+  for (const pattern of ifrsPatterns) {
+    let matchScore = 0;
+    const matchedTerms: string[] = [];
+
+    for (const term of pattern.patterns) {
+      if (text.includes(term)) {
+        matchScore += 0.3;
+        matchedTerms.push(term);
+      }
+    }
+
+    if (matchScore > 0) {
+      const confidence = Math.min(matchScore * pattern.confidence_base, 0.95);
+      if (confidence > bestMatch.confidence) {
+        bestMatch = {
+          category_code: pattern.category_code,
+          category_name: pattern.category_name,
+          confidence,
+          reasoning: `Matched IFRS patterns: ${matchedTerms.join(', ')}`
+        };
+      }
+    }
+  }
+
+  return bestMatch;
+}
+
 
 export const processDocumentOCR = task({
   id: "process-document-ocr",
@@ -180,13 +283,8 @@ export const processDocumentOCR = task({
 
       console.log(`🖼️ Image prepared: ${Math.round(imageBuffer.byteLength / 1024)}KB`);
 
-      // Step 3: Prepare IFRS categories for DSPy AI-powered categorization
-      console.log(`📊 Preparing IFRS accounting categories for AI-powered categorization...`);
-      const ifrsCategories = IFRS_CATEGORIES_FOR_DSPY;
-      console.log(`📋 Prepared ${ifrsCategories.length} IFRS accounting categories for DSPy processing`);
-
-      // Step 4: Process with DSPy Common Services (with AI-powered IFRS categorization)
-      console.log(`🐍 Starting DSPy processing with AI-powered IFRS categorization...`);
+      // Step 3: Process with DSPy Common Services
+      console.log(`🐍 Starting DSPy processing with Python runtime...`);
       const dspyResult = await python.runInline(`
 # =============================================================================
 # DSPy PROCESSING WITH AI-POWERED IFRS CATEGORIZATION
@@ -291,12 +389,146 @@ def process_document_with_ai_ifrs(document_image, lm_client, ifrs_categories):
     processor = AIIFRSDocumentProcessor()
     return processor.forward(document_image, ifrs_json)
 
-# Inject unified DSPy processing (consolidated)
-${unifiedDspyScript}
+# Define the missing DSPy processing function for IFRS categorization
+def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
+    \"\"\"Document processing with proper DSPy signature matching receipt extraction pattern\"\"\"
+    try:
+        # Configure DSPy with the provided LM
+        dspy.settings.configure(lm=lm_client, adapter=dspy.JSONAdapter())
+
+        # Define structured Pydantic model for extraction (matching receipt extraction pattern)
+        from pydantic import BaseModel, Field
+
+        # Comprehensive line item model
+        class DocumentLineItem(BaseModel):
+            description: str = Field(..., description="Item description/name")
+            item_code: Optional[str] = Field(None, description="Item code, HSN code, SKU, or product identifier")
+            quantity: Optional[float] = Field(None, description="Quantity purchased")
+            unit_measurement: Optional[str] = Field(None, description="Unit of measurement as shown in invoice (e.g., PC, PCE, PCS, SET, KG, L, M, etc.). Extract the exact abbreviation from the document.")
+            unit_price: Optional[float] = Field(None, description="Price per unit")
+            line_total: float = Field(..., description="Total amount for this line item")
+
+        class DocumentData(BaseModel):
+            # Core transaction fields
+            vendor_name: str = Field(..., description="The name of the merchant or store")
+            transaction_date: str = Field(..., description="Transaction date in YYYY-MM-DD format")
+            total_amount: float = Field(..., description="Final total amount")
+            currency: str = Field(..., description="Currency code in ISO 4217 format")
+
+            # Document identification
+            document_number: Optional[str] = Field(None, description="Invoice or receipt number")
+
+            # Detailed vendor information
+            vendor_address: Optional[str] = Field(None, description="Complete vendor address")
+            vendor_contact: Optional[str] = Field(None, description="Vendor phone, email or contact information")
+            vendor_tax_id: Optional[str] = Field(None, description="Vendor tax ID, registration number, or GSTIN")
+
+            # Customer information
+            customer_name: Optional[str] = Field(None, description="Customer or buyer name")
+            customer_address: Optional[str] = Field(None, description="Customer address")
+            customer_contact: Optional[str] = Field(None, description="Customer contact information")
+
+            # Financial breakdown
+            subtotal_amount: Optional[float] = Field(None, description="Subtotal before tax and discounts")
+            tax_amount: Optional[float] = Field(None, description="Total tax amount")
+            discount_amount: Optional[float] = Field(None, description="Total discount amount")
+
+            # Payment information
+            payment_terms: Optional[str] = Field(None, description="Payment terms or due date")
+            payment_method: Optional[str] = Field(None, description="Payment method")
+            bank_details: Optional[str] = Field(None, description="Bank account details, routing numbers, or payment instructions")
+
+            # Line items
+            line_items: List[DocumentLineItem] = Field(default_factory=list, description="Individual items or services")
+
+            # Quality and confidence
+            extraction_confidence: float = Field(..., ge=0.0, le=1.0, description="Overall extraction confidence from 0.0 to 1.0")
+            missing_fields: List[str] = Field(default_factory=list, description="Fields that couldn't be extracted")
+
+        # Create proper signature using structured output (like receipt extraction)
+        class DocumentExtractionSignature(dspy.Signature):
+            \"\"\"Extract comprehensive structured data from document image including all vendor details, customer information, line items, and financial breakdowns\"\"\"
+            document_image: dspy.Image = dspy.InputField(desc="Document image for multimodal analysis")
+            extracted_data: DocumentData = dspy.OutputField(desc="Complete structured document data with all available fields. IMPORTANT: Extract vendor address, contact info, customer details, line items with item codes/HSN codes, quantities, unit measurements (PC, PCE, PCS, SET, KG, L, M, etc.), and prices, subtotal, tax amounts, and payment information. For unit measurements: extract the EXACT abbreviation shown in the invoice table (PC for pieces, PCE for piece, PCS for pieces, SET for set, KG for kilogram, L for liter, M for meter, etc.). For currency: analyze vendor location, address, currency symbols, and context to determine the correct ISO 4217 currency code (e.g., INR for India, USD for US, SGD for Singapore, MYR for Malaysia, etc.). If any field cannot be found, add it to missing_fields list.")
+
+        # Use ChainOfThought processor (same as receipt extraction)
+        processor = dspy.ChainOfThought(DocumentExtractionSignature)
+
+        print(f"🔧 Processing document with DSPy using {type(lm_client).__name__}", file=sys.stderr)
+
+        # Process the document
+        prediction = processor(document_image=document_image)
+
+        # Extract the structured data
+        extracted = prediction.extracted_data
+
+        # Build result using direct DSPy output (like receipt extraction)
+        result = {
+            "success": True,
+            # Direct DSPy output - primary structure
+            "vendor_name": extracted.vendor_name,
+            "total_amount": extracted.total_amount,
+            "currency": extracted.currency,
+            "transaction_date": extracted.transaction_date,
+            "document_number": extracted.document_number or "",
+            "confidence_score": extracted.extraction_confidence,
+            "requires_validation": extracted.extraction_confidence < 0.8,
+            "backend_used": "structured_dspy",
+
+            # Comprehensive fields from DSPy - direct output
+            "vendor_address": extracted.vendor_address or "",
+            "vendor_contact": extracted.vendor_contact or "",
+            "vendor_tax_id": extracted.vendor_tax_id or "",
+            "customer_name": extracted.customer_name or "",
+            "customer_address": extracted.customer_address or "",
+            "customer_contact": extracted.customer_contact or "",
+            "subtotal_amount": extracted.subtotal_amount or 0.0,
+            "tax_amount": extracted.tax_amount or 0.0,
+            "discount_amount": extracted.discount_amount or 0.0,
+            "payment_terms": extracted.payment_terms or "",
+            "payment_method": extracted.payment_method or "",
+            "bank_details": extracted.bank_details or "",
+
+            # Line items - direct DSPy output
+            "line_items": [
+                {
+                    "description": item.description,
+                    "item_code": item.item_code,
+                    "quantity": item.quantity,
+                    "unit_measurement": item.unit_measurement,
+                    "unit_price": item.unit_price,
+                    "line_total": item.line_total
+                }
+                for item in extracted.line_items
+            ],
+
+            # Quality tracking
+            "missing_fields": extracted.missing_fields
+        }
+
+        print(f"✅ Structured DSPy processing completed: {result['vendor_name']}, {result['total_amount']} {result['currency']}", file=sys.stderr)
+        return result
+
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"❌ Structured DSPy processing failed: {str(e)}", file=sys.stderr)
+        print(f"❌ Full traceback: {error_traceback}", file=sys.stderr)
+        return {
+            "success": False,
+            "error": str(e),
+            "backend_used": "structured_dspy_failed",
+            "traceback": error_traceback
+        }
+
+# Define IFRS categories for DSPy processing
+ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES_FOR_DSPY)}
 
 def main():
     print("🚀 Clean DSPy Processing with Common Services", file=sys.stderr)
-    
+
+    import traceback  # Import here for exception handling
+
     try:
         # Prepare image data
         document_image_data = ${JSON.stringify({
@@ -304,25 +536,21 @@ def main():
           mimeType: processedMimeType,
           filename: docRecord.file_name
         })}
-        
-        # Convert to PIL Image
+
+        # Convert to PIL Image and then to dspy.Image (CRITICAL for multimodal processing)
         image_bytes = base64.b64decode(document_image_data['base64'])
         document_image_pil = Image.open(io.BytesIO(image_bytes))
-        
-        print(f"🖼️ Image ready: {document_image_pil.size}", file=sys.stderr)
-        
-        # Run both Gemini and vLLM for comparison with AI-powered IFRS categorization
+        document_image = dspy.Image.from_PIL(document_image_pil)  # CRITICAL: Convert to dspy.Image
+
+        print(f"🖼️ Image ready: {document_image_pil.size}, converted to dspy.Image", file=sys.stderr)
+        # Run both Gemini and vLLM for comparison
         gemini_result = None
         vllm_result = None
 
-        # IFRS categories for AI-powered processing (from shared constants)
-        ifrs_categories = ${JSON.stringify(ifrsCategories)}
-        print(f"📋 Using {len(ifrs_categories)} IFRS categories for AI categorization", file=sys.stderr)
-
-        # Try Gemini first with AI IFRS categorization - capture all errors in return value
+        # Try Gemini first - capture all errors in return value
         gemini_error_details = None
         try:
-            print("🔧 Running Gemini processing with AI-powered IFRS categorization...", file=sys.stderr)
+            print("🔧 Running Gemini processing with IFRS categorization...", file=sys.stderr)
 
             gemini_api_key = os.getenv('GEMINI_API_KEY')
             if not gemini_api_key:
@@ -337,9 +565,9 @@ def main():
             )
             print(f"✅ Gemini LM configured successfully", file=sys.stderr)
 
-            print(f"🤖 Calling process_document_with_ai_ifrs for Gemini...", file=sys.stderr)
-            gemini_result = process_document_with_ai_ifrs(
-                document_image=document_image_pil,
+            print(f"🤖 Calling process_document_with_ifrs_dspy for Gemini...", file=sys.stderr)
+            gemini_result = process_document_with_ifrs_dspy(
+                document_image=document_image,  # Use dspy.Image object instead of PIL
                 lm_client=gemini_lm,
                 ifrs_categories=ifrs_categories
             )
@@ -358,15 +586,17 @@ def main():
                 else:
                     document_summary = gemini_result.get('document_summary', {})
                     if isinstance(document_summary, dict):
-                        vendor_name = document_summary.get('vendor_name', 'N/A')
-                        doc_number = document_summary.get('document_number', 'N/A')
-                        vendor_address = document_summary.get('vendor_address', 'N/A')
+                        vendor_name = document_summary.get('vendor_name', {}).get('value', 'N/A') if isinstance(document_summary.get('vendor_name'), dict) else document_summary.get('vendor_name', 'N/A')
+                        doc_number = document_summary.get('document_number', {}).get('value', 'N/A') if isinstance(document_summary.get('document_number'), dict) else document_summary.get('document_number', 'N/A')
+                        vendor_address = document_summary.get('vendor_address', {}).get('value', 'N/A') if isinstance(document_summary.get('vendor_address'), dict) else document_summary.get('vendor_address', 'N/A')
                     else:
                         # Fallback to flat structure
                         vendor_name = gemini_result.get('vendor_name', 'N/A')
                         doc_number = gemini_result.get('document_number', 'N/A')
                         vendor_address = gemini_result.get('vendor_address', 'N/A')
-                    print(f"✅ Gemini extraction: vendor={vendor_name}, doc_num={doc_number}, address={vendor_address[:50]}{'...' if len(vendor_address) > 50 else ''}", file=sys.stderr)
+                    # Safely handle string slicing
+                    address_display = str(vendor_address)[:50] + ('...' if len(str(vendor_address)) > 50 else '') if vendor_address else 'N/A'
+                    print(f"✅ Gemini extraction: vendor={vendor_name}, doc_num={doc_number}, address={address_display}", file=sys.stderr)
                     gemini_result['backend_used'] = 'gemini_primary'
             else:
                 gemini_error_details = f"Gemini returned unexpected type {type(gemini_result)}: {str(gemini_result)[:200]}..."
@@ -403,7 +633,7 @@ def main():
         vllm_endpoint = os.getenv('OCR_ENDPOINT_URL')
         if vllm_endpoint:
             try:
-                print("🔧 Running vLLM processing with AI-powered IFRS categorization...", file=sys.stderr)
+                print("🔧 Running vLLM processing with IFRS categories...", file=sys.stderr)
 
                 vllm_model = os.getenv('OCR_MODEL_NAME', 'brandonbeiler/Skywork-R1V3-38B-FP8-Dynamic')
                 print(f"🔧 Configuring vLLM with endpoint: {vllm_endpoint}, model: {vllm_model}", file=sys.stderr)
@@ -417,9 +647,9 @@ def main():
                 )
                 print(f"✅ vLLM LM configured successfully", file=sys.stderr)
 
-                print(f"🤖 Calling process_document_with_ai_ifrs for vLLM...", file=sys.stderr)
-                vllm_result = process_document_with_ai_ifrs(
-                    document_image=document_image_pil,
+                print(f"🤖 Calling process_document_with_ifrs_dspy for vLLM...", file=sys.stderr)
+                vllm_result = process_document_with_ifrs_dspy(
+                    document_image=document_image,  # Use dspy.Image object instead of PIL
                     lm_client=skywork_lm,
                     ifrs_categories=ifrs_categories
                 )
@@ -438,15 +668,17 @@ def main():
                     else:
                         document_summary = vllm_result.get('document_summary', {})
                         if isinstance(document_summary, dict):
-                            vendor_name = document_summary.get('vendor_name', 'N/A')
-                            doc_number = document_summary.get('document_number', 'N/A')
-                            vendor_address = document_summary.get('vendor_address', 'N/A')
+                            vendor_name = document_summary.get('vendor_name', {}).get('value', 'N/A') if isinstance(document_summary.get('vendor_name'), dict) else document_summary.get('vendor_name', 'N/A')
+                            doc_number = document_summary.get('document_number', {}).get('value', 'N/A') if isinstance(document_summary.get('document_number'), dict) else document_summary.get('document_number', 'N/A')
+                            vendor_address = document_summary.get('vendor_address', {}).get('value', 'N/A') if isinstance(document_summary.get('vendor_address'), dict) else document_summary.get('vendor_address', 'N/A')
                         else:
                             # Fallback to flat structure
                             vendor_name = vllm_result.get('vendor_name', 'N/A')
                             doc_number = vllm_result.get('document_number', 'N/A')
                             vendor_address = vllm_result.get('vendor_address', 'N/A')
-                        print(f"✅ vLLM extraction: vendor={vendor_name}, doc_num={doc_number}, address={vendor_address[:50]}{'...' if len(vendor_address) > 50 else ''}", file=sys.stderr)
+                        # Safely handle string slicing
+                        address_display = str(vendor_address)[:50] + ('...' if len(str(vendor_address)) > 50 else '') if vendor_address else 'N/A'
+                        print(f"✅ vLLM extraction: vendor={vendor_name}, doc_num={doc_number}, address={address_display}", file=sys.stderr)
                         vllm_result['backend_used'] = 'vllm_comparison'
                 else:
                     vllm_error_details = f"vLLM returned unexpected type {type(vllm_result)}: {str(vllm_result)[:200]}..."
@@ -491,17 +723,32 @@ def main():
             score = 0
             doc_summary = extraction.get('document_summary', {})
 
-            # Check key field completeness
-            if doc_summary.get('vendor_name', {}).get('value', '').strip():
+            # Check key field completeness (safe string handling)
+            vendor_name = doc_summary.get('vendor_name', {}).get('value', '')
+            if isinstance(vendor_name, str) and vendor_name.strip():
                 score += 2
-            if doc_summary.get('document_number', {}).get('value', '').strip():
+
+            doc_number = doc_summary.get('document_number', {}).get('value', '')
+            if isinstance(doc_number, str) and doc_number.strip():
                 score += 3  # Document number is critical
-            if doc_summary.get('vendor_address', {}).get('value', '').strip():
+
+            vendor_address = doc_summary.get('vendor_address', {}).get('value', '')
+            if isinstance(vendor_address, str) and vendor_address.strip():
                 score += 2  # Address is important
-            if doc_summary.get('vendor_contact', {}).get('value', '').strip():
+
+            vendor_contact = doc_summary.get('vendor_contact', {}).get('value', '')
+            if isinstance(vendor_contact, str) and vendor_contact.strip():
                 score += 2  # Contact info is important
-            if doc_summary.get('total_amount', {}).get('value', '').strip():
+
+            total_amount = doc_summary.get('total_amount', {}).get('value', 0)
+            if isinstance(total_amount, (int, float)) and total_amount > 0:
                 score += 1
+            elif isinstance(total_amount, str) and total_amount.strip():
+                try:
+                    if float(total_amount) > 0:
+                        score += 1
+                except ValueError:
+                    pass
 
             # Check line items quality
             line_items = extraction.get('line_items', [])
@@ -632,19 +879,49 @@ print(json.dumps(result))
       console.log(`🏪 Vendor: ${finalExtractionData.document_summary?.vendor_name || finalExtractionData.vendor_name}`);
       console.log(`💰 Amount: ${finalExtractionData.document_summary?.total_amount || finalExtractionData.total_amount}`);
 
-      // Step 5: AI-powered IFRS categorization (already completed by DSPy)
-      console.log(`🤖 AI-powered IFRS categorization completed by DSPy`);
-      console.log(`🎯 AI-selected IFRS category: ${finalExtractionData.suggested_category}`);
-      console.log(`📊 AI confidence: ${(finalExtractionData.category_confidence * 100).toFixed(1)}%`);
-      console.log(`🧠 AI reasoning: ${finalExtractionData.category_reasoning}`);
+      // Step 5: IFRS categorization for transactions table (standardized categories only)
+      console.log(`📊 Performing IFRS categorization for transactions table...`);
 
-      // Step 6: Prepare final DSPy result with AI-powered IFRS categorization
-      console.log(`🔄 Preparing final DSPy result with AI IFRS categorization`);
+      // Use IFRS categories for DSPy-based categorization (NOT business categories)
+      const selectedCategory = categorizeWithIFRSAccountingCategories(finalExtractionData);
+      console.log(`📊 IFRS Category: ${selectedCategory.category_code} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
+      console.log(`📊 Reasoning: ${selectedCategory.reasoning}`);
 
-      // Store raw DSPy output directly (already contains AI-powered IFRS categorization)
+      // Step 6: Prepare final DSPy result with standard IFRS categorization only
+      console.log(`🔄 Preparing final DSPy result with standard IFRS categorization`);
+
+      // Calculate due date from transaction date + payment terms
+      let calculatedDueDate = null;
+      if (finalExtractionData.transaction_date && finalExtractionData.payment_terms) {
+        try {
+          const transactionDate = new Date(finalExtractionData.transaction_date);
+          const paymentTerms = finalExtractionData.payment_terms.toLowerCase();
+
+          // Extract days from payment terms (e.g., "30 DAYS", "NET 30", "15 days")
+          const dayMatches = paymentTerms.match(/(\d+)\s*(days?|day)/i);
+          if (dayMatches && !isNaN(transactionDate.getTime())) {
+            const daysToAdd = parseInt(dayMatches[1]);
+            const dueDate = new Date(transactionDate);
+            dueDate.setDate(dueDate.getDate() + daysToAdd);
+            calculatedDueDate = dueDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+            console.log(`📅 Calculated due date: ${calculatedDueDate} (${daysToAdd} days from ${finalExtractionData.transaction_date})`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Could not calculate due date: ${error}`);
+        }
+      }
+
+      // Store raw DSPy output directly with standard IFRS categorization only
       const finalDspyResult = {
-        ...finalExtractionData, // All raw DSPy fields including AI-selected IFRS category
-        processing_method: finalExtractionData.backend_used || 'ai_ifrs_categorization'
+        ...finalExtractionData, // All raw DSPy fields (vendor_name, total_amount, currency, etc.)
+        // Add calculated due date
+        due_date: calculatedDueDate,
+        // Add standard IFRS accounting categorization (Documents page - accounting purpose)
+        suggested_category: selectedCategory.category_code,
+        accounting_category: selectedCategory.category_name,
+        category_confidence: selectedCategory.confidence,
+        category_reasoning: selectedCategory.reasoning,
+        processing_method: finalExtractionData.backend_used || 'dspy_processing'
       };
 
       // Step 7: Update database with raw DSPy structure
@@ -658,11 +935,13 @@ print(json.dumps(result))
         processing_metadata: {
           backend_used: finalExtractionData.backend_used,
           requires_validation: finalExtractionData.requires_validation,
-          ai_ifrs_categorization: {
-            selected_category: finalExtractionData.suggested_category,
-            confidence: finalExtractionData.category_confidence,
-            reasoning: finalExtractionData.category_reasoning,
-            processing_type: 'ai_powered_ifrs'
+          category_suggestion: {
+            ifrs_accounting: {
+              category: selectedCategory.category_code,
+              accounting_category: selectedCategory.category_name,
+              confidence: selectedCategory.confidence,
+              reasoning: selectedCategory.reasoning
+            }
           }
         }
       }).eq('id', payload.documentId);
@@ -677,12 +956,11 @@ print(json.dumps(result))
         success: true,
         documentId: payload.documentId,
         confidence: finalExtractionData.confidence_score,
-        suggested_category: finalExtractionData.suggested_category,
-        category_confidence: finalExtractionData.category_confidence,
-        category_reasoning: finalExtractionData.category_reasoning,
+        suggested_category: selectedCategory.category_code,
+        accounting_category: selectedCategory.category_name,
         requiresValidation: finalExtractionData.requires_validation,
         backend: finalExtractionData.backend_used,
-        processing_type: 'ai_powered_ifrs'
+        processing_type: 'ifrs_categorization'
       };
 
     } catch (dspyError) {
@@ -715,8 +993,140 @@ import io
 import base64
 import traceback
 
-# Inject unified DSPy processing (consolidated)
-${unifiedDspyScript}
+# Define the missing DSPy processing function for IFRS categorization
+def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
+    \"\"\"Document processing with proper DSPy signature matching receipt extraction pattern\"\"\"
+    try:
+        # Configure DSPy with the provided LM
+        dspy.settings.configure(lm=lm_client, adapter=dspy.JSONAdapter())
+
+        # Define structured Pydantic model for extraction (matching receipt extraction pattern)
+        from pydantic import BaseModel, Field
+
+        # Comprehensive line item model
+        class DocumentLineItem(BaseModel):
+            description: str = Field(..., description="Item description/name")
+            item_code: Optional[str] = Field(None, description="Item code, HSN code, SKU, or product identifier")
+            quantity: Optional[float] = Field(None, description="Quantity purchased")
+            unit_measurement: Optional[str] = Field(None, description="Unit of measurement as shown in invoice (e.g., PC, PCE, PCS, SET, KG, L, M, etc.). Extract the exact abbreviation from the document.")
+            unit_price: Optional[float] = Field(None, description="Price per unit")
+            line_total: float = Field(..., description="Total amount for this line item")
+
+        class DocumentData(BaseModel):
+            # Core transaction fields
+            vendor_name: str = Field(..., description="The name of the merchant or store")
+            transaction_date: str = Field(..., description="Transaction date in YYYY-MM-DD format")
+            total_amount: float = Field(..., description="Final total amount")
+            currency: str = Field(..., description="Currency code in ISO 4217 format")
+
+            # Document identification
+            document_number: Optional[str] = Field(None, description="Invoice or receipt number")
+
+            # Detailed vendor information
+            vendor_address: Optional[str] = Field(None, description="Complete vendor address")
+            vendor_contact: Optional[str] = Field(None, description="Vendor phone, email or contact information")
+            vendor_tax_id: Optional[str] = Field(None, description="Vendor tax ID, registration number, or GSTIN")
+
+            # Customer information
+            customer_name: Optional[str] = Field(None, description="Customer or buyer name")
+            customer_address: Optional[str] = Field(None, description="Customer address")
+            customer_contact: Optional[str] = Field(None, description="Customer contact information")
+
+            # Financial breakdown
+            subtotal_amount: Optional[float] = Field(None, description="Subtotal before tax and discounts")
+            tax_amount: Optional[float] = Field(None, description="Total tax amount")
+            discount_amount: Optional[float] = Field(None, description="Total discount amount")
+
+            # Payment information
+            payment_terms: Optional[str] = Field(None, description="Payment terms or due date")
+            payment_method: Optional[str] = Field(None, description="Payment method")
+            bank_details: Optional[str] = Field(None, description="Bank account details, routing numbers, or payment instructions")
+
+            # Line items
+            line_items: List[DocumentLineItem] = Field(default_factory=list, description="Individual items or services")
+
+            # Quality and confidence
+            extraction_confidence: float = Field(..., ge=0.0, le=1.0, description="Overall extraction confidence from 0.0 to 1.0")
+            missing_fields: List[str] = Field(default_factory=list, description="Fields that couldn't be extracted")
+
+        # Create proper signature using structured output (like receipt extraction)
+        class DocumentExtractionSignature(dspy.Signature):
+            \"\"\"Extract comprehensive structured data from document image including all vendor details, customer information, line items, and financial breakdowns\"\"\"
+            document_image: dspy.Image = dspy.InputField(desc="Document image for multimodal analysis")
+            extracted_data: DocumentData = dspy.OutputField(desc="Complete structured document data with all available fields. IMPORTANT: Extract vendor address, contact info, customer details, line items with item codes/HSN codes, quantities, unit measurements (PC, PCE, PCS, SET, KG, L, M, etc.), and prices, subtotal, tax amounts, and payment information. For unit measurements: extract the EXACT abbreviation shown in the invoice table (PC for pieces, PCE for piece, PCS for pieces, SET for set, KG for kilogram, L for liter, M for meter, etc.). For currency: analyze vendor location, address, currency symbols, and context to determine the correct ISO 4217 currency code (e.g., INR for India, USD for US, SGD for Singapore, MYR for Malaysia, etc.). If any field cannot be found, add it to missing_fields list.")
+
+        # Use ChainOfThought processor (same as receipt extraction)
+        processor = dspy.ChainOfThought(DocumentExtractionSignature)
+
+        print(f"🔧 Processing document with DSPy using {type(lm_client).__name__}", file=sys.stderr)
+
+        # Process the document
+        prediction = processor(document_image=document_image)
+
+        # Extract the structured data
+        extracted = prediction.extracted_data
+
+        # Build result using direct DSPy output (like receipt extraction)
+        result = {
+            "success": True,
+            # Direct DSPy output - primary structure
+            "vendor_name": extracted.vendor_name,
+            "total_amount": extracted.total_amount,
+            "currency": extracted.currency,
+            "transaction_date": extracted.transaction_date,
+            "document_number": extracted.document_number or "",
+            "confidence_score": extracted.extraction_confidence,
+            "requires_validation": extracted.extraction_confidence < 0.8,
+            "backend_used": "structured_dspy",
+
+            # Comprehensive fields from DSPy - direct output
+            "vendor_address": extracted.vendor_address or "",
+            "vendor_contact": extracted.vendor_contact or "",
+            "vendor_tax_id": extracted.vendor_tax_id or "",
+            "customer_name": extracted.customer_name or "",
+            "customer_address": extracted.customer_address or "",
+            "customer_contact": extracted.customer_contact or "",
+            "subtotal_amount": extracted.subtotal_amount or 0.0,
+            "tax_amount": extracted.tax_amount or 0.0,
+            "discount_amount": extracted.discount_amount or 0.0,
+            "payment_terms": extracted.payment_terms or "",
+            "payment_method": extracted.payment_method or "",
+            "bank_details": extracted.bank_details or "",
+
+            # Line items - direct DSPy output
+            "line_items": [
+                {
+                    "description": item.description,
+                    "item_code": item.item_code,
+                    "quantity": item.quantity,
+                    "unit_measurement": item.unit_measurement,
+                    "unit_price": item.unit_price,
+                    "line_total": item.line_total
+                }
+                for item in extracted.line_items
+            ],
+
+            # Quality tracking
+            "missing_fields": extracted.missing_fields
+        }
+
+        print(f"✅ Structured DSPy processing completed: {result['vendor_name']}, {result['total_amount']} {result['currency']}", file=sys.stderr)
+        return result
+
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"❌ Structured DSPy processing failed: {str(e)}", file=sys.stderr)
+        print(f"❌ Full traceback: {error_traceback}", file=sys.stderr)
+        return {
+            "success": False,
+            "error": str(e),
+            "backend_used": "structured_dspy_failed",
+            "traceback": error_traceback
+        }
+
+# Define IFRS categories for DSPy processing
+ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES_FOR_DSPY)}
 
 def main():
     print("🚀 vLLM Fallback DSPy Processing with AI IFRS Categorization", file=sys.stderr)
@@ -725,11 +1135,12 @@ def main():
         # Prepare image data
         document_image_data = ${JSON.stringify(vllmImageData)}
         
-        # Convert to PIL Image
+        # Convert to PIL Image and then to dspy.Image (CRITICAL for multimodal processing)
         image_bytes = base64.b64decode(document_image_data['base64'])
         document_image_pil = Image.open(io.BytesIO(image_bytes))
-        
-        print(f"🖼️ vLLM Image ready: {document_image_pil.size}", file=sys.stderr)
+        document_image = dspy.Image.from_PIL(document_image_pil)  # CRITICAL: Convert to dspy.Image
+
+        print(f"🖼️ vLLM Image ready: {document_image_pil.size}, converted to dspy.Image", file=sys.stderr)
 
         # IFRS categories for AI-powered processing
         ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES_FOR_DSPY)}
@@ -751,8 +1162,8 @@ def main():
             max_tokens=16384
         )
         
-        result = process_document_with_ai_ifrs(
-            document_image=document_image_pil,
+        result = process_document_with_ifrs_dspy(
+            document_image=document_image,  # Use dspy.Image object instead of PIL
             lm_client=skywork_lm,
             ifrs_categories=ifrs_categories
         )
@@ -824,19 +1235,48 @@ print(json.dumps(result))
           console.log(`🏪 Vendor: ${vllmExtractionData.document_summary?.vendor_name || vllmExtractionData.vendor_name}`);
           console.log(`💰 Amount: ${vllmExtractionData.document_summary?.total_amount || vllmExtractionData.total_amount}`);
 
-          // AI-powered IFRS categorization (already completed by vLLM DSPy)
-          console.log(`🤖 AI-powered IFRS categorization completed by vLLM DSPy`);
-          console.log(`🎯 vLLM AI-selected IFRS category: ${vllmExtractionData.suggested_category}`);
-          console.log(`📊 vLLM AI confidence: ${(vllmExtractionData.category_confidence * 100).toFixed(1)}%`);
-          console.log(`🧠 vLLM AI reasoning: ${vllmExtractionData.category_reasoning}`);
+          // Standard IFRS accounting categorization for vLLM result (Documents page - accounting purpose only)
+          console.log(`📊 Performing standard IFRS accounting categorization (vLLM fallback)...`);
+          const selectedCategory = categorizeWithIFRSAccountingCategories(vllmExtractionData);
 
-          // Prepare final vLLM DSPy result with AI-powered IFRS categorization
-          console.log(`🔄 Preparing final vLLM DSPy result with AI IFRS categorization`);
+          console.log(`📊 vLLM IFRS Accounting Category: ${selectedCategory.category_code} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
+          console.log(`📊 vLLM Reasoning: ${selectedCategory.reasoning}`);
 
-          // Store raw vLLM DSPy output directly (already contains AI-powered IFRS categorization)
+          // Prepare final vLLM DSPy result with standard IFRS categorization only
+          console.log(`🔄 Preparing final vLLM DSPy result with standard IFRS categorization`);
+
+          // Calculate due date from transaction date + payment terms (vLLM fallback)
+          let vllmCalculatedDueDate = null;
+          if (vllmExtractionData.transaction_date && vllmExtractionData.payment_terms) {
+            try {
+              const transactionDate = new Date(vllmExtractionData.transaction_date);
+              const paymentTerms = vllmExtractionData.payment_terms.toLowerCase();
+
+              // Extract days from payment terms (e.g., "30 DAYS", "NET 30", "15 days")
+              const dayMatches = paymentTerms.match(/(\d+)\s*(days?|day)/i);
+              if (dayMatches && !isNaN(transactionDate.getTime())) {
+                const daysToAdd = parseInt(dayMatches[1]);
+                const dueDate = new Date(transactionDate);
+                dueDate.setDate(dueDate.getDate() + daysToAdd);
+                vllmCalculatedDueDate = dueDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+                console.log(`📅 vLLM calculated due date: ${vllmCalculatedDueDate} (${daysToAdd} days from ${vllmExtractionData.transaction_date})`);
+              }
+            } catch (error) {
+              console.log(`⚠️ Could not calculate due date (vLLM): ${error}`);
+            }
+          }
+
+          // Store raw vLLM DSPy output directly with standard IFRS categorization only
           const finalVllmDspyResult = {
-            ...vllmExtractionData, // All raw DSPy fields including AI-selected IFRS category
-            processing_method: vllmExtractionData.backend_used || 'vllm_ai_ifrs_fallback'
+            ...vllmExtractionData, // All raw DSPy fields (vendor_name, total_amount, currency, etc.)
+            // Add calculated due date
+            due_date: vllmCalculatedDueDate,
+            // Add standard IFRS accounting categorization (Documents page - accounting purpose)
+            suggested_category: selectedCategory.category_code,
+            accounting_category: selectedCategory.category_name,
+            category_confidence: selectedCategory.confidence,
+            category_reasoning: selectedCategory.reasoning,
+            processing_method: vllmExtractionData.backend_used || 'vllm_fallback'
           };
 
           // Update database with vLLM raw DSPy structure
@@ -850,11 +1290,13 @@ print(json.dumps(result))
             processing_metadata: {
               backend_used: vllmExtractionData.backend_used,
               requires_validation: vllmExtractionData.requires_validation,
-              ai_ifrs_categorization: {
-                selected_category: vllmExtractionData.suggested_category,
-                confidence: vllmExtractionData.category_confidence,
-                reasoning: vllmExtractionData.category_reasoning,
-                processing_type: 'vllm_ai_ifrs_fallback'
+              category_suggestion: {
+                ifrs_accounting: {
+                  category: selectedCategory.category_code,
+                  accounting_category: selectedCategory.category_name,
+                  confidence: selectedCategory.confidence,
+                  reasoning: selectedCategory.reasoning
+                }
               },
               fallback_reason: 'Primary DSPy processing failed',
               primary_error: dspyError instanceof Error ? dspyError.message : 'Primary processing failed'
@@ -871,12 +1313,11 @@ print(json.dumps(result))
             success: true,
             documentId: payload.documentId,
             confidence: vllmExtractionData.confidence_score,
-            suggested_category: vllmExtractionData.suggested_category,
-            category_confidence: vllmExtractionData.category_confidence,
-            category_reasoning: vllmExtractionData.category_reasoning,
+            suggested_category: selectedCategory.category_code,
+            accounting_category: selectedCategory.category_name,
             requiresValidation: vllmExtractionData.requires_validation,
             backend: vllmExtractionData.backend_used,
-            processing_type: 'vllm_ai_ifrs_fallback'
+            processing_type: 'vllm_ifrs_fallback'
           };
 
         } catch (fallbackError) {

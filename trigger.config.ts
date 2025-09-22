@@ -28,8 +28,8 @@ export default defineConfig({
       pythonExtension({
         // Path to requirements.txt file
         requirementsFile: "./requirements.txt",
-        // Python binary path for development (uses virtual environment)  
-        devPythonBinaryPath: "/Users/yooi/Documents/code/personal/finanseal-cc/finanseal-claims/venv/bin/python3",
+        // Python binary path for development (uses relative path for portability)
+        devPythonBinaryPath: "./venv/bin/python3",
       }),
     ],
   },
