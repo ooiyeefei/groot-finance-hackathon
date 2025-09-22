@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Check, ChevronDown, Tag } from 'lucide-react'
+import { COMPLETE_CATEGORY_OPTIONS, CategoryOption } from '@/lib/constants/ifrs-categories'
 
 interface CategorySelectorProps {
   transactionId: string
@@ -11,41 +12,8 @@ interface CategorySelectorProps {
   className?: string
 }
 
-interface CategoryOption {
-  value: string
-  label: string
-  group: string
-}
-
-const CATEGORY_OPTIONS: CategoryOption[] = [
-  // Income categories
-  { value: 'operating_revenue', label: 'Operating Revenue', group: 'Income' },
-  { value: 'other_income', label: 'Other Income', group: 'Income' },
-  { value: 'investment_income', label: 'Investment Income', group: 'Income' },
-  { value: 'government_grants', label: 'Government Grants', group: 'Income' },
-  
-  // Expense categories (organized by business function)
-  { value: 'cost_of_goods_sold', label: 'Cost of Goods Sold', group: 'Direct Expenses' },
-  
-  { value: 'administrative_expenses', label: 'Administrative Expenses', group: 'Operating Expenses' },
-  { value: 'marketing_advertising', label: 'Marketing & Advertising', group: 'Operating Expenses' },
-  { value: 'travel_entertainment', label: 'Travel & Entertainment', group: 'Operating Expenses' },
-  { value: 'utilities_communications', label: 'Utilities & Communications', group: 'Operating Expenses' },
-  { value: 'rent_facilities', label: 'Rent & Facilities', group: 'Operating Expenses' },
-  { value: 'insurance', label: 'Insurance', group: 'Operating Expenses' },
-  { value: 'taxes_licenses', label: 'Taxes & Licenses', group: 'Operating Expenses' },
-  { value: 'software_subscriptions', label: 'Software & Subscriptions', group: 'Operating Expenses' },
-  { value: 'professional_services', label: 'Professional Services', group: 'Operating Expenses' },
-  { value: 'other_operating', label: 'Other Operating Expenses', group: 'Operating Expenses' },
-  
-  { value: 'depreciation', label: 'Depreciation', group: 'Non-Operating Expenses' },
-  { value: 'interest_expense', label: 'Interest Expense', group: 'Non-Operating Expenses' },
-  
-  // Legacy support
-  { value: 'General Expenses', label: 'General Expenses (Legacy)', group: 'Legacy' },
-  { value: 'General Income', label: 'General Income (Legacy)', group: 'Legacy' },
-  { value: 'Other', label: 'Other', group: 'Legacy' }
-]
+// Use the complete category list from constants (IFRS + Income)
+const CATEGORY_OPTIONS = COMPLETE_CATEGORY_OPTIONS
 
 export default function CategorySelector({
   transactionId,
@@ -60,12 +28,12 @@ export default function CategorySelector({
   // Filter categories based on transaction type
   const getFilteredCategories = () => {
     if (transactionType === 'income') {
-      return CATEGORY_OPTIONS.filter(opt => 
-        opt.group === 'Income' || opt.value === 'General Income' || opt.value === 'Other'
+      return CATEGORY_OPTIONS.filter(opt =>
+        opt.group === 'Income'
       )
     } else if (transactionType === 'expense') {
-      return CATEGORY_OPTIONS.filter(opt => 
-        opt.group !== 'Income' || opt.value === 'General Expenses' || opt.value === 'Other'
+      return CATEGORY_OPTIONS.filter(opt =>
+        opt.group !== 'Income'
       )
     } else {
       // For other transaction types, show all categories

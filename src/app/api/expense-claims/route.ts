@@ -9,8 +9,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
 import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/currency-service'
-import { 
-  CreateExpenseClaimRequest, 
+import {
+  CreateExpenseClaimRequest,
   ExpenseClaimListParams,
   ExpenseStatus,
   ExpenseCategory,
@@ -18,6 +18,11 @@ import {
   EXPENSE_VALIDATION_RULES
 } from '@/types/expense-claims'
 import { SupportedCurrency } from '@/types/transaction'
+import {
+  mapExpenseCategoryToAccounting,
+  getBusinessExpenseCategory,
+  isValidExpenseCategory
+} from '@/lib/expense-category-mapper'
 
 // Otto's risk scoring algorithm
 function calculateRiskScore(amount: number, category: ExpenseCategory, employee: any): number {
@@ -84,21 +89,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate expense category (must match database constraint)
-    const validCategories: ExpenseCategory[] = [
-      'travel_accommodation', 
-      'petrol', 
-      'toll', 
-      'entertainment', 
-      'other'
-    ]
-    if (!validCategories.includes(expense_category)) {
-      return NextResponse.json(
-        { success: false, error: `Invalid expense category: ${expense_category}` },
-        { status: 400 }
-      )
-    }
-
     // Validate currency
     if (!currencyService.isSupportedCurrency(original_currency)) {
       return NextResponse.json(
@@ -122,6 +112,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate expense category against business-specific categories
+    const isValidCategory = await isValidExpenseCategory(employeeProfile.business_id, expense_category)
+    if (!isValidCategory) {
+      return NextResponse.json(
+        { success: false, error: `Invalid expense category: ${expense_category}. Please use a valid category for your business.` },
+        { status: 400 }
+      )
+    }
+
+    // Get category details for proper accounting mapping
+    const categoryInfo = await getBusinessExpenseCategory(employeeProfile.business_id, expense_category)
+    const accountingCategory = categoryInfo?.accounting_category || mapExpenseCategoryToAccounting(expense_category)
 
     // Get user's home currency from users table
     const { data: userInfo, error: userError } = await supabase
@@ -217,8 +219,8 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id: userId,
         transaction_type: 'expense',
-        category: 'administrative_expenses', // Map to IFRS category
-        subcategory: expense_category,
+        category: accountingCategory, // Use mapped IFRS accounting category
+        subcategory: expense_category, // Keep original business category as subcategory
         description,
         reference_number,
         document_type: null, // No document_id dependency
@@ -232,12 +234,18 @@ export async function POST(request: NextRequest) {
         vendor_name,
         vendor_id, // NEW: Link to vendors table
         notes,
+        status: 'pending', // Start with pending status (will be synced by trigger)
         created_by_method: 'manual', // Unified approach - use business_purpose_details for file tracking
         processing_metadata: {
           expense_category,
           business_purpose,
           employee_profile_id: employeeProfile.id, // Store in metadata instead
-          created_via: 'expense_claims_api'
+          created_via: 'expense_claims_api',
+          category_mapping: {
+            business_category: expense_category,
+            accounting_category: accountingCategory,
+            category_name: categoryInfo?.business_category_name
+          }
         }
       })
       .select()

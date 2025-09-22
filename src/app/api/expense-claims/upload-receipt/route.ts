@@ -9,6 +9,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
 import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
 import { tasks } from '@trigger.dev/sdk/v3'
+import {
+  mapExpenseCategoryToAccounting,
+  getBusinessExpenseCategory,
+  isValidExpenseCategory
+} from '@/lib/expense-category-mapper'
 
 // Simple in-memory deduplication store (in production, use Redis)
 const recentRequests = new Map<string, number>()
@@ -43,14 +48,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate expense category
-    if (!['travel_accommodation', 'petrol', 'toll', 'entertainment', 'other'].includes(expenseCategory)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid expense category provided' },
-        { status: 400 }
-      )
-    }
-
     // Validate file type and size
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
     if (!allowedTypes.includes(file.type)) {
@@ -79,6 +76,19 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Validate expense category against business-specific categories
+    const isValidCategory = await isValidExpenseCategory(employeeProfile.business_id, expenseCategory)
+    if (!isValidCategory) {
+      return NextResponse.json(
+        { success: false, error: `Invalid expense category: ${expenseCategory}. Please use a valid category for your business.` },
+        { status: 400 }
+      )
+    }
+
+    // Get category details for proper accounting mapping
+    const categoryInfo = await getBusinessExpenseCategory(employeeProfile.business_id, expenseCategory)
+    const accountingCategory = categoryInfo?.accounting_category || mapExpenseCategoryToAccounting(expenseCategory)
 
     console.log(`[Expense Receipt API] Processing receipt upload for user ${userId}`)
     console.log(`[Expense Receipt API] File: ${file.name}, Category: ${expenseCategory}`)
@@ -119,8 +129,8 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id: userId,
         transaction_type: 'expense',
-        category: 'administrative_expenses',
-        subcategory: expenseCategory,
+        category: accountingCategory, // Use mapped IFRS accounting category
+        subcategory: expenseCategory, // Keep original business category as subcategory
         description: `Expense from ${file.name}`,
         original_currency: userHomeCurrency, // Will be updated from OCR if different
         original_amount: 0, // Will be updated from OCR
@@ -129,6 +139,7 @@ export async function POST(request: NextRequest) {
         exchange_rate: 1,
         exchange_rate_date: new Date().toISOString().split('T')[0],
         transaction_date: new Date().toISOString().split('T')[0], // Will be updated from OCR
+        status: 'pending', // Start with pending status (will be synced by trigger)
         created_by_method: 'document_extract',
         processing_metadata: {
           expense_category: expenseCategory,
@@ -137,7 +148,12 @@ export async function POST(request: NextRequest) {
           created_via: 'expense_receipt_upload',
           file_path: filePath,
           file_name: file.name,
-          processing_stage: 'ocr_extraction'
+          processing_stage: 'ocr_extraction',
+          category_mapping: {
+            business_category: expenseCategory,
+            accounting_category: accountingCategory,
+            category_name: categoryInfo?.business_category_name
+          }
         }
       })
       .select()

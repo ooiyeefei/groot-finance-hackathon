@@ -58,10 +58,10 @@ export async function PATCH(
       'software_subscriptions',
       'professional_services',
       
-      // Legacy support
-      'General Expenses',
-      'General Income',
-      'Other'
+      // Legacy categories removed - now covered by IFRS categories:
+      // 'General Expenses' → 'other_operating' (Other Operating Expenses)
+      // 'General Income' → 'other_income' (Other Income)
+      // 'Other' → 'other_operating' (Other Operating Expenses)
     ]
 
     if (!validCategories.includes(category)) {

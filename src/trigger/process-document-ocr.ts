@@ -9,6 +9,7 @@ import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
 import { createClient } from '@supabase/supabase-js';
 import { DynamicExpenseCategory } from '@/hooks/use-expense-categories';
+import { IFRS_CATEGORIES_FOR_DSPY } from '@/lib/constants/ifrs-categories';
 
 // Import unified DSPy processing (consolidated from separate schema/signature/service files)
 import { unifiedDspyScript } from './common/python/unified-dspy-processing.py';
@@ -179,11 +180,16 @@ export const processDocumentOCR = task({
 
       console.log(`🖼️ Image prepared: ${Math.round(imageBuffer.byteLength / 1024)}KB`);
 
-      // Step 3: Process with DSPy Common Services
-      console.log(`🐍 Starting DSPy processing with Python runtime...`);
+      // Step 3: Prepare IFRS categories for DSPy AI-powered categorization
+      console.log(`📊 Preparing IFRS accounting categories for AI-powered categorization...`);
+      const ifrsCategories = IFRS_CATEGORIES_FOR_DSPY;
+      console.log(`📋 Prepared ${ifrsCategories.length} IFRS accounting categories for DSPy processing`);
+
+      // Step 4: Process with DSPy Common Services (with AI-powered IFRS categorization)
+      console.log(`🐍 Starting DSPy processing with AI-powered IFRS categorization...`);
       const dspyResult = await python.runInline(`
 # =============================================================================
-# CLEAN DSPy PROCESSING USING COMMON SERVICES
+# DSPy PROCESSING WITH AI-POWERED IFRS CATEGORIZATION
 # =============================================================================
 
 import dspy
@@ -195,6 +201,95 @@ from PIL import Image
 import io
 import base64
 import traceback
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
+
+# IFRS Category Selection Models for AI-powered categorization
+class IFRSCategorySelection(BaseModel):
+    selected_category: str = Field(..., description="Selected IFRS category code from available options")
+    selection_confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in category selection")
+    selection_reasoning: str = Field(..., description="Detailed reasoning for category selection")
+
+# Enhanced Document Processing with IFRS Category Selection
+class DocumentProcessingWithIFRSSignature(dspy.Signature):
+    \"\"\"Process document and intelligently select IFRS accounting category\"\"\"
+    document_image: dspy.Image = dspy.InputField(desc="Document image for multimodal analysis")
+    available_ifrs_categories: str = dspy.InputField(desc="JSON list of available IFRS accounting categories")
+
+    # Core extraction fields
+    vendor_name: str = dspy.OutputField(desc="Vendor/merchant name")
+    total_amount: float = dspy.OutputField(desc="Total amount")
+    currency: str = dspy.OutputField(desc="Currency code (ISO 4217)")
+    transaction_date: str = dspy.OutputField(desc="Transaction date (YYYY-MM-DD)")
+    document_number: str = dspy.OutputField(desc="Invoice/receipt number")
+
+    # AI-powered IFRS category selection
+    ifrs_category_selection: IFRSCategorySelection = dspy.OutputField(desc="AI-selected IFRS category with confidence and reasoning")
+
+    # Quality metrics
+    extraction_confidence: float = dspy.OutputField(desc="Overall extraction confidence (0.0-1.0)")
+    requires_validation: bool = dspy.OutputField(desc="Whether manual validation is needed")
+
+# DSPy Processor with AI-powered IFRS Categorization
+class AIIFRSDocumentProcessor(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.processor = dspy.ChainOfThought(DocumentProcessingWithIFRSSignature)
+
+    def forward(self, document_image, ifrs_categories_json):
+        try:
+            prediction = self.processor(
+                document_image=document_image,
+                available_ifrs_categories=ifrs_categories_json
+            )
+
+            # Build structured result with AI-powered IFRS categorization
+            result = {
+                "success": True,
+                "vendor_name": prediction.vendor_name,
+                "total_amount": prediction.total_amount,
+                "currency": prediction.currency,
+                "transaction_date": prediction.transaction_date,
+                "document_number": prediction.document_number,
+
+                # AI-powered IFRS category selection
+                "suggested_category": prediction.ifrs_category_selection.selected_category,
+                "category_confidence": prediction.ifrs_category_selection.selection_confidence,
+                "category_reasoning": prediction.ifrs_category_selection.selection_reasoning,
+
+                # Quality metrics
+                "confidence_score": prediction.extraction_confidence,
+                "requires_validation": prediction.requires_validation,
+                "backend_used": "ai_ifrs_categorization"
+            }
+
+            print(f"✅ AI IFRS processing completed: {result['vendor_name']}, {result['total_amount']} {result['currency']}", file=sys.stderr)
+            print(f"🎯 AI-selected IFRS category: {result['suggested_category']} ({result['category_confidence']:.3f})", file=sys.stderr)
+            print(f"🤖 AI reasoning: {result['category_reasoning']}", file=sys.stderr)
+
+            return result
+
+        except Exception as e:
+            print(f"❌ AI IFRS processing failed: {str(e)}", file=sys.stderr)
+            return {
+                "success": False,
+                "error": str(e),
+                "backend_used": "ai_ifrs_failed"
+            }
+
+def process_document_with_ai_ifrs(document_image, lm_client, ifrs_categories):
+    \"\"\"Process document with AI-powered IFRS category selection\"\"\"
+
+    # Configure DSPy with the provided LM
+    dspy.settings.configure(lm=lm_client, adapter=dspy.JSONAdapter())
+
+    # Format IFRS categories as JSON for AI processing
+    ifrs_json = json.dumps(ifrs_categories)
+    print(f"📋 Using IFRS categories for AI: {ifrs_json}", file=sys.stderr)
+
+    # Initialize and run AI-powered processor
+    processor = AIIFRSDocumentProcessor()
+    return processor.forward(document_image, ifrs_json)
 
 # Inject unified DSPy processing (consolidated)
 ${unifiedDspyScript}
@@ -216,14 +311,18 @@ def main():
         
         print(f"🖼️ Image ready: {document_image_pil.size}", file=sys.stderr)
         
-        # Run both Gemini and vLLM for comparison
+        # Run both Gemini and vLLM for comparison with AI-powered IFRS categorization
         gemini_result = None
         vllm_result = None
-        
-        # Try Gemini first - capture all errors in return value
+
+        # IFRS categories for AI-powered processing (from shared constants)
+        ifrs_categories = ${JSON.stringify(ifrsCategories)}
+        print(f"📋 Using {len(ifrs_categories)} IFRS categories for AI categorization", file=sys.stderr)
+
+        # Try Gemini first with AI IFRS categorization - capture all errors in return value
         gemini_error_details = None
         try:
-            print("🔧 Running Gemini processing for comparison...", file=sys.stderr)
+            print("🔧 Running Gemini processing with AI-powered IFRS categorization...", file=sys.stderr)
 
             gemini_api_key = os.getenv('GEMINI_API_KEY')
             if not gemini_api_key:
@@ -238,12 +337,11 @@ def main():
             )
             print(f"✅ Gemini LM configured successfully", file=sys.stderr)
 
-            print(f"🤖 Calling process_document_with_dspy for Gemini...", file=sys.stderr)
-            gemini_result = process_document_with_dspy(
+            print(f"🤖 Calling process_document_with_ai_ifrs for Gemini...", file=sys.stderr)
+            gemini_result = process_document_with_ai_ifrs(
                 document_image=document_image_pil,
                 lm_client=gemini_lm,
-                processing_strategy="auto",
-                processing_options={'backend': 'gemini_primary'}
+                ifrs_categories=ifrs_categories
             )
             print(f"🔍 Gemini raw result type: {type(gemini_result)}", file=sys.stderr)
             print(f"🔍 Gemini raw result preview: {str(gemini_result)[:300]}...", file=sys.stderr)
@@ -305,7 +403,7 @@ def main():
         vllm_endpoint = os.getenv('OCR_ENDPOINT_URL')
         if vllm_endpoint:
             try:
-                print("🔧 Running vLLM processing for comparison...", file=sys.stderr)
+                print("🔧 Running vLLM processing with AI-powered IFRS categorization...", file=sys.stderr)
 
                 vllm_model = os.getenv('OCR_MODEL_NAME', 'brandonbeiler/Skywork-R1V3-38B-FP8-Dynamic')
                 print(f"🔧 Configuring vLLM with endpoint: {vllm_endpoint}, model: {vllm_model}", file=sys.stderr)
@@ -319,12 +417,11 @@ def main():
                 )
                 print(f"✅ vLLM LM configured successfully", file=sys.stderr)
 
-                print(f"🤖 Calling process_document_with_dspy for vLLM...", file=sys.stderr)
-                vllm_result = process_document_with_dspy(
+                print(f"🤖 Calling process_document_with_ai_ifrs for vLLM...", file=sys.stderr)
+                vllm_result = process_document_with_ai_ifrs(
                     document_image=document_image_pil,
                     lm_client=skywork_lm,
-                    processing_strategy="auto",
-                    processing_options={'backend': 'vllm_comparison'}
+                    ifrs_categories=ifrs_categories
                 )
                 print(f"🔍 vLLM raw result type: {type(vllm_result)}", file=sys.stderr)
                 print(f"🔍 vLLM raw result preview: {str(vllm_result)[:300]}...", file=sys.stderr)
@@ -535,30 +632,19 @@ print(json.dumps(result))
       console.log(`🏪 Vendor: ${finalExtractionData.document_summary?.vendor_name || finalExtractionData.vendor_name}`);
       console.log(`💰 Amount: ${finalExtractionData.document_summary?.total_amount || finalExtractionData.total_amount}`);
 
-      // Step 5: Business categorization
-      console.log(`🏢 Performing business categorization...`);
-      const businessId = docRecord.business_id;
-      if (!businessId) {
-        throw new Error('Unable to determine business ID for categorization');
-      }
-      console.log(`🏢 Business ID: ${businessId}`);
-      
-      const businessCategories = await fetchEnabledCategoriesFromDB(businessId);
-      const enhancedCategory = categorizeExpenseWithDynamicCategories(finalExtractionData, businessCategories);
-      
-      console.log(`🏷️ Category: ${enhancedCategory.category} (${(enhancedCategory.confidence * 100).toFixed(1)}%)`);
+      // Step 5: AI-powered IFRS categorization (already completed by DSPy)
+      console.log(`🤖 AI-powered IFRS categorization completed by DSPy`);
+      console.log(`🎯 AI-selected IFRS category: ${finalExtractionData.suggested_category}`);
+      console.log(`📊 AI confidence: ${(finalExtractionData.category_confidence * 100).toFixed(1)}%`);
+      console.log(`🧠 AI reasoning: ${finalExtractionData.category_reasoning}`);
 
-      // Step 6: Prepare final DSPy result with business categorization
-      console.log(`🔄 Preparing final DSPy result with business categorization`);
+      // Step 6: Prepare final DSPy result with AI-powered IFRS categorization
+      console.log(`🔄 Preparing final DSPy result with AI IFRS categorization`);
 
-      // Store raw DSPy output directly with business categorization enhancements
+      // Store raw DSPy output directly (already contains AI-powered IFRS categorization)
       const finalDspyResult = {
-        ...finalExtractionData, // All raw DSPy fields (vendor_name, total_amount, currency, etc.)
-        // Add business categorization
-        suggested_category: enhancedCategory.category,
-        category_confidence: enhancedCategory.confidence,
-        category_reasoning: enhancedCategory.reasoning,
-        processing_method: finalExtractionData.backend_used || 'dspy_processing'
+        ...finalExtractionData, // All raw DSPy fields including AI-selected IFRS category
+        processing_method: finalExtractionData.backend_used || 'ai_ifrs_categorization'
       };
 
       // Step 7: Update database with raw DSPy structure
@@ -572,9 +658,11 @@ print(json.dumps(result))
         processing_metadata: {
           backend_used: finalExtractionData.backend_used,
           requires_validation: finalExtractionData.requires_validation,
-          category_suggestion: {
-            enhanced: enhancedCategory.category,
-            confidence: enhancedCategory.confidence
+          ai_ifrs_categorization: {
+            selected_category: finalExtractionData.suggested_category,
+            confidence: finalExtractionData.category_confidence,
+            reasoning: finalExtractionData.category_reasoning,
+            processing_type: 'ai_powered_ifrs'
           }
         }
       }).eq('id', payload.documentId);
@@ -585,13 +673,16 @@ print(json.dumps(result))
 
       console.log(`✅ Document ${payload.documentId} processed successfully`);
       
-      return { 
-        success: true, 
-        documentId: payload.documentId, 
+      return {
+        success: true,
+        documentId: payload.documentId,
         confidence: finalExtractionData.confidence_score,
-        category: enhancedCategory.category,
+        suggested_category: finalExtractionData.suggested_category,
+        category_confidence: finalExtractionData.category_confidence,
+        category_reasoning: finalExtractionData.category_reasoning,
         requiresValidation: finalExtractionData.requires_validation,
-        backend: finalExtractionData.backend_used
+        backend: finalExtractionData.backend_used,
+        processing_type: 'ai_powered_ifrs'
       };
 
     } catch (dspyError) {
@@ -628,7 +719,7 @@ import traceback
 ${unifiedDspyScript}
 
 def main():
-    print("🚀 vLLM Fallback DSPy Processing", file=sys.stderr)
+    print("🚀 vLLM Fallback DSPy Processing with AI IFRS Categorization", file=sys.stderr)
     
     try:
         # Prepare image data
@@ -639,7 +730,11 @@ def main():
         document_image_pil = Image.open(io.BytesIO(image_bytes))
         
         print(f"🖼️ vLLM Image ready: {document_image_pil.size}", file=sys.stderr)
-        
+
+        # IFRS categories for AI-powered processing
+        ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES_FOR_DSPY)}
+        print(f"📋 vLLM using {len(ifrs_categories)} IFRS categories for AI categorization", file=sys.stderr)
+
         # Configure vLLM backend
         vllm_endpoint = os.getenv('OCR_ENDPOINT_URL')
         vllm_model = os.getenv('OCR_MODEL_NAME', 'brandonbeiler/Skywork-R1V3-38B-FP8-Dynamic')
@@ -656,11 +751,10 @@ def main():
             max_tokens=16384
         )
         
-        result = process_document_with_dspy(
+        result = process_document_with_ai_ifrs(
             document_image=document_image_pil,
             lm_client=skywork_lm,
-            processing_strategy="auto",
-            processing_options={'backend': 'vllm_fallback'}
+            ifrs_categories=ifrs_categories
         )
         
         # Safely access result - handle both dict and string returns
@@ -730,30 +824,19 @@ print(json.dumps(result))
           console.log(`🏪 Vendor: ${vllmExtractionData.document_summary?.vendor_name || vllmExtractionData.vendor_name}`);
           console.log(`💰 Amount: ${vllmExtractionData.document_summary?.total_amount || vllmExtractionData.total_amount}`);
 
-          // Business categorization for vLLM result
-          console.log(`🏢 Performing business categorization (vLLM fallback)...`);
-          const businessId = docRecord.business_id;
-          if (!businessId) {
-            throw new Error('Unable to determine business ID for categorization');
-          }
-          console.log(`🏢 Business ID: ${businessId}`);
+          // AI-powered IFRS categorization (already completed by vLLM DSPy)
+          console.log(`🤖 AI-powered IFRS categorization completed by vLLM DSPy`);
+          console.log(`🎯 vLLM AI-selected IFRS category: ${vllmExtractionData.suggested_category}`);
+          console.log(`📊 vLLM AI confidence: ${(vllmExtractionData.category_confidence * 100).toFixed(1)}%`);
+          console.log(`🧠 vLLM AI reasoning: ${vllmExtractionData.category_reasoning}`);
 
-          const businessCategories = await fetchEnabledCategoriesFromDB(businessId);
-          const enhancedCategory = categorizeExpenseWithDynamicCategories(vllmExtractionData, businessCategories);
-          
-          console.log(`🏷️ vLLM Category: ${enhancedCategory.category} (${(enhancedCategory.confidence * 100).toFixed(1)}%)`);
+          // Prepare final vLLM DSPy result with AI-powered IFRS categorization
+          console.log(`🔄 Preparing final vLLM DSPy result with AI IFRS categorization`);
 
-          // Prepare final vLLM DSPy result with business categorization
-          console.log(`🔄 Preparing final vLLM DSPy result with business categorization`);
-
-          // Store raw vLLM DSPy output directly with business categorization enhancements
+          // Store raw vLLM DSPy output directly (already contains AI-powered IFRS categorization)
           const finalVllmDspyResult = {
-            ...vllmExtractionData, // All raw DSPy fields (vendor_name, total_amount, currency, etc.)
-            // Add business categorization
-            suggested_category: enhancedCategory.category,
-            category_confidence: enhancedCategory.confidence,
-            category_reasoning: enhancedCategory.reasoning,
-            processing_method: vllmExtractionData.backend_used || 'vllm_fallback'
+            ...vllmExtractionData, // All raw DSPy fields including AI-selected IFRS category
+            processing_method: vllmExtractionData.backend_used || 'vllm_ai_ifrs_fallback'
           };
 
           // Update database with vLLM raw DSPy structure
@@ -767,9 +850,11 @@ print(json.dumps(result))
             processing_metadata: {
               backend_used: vllmExtractionData.backend_used,
               requires_validation: vllmExtractionData.requires_validation,
-              category_suggestion: {
-                enhanced: enhancedCategory.category,
-                confidence: enhancedCategory.confidence
+              ai_ifrs_categorization: {
+                selected_category: vllmExtractionData.suggested_category,
+                confidence: vllmExtractionData.category_confidence,
+                reasoning: vllmExtractionData.category_reasoning,
+                processing_type: 'vllm_ai_ifrs_fallback'
               },
               fallback_reason: 'Primary DSPy processing failed',
               primary_error: dspyError instanceof Error ? dspyError.message : 'Primary processing failed'
@@ -782,14 +867,16 @@ print(json.dumps(result))
 
           console.log(`✅ Document ${payload.documentId} processed successfully with vLLM fallback`);
           
-          return { 
-            success: true, 
-            documentId: payload.documentId, 
+          return {
+            success: true,
+            documentId: payload.documentId,
             confidence: vllmExtractionData.confidence_score,
-            category: enhancedCategory.category,
+            suggested_category: vllmExtractionData.suggested_category,
+            category_confidence: vllmExtractionData.category_confidence,
+            category_reasoning: vllmExtractionData.category_reasoning,
             requiresValidation: vllmExtractionData.requires_validation,
             backend: vllmExtractionData.backend_used,
-            method: 'vllm_fallback'
+            processing_type: 'vllm_ai_ifrs_fallback'
           };
 
         } catch (fallbackError) {
