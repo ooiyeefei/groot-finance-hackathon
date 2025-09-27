@@ -28,8 +28,8 @@ export default defineConfig({
       pythonExtension({
         // Path to requirements.txt file
         requirementsFile: "./requirements.txt",
-        // Python binary path for development (uses relative path for portability)
-        devPythonBinaryPath: "./venv/bin/python3",
+        // Use system python3 for development (macOS doesn't have 'python' command)
+        devPythonBinaryPath: "/opt/homebrew/bin/python3",
       }),
     ],
   },

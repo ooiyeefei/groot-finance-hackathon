@@ -255,19 +255,29 @@ export default function TransactionFormModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              form="transaction-form"
+              disabled={isLoading}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Saving...' : (transaction ? 'Update Transaction' : 'Create Transaction')}
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Content - Two Pane Layout */}
         <div className="flex-1 flex min-h-0">
           {/* Left Pane - Form Fields (Scrollable) */}
           <div className="w-1/2 border-r border-gray-700 flex flex-col min-h-0">
-            <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 p-6">
+            <form id="transaction-form" onSubmit={handleSubmit} className="overflow-y-auto flex-1 p-6">
               <div className="space-y-4">
                 {/* Transaction Details */}
                 <div>
@@ -544,24 +554,6 @@ export default function TransactionFormModal({
                   </div>
                 )}
 
-                {/* Form Actions */}
-                <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-700">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
-                    disabled={isLoading}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-                  >
-                    {isLoading ? 'Saving...' : (transaction ? 'Update Transaction' : 'Create Transaction')}
-                  </button>
-                </div>
               </div>
             </form>
           </div>
