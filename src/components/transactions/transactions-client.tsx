@@ -11,6 +11,7 @@ import DocumentAnalysisModal from '@/components/documents/document-analysis-moda
 import { useTransactions } from '@/hooks/use-transactions'
 import { Transaction } from '@/types/transaction'
 import { Plus } from 'lucide-react'
+import { ClientProviders } from '@/components/providers/client-providers'
 
 export default function TransactionsClient() {
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -87,73 +88,75 @@ export default function TransactionsClient() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-900">
-      {/* Sidebar */}
-      <Sidebar />
-      
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <HeaderWithUser
-          title="Transactions"
-          subtitle="View and manage your financial transactions across multiple currencies"
-        />
-        
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-auto p-6">
-          <TransactionsList
-            transactions={transactions}
-            isLoading={loading}
-            error={null}
-            onRefresh={refreshTransactions}
-            onView={setViewingTransaction}
-            onEdit={setEditingTransaction}
-            onDelete={handleDeleteTransaction}
+    <ClientProviders>
+      <div className="flex h-screen bg-gray-900">
+        {/* Sidebar */}
+        <Sidebar />
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {/* Header */}
+          <HeaderWithUser
+            title="Transactions"
+            subtitle="View and manage your financial transactions across multiple currencies"
           />
-        </main>
+
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-auto p-6">
+            <TransactionsList
+              transactions={transactions}
+              isLoading={loading}
+              error={null}
+              onRefresh={refreshTransactions}
+              onView={setViewingTransaction}
+              onEdit={setEditingTransaction}
+              onDelete={handleDeleteTransaction}
+            />
+          </main>
+        </div>
+
+        {/* Modals */}
+        {showCreateModal && (
+          <TransactionFormModal
+            onClose={() => setShowCreateModal(false)}
+            onSubmit={handleCreateTransaction}
+          />
+        )}
+
+        {editingTransaction && (
+          <TransactionFormModal
+            transaction={editingTransaction}
+            onClose={() => setEditingTransaction(null)}
+            onSubmit={handleUpdateTransaction}
+          />
+        )}
+
+        {viewingTransaction && (
+          <TransactionDetailModal
+            transaction={viewingTransaction}
+            onClose={() => setViewingTransaction(null)}
+            onEdit={handleEditFromDetail}
+            onDelete={() => handleDeleteTransaction(viewingTransaction.id)}
+            onViewDocument={handleViewDocument}
+          />
+        )}
+
+        {selectedDocument && (
+          <DocumentAnalysisModal
+            document={selectedDocument}
+            onClose={() => setSelectedDocument(null)}
+          />
+        )}
+
+        {/* Floating Action Button */}
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="fixed bottom-6 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all duration-200 ease-in-out flex items-center justify-center"
+          aria-label="Add new transaction"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
       </div>
-
-      {/* Modals */}
-      {showCreateModal && (
-        <TransactionFormModal
-          onClose={() => setShowCreateModal(false)}
-          onSubmit={handleCreateTransaction}
-        />
-      )}
-
-      {editingTransaction && (
-        <TransactionFormModal
-          transaction={editingTransaction}
-          onClose={() => setEditingTransaction(null)}
-          onSubmit={handleUpdateTransaction}
-        />
-      )}
-
-      {viewingTransaction && (
-        <TransactionDetailModal
-          transaction={viewingTransaction}
-          onClose={() => setViewingTransaction(null)}
-          onEdit={handleEditFromDetail}
-          onDelete={() => handleDeleteTransaction(viewingTransaction.id)}
-          onViewDocument={handleViewDocument}
-        />
-      )}
-
-      {selectedDocument && (
-        <DocumentAnalysisModal
-          document={selectedDocument}
-          onClose={() => setSelectedDocument(null)}
-        />
-      )}
-
-      {/* Floating Action Button */}
-      <button
-        onClick={() => setShowCreateModal(true)}
-        className="fixed bottom-6 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all duration-200 ease-in-out flex items-center justify-center"
-        aria-label="Add new transaction"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
-    </div>
+    </ClientProviders>
   )
 }

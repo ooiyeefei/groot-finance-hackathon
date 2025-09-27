@@ -2,7 +2,7 @@
 const nextConfig = {
   // Your other Next.js config options can go here
   
-  // Allow external images from Google Cloud Storage
+  // Allow external images from Google Cloud Storage and Supabase Storage
   images: {
     remotePatterns: [
       {
@@ -10,6 +10,12 @@ const nextConfig = {
         hostname: 'storage.googleapis.com',
         port: '',
         pathname: '/finanseal-logo/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'ohxwghdgsuyabgsndfzc.supabase.co',
+        port: '',
+        pathname: '/storage/v1/object/public/business-profiles/**',
       },
     ],
   },
@@ -32,7 +38,7 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
 
-  // Allow build to complete even with ESLint warnings
+  // Temporarily ignore ESLint during builds - will address warnings in separate task
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -42,9 +48,8 @@ const nextConfig = {
     typedRoutes: false,
   },
 
-  // Disable React StrictMode in development to prevent double-firing
-  // This prevents useEffect from running twice in development mode
-  reactStrictMode: false,
+  // Enable React StrictMode to catch potential issues early
+  reactStrictMode: true,
 };
 
 export default nextConfig;

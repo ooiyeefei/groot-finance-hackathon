@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import InvitationDialog, { InvitationFormData } from '@/components/ui/invitation-dialog'
+import { clearUserRoleCache } from '@/lib/cache-utils'
 
 interface TeamMember {
   id: string
@@ -148,6 +149,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
       if (result.success) {
         setSuccess(`User role updated successfully`)
+        // Clear user role cache so sidebar updates immediately
+        clearUserRoleCache()
         await fetchTeamMembers() // Refresh the list
       } else {
         setError(result.error || 'Failed to update user role')

@@ -8,6 +8,7 @@ import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import PersonalExpenseDashboard from '@/components/expense-claims/personal-expense-dashboard'
+import { ClientProviders } from '@/components/providers/client-providers'
 
 export default async function ExpenseClaimsPage() {
   // Server-side authentication check
@@ -27,26 +28,28 @@ export default async function ExpenseClaimsPage() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-900">
-      {/* Sidebar */}
-      <Sidebar />
+    <ClientProviders>
+      <div className="flex h-screen bg-gray-900">
+        {/* Sidebar */}
+        <Sidebar />
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <HeaderWithUser
-          title="Expense Claims"
-          subtitle=""
-        />
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {/* Header */}
+          <HeaderWithUser
+            title="Expense Claims"
+            subtitle=""
+          />
 
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-auto p-4 sm:p-6">
-          <div className="max-w-7xl mx-auto">
-            {/* Personal Expense Dashboard */}
-            <PersonalExpenseDashboard userId={userId} />
-          </div>
-        </main>
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-auto p-4 sm:p-6">
+            <div className="max-w-7xl mx-auto">
+              {/* Personal Expense Dashboard */}
+              <PersonalExpenseDashboard userId={userId} />
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ClientProviders>
   )
 }

@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Users, Shield, Edit, Mail, Calendar, Briefcase, Loader2, ShieldAlert, AlertCircle, CheckCircle, Crown, UserCheck } from 'lucide-react'
+import { clearUserRoleCache } from '@/lib/cache-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -112,6 +113,8 @@ export default function TeamManagementClient({ userId }: TeamManagementClientPro
 
       if (result.success) {
         setSuccess(`User role updated successfully`)
+        // Clear user role cache so sidebar updates immediately
+        clearUserRoleCache()
         await fetchTeamMembers() // Refresh the list
       } else {
         setError(result.error || 'Failed to update user role')

@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react'
 import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, ChevronLeft, Users, CheckCircle } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
+import { useBusinessProfile } from '@/contexts/business-profile-context'
+import { getCachedUserRole, cacheUserRole } from '@/lib/cache-utils'
 
 interface UserRole {
   employee: boolean
@@ -18,7 +20,14 @@ export default function Sidebar() {
   const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
-  const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, admin: false })
+  // Initialize user role from localStorage cache
+  const getInitialUserRole = (): UserRole => {
+    const cached = getCachedUserRole()
+    return cached || { employee: true, manager: false, admin: false }
+  }
+
+  const [userRole, setUserRole] = useState<UserRole>(getInitialUserRole())
+  const { profile: businessProfile } = useBusinessProfile()
   
   // Base navigation items
   const baseNavigation = [
@@ -67,11 +76,13 @@ export default function Sidebar() {
 
     // Fetch user role and permissions
     fetchUserRole()
-    
-    return () => window.removeEventListener('resize', checkMobile)
+
+    return () => {
+      window.removeEventListener('resize', checkMobile)
+    }
   }, [])
 
-  // Fetch user role and pending approvals count
+  // Fetch user role and cache the result
   const fetchUserRole = async () => {
     try {
       // Get user role from employee profile
@@ -79,12 +90,20 @@ export default function Sidebar() {
       if (roleResponse.ok) {
         const roleResult = await roleResponse.json()
         if (roleResult.success) {
-          setUserRole(roleResult.data.permissions)
+          const permissions = roleResult.data.permissions
+          setUserRole(permissions)
+          // Cache the result using the utility function
+          cacheUserRole(permissions)
         }
       }
     } catch (error) {
       console.error('Failed to fetch user role:', error)
     }
+  }
+
+
+  const getBusinessInitial = () => {
+    return businessProfile?.name?.[0]?.toUpperCase() || 'B'
   }
 
 
@@ -103,28 +122,37 @@ export default function Sidebar() {
         transition-all duration-300 ease-in-out
         ${isMobile ? 'fixed left-0 top-0 h-full z-50' : 'relative'}
       `}>
-        {/* Logo and Toggle */}
+        {/* Business Profile and Toggle */}
         <div className={`${isExpanded ? 'p-6' : 'p-4'} transition-all duration-300 ease-in-out`}>
           <div className={`flex items-center ${isExpanded ? 'justify-between' : 'justify-center'}`}>
             {isExpanded ? (
               <>
                 <Link href="/" className="flex items-center space-x-3 min-w-0">
                   <div className="flex-shrink-0">
-                    <Image
-                      src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
-                      alt="FinanSEAL Logo"
-                      width={43}
-                      height={43}
-                      className="rounded-lg"
-                    />
+                    {businessProfile?.logo_url ? (
+                      <Image
+                        src={businessProfile.logo_url}
+                        alt="Business Logo"
+                        width={37}
+                        height={37}
+                        className="rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div
+                        className="w-[37px] h-[37px] rounded-lg flex items-center justify-center text-white font-bold text-lg"
+                        style={{ backgroundColor: businessProfile?.logo_fallback_color || '#3b82f6' }}
+                      >
+                        {getBusinessInitial()}
+                      </div>
+                    )}
                   </div>
                   <div className="transition-all duration-300 ease-in-out overflow-hidden">
-                    <h2 className="text-2xl font-bold text-white whitespace-nowrap">
-                      FinanSEAL
+                    <h2 className="text-lg font-semibold text-white whitespace-nowrap">
+                      {businessProfile?.name || 'My Business'}
                     </h2>
                   </div>
                 </Link>
-                
+
                 <button
                   onClick={toggleSidebar}
                   className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0"
@@ -136,15 +164,24 @@ export default function Sidebar() {
             ) : (
               <div className="flex flex-col items-center space-y-2">
                 <Link href="/" className="flex-shrink-0">
-                  <Image
-                    src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
-                    alt="FinanSEAL Logo"
-                    width={39}
-                    height={39}
-                    className="rounded hover:opacity-80 transition-opacity"
-                  />
+                  {businessProfile?.logo_url ? (
+                    <Image
+                      src={businessProfile.logo_url}
+                      alt="Business Logo"
+                      width={33}
+                      height={33}
+                      className="rounded-lg object-cover hover:opacity-80 transition-opacity"
+                    />
+                  ) : (
+                    <div
+                      className="w-[33px] h-[33px] rounded-lg flex items-center justify-center text-white font-bold text-base hover:opacity-80 transition-opacity"
+                      style={{ backgroundColor: businessProfile?.logo_fallback_color || '#3b82f6' }}
+                    >
+                      {getBusinessInitial()}
+                    </div>
+                  )}
                 </Link>
-                
+
                 <button
                   onClick={toggleSidebar}
                   className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
@@ -223,6 +260,39 @@ export default function Sidebar() {
             })}
           </ul>
         </nav>
+
+        {/* Powered by FinanSEAL */}
+        <div className="p-4">
+          {isExpanded ? (
+            <div className="flex items-center justify-center space-x-2 text-gray-400 text-sm">
+              <span>Powered by</span>
+              <Image
+                src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
+                alt="FinanSEAL"
+                width={27}
+                height={27}
+                className="rounded opacity-80"
+              />
+              <span className="font-medium">FinanSEAL</span>
+            </div>
+          ) : (
+            <div className="flex justify-center">
+              <div className="relative group">
+                <Image
+                  src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
+                  alt="Powered by FinanSEAL"
+                  width={23}
+                  height={23}
+                  className="rounded opacity-60 hover:opacity-80 transition-opacity"
+                />
+                {/* Tooltip for collapsed state */}
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                  Powered by FinanSEAL
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
       </div>
 

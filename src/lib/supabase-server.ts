@@ -13,18 +13,44 @@ async function getSupabaseUserUuid(clerkUserId: string): Promise<string> {
       }
     }
   )
-  
+
   const { data: user, error } = await serviceClient
     .from('users')
     .select('id')
     .eq('clerk_user_id', clerkUserId)
     .single()
-    
+
   if (error || !user) {
     throw new Error(`Failed to resolve Clerk user ID to Supabase UUID: ${error?.message || 'User not found'}`)
   }
-  
+
   return user.id
+}
+
+// Helper function to get user data including business_id (bypasses RLS)
+export async function getUserData(clerkUserId: string): Promise<{id: string, business_id: string | null}> {
+  const serviceClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  )
+
+  const { data: user, error } = await serviceClient
+    .from('users')
+    .select('id, business_id')
+    .eq('clerk_user_id', clerkUserId)
+    .single()
+
+  if (error || !user) {
+    throw new Error(`Failed to fetch user data: ${error?.message || 'User not found'}`)
+  }
+
+  return user
 }
 
 // Create a user-scoped Supabase client with proper RLS enforcement

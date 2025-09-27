@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import CurrencySettings from '@/components/settings/currency-settings'
+import BusinessProfileSettings from '@/components/settings/business-profile-settings'
+import { ClientProviders } from '@/components/providers/client-providers'
 
 export default async function SettingsPage() {
   // Server-side authentication check
@@ -13,12 +15,13 @@ export default async function SettingsPage() {
   }
   
   return (
-    <div className="flex h-screen bg-gray-900">
-      {/* Sidebar */}
-      <Sidebar />
-      
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+    <ClientProviders>
+      <div className="flex h-screen bg-gray-900">
+        {/* Sidebar */}
+        <Sidebar />
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
         {/* Header */}
         <HeaderWithUser
           title="Settings"
@@ -30,6 +33,9 @@ export default async function SettingsPage() {
           <div className="max-w-4xl mx-auto">
             {/* Settings Sections */}
             <div className="space-y-6">
+              {/* Business Profile Settings */}
+              <BusinessProfileSettings />
+
               {/* Currency Settings */}
               <CurrencySettings />
 
@@ -106,7 +112,8 @@ export default async function SettingsPage() {
             </div>
           </div>
         </main>
+        </div>
       </div>
-    </div>
+    </ClientProviders>
   )
 }
