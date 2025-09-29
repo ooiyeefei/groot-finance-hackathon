@@ -20,14 +20,11 @@ export default function Sidebar() {
   const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
-  // Initialize user role from localStorage cache
-  const getInitialUserRole = (): UserRole => {
-    const cached = getCachedUserRole()
-    return cached || { employee: true, manager: false, admin: false }
-  }
+  const [isHydrated, setIsHydrated] = useState(false) // Track hydration completion
 
-  const [userRole, setUserRole] = useState<UserRole>(getInitialUserRole())
-  const { profile: businessProfile } = useBusinessProfile()
+  // Initialize user role with default values to prevent hydration mismatch
+  const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, admin: false })
+  const { profile: businessProfile, isLoading } = useBusinessProfile()
   
   // Base navigation items
   const baseNavigation = [
@@ -58,6 +55,15 @@ export default function Sidebar() {
 
   // Load saved state from localStorage and fetch user role
   useEffect(() => {
+    // Mark as hydrated - prevents hydration mismatch
+    setIsHydrated(true)
+
+    // Load cached user role to prevent hydration mismatch
+    const cachedRole = getCachedUserRole()
+    if (cachedRole) {
+      setUserRole(cachedRole)
+    }
+
     const savedState = localStorage.getItem('sidebar-expanded')
     if (savedState !== null) {
       setIsExpanded(JSON.parse(savedState))
@@ -106,6 +112,11 @@ export default function Sidebar() {
     return businessProfile?.name?.[0]?.toUpperCase() || 'B'
   }
 
+  // Determine if we should show logo image (prevents hydration mismatch)
+  const shouldShowLogo = () => {
+    return isHydrated && !isLoading && businessProfile?.logo_url
+  }
+
 
   // Save state to localStorage
   const toggleSidebar = () => {
@@ -129,7 +140,7 @@ export default function Sidebar() {
               <>
                 <Link href="/" className="flex items-center space-x-3 min-w-0">
                   <div className="flex-shrink-0">
-                    {businessProfile?.logo_url ? (
+                    {shouldShowLogo() && businessProfile?.logo_url ? (
                       <Image
                         src={businessProfile.logo_url}
                         alt="Business Logo"
@@ -141,14 +152,15 @@ export default function Sidebar() {
                       <div
                         className="w-[37px] h-[37px] rounded-lg flex items-center justify-center text-white font-bold text-lg"
                         style={{ backgroundColor: businessProfile?.logo_fallback_color || '#3b82f6' }}
+                        suppressHydrationWarning={true}
                       >
-                        {getBusinessInitial()}
+                        {isHydrated ? getBusinessInitial() : 'B'}
                       </div>
                     )}
                   </div>
                   <div className="transition-all duration-300 ease-in-out overflow-hidden">
-                    <h2 className="text-lg font-semibold text-white whitespace-nowrap">
-                      {businessProfile?.name || 'My Business'}
+                    <h2 className="text-lg font-semibold text-white whitespace-nowrap" suppressHydrationWarning={true}>
+                      {isHydrated ? (businessProfile?.name || 'My Business') : 'My Business'}
                     </h2>
                   </div>
                 </Link>
@@ -164,7 +176,7 @@ export default function Sidebar() {
             ) : (
               <div className="flex flex-col items-center space-y-2">
                 <Link href="/" className="flex-shrink-0">
-                  {businessProfile?.logo_url ? (
+                  {shouldShowLogo() && businessProfile?.logo_url ? (
                     <Image
                       src={businessProfile.logo_url}
                       alt="Business Logo"
@@ -176,8 +188,9 @@ export default function Sidebar() {
                     <div
                       className="w-[33px] h-[33px] rounded-lg flex items-center justify-center text-white font-bold text-base hover:opacity-80 transition-opacity"
                       style={{ backgroundColor: businessProfile?.logo_fallback_color || '#3b82f6' }}
+                      suppressHydrationWarning={true}
                     >
-                      {getBusinessInitial()}
+                      {isHydrated ? getBusinessInitial() : 'B'}
                     </div>
                   )}
                 </Link>

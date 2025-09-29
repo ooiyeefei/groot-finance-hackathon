@@ -282,7 +282,7 @@ export function calculateRiskScore(claim: EnhancedExpenseClaim): number {
   let score = 0
   
   // Amount-based risk
-  const amount = claim.transaction?.home_amount || 0
+  const amount = claim.transaction?.home_currency_amount || 0
   if (amount > 10000) score += 30
   else if (amount > 5000) score += 20
   else if (amount > 1000) score += 10

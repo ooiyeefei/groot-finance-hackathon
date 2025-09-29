@@ -138,7 +138,7 @@ export async function calculateFinancialAnalytics(
   // First, let's check what transactions exist for this user
   const { data: allUserTransactions, error: checkError } = await supabase
     .from('transactions')
-    .select('id, transaction_date, transaction_type, original_amount, home_amount')
+    .select('id, transaction_date, transaction_type, original_amount, home_currency_amount')
     .eq('user_id', clerkUserId)
     .order('transaction_date', { ascending: false })
     .limit(10);
@@ -210,7 +210,7 @@ export async function calculateFinancialAnalytics(
   const categoryBreakdown: Record<string, number> = {};
 
   for (const transaction of transactions) {
-    const amount = transaction.home_amount || transaction.original_amount || 0;
+    const amount = transaction.home_currency_amount || transaction.original_amount || 0;
     const currency = transaction.home_currency || transaction.original_currency || homeCurrency;
     const category = transaction.category || 'uncategorized';
     const type = transaction.transaction_type;
@@ -273,7 +273,7 @@ export async function calculateFinancialAnalytics(
     console.log('[Analytics Engine] Found', receivableTransactions.length, 'outstanding receivable transactions');
     
     for (const transaction of receivableTransactions) {
-      const amount = transaction.home_amount || transaction.original_amount || 0;
+      const amount = transaction.home_currency_amount || transaction.original_amount || 0;
       const currency = (transaction.home_currency || transaction.original_currency || homeCurrency) as SupportedCurrency;
       
       // Use due_date if available, otherwise calculate as transaction_date + 30 days (standard payment terms)
@@ -368,7 +368,7 @@ export async function calculateFinancialAnalytics(
     console.log('[Analytics Engine] Found', payableTransactions.length, 'outstanding payable transactions');
     
     for (const transaction of payableTransactions) {
-      const amount = Math.abs(transaction.home_amount || transaction.original_amount || 0);
+      const amount = Math.abs(transaction.home_currency_amount || transaction.original_amount || 0);
       const currency = (transaction.home_currency || transaction.original_currency || homeCurrency) as SupportedCurrency;
       
       // Use due_date if available, otherwise calculate as transaction_date + 30 days (standard payment terms)

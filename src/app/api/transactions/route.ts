@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
         original_currency,
         original_amount,
         home_currency: homeCurrency,
-        home_amount: homeAmount,
+        home_currency_amount: homeAmount,
         exchange_rate: exchangeRate,
         exchange_rate_date: exchangeRateDate,
         transaction_date,

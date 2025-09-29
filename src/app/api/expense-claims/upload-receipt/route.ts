@@ -41,9 +41,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!businessPurpose || !expenseCategory) {
+    // Smart DSPy workflow: business_purpose and expense_category are optional for auto-categorization
+    if (!businessPurpose && !expenseCategory) {
       return NextResponse.json(
-        { success: false, error: 'Business purpose and expense category are required' },
+        { success: false, error: 'Either business purpose or expense category must be provided' },
         { status: 400 }
       )
     }
@@ -77,18 +78,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate expense category against business-specific categories
-    const isValidCategory = await isValidExpenseCategory(employeeProfile.business_id, expenseCategory)
-    if (!isValidCategory) {
-      return NextResponse.json(
-        { success: false, error: `Invalid expense category: ${expenseCategory}. Please use a valid category for your business.` },
-        { status: 400 }
-      )
-    }
+    // Smart DSPy categorization: Handle 'auto' flag for DSPy auto-categorization
+    let useAutoCategorization = false
+    let categoryInfo = null
+    let accountingCategory = null
 
-    // Get category details for proper accounting mapping
-    const categoryInfo = await getBusinessExpenseCategory(employeeProfile.business_id, expenseCategory)
-    const accountingCategory = categoryInfo?.accounting_category || mapExpenseCategoryToAccounting(expenseCategory)
+    if (expenseCategory === 'auto') {
+      // Use DSPy auto-categorization with business categories
+      useAutoCategorization = true
+      console.log(`[Expense Receipt API] Using DSPy auto-categorization for business ${employeeProfile.business_id}`)
+    } else if (expenseCategory) {
+      // Validate provided expense category against business-specific categories
+      const isValidCategory = await isValidExpenseCategory(employeeProfile.business_id, expenseCategory)
+      if (!isValidCategory) {
+        return NextResponse.json(
+          { success: false, error: `Invalid expense category: ${expenseCategory}. Please use a valid category for your business.` },
+          { status: 400 }
+        )
+      }
+
+      // Get category details for proper accounting mapping
+      categoryInfo = await getBusinessExpenseCategory(employeeProfile.business_id, expenseCategory)
+      accountingCategory = categoryInfo?.accounting_category || mapExpenseCategoryToAccounting(expenseCategory)
+    } else {
+      // No category provided, use auto-categorization
+      useAutoCategorization = true
+    }
 
     console.log(`[Expense Receipt API] Processing receipt upload for user ${userId}`)
     console.log(`[Expense Receipt API] File: ${file.name}, Category: ${expenseCategory}`)
@@ -124,38 +139,41 @@ export async function POST(request: NextRequest) {
     const userHomeCurrency = userProfile?.home_currency || 'SGD'
 
     // Create preliminary transaction record (will be updated when DSPy processing completes)
+    const transactionData = {
+      user_id: userId,
+      transaction_type: 'expense',
+      category: useAutoCategorization ? 'administrative_expenses' : accountingCategory, // Placeholder for auto, actual for manual
+      subcategory: useAutoCategorization ? 'auto_pending' : expenseCategory, // Placeholder for auto
+      description: `Expense from ${file.name}`,
+      original_currency: userHomeCurrency, // Will be updated from OCR if different
+      original_amount: 0, // Will be updated from OCR
+      home_currency: userHomeCurrency,
+      home_currency_amount: 0,
+      exchange_rate: 1,
+      exchange_rate_date: new Date().toISOString().split('T')[0],
+      transaction_date: new Date().toISOString().split('T')[0], // Will be updated from OCR
+      status: 'pending', // Start with pending status (will be synced by trigger)
+      created_by_method: 'document_extract',
+      processing_metadata: {
+        expense_category: useAutoCategorization ? 'auto_pending' : expenseCategory,
+        business_purpose: businessPurpose || 'Auto-extracted from receipt',
+        employee_profile_id: employeeProfile.id,
+        created_via: 'expense_receipt_upload',
+        file_path: filePath,
+        file_name: file.name,
+        processing_stage: 'ocr_extraction',
+        use_auto_categorization: useAutoCategorization,
+        category_mapping: useAutoCategorization ? null : {
+          business_category: expenseCategory,
+          accounting_category: accountingCategory,
+          category_name: categoryInfo?.business_category_name
+        }
+      }
+    }
+
     const { data: transaction, error: transactionError } = await supabase
       .from('transactions')
-      .insert({
-        user_id: userId,
-        transaction_type: 'expense',
-        category: accountingCategory, // Use mapped IFRS accounting category
-        subcategory: expenseCategory, // Keep original business category as subcategory
-        description: `Expense from ${file.name}`,
-        original_currency: userHomeCurrency, // Will be updated from OCR if different
-        original_amount: 0, // Will be updated from OCR
-        home_currency: userHomeCurrency,
-        home_currency_amount: 0,
-        exchange_rate: 1,
-        exchange_rate_date: new Date().toISOString().split('T')[0],
-        transaction_date: new Date().toISOString().split('T')[0], // Will be updated from OCR
-        status: 'pending', // Start with pending status (will be synced by trigger)
-        created_by_method: 'document_extract',
-        processing_metadata: {
-          expense_category: expenseCategory,
-          business_purpose: businessPurpose,
-          employee_profile_id: employeeProfile.id,
-          created_via: 'expense_receipt_upload',
-          file_path: filePath,
-          file_name: file.name,
-          processing_stage: 'ocr_extraction',
-          category_mapping: {
-            business_category: expenseCategory,
-            accounting_category: accountingCategory,
-            category_name: categoryInfo?.business_category_name
-          }
-        }
-      })
+      .insert(transactionData)
       .select()
       .single()
 
@@ -181,18 +199,19 @@ export async function POST(request: NextRequest) {
       employee_id: employeeProfile.id,
       business_id: employeeProfile.business_id,
       status: 'draft', // Start in draft status
-      business_purpose: businessPurpose,
+      business_purpose: businessPurpose || 'Auto-extracting from receipt...',
       business_purpose_details: {
-        category_reason: businessPurpose,
+        category_reason: businessPurpose || 'Auto-extracting from receipt...',
         file_upload: {
           original_filename: file.name,
           file_path: filePath,
           file_size: file.size,
           file_type: file.type
         },
-        processing_source: 'receipt_upload'
+        processing_source: 'receipt_upload',
+        use_auto_categorization: useAutoCategorization
       },
-      expense_category: expenseCategory,
+      expense_category: useAutoCategorization ? 'auto_pending' : expenseCategory,
       claim_month: claimMonth,
       risk_score: 0, // Will be calculated after OCR
       current_approver_id: null,
@@ -209,6 +228,7 @@ export async function POST(request: NextRequest) {
         },
         extraction_method: 'dspy',
         processing_stage: 'ocr_extraction',
+        use_auto_categorization: useAutoCategorization,
         started_at: new Date().toISOString()
       }
     }
@@ -267,7 +287,7 @@ export async function POST(request: NextRequest) {
     recentRequests.set(idempotentKey, now)
     const requestId = `${idempotentKey}-${now}`
 
-    // Trigger DSPy extraction with expense claim context
+    // Trigger DSPy extraction with expense claim context and business categories
     try {
       const taskHandle = await tasks.trigger('dspy-receipt-extraction', {
         receiptText: null,
@@ -276,8 +296,9 @@ export async function POST(request: NextRequest) {
         expenseClaimId: expenseClaim.id, // Pass expense claim ID instead of document ID
         transactionId: transaction.id,
         userId,
-        businessPurpose,
-        expenseCategory,
+        businessPurpose: businessPurpose || 'Auto-extracting from receipt...',
+        expenseCategory: useAutoCategorization ? 'auto' : expenseCategory,
+        useAutoCategorization: useAutoCategorization,
         imageMetadata: {
           confidence: 0.85,
           quality: 'good',

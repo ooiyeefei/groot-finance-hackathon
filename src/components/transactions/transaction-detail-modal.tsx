@@ -204,7 +204,7 @@ export default function TransactionDetailModal({
                         <div className="flex items-center justify-between">
                           <span className="text-gray-400">Home Currency:</span>
                           <span className="text-white font-semibold">
-                            {formatCurrency(transaction.home_amount, transaction.home_currency)}
+                            {formatCurrency(transaction.home_currency_amount, transaction.home_currency)}
                           </span>
                         </div>
                         

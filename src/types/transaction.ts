@@ -82,7 +82,7 @@ export interface Transaction {
   original_currency: SupportedCurrency
   original_amount: number
   home_currency: SupportedCurrency
-  home_amount: number
+  home_currency_amount: number
   exchange_rate: number
   exchange_rate_date: string // ISO date
   

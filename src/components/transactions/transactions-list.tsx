@@ -487,9 +487,11 @@ export default function TransactionsList({
                       {transaction.transaction_type === 'expense' && '-'}
                       {formatCurrency(transaction.original_amount, transaction.original_currency)}
                     </div>
-                    {transaction.original_currency !== transaction.home_currency && (
+                    {transaction.home_currency_amount &&
+                     transaction.original_currency !== transaction.home_currency &&
+                     parseFloat(transaction.home_currency_amount.toString()) !== parseFloat(transaction.original_amount.toString()) && (
                       <div className="text-sm text-gray-400">
-                        {formatCurrency(transaction.home_amount, transaction.home_currency)}
+                        ≈ {formatCurrency(transaction.home_currency_amount, transaction.home_currency)}
                       </div>
                     )}
                   </div>

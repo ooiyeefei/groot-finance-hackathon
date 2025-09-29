@@ -148,7 +148,50 @@ export async function ensureEmployeeProfile(userId: string): Promise<EmployeePro
     console.log(`[Employee Profile] No invitation found for user ${userId}, creating personal business for direct signup`)
 
     try {
-      // Create personal business for direct signup
+      // CRITICAL FIX: Check one more time for existing user to prevent race conditions
+      const { data: raceCheckUser, error: raceCheckError } = await supabase
+        .from('users')
+        .select('id, business_id, role')
+        .eq('clerk_user_id', userId)
+        .single()
+
+      if (!raceCheckError && raceCheckUser) {
+        console.log(`[Employee Profile] Race condition avoided - user created by another request`)
+        // Recursively call this function to handle the now-existing user
+        return ensureEmployeeProfile(userId)
+      }
+
+      // CRITICAL FIX: Also check by email to prevent duplicate businesses for same person
+      if (userEmail) {
+        const { data: existingByEmail, error: emailCheckError } = await supabase
+          .from('users')
+          .select('id, business_id, role, clerk_user_id')
+          .ilike('email', userEmail)
+          .single()
+
+        if (!emailCheckError && existingByEmail && !existingByEmail.clerk_user_id) {
+          // Found existing user by email but without clerk_user_id - link them
+          console.log(`[Employee Profile] Found existing user by email, linking Clerk account`)
+
+          const { error: linkError } = await supabase
+            .from('users')
+            .update({
+              clerk_user_id: userId,
+              full_name: clerkUser.firstName && clerkUser.lastName
+                ? `${clerkUser.firstName} ${clerkUser.lastName}`
+                : null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingByEmail.id)
+
+          if (!linkError) {
+            // Recursively call this function to handle the now-linked user
+            return ensureEmployeeProfile(userId)
+          }
+        }
+      }
+
+      // Safe to create new business now
       const businessName = clerkUser.firstName && clerkUser.lastName
         ? `${clerkUser.firstName} ${clerkUser.lastName}'s Business`
         : `${userEmail?.split('@')[0]}'s Business`
@@ -161,6 +204,8 @@ export async function ensureEmployeeProfile(userId: string): Promise<EmployeePro
           country_code: 'SG', // Use correct column name
           home_currency: 'SGD', // Use correct column name
           custom_expense_categories: getDefaultExpenseCategories(), // Add default expense categories
+          logo_url: 'https://storage.googleapis.com/finanseal-logo/finanseal.png', // Default logo prevents hydration errors
+          logo_fallback_color: '#3b82f6', // Consistent fallback color
           created_at: new Date().toISOString()
         })
         .select('id')
@@ -190,6 +235,11 @@ export async function ensureEmployeeProfile(userId: string): Promise<EmployeePro
 
       if (userError) {
         console.error('[Employee Profile] Error creating user record:', userError)
+        // If user creation fails due to duplicate clerk_user_id, another request beat us
+        if (userError.code === '23505') { // Unique constraint violation
+          console.log(`[Employee Profile] Another request created user simultaneously, retrying`)
+          return ensureEmployeeProfile(userId)
+        }
         return null
       }
 

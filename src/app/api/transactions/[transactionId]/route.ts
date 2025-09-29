@@ -223,7 +223,7 @@ export async function PUT(
             newCurrency as SupportedCurrency,
             homeCurrency
           )
-          updateData.home_amount = conversion.converted_amount
+          updateData.home_currency_amount = conversion.converted_amount
           updateData.exchange_rate = conversion.exchange_rate
           updateData.exchange_rate_date = conversion.rate_date
         } catch (error) {
@@ -231,7 +231,7 @@ export async function PUT(
           // Keep existing conversion data if conversion fails
         }
       } else {
-        updateData.home_amount = newAmount
+        updateData.home_currency_amount = newAmount
         updateData.exchange_rate = 1
         updateData.exchange_rate_date = new Date().toISOString().split('T')[0]
       }

@@ -160,7 +160,7 @@ async function checkOverdueReceivables(
 
         if (daysPastDue > config.receivables_aging_days) {
           const riskContext: TransactionRiskContext = {
-            amount: transaction.home_amount || transaction.original_amount,
+            amount: transaction.home_currency_amount || transaction.original_amount,
             currency: transaction.home_currency || transaction.original_currency || 'SGD',
             daysPastDue,
             transactionType: 'income'
@@ -174,7 +174,7 @@ async function checkOverdueReceivables(
             severity: riskScore.level === 'critical' ? 'critical' : 'warning',
             title: 'Overdue Receivable Alert',
             description: `Invoice from ${transaction.vendor_name || 'Unknown'} is ${daysPastDue} days overdue`,
-            amount: transaction.home_amount || transaction.original_amount,
+            amount: transaction.home_currency_amount || transaction.original_amount,
             currency: transaction.home_currency || transaction.original_currency || 'SGD',
             due_date: transaction.due_date,
             recommended_actions: [
@@ -220,7 +220,7 @@ async function checkPaymentDeadlines(
 
   if (upcomingPayables && upcomingPayables.length > 0) {
     const totalAmount = upcomingPayables.reduce((sum: number, t: any) =>
-      sum + Math.abs(t.home_amount || t.original_amount), 0
+      sum + Math.abs(t.home_currency_amount || t.original_amount), 0
     );
 
     alerts.push({
@@ -255,7 +255,7 @@ async function checkCurrencyExposure(
   // Get all open transactions to calculate currency exposure
   const { data: openTransactions, error } = await supabase
     .from('transactions')
-    .select('original_currency, original_amount, home_amount, transaction_type')
+    .select('original_currency, original_amount, home_currency_amount, transaction_type')
     .eq('user_id', clerkUserId)
     .in('status', ['pending', 'awaiting_payment']);
 
@@ -269,7 +269,7 @@ async function checkCurrencyExposure(
 
   for (const transaction of openTransactions) {
     const currency = transaction.original_currency || 'SGD';
-    const amount = Math.abs(transaction.home_amount || transaction.original_amount || 0);
+    const amount = Math.abs(transaction.home_currency_amount || transaction.original_amount || 0);
 
     if (!exposureByCurrency[currency]) {
       exposureByCurrency[currency] = 0;
@@ -342,22 +342,22 @@ async function generateCashFlowProjections(
       .lte('due_date', endDate.toISOString().split('T')[0]);
 
     const inflow = expectedReceivables?.reduce((sum: number, t: any) =>
-      sum + (t.home_amount || t.original_amount || 0), 0) || 0;
+      sum + (t.home_currency_amount || t.original_amount || 0), 0) || 0;
 
     const outflow = expectedPayables?.reduce((sum: number, t: any) =>
-      sum + Math.abs(t.home_amount || t.original_amount || 0), 0) || 0;
+      sum + Math.abs(t.home_currency_amount || t.original_amount || 0), 0) || 0;
 
     const criticalDates = [
       ...(expectedReceivables?.map((t: any) => ({
         date: t.due_date || t.transaction_date,
         type: 'receivable' as const,
-        amount: t.home_amount || t.original_amount || 0,
+        amount: t.home_currency_amount || t.original_amount || 0,
         description: `Payment from ${t.vendor_name || 'Unknown'}`
       })) || []),
       ...(expectedPayables?.map((t: any) => ({
         date: t.due_date || t.transaction_date,
         type: 'payable' as const,
-        amount: Math.abs(t.home_amount || t.original_amount || 0),
+        amount: Math.abs(t.home_currency_amount || t.original_amount || 0),
         description: `Payment to ${t.vendor_name || 'Unknown'}`
       })) || [])
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());

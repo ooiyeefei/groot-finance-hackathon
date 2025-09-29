@@ -145,11 +145,11 @@ export default function DSPyProcessingStep({
           })
         }
 
-        // Start actual DSPy processing with hybrid classification immediately
+        // Start actual DSPy processing with expense claims workflow
         const formData = new FormData()
         formData.append('receipt', file)
-        formData.append('business_purpose', 'Receipt processing - details to be reviewed')
-        formData.append('expense_category', 'other')
+        formData.append('business_purpose', 'Processing receipt...')
+        formData.append('expense_category', 'auto') // Special flag for auto-categorization
 
         // Start both the DSPy API call and progress simulation in parallel
         const [response] = await Promise.all([
@@ -179,10 +179,10 @@ export default function DSPyProcessingStep({
         // Check if component still mounted before updating state
         if (!isMounted || signal.aborted) return
 
-        // Check if processing is complete or still running
-        if (result.data.processing_status === 'processing') {
-          const taskId = result.data.task_id
+        // Check if processing is complete or still running (expense-claims API structure)
+        if (!result.data.processing_complete) {
           const expenseClaimId = result.data.expense_claim_id
+          const taskId = result.data.task_id
           console.log(`[DSPy Processing] Expense claim created: ${expenseClaimId}, task_id: ${taskId}`)
           console.log(`[DSPy Processing] Starting polling for expense claim completion...`)
 
@@ -202,10 +202,10 @@ export default function DSPyProcessingStep({
         }
 
         // Processing completed immediately - unusual but handle gracefully
-        if (result.data.processing_status === 'completed') {
+        if (result.data.processing_complete) {
           console.log(`[DSPy Processing] Expense claim completed immediately!`)
 
-          // Transform the result using our new function
+          // Transform the result using the expense claim function
           const extractionResult = transformClaimDataToExtractionResult(result.data)
 
           // Update processing claim to completed status
@@ -265,6 +265,7 @@ export default function DSPyProcessingStep({
       controller.abort()
     }
   }, [file]) // Only depend on file, not isProcessing to avoid infinite loops
+
 
   // Poll for expense claim completion using the expense claim status API
   const pollExpenseClaimCompletion = async (expenseClaimId: string, signal: AbortSignal) => {
@@ -350,6 +351,7 @@ export default function DSPyProcessingStep({
       throw new Error('Processing is taking longer than expected. Please try again.')
     }
   }
+
 
   // Transform expense claim data to DSPy extraction result format
   const transformClaimDataToExtractionResult = (claimData: any) => {

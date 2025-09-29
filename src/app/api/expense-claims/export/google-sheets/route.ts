@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
           transaction_date,
           original_amount,
           original_currency,
-          home_amount
+          home_currency_amount
         )
       `)
       .eq('business_id', employeeProfile.business_id)
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         category: expense.expense_category,
         original_amount: transaction?.original_amount || 0,
         original_currency: transaction?.original_currency || 'SGD',
-        converted_amount_sgd: transaction?.home_amount || transaction?.original_amount || 0,
+        converted_amount_sgd: transaction?.home_currency_amount || transaction?.original_amount || 0,
         status: expense.status,
         approved_by: expense.approved_by || '',
         approved_date: expense.approved_at || '',

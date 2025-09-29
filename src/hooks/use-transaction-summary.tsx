@@ -73,14 +73,14 @@ export function useTransactionSummary(
       console.log(`Processing ${transactions.length} transactions for summary`) // Debug log
       
       for (const transaction of transactions) {
-        let amount = transaction.home_amount || transaction.original_amount
+        let amount = transaction.home_currency_amount || transaction.original_amount
         console.log(`Transaction: ${transaction.description}, Type: ${transaction.transaction_type}, Amount: ${amount}`) // Debug log
 
         // Convert to home currency if needed
         if (transaction.home_currency !== homeCurrency) {
           // If home currency differs, we'd need to convert
-          // For now, use home_amount as is (this should be handled by backend)
-          amount = transaction.home_amount || transaction.original_amount
+          // For now, use home_currency_amount as is (this should be handled by backend)
+          amount = transaction.home_currency_amount || transaction.original_amount
         }
 
         if (transaction.transaction_type === 'income') {

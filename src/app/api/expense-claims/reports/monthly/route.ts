@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
 
     // Process each claim for statistics
     expenseClaims?.forEach(claim => {
-      const amount = claim.transaction?.home_amount || 0
+      const amount = claim.transaction?.home_currency_amount || 0
       summary.total_amount += amount
 
       // Categorize by status
