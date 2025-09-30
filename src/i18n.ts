@@ -64,28 +64,28 @@ export const languageOptions = [
     name: 'English',
     nativeName: 'English',
     flag: '🇺🇸',
-    region: 'Global'
+    region: 'en-US'
   },
   {
     code: 'th' as const,
     name: 'Thai',
     nativeName: 'ไทย',
     flag: '🇹🇭',
-    region: 'Thailand'
+    region: 'th-TH'
   },
   {
     code: 'id' as const,
     name: 'Indonesian',
     nativeName: 'Bahasa Indonesia',
     flag: '🇮🇩',
-    region: 'Indonesia'
+    region: 'id-ID'
   },
   {
     code: 'zh' as const,
     name: 'Chinese',
     nativeName: '中文',
     flag: '🇨🇳',
-    region: 'China/Singapore'
+    region: 'zh-CN'
   }
 ] as const;
 
