@@ -42,21 +42,8 @@ CREATE TABLE transaction_sequences (
   UNIQUE(user_id, sequence_type)
 );
 
--- Create financial analytics cache table
-CREATE TABLE financial_analytics (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  period_start DATE NOT NULL,
-  period_end DATE NOT NULL,
-  total_income DECIMAL(15,2) DEFAULT 0,
-  total_expenses DECIMAL(15,2) DEFAULT 0,
-  net_profit DECIMAL(15,2) DEFAULT 0,
-  currency_breakdown JSONB,
-  category_breakdown JSONB,
-  compliance_summary JSONB,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(user_id, period_start, period_end)
-);
+-- Real-time analytics via optimized RPC function (replaces caching table)
+-- Uses get_dashboard_analytics_realtime() for sub-10ms performance
 ```
 
 ### API Endpoint Requirements
