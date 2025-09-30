@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, Languages, Eye, FileText, DollarSign, List } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
 
 interface Document {
@@ -207,6 +208,12 @@ const SUPPORTED_LANGUAGES = [
 ]
 
 export default function DocumentAnalysisModal({ document, onClose }: DocumentAnalysisModalProps) {
+  const t = useTranslations('documents.analysis')
+  const tAnalysis = useTranslations('documents.analysis')
+  const tFields = useTranslations('documents.fields')
+  const tActions = useTranslations('documents.actions')
+  const tCommon = useTranslations('common')
+
   const [sourceLanguage, setSourceLanguage] = useState('auto')
   const [targetLanguage, setTargetLanguage] = useState('en')
   const [translatedText, setTranslatedText] = useState('')
@@ -812,7 +819,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
               <Eye className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-medium text-white">Document Analysis</h3>
+              <h3 className="text-lg font-medium text-white">{t('title')}</h3>
               <p className="text-sm text-gray-400 mt-1">
                 {document.file_name} • {formatDate(document.processed_at || document.created_at)}
               </p>
@@ -833,7 +840,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
             <div className="overflow-y-auto flex-1 p-6">
               <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                 <FileText className="w-4 h-4 mr-2" />
-                Document Preview
+                {t('documentPreview')}
               </h4>
               
               {/* Document Preview with Fixed Height (50% of screen) */}
@@ -856,7 +863,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
             <div className="mt-4 bg-gray-700/50 rounded-lg p-4 flex-shrink-0">
               <h5 className="text-sm font-medium text-white mb-4 flex items-center">
                 <Languages className="w-4 h-4 mr-2" />
-                Translation
+                {t('translation')}
               </h5>
               
               <div className="space-y-3">
@@ -864,14 +871,14 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-300 mb-1">
-                      Source Language
+                      {t('sourceLanguage')}
                     </label>
                     <select
                       value={sourceLanguage}
                       onChange={(e) => setSourceLanguage(e.target.value)}
                       className="w-full bg-gray-600 border border-gray-500 rounded-md px-2 py-1 text-white text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <option value="auto">Auto-detect</option>
+                      <option value="auto">{t('autoDetect')}</option>
                       {SUPPORTED_LANGUAGES.map((lang) => (
                         <option key={lang.code} value={lang.code}>
                           {lang.name}
@@ -881,7 +888,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-300 mb-1">
-                      Target Language
+                      {t('targetLanguage')}
                     </label>
                     <select
                       value={targetLanguage}
@@ -906,12 +913,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   {isTranslating ? (
                     <>
                       <div className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full mr-2" />
-                      Translating...
+                      {tCommon('loading')}...
                     </>
                   ) : (
                     <>
                       <Languages className="w-3 h-3 mr-2" />
-                      Translate
+                      {t('translate')}
                     </>
                   )}
                 </button>
@@ -919,7 +926,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Translation Output */}
                 {translatedText && (
                   <div className="bg-gray-800 rounded-lg p-3">
-                    <h6 className="text-xs font-medium text-gray-300 mb-2">Translation Result</h6>
+                    <h6 className="text-xs font-medium text-gray-300 mb-2">{t('translate')} {tCommon('total')}</h6>
                     <div className="text-xs text-white whitespace-pre-wrap max-h-64 overflow-y-auto bg-gray-800/50 rounded-md p-3 border border-gray-600">
                       {translatedText}
                     </div>
@@ -930,14 +937,14 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
 
             {/* Processing Stats */}
             <div className="mt-4 bg-gray-700/50 rounded-lg p-4 flex-shrink-0">
-              <h5 className="text-sm font-medium text-white mb-2">Processing Information</h5>
+              <h5 className="text-sm font-medium text-white mb-2">{t('processingInformation')}</h5>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className="text-gray-400">Status:</span>
+                  <span className="text-gray-400">{tAnalysis('status')}:</span>
                   <span className="ml-2 text-green-400 capitalize">{document.processing_status}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400">AI Confidence:</span>
+                  <span className="text-gray-400">{tAnalysis('aiConfidence')}:</span>
                   <span className="ml-2 text-white">
                     {(() => {
                       // Try multiple possible confidence score locations for robust access
@@ -980,7 +987,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
-                      Document Summary
+                      {t('documentSummary')}
                       {highlightedBox && (
                         <span className="ml-2 px-2 py-1 bg-blue-600 text-xs rounded">
                           Hovering: {highlightedBox.category}
@@ -1008,7 +1015,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           onMouseEnter={() => setHoveredEntity('vendor_name')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
-                          <div className="text-xs text-gray-400 mb-1">Vendor</div>
+                          <div className="text-xs text-gray-400 mb-1">{tFields('vendor')}</div>
                           <div className="text-sm text-white font-medium">
                             {getFieldValue('vendor_name')}
                           </div>
@@ -1021,7 +1028,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           onMouseEnter={() => setHoveredEntity('total_amount')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
-                          <div className="text-xs text-gray-400 mb-1">Amount</div>
+                          <div className="text-xs text-gray-400 mb-1">{tFields('amount')}</div>
                           <div className="text-sm text-green-400 font-medium">
                             {getFieldValue('currency') || 'SGD'} {getFieldValue('total_amount')}
                           </div>
@@ -1034,7 +1041,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           onMouseEnter={() => setHoveredEntity('transaction_date')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
-                          <div className="text-xs text-gray-400 mb-1">Date</div>
+                          <div className="text-xs text-gray-400 mb-1">{tFields('date')}</div>
                           <div className="text-sm text-white font-medium">
                             {getFieldValue('document_date', 'transaction_date')}
                           </div>
@@ -1049,7 +1056,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
-                      Vendor Information
+                      {t('vendorInformation')}
                     </h4>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1058,7 +1065,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('vendor_address')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Address</div>
+                        <div className="text-xs text-gray-400 mb-1">{t('address')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('vendor_address') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1071,7 +1078,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('vendor_contact')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Contact</div>
+                        <div className="text-xs text-gray-400 mb-1">{t('contact')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('vendor_contact') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1084,7 +1091,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('vendor_tax_id')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Tax ID / Registration</div>
+                        <div className="text-xs text-gray-400 mb-1">{t('taxIdRegistration')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('vendor_tax_id') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1100,7 +1107,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
-                      Customer Information
+                      {t('customerInformation')}
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1109,7 +1116,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('customer_name')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Customer Name</div>
+                        <div className="text-xs text-gray-400 mb-1">{t('customerName')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('customer_name') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1122,7 +1129,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('customer_address')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Customer Address</div>
+                        <div className="text-xs text-gray-400 mb-1">{t('customerAddress')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('customer_address') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1135,7 +1142,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('customer_contact')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Customer Contact</div>
+                        <div className="text-xs text-gray-400 mb-1">{t('customerContact')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('customer_contact') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1151,7 +1158,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
-                      Document Information
+{t('documentInformation')}
                     </h4>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1160,7 +1167,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('document_number')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Document Number</div>
+                        <div className="text-xs text-gray-400 mb-1">{tAnalysis('documentNumber')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('document_number') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1173,7 +1180,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('due_date')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Due Date</div>
+                        <div className="text-xs text-gray-400 mb-1">{tAnalysis('dueDate')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('due_date') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1189,7 +1196,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <DollarSign className="w-4 h-4 mr-2" />
-                      Payment Information
+                      {tAnalysis('paymentInformation')}
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1198,7 +1205,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('payment_terms')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Payment Terms</div>
+                        <div className="text-xs text-gray-400 mb-1">{tAnalysis('paymentTerms')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('payment_terms') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1211,7 +1218,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('payment_method')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Payment Method</div>
+                        <div className="text-xs text-gray-400 mb-1">{tAnalysis('paymentMethod')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('payment_method') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1224,7 +1231,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('bank_details')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Bank Details</div>
+                        <div className="text-xs text-gray-400 mb-1">{tAnalysis('bankDetails')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('bank_details') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1240,7 +1247,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <DollarSign className="w-4 h-4 mr-2" />
-                      Tax & Financial Breakdown
+                      {tAnalysis('taxFinancialBreakdown')}
                     </h4>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1249,7 +1256,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('subtotal_amount')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Subtotal</div>
+                        <div className="text-xs text-gray-400 mb-1">{tAnalysis('subtotal')}</div>
                         <div className="text-sm text-white font-medium">
                           {getFieldValue('subtotal_amount') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1262,7 +1269,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('tax_amount')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Tax Amount</div>
+                        <div className="text-xs text-gray-400 mb-1">{tAnalysis('taxAmount')}</div>
                         <div className="text-sm text-orange-400 font-medium">
                           {getFieldValue('tax_amount') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1275,7 +1282,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseEnter={() => setHoveredEntity('discount_amount')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Discount</div>
+                        <div className="text-xs text-gray-400 mb-1">{tAnalysis('discount')}</div>
                         <div className="text-sm text-blue-400 font-medium">
                           {getFieldValue('discount_amount') || (
                             <span className="text-gray-500 italic">Not extracted</span>
@@ -1291,18 +1298,18 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
-                      Document-Specific Information
+                      {tAnalysis('documentSpecificInformation')}
                     </h4>
                     
                     <div className="space-y-4">
                       {/* Invoice Data */}
                       {document.extracted_data.document_specific_data.invoice_data && (
                         <div className="bg-gray-900 rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-blue-400 mb-2">Invoice Details</h5>
+                          <h5 className="text-sm font-medium text-blue-400 mb-2">{tAnalysis('invoiceDetails')}</h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             {document.extracted_data.document_specific_data.invoice_data.invoice_number && (
                               <div>
-                                <span className="text-gray-400">Invoice Number:</span>
+                                <span className="text-gray-400">{tAnalysis('invoiceNumber')}:</span>
                                 <span className="ml-2 text-white font-medium">
                                   {document.extracted_data.document_specific_data.invoice_data.invoice_number}
                                 </span>
@@ -1310,7 +1317,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             )}
                             {document.extracted_data.document_specific_data.invoice_data.customer_info?.name && (
                               <div>
-                                <span className="text-gray-400">Customer:</span>
+                                <span className="text-gray-400">{tAnalysis('customer')}:</span>
                                 <span className="ml-2 text-white font-medium">
                                   {document.extracted_data.document_specific_data.invoice_data.customer_info.name}
                                 </span>
@@ -1339,11 +1346,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       {/* Receipt Data */}
                       {document.extracted_data.document_specific_data.receipt_data && (
                         <div className="bg-gray-900 rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-green-400 mb-2">Receipt Details</h5>
+                          <h5 className="text-sm font-medium text-green-400 mb-2">{tAnalysis('receiptDetails')}</h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             {document.extracted_data.document_specific_data.receipt_data.receipt_number && (
                               <div>
-                                <span className="text-gray-400">Receipt Number:</span>
+                                <span className="text-gray-400">{tAnalysis('receiptNumber')}:</span>
                                 <span className="ml-2 text-white font-medium">
                                   {document.extracted_data.document_specific_data.receipt_data.receipt_number}
                                 </span>
@@ -1359,7 +1366,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             )}
                             {document.extracted_data.document_specific_data.receipt_data.cashier_id && (
                               <div>
-                                <span className="text-gray-400">Cashier ID:</span>
+                                <span className="text-gray-400">{tAnalysis('cashierId')}:</span>
                                 <span className="ml-2 text-white font-medium">
                                   {document.extracted_data.document_specific_data.receipt_data.cashier_id}
                                 </span>
@@ -1372,11 +1379,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       {/* Transport Data */}
                       {document.extracted_data.document_specific_data.transport_data && (
                         <div className="bg-gray-900 rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-yellow-400 mb-2">Transport Details</h5>
+                          <h5 className="text-sm font-medium text-yellow-400 mb-2">{tAnalysis('transportDetails')}</h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             {document.extracted_data.document_specific_data.transport_data.trip_id && (
                               <div>
-                                <span className="text-gray-400">Trip ID:</span>
+                                <span className="text-gray-400">{tAnalysis('tripId')}:</span>
                                 <span className="ml-2 text-white font-medium">
                                   {document.extracted_data.document_specific_data.transport_data.trip_id}
                                 </span>
@@ -1384,7 +1391,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             )}
                             {document.extracted_data.document_specific_data.transport_data.pickup_location && (
                               <div>
-                                <span className="text-gray-400">Pickup:</span>
+                                <span className="text-gray-400">{tAnalysis('pickup')}:</span>
                                 <span className="ml-2 text-white font-medium">
                                   {document.extracted_data.document_specific_data.transport_data.pickup_location}
                                 </span>
@@ -1392,7 +1399,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             )}
                             {document.extracted_data.document_specific_data.transport_data.dropoff_location && (
                               <div>
-                                <span className="text-gray-400">Dropoff:</span>
+                                <span className="text-gray-400">{tAnalysis('dropoff')}:</span>
                                 <span className="ml-2 text-white font-medium">
                                   {document.extracted_data.document_specific_data.transport_data.dropoff_location}
                                 </span>
@@ -1410,7 +1417,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <DollarSign className="w-4 h-4 mr-2" />
-                      Financial Entities ({document.extracted_data.financial_entities.length})
+                      {tAnalysis('financialEntities')} ({document.extracted_data.financial_entities.length})
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1437,7 +1444,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <List className="w-4 h-4 mr-2" />
-                      Line Items ({document.extracted_data.line_items.length})
+                      {tAnalysis('lineItems')} ({document.extracted_data.line_items.length})
                     </h4>
                     
                     <div className="bg-gray-900 rounded-lg overflow-hidden">
@@ -1446,12 +1453,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           <thead className="bg-gray-800">
                             <tr>
                               <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">{tCommon('description')}</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">{tAnalysis('itemCode')}</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">{tAnalysis('quantity')}</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">{tAnalysis('unit')}</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">{tAnalysis('unitPrice')}</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">{tAnalysis('total')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-700">
@@ -1560,11 +1567,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
-                      Complete Extracted Text
+                      {tAnalysis('completeExtractedText')}
                     </h4>
                     
                     <div className="bg-gray-900 rounded-lg p-4">
-                      <div className="text-xs text-gray-400 mb-2">Clean OCR Output</div>
+                      <div className="text-xs text-gray-400 mb-2">{tAnalysis('cleanOcrOutput')}</div>
                       <div className="text-xs text-gray-300 whitespace-pre-wrap overflow-auto max-h-64 leading-relaxed">
                         {(() => {
                           // Filter out AI reasoning patterns from the displayed text
@@ -1654,7 +1661,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onClick={() => setShowRawJson(!showRawJson)}
                         className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
                       >
-                        {showRawJson ? 'Hide' : 'Show'} Raw JSON Data
+                        {showRawJson ? tAnalysis('hideRawJsonData') : tAnalysis('showRawJsonData')}
                       </button>
                       
                       {showRawJson && (

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw, PiggyBank, CreditCard } from 'lucide-react';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/types/transaction';
 import { useHomeCurrency } from '@/components/settings/currency-settings';
+import { useTranslations } from 'next-intl';
 import useFinancialAnalytics from './hooks/use-financial-analytics';
 
 interface UnifiedFinancialDashboardProps {
@@ -40,11 +41,13 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
     })}`;
   };
 
+  const t = useTranslations('dashboard');
+
   const getPeriodDisplayName = (period: 'month' | 'quarter' | 'year') => {
     switch (period) {
-      case 'month': return 'Last 60 Days';
-      case 'quarter': return 'Current Quarter';
-      case 'year': return 'Current Year';
+      case 'month': return t('periods.last60Days');
+      case 'quarter': return t('periods.currentQuarter');
+      case 'year': return t('periods.currentYear');
     }
   };
 
@@ -62,11 +65,11 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
 
   const getTrendText = (trend?: number) => {
     if (trend === undefined) return '';
-    if (trend === 0) return 'No change';
-    
+    if (trend === 0) return t('trends.noChange');
+
     const absChange = Math.abs(trend);
-    const direction = trend > 0 ? 'up' : 'down';
-    
+    const direction = trend > 0 ? t('trends.up') : t('trends.down');
+
     if (absChange >= 100) {
       return `${absChange.toFixed(0)}% ${direction}`;
     }
@@ -96,14 +99,14 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
           <div className="w-12 h-12 bg-red-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
             <span className="text-xl">⚠️</span>
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">Error Loading Financial Data</h3>
+          <h3 className="text-lg font-medium text-white mb-2">{t('errorLoadingData')}</h3>
           <p className="text-gray-400 text-sm mb-4">{error}</p>
           <button
             onClick={refresh}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />
-            Retry
+            {t('retryLoading')}
           </button>
         </div>
       </div>
@@ -115,11 +118,11 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
       {/* Header with Period Selector */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Financial Dashboard</h2>
+          <h2 className="text-xl font-semibold text-white">{t('financialDashboard')}</h2>
           <p className="text-sm text-gray-400">
-            {getPeriodDisplayName(selectedPeriod)} • Displayed in {homeCurrency}
+            {getPeriodDisplayName(selectedPeriod)} • {t('displayedIn', { currency: homeCurrency })}
             {lastUpdated && (
-              <span className="ml-2">• Updated {lastUpdated.toLocaleTimeString()}</span>
+              <span className="ml-2">• {t('updated')} {lastUpdated.toLocaleTimeString()}</span>
             )}
           </p>
         </div>
@@ -131,9 +134,9 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
             onChange={(e) => setSelectedPeriod(e.target.value as 'month' | 'quarter' | 'year')}
             className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="month">Last 60 Days</option>
-            <option value="quarter">Current Quarter</option>
-            <option value="year">Current Year</option>
+            <option value="month">{t('periods.last60Days')}</option>
+            <option value="quarter">{t('periods.currentQuarter')}</option>
+            <option value="year">{t('periods.currentYear')}</option>
           </select>
 
           {/* Refresh Button */}
@@ -141,7 +144,7 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
             onClick={refresh}
             disabled={loading}
             className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50"
-            title="Refresh data"
+            title={t('refreshData')}
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -153,7 +156,7 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
         {/* Total Income Card */}
         <div className="bg-gray-800 border border-green-700/50 bg-green-900/10 rounded-lg p-6 transition-all hover:bg-gray-750">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Total Income</p>
+            <p className="text-sm font-medium text-gray-300">{t('totalIncome')}</p>
             <PiggyBank className="w-5 h-5 text-gray-400" />
           </div>
           <div className="mb-2">
@@ -175,17 +178,17 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-gray-500">{t('trends.noTrend')}</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-gray-500">{t('trends.vsPrevPeriod')}</span>
           </div>
         </div>
 
         {/* Total Expenses Card */}
         <div className="bg-gray-800 border border-red-700/50 bg-red-900/10 rounded-lg p-6 transition-all hover:bg-gray-750">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Total Expenses</p>
+            <p className="text-sm font-medium text-gray-300">{t('totalExpenses')}</p>
             <CreditCard className="w-5 h-5 text-gray-400" />
           </div>
           <div className="mb-2">
@@ -207,10 +210,10 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-gray-500">{t('trends.noTrend')}</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-gray-500">{t('trends.vsPrevPeriod')}</span>
           </div>
         </div>
 
@@ -221,7 +224,7 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
             : 'border-red-700/50 bg-red-900/10'
         }`}>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Net Profit</p>
+            <p className="text-sm font-medium text-gray-300">{t('netProfit')}</p>
             <DollarSign className="w-5 h-5 text-gray-400" />
           </div>
           <div className="mb-2">
@@ -243,17 +246,17 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-gray-500">{t('trends.noTrend')}</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-gray-500">{t('trends.vsPrevPeriod')}</span>
           </div>
         </div>
 
         {/* Transaction Count Card */}
         <div className="bg-gray-800 border border-blue-700/50 bg-blue-900/10 rounded-lg p-6 transition-all hover:bg-gray-750">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Transactions</p>
+            <p className="text-sm font-medium text-gray-300">{t('transactions')}</p>
             <Activity className="w-5 h-5 text-gray-400" />
           </div>
           <div className="mb-2">
@@ -267,7 +270,7 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-1">
-              <span className="text-xs text-gray-500">Total count</span>
+              <span className="text-xs text-gray-500">{t('totalCount')}</span>
             </div>
             <span className="text-xs text-gray-500">{getPeriodDisplayName(selectedPeriod)}</span>
           </div>
@@ -280,7 +283,7 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
             : 'border-orange-700/50 bg-orange-900/10'
         }`}>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Profit Margin</p>
+            <p className="text-sm font-medium text-gray-300">{t('profitMargin')}</p>
             <TrendingUp className="w-5 h-5 text-gray-400" />
           </div>
           <div className="mb-2">
@@ -302,10 +305,10 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-gray-500">{t('trends.noTrend')}</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-gray-500">{t('trends.vsPrevPeriod')}</span>
           </div>
         </div>
       </div>

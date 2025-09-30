@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Loader2, Trash2, MoreVertical } from 'lucide-react'
-import { useLanguage } from '@/contexts/language-context'
+import { useLocale, useTranslations } from 'next-intl'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { CitationData } from '@/lib/tools/base-tool'
 import CitationOverlay from '@/components/citations/citation-overlay'
 import { ChatDisclaimer } from '@/components/ui/financial-disclaimer'
 import ReactMarkdown from 'react-markdown'
+import rehypeSanitize from 'rehype-sanitize'
 import rehypeRaw from 'rehype-raw'
 
 interface Message {
@@ -26,7 +27,8 @@ interface ChatInterfaceProps {
 }
 
 export default function ChatInterface({ conversationId, onConversationCreated, initialMessages, onMessagesUpdate }: ChatInterfaceProps) {
-  const { language, t } = useLanguage()
+  const locale = useLocale()
+  const t = useTranslations('chat')
   const [messages, setMessages] = useState<Message[]>(initialMessages || [])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -48,68 +50,91 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
     setActiveCitation(citation)
   }
 
-  const renderContentWithCitations = (content: string, citations: CitationData[] = []) => {
-    // First, preprocess content to replace citation markers with JSX elements
-    const processedContent = content.replace(/\[\^(\d+)\]/g, (match, citationNum) => {
-      const citationIndex = parseInt(citationNum) - 1
-      const citation = citations[citationIndex]
-      
-      if (citation) {
-        return `<cite data-citation="${citationIndex}" data-citation-num="${citationNum}" class="citation-link">[^${citationNum}]</cite>`
-      } else {
-        return `<cite data-citation-missing="${citationNum}" class="citation-missing">[^${citationNum}]</cite>`
-      }
-    })
-    
-    // Custom component for rendering citations within markdown
-    const components = {
-      // Handle custom cite elements for citations
-      cite: ({ children, ...props }: any) => {
-        const citationIndex = props['data-citation']
-        const citationNum = props['data-citation-num']
-        const isMissing = props['data-citation-missing']
-        
-        if (isMissing) {
-          return (
-            <span className="inline-flex items-center px-1 py-0.5 text-xs bg-gray-500 text-white rounded mx-0.5">
-              {children}
-            </span>
-          )
-        }
-        
-        if (citationIndex !== undefined && citationNum) {
-          const citation = citations[parseInt(citationIndex)]
+  // Citation replacement component
+  const CitationReplacer = ({ content, citations }: { content: string, citations: CitationData[] }) => {
+
+    // Process content to handle citations inline with proper text formatting
+    const processContent = (text: string) => {
+      const parts = text.split(/(\[\^\d+\])/)
+      const elements: React.ReactNode[] = []
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]
+        const citationMatch = part.match(/\[\^(\d+)\]/)
+
+        if (citationMatch) {
+          // This is a citation marker
+          const citationNum = citationMatch[1]
+          const citationIndex = parseInt(citationNum) - 1
+          const citation = citations[citationIndex]
+
           if (citation) {
-            return (
+            elements.push(
               <button
-                className="inline-flex items-center px-1 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer mx-0.5 transition-colors"
+                key={`citation-${i}`}
+                className="inline-flex items-center px-1 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer transition-colors"
+                style={{ margin: '0 1px' }}
                 onClick={() => handleCitationClick(citation)}
                 title={`${citation.source_name} (${citation.country})`}
               >
                 ^{citationNum}
               </button>
             )
+          } else {
+            elements.push(
+              <span key={`missing-citation-${i}`} className="inline-flex items-center px-1 py-0.5 text-xs bg-gray-500 text-white rounded" style={{ margin: '0 1px' }}>
+                [^{citationNum}]
+              </span>
+            )
           }
+        } else if (part && part.trim()) {
+          // Only add non-empty text parts and normalize whitespace
+          elements.push(part)
         }
-        
-        return <span>{children}</span>
-      },
-      // Style markdown elements to fit chat design
-      p: ({ children, ...props }: React.ComponentProps<'p'>) => <p {...props} className="mb-2 last:mb-0">{children}</p>,
-      ul: ({ children, ...props }: React.ComponentProps<'ul'>) => <ul {...props} className="list-disc ml-4 mb-2">{children}</ul>,
-      ol: ({ children, ...props }: React.ComponentProps<'ol'>) => <ol {...props} className="list-decimal ml-4 mb-2">{children}</ol>,
-      li: ({ children, ...props }: React.ComponentProps<'li'>) => <li {...props} className="mb-1">{children}</li>,
-      strong: ({ children, ...props }: React.ComponentProps<'strong'>) => <strong {...props} className="font-semibold">{children}</strong>,
-      em: ({ children, ...props }: React.ComponentProps<'em'>) => <em {...props} className="italic">{children}</em>,
-      code: ({ children, ...props }: React.ComponentProps<'code'>) => <code {...props} className="bg-gray-800 px-1 py-0.5 rounded text-sm">{children}</code>,
-      pre: ({ children, ...props }: React.ComponentProps<'pre'>) => <pre {...props} className="bg-gray-800 p-2 rounded text-sm overflow-x-auto mb-2">{children}</pre>
+      }
+
+      return elements
     }
 
     return (
-      <ReactMarkdown components={components} rehypePlugins={[rehypeRaw]}>
-        {processedContent}
+      <ReactMarkdown
+        components={{
+          // Style markdown elements to fit chat design
+          p: ({ children, ...props }: React.ComponentProps<'p'>) => {
+            // Process children to handle citations
+            const processedChildren = React.Children.map(children, (child) => {
+              if (typeof child === 'string') {
+                return processContent(child)
+              }
+              return child
+            })
+            return <p {...props} className="mb-2 last:mb-0">{processedChildren}</p>
+          },
+          ul: ({ children, ...props }: React.ComponentProps<'ul'>) => <ul {...props} className="list-disc ml-4 mb-2">{children}</ul>,
+          ol: ({ children, ...props }: React.ComponentProps<'ol'>) => <ol {...props} className="list-decimal ml-4 mb-2">{children}</ol>,
+          li: ({ children, ...props }: React.ComponentProps<'li'>) => {
+            // Process children to handle citations
+            const processedChildren = React.Children.map(children, (child) => {
+              if (typeof child === 'string') {
+                return processContent(child)
+              }
+              return child
+            })
+            return <li {...props} className="mb-1">{processedChildren}</li>
+          },
+          strong: ({ children, ...props }: React.ComponentProps<'strong'>) => <strong {...props} className="font-semibold">{children}</strong>,
+          em: ({ children, ...props }: React.ComponentProps<'em'>) => <em {...props} className="italic">{children}</em>,
+          code: ({ children, ...props }: React.ComponentProps<'code'>) => <code {...props} className="bg-gray-800 px-1 py-0.5 rounded text-sm">{children}</code>,
+          pre: ({ children, ...props }: React.ComponentProps<'pre'>) => <pre {...props} className="bg-gray-800 p-2 rounded text-sm overflow-x-auto mb-2">{children}</pre>
+        }}
+      >
+        {content}
       </ReactMarkdown>
     )
+  }
+
+  const renderContentWithCitations = (content: string, citations: CitationData[] = []) => {
+    return <CitationReplacer content={content} citations={citations} />
   }
 
   useEffect(() => {
@@ -152,7 +177,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
         body: JSON.stringify({
           message: userMessage.content,
           conversationId: currentConversationId,
-          language: language
+          language: locale
         }),
       })
 
@@ -185,7 +210,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `${t.error}: Sorry, I encountered an error while processing your message. Please try again.`,
+        content: t('errorMessage'),
         timestamp: new Date()
       }
       
@@ -289,24 +314,8 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
 
   return (
     <div className="flex flex-col h-full bg-gray-800 rounded-lg border border-gray-700">
-      {/* Chat Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
-            <Bot className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-white">FinanSEAL AI</h3>
-            <p className="text-sm text-gray-400">Financial Assistant</p>
-          </div>
-        </div>
-        <div className="text-xs text-gray-500">
-          {currentConversationId ? t.connected : t.newChat}
-        </div>
-      </div>
-
       {/* Financial Disclaimer Banner */}
-      <div className="px-4 pt-2">
+      <div className="px-4 pt-4">
         <ChatDisclaimer />
       </div>
 
@@ -318,10 +327,10 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
               <Bot className="w-8 h-8 text-white" />
             </div>
             <h4 className="text-lg font-medium text-white mb-2">
-              {t.welcome}
+              {t('welcome')}
             </h4>
             <p className="text-gray-400 text-sm max-w-md mx-auto">
-              {t.welcomeSubtitle}
+              {t('welcomeSubtitle')}
             </p>
           </div>
         )}
@@ -392,7 +401,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
                             aria-label={`Delete message sent at ${formatTime(message.timestamp)}`}
                           >
                             <Trash2 className="w-3 h-3 mr-1.5" />
-                            Delete
+{t('delete') || 'Delete'}
                           </button>
                         </div>
                       )}
@@ -418,7 +427,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             <div className="bg-gray-700 text-gray-100 px-4 py-2 rounded-lg">
               <div className="flex items-center space-x-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm">{t.thinking}</span>
+                <span className="text-sm">{t('thinking')}</span>
               </div>
             </div>
           </div>
@@ -436,7 +445,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
-            placeholder={t.inputPlaceholder}
+            placeholder={t('inputPlaceholder')}
             className="flex-1 bg-gray-700 text-white placeholder-gray-400 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600"
             disabled={isLoading}
           />
@@ -444,13 +453,13 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             onClick={sendMessage}
             disabled={!inputValue.trim() || isLoading}
             className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
-            aria-label={t.send}
+            aria-label={t('send')}
           >
             <Send className="w-5 h-5" />
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-2">
-          {t.inputHelp}
+          {t('inputHelp')}
         </p>
       </div>
       
@@ -459,10 +468,10 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
         isOpen={deleteDialogOpen}
         onClose={handleCloseDeleteDialog}
         onConfirm={handleDeleteMessage}
-        title="Delete Message"
-        message="Are you sure you want to delete this message? This action cannot be undone."
-        confirmText="Delete"
-        cancelText="Cancel"
+        title={t('deleteMessage') || 'Delete Message'}
+        message={t('deleteMessageConfirm') || 'Are you sure you want to delete this message? This action cannot be undone.'}
+        confirmText={t('delete') || 'Delete'}
+        cancelText={t('cancel') || 'Cancel'}
         confirmVariant="danger"
         isLoading={isDeletingMessage}
       />

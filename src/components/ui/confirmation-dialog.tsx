@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 
 interface ConfirmationDialogProps {
   isOpen: boolean
@@ -19,11 +20,15 @@ export default function ConfirmationDialog({
   onConfirm,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   confirmVariant = 'primary',
   isLoading = false
 }: ConfirmationDialogProps) {
+  const tCommon = useTranslations('common')
+
+  const defaultConfirmText = confirmText || tCommon('confirm')
+  const defaultCancelText = cancelText || tCommon('cancel')
   if (!isOpen) return null
 
   const confirmButtonClasses = confirmVariant === 'danger'
@@ -70,7 +75,7 @@ export default function ConfirmationDialog({
                 disabled={isLoading}
                 className="inline-flex justify-center rounded-xl bg-gray-700 px-6 py-3 text-sm font-medium text-gray-200 shadow-sm ring-1 ring-inset ring-gray-600 hover:bg-gray-600 hover:text-white transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px] sm:min-w-[120px]"
               >
-                {cancelText}
+                {defaultCancelText}
               </button>
               <button
                 type="button"
@@ -84,7 +89,7 @@ export default function ConfirmationDialog({
                     <span>Loading...</span>
                   </div>
                 ) : (
-                  confirmText
+                  defaultConfirmText
                 )}
               </button>
             </div>

@@ -1,19 +1,26 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import CurrencySettings from '@/components/settings/currency-settings'
 import BusinessProfileSettings from '@/components/settings/business-profile-settings'
 import { ClientProviders } from '@/components/providers/client-providers'
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ params }: { params: Promise<{ locale: string }> }) {
   // Server-side authentication check
   const { userId } = await auth()
-  
+
   if (!userId) {
     redirect('/sign-in')
   }
-  
+
+  // Await params in Next.js 15
+  const { locale } = await params
+
+  // Get translations for server component with explicit locale
+  const t = await getTranslations({locale, namespace: 'settings'})
+
   return (
     <ClientProviders>
       <div className="flex h-screen bg-gray-900">
@@ -24,8 +31,8 @@ export default async function SettingsPage() {
         <div className="flex-1 flex flex-col">
         {/* Header */}
         <HeaderWithUser
-          title="Settings"
-          subtitle="Manage your account preferences and application settings"
+          title={t('title')}
+          subtitle={t('subtitle')}
         />
         
         {/* Main Content Area */}
@@ -41,11 +48,11 @@ export default async function SettingsPage() {
 
               {/* Language Settings */}
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                <h2 className="text-xl font-semibold text-white mb-4">Language Preferences</h2>
+                <h2 className="text-xl font-semibold text-white mb-4">{t('languagePreferences')}</h2>
                 <div className="grid gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Interface Language
+                      {t('interfaceLanguage')}
                     </label>
                     <select className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="en">English</option>
@@ -55,7 +62,7 @@ export default async function SettingsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      AI Assistant Language
+                      {t('aiAssistantLanguage')}
                     </label>
                     <select className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="en">English</option>
@@ -68,11 +75,11 @@ export default async function SettingsPage() {
 
               {/* Account Settings */}
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                <h2 className="text-xl font-semibold text-white mb-4">Account</h2>
+                <h2 className="text-xl font-semibold text-white mb-4">{t('account')}</h2>
                 <div className="grid gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Timezone
+                      {t('timezone')}
                     </label>
                     <select className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="Asia/Singapore">Asia/Singapore</option>
@@ -93,20 +100,20 @@ export default async function SettingsPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">More Settings Coming Soon</h3>
+                  <h3 className="text-lg font-semibold text-white mb-2">{t('moreSettingsComingSoon')}</h3>
                   <p className="text-gray-400 text-sm">
-                    Additional settings and preferences will be available in future updates.
+                    {t('additionalSettingsDescription')}
                   </p>
                 </div>
               </div>
 
               {/* Save Button */}
               <div className="flex justify-end">
-                <button 
+                <button
                   disabled
                   className="px-6 py-2 bg-blue-600/50 text-white rounded-md font-medium cursor-not-allowed opacity-50"
                 >
-                  Save Changes (Coming Soon)
+                  {t('saveChangesComingSoon')}
                 </button>
               </div>
             </div>

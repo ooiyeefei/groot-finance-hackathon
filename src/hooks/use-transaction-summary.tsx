@@ -62,7 +62,6 @@ export function useTransactionSummary(
       }
 
       const result = await response.json()
-      console.log('Transaction API response:', result) // Debug log
       const transactions = result.data?.transactions || [] // Fix: correct API response structure
 
       // Calculate summary with currency conversion
@@ -70,11 +69,9 @@ export function useTransactionSummary(
       let totalExpense = 0
       const transactionCount = transactions.length
 
-      console.log(`Processing ${transactions.length} transactions for summary`) // Debug log
       
       for (const transaction of transactions) {
         let amount = transaction.home_currency_amount || transaction.original_amount
-        console.log(`Transaction: ${transaction.description}, Type: ${transaction.transaction_type}, Amount: ${amount}`) // Debug log
 
         // Convert to home currency if needed
         if (transaction.home_currency !== homeCurrency) {
@@ -93,7 +90,6 @@ export function useTransactionSummary(
 
       const netAmount = totalIncome - totalExpense
       
-      console.log(`Summary calculated: Income=${totalIncome}, Expense=${totalExpense}, Net=${netAmount}, Count=${transactionCount}`) // Debug log
 
       setSummary({
         totalIncome,

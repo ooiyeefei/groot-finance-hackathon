@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 // File validation constants
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
@@ -51,22 +52,24 @@ export default function FileUploadZone({
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const t = useTranslations('documents.upload');
+
   // Validate file before upload
   const validateFile = (file: File): string | null => {
     // Check file type
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return 'Invalid file type. Only JPG, PNG, and PDF files are allowed.'
+      return t('validation.invalidFileType')
     }
 
     // Check file size
     if (file.size > MAX_FILE_SIZE) {
-      return 'File too large. Maximum size is 10MB.'
+      return t('validation.fileTooLarge')
     }
 
     // Check file extension as additional validation
     const extension = '.' + file.name.split('.').pop()?.toLowerCase()
     if (!ALLOWED_EXTENSIONS.includes(extension)) {
-      return 'Invalid file extension. Only .jpg, .png, and .pdf files are allowed.'
+      return t('validation.invalidFileExtension')
     }
 
     return null
@@ -160,9 +163,9 @@ export default function FileUploadZone({
         uploading: false,
         progress: 100,
         error: null,
-        success: uploadedDocuments.length === 1 
-          ? `Successfully uploaded "${uploadedDocuments[0].fileName}"`
-          : `Successfully uploaded ${uploadedDocuments.length} files`,
+        success: uploadedDocuments.length === 1
+          ? `${t('successfullyUploaded')} "${uploadedDocuments[0].fileName}"`
+          : `${t('successfullyUploaded')} ${uploadedDocuments.length} files`,
         uploadedFiles: uploadedDocuments.length,
         totalFiles: files.length
       })
@@ -175,8 +178,8 @@ export default function FileUploadZone({
       setUploadState({
         uploading: false,
         progress: 100,
-        error: `Some uploads failed: ${errors.join(', ')}`,
-        success: `Successfully uploaded ${uploadedDocuments.length} of ${files.length} files`,
+        error: `${t('someUploadsFailed')} ${errors.join(', ')}`,
+        success: `${t('successfullyUploaded')} ${uploadedDocuments.length} of ${files.length} files`,
         uploadedFiles: uploadedDocuments.length,
         totalFiles: files.length
       })
@@ -189,7 +192,7 @@ export default function FileUploadZone({
       setUploadState({
         uploading: false,
         progress: 0,
-        error: `All uploads failed: ${errors.join(', ')}`,
+        error: `${t('allUploadsFailed')} ${errors.join(', ')}`,
         success: null,
         uploadedFiles: 0,
         totalFiles: files.length
@@ -308,12 +311,12 @@ export default function FileUploadZone({
               <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto" />
               <div>
                 <p className="text-white font-medium">
-                  {uploadState.totalFiles > 1 ? 'Uploading files...' : 'Uploading file...'}
+                  {uploadState.totalFiles > 1 ? t('uploadingFiles') : t('uploadingFile')}
                 </p>
                 <p className="text-gray-400 text-sm">
-                  {uploadState.totalFiles > 1 
-                    ? `Processing ${uploadState.uploadedFiles} of ${uploadState.totalFiles} files`
-                    : 'Please wait while we process your document'
+                  {uploadState.totalFiles > 1
+                    ? t('processingFiles', { current: uploadState.uploadedFiles, total: uploadState.totalFiles })
+                    : t('pleaseWait')
                   }
                 </p>
                 {uploadState.totalFiles > 1 && (
@@ -331,14 +334,14 @@ export default function FileUploadZone({
               <Upload className="w-12 h-12 text-gray-400 mx-auto" />
               <div>
                 <p className="text-white font-medium">
-                  {dragActive 
-                    ? `Drop your ${allowMultiple ? 'files' : 'file'} here` 
-                    : `Click to upload or drag and drop`
+                  {dragActive
+                    ? allowMultiple ? t('dropFilesHere') : t('dropFileHere')
+                    : t('clickToUpload')
                   }
                 </p>
                 <p className="text-gray-400 text-sm mt-1">
-                  JPG, PNG, or PDF files up to 10MB
-                  {allowMultiple && ' (multiple files supported)'}
+                  {t('jpgPngPdfFiles')}
+                  {allowMultiple && ` ${t('multipleSupported')}`}
                 </p>
               </div>
             </>
@@ -365,20 +368,20 @@ export default function FileUploadZone({
       <div className="bg-gray-700/50 rounded-lg p-4">
         <h3 className="text-white font-medium mb-2 flex items-center">
           <FileText className="w-4 h-4 mr-2" />
-          Supported File Types
+          {t('supportedFileTypes')}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-300">
           <div>
-            <strong className="text-white">Images:</strong>
+            <strong className="text-white">{t('images')}</strong>
             <br />JPG, JPEG, PNG
           </div>
           <div>
-            <strong className="text-white">Documents:</strong>
-            <br />PDF (converted to image for OCR)
+            <strong className="text-white">{t('documents')}</strong>
+            <br />{t('pdfConvertedOcr')}
           </div>
           <div>
-            <strong className="text-white">Size Limit:</strong>
-            <br />Maximum 10MB
+            <strong className="text-white">{t('sizeLimit')}</strong>
+            <br />{t('maximum10MB')}
           </div>
         </div>
       </div>

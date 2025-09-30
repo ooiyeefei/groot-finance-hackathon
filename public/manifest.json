@@ -2,7 +2,7 @@
   "name": "FinanSEAL Expense Claims",
   "short_name": "FinanSEAL",
   "description": "Southeast Asian SME Financial Co-pilot - Expense Management",
-  "start_url": "/expense-claims",
+  "start_url": "/en",
   "display": "standalone",
   "background_color": "#1f2937",
   "theme_color": "#3b82f6",

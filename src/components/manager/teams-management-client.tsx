@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Users, Shield, Mail, Calendar, Briefcase, Loader2, ShieldAlert, AlertCircle, CheckCircle, Crown, UserCheck, UserPlus, Send, Plus, Trash2, Edit3, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -55,6 +56,8 @@ interface TeamsManagementClientProps {
 }
 
 export default function TeamsManagementClient({ userId }: TeamsManagementClientProps) {
+  const t = useTranslations('teams')
+  const tCommon = useTranslations('common')
   const [userRole, setUserRole] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
@@ -95,7 +98,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         }
       }
     } catch (error) {
-      console.error('Failed to check permissions:', error)
+      console.error(t('messages.failedToCheckPermissions'), error)
       router.push('/')
     } finally {
       setLoading(false)
@@ -110,12 +113,12 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         if (result.success) {
           setTeamMembers(result.data.users)
         } else {
-          setError(result.error || 'Failed to fetch team members')
+          setError(result.error || t('messages.failedToFetchTeamMembers'))
         }
       }
     } catch (error) {
       console.error('Failed to fetch team members:', error)
-      setError('Network error while fetching team members')
+      setError(t('messages.networkErrorTeamMembers'))
     }
   }
 
@@ -129,7 +132,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         }
       }
     } catch (error) {
-      console.error('Failed to fetch pending invitations:', error)
+      console.error(t('messages.failedToFetchInvitations'), error)
     }
   }
 
@@ -148,16 +151,16 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(`User role updated successfully`)
+        setSuccess(t('messages.userRoleUpdated'))
         // Clear user role cache so sidebar updates immediately
         clearUserRoleCache()
         await fetchTeamMembers() // Refresh the list
       } else {
-        setError(result.error || 'Failed to update user role')
+        setError(result.error || t('messages.failedToUpdateRole'))
       }
     } catch (error) {
       console.error('Failed to update role:', error)
-      setError('Network error while updating role')
+      setError(t('messages.networkErrorRole'))
     } finally {
       setUpdating(prev => {
         const newSet = new Set(prev)
@@ -185,14 +188,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(`Manager assignment updated successfully`)
+        setSuccess(t('messages.managerAssignmentUpdated'))
         await fetchTeamMembers() // Refresh the list
       } else {
-        setError(result.error || 'Failed to assign manager')
+        setError(result.error || t('messages.failedToAssignManager'))
       }
     } catch (error) {
       console.error('Failed to assign manager:', error)
-      setError('Network error while assigning manager')
+      setError(t('messages.networkErrorManager'))
     } finally {
       setUpdating(prev => {
         const newSet = new Set(prev)
@@ -235,17 +238,17 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
           setError(result.warning)
         } else {
           // Success with email sent
-          setSuccess(`Invitation sent to ${data.email}`)
+          setSuccess(t('messages.invitationSent', { email: data.email }))
         }
         setShowInviteDialog(false)
         await fetchPendingInvitations() // Refresh invitations list
       } else {
-        setError(result.error || 'Failed to send invitation')
+        setError(result.error || t('messages.failedToSendInvitation'))
         throw new Error(result.error || 'Failed to send invitation')
       }
     } catch (error) {
       console.error('Failed to send invitation:', error)
-      setError('Network error while sending invitation')
+      setError(t('messages.networkErrorInvitation'))
       throw error
     } finally {
       setInviteLoading(false)
@@ -264,14 +267,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess('Invitation resent successfully')
+        setSuccess(t('messages.invitationResent'))
         await fetchPendingInvitations()
       } else {
-        setError(result.error || 'Failed to resend invitation')
+        setError(result.error || t('messages.failedToResendInvitation'))
       }
     } catch (error) {
       console.error('Failed to resend invitation:', error)
-      setError('Network error while resending invitation')
+      setError(t('messages.networkErrorResend'))
     }
   }
 
@@ -287,14 +290,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess('Invitation deleted successfully')
+        setSuccess(t('messages.invitationDeleted'))
         await fetchPendingInvitations()
       } else {
-        setError(result.error || 'Failed to delete invitation')
+        setError(result.error || t('messages.failedToDeleteInvitation'))
       }
     } catch (error) {
       console.error('Failed to delete invitation:', error)
-      setError('Network error while deleting invitation')
+      setError(t('messages.networkErrorDelete'))
     }
   }
 
@@ -314,12 +317,12 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
   const updateUserName = async (memberId: string, isCurrentUser: boolean = false) => {
     if (!editingNameValue.trim()) {
-      setError('Please enter a valid name')
+      setError(t('messages.enterValidName'))
       return
     }
 
     if (editingNameValue.trim().length < 2) {
-      setError('Name must be at least 2 characters long')
+      setError(t('messages.nameMinLength'))
       return
     }
 
@@ -340,15 +343,15 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess('Name updated successfully')
+        setSuccess(t('messages.nameUpdated'))
         cancelEditingName(memberId)
         await fetchTeamMembers() // Refresh the list
       } else {
-        setError(result.error || 'Failed to update name')
+        setError(result.error || t('messages.failedToUpdateName'))
       }
     } catch (error) {
       console.error('Failed to update name:', error)
-      setError('Network error while updating name')
+      setError(t('messages.networkErrorName'))
     } finally {
       setUpdating(prev => {
         const newSet = new Set(prev)
@@ -402,7 +405,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     return (
       <div className="text-center py-12">
         <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-400" />
-        <p className="text-gray-400">Loading teams management...</p>
+        <p className="text-gray-400">{t('loading')}</p>
       </div>
     )
   }
@@ -412,9 +415,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       <Card className="bg-gray-800 border-gray-700">
         <CardContent className="p-12 text-center">
           <ShieldAlert className="w-16 h-16 mx-auto mb-4 text-red-400" />
-          <h3 className="text-xl font-semibold text-white mb-2">Access Denied</h3>
+          <h3 className="text-xl font-semibold text-white mb-2">{t('accessDenied')}</h3>
           <p className="text-gray-400">
-            Teams management requires administrator permissions.
+            {t('accessDeniedDescription')}
           </p>
         </CardContent>
       </Card>
@@ -446,10 +449,10 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
             <div>
               <CardTitle className="text-white flex items-center gap-2">
                 <Shield className="w-5 h-5" />
-                Role Permissions
+                {t('rolePermissions')}
               </CardTitle>
               <CardDescription className="text-gray-400">
-                Understanding role permissions and capabilities
+                {t('rolePermissionsDescription')}
               </CardDescription>
             </div>
             <Button
@@ -457,7 +460,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               <UserPlus className="w-4 h-4 mr-2" />
-              Invite Team Member
+              {t('inviteTeamMember')}
             </Button>
           </div>
         </CardHeader>
@@ -466,38 +469,38 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
             <div className="p-4 bg-gray-700 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <UserCheck className="w-4 h-4 text-gray-400" />
-                <h4 className="font-medium text-white">Employee</h4>
+                <h4 className="font-medium text-white">{t('roles.employee')}</h4>
               </div>
               <ul className="text-sm text-gray-300 space-y-1">
-                <li>• Submit expense claims</li>
-                <li>• Upload receipts</li>
-                <li>• View own transactions</li>
+                <li>• {t('permissions.submitExpenseClaims')}</li>
+                <li>• {t('permissions.uploadReceipts')}</li>
+                <li>• {t('permissions.viewOwnTransactions')}</li>
               </ul>
             </div>
             
             <div className="p-4 bg-blue-900/20 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <Shield className="w-4 h-4 text-blue-400" />
-                <h4 className="font-medium text-white">Manager</h4>
+                <h4 className="font-medium text-white">{t('roles.manager')}</h4>
               </div>
               <ul className="text-sm text-gray-300 space-y-1">
-                <li>• All employee permissions</li>
-                <li>• Approve/reject expenses</li>
-                <li>• Manage categories</li>
-                <li>• View team expenses</li>
+                <li>• {t('permissions.allEmployeePermissions')}</li>
+                <li>• {t('permissions.approveRejectExpenses')}</li>
+                <li>• {t('permissions.manageCategories')}</li>
+                <li>• {t('permissions.viewTeamExpenses')}</li>
               </ul>
             </div>
             
             <div className="p-4 bg-purple-900/20 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <Crown className="w-4 h-4 text-purple-400" />
-                <h4 className="font-medium text-white">Admin</h4>
+                <h4 className="font-medium text-white">{t('roles.admin')}</h4>
               </div>
               <ul className="text-sm text-gray-300 space-y-1">
-                <li>• All manager permissions</li>
-                <li>• Manage user roles</li>
-                <li>• Send invitations</li>
-                <li>• Full system access</li>
+                <li>• {t('permissions.allManagerPermissions')}</li>
+                <li>• {t('permissions.manageUserRoles')}</li>
+                <li>• {t('permissions.sendInvitations')}</li>
+                <li>• {t('permissions.fullSystemAccess')}</li>
               </ul>
             </div>
           </div>
@@ -516,10 +519,10 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       <Tabs defaultValue="members" className="space-y-4">
         <TabsList className="grid w-full grid-cols-2 bg-gray-800 border border-gray-700">
           <TabsTrigger value="members" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-            Team Members ({teamMembers.length})
+            {t('teamMembers')} ({teamMembers.length})
           </TabsTrigger>
           <TabsTrigger value="invitations" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
-            Pending Invitations ({pendingInvitations.length})
+            {t('pendingInvitationsTab')} ({pendingInvitations.length})
           </TabsTrigger>
         </TabsList>
 
@@ -528,17 +531,17 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                Active Team Members
+                {t('activeTeamMembers')}
               </CardTitle>
               <CardDescription className="text-gray-400">
-                Manage role assignments for current team members
+                {t('activeTeamMembersDescription')}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {teamMembers.length === 0 ? (
                 <div className="text-center py-8">
                   <Users className="w-12 h-12 mx-auto mb-4 text-gray-500" />
-                  <p className="text-gray-400">No team members found</p>
+                  <p className="text-gray-400">{t('noTeamMembers')}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -560,7 +563,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                         value={editingNameValue}
                                         onChange={(e) => setEditingNameValue(e.target.value)}
                                         className="bg-gray-600 border-gray-500 text-white h-8 w-48"
-                                        placeholder="Enter full name"
+                                        placeholder={t('form.enterFullName')}
                                         autoFocus
                                       />
                                       <Button
@@ -626,7 +629,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   )}
                                   <div className="flex items-center gap-1">
                                     <Calendar className="w-3 h-3" />
-                                    <span>Joined {new Date(member.created_at).toLocaleDateString()}</span>
+                                    <span>{t('form.joined')} {new Date(member.created_at).toLocaleDateString()}</span>
                                   </div>
                                 </div>
                               </div>
@@ -634,7 +637,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
                             <div className="flex items-center gap-3">
                               <div className="min-w-[120px]">
-                                <Label className="text-gray-400 text-sm">Role</Label>
+                                <Label className="text-gray-400 text-sm">{t('form.role')}</Label>
                                 <Select
                                   value={currentRole}
                                   onValueChange={(newRole: UserRole) => updateUserRole(member.user_id, newRole)}
@@ -647,19 +650,19 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                     <SelectItem value="employee" className="text-white">
                                       <div className="flex items-center gap-2">
                                         <UserCheck className="w-3 h-3" />
-                                        Employee
+                                        {t('roles.employee')}
                                       </div>
                                     </SelectItem>
                                     <SelectItem value="manager" className="text-white">
                                       <div className="flex items-center gap-2">
                                         <Shield className="w-3 h-3" />
-                                        Manager
+                                        {t('roles.manager')}
                                       </div>
                                     </SelectItem>
                                     <SelectItem value="admin" className="text-white">
                                       <div className="flex items-center gap-2">
                                         <Crown className="w-3 h-3" />
-                                        Admin
+                                        {t('roles.admin')}
                                       </div>
                                     </SelectItem>
                                   </SelectContent>
@@ -669,18 +672,18 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                               {/* Manager Assignment - Only show for employees */}
                               {currentRole === 'employee' && (
                                 <div className="min-w-[140px]">
-                                  <Label className="text-gray-400 text-sm">Manager</Label>
+                                  <Label className="text-gray-400 text-sm">{t('form.manager')}</Label>
                                   <Select
                                     value={member.manager_user_id || 'none'}
                                     onValueChange={(managerId: string) => assignManager(member.user_id, managerId)}
                                     disabled={isUpdating}
                                   >
                                     <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8">
-                                      <SelectValue placeholder="Assign manager" />
+                                      <SelectValue placeholder={t('form.assignManager')} />
                                     </SelectTrigger>
                                     <SelectContent className="bg-gray-700 border-gray-600">
                                       <SelectItem value="none" className="text-white">
-                                        No Manager
+                                        {t('form.noManager')}
                                       </SelectItem>
                                       {getAvailableManagers().map((manager) => (
                                         <SelectItem
@@ -726,18 +729,18 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <Mail className="w-5 h-5" />
-                Pending Invitations
+                {t('pendingInvitations')}
               </CardTitle>
               <CardDescription className="text-gray-400">
-                Track and manage sent invitations
+                {t('pendingInvitationsDescription')}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {pendingInvitations.length === 0 ? (
                 <div className="text-center py-8">
                   <Mail className="w-12 h-12 mx-auto mb-4 text-gray-500" />
-                  <p className="text-gray-400">No pending invitations</p>
-                  <p className="text-sm text-gray-500 mt-2">Send your first invitation to grow your team</p>
+                  <p className="text-gray-400">{t('noPendingInvitations')}</p>
+                  <p className="text-sm text-gray-500 mt-2">{t('sendFirstInvitation')}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -757,14 +760,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   {displayRole}
                                 </Badge>
                                 <Badge className={getInvitationStatusColor(invitation.status)}>
-                                  {invitation.status}
+                                  {t(`invitation.${invitation.status}`)}
                                 </Badge>
                               </div>
                               
                               <div className="flex items-center gap-4 text-sm text-gray-400">
                                 <div className="flex items-center gap-1">
                                   <Calendar className="w-3 h-3" />
-                                  <span>Sent {new Date(invitation.invited_at).toLocaleDateString()}</span>
+                                  <span>{t('invitation.sent')} {new Date(invitation.invited_at).toLocaleDateString()}</span>
                                 </div>
                               </div>
                             </div>
@@ -778,7 +781,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                     className="bg-blue-600 hover:bg-blue-700 text-white"
                                   >
                                     <Send className="w-3 h-3 mr-1" />
-                                    Resend
+                                    {t('invitation.resend')}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -787,7 +790,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                     className="border-red-600 text-red-400 hover:bg-red-900/20"
                                   >
                                     <Trash2 className="w-3 h-3 mr-1" />
-                                    Delete
+                                    {tCommon('delete')}
                                   </Button>
                                 </>
                               )}

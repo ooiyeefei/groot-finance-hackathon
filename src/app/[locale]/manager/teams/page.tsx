@@ -5,21 +5,28 @@
 
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import TeamsManagementClient from '@/components/manager/teams-management-client'
 import { ClientProviders } from '@/components/providers/client-providers'
 
-export default async function TeamsManagementPage() {
+export default async function TeamsManagementPage({ params }: { params: Promise<{ locale: string }> }) {
   // Server-side authentication check
   const { userId } = await auth()
-  
+
   if (!userId) {
     redirect('/sign-in')
   }
-  
+
   const user = await currentUser()
-  
+
+  // Await params in Next.js 15
+  const { locale } = await params
+
+  // Get translations for server component with explicit locale
+  const t = await getTranslations({locale, namespace: 'teams'})
+
   return (
     <ClientProviders>
       <div className="flex h-screen bg-gray-900">
@@ -30,8 +37,8 @@ export default async function TeamsManagementPage() {
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <HeaderWithUser
-            title="Teams Management"
-            subtitle=""
+            title={t('title')}
+            subtitle={t('subtitle')}
           />
 
           {/* Main Content Area */}

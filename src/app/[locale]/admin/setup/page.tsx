@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useUser } from '@clerk/nextjs'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { CheckCircle, AlertCircle } from 'lucide-react'
 
 export default function AdminSetupPage() {
+  const t = useTranslations('settings.admin')
   const { user } = useUser()
   const [adminKey, setAdminKey] = useState('')
   const [loading, setLoading] = useState(false)
@@ -36,18 +38,18 @@ export default function AdminSetupPage() {
       if (data.success) {
         setResult({
           success: true,
-          message: 'Admin privileges assigned successfully! Please refresh the page to see manager features.'
+          message: t('adminPrivilegesAssignedSuccess')
         })
       } else {
         setResult({
           success: false,
-          message: data.error || 'Failed to assign admin privileges'
+          message: data.error || t('failedToAssignAdmin')
         })
       }
     } catch (error) {
       setResult({
         success: false,
-        message: 'Network error. Please try again.'
+        message: t('networkErrorTryAgain')
       })
     } finally {
       setLoading(false)
@@ -59,7 +61,7 @@ export default function AdminSetupPage() {
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <Card className="w-full max-w-md bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle className="text-white">Please sign in first</CardTitle>
+            <CardTitle className="text-white">{t('pleaseSignInFirst')}</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -70,15 +72,15 @@ export default function AdminSetupPage() {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-md bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">Business Admin Assignment</CardTitle>
+          <CardTitle className="text-white">{t('businessAdminAssignment')}</CardTitle>
           <CardDescription className="text-gray-400">
-            Contact support to become a business administrator
+            {t('contactSupportToBecome')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="user-info" className="text-sm font-medium text-gray-300">
-              Current User
+              {t('currentUser')}
             </Label>
             <div className="p-3 bg-gray-700 rounded-md">
               <p className="text-white text-sm">{user.emailAddresses[0]?.emailAddress}</p>
@@ -88,19 +90,19 @@ export default function AdminSetupPage() {
 
           <div className="space-y-2">
             <Label htmlFor="admin-key" className="text-sm font-medium text-gray-300">
-              Admin Setup Key
+              {t('adminSetupKey')}
             </Label>
             <Input
               id="admin-key"
               type="password"
-              placeholder="Enter your admin setup key"
+              placeholder={t('enterYourAdminKey')}
               value={adminKey}
               onChange={(e) => setAdminKey(e.target.value)}
               className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
               disabled={loading}
             />
             <p className="text-xs text-gray-400">
-              This key should be provided by your system administrator
+              {t('keyProvidedBy')}
             </p>
           </div>
 
@@ -122,16 +124,16 @@ export default function AdminSetupPage() {
             disabled={!adminKey || loading}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white"
           >
-            {loading ? 'Setting up...' : 'Assign Admin Privileges'}
+            {loading ? t('settingUp') : t('assignAdminPrivileges')}
           </Button>
 
           <div className="mt-4 p-3 bg-blue-900/20 rounded-md border border-blue-600/20">
-            <h4 className="text-sm font-medium text-blue-300 mb-2">After Setup:</h4>
+            <h4 className="text-sm font-medium text-blue-300 mb-2">{t('afterSetup')}</h4>
             <ul className="text-xs text-blue-200 space-y-1">
-              <li>• You&apos;ll have full finance permissions</li>
-              <li>• Access to manager approval dashboard</li>
-              <li>• Ability to assign roles to other users</li>
-              <li>• Team management capabilities</li>
+              <li>• {t('fullFinancePermissions')}</li>
+              <li>• {t('accessManagerDashboard')}</li>
+              <li>• {t('abilityToAssignRoles')}</li>
+              <li>• {t('teamManagementCapabilities')}</li>
             </ul>
           </div>
         </CardContent>

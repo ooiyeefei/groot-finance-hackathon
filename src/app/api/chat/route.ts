@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { SupportedLanguage } from '@/lib/translations'
+import { type Locale, isValidLocale } from '@/i18n'
 import { createFinancialAgent, createAgentState } from '@/lib/langgraph-agent'
 import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages'
 import { CitationData } from '@/lib/tools/base-tool'
@@ -9,7 +9,7 @@ import { CitationData } from '@/lib/tools/base-tool'
 interface ChatRequest {
   message: string
   conversationId?: string
-  language?: SupportedLanguage
+  language?: string
 }
 
 
@@ -110,51 +110,51 @@ function extractEstablishedFacts(message: string): Record<string, string> {
   const facts: Record<string, string> = {};
   const messageWords = message.toLowerCase().trim();
 
-  // Extract country information
-  if (messageWords.includes('singapore')) {
+  // Extract country information using word boundaries for more accurate matching
+  if (/\bsingapore\b/i.test(messageWords)) {
     facts.country = 'Singapore';
-  } else if (messageWords.includes('malaysia')) {
+  } else if (/\bmalaysia\b/i.test(messageWords)) {
     facts.country = 'Malaysia';
-  } else if (messageWords.includes('thailand')) {
+  } else if (/\bthailand\b/i.test(messageWords)) {
     facts.country = 'Thailand';
-  } else if (messageWords.includes('indonesia')) {
+  } else if (/\bindonesia\b/i.test(messageWords)) {
     facts.country = 'Indonesia';
   }
 
-  // Extract business structure information
-  if (messageWords.includes('sole proprietorship')) {
+  // Extract business structure information using word boundaries
+  if (/\bsole\s+proprietorship\b/i.test(messageWords)) {
     facts.businessStructure = 'Sole Proprietorship';
-  } else if (messageWords.includes('partnership')) {
+  } else if (/\bpartnership\b/i.test(messageWords)) {
     facts.businessStructure = 'Partnership';
-  } else if (messageWords.includes('private limited') || messageWords.includes('pte ltd')) {
+  } else if (/\bprivate\s+limited\b/i.test(messageWords) || /\bpte\s+ltd\b/i.test(messageWords)) {
     facts.businessStructure = 'Private Limited Company';
-  } else if (messageWords.includes('sdn bhd')) {
+  } else if (/\bsdn\s+bhd\b/i.test(messageWords)) {
     facts.businessStructure = 'Sdn Bhd';
   }
 
-  // Extract business type information
-  if (messageWords.includes('individual')) {
+  // Extract business type information using word boundaries
+  if (/\bindividual\b/i.test(messageWords)) {
     facts.businessType = 'Individual';
-  } else if (messageWords.includes('sme') || messageWords.includes('small')) {
+  } else if (/\bsme\b/i.test(messageWords) || /\bsmall\s+(business|company|enterprise)\b/i.test(messageWords)) {
     facts.businessType = 'SME';
-  } else if (messageWords.includes('corporate')) {
+  } else if (/\bcorporate\b/i.test(messageWords)) {
     facts.businessType = 'Corporate';
-  } else if (messageWords.includes('startup')) {
+  } else if (/\bstartup\b/i.test(messageWords)) {
     facts.businessType = 'Startup';
   }
 
-  // Extract industry information
-  if (messageWords.includes('retail')) {
+  // Extract industry information using word boundaries
+  if (/\bretail\b/i.test(messageWords)) {
     facts.industry = 'Retail';
-  } else if (messageWords.includes('restaurant') || messageWords.includes('food')) {
+  } else if (/\brestaurant\b/i.test(messageWords) || /\bfood\s+(and\s+)?beverage\b/i.test(messageWords)) {
     facts.industry = 'Food & Beverage';
-  } else if (messageWords.includes('tech') || messageWords.includes('technology')) {
+  } else if (/\btech(nology)?\b/i.test(messageWords)) {
     facts.industry = 'Technology';
-  } else if (messageWords.includes('consulting')) {
+  } else if (/\bconsulting\b/i.test(messageWords)) {
     facts.industry = 'Consulting';
-  } else if (messageWords.includes('manufacturing')) {
+  } else if (/\bmanufacturing\b/i.test(messageWords)) {
     facts.industry = 'Manufacturing';
-  } else if (messageWords.includes('trading')) {
+  } else if (/\btrading\b/i.test(messageWords)) {
     facts.industry = 'Trading';
   }
 
@@ -318,11 +318,16 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body: ChatRequest = await request.json()
-    const { message, conversationId, language = 'en' } = body
+    const { message, conversationId, language: rawLanguage = 'en' } = body
 
     if (!message || message.trim() === '') {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
     }
+
+    // Validate and sanitize language parameter
+    const language: Locale = isValidLocale(rawLanguage) ? rawLanguage as Locale : 'en'
+
+    console.log(`[Chat API] Request language: ${rawLanguage}, validated language: ${language}`)
 
     // Initialize Supabase client
     const supabase = createServerSupabaseClient()
@@ -615,7 +620,15 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[Chat API] LangGraph agent error:', error)
+    // Only log the error message, not the full error object with stack trace
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[Chat API] LangGraph agent error:', errorMessage)
+
+    // In production, send full error details to secure monitoring service
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[Chat API] Full error details (dev only):', error)
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

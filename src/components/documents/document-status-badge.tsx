@@ -1,6 +1,7 @@
 'use client'
 
 import { Clock, CheckCircle, XCircle, Loader2, Upload, Cog } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface DocumentStatusBadgeProps {
   status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed' | 'uploading'
@@ -9,33 +10,34 @@ interface DocumentStatusBadgeProps {
   animated?: boolean
 }
 
-export default function DocumentStatusBadge({ 
-  status, 
-  errorMessage, 
+export default function DocumentStatusBadge({
+  status,
+  errorMessage,
   processingStage,
-  animated = true 
+  animated = true
 }: DocumentStatusBadgeProps) {
-  
+  const t = useTranslations('documents.status')
+
   const getStatusConfig = () => {
     switch (status) {
       case 'uploading':
         return {
           icon: Upload,
-          text: 'Uploading',
+          text: t('uploading'),
           className: 'bg-blue-900/20 text-blue-300 border-blue-700/50',
           animate: true
         }
       case 'pending':
         return {
           icon: Clock,
-          text: 'Pending',
+          text: t('pending'),
           className: 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50',
           animate: false
         }
       case 'processing':
-        const stageText = processingStage 
-          ? `Processing (${processingStage})`
-          : 'Processing'
+        const stageText = processingStage
+          ? `${t('processing')} (${processingStage})`
+          : t('processing')
         return {
           icon: processingStage === 'extracting' ? Upload :
                 processingStage === 'analyzing' ? Cog : Loader2,
@@ -46,28 +48,28 @@ export default function DocumentStatusBadge({
       case 'ocr_processing':
         return {
           icon: Cog,
-          text: 'OCR Processing (5-8 min)',
+          text: t('ocrProcessing'),
           className: 'bg-purple-900/20 text-purple-300 border-purple-700/50',
           animate: true
         }
       case 'completed':
         return {
           icon: CheckCircle,
-          text: 'Completed',
+          text: t('completed'),
           className: 'bg-green-900/20 text-green-300 border-green-700/50',
           animate: false
         }
       case 'failed':
         return {
           icon: XCircle,
-          text: 'Failed',
+          text: t('failed'),
           className: 'bg-red-900/20 text-red-300 border-red-700/50',
           animate: false
         }
       default:
         return {
           icon: Clock,
-          text: 'Unknown',
+          text: t('unknown'),
           className: 'bg-gray-900/20 text-gray-300 border-gray-700/50',
           animate: false
         }

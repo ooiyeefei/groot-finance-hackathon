@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { UserButton } from '@clerk/nextjs'
+import { LanguageSwitcher } from '@/components/language-switcher'
 
 interface HeaderWithUserProps {
   title?: string
@@ -9,7 +10,7 @@ interface HeaderWithUserProps {
   actions?: React.ReactNode
 }
 
-export default function HeaderWithUser({ title = "Dashboard", subtitle, actions }: HeaderWithUserProps) {
+export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithUserProps) {
   return (
     <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
       <div className="flex items-center justify-between gap-4">
@@ -27,15 +28,18 @@ export default function HeaderWithUser({ title = "Dashboard", subtitle, actions 
             {actions}
           </div>
         )}
-        
-        {/* Right: User button */}
-        <UserButton 
-          appearance={{
-            elements: {
-              avatarBox: "w-8 h-8",
-            }
-          }}
-        />
+
+        {/* Right: Language switcher and user button */}
+        <div className="flex items-center gap-4">
+          <LanguageSwitcher />
+          <UserButton
+            appearance={{
+              elements: {
+                avatarBox: "w-8 h-8",
+              }
+            }}
+          />
+        </div>
       </div>
     </header>
   )

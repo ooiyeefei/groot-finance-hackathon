@@ -116,11 +116,11 @@ export default function ExpenseSubmissionForm({ onClose, onSubmit }: ExpenseSubm
       }))
 
       try {
-        const response = await fetch('/api/expense-categories')
-        
+        const response = await fetch('/api/expense-categories?enabled=true')
+
         if (response.ok) {
           const result = await response.json()
-          if (result.success && result.data.categories && result.data.categories.length > 0) {
+          if (result.success && result.data && result.data.categories && result.data.categories.length > 0) {
             setCategories(result.data.categories)
             console.log('[Categories] Loaded from API:', result.data.categories.length)
             return

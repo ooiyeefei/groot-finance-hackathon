@@ -5,6 +5,7 @@ import { AlertTriangle, TrendingDown, TrendingUp, CheckCircle, CreditCard, Piggy
 import ActionButton from '@/components/ui/action-button';
 import { AnalyticsData, AnalyticsTrends, ActionItem } from '../types/analytics';
 import { Transaction } from '@/types/transaction';
+import { useTranslations } from 'next-intl';
 
 interface ActionCenterProps {
   analytics: AnalyticsData | null;
@@ -19,6 +20,7 @@ export default function ActionCenter({
   onActionClick,
   loading
 }: ActionCenterProps) {
+  const t = useTranslations('dashboard.actionCenter');
   const [statusBasedData, setStatusBasedData] = useState<{
     overdueTransactions: Transaction[];
     upcomingDueTransactions: Transaction[];
@@ -91,11 +93,11 @@ export default function ActionCenter({
         items.push({
           id: 'critical-compliance',
           type: 'error',
-          title: 'Critical Compliance Issues',
+          title: t('criticalComplianceIssues'),
           description: `${criticalAlerts.length} transaction${criticalAlerts.length === 1 ? '' : 's'} with critical compliance violations requiring immediate attention.`,
           priority: 'high',
           action: {
-            label: 'Review Compliance',
+            label: t('reviewCompliance'),
             onClick: () => onActionClick?.('review-critical-compliance')
           }
         });
@@ -106,11 +108,11 @@ export default function ActionCenter({
         items.push({
           id: 'compliance-attention',
           type: 'warning',
-          title: 'Compliance Review Needed',
+          title: t('complianceReviewNeeded'),
           description: `${requiresAttentionAlerts.length} cross-border transaction${requiresAttentionAlerts.length === 1 ? '' : 's'} require${requiresAttentionAlerts.length === 1 ? 's' : ''} compliance review.`,
           priority: 'high',
           action: {
-            label: 'Review Transactions',
+            label: t('reviewTransactions'),
             onClick: () => onActionClick?.('review-compliance-transactions')
           }
         });
@@ -122,11 +124,11 @@ export default function ActionCenter({
       items.push({
         id: 'overdue-transactions',
         type: 'error',
-        title: 'Overdue Payments',
+        title: t('overduePayments'),
         description: `You have ${statusBasedData.overdueTransactions.length} overdue ${statusBasedData.overdueTransactions.length === 1 ? 'transaction' : 'transactions'} requiring immediate attention.`,
         priority: 'high',
         action: {
-          label: 'Review Overdue',
+          label: t('reviewOverdue'),
           onClick: () => onActionClick?.('review-overdue')
         }
       });
@@ -136,11 +138,11 @@ export default function ActionCenter({
       items.push({
         id: 'upcoming-due',
         type: 'warning',
-        title: 'Upcoming Due Dates',
+        title: t('upcomingDueDates'),
         description: `${statusBasedData.upcomingDueTransactions.length} ${statusBasedData.upcomingDueTransactions.length === 1 ? 'payment is' : 'payments are'} due within the next 7 days.`,
         priority: 'high',
         action: {
-          label: 'View Calendar',
+          label: t('viewCalendar'),
           onClick: () => onActionClick?.('view-payment-calendar')
         }
       });
@@ -150,11 +152,11 @@ export default function ActionCenter({
       items.push({
         id: 'awaiting-payment',
         type: 'info',
-        title: 'Awaiting Payment',
+        title: t('awaitingPayment'),
         description: `${statusBasedData.awaitingPaymentCount} ${statusBasedData.awaitingPaymentCount === 1 ? 'transaction is' : 'transactions are'} waiting for payment confirmation.`,
         priority: 'medium',
         action: {
-          label: 'Update Status',
+          label: t('updateStatus'),
           onClick: () => onActionClick?.('update-payment-status')
         }
       });
@@ -165,11 +167,11 @@ export default function ActionCenter({
       items.push({
         id: 'negative-profit',
         type: 'error',
-        title: 'Negative Profit Alert',
+        title: t('negativeProfitAlert'),
         description: `Your expenses exceed income by ${Math.abs(analytics.net_profit).toLocaleString()}. Review your spending patterns.`,
         priority: 'high',
         action: {
-          label: 'Review Expenses',
+          label: t('reviewExpenses'),
           onClick: () => onActionClick?.('review-expenses')
         }
       });
@@ -180,11 +182,11 @@ export default function ActionCenter({
       items.push({
         id: 'declining-income',
         type: 'warning',
-        title: 'Income Declining',
+        title: t('incomeDeclining'),
         description: `Income has decreased by ${Math.abs(trends.income_change).toFixed(1)}% compared to last period.`,
         priority: 'high',
         action: {
-          label: 'Analyze Revenue',
+          label: t('analyzeRevenue'),
           onClick: () => onActionClick?.('analyze-revenue')
         }
       });
@@ -195,11 +197,11 @@ export default function ActionCenter({
       items.push({
         id: 'rising-expenses',
         type: 'warning',
-        title: 'Expenses Rising',
+        title: t('expensesRising'),
         description: `Expenses have increased by ${trends.expenses_change.toFixed(1)}% compared to last period.`,
         priority: 'medium',
         action: {
-          label: 'Control Costs',
+          label: t('controlCosts'),
           onClick: () => onActionClick?.('control-costs')
         }
       });
@@ -210,11 +212,11 @@ export default function ActionCenter({
       items.push({
         id: 'profit-growth',
         type: 'success',
-        title: 'Strong Profit Growth',
+        title: t('strongProfitGrowth'),
         description: `Profit increased by ${trends.profit_change.toFixed(1)}%. Consider investing in growth opportunities.`,
         priority: 'medium',
         action: {
-          label: 'Explore Growth',
+          label: t('exploreGrowth'),
           onClick: () => onActionClick?.('explore-growth')
         }
       });
@@ -232,7 +234,7 @@ export default function ActionCenter({
         description: `You have exposure to ${significantCurrencies.length} currencies. Consider hedging foreign exchange risk.`,
         priority: 'low',
         action: {
-          label: 'Review FX Risk',
+          label: t('reviewFxRisk'),
           onClick: () => onActionClick?.('review-fx-risk')
         }
       });
@@ -244,11 +246,11 @@ export default function ActionCenter({
       items.push({
         id: 'categorization',
         type: 'info',
-        title: 'Improve Categorization',
+        title: t('improveCategorization'),
         description: 'Most expenses are uncategorized. Better categorization helps with insights.',
         priority: 'low',
         action: {
-          label: 'Categorize Transactions',
+          label: t('categorizeTransactions'),
           onClick: () => onActionClick?.('categorize-transactions')
         }
       });
@@ -260,7 +262,7 @@ export default function ActionCenter({
       items.push({
         id: 'healthy-margin',
         type: 'success',
-        title: 'Healthy Profit Margin',
+        title: t('healthyProfitMargin'),
         description: `Your profit margin is ${profitMargin.toFixed(1)}%. You're maintaining strong profitability.`,
         priority: 'low'
       });
@@ -292,12 +294,12 @@ export default function ActionCenter({
   if (actionItems.length === 0) {
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Action Center</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">{t('title')}</h3>
         <div className="flex items-center justify-center py-8 text-gray-400">
           <div className="text-center">
             <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-400" />
-            <p className="text-sm">All looking good!</p>
-            <p className="text-xs mt-1">No urgent actions needed at this time</p>
+            <p className="text-sm">{t('allLookingGood')}</p>
+            <p className="text-xs mt-1">{t('noUrgentActions')}</p>
           </div>
         </div>
       </div>
@@ -307,31 +309,31 @@ export default function ActionCenter({
   return (
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white">Action Center</h3>
+        <h3 className="text-lg font-semibold text-white">{t('title')}</h3>
         <span className="text-xs text-gray-400">
-          {actionItems.length} {actionItems.length === 1 ? 'item' : 'items'}
+          {actionItems.length} {actionItems.length === 1 ? t('item') : t('items')}
         </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {actionItems.map((item) => (
-          <ActionCard key={item.id} item={item} />
+          <ActionCard key={item.id} item={item} t={t} />
         ))}
       </div>
 
       {/* Summary footer */}
       <div className="mt-6 pt-4 border-t border-gray-700 flex items-center justify-between text-xs text-gray-400">
         <span>
-          Priority items: {actionItems.filter(item => item.priority === 'high').length} high, 
-          {' '}{actionItems.filter(item => item.priority === 'medium').length} medium
+          {t('priorityItems')}: {actionItems.filter(item => item.priority === 'high').length} {t('high')},
+          {' '}{actionItems.filter(item => item.priority === 'medium').length} {t('medium')}
         </span>
-        <span>Last updated: {new Date().toLocaleTimeString()}</span>
+        <span>{t('lastUpdated')}: {new Date().toLocaleTimeString()}</span>
       </div>
     </div>
   );
 }
 
-function ActionCard({ item }: { item: ActionItem }) {
+function ActionCard({ item, t }: { item: ActionItem; t: any }) {
   const getTypeStyles = () => {
     switch (item.type) {
       case 'error':
@@ -375,7 +377,7 @@ function ActionCard({ item }: { item: ActionItem }) {
 
     return (
       <span className={`text-xs px-2 py-1 rounded-full border ${colors[item.priority]}`}>
-        {item.priority}
+        {t(item.priority)}
       </span>
     );
   };

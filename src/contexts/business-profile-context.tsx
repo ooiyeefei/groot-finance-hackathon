@@ -36,22 +36,9 @@ export const BusinessProfileProvider: React.FC<BusinessProfileProviderProps> = (
   children,
   initialProfile = null
 }) => {
-  // Try to load from localStorage first for instant display
-  const getInitialProfile = () => {
-    if (initialProfile) return initialProfile
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('business-profile')
-        return cached ? JSON.parse(cached) : null
-      } catch (error) {
-        console.warn('Failed to parse cached business profile:', error)
-        return null
-      }
-    }
-    return null
-  }
-
-  const [profile, setProfile] = useState<BusinessProfile | null>(getInitialProfile())
+  // Start with null to ensure server/client consistency
+  // Client-side data will be loaded in useEffect
+  const [profile, setProfile] = useState<BusinessProfile | null>(initialProfile)
   const [isLoading, setIsLoading] = useState(!profile) // Only loading if no cached data
   const [error, setError] = useState<string | null>(null)
 
@@ -94,12 +81,27 @@ export const BusinessProfileProvider: React.FC<BusinessProfileProviderProps> = (
     }
   }, [])
 
+  // Load cached profile on client-side after hydration
   useEffect(() => {
-    // Only fetch if we don't have initial profile data
-    if (!initialProfile) {
+    if (!initialProfile && !profile) {
+      try {
+        const cached = localStorage.getItem('business-profile')
+        if (cached) {
+          const cachedProfile = JSON.parse(cached)
+          setProfile(cachedProfile)
+          setIsLoading(false)
+          return // Skip API fetch if we have cached data
+        }
+      } catch (error) {
+        console.warn('Failed to parse cached business profile:', error)
+      }
+    }
+
+    // Only fetch from API if we don't have initial or cached profile data
+    if (!initialProfile && !profile) {
       fetchProfile()
     }
-  }, [fetchProfile, initialProfile])
+  }, [fetchProfile, initialProfile, profile])
 
   return (
     <BusinessProfileContext.Provider value={{

@@ -824,8 +824,6 @@ print(json.dumps(result))
       // Step 4: Parse and validate result
       let finalExtractionData;
       try {
-        console.log(`🔍 Debug - dspyResult type: ${typeof dspyResult}`);
-        console.log(`🔍 Debug - dspyResult preview:`, JSON.stringify(dspyResult).substring(0, 200));
         
         let jsonString: string;
         if (typeof dspyResult === 'string') {
@@ -836,13 +834,10 @@ print(json.dumps(result))
           jsonString = JSON.stringify(dspyResult);
         }
         
-        console.log(`🔍 Debug - jsonString preview:`, jsonString.substring(0, 200));
         
         const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
         if (jsonMatch && jsonMatch[0]) {
           finalExtractionData = JSON.parse(jsonMatch[0]);
-          console.log(`🔍 Debug - finalExtractionData type after parse: ${typeof finalExtractionData}`);
-          console.log(`🔍 Debug - finalExtractionData keys:`, finalExtractionData ? Object.keys(finalExtractionData) : 'null/undefined');
         } else {
           throw new Error("No valid JSON object found in processing output");
         }
@@ -853,8 +848,6 @@ print(json.dumps(result))
       }
       
       // Add type safety check before accessing properties
-      console.log(`🔍 Debug - About to check success. finalExtractionData type: ${typeof finalExtractionData}`);
-      console.log(`🔍 Debug - finalExtractionData value:`, finalExtractionData);
       
       if (typeof finalExtractionData === 'string') {
         console.error("❌ finalExtractionData is still a string after parsing, trying to parse again");

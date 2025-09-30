@@ -18,7 +18,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "FinanSEAL - Financial Co-Pilot",
   description: "Multi-modal financial assistant for Southeast Asian SMEs",
-  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -34,6 +33,10 @@ export const viewport = {
   themeColor: "#3b82f6"
 };
 
+/**
+ * Root Layout - Minimal setup for internationalization
+ * The actual providers and locale-specific setup are handled in [locale]/layout.tsx
+ */
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -41,10 +44,11 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en">
-        <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-900 text-white`}
-        >
+      <html>
+        <head>
+          <link rel="manifest" href="/manifest.json" />
+        </head>
+        <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-900 text-white`}>
           <LanguageProvider>
             <ToastProvider>
               {children}

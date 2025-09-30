@@ -1,6 +1,7 @@
 'use client'
 
 import { X, Edit, Trash2, Calendar, Building, FileText, DollarSign, Hash, Eye } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Transaction } from '@/types/transaction'
 import { formatCurrency, getTransactionTypeColor, getTransactionTypeIcon } from '@/hooks/use-transactions'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
@@ -21,6 +22,9 @@ export default function TransactionDetailModal({
   onDelete,
   onViewDocument
 }: TransactionDetailModalProps) {
+  const t = useTranslations('transactions')
+  const tCommon = useTranslations('common')
+
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     isOpen: boolean
     isLoading: boolean
@@ -85,7 +89,7 @@ export default function TransactionDetailModal({
               <Eye className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-medium text-white">Transaction Details</h3>
+              <h3 className="text-lg font-medium text-white">{t('viewDetails')}</h3>
               <p className="text-sm text-gray-400 mt-1">
                 {formatCategoryName(transaction.category)} • {formatDate(transaction.transaction_date)}
               </p>
@@ -95,14 +99,14 @@ export default function TransactionDetailModal({
             <button
               onClick={onEdit}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors"
-              title="Edit Transaction"
+              title={t('editTransaction')}
             >
               <Edit className="w-5 h-5" />
             </button>
             <button
               onClick={handleDeleteClick}
               className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded-lg transition-colors"
-              title="Delete Transaction"
+              title={t('deleteTransaction')}
             >
               <Trash2 className="w-5 h-5" />
             </button>
@@ -125,47 +129,47 @@ export default function TransactionDetailModal({
                 <div>
                   <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                     <FileText className="w-4 h-4 mr-2" />
-                    Transaction Information
+                    {t('transactionInformation')}
                   </h4>
                   
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Type:</span>
+                      <span className="text-gray-400">{t('type')}:</span>
                       <span className={`font-medium capitalize ${getTransactionTypeColor(transaction.transaction_type)}`}>
                         {transaction.transaction_type}
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Description:</span>
+                      <span className="text-gray-400">{t('description')}:</span>
                       <span className="text-white font-medium">{transaction.description}</span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Category:</span>
+                      <span className="text-gray-400">{t('category')}:</span>
                       <span className="text-white">{formatCategoryName(transaction.category)}</span>
                     </div>
                     
                     {transaction.subcategory && (
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-400">Subcategory:</span>
+                        <span className="text-gray-400">{t('subcategory')}:</span>
                         <span className="text-white">{formatCategoryName(transaction.subcategory)}</span>
                       </div>
                     )}
-                    
+
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400 flex items-center gap-1">
                         <Calendar className="w-4 h-4" />
-                        Date:
+                        {t('date')}:
                       </span>
                       <span className="text-white">{formatDate(transaction.transaction_date)}</span>
                     </div>
-                    
+
                     {transaction.vendor_name && (
                       <div className="flex items-center justify-between">
                         <span className="text-gray-400 flex items-center gap-1">
                           <Building className="w-4 h-4" />
-                          Vendor:
+                          {t('vendor')}:
                         </span>
                         <span className="text-white">{transaction.vendor_name}</span>
                       </div>
@@ -175,7 +179,7 @@ export default function TransactionDetailModal({
                       <div className="flex items-center justify-between">
                         <span className="text-gray-400 flex items-center gap-1">
                           <Hash className="w-4 h-4" />
-                          Reference:
+                          {t('reference')}:
                         </span>
                         <span className="text-white">{transaction.reference_number}</span>
                       </div>
@@ -187,36 +191,36 @@ export default function TransactionDetailModal({
                 <div>
                   <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                     <DollarSign className="w-4 h-4 mr-2" />
-                    Amount & Currency
+                    {t('amountAndCurrency')}
                   </h4>
                   
                   <div className="bg-gray-900 rounded-lg p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Original Amount:</span>
+                      <span className="text-gray-400">{t('originalAmount')}:</span>
                       <span className={`text-xl font-bold ${getTransactionTypeColor(transaction.transaction_type)}`}>
                         {transaction.transaction_type === 'expense' && '-'}
                         {formatCurrency(transaction.original_amount, transaction.original_currency)}
                       </span>
                     </div>
-                    
+
                     {transaction.original_currency !== transaction.home_currency && (
                       <>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-400">Home Currency:</span>
+                          <span className="text-gray-400">{t('homeCurrency')}:</span>
                           <span className="text-white font-semibold">
                             {formatCurrency(transaction.home_currency_amount, transaction.home_currency)}
                           </span>
                         </div>
                         
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-500">Exchange Rate:</span>
+                          <span className="text-gray-500">{t('exchangeRate')}:</span>
                           <span className="text-gray-400">
                             1 {transaction.original_currency} = {transaction.exchange_rate.toFixed(6)} {transaction.home_currency}
                           </span>
                         </div>
                         
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-500">Rate Date:</span>
+                          <span className="text-gray-500">{t('rateDate')}:</span>
                           <span className="text-gray-400">
                             {formatDate(transaction.exchange_rate_date)}
                           </span>
@@ -228,25 +232,25 @@ export default function TransactionDetailModal({
                 
                 {/* System Information */}
                 <div>
-                  <h4 className="text-sm font-medium text-white mb-4">System Information</h4>
+                  <h4 className="text-sm font-medium text-white mb-4">{t('systemInformation')}</h4>
                   
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Created:</span>
+                      <span className="text-gray-500">{t('created')}:</span>
                       <span className="text-gray-400">
                         {new Date(transaction.created_at).toLocaleString()}
                       </span>
                     </div>
                     
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Last Updated:</span>
+                      <span className="text-gray-500">{t('lastUpdated')}:</span>
                       <span className="text-gray-400">
                         {new Date(transaction.updated_at).toLocaleString()}
                       </span>
                     </div>
                     
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Creation Method:</span>
+                      <span className="text-gray-500">{t('creationMethod')}:</span>
                       <span className="text-gray-400 capitalize">
                         {transaction.created_by_method.replace('_', ' ')}
                       </span>
@@ -256,14 +260,14 @@ export default function TransactionDetailModal({
                       <div className="flex items-center justify-between">
                         <span className="text-gray-500 flex items-center gap-1">
                           <FileText className="w-3 h-3" />
-                          Source Document:
+                          {t('sourceDocument')}:
                         </span>
                         <button
                           onClick={() => onViewDocument?.(transaction.document_id!)}
                           className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
                         >
                           <Eye className="w-3 h-3" />
-                          View Document
+                          {t('viewDocument')}
                         </button>
                       </div>
                     )}
@@ -281,7 +285,7 @@ export default function TransactionDetailModal({
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                     <FileText className="w-4 h-4 mr-2" />
-                    Line Items ({transaction.line_items?.length || 0})
+                    {tCommon('lineItems')} ({transaction.line_items?.length || 0})
                   </h4>
                 </div>
 
@@ -293,12 +297,12 @@ export default function TransactionDetailModal({
                         <thead className="bg-gray-800">
                           <tr>
                             <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
-                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">{tCommon('description')}</th>
                             <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
-                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">{tCommon('qty')}</th>
                             <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
-                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
-                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">{tCommon('unitPrice')}</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">{tCommon('total')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-700">
@@ -331,7 +335,7 @@ export default function TransactionDetailModal({
                 ) : (
                   <div className="text-center py-8 text-gray-400">
                     <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p>No line items found</p>
+                    <p>No {tCommon('lineItems')} found</p>
                     <p className="text-xs mt-1">This transaction has no itemized details</p>
                   </div>
                 )}
@@ -339,20 +343,20 @@ export default function TransactionDetailModal({
                 {/* Transaction Summary */}
                 {transaction.line_items && transaction.line_items.length > 0 && (
                   <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
-                    <h5 className="text-sm font-medium text-white mb-3">Transaction Summary</h5>
+                    <h5 className="text-sm font-medium text-white mb-3">{t('transactionSummary')}</h5>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-400">Items Count:</span>
+                        <span className="text-gray-400">{t('itemsCount')}:</span>
                         <span className="text-white">{transaction.line_items.length}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-400">Subtotal:</span>
+                        <span className="text-gray-400">{t('subtotal')}:</span>
                         <span className="text-white">
                           {formatCurrency(calculateLineItemsTotal(), transaction.original_currency)}
                         </span>
                       </div>
                       <div className="flex justify-between border-t border-gray-700 pt-2">
-                        <span className="text-gray-300 font-medium">Total Amount:</span>
+                        <span className="text-gray-300 font-medium">{tCommon('totalAmount')}:</span>
                         <span className="text-green-400 font-medium">
                           {formatCurrency(transaction.original_amount, transaction.original_currency)}
                         </span>
@@ -361,7 +365,7 @@ export default function TransactionDetailModal({
                       {/* Note about line items vs main amount */}
                       {Math.abs(calculateLineItemsTotal() - transaction.original_amount) > 0.01 && (
                         <div className="mt-3 text-xs text-yellow-400 bg-yellow-900/20 rounded p-2">
-                          Note: Line items total differs from transaction amount. 
+                          {t('lineItemsDifferNote')} 
                           This may be due to additional fees, discounts, or rounding differences.
                         </div>
                       )}
@@ -397,13 +401,13 @@ export default function TransactionDetailModal({
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
               >
                 <Edit className="w-4 h-4 mr-2 inline" />
-                Edit Transaction
+                {t('editTransaction')}
               </button>
               <button
                 onClick={onClose}
                 className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
               >
-                Close
+                {tCommon('close')}
               </button>
             </div>
           </div>
@@ -415,10 +419,10 @@ export default function TransactionDetailModal({
         isOpen={deleteConfirmation.isOpen}
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        title="Delete Transaction"
-        message={`Are you sure you want to delete this ${transaction.transaction_type}? This action cannot be undone.`}
+        title={t('deleteTransaction')}
+        message={t('deleteConfirmMessage', { type: transaction.transaction_type })}
         confirmText="Delete"
-        cancelText="Cancel"
+        cancelText={tCommon('cancel')}
         confirmVariant="danger"
         isLoading={deleteConfirmation.isLoading}
       />

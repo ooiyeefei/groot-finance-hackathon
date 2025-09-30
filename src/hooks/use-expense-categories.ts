@@ -1,9 +1,11 @@
 /**
  * Custom hook for fetching dynamic expense categories
  * Replaces hardcoded EXPENSE_CATEGORY_CONFIG with admin-configured categories
+ * Supports multi-language category names via locale parameter
  */
 
 import { useState, useEffect } from 'react'
+import { useLocale } from 'next-intl'
 
 export interface DynamicExpenseCategory {
   id: string
@@ -12,6 +14,12 @@ export interface DynamicExpenseCategory {
   description?: string
   vendor_patterns?: string[]
   ai_keywords?: string[]
+  translations?: {
+    [locale: string]: {
+      category_name: string
+      description?: string
+    }
+  }
 }
 
 interface UseExpenseCategoriesReturn {
@@ -25,13 +33,19 @@ export function useExpenseCategories(): UseExpenseCategoriesReturn {
   const [categories, setCategories] = useState<DynamicExpenseCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const locale = useLocale()
 
   const fetchCategories = async (): Promise<void> => {
     try {
       setLoading(true)
       setError(null)
-      
-      const response = await fetch('/api/expense-categories/enabled', {
+
+      // Include locale parameter and enabled filter for active categories only
+      const url = new URL('/api/expense-categories', window.location.origin)
+      url.searchParams.set('enabled', 'true')
+      url.searchParams.set('locale', locale)
+
+      const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -49,7 +63,7 @@ export function useExpenseCategories(): UseExpenseCategoriesReturn {
         throw new Error(result.error || 'Failed to fetch expense categories')
       }
 
-      setCategories(result.data || [])
+      setCategories(result.data?.categories || [])
     } catch (err) {
       console.error('Error fetching expense categories:', err)
       setError(err instanceof Error ? err.message : 'Failed to load categories')
@@ -67,7 +81,7 @@ export function useExpenseCategories(): UseExpenseCategoriesReturn {
 
   useEffect(() => {
     fetchCategories()
-  }, [])
+  }, [locale]) // Re-fetch when locale changes
 
   return {
     categories,

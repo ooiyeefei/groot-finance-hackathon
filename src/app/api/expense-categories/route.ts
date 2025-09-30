@@ -48,6 +48,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Check for enabled filter parameter
+    const { searchParams } = new URL(request.url)
+    const enabledOnly = searchParams.get('enabled') === 'true'
+
     // Get categories from the business JSONB column
     const { data: businessData, error: categoriesError } = await supabase
       .from('businesses')
@@ -63,9 +67,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Extract categories from JSONB column and sort (include inactive categories for management)
-    const categories = (businessData?.custom_expense_categories || [])
-      .sort((a: any, b: any) => (a.sort_order || 99) - (b.sort_order || 99))
+    // Extract categories from JSONB column and apply filtering
+    let categories = (businessData?.custom_expense_categories || [])
+
+    // Filter for enabled categories if requested
+    if (enabledOnly) {
+      categories = categories.filter((category: any) => category.is_active !== false) // Default to enabled if not specified
+    }
+
+    // Sort categories
+    categories = categories.sort((a: any, b: any) => (a.sort_order || 99) - (b.sort_order || 99))
 
     return NextResponse.json({
       success: true,

@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import ActionButton from '@/components/ui/action-button'
 import TransactionsList from '@/components/transactions/transactions-list'
 import TransactionFormModal from '@/components/transactions/transaction-form-modal'
 import TransactionDetailModal from '@/components/transactions/transaction-detail-modal'
@@ -14,11 +14,12 @@ import { Plus } from 'lucide-react'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 export default function TransactionsClient() {
+  const t = useTranslations('transactions')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null)
   const [selectedDocument, setSelectedDocument] = useState<any | null>(null)
-  
+
   const {
     transactions,
     loading,
@@ -97,8 +98,8 @@ export default function TransactionsClient() {
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <HeaderWithUser
-            title="Transactions"
-            subtitle="View and manage your financial transactions across multiple currencies"
+            title={t('title')}
+            subtitle={t('subtitle')}
           />
 
           {/* Main Content Area */}

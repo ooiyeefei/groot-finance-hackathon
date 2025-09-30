@@ -5,7 +5,7 @@ import { X, Info, AlertTriangle, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useLanguage } from '@/contexts/language-context'
+import { useTranslations } from 'next-intl'
 
 export type DisclaimerVariant = 'banner' | 'card' | 'footer' | 'modal'
 export type DisclaimerType = 'chat' | 'ocr-document' | 'ocr-receipt' | 'general'
@@ -22,22 +22,22 @@ interface FinancialDisclaimerProps {
 const getDisclaimerContent = (type: DisclaimerType, t: any) => {
   const contentMap = {
     chat: {
-      text: t.chatDisclaimer,
+      text: t('chat'),
       icon: Shield,
       color: 'blue'
     },
     'ocr-document': {
-      text: t.ocrDocumentDisclaimer,
+      text: t('ocrDocument'),
       icon: AlertTriangle,
       color: 'amber'
     },
     'ocr-receipt': {
-      text: t.ocrReceiptDisclaimer,
+      text: t('ocrReceipt'),
       icon: AlertTriangle,
       color: 'amber'
     },
     general: {
-      text: t.generalDisclaimer,
+      text: t('general'),
       icon: Info,
       color: 'gray'
     }
@@ -75,7 +75,7 @@ export function FinancialDisclaimer({
   persistDismissal = true,
   onDismiss
 }: FinancialDisclaimerProps) {
-  const { t } = useLanguage()
+  const t = useTranslations('disclaimers')
   const [isDismissed, setIsDismissed] = useState(false)
   const content = getDisclaimerContent(type, t)
   const colors = colorClasses[content.color as keyof typeof colorClasses]

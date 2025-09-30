@@ -1,3 +1,7 @@
+import createNextIntlPlugin from 'next-intl/plugin';
+
+const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Your other Next.js config options can go here
@@ -6,15 +10,13 @@ const nextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
+        protocol: 'https' as const,
         hostname: 'storage.googleapis.com',
-        port: '',
         pathname: '/finanseal-logo/**',
       },
       {
-        protocol: 'https',
+        protocol: 'https' as const,
         hostname: 'ohxwghdgsuyabgsndfzc.supabase.co',
-        port: '',
         pathname: '/storage/v1/object/public/business-profiles/**',
       },
     ],
@@ -38,7 +40,8 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
 
-  // Temporarily ignore ESLint during builds - will address warnings in separate task
+  // Temporarily disable ESLint during builds while security fixes are validated
+  // TODO: Re-enable after addressing existing linting warnings
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -48,8 +51,9 @@ const nextConfig = {
     typedRoutes: false,
   },
 
-  // Enable React StrictMode to catch potential issues early
+  // Enable React StrictMode for better development safety
+  // Helps catch potential issues early in development
   reactStrictMode: true,
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

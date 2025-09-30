@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface ExtractedInfoTagsProps {
   extractedData: any
@@ -8,6 +9,7 @@ interface ExtractedInfoTagsProps {
 }
 
 const ExtractedInfoTags = ({ extractedData, className = '' }: ExtractedInfoTagsProps) => {
+  const tFields = useTranslations('documents.fields')
   if (!extractedData) {
     return null
   }
@@ -84,14 +86,14 @@ const ExtractedInfoTags = ({ extractedData, className = '' }: ExtractedInfoTagsP
       {/* Primary Information - Always show if available */}
       {vendor && (
         <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-blue-600/20 text-blue-300 border border-blue-500/30">
-          <span className="font-medium">Vendor:</span>
+          <span className="font-medium">{tFields('vendor')}:</span>
           <span className="ml-1 truncate max-w-32" title={vendor}>{vendor}</span>
         </span>
       )}
 
       {totalAmount && (
         <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-green-600/20 text-green-300 border border-green-500/30">
-          <span className="font-medium">Amount:</span>
+          <span className="font-medium">{tFields('amount')}:</span>
           <span className="ml-1">{totalAmount} {currency}</span>
         </span>
       )}
@@ -99,14 +101,14 @@ const ExtractedInfoTags = ({ extractedData, className = '' }: ExtractedInfoTagsP
       {/* Secondary Information - Show if available */}
       {documentNumber && (
         <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-purple-600/20 text-purple-300 border border-purple-500/30">
-          <span className="font-medium">Invoice:</span>
+          <span className="font-medium">{tFields('invoice')}:</span>
           <span className="ml-1 font-mono text-xs" title={documentNumber}>{documentNumber}</span>
         </span>
       )}
 
       {lineItemsCount > 0 && (
         <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-orange-600/20 text-orange-300 border border-orange-500/30">
-          <span className="font-medium">Items:</span>
+          <span className="font-medium">{tFields('items')}:</span>
           <span className="ml-1">{lineItemsCount}</span>
         </span>
       )}
@@ -114,14 +116,14 @@ const ExtractedInfoTags = ({ extractedData, className = '' }: ExtractedInfoTagsP
       {/* Tertiary Information - Show if available */}
       {paymentTerms && (
         <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-yellow-600/20 text-yellow-300 border border-yellow-500/30">
-          <span className="font-medium">Terms:</span>
+          <span className="font-medium">{tFields('terms')}:</span>
           <span className="ml-1">{paymentTerms}</span>
         </span>
       )}
 
       {documentDate && (
         <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-600/20 text-gray-300 border border-gray-500/30">
-          <span className="font-medium">Date:</span>
+          <span className="font-medium">{tFields('date')}:</span>
           <span className="ml-1">{new Date(documentDate).toLocaleDateString()}</span>
         </span>
       )}

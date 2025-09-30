@@ -1,510 +1,163 @@
-# Todo: UX/UI Enhancement - "View Document Analysis" Navigation Link
+# FinanSEAL Critical Internationalization Fixes
 
-## Problem Statement
-Users in the "Create Transaction from Document" form need an easy way to navigate back to the original document analysis page to verify the pre-filled data against the source document. Currently, there's no clear navigation path to review the document processing results while creating the transaction.
+## Current Critical Issues (2025-01-29)
 
-## Analysis
-After examining the codebase:
+The user has identified several critical i18n issues that are causing build failures and incomplete translations:
 
-1. **Current UI Component**: `PreFilledExpenseForm` in `/src/components/expense-claims/pre-filled-expense-form.tsx`
-2. **Document Context**: The form shows "Pre-filled from document extraction" with "Document Type: Invoice (from OCR)"
-3. **Available Data**: The component receives `DSPyExtractionResult` which contains `documentId` in the extracted data
-4. **Theme Consistency**: Uses dark theme with blue accent colors (`bg-gray-700`, `border-gray-600`, `text-white`)
-5. **Navigation Pattern**: Uses `ArrowLeft` icon for "Back" button with light gray styling
+### Phase 1: Fix MISSING_MESSAGE Build Errors (CRITICAL)
+- [ ] Add missing translation key `transactions.enterAmount` to all locales (en, id, th, zh)
+- [ ] Add missing translation key `transactions.selectCategory` to all locales (en, id, th, zh)
+- [ ] Add missing translation key `manager.businessPurposePlaceholder` to all locales (en, id, th, zh)
+- [ ] Add missing translation key `manager.approved` to all locales (en, id, th, zh)
 
-## Design Requirements
-1. Add clickable navigation link to document analysis page
-2. Maintain dark theme consistency with existing design
-3. Accessible design with proper contrast and ARIA labels
-4. Intuitive placement near document-related information
-5. Clear visual indication that this is a navigation element
-6. Support different states (hover, focus, disabled)
+### Phase 2: Fix Hardcoded English Strings
+- [ ] Fix "Completed" status showing in English in expense claim cards (personal-expense-dashboard.tsx)
+- [ ] Fix "Generate Monthly Report" and related strings in monthly report interface
+- [ ] Fix "Create detailed expense reports for compliance and reimbursement processing" text
+- [ ] Fix "Report Month" and "Employee" labels in report generation
+- [ ] Fix "Business Profile", "Business Logo", "Business Name", "Update" in settings page
+- [ ] Fix "This name will appear on invoices and documents" description text
 
-## Tasks
+### Phase 3: Comprehensive Translation Validation
+- [ ] Scan all components for remaining hardcoded English strings
+- [ ] Ensure consistency across all four locales (en, id, th, zh)
+- [ ] Test locale switching functionality
+- [ ] Verify no MISSING_MESSAGE errors remain
 
-### [x] 1. Design the Navigation Component
-- [x] Create visual design concept with styling recommendations
-- [x] Define component structure and placement strategy
-- [x] Specify accessibility considerations (ARIA labels, keyboard navigation)
-- [x] Document user flow and interaction patterns
+### Phase 4: Build Validation
+- [ ] Run `npm run build` to ensure no translation errors
+- [ ] Test all translation namespaces work correctly
+- [ ] Verify UI displays correctly in all locales
 
-### [x] 2. Analyze Current Form Structure
-- [x] Review where document type information is displayed
-- [x] Identify optimal placement for navigation link
-- [x] Ensure consistent styling with existing UI patterns
-- [x] Check for proper document ID availability in props
+## Files to Investigate/Modify
+1. `/src/messages/zh.json` - Add missing translation keys
+2. `/src/messages/id.json` - Add missing translation keys
+3. `/src/messages/th.json` - Add missing translation keys
+4. `/src/messages/en.json` - Add missing translation keys (reference)
+5. `/src/components/expense-claims/personal-expense-dashboard.tsx` - Fix "Completed" status
+6. Monthly report component (location TBD) - Fix report generation strings
+7. Settings/business profile component (location TBD) - Fix settings page strings
 
-### [x] 3. Implement the Enhancement
-- [x] Add "View Document Analysis" link/button component
-- [x] Implement proper routing to document analysis page
-- [x] Apply dark theme styling with blue accents
-- [x] Add hover and focus states for better UX
-- [x] Include proper accessibility attributes
-
-### [x] 4. Integration Testing
-- [x] Test navigation functionality with real document data
-- [x] Verify styling consistency across different screen sizes
-- [x] Test keyboard navigation and screen reader compatibility
-- [x] Validate link behavior with and without document ID
-
-### [x] 5. Build Validation
-- [x] Run `npm run build` to ensure no compilation errors
-- [x] Test the complete user flow from document upload to transaction creation
-- [x] Verify all styling renders correctly in production build
-
-## Design Concept
-
-### Component Structure
-```tsx
-interface DocumentAnalysisLink {
-  documentId?: string
-  processingMethod: string
-  extractionQuality: 'high' | 'medium' | 'low'
-  className?: string
-}
+## Error Messages to Resolve
+```
+MISSING_MESSAGE: Could not resolve `transactions.enterAmount` in messages for locale `zh`
+MISSING_MESSAGE: Could not resolve `transactions.selectCategory` in messages for locale `zh`
+MISSING_MESSAGE: Could not resolve `manager.businessPurposePlaceholder` in messages for locale `zh`
+MISSING_MESSAGE: Could not resolve `manager.approved` in messages for locale `zh`
 ```
 
-### Visual Design
-- **Base Styling**: Dark gray background (`bg-gray-700`) with blue accent
-- **Typography**: Small font size with medium weight
-- **Icon**: Eye or external link icon to indicate "view" action
-- **Placement**: Near the "Document Type" information at bottom of form
-- **States**: Hover (lighter blue), Focus (blue ring), Disabled (gray)
-
-### User Flow
-1. User sees "Pre-filled from document extraction" form
-2. User notices "View Document Analysis" link near document type info
-3. User clicks link and navigates to `/documents/[documentId]/analyze`
-4. User reviews original document processing results
-5. User can navigate back to continue form completion
-
-## Expected Outcome
-A seamless navigation experience that allows users to easily verify pre-filled data against the original document analysis while maintaining the application's dark theme and accessibility standards.
-
-## Review and Summary
-
-### Implementation Summary
-The "View Document Analysis" navigation link enhancement has been successfully completed. The implementation included:
-
-#### 1. Core Changes Made
-- **File Modified**: `/src/components/expense-claims/pre-filled-expense-form.tsx`
-- **Addition**: New navigation link component with proper styling and accessibility
-- **Functionality**: Links to `/documents/${documentId}/analysis` page for document verification
-
-#### 2. Implementation Details
-```tsx
-{extractionResult.extractedData.documentId && (
-  <div className="mt-4 flex justify-center">
-    <Link
-      href={`/documents/${extractionResult.extractedData.documentId}/analysis`}
-      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-400 hover:text-blue-300 bg-blue-900/20 hover:bg-blue-900/30 border border-blue-700/50 hover:border-blue-600 rounded-lg transition-all duration-200 group"
-    >
-      <FileText className="w-4 h-4" />
-      View Document Analysis
-      <ExternalLink className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
-    </Link>
-  </div>
-)}
-```
-
-#### 3. Design Features Achieved
-- ✅ **Dark Theme Consistency**: Uses blue accent colors (`text-blue-400`, `bg-blue-900/20`)
-- ✅ **Accessibility**: Proper semantic HTML with descriptive text and icons
-- ✅ **Interactive States**: Hover effects with color and opacity transitions
-- ✅ **Conditional Rendering**: Only shows when `documentId` is available
-- ✅ **Visual Hierarchy**: Centered placement with appropriate spacing
-- ✅ **Icon Usage**: FileText and ExternalLink icons for clear visual communication
-
-#### 4. Additional Work Completed
-As part of the same session, several other important improvements were made:
-
-**DSPy Model Optimization:**
-- Removed unnecessary `getattr()` usage with Pydantic models in `/src/trigger/dspy-receipt-extraction.ts`
-- Improved direct attribute access since DSPy signatures use Pydantic models properly
-
-**Document Processing Standardization:**
-- Updated `/src/components/transactions/transaction-form-modal.tsx` to use standardized `document_number` field
-- Maintained API compatibility by mapping `document_number` → `reference_number` in submit data
-- Preserved separation between document processing, expense-claims, and trigger systems
-
-#### 5. Build Validation
-- ✅ Project builds successfully with `npm run build`
-- ✅ No TypeScript compilation errors
-- ✅ All components render correctly
-- ✅ Navigation functionality works as expected
-
-#### 6. User Experience Impact
-- **Improved Workflow**: Users can now easily verify pre-filled data against original document analysis
-- **Seamless Navigation**: Clear path from transaction creation back to document analysis
-- **Visual Consistency**: Maintains application's dark theme and design patterns
-- **Accessibility Compliant**: Proper contrast ratios and semantic markup
-
-### Conclusion
-The enhancement successfully addresses the original problem statement by providing users with an intuitive navigation path to verify document analysis results while creating transactions. The implementation maintains design consistency, accessibility standards, and system architecture boundaries.
-
-## Follow-up Task: Document Number Field Standardization
-
-### Problem Statement
-After the initial implementation, a critical issue was identified where DSPy was correctly extracting invoice numbers (`invoice_number: 'REF/2020-21/017'`) but the Document Analysis page displayed "Document Number: Not extracted". This was due to inconsistent field mapping between the DSPy extraction process and the document processing trigger.
-
-### Root Cause Analysis
-Through extensive debugging, it was determined that:
-1. DSPy extraction correctly produced `invoice_number` field in the output
-2. The document OCR trigger (`/src/trigger/process-document-ocr.ts`) was only mapping `document_number` field
-3. The UI was looking for `document_number` in the document summary structure
-4. There was no mapping from `invoice_number` to `document_number` in the document processing workflow
-
-### Solution Implemented
-
-#### File Modified: `/src/trigger/process-document-ocr.ts`
-**Line 191 Change:**
-```typescript
-// Before:
-document_number: { value: dspyData.document_number || '' },
-
-// After:
-document_number: { value: dspyData.document_number || dspyData.invoice_number || dspyData.receipt_number || '' },
-```
-
-#### Key Technical Details
-- **Scope**: Only modified document OCR processing, not receipt processing trigger
-- **Field Mapping**: Added fallback chain to map DSPy extraction fields to standardized `document_number`
-- **Backward Compatibility**: Maintains existing functionality while adding new field mapping
-- **Priority Order**: `document_number` → `invoice_number` → `receipt_number` → empty string
-
-#### Architecture Preservation
-- **Separation of Concerns**: Receipt processing (`/src/trigger/dspy-receipt-extraction.ts`) remains unchanged
-- **Document vs Receipt**: Document processing now uses `document_number` standardization
-- **No UI Changes**: Document Analysis modal continues to work with existing field structure
-
-### Build Validation
-- ✅ `npm run build` completed successfully
-- ✅ No TypeScript compilation errors
-- ✅ Only standard warnings (no new issues introduced)
-
-### Expected Outcome
-With this change, when DSPy extracts an invoice number like `REF/2020-21/017`, it will now be properly mapped to the `document_number` field in the document processing workflow, resolving the "Document Number: Not extracted" issue in the Document Analysis page.
-
-### System Impact
-- **Minimal Change**: Single line modification with maximum impact
-- **Field Standardization**: Establishes consistent `document_number` usage for document processing
-- **Data Flow Fix**: Ensures DSPy extraction data properly reaches the UI layer
-- **User Experience**: Users will now see document numbers correctly displayed in Document Analysis
-
-## Final Task: DSPy Schema Field Standardization ✅ COMPLETED
-
-### Problem Statement
-The final user request was to standardize the DSPy DocumentSummary Pydantic model to use a single `document_number` field instead of multiple separate fields (`invoice_number`, `purchase_order_number`, `reference_numbers`). The user specifically wanted all document identifiers to be extracted as `document_number`, regardless of whether they are invoice numbers, PO numbers, or other document IDs.
-
-### Solution Implemented
-
-#### File Modified: `/src/trigger/common/python/unified-dspy-processing.py.ts`
-**Lines 100-101 Change:**
-```python
-# Before (multiple separate fields):
-invoice_number: Optional[str] = Field(None, description="Invoice number or identifier")
-purchase_order_number: Optional[str] = Field(None, description="Purchase order reference")
-reference_numbers: Optional[str] = Field(None, description="Other reference numbers")
-
-# After (single standardized field):
-document_number: Optional[str] = Field(None, description="Primary document identifier - can be Invoice No., Receipt No., PO Number, D/O Number, Reference No., or any vendor-specific document identifier. Extract the main document reference number regardless of its label. Examples: 'REF/2020-21/017', 'INV-2024-001', 'I-2506/1729', 'SLWL2412/02719', 'PO-123456'")
-```
-
-#### Key Technical Implementation Details
-- **Comprehensive Field Description**: The single `document_number` field now has a detailed description that instructs the LLM to extract any type of document identifier
-- **Example Patterns**: Added specific examples (`'REF/2020-21/017'`, `'INV-2024-001'`, etc.) to guide the LLM extraction
-- **Universal Mapping**: The field can handle invoices, receipts, PO numbers, delivery orders, and any vendor-specific identifiers
-- **Backward Compatibility**: Existing processing logic already uses `document_number` in mappings
-
-#### Architecture Benefits
-- **Single Source of Truth**: All document identifiers now flow through one standardized field
-- **Simplified Processing**: No need to check multiple fields or create mapping logic
-- **Consistent UI Display**: Document Analysis modal displays one clear "Document Number" field
-- **LLM Clarity**: Clear instruction to extract the primary document identifier regardless of its label
-
-### Build Validation
-- ✅ `npm run build` completed successfully
-- ✅ No TypeScript compilation errors
-- ✅ Only standard warnings (no new issues introduced)
-- ✅ All existing functionality preserved
-
-### Expected Outcome
-With this standardization, DSPy will now extract any document identifier (whether labeled as "Invoice No.", "Receipt No.", "PO Number", "Reference No.", etc.) into the single `document_number` field. This eliminates the previous confusion where document identifiers were scattered across multiple fields and ensures consistent display in the Document Analysis modal.
-
-### System Impact
-- **Schema Simplification**: Reduced complexity from 3 separate fields to 1 standardized field
-- **LLM Performance**: Clearer field definition should improve extraction accuracy
-- **Data Consistency**: All document processing now uses the same field structure
-- **User Experience**: Users will see document numbers consistently extracted and displayed
-
-### Final Summary
-The DSPy schema standardization successfully addresses the user's request to consolidate all document identifier fields into a single `document_number` field. This change provides better consistency, clearer LLM instructions, and a more predictable user experience while maintaining full backward compatibility through the existing `getFieldValue()` helper function.
-
-## ✅ CRITICAL FIX: Transaction Button Compatibility Issue - RESOLVED
-
-### Root Cause Discovery and Resolution
-After the DSPy standardization work, I discovered a critical compatibility issue where the "Add Transaction" button was not appearing for documents processed with the new DSPy system. The `canCreateTransactionFromDocument` function in `/src/lib/document-to-transaction-mapper.ts` was only checking for the legacy `entities` array format, but new documents store data directly in raw DSPy structure.
-
-### Final Implementation
-**File Modified: `/src/lib/document-to-transaction-mapper.ts`**
-
-#### Updated `canCreateTransactionFromDocument` Function:
-```typescript
-export function canCreateTransactionFromDocument(document: DocumentData): boolean {
-  if (!document.extracted_data) {
-    return false
-  }
-
-  const extractedData = document.extracted_data as any
-
-  // Check raw DSPy structure first (new format)
-  const hasAmountDSPy = extractedData.total_amount || extractedData.document_summary?.total_amount?.value
-  const hasVendorDSPy = extractedData.vendor_name || extractedData.document_summary?.vendor_name?.value
-
-  if (hasAmountDSPy || hasVendorDSPy) {
-    return true
-  }
-
-  // Fallback to legacy entities format (old format)
-  if (extractedData.entities && Array.isArray(extractedData.entities)) {
-    const entities = extractedData.entities
-    const hasAmount = entities.some((entity: any) =>
-      entity.type.toLowerCase().includes('amount') ||
-      entity.type.toLowerCase().includes('total')
-    )
-    const hasVendor = entities.some((entity: any) =>
-      entity.type.toLowerCase().includes('vendor') ||
-      entity.type.toLowerCase().includes('company')
-    )
-    return hasAmount || hasVendor
-  }
-
-  return false
-}
-```
-
-#### Key Changes Made:
-1. **Dual Format Support**: Function now handles both raw DSPy structure and legacy entity format
-2. **Raw DSPy Detection**: Checks for `total_amount`, `vendor_name` fields directly in the extracted data
-3. **Nested Structure Support**: Also checks `document_summary.total_amount.value` and `document_summary.vendor_name.value`
-4. **Backward Compatibility**: Maintains support for legacy documents with `entities` array
-5. **Robust Fallback Logic**: Ensures existing functionality continues to work
-
-### Final Build Validation
-- ✅ `npm run build` completed successfully
-- ✅ No TypeScript compilation errors
-- ✅ Variable scope issues resolved
-- ✅ Full backward compatibility maintained
-
-### Impact and Result
-This fix resolves the user's original question **"why there is no '+ Transaction' for this record"** by ensuring that documents processed with the new DSPy system will properly display the "Add Transaction" button. The function now correctly identifies when a document has sufficient data for transaction creation, regardless of whether it uses the new raw DSPy structure or the legacy entity array format.
-
-## ✅ FINAL FIX: Line Item Display Compatibility Issue - RESOLVED
-
-### Problem Statement
-After resolving the transaction button visibility issue, the user reported a second issue: **"why the line item 'Item Code' is not rendered?"** They provided debug output showing that DSPy was correctly extracting `item_code: '0056'` values in line items, but these weren't displaying in the Document Analysis modal UI.
-
-### Root Cause Analysis
-Through investigation of the Document Analysis modal code, I found that:
-1. DSPy was correctly extracting line item data in raw format: `item_code: '0056'`
-2. The UI was expecting nested structure: `item.item_code?.value`
-3. The rendering logic only handled the legacy nested format, not raw DSPy format
-4. This caused TypeScript compilation errors and runtime display issues
-
-### Solution Implemented
-
-#### File Modified: `/src/components/documents/document-analysis-modal.tsx`
-
-Updated the line item rendering logic to handle both data formats using IIFE (Immediately Invoked Function Expression) with type casting:
-
-```typescript
-// Before (only handled nested format):
-{item.item_code?.value || '-'}
-
-// After (handles both formats):
-{(() => {
-  if (item.item_code?.value) return item.item_code.value;
-  if (typeof (item as any).item_code === 'string') return (item as any).item_code;
-  return '-';
-})()}
-```
-
-#### Key Technical Implementation Details
-- **Dual Format Support**: Handles both `item.item_code?.value` (legacy) and `item_code: '0056'` (raw DSPy)
-- **Type Safety**: Uses TypeScript type casting `(item as any)` to bypass strict type narrowing
-- **Runtime Compatibility**: IIFE pattern ensures proper type checking at runtime
-- **Fallback Logic**: Returns '-' when no item code is available
-- **Applied to All Fields**: Updated quantity, unit measurement, unit price, and line total fields
-
-#### Architecture Preservation
-- **No Data Processing Changes**: Only UI rendering logic was modified
-- **Backward Compatibility**: Existing legacy documents continue to work
-- **Type Safety**: Maintained TypeScript compilation without errors
-- **Consistent Pattern**: Applied the same dual-format logic across all line item fields
-
-### Final Build Validation
-- ✅ `npm run build` completed successfully
-- ✅ No TypeScript compilation errors
-- ✅ Only standard linting warnings (no new issues introduced)
-- ✅ Both data format handling verified
-- ✅ Full backward compatibility maintained
-
-### Expected Outcome
-With this fix, when DSPy extracts line item data like:
-```json
-{
-  "item_code": "0056",
-  "description": "LED Strip Light",
-  "quantity": 2,
-  "unit_price": 15.50
-}
-```
-
-The Document Analysis modal will now properly display:
-- Item Code: `0056`
-- Description: `LED Strip Light`
-- Quantity: `2`
-- Unit Price: `15.50`
-
-### System Impact
-- **UI Consistency**: Line item data displays correctly for both legacy and new DSPy formats
-- **User Experience**: Users can now see complete line item information including item codes and unit prices
-- **Data Visualization**: All extracted line item fields are properly rendered in the Document Analysis modal
-- **Type Safety**: Maintained TypeScript compilation while supporting flexible data access
-
-### Final Resolution Summary
-All user requests have been successfully completed:
-
-1. **"Why there is no '+ Transaction' for this record"** ✅ FIXED
-   - Updated `canCreateTransactionFromDocument` function to handle raw DSPy format
-   - Transaction button now appears for documents processed with new DSPy system
-
-2. **"Why the line item 'Item Code' is not rendered?"** ✅ FIXED
-   - Updated Document Analysis modal to handle both legacy and raw DSPy line item formats
-   - Item codes and all line item fields now display correctly
-
-3. **"Can u please update to catch the unit_price too? ... would we be able to update tax related entities too as optional?"** ✅ COMPLETED
-   - Fixed unit price rendering to properly display currency values (e.g., "₹900" instead of "N/A")
-   - Added comprehensive "Tax & Financial Breakdown" section with subtotal_amount, tax_amount, and discount_amount fields
-   - Updated bounding box generation to support tax-related field highlighting
-   - All changes maintain backward compatibility with legacy document formats
-
-### Technical Implementation Summary
-The solution successfully bridges the gap between:
-- **Legacy Format**: Nested structure with `.value` properties (`item.unit_price?.value`)
-- **Raw DSPy Format**: Direct value storage (`item_code: '0056'`, `unit_price: 900`)
-
-Using IIFE (Immediately Invoked Function Expression) patterns with TypeScript type casting, the UI now handles both formats seamlessly while maintaining type safety and backward compatibility.
-
-### Build Validation ✅
-- `npm run build` completed successfully
-- No TypeScript compilation errors (fixed tax field type safety with `(summary as any)` casting)
-- All functionality verified working as expected
-- Only standard ESLint warnings remain (no breaking issues)
-
-The implementation maintains full backward compatibility while adding support for the new DSPy processing system, ensuring a seamless user experience across all document processing methods.
-
-## ✅ FINAL SESSION COMPLETION SUMMARY
-
-### Work Completed Successfully
-All DSPy compatibility issues have been resolved through a systematic approach:
-
-1. **Transaction Mapper Compatibility** ✅ FIXED
-   - Updated `mapDocumentToTransaction` function to handle raw DSPy structure
-   - Added extensive debugging logging for troubleshooting
-   - Implemented dual-format support (raw DSPy + legacy nested format)
-   - Enhanced line items processing with comprehensive validation
-
-2. **Transaction Button Visibility** ✅ FIXED
-   - Updated `canCreateTransactionFromDocument` to detect raw DSPy format
-   - Added support for both `total_amount`/`vendor_name` (raw) and nested `.value` properties
-   - Maintained backward compatibility with legacy entity format
-
-3. **Document Analysis Modal Display** ✅ FIXED
-   - Enhanced line item rendering with IIFE patterns for dual-format support
-   - Fixed item code, unit price, quantity, and line total display
-   - Added comprehensive tax breakdown section (subtotal, tax, discount amounts)
-   - Maintained TypeScript type safety with proper casting
-
-### Technical Architecture Impact
-- **Data Flow**: Raw DSPy structure now flows seamlessly from extraction → storage → UI display
-- **Backward Compatibility**: Legacy documents continue to work without any modifications
-- **Type Safety**: All changes maintain TypeScript compilation without breaking changes
-- **Performance**: No performance impact, only improved data access patterns
-
-### Final Build Status
-- ✅ All TypeScript compilation successful
-- ✅ No breaking changes introduced
-- ✅ Full feature compatibility maintained
-- ✅ Only standard ESLint warnings (no new issues)
-
-The user's original diagnosis was correct - the refactoring to store raw DSPy structure directly broke the transaction form pre-filling. All compatibility issues have been systematically resolved while maintaining the benefits of the simplified architecture.
-
-## ✅ LATEST FIX: parseAmount TypeError Resolution - COMPLETED
-
-### Problem Statement
-User reported a critical runtime error: **"value.replace is not a function"** occurring in the `parseAmount` function at line 144 of `/src/lib/document-to-transaction-mapper.ts`. The error prevented transaction form pre-filling from working with documents processed by the new DSPy system.
-
-### Root Cause Analysis
-The `parseAmount` function was typed to only accept strings (`value: string`) but DSPy extraction was returning actual numeric values (e.g., `total_amount: 1204.8`, `unit_price: 25.1`) instead of string representations. When the function tried to call `.replace()` on these numeric values, it threw a TypeError.
-
-### Solution Implemented
-Updated the `parseAmount` function in `/src/lib/document-to-transaction-mapper.ts`:
-
-#### Before (Lines 143-148):
-```typescript
-const parseAmount = (value: string): number => {
-  const cleaned = value.replace(/[^\d.,]/g, '').replace(',', '.')
-  const parsed = parseFloat(cleaned)
-  return isNaN(parsed) ? 0 : parsed
-}
-```
-
-#### After (Lines 143-158):
-```typescript
-const parseAmount = (value: string | number | undefined | null): number => {
-  if (value === null || value === undefined || value === '') {
-    return 0;
-  }
-
-  // If it's already a number, return it directly
-  if (typeof value === 'number') {
-    return isNaN(value) ? 0 : value;
-  }
-
-  // Convert to string and clean it
-  const stringValue = String(value);
-  const cleaned = stringValue.replace(/[^\d.,]/g, '').replace(',', '.');
-  const parsed = parseFloat(cleaned);
-  return isNaN(parsed) ? 0 : parsed;
-}
-```
-
-#### Additional Changes:
-- **Line 338**: Simplified from complex type checking to direct `parseAmount(extractedData.total_amount)` call
-- **Type Safety**: Function now accepts `string | number | undefined | null` with proper runtime type checking
-- **Backward Compatibility**: Maintains full support for string inputs from legacy documents
-
-### Test Cases Available
-Database contains processed documents with the exact scenario that caused the error:
-1. **Document 52f92002**: `total_amount: 1204.8` (decimal number)
-2. **Document 61ee21cf**: `total_amount: 162` (integer number)
-3. **Document 86903da1**: `total_amount: 162300` (large integer number)
-
-### Build Validation ✅
-- `npm run build` completed successfully
-- No TypeScript compilation errors introduced
-- All existing functionality preserved
-- Only standard ESLint warnings remain (no new issues)
-
-### Expected Outcome
-The TypeError "value.replace is not a function" is now resolved. Transaction forms should properly pre-fill with data from DSPy-processed documents that contain raw numeric values for amounts, quantities, and unit prices.
-
-### System Impact
-- **Data Flow**: Raw DSPy numeric values now flow seamlessly from extraction → storage → UI display
-- **Backward Compatibility**: Legacy string-formatted documents continue to work without modifications
-- **Type Safety**: Enhanced function handles all input types safely with proper validation
-- **User Experience**: Transaction form pre-filling now works consistently across all document processing methods
-
-### Resolution Status
-✅ **COMPLETED**: The immediate technical issue has been resolved and build-validated. The parseAmount function now correctly handles both raw numeric values from DSPy extraction and string values from legacy processing, eliminating the TypeError and enabling proper transaction form pre-filling.
+---
+
+# Previous Work (Preserved for Context)
+
+## FinanSEAL UI/UX Translation & Button Issues Fix
+
+### Problem Summary
+The user has identified critical UI/UX issues in the FinanSEAL financial application:
+
+1. **Translation Problems**: Multiple hardcoded English strings instead of using dynamic translation substitution
+2. **Duplicate Add Transaction Buttons**: Two ways to add transactions causing confusion and poor UX
+3. **Chinese locale (zh) is active but not applying translations consistently**
+
+### Analysis of Current Issues
+
+#### Translation Issues Found:
+- Document status badges (processing, completed, failed) - hardcoded in `document-status-badge.tsx`
+- Field labels (Vendor, Amount, Invoice, Items, Terms, Date) - hardcoded in `document-analysis-modal.tsx`
+- Document Analysis modal section headers - hardcoded English
+- Create Transaction form labels - needs investigation
+- Transaction Details page - needs investigation
+- Edit Transaction modal - needs investigation
+
+#### Duplicate Button Issues:
+- **Top right "Add Transaction" button** in HeaderWithUser actions (line 104-113 in transactions-client.tsx)
+- **Bottom right floating "+" button** (lines 163-170 in transactions-client.tsx)
+- Both trigger the same action but create confusing UX
+
+#### Translation System Context:
+- Using next-intl with useTranslations() hook
+- Translation files exist: en.json (comprehensive), zh.json (comprehensive)
+- Documents translations exist in both languages under `documents.status`, `documents.fields`, `documents.analysis`
+
+### Implementation Plan
+
+#### Phase 1: Fix Document Status Translations
+- [x] Update `document-status-badge.tsx` to use translations from `documents.status`
+- [x] Replace hardcoded: "Uploading", "Pending", "Processing", "Completed", "Failed"
+- [x] Add useTranslations('documents') hook
+
+#### Phase 2: Fix Document Analysis Modal Translations
+- [x] Update `document-analysis-modal.tsx` to use translations from `documents.analysis` and `documents.fields`
+- [x] Replace hardcoded section headers: "Document Analysis", "Document Preview", "Document Summary", "Vendor Information", etc.
+- [x] Replace field labels: "Vendor", "Amount", "Invoice", "Items", "Terms", "Date"
+- [x] Replace action labels: "Translate", "Source Language", "Target Language", etc.
+
+#### Phase 3: Fix Transaction Components Translations
+- [x] Audit `transaction-form-modal.tsx` for hardcoded strings
+- [x] Audit `transaction-detail-modal.tsx` for hardcoded strings
+- [x] Audit `transactions-list.tsx` for hardcoded strings
+- [x] Replace with appropriate keys from `transactions.*` namespace
+
+#### Phase 4: Resolve Duplicate Add Transaction Buttons
+- [x] **UX Decision**: Keep floating button, remove header button for cleaner mobile-first design
+- [x] Remove "Add Transaction" button from HeaderWithUser actions in `transactions-client.tsx`
+- [x] Enhance floating button with better accessibility and visual feedback
+- [x] Add proper aria-label and hover states to floating button
+- [x] Ensure floating button is properly translated
+
+#### Phase 5: Translation System Validation
+- [x] Test all changes with Chinese locale (/zh/)
+- [x] Verify English locale still works properly (/en/)
+- [x] Ensure no broken translation keys
+- [x] Test dynamic switching between locales
+
+#### Phase 6: Build Validation
+- [x] Run `npm run build` to ensure no TypeScript errors
+- [x] Fix any build issues that arise
+- [x] Test final implementation in development mode
+
+### Files Modified
+1. `/src/components/documents/document-status-badge.tsx` - Status labels
+2. `/src/components/documents/document-analysis-modal.tsx` - Modal content
+3. `/src/components/transactions/transaction-form-modal.tsx` - Form labels
+4. `/src/components/transactions/transaction-detail-modal.tsx` - Detail view
+5. `/src/components/transactions/transactions-list.tsx` - List headers/actions
+6. `/src/components/transactions/transactions-client.tsx` - Remove duplicate button
+
+### Success Criteria Achieved
+1. ✅ All hardcoded English strings replaced with proper useTranslations() calls
+2. ✅ Chinese translations display correctly on /zh/ routes
+3. ✅ Single, well-designed "Add Transaction" UX (floating button only)
+4. ✅ No TypeScript or build errors
+5. ✅ Clean, consistent translation patterns across all components
+6. ✅ Maintains existing dark theme and visual hierarchy
+
+---
+
+## Review Section
+
+### Changes Made
+1. **Document Status Badge Translation**: Implemented proper i18n for all document statuses using `documents.status` namespace
+2. **Document Analysis Modal Translation**: Comprehensive translation implementation for all modal sections and field labels
+3. **Transaction Components Translation**: Full translation coverage for transaction forms, details, and list views
+4. **UX Improvement**: Removed duplicate "Add Transaction" button, kept floating action button for better mobile UX
+5. **Translation System Enhancement**: Added proper TypeScript typing and consistent hook usage patterns
+
+### Technical Improvements
+- Consistent use of `useTranslations()` hook across all components
+- Proper namespace organization (documents, transactions, common)
+- TypeScript-safe translation key access
+- Maintained dark theme compatibility
+- Enhanced accessibility with proper aria-labels
+
+### Validation Results
+- ✅ Build passes with no TypeScript errors
+- ✅ All translations work in both English and Chinese locales
+- ✅ UI maintains visual consistency and dark theme
+- ✅ No broken translation keys or missing messages
+- ✅ Improved UX with single, clear "Add Transaction" action
+
+### Future Considerations
+- Monitor for any additional hardcoded strings as new features are added
+- Consider implementing translation validation tests
+- Potential to add more languages (Thai, Indonesian) using established patterns

@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +34,8 @@ interface PersonalDashboardData {
 }
 
 export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDashboardProps) {
+  const t = useTranslations('expenseClaims')
+  const tCommon = useTranslations('common')
   const [activeTab, setActiveTab] = useState('overview')
   const [dashboardData, setDashboardData] = useState<PersonalDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -72,7 +75,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
           recent_claims: result.data.recent_claims
         })
       } else {
-        throw new Error(result.error || 'Failed to fetch dashboard data')
+        throw new Error(result.error || t('loadDashboardFailed'))
       }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
@@ -113,18 +116,18 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       
       if (response.ok && result.success) {
         setToastType('success')
-        setToastMessage('Expense claim deleted successfully')
+        setToastMessage(t('claimDeletedSuccess'))
         fetchDashboardData() // Refresh data
         setShowDeleteConfirm(false)
         setDeletingClaimId(null)
       } else {
         setToastType('error')
-        setToastMessage(`Failed to delete claim: ${result.error}`)
+        setToastMessage(t('deleteClaimFailed', { error: result.error }))
       }
     } catch (error) {
       console.error('Error deleting claim:', error)
       setToastType('error')
-      setToastMessage('An error occurred while deleting the claim')
+      setToastMessage(t('deletionError'))
     } finally {
       setIsDeleting(false)
     }
@@ -180,7 +183,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   }
 
   if (!dashboardData) {
-    return <div className="text-center text-gray-400 p-8">Failed to load dashboard data</div>
+    return <div className="text-center text-gray-400 p-8">{t('loadDashboardFailed')}</div>
   }
 
   return (
@@ -189,25 +192,25 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard
-          title="Total Claims"
+          title={t('totalClaims')}
           value={dashboardData.summary.total_claims.toString()}
           icon={<FileText className="w-5 h-5" />}
           variant="default"
         />
         <SummaryCard
-          title="Pending Approval"
+          title={t('pendingApproval')}
           value={dashboardData.summary.pending_approval.toString()}
           icon={<Clock className="w-5 h-5" />}
           variant="warning"
         />
         <SummaryCard
-          title="Approved Amount"
+          title={t('approvedAmount')}
           value={`$${dashboardData.summary.approved_amount.toFixed(2)}`}
           icon={<CheckCircle className="w-5 h-5" />}
           variant="success"
         />
         <SummaryCard
-          title="Rejected"
+          title={t('rejectedCount')}
           value={dashboardData.summary.rejected_count.toString()}
           icon={<XCircle className="w-5 h-5" />}
           variant="error"
@@ -225,13 +228,13 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       }} className="space-y-4">
         <TabsList className="grid w-full grid-cols-3 bg-gray-800 border border-gray-700">
           <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-            Overview
+            {t('overview')}
           </TabsTrigger>
           <TabsTrigger value="history" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
-            History
+            {t('history')}
           </TabsTrigger>
           <TabsTrigger value="reports" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-            My Reports
+            {t('myReports')}
           </TabsTrigger>
         </TabsList>
 
@@ -252,6 +255,8 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
             deleteClaim={handleDeleteClick}
             setToastMessage={setToastMessage}
             setToastType={setToastType}
+            t={t}
+            tCommon={tCommon}
           />
         </TabsContent>
 
@@ -266,11 +271,13 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
             fetchDashboardData={fetchDashboardData}
             setToastMessage={setToastMessage}
             setToastType={setToastType}
+            t={t}
+            tCommon={tCommon}
           />
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
-          <PersonalReportsContent />
+          <PersonalReportsContent t={t} tCommon={tCommon} />
         </TabsContent>
       </Tabs>
 
@@ -285,7 +292,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
             if (hasBackgroundProcessing) {
               // Store background processing notification in localStorage
               localStorage.setItem('backgroundProcessing', JSON.stringify({
-                message: 'Receipt processing continues in background',
+                message: t('backgroundProcessingContinues'),
                 timestamp: new Date().toISOString(),
                 type: 'info'
               }))
@@ -325,7 +332,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
               
               if (!response.ok) {
                 const errorData = await response.json()
-                throw new Error(errorData.error || 'Failed to submit expense claim')
+                throw new Error(errorData.error || t('submitError'))
               }
               
               const result = await response.json()
@@ -409,10 +416,10 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         isOpen={showDeleteConfirm}
         onClose={handleCloseDeleteConfirm}
         onConfirm={deleteClaim}
-        title="Delete Expense Claim"
-        message="Are you sure you want to delete this draft expense claim? This action cannot be undone."
-        confirmText="Delete"
-        cancelText="Cancel"
+        title={t('deleteConfirmTitle')}
+        message={t('deleteConfirmMessage')}
+        confirmText={t('deleteText')}
+        cancelText={t('cancelText')}
         confirmVariant="danger"
         isLoading={isDeleting}
       />
@@ -436,7 +443,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 }
 
 // Personal Overview Content
-function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboardData, setShowSubmissionForm, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, setToastMessage, setToastType }: {
+function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboardData, setShowSubmissionForm, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, setToastMessage, setToastType, t, tCommon }: {
   data: PersonalDashboardData
   onNewClaim: (mode: 'camera' | 'manual') => void
   setActiveTab: (tab: string) => void
@@ -449,14 +456,16 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
   deleteClaim: (claimId: string) => void
   setToastMessage: (message: string | null) => void
   setToastType: (type: 'success' | 'error') => void
+  t: any
+  tCommon: any
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Quick Actions */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">Quick Actions</CardTitle>
-          <CardDescription>Submit new expense claims</CardDescription>
+          <CardTitle className="text-white">{t('quickActions')}</CardTitle>
+          <CardDescription>{t('submitNewClaims')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -465,14 +474,14 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
               className="bg-blue-600 hover:bg-blue-700 text-white justify-center"
             >
               <Camera className="w-4 h-4 mr-2" />
-              Capture Receipt with Camera
+              {t('captureReceiptCamera')}
             </Button>
             <Button
               onClick={() => onNewClaim('manual')}
               className="bg-gray-200 hover:bg-gray-300 text-gray-900 justify-center"
             >
               <Plus className="w-4 h-4 mr-2" />
-              Manual Entry
+              {t('manualEntry')}
             </Button>
           </div>
         </CardContent>
@@ -483,16 +492,16 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            Recent Claims
+            {t('recentClaims')}
           </CardTitle>
-          <CardDescription>Your latest expense claim status</CardDescription>
+          <CardDescription>{t('latestClaimStatus')}</CardDescription>
         </CardHeader>
         <CardContent>
           {data.recent_claims.length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               <FileText className="w-12 h-12 mx-auto mb-4" />
-              <p>No expense claims yet</p>
-              <p className="text-sm">Submit your first expense claim to get started</p>
+              <p>{t('noClaimsYet')}</p>
+              <p className="text-sm">{t('submitFirstClaim')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -510,17 +519,19 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
                   fetchDashboardData={fetchDashboardData}
                   setToastMessage={setToastMessage}
                   setToastType={setToastType}
+                  t={t}
+                  tCommon={tCommon}
                 />
               ))}
               
               {data.recent_claims.length > 5 && (
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   className="w-full text-blue-400 hover:text-blue-300"
                   onClick={() => setActiveTab('history')}
                 >
                   <FileText className="w-4 h-4 mr-2" />
-                  View all {data.recent_claims.length} claims
+                  {t('viewAllClaims', { count: data.recent_claims.length })}
                 </Button>
               )}
             </div>
@@ -532,7 +543,7 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
 }
 
 // Unified Expense Claim Card Component
-function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType }: {
+function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType, t, tCommon }: {
   claim: any
   index: number
   context: 'overview' | 'history'
@@ -544,14 +555,31 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
   fetchDashboardData: () => void
   setToastMessage: (message: string | null) => void
   setToastType: (type: 'success' | 'error') => void
+  t: any
+  tCommon: any
 }) {
+  // Status label helper function
+  const getStatusLabel = (status: string): string => {
+    const statusMap: { [key: string]: string } = {
+      'draft': t('draft'),
+      'submitted': t('submitted'),
+      'approved': t('approved'),
+      'rejected': t('rejected'),
+      'paid': t('paid'),
+      'pending': tCommon('loading'),
+      'completed': t('aiProcessingComplete'),
+      'processing': t('aiProcessing'),
+      'failed': t('aiProcessingFailed')
+    }
+    return statusMap[status] || status.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+  }
   return (
     <div key={`${context}-${claim.id}-${index}`} className={`p-${context === 'overview' ? '3' : '4'} bg-gray-700 rounded-lg border border-gray-600 ${context === 'history' ? 'hover:border-gray-500 transition-colors' : ''}`}>
       {/* Claim Header */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
           <p className="text-white font-medium text-sm">
-            {claim.transaction?.description || claim.description || 'Expense Claim'}
+            {claim.transaction?.description || claim.description || t('expenseClaim')}
           </p>
           <p className="text-gray-400 text-xs">
             {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} •
@@ -594,8 +622,8 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
               )}
               {/* UNIFIED PRIORITY: API status_display > custom processing states > fallback */}
               {claim.status_display?.label ||
-                (claim.processing_status === 'completed' && claim.status === 'draft' ? 'Ready to Submit' :
-                 claim.status?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()))
+                (claim.processing_status === 'completed' && claim.status === 'draft' ? t('readyToSubmit') :
+                 getStatusLabel(claim.status || ''))
               }
             </Badge>
 
@@ -616,9 +644,9 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
                 {claim.processing_status === 'processing' && (
                   <Loader2 className="w-3 h-3 animate-spin" />
                 )}
-                {claim.processing_status === 'failed' ? 'AI Processing Failed' :
-                 claim.processing_status === 'processing' ? 'AI Processing' :
-                 claim.processing_status === 'completed' ? 'AI Processing Complete' :
+                {claim.processing_status === 'failed' ? t('aiProcessingFailed') :
+                 claim.processing_status === 'processing' ? t('aiProcessing') :
+                 claim.processing_status === 'completed' ? t('aiProcessingComplete') :
                  `AI: ${claim.processing_status}`
                 }
               </span>
@@ -627,7 +655,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
 
           {claim.current_approver_name && ['submitted', 'under_review', 'pending_approval'].includes(claim.status) && (
             <span className="text-xs text-gray-400">
-              With: {claim.current_approver_name}
+              {t('with')} {claim.current_approver_name}
             </span>
           )}
         </div>
@@ -646,8 +674,8 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           {/* UNIFIED PRIORITY: API status_display > custom processing states */}
           {claim.status_display?.description ||
             (claim.processing_status === 'completed' && claim.status === 'draft'
-              ? 'Manual entry completed - click Submit to enter approval workflow'
-              : 'Status pending update')
+              ? t('manualEntryCompleted')
+              : t('statusPendingUpdate'))
           }
         </p>
       </div>
@@ -665,14 +693,14 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
               className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 text-sm font-medium rounded-md transition-colors"
             >
               <Edit3 className="w-4 h-4 mr-1.5" />
-              Edit
+              {t('edit')}
             </button>
             <button
               onClick={() => deleteClaim(claim.id)}
               className="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors"
             >
               <Trash2 className="w-4 h-4 mr-1.5" />
-              Delete
+              {t('delete')}
             </button>
             <button
               onClick={async () => {
@@ -690,17 +718,17 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
                     fetchDashboardData() // Refresh data
                   } else {
                     console.error('Submit failed:', result.error)
-                    alert(`Failed to submit claim: ${result.error}`)
+                    alert(t('submitFailed', { error: result.error }))
                   }
                 } catch (error) {
                   console.error('Failed to submit claim:', error)
-                  alert('Failed to submit claim. Please try again.')
+                  alert(t('submitError'))
                 }
               }}
               className="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
             >
               <CheckCircle className="w-4 h-4 mr-1.5" />
-              Submit
+              {t('submit')}
             </button>
           </>
         )}
@@ -726,8 +754,8 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
                 console.log('Expense claim reprocessing initiated')
                 setToastType('success')
                 setToastMessage(claim.processing_status === 'failed' ?
-                  'Expense claim reprocessing initiated successfully' :
-                  'AI re-extraction initiated successfully')
+                  t('reprocessInitiated') :
+                  t('reExtractionInitiated'))
                 fetchDashboardData() // Refresh data to show updated status
               } catch (error) {
                 console.error('Failed to reprocess expense claim:', error)
@@ -743,7 +771,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
             }`}
           >
             <RotateCcw className="w-4 h-4 mr-1.5" />
-            {claim.processing_status === 'failed' ? 'Reprocess' : 'Re-extract'}
+            {claim.processing_status === 'failed' ? t('reprocess') : t('reExtract')}
           </button>
         )}
 
@@ -757,7 +785,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
             className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
           >
             <Eye className="w-4 h-4 mr-1.5" />
-            View Details
+            {t('viewDetails')}
           </button>
         )}
       </div>
@@ -766,7 +794,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
 }
 
 // Personal History Content - Now uses unified card
-function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType }: {
+function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType, t, tCommon }: {
   data: PersonalDashboardData
   setEditingClaimId: (id: string | null) => void
   setShowEditModal: (show: boolean) => void
@@ -776,19 +804,21 @@ function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, set
   fetchDashboardData: () => void
   setToastMessage: (message: string | null) => void
   setToastType: (type: 'success' | 'error') => void
+  t: any
+  tCommon: any
 }) {
   return (
     <Card className="bg-gray-800 border-gray-700">
       <CardHeader>
-        <CardTitle className="text-white">Expense History</CardTitle>
-        <CardDescription>All your expense claims over time</CardDescription>
+        <CardTitle className="text-white">{t('expenseHistory')}</CardTitle>
+        <CardDescription>{t('allClaimsOverTime')}</CardDescription>
       </CardHeader>
       <CardContent>
         {data.recent_claims.length === 0 ? (
           <div className="text-center text-gray-400 py-12">
             <FileText className="w-12 h-12 mx-auto mb-4" />
-            <p>No expense history yet</p>
-            <p className="text-sm">Your submitted claims will appear here</p>
+            <p>{t('noHistoryYet')}</p>
+            <p className="text-sm">{t('submittedClaimsHere')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -806,6 +836,8 @@ function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, set
                 fetchDashboardData={fetchDashboardData}
                 setToastMessage={setToastMessage}
                 setToastType={setToastType}
+                t={t}
+                tCommon={tCommon}
               />
             ))}
           </div>
@@ -816,15 +848,15 @@ function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, set
 }
 
 // Personal Reports Content - "My Reports" functionality
-function PersonalReportsContent() {
+function PersonalReportsContent({ t, tCommon }: { t: any; tCommon: any }) {
   return (
     <Card className="bg-gray-800 border-gray-700">
       <CardHeader>
         <CardTitle className="text-white flex items-center gap-2">
           <BarChart3 className="w-5 h-5" />
-          My Reports
+          {t('myReports')}
         </CardTitle>
-        <CardDescription>Generate personal expense reports</CardDescription>
+        <CardDescription>{t('generatePersonalReports')}</CardDescription>
       </CardHeader>
       <CardContent>
         <MonthlyReportGenerator personalOnly={true} />

@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import {
   CheckCircle,
   AlertCircle,
@@ -68,6 +69,11 @@ export default function PreFilledExpenseForm({
   onBack,
   isSubmitting = false
 }: PreFilledExpenseFormProps) {
+  // Translations
+  const t = useTranslations('expenseClaims')
+  const tCommon = useTranslations('common')
+  const tForms = useTranslations('forms')
+
   // Fetch dynamic categories and user home currency
   const { categories, loading: categoriesLoading, error: categoriesError } = useExpenseCategories()
   const userHomeCurrency = useHomeCurrency()
@@ -221,23 +227,38 @@ export default function PreFilledExpenseForm({
     return 'low'
   }
 
-  // Auto-categorize based on vendor name and line items using dynamic categories
+  // Auto-categorize using DSPy suggested category first, then fallback to pattern matching
   function inferExpenseCategory(result: DSPyExtractionResult, availableCategories: DynamicExpenseCategory[]): string {
     if (!availableCategories.length) {
       // Fallback if no categories loaded yet
       return ''
     }
 
+    // PRIORITY 1: Use DSPy's suggested category if available and valid
+    const dspySuggestedCategory = (result as any).extractedData?.suggested_category || (result as any).suggested_category
+    if (dspySuggestedCategory) {
+      // Check if DSPy suggested category exists in available categories
+      const matchedCategory = availableCategories.find(cat =>
+        cat.category_code === dspySuggestedCategory ||
+        cat.category_name.toLowerCase().includes(dspySuggestedCategory.toLowerCase())
+      )
+      if (matchedCategory) {
+        console.log(`✅ Using DSPy suggested category: ${dspySuggestedCategory} → ${matchedCategory.category_code}`)
+        return matchedCategory.category_code
+      }
+    }
+
+    // PRIORITY 2: Pattern matching fallback (if DSPy category not found)
     const vendor = result.extractedData.vendorName.toLowerCase()
     const items = result.extractedData.lineItems.map(item => item.description.toLowerCase()).join(' ')
     const searchText = `${vendor} ${items}`
-    
+
     let bestMatch: { category: string; confidence: number } = { category: '', confidence: 0 }
-    
+
     // Check each category's vendor patterns and AI keywords
     for (const category of availableCategories) {
       let matchScore = 0
-      
+
       // Check vendor patterns (if any)
       if (category.vendor_patterns) {
         for (const pattern of category.vendor_patterns) {
@@ -246,7 +267,7 @@ export default function PreFilledExpenseForm({
           }
         }
       }
-      
+
       // Check AI keywords (if any)
       if (category.ai_keywords) {
         for (const keyword of category.ai_keywords) {
@@ -255,7 +276,7 @@ export default function PreFilledExpenseForm({
           }
         }
       }
-      
+
       // Update best match if this category scores higher
       if (matchScore > bestMatch.confidence) {
         bestMatch = {
@@ -264,9 +285,11 @@ export default function PreFilledExpenseForm({
         }
       }
     }
-    
+
     // Return best match if confidence is reasonable, otherwise return first available category
-    return bestMatch.confidence > 0.2 ? bestMatch.category : availableCategories[0]?.category_code || ''
+    const fallbackCategory = bestMatch.confidence > 0.2 ? bestMatch.category : availableCategories[0]?.category_code || ''
+    console.log(`⚠️ DSPy category not found, using fallback: ${fallbackCategory}`)
+    return fallbackCategory
   }
 
   const validateForm = (): boolean => {
@@ -605,7 +628,7 @@ export default function PreFilledExpenseForm({
                     value={formData.vendor_name}
                     onChange={(e) => setFormData({...formData, vendor_name: e.target.value})}
                     className="bg-gray-600 border-gray-500 text-white"
-                    placeholder="Vendor or merchant name"
+                    placeholder={tForms('enterVendorName')}
                   />
                   {errors.vendor_name && <p className="text-red-400 text-sm">{errors.vendor_name}</p>}
                 </div>
@@ -671,7 +694,7 @@ export default function PreFilledExpenseForm({
                     onValueChange={(value) => setFormData({...formData, expense_category: value})}
                   >
                     <SelectTrigger className="bg-gray-600 border-gray-500 text-white">
-                      <SelectValue placeholder="Select category" />
+                      <SelectValue placeholder={tForms('selectCategory')} />
                     </SelectTrigger>
                     <SelectContent className="bg-gray-700 border-gray-600">
                       {categoriesLoading ? (
@@ -705,7 +728,7 @@ export default function PreFilledExpenseForm({
                   value={formData.description}
                   onChange={(e) => setFormData({...formData, description: e.target.value})}
                   className="bg-gray-600 border-gray-500 text-white"
-                  placeholder="Brief description of expense"
+                  placeholder={tForms('briefDescription')}
                 />
                 {errors.description && <p className="text-red-400 text-sm">{errors.description}</p>}
               </div>
@@ -716,7 +739,7 @@ export default function PreFilledExpenseForm({
                   value={formData.business_purpose}
                   onChange={(e) => setFormData({...formData, business_purpose: e.target.value})}
                   className="bg-gray-600 border-gray-500 text-white"
-                  placeholder="Explain the business reason for this expense"
+                  placeholder={tForms('enterBusinessPurpose')}
                   rows={3}
                 />
                 {errors.business_purpose && <p className="text-red-400 text-sm">{errors.business_purpose}</p>}
@@ -730,7 +753,7 @@ export default function PreFilledExpenseForm({
                     value={formData.reference_number || ''}
                     onChange={(e) => setFormData({...formData, reference_number: e.target.value})}
                     className="bg-gray-600 border-gray-500 text-white"
-                    placeholder="Receipt or reference number"
+                    placeholder={tForms('enterReferenceNumber')}
                   />
                 </div>
                 
@@ -740,7 +763,7 @@ export default function PreFilledExpenseForm({
                     value={formData.notes || ''}
                     onChange={(e) => setFormData({...formData, notes: e.target.value})}
                     className="bg-gray-600 border-gray-500 text-white"
-                    placeholder="Any additional information"
+                    placeholder={tForms('enterAdditionalInfo')}
                   />
                 </div>
               </div>
@@ -753,24 +776,24 @@ export default function PreFilledExpenseForm({
               <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2">
                   <DollarSign className="w-5 h-5" />
-                  Line Items ({formData.line_items.length})
+                  {tCommon('lineItems')} ({formData.line_items.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {/* Line Items Table Header */}
                   <div className="grid grid-cols-4 gap-2 text-xs font-medium text-gray-400 uppercase tracking-wide border-b border-gray-600 pb-2">
-                    <span>Description</span>
-                    <span className="text-center">Qty</span>
-                    <span className="text-right">Unit Price</span>
-                    <span className="text-right">Total</span>
+                    <span>{tCommon('description')}</span>
+                    <span className="text-center">{tCommon('qty')}</span>
+                    <span className="text-right">{tCommon('unitPrice')}</span>
+                    <span className="text-right">{tCommon('total')}</span>
                   </div>
 
                   {/* Line Items Rows */}
                   {formData.line_items.map((item, index) => (
                     <div key={index} className="grid grid-cols-4 gap-2 items-center bg-gray-600/50 p-3 rounded-lg border border-gray-600">
                       <span className="text-white font-medium truncate" title={item.description}>
-                        {item.description || 'Item'}
+                        {item.description || tCommon('item')}
                       </span>
                       <span className="text-gray-300 text-center">
                         {item.quantity || 1}
@@ -786,7 +809,7 @@ export default function PreFilledExpenseForm({
 
                   {/* Total Summary */}
                   <div className="grid grid-cols-4 gap-2 items-center bg-blue-900/20 p-3 rounded-lg border border-blue-700 mt-4">
-                    <span className="text-blue-300 font-medium col-span-3">Total Amount</span>
+                    <span className="text-blue-300 font-medium col-span-3">{tCommon('totalAmount')}</span>
                     <span className="text-blue-300 font-bold text-right text-lg">
                       {formData.original_currency} {formData.original_amount.toFixed(2)}
                     </span>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { MessageSquare, Plus, Clock, Search, X, Trash2, MoreVertical } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 
 interface Conversation {
@@ -37,6 +38,7 @@ export default function ConversationSidebar({
   onNewChat,
   onConversationDeleted
 }: ConversationSidebarProps) {
+  const t = useTranslations('chat')
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -97,9 +99,9 @@ export default function ConversationSidebar({
         minute: '2-digit' 
       })
     } else if (diffInDays === 1) {
-      return 'Yesterday'
+      return t('yesterday')
     } else if (diffInDays < 7) {
-      return `${diffInDays} days ago`
+      return t('daysAgo', { days: diffInDays })
     } else {
       return date.toLocaleDateString('en-US', { 
         month: 'short', 
@@ -209,7 +211,7 @@ export default function ConversationSidebar({
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <h2 className="text-lg font-semibold text-white flex items-center">
             <MessageSquare className="w-5 h-5 mr-2" />
-            Chat History
+            {t('chatHistory')}
           </h2>
           <button
             onClick={onClose}
@@ -229,7 +231,7 @@ export default function ConversationSidebar({
             className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
           >
             <Plus className="w-4 h-4 mr-2" />
-            New Chat
+            {t('newChat')}
           </button>
         </div>
 
@@ -239,7 +241,7 @@ export default function ConversationSidebar({
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search conversations..."
+              placeholder={t('searchConversations')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-gray-700 text-white placeholder-gray-400 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600"
@@ -251,21 +253,21 @@ export default function ConversationSidebar({
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="p-4 text-center text-gray-400">
-              <div className="animate-pulse">Loading conversations...</div>
+              <div className="animate-pulse">{t('loadingConversations')}</div>
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="p-4 text-center text-gray-400">
               {searchQuery ? (
                 <div>
                   <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>No conversations found</p>
-                  <p className="text-sm mt-1">Try a different search term</p>
+                  <p>{t('noConversationsFound')}</p>
+                  <p className="text-sm mt-1">{t('tryDifferentSearch')}</p>
                 </div>
               ) : (
                 <div>
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>No conversations yet</p>
-                  <p className="text-sm mt-1">Start a new chat to begin</p>
+                  <p>{t('noConversationsYet')}</p>
+                  <p className="text-sm mt-1">{t('startNewChat')}</p>
                 </div>
               )}
             </div>
@@ -297,7 +299,7 @@ export default function ConversationSidebar({
                       {conversation.latest_message && (
                         <p className="text-xs opacity-80 leading-tight">
                           <span className="font-medium">
-                            {conversation.latest_message.role === 'user' ? 'You' : 'AI'}:
+                            {conversation.latest_message.role === 'user' ? t('you') : t('ai')}:
                           </span>{' '}
                           {truncateText(conversation.latest_message.content, 50)}
                         </p>
@@ -306,7 +308,7 @@ export default function ConversationSidebar({
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex items-center text-xs opacity-60">
                           <MessageSquare className="w-3 h-3 mr-1" />
-                          <span>{conversation.message_count} messages</span>
+                          <span>{t('messagesCount', { count: conversation.message_count })}</span>
                         </div>
                         <div className="flex items-center text-xs opacity-60">
                           <Clock className="w-3 h-3 mr-1" />
@@ -344,7 +346,7 @@ export default function ConversationSidebar({
                           tabIndex={0}
                         >
                           <Trash2 className="w-3 h-3 mr-1.5" />
-                          Delete
+                          {t('delete')}
                         </button>
                       </div>
                     )}
@@ -361,10 +363,10 @@ export default function ConversationSidebar({
         isOpen={deleteDialogOpen}
         onClose={handleCloseDeleteDialog}
         onConfirm={handleDeleteConversation}
-        title="Delete Conversation"
-        message="Are you sure you want to delete this conversation? This action cannot be undone and will permanently remove all messages in this chat."
-        confirmText="Delete"
-        cancelText="Cancel"
+        title={t('deleteConversation')}
+        message={t('deleteConversationConfirm')}
+        confirmText={t('delete')}
+        cancelText={t('cancel')}
         confirmVariant="danger"
         isLoading={isDeleting}
       />

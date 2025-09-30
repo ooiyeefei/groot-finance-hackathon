@@ -1,57 +1,84 @@
 /**
- * Middleware for role-based route protection
- * Following Clerk RBAC best practices
+ * Middleware for internationalization and role-based route protection
+ * Combines next-intl locale detection with Clerk RBAC
  */
 
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import createIntlMiddleware from 'next-intl/middleware'
+import { locales, defaultLocale } from './i18n'
 
-// Public routes that don't require authentication
+// Create intl middleware for locale detection
+const intlMiddleware = createIntlMiddleware({
+  locales,
+  defaultLocale,
+  localePrefix: 'always'
+})
+
+// Public routes that don't require authentication (with locale support)
 const isPublicRoute = createRouteMatcher([
-  '/sign-in(.*)',
-  '/sign-up(.*)',
+  '/', // Root redirect page
+  '/(en|th|id|zh)', // Main locale home pages
+  '/(en|th|id|zh)?/sign-in(.*)',
+  '/(en|th|id|zh)?/sign-up(.*)',
+  '/ai-assistant', // AI Assistant should be accessible (will redirect to localized version)
+  '/(en|th|id|zh)?/ai-assistant(.*)', // Localized AI Assistant pages
   '/api/health(.*)',
   '/api/trigger(.*)', // Trigger.dev CLI integration endpoint
   '/api/internal/(.*)', // Internal service APIs with their own authentication
   '/api/pdf-proxy(.*)', // PDF proxy handles its own authentication for government documents
   '/api/clerk/webhook(.*)', // Clerk webhook for user synchronization
   '/manifest.json', // PWA manifest file should be publicly accessible
+  '/manifest(.*)', // Any manifest-related requests
 ])
 
 // Special routes that need authentication but bypass role checks
 const isSpecialAuthRoute = createRouteMatcher([
-  '/api/user/assign-admin(.*)', // Admin assignment API (validates master key internally)
+  '/(en|th|id|zh)?/api/user/assign-admin(.*)', // Admin assignment API (validates master key internally)
 ])
 
-// Define role-based route matchers following Clerk patterns
+// Define role-based route matchers following Clerk patterns (with locale support)
 const isManagerRoute = createRouteMatcher([
-  '/manager(.*)',
-  '/api/expense-claims/approvals(.*)'
+  '/(en|th|id|zh)?/manager(.*)',
+  '/(en|th|id|zh)?/api/expense-claims/approvals(.*)'
 ])
 
 // Admin setup should be accessible to authenticated users (for master key assignment)
 const isAdminSetupRoute = createRouteMatcher([
-  '/admin/setup(.*)'
+  '/(en|th|id|zh)?/admin/setup(.*)'
 ])
 
 const isAdminRoute = createRouteMatcher([
-  '/admin/((?!setup).*)', // Admin routes except setup
-  '/finance(.*)',
-  '/api/user/team(.*)'
+  '/(en|th|id|zh)?/admin/((?!setup).*)', // Admin routes except setup
+  '/(en|th|id|zh)?/finance(.*)',
+  '/(en|th|id|zh)?/api/user/team(.*)'
 ])
 
 // Routes that need different method-based protection
 const isAdminOnlyForUpdates = createRouteMatcher([
-  '/api/user/role(.*)'
+  '/(en|th|id|zh)?/api/user/role(.*)'
 ])
 
 export default clerkMiddleware(async (auth, req: NextRequest) => {
-  // Allow public routes
-  if (isPublicRoute(req)) {
-    return NextResponse.next()
+  // Skip intl middleware for API routes to avoid locale prefixing
+  let intlResponse: NextResponse | Response | undefined
+  if (!req.nextUrl.pathname.startsWith('/api/')) {
+    // Apply intl middleware for non-API routes to handle locale detection and redirects
+    intlResponse = intlMiddleware(req)
+
+    // If intl middleware returns a redirect (for locale detection), return it immediately
+    if (intlResponse && (intlResponse.status === 301 || intlResponse.status === 302)) {
+      return intlResponse
+    }
   }
 
+  // Handle public routes that don't require authentication
+  if (isPublicRoute(req)) {
+    return intlResponse || NextResponse.next()
+  }
+
+  // For protected routes, require authentication
   const { userId, sessionClaims } = await auth.protect()
   
   // Get user role from session claims (Clerk metadata)
@@ -93,15 +120,17 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   const response = NextResponse.next()
   response.headers.set('x-user-id', userId)
   response.headers.set('x-user-role', (sessionClaims?.metadata as any)?.role || 'employee')
-  
+
   return response
 })
 
 export const config = {
   matcher: [
     // Skip Next.js internals and all static files, unless found in search params
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    '/((?!_next|manifest\\.json|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
     // Always run for API routes
     '/(api|trpc)(.*)',
+    // Run for locale-prefixed routes
+    '/(en|th|id|zh)/(.*)',
   ],
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload, X, Camera, Building2 } from 'lucide-react'
 import Image from 'next/image'
+import { useTranslations } from 'next-intl'
 import { useToast } from '@/components/ui/toast'
 import { useBusinessProfile } from '@/contexts/business-profile-context'
 
@@ -14,6 +15,7 @@ interface BusinessProfile {
 }
 
 export default function BusinessProfileSettings() {
+  const t = useTranslations('settings')
   const { profile, isLoading, updateProfile } = useBusinessProfile()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -49,21 +51,21 @@ export default function BusinessProfileSettings() {
         updateProfile(result.data)
         addToast({
           type: 'success',
-          title: 'Business name updated',
-          description: 'Your business name has been updated successfully'
+          title: t('businessProfile.toast.nameUpdatedTitle'),
+          description: t('businessProfile.toast.nameUpdatedDescription')
         })
       } else {
         addToast({
           type: 'error',
-          title: 'Failed to update name',
-          description: result.error || 'Unable to update business name'
+          title: t('businessProfile.toast.nameUpdateFailedTitle'),
+          description: result.error || t('businessProfile.toast.nameUpdateErrorDescription')
         })
       }
     } catch (error) {
       addToast({
         type: 'error',
-        title: 'Error updating name',
-        description: 'Unable to connect to server'
+        title: t('businessProfile.toast.nameUpdateErrorTitle'),
+        description: t('businessProfile.toast.nameUpdateErrorDescription')
       })
     } finally {
       setIsUpdating(false)
@@ -79,8 +81,8 @@ export default function BusinessProfileSettings() {
     if (!allowedTypes.includes(file.type)) {
       addToast({
         type: 'error',
-        title: 'Invalid file type',
-        description: 'Please upload a JPG, PNG, or WebP image.'
+        title: t('businessProfile.toast.invalidFileTypeTitle'),
+        description: t('businessProfile.toast.invalidFileTypeDescription')
       })
       return
     }
@@ -89,8 +91,8 @@ export default function BusinessProfileSettings() {
     if (file.size > 5 * 1024 * 1024) {
       addToast({
         type: 'error',
-        title: 'File too large',
-        description: 'Please upload an image under 5MB.'
+        title: t('businessProfile.toast.fileTooLargeTitle'),
+        description: t('businessProfile.toast.fileTooLargeDescription')
       })
       return
     }
@@ -113,21 +115,21 @@ export default function BusinessProfileSettings() {
         updateProfile(updatedProfile)
         addToast({
           type: 'success',
-          title: 'Logo uploaded',
-          description: 'Your business logo has been updated successfully'
+          title: t('businessProfile.toast.logoUploadedTitle'),
+          description: t('businessProfile.toast.logoUploadedDescription')
         })
       } else {
         addToast({
           type: 'error',
-          title: 'Upload failed',
-          description: result.error || 'Failed to upload logo'
+          title: t('businessProfile.toast.logoUploadFailedTitle'),
+          description: result.error || t('businessProfile.toast.logoUploadErrorDescription')
         })
       }
     } catch (error) {
       addToast({
         type: 'error',
-        title: 'Error uploading logo',
-        description: 'Unable to connect to server'
+        title: t('businessProfile.toast.logoUploadErrorTitle'),
+        description: t('businessProfile.toast.logoUploadErrorDescription')
       })
     } finally {
       setIsUploading(false)
@@ -155,21 +157,21 @@ export default function BusinessProfileSettings() {
         updateProfile(updatedProfile)
         addToast({
           type: 'success',
-          title: 'Logo removed',
-          description: 'Your business logo has been removed successfully'
+          title: t('businessProfile.toast.logoRemovedTitle'),
+          description: t('businessProfile.toast.logoRemovedDescription')
         })
       } else {
         addToast({
           type: 'error',
-          title: 'Remove failed',
-          description: result.error || 'Failed to remove logo'
+          title: t('businessProfile.toast.logoRemoveFailedTitle'),
+          description: result.error || t('businessProfile.toast.logoRemoveErrorDescription')
         })
       }
     } catch (error) {
       addToast({
         type: 'error',
-        title: 'Error removing logo',
-        description: 'Unable to connect to server'
+        title: t('businessProfile.toast.logoRemoveErrorTitle'),
+        description: t('businessProfile.toast.logoRemoveErrorDescription')
       })
     } finally {
       setIsUploading(false)
@@ -198,14 +200,14 @@ export default function BusinessProfileSettings() {
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
       <div className="flex items-center space-x-3 mb-6">
         <Building2 className="w-6 h-6 text-blue-400" />
-        <h2 className="text-xl font-semibold text-white">Business Profile</h2>
+        <h2 className="text-xl font-semibold text-white">{t('businessProfile.title')}</h2>
       </div>
 
       <div className="space-y-6">
         {/* Business Logo */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-3">
-            Business Logo
+            {t('businessProfile.businessLogoLabel')}
           </label>
 
           <div className="flex items-center space-x-4">
@@ -215,7 +217,7 @@ export default function BusinessProfileSettings() {
                 <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-700 border-2 border-gray-600">
                   <Image
                     src={profile.logo_url}
-                    alt="Business Logo"
+                    alt={t('businessProfile.logoAlt')}
                     width={80}
                     height={80}
                     className="w-full h-full object-cover"
@@ -252,18 +254,18 @@ export default function BusinessProfileSettings() {
                 {isUploading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Uploading...
+                    {t('businessProfile.uploading')}
                   </>
                 ) : (
                   <>
                     <Camera className="w-4 h-4 mr-2" />
-                    {profile?.logo_url ? 'Change Logo' : 'Upload Logo'}
+                    {profile?.logo_url ? t('businessProfile.changeLogo') : t('businessProfile.uploadLogo')}
                   </>
                 )}
               </button>
 
               <p className="text-xs text-gray-400">
-                JPG, PNG or WebP. Max 5MB.
+                {t('businessProfile.fileFormatDescription')}
               </p>
             </div>
 
@@ -281,14 +283,14 @@ export default function BusinessProfileSettings() {
         {/* Business Name */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
-            Business Name
+            {t('businessProfile.businessNameLabel')}
           </label>
           <div className="flex space-x-3">
             <input
               type="text"
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
-              placeholder="Enter your business name"
+              placeholder={t('businessProfile.businessNamePlaceholder')}
               className="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <button
@@ -299,12 +301,12 @@ export default function BusinessProfileSettings() {
               {isUpdating ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               ) : (
-                'Update'
+                t('businessProfile.updateButton')
               )}
             </button>
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            This name will appear in the sidebar and throughout the application.
+            {t('businessProfile.businessNameDescription')}
           </p>
         </div>
       </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useLanguage } from '@/contexts/language-context'
+import { useTranslations } from 'next-intl'
 import LanguageSelector from '@/components/ui/language-selector'
 
 export default function AIAssistantHeader() {
@@ -15,11 +15,11 @@ export default function AIAssistantHeader() {
 }
 
 function TranslatedHeader() {
-  const { t } = useLanguage()
+  const t = useTranslations('chat')
   return (
     <div>
-      <h1 className="text-3xl font-bold text-white mb-2">{t.aiAssistant}</h1>
-      <p className="text-gray-400">{t.aiAssistantSubtitle}</p>
+      <h1 className="text-3xl font-bold text-white mb-2">{t('title')}</h1>
+      <p className="text-gray-400">{t('subtitle')}</p>
     </div>
   )
 }

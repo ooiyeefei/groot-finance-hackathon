@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Badge } from '@/components/ui/badge'
 import { useBusinessProfile } from '@/contexts/business-profile-context'
 import { getCachedUserRole, cacheUserRole } from '@/lib/cache-utils'
+import { useTranslations, useLocale } from 'next-intl'
 
 interface UserRole {
   employee: boolean
@@ -18,32 +19,36 @@ interface UserRole {
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const locale = useLocale()
+  const t = useTranslations('navigation')
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false) // Track hydration completion
 
-  // Initialize user role with default values to prevent hydration mismatch
+  // Initialize user role with default state to prevent hydration mismatch
   const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, admin: false })
   const { profile: businessProfile, isLoading } = useBusinessProfile()
-  
+
+  // Helper function to create localized hrefs (our i18n feature)
+  const localizedHref = (path: string) => `/${locale}${path}`
   // Base navigation items
   const baseNavigation = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Documents', href: '/documents', icon: FileText },
-    { name: 'Transactions', href: '/transactions', icon: CreditCard },
-    { name: 'Expense Claims', href: '/expense-claims', icon: Receipt },
-    { name: 'AI Assistant', href: '/ai-assistant', icon: MessageSquare },
+    { name: t('dashboard'), href: localizedHref('/'), icon: Home },
+    { name: t('documents'), href: localizedHref('/documents'), icon: FileText },
+    { name: t('transactions'), href: localizedHref('/transactions'), icon: CreditCard },
+    { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
+    { name: t('aiAssistant'), href: localizedHref('/ai-assistant'), icon: MessageSquare },
   ]
 
   // Manager-specific navigation items
   const managerNavigation = [
-    { name: 'Approvals', href: '/manager/approvals', icon: CheckCircle },
-    { name: 'Team Management', href: '/manager/teams', icon: Users },
+    { name: t('approvals'), href: localizedHref('/manager/approvals'), icon: CheckCircle },
+    { name: t('team'), href: localizedHref('/manager/teams'), icon: Users },
   ]
 
   // Settings always at the end
   const settingsNavigation = [
-    { name: 'Settings', href: '/settings', icon: Settings }
+    { name: t('settings'), href: localizedHref('/settings'), icon: Settings }
   ]
 
   // Build complete navigation based on role
@@ -80,13 +85,26 @@ export default function Sidebar() {
     checkMobile()
     window.addEventListener('resize', checkMobile)
 
-    // Fetch user role and permissions
-    fetchUserRole()
+    // Load user role from cache first, then fetch from API if needed
+    const loadUserRole = async () => {
+      // Try to load from cache first (after hydration)
+      const cached = getCachedUserRole()
+      if (cached) {
+        setUserRole(cached)
+        return // Skip API fetch if we have cached data
+      }
+
+      // Fallback to API fetch if no cache
+      await fetchUserRole()
+    }
+
+    loadUserRole()
 
     return () => {
       window.removeEventListener('resize', checkMobile)
     }
   }, [])
+
 
   // Fetch user role and cache the result
   const fetchUserRole = async () => {

@@ -6,6 +6,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { 
   X, 
   FileText, 
@@ -78,15 +79,16 @@ interface ClaimDetails {
   }>
 }
 
-export default function ExpenseClaimDetailsModal({ 
-  claimId, 
-  isOpen, 
-  onClose 
+export default function ExpenseClaimDetailsModal({
+  claimId,
+  isOpen,
+  onClose
 }: ExpenseClaimDetailsModalProps) {
   const [claimDetails, setClaimDetails] = useState<ClaimDetails | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDocument, setShowDocument] = useState(false)
+  const t = useTranslations('expenseClaims')
 
   // Fetch claim details
   useEffect(() => {
@@ -136,15 +138,15 @@ export default function ExpenseClaimDetailsModal({
   // Helper function to get status display info (fallback if not provided by API)
   const getStatusDisplayInfo = (status: string) => {
     const statusMap: Record<string, { label: string; color: string; description: string }> = {
-      'draft': { label: 'Draft', color: 'gray', description: 'Expense claim is being prepared' },
-      'submitted': { label: 'Submitted', color: 'blue', description: 'Submitted for manager review' },
-      'under_review': { label: 'Under Review', color: 'yellow', description: 'Being reviewed by manager' },
-      'approved': { label: 'Approved', color: 'green', description: 'Approved - awaiting reimbursement' },
-      'reimbursed': { label: 'Reimbursed', color: 'purple', description: 'Payment processed' },
-      'paid': { label: 'Paid', color: 'green', description: 'Payment completed' },
-      'rejected': { label: 'Rejected', color: 'red', description: 'Claim was rejected' },
+      'draft': { label: t('draft'), color: 'gray', description: 'Expense claim is being prepared' },
+      'submitted': { label: t('submitted'), color: 'blue', description: t('submittedDescription') },
+      'under_review': { label: t('underReview'), color: 'yellow', description: t('underReviewDescription') },
+      'approved': { label: t('approved'), color: 'green', description: t('approvedDescription') },
+      'reimbursed': { label: t('reimbursed'), color: 'purple', description: t('reimbursedDescription') },
+      'paid': { label: t('paid'), color: 'green', description: t('paidDescription') },
+      'rejected': { label: t('rejected'), color: 'red', description: t('rejectedDescription') },
     }
-    return statusMap[status] || { label: status.replace('_', ' ').toUpperCase(), color: 'gray', description: 'Unknown status' }
+    return statusMap[status] || { label: status.replace('_', ' ').toUpperCase(), color: 'gray', description: t('unknownStatus') }
   }
 
   // Helper function to get workflow progress
