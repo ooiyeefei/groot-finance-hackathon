@@ -628,7 +628,7 @@
     "inputPlaceholder": "询问关于财务规划、现金流或任何业务问题...",
     "inputHelp": "按Enter发送，Shift+Enter换行",
     "connected": "已连接",
-    "newChat": "新聊天",
+    "newChat": "新对话",
     "errorMessage": "抱歉，处理您的消息时出现错误。请重试。",
     "chatHistory": "聊天历史",
     "clearHistory": "清除历史",
