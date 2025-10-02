@@ -86,6 +86,7 @@ interface SmartPayslipUploaderProps {
 /**
  * Client-side payslip date validation for immediate user feedback
  * Synchronized with server-side validation logic in validate-payslip-dates.ts
+ * Handles both single payslip and multi-payslip document structures
  */
 function validatePayslipDateClientSide(document: PayslipFile['document']): ClientValidationResult {
   if (!document || document.processing_status !== 'completed') {
@@ -97,7 +98,43 @@ function validatePayslipDateClientSide(document: PayslipFile['document']): Clien
     return { isValid: false, message: 'No data extracted', type: 'error' }
   }
 
-  // Use the parsed_pay_date field added by extract-payslip-data.ts
+  // Handle multi-payslip structure (extractedData.payslips array)
+  if (extractedData.payslips && Array.isArray(extractedData.payslips) && extractedData.payslips.length > 0) {
+    // For multi-payslip documents, check if any payslip is recent
+    const currentDate = new Date()
+    const threeMonthsAgo = new Date()
+    threeMonthsAgo.setMonth(currentDate.getMonth() - 3)
+
+    let validPayslips = 0
+    for (const payslip of extractedData.payslips) {
+      if (payslip.parsed_pay_date) {
+        try {
+          const payslipDate = new Date(payslip.parsed_pay_date)
+          if (payslipDate <= currentDate && payslipDate >= threeMonthsAgo) {
+            validPayslips++
+          }
+        } catch (error) {
+          // Skip invalid dates
+        }
+      }
+    }
+
+    if (validPayslips >= 3) {
+      return {
+        isValid: true,
+        message: `Recent payslips`,
+        type: 'success'
+      }
+    } else {
+      return {
+        isValid: false,
+        message: `Outdated payslips`,
+        type: 'error'
+      }
+    }
+  }
+
+  // Handle single payslip structure (extractedData.parsed_pay_date)
   const parsedPayDate = extractedData.parsed_pay_date
   const payPeriod = extractedData.pay_period
 
@@ -121,7 +158,7 @@ function validatePayslipDateClientSide(document: PayslipFile['document']): Clien
     if (payslipDate > currentDate) {
       return {
         isValid: false,
-        message: 'Future date not allowed',
+        message: 'Future payslip',
         monthYear: formatDateToMonthYear(payslipDate),
         type: 'error'
       }
@@ -131,7 +168,7 @@ function validatePayslipDateClientSide(document: PayslipFile['document']): Clien
     if (payslipDate < threeMonthsAgo) {
       return {
         isValid: false,
-        message: 'Outside 3-month range',
+        message: 'Outdated payslip',
         monthYear: formatDateToMonthYear(payslipDate),
         type: 'error'
       }
@@ -140,7 +177,7 @@ function validatePayslipDateClientSide(document: PayslipFile['document']): Clien
     // Valid payslip within range
     return {
       isValid: true,
-      message: `Verified: ${formatDateToMonthYear(payslipDate)}`,
+      message: `Recent payslip`,
       monthYear: formatDateToMonthYear(payslipDate),
       type: 'success'
     }
@@ -438,36 +475,33 @@ export default function SmartPayslipUploader({
                         <span className="ml-1">{getStatusText(doc.processing_status)}</span>
                       </span>
 
-                      {/* Client-Side Validation Badge (Immediate Feedback) */}
-                      {doc.processing_status === 'completed' && clientValidation && (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
-                          clientValidation.type === 'success'
-                            ? 'bg-green-900/20 text-green-300 border-green-700/50'
-                            : clientValidation.type === 'error'
-                            ? 'bg-red-900/20 text-red-300 border-red-700/50'
-                            : 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50'
-                        }`}>
-                          {clientValidation.type === 'success' ? '✅' :
-                           clientValidation.type === 'error' ? '❌' : '⚠️'}
-                          <span className="ml-1">{clientValidation.message}</span>
-                          {!validation && (
-                            <span className="ml-1 text-xs opacity-75">(Client)</span>
-                          )}
-                        </span>
-                      )}
+                      {/* Unified Validation Badge (Server validation takes priority) */}
+                      {doc.processing_status === 'completed' && (validation || clientValidation) && (() => {
+                        // Use server validation if available, otherwise fall back to client validation
+                        const validationData = validation || {
+                          isValid: clientValidation!.isValid,
+                          validationMessage: clientValidation!.message
+                        }
 
-                      {/* Server-Side Validation Badge (Authoritative) */}
-                      {validation && doc.processing_status === 'completed' && (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
-                          validation.isValid
-                            ? 'bg-green-900/20 text-green-300 border-green-700/50'
-                            : 'bg-red-900/20 text-red-300 border-red-700/50'
-                        }`}>
-                          {validation.isValid ? '🔒✅' : '🔒❌'}
-                          <span className="ml-1">{validation.validationMessage}</span>
-                          <span className="ml-1 text-xs opacity-75">(Server)</span>
-                        </span>
-                      )}
+                        // Simplify validation messages
+                        let displayMessage = validationData.validationMessage
+                        if (validationData.validationMessage.includes('too old') || validationData.validationMessage.includes('Outside')) {
+                          displayMessage = 'Outdated payslip'
+                        } else if (validationData.isValid) {
+                          displayMessage = 'Recent payslip'
+                        }
+
+                        return (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
+                            validationData.isValid
+                              ? 'bg-green-900/20 text-green-300 border-green-700/50'
+                              : 'bg-red-900/20 text-red-300 border-red-700/50'
+                          }`}>
+                            {validationData.isValid ? '✅' : '❌'}
+                            <span className="ml-1">{displayMessage}</span>
+                          </span>
+                        )
+                      })()}
                     </div>
                     <div className="flex gap-2">
                       <Button

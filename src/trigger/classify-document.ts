@@ -53,37 +53,43 @@ export const classifyDocument = task({
       throw new Error(`Document not found: ${fetchError?.message}`);
     }
 
-    // UNIFIED ARCHITECTURE: Use bucket list() to discover files - check converted path first, then original path
-    console.log(`[Classify] Using unified bucket list() architecture for document ${documentId}`);
+    // GRACEFUL PATH HANDLING: Different approaches for images vs converted PDFs
+    console.log(`[Classify] Document type: ${document.file_type}, has converted path: ${!!document.converted_image_path}`);
 
-    // Determine which path to use: converted_image_path (for PDFs) or storage_path (for images)
-    const searchPath = document.converted_image_path || document.storage_path;
-    console.log(`[Classify] Discovering files at storage location: ${searchPath}`);
-    console.log(`[Classify] Using ${document.converted_image_path ? 'converted_image_path' : 'storage_path'} for file discovery`);
+    let classifyImagePath: string;
 
-    // Use storage.list() to discover all files at the determined location
-    const { data: fileList, error: listError } = await supabase.storage
-      .from('documents')
-      .list(searchPath, {
-        limit: 100,
-        sortBy: { column: 'name', order: 'asc' }
-      });
+    if (document.converted_image_path) {
+      // PDF CASE: converted_image_path is a folder containing multiple images
+      console.log(`[Classify] PDF workflow - using converted image folder: ${document.converted_image_path}`);
 
-    if (listError) {
-      throw new Error(`Failed to list files at storage path: ${listError.message}`);
+      const { data: fileList, error: listError } = await supabase.storage
+        .from('documents')
+        .list(document.converted_image_path, {
+          limit: 100,
+          sortBy: { column: 'name', order: 'asc' }
+        });
+
+      if (listError) {
+        throw new Error(`Failed to list converted images: ${listError.message}`);
+      }
+
+      if (!fileList || fileList.length === 0) {
+        throw new Error(`No converted images found in folder: ${document.converted_image_path}`);
+      }
+
+      console.log(`[Classify] Found ${fileList.length} converted image(s), using first for classification`);
+
+      // Use first converted image for classification
+      const firstFile = fileList[0];
+      classifyImagePath = `${document.converted_image_path}/${firstFile.name}`;
+
+    } else {
+      // IMAGE CASE: storage_path is the direct file path
+      console.log(`[Classify] Image workflow - using direct file path: ${document.storage_path}`);
+      classifyImagePath = document.storage_path;
     }
 
-    if (!fileList || fileList.length === 0) {
-      throw new Error(`No files found at storage path: ${searchPath}`);
-    }
-
-    console.log(`[Classify] Found ${fileList.length} file(s) at location`);
-
-    // For classification, we only need the first file (first page for multi-page PDFs)
-    const firstFile = fileList[0];
-    const classifyImagePath = `${searchPath}/${firstFile.name}`;
-
-    console.log(`[Classify] Using first file for classification: ${classifyImagePath}`);
+    console.log(`[Classify] Final classification image path: ${classifyImagePath}`);
 
     // Create signed URL for the discovered file
     const { data: urlData, error: urlError } = await supabase.storage
