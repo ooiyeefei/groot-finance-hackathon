@@ -2,7 +2,7 @@
  * Individual Application API Routes
  * GET - Fetch single application with slot status
  * PUT - Update application details
- * DELETE - Delete draft application
+ * DELETE - Delete draft application (documents preserved and disassociated)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -336,15 +336,21 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Delete associated documents first (documents table has ON DELETE CASCADE foreign key)
+    // Disassociate documents from application (preserve documents, clear application_id)
     const { error: documentsError } = await supabase
       .from('documents')
-      .delete()
+      .update({
+        application_id: null,
+        document_slot: null,
+        updated_at: new Date().toISOString()
+      })
       .eq('application_id', id)
 
     if (documentsError) {
-      console.error('[Applications API DELETE] Error deleting documents:', documentsError)
-      // Continue with application deletion even if documents fail
+      console.error('[Applications API DELETE] Error disassociating documents:', documentsError)
+      // Continue with application deletion even if document disassociation fails
+    } else {
+      console.log(`[Applications API DELETE] Successfully disassociated documents from application ${id}`)
     }
 
     // Delete the application
@@ -361,11 +367,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    console.log(`[Applications API DELETE] Successfully deleted application ${id}`)
+    console.log(`[Applications API DELETE] Successfully deleted application ${id} and disassociated documents`)
 
     return NextResponse.json({
       success: true,
-      message: 'Application deleted successfully'
+      message: 'Application deleted successfully (documents preserved)'
     })
 
   } catch (error) {
