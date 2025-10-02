@@ -6,7 +6,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
 import { CheckCircle, XCircle, Clock, Eye, DollarSign, Calendar, Tag, User, FileText, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -46,7 +45,6 @@ interface ApprovalAction {
 }
 
 export default function ExpenseApprovalDashboard() {
-  const t = useTranslations('manager')
   const [claims, setClaims] = useState<ExpenseClaim[]>([])
   const [loading, setLoading] = useState(true)
   const [processingClaims, setProcessingClaims] = useState<Set<string>>(new Set())
@@ -157,8 +155,8 @@ export default function ExpenseApprovalDashboard() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">{t('expenseApprovals')}</h1>
-          <p className="text-gray-400">{t('reviewApproveTeam')}</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Expense Approvals</h1>
+          <p className="text-gray-400">Review and approve employee expense claims</p>
         </div>
 
         {error && (
@@ -174,7 +172,7 @@ export default function ExpenseApprovalDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm">{t('pendingApprovals')}</p>
+                  <p className="text-gray-400 text-sm">Pending Approval</p>
                   <p className="text-2xl font-bold text-yellow-400">{stats.pending}</p>
                 </div>
                 <Clock className="w-8 h-8 text-yellow-400" />
@@ -186,7 +184,7 @@ export default function ExpenseApprovalDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm">{t('approvedToday')}</p>
+                  <p className="text-gray-400 text-sm">Approved Today</p>
                   <p className="text-2xl font-bold text-green-400">{stats.approved_today}</p>
                 </div>
                 <CheckCircle className="w-8 h-8 text-green-400" />
@@ -198,7 +196,7 @@ export default function ExpenseApprovalDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm">{t('pendingAmount')}</p>
+                  <p className="text-gray-400 text-sm">Pending Amount</p>
                   <p className="text-2xl font-bold text-blue-400">
                     ${stats.total_pending_amount.toFixed(2)}
                   </p>
@@ -214,15 +212,15 @@ export default function ExpenseApprovalDashboard() {
           <Card className="bg-gray-800 border-gray-700">
             <CardContent className="p-12 text-center">
               <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-400" />
-              <h3 className="text-xl font-semibold text-white mb-2">{t('allCaughtUp')}</h3>
-              <p className="text-gray-400">{t('noExpenseClaimsPending')}</p>
+              <h3 className="text-xl font-semibold text-white mb-2">All Caught Up!</h3>
+              <p className="text-gray-400">No expense claims pending your approval.</p>
             </CardContent>
           </Card>
         ) : (
           <Card className="bg-gray-800 border-gray-700">
             <CardHeader>
-              <CardTitle className="text-white">{t('pendingApprovals')}</CardTitle>
-              <CardDescription>{t('claimsRequiringImmediateAttention')}</CardDescription>
+              <CardTitle className="text-white">Pending Approvals</CardTitle>
+              <CardDescription>Claims requiring immediate attention</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="space-y-0">
@@ -261,7 +259,7 @@ export default function ExpenseApprovalDashboard() {
                           {(claim.is_over_limit || (claim.receipt_confidence && claim.receipt_confidence < 80)) && (
                             <span className="flex items-center gap-1 text-red-400">
                               <AlertCircle className="w-3 h-3" />
-                              {t('risk')}
+                              Risk
                             </span>
                           )}
                         </div>
@@ -287,7 +285,7 @@ export default function ExpenseApprovalDashboard() {
                           className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 h-7"
                         >
                           <Eye className="w-3 h-3 mr-1" />
-                          {t('review')}
+                          Review
                         </Button>
 
                         <Button
@@ -301,7 +299,7 @@ export default function ExpenseApprovalDashboard() {
                           ) : (
                             <CheckCircle className="w-3 h-3 mr-1" />
                           )}
-                          {t('approve')}
+                          Approve
                         </Button>
 
                         <Button

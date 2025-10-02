@@ -1,43 +1,41 @@
 'use client'
 
-import { Clock, CheckCircle, XCircle, Loader2, Upload, Cog } from 'lucide-react'
-import { useTranslations } from 'next-intl'
+import { Clock, CheckCircle, XCircle, Loader2, Upload, Cog, Eye, Brain, FileText } from 'lucide-react'
 
 interface DocumentStatusBadgeProps {
-  status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed' | 'uploading'
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'uploading' | 'classifying' | 'classification_failed' | 'pending_extraction' | 'extracting'
   errorMessage?: string
   processingStage?: 'extracting' | 'analyzing' | 'finalizing'
   animated?: boolean
 }
 
-export default function DocumentStatusBadge({
-  status,
-  errorMessage,
+export default function DocumentStatusBadge({ 
+  status, 
+  errorMessage, 
   processingStage,
-  animated = true
+  animated = true 
 }: DocumentStatusBadgeProps) {
-  const t = useTranslations('documents.status')
-
+  
   const getStatusConfig = () => {
     switch (status) {
       case 'uploading':
         return {
           icon: Upload,
-          text: t('uploading'),
+          text: 'Uploading',
           className: 'bg-blue-900/20 text-blue-300 border-blue-700/50',
           animate: true
         }
       case 'pending':
         return {
           icon: Clock,
-          text: t('pending'),
+          text: 'Pending',
           className: 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50',
           animate: false
         }
       case 'processing':
-        const stageText = processingStage
-          ? `${t('processing')} (${processingStage})`
-          : t('processing')
+        const stageText = processingStage 
+          ? `Processing (${processingStage})`
+          : 'Processing'
         return {
           icon: processingStage === 'extracting' ? Upload :
                 processingStage === 'analyzing' ? Cog : Loader2,
@@ -45,31 +43,52 @@ export default function DocumentStatusBadge({
           className: 'bg-blue-900/20 text-blue-300 border-blue-700/50',
           animate: true
         }
-      case 'ocr_processing':
+      case 'classifying':
         return {
-          icon: Cog,
-          text: t('ocrProcessing'),
-          className: 'bg-purple-900/20 text-purple-300 border-purple-700/50',
+          icon: Brain,
+          text: 'Classifying Document',
+          className: 'bg-indigo-900/20 text-indigo-300 border-indigo-700/50',
+          animate: true
+        }
+      case 'classification_failed':
+        return {
+          icon: XCircle,
+          text: 'Classification Failed',
+          className: 'bg-red-900/20 text-red-300 border-red-700/50',
+          animate: false
+        }
+      case 'pending_extraction':
+        return {
+          icon: Eye,
+          text: 'Awaiting Extraction',
+          className: 'bg-amber-900/20 text-amber-300 border-amber-700/50',
+          animate: false
+        }
+      case 'extracting':
+        return {
+          icon: FileText,
+          text: 'Extracting Data',
+          className: 'bg-cyan-900/20 text-cyan-300 border-cyan-700/50',
           animate: true
         }
       case 'completed':
         return {
           icon: CheckCircle,
-          text: t('completed'),
+          text: 'Completed',
           className: 'bg-green-900/20 text-green-300 border-green-700/50',
           animate: false
         }
       case 'failed':
         return {
           icon: XCircle,
-          text: t('failed'),
+          text: 'Failed',
           className: 'bg-red-900/20 text-red-300 border-red-700/50',
           animate: false
         }
       default:
         return {
           icon: Clock,
-          text: t('unknown'),
+          text: 'Unknown',
           className: 'bg-gray-900/20 text-gray-300 border-gray-700/50',
           animate: false
         }
@@ -82,9 +101,9 @@ export default function DocumentStatusBadge({
   return (
     <span 
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.className} ${
-        status === 'failed' && errorMessage ? 'cursor-help' : ''
+        (status === 'failed' || status === 'classification_failed') && errorMessage ? 'cursor-help' : ''
       }`}
-      title={status === 'failed' && errorMessage ? errorMessage : undefined}
+      title={(status === 'failed' || status === 'classification_failed') && errorMessage ? errorMessage : undefined}
     >
       <Icon 
         className={`w-3 h-3 mr-1 ${

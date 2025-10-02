@@ -1,7 +1,6 @@
 /**
  * Expense Category Management Interface
  * Allows managers and finance users to create and manage custom expense categories
- * Supports multi-language category names and translations
  */
 
 'use client'
@@ -15,7 +14,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import CategoryFormModal, { CategoryFormData } from '@/components/expense-claims/category-form-modal'
-import { useTranslations } from 'next-intl'
 
 interface ExpenseCategory {
   id: string
@@ -33,12 +31,6 @@ interface ExpenseCategory {
   requires_manager_approval: boolean
   sort_order: number
   is_default: boolean
-  translations?: {
-    [locale: string]: {
-      category_name: string
-      description?: string
-    }
-  }
 }
 
 
@@ -51,7 +43,6 @@ interface CategoryManagementProps {
 }
 
 export default function CategoryManagement({ userRole }: CategoryManagementProps) {
-  const t = useTranslations('categories')
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -88,11 +79,11 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
       if (result.success) {
         setCategories(result.data.categories)
       } else {
-        setError(result.error || t('createCategoryFailed'))
+        setError(result.error || 'Failed to fetch categories')
       }
     } catch (error) {
       console.error('Failed to fetch categories:', error)
-      setError(t('networkError'))
+      setError('Network error while fetching categories')
     } finally {
       setLoading(false)
     }
@@ -123,17 +114,17 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(editingCategory ? t('categoryUpdated') : t('categoryCreated'))
+        setSuccess(editingCategory ? 'Category updated successfully' : 'Category created successfully')
         setShowForm(false)
         setEditingCategory(null)
         fetchCategories()
       } else {
-        setError(result.error || t('createCategoryFailed'))
-        throw new Error(result.error || t('createCategoryFailed'))
+        setError(result.error || 'Failed to save category')
+        throw new Error(result.error || 'Failed to save category')
       }
     } catch (error) {
       console.error('Failed to save category:', error)
-      setError(t('networkError'))
+      setError('Network error while saving category')
       throw error // Re-throw to let modal handle the error state
     } finally {
       setSaving(false)
@@ -174,7 +165,7 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(t('categoryDeleted'))
+        setSuccess('Category deleted successfully')
         fetchCategories()
         setDeleteConfirmation({
           isOpen: false,
@@ -182,12 +173,12 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
           category: null
         })
       } else {
-        setError(result.error || t('deleteCategoryFailed'))
+        setError(result.error || 'Failed to delete category')
         setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
       }
     } catch (error) {
       console.error('Failed to delete category:', error)
-      setError(t('networkError'))
+      setError('Network error while deleting category')
       setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
     }
   }
@@ -212,7 +203,7 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
       <Card className="bg-gray-800 border-gray-700">
         <CardContent className="p-6 text-center">
           <Tag className="w-12 h-12 mx-auto mb-4 text-gray-500" />
-          <p className="text-gray-400">{t('accessDenied')}</p>
+          <p className="text-gray-400">Category management is available for managers and finance users only.</p>
         </CardContent>
       </Card>
     )
@@ -227,10 +218,10 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
             <div>
               <CardTitle className="text-white flex items-center gap-2">
                 <Tag className="w-5 h-5" />
-                {t('title')}
+                Expense Categories
               </CardTitle>
               <CardDescription className="text-gray-400">
-                {t('subtitle')}
+                Manage expense categories for your organization
               </CardDescription>
             </div>
             <Button
@@ -243,7 +234,7 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
               className="bg-blue-600 hover:bg-blue-700"
             >
               <Plus className="w-4 h-4 mr-2" />
-              {t('addCategory')}
+              Add Category
             </Button>
           </div>
         </CardHeader>
@@ -253,7 +244,7 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
-              placeholder={t('searchCategories')}
+              placeholder="Search categories..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 bg-gray-700 border-gray-600 text-white"
@@ -279,13 +270,13 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
           {loading ? (
             <div className="text-center py-8">
               <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-400" />
-              <p className="text-gray-400">{t('loadingCategories')}</p>
+              <p className="text-gray-400">Loading categories...</p>
             </div>
           ) : filteredCategories.length === 0 ? (
             <div className="text-center py-8">
               <Tag className="w-12 h-12 mx-auto mb-4 text-gray-500" />
               <p className="text-gray-400">
-                {searchQuery ? t('noMatchingCategories') : t('noCategoriesFound')}
+                {searchQuery ? 'No categories match your search' : 'No categories found'}
               </p>
             </div>
           ) : (
@@ -304,10 +295,10 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                         </div>
                         <div className="flex gap-1">
                           {!category.is_active && (
-                            <Badge variant="secondary" className="text-xs">{t('inactive')}</Badge>
+                            <Badge variant="secondary" className="text-xs">Inactive</Badge>
                           )}
                           {category.is_default && (
-                            <Badge variant="outline" className="text-xs text-white border-white">{t('default')}</Badge>
+                            <Badge variant="outline" className="text-xs text-white border-white">Default</Badge>
                           )}
                         </div>
                       </div>
@@ -319,20 +310,20 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                         </div>
 
                         <div className={`text-xs ${category.requires_receipt ? 'text-yellow-400' : 'text-gray-500'}`}>
-                          {category.requires_receipt ? t('receiptRequired') : t('receiptNotRequired')} {category.receipt_threshold && category.requires_receipt && `(>$${category.receipt_threshold})`}
+                          Receipt {category.requires_receipt ? 'required' : 'not required'} {category.receipt_threshold && category.requires_receipt && `(>$${category.receipt_threshold})`}
                         </div>
 
                         <div className={`text-xs ${category.requires_manager_approval ? 'text-orange-400' : 'text-gray-500'}`}>
-                          {category.requires_manager_approval ? t('managerApprovalRequired') : t('managerApprovalNotRequired')}
+                          Manager approval {category.requires_manager_approval ? 'required' : 'not required'}
                         </div>
 
                         <div className="text-xs text-red-400">
-                          {t('policyLimit')}: ${category.policy_limit || 0}
+                          Policy limit: ${category.policy_limit || 0}
                         </div>
 
                         {category.ai_keywords.length > 0 && (
                           <div className="text-xs text-gray-400">
-                            {t('keywords')}: {category.ai_keywords.slice(0, 3).join(', ')}
+                            Keywords: {category.ai_keywords.slice(0, 3).join(', ')}
                             {category.ai_keywords.length > 3 && '...'}
                           </div>
                         )}
@@ -346,7 +337,7 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                         className="flex-1 bg-blue-600 text-white hover:bg-blue-700 border-0"
                       >
                         <Edit className="w-3 h-3 mr-1" />
-                        {t('edit')}
+                        Edit
                       </Button>
                       <Button
                         size="sm"
@@ -369,10 +360,10 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
         isOpen={deleteConfirmation.isOpen}
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        title={t('deleteCategory')}
-        message={t('deleteCategoryConfirm', { categoryName: deleteConfirmation.category?.category_name || '' })}
-        confirmText={t('delete')}
-        cancelText={t('cancel')}
+        title="Delete Category"
+        message={`Are you sure you want to delete the category "${deleteConfirmation.category?.category_name}"? This action cannot be undone and may affect existing expense claims.`}
+        confirmText="Delete"
+        cancelText="Cancel"
         confirmVariant="danger"
         isLoading={deleteConfirmation.isLoading}
       />

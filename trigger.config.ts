@@ -28,8 +28,10 @@ export default defineConfig({
       pythonExtension({
         // Path to requirements.txt file
         requirementsFile: "./requirements.txt",
-        // Use system python3 for development (macOS doesn't have 'python' command)
-        devPythonBinaryPath: "/opt/homebrew/bin/python3",
+        // Use virtual environment python for local development (will be ignored in cloud)
+        devPythonBinaryPath: "./.venv/bin/python3",
+        // Copy Python script files to build environment
+        scripts: ["./src/python/**/*.py"],
       }),
     ],
   },

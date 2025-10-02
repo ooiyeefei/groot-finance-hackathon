@@ -234,19 +234,20 @@ function categorizeWithIFRSAccountingCategories(
 
 export const processDocumentOCR = task({
   id: "process-document-ocr",
-  run: async (payload: { documentId: string; imageStoragePath: string; expenseCategory?: string }) => {
+  run: async (payload: { documentId: string; imageStoragePath?: string; expenseCategory?: string }) => {
     console.log(`🚀 Starting DSPy Document OCR extraction`);
     console.log(`📄 Document ID: ${payload.documentId}`);
-    console.log(`🖼️ Image storage path: ${payload.imageStoragePath}`);
+    console.log(`🖼️ Image storage path: ${payload.imageStoragePath || 'Will fetch from document record'}`);
     console.log(`🏷️ Expense category: ${payload.expenseCategory || 'Not provided'}`);
 
     // Declare variables at function scope for catch block access
     let processedImageBase64: string = '';
     let processedMimeType: string = '';
     let docRecord: any = null;
+    let imageStoragePath: string;
 
     try {
-      // Step 1: Fetch document record and prepare image
+      // Step 1: Fetch document record and determine image path
       const { data: fetchedDocRecord, error: fetchError } = await supabase
         .from('documents')
         .select('file_name, file_type, file_size, user_id, business_id, storage_path, converted_image_path')
@@ -260,26 +261,73 @@ export const processDocumentOCR = task({
       // Assign to function-scoped variable
       docRecord = fetchedDocRecord;
 
-      console.log(`📄 Processing: ${docRecord.file_name} (${docRecord.file_type}, ${Math.round(docRecord.file_size / 1024)}KB)`);
+      // Determine image storage path: use provided path or fall back to document.storage_path
+      imageStoragePath = payload.imageStoragePath || docRecord.storage_path;
 
-      // Step 2: Create signed URL and download image
-      const { data: urlData, error: urlError } = await supabase.storage
-        .from('documents')
-        .createSignedUrl(payload.imageStoragePath, 600);
-
-      if (urlError || !urlData) {
-        throw new Error(`Failed to create signed URL: ${urlError?.message}`);
+      if (!imageStoragePath) {
+        throw new Error('No storage path available - neither provided in payload nor found in document record');
       }
 
-      console.log("📥 Downloading image for processing...");
-      const imageResponse = await fetch(urlData.signedUrl);
+      console.log(`📄 Processing: ${docRecord.file_name} (${docRecord.file_type}, ${Math.round(docRecord.file_size / 1024)}KB)`);
+      console.log(`🖼️ Using image storage path: ${imageStoragePath}`);
+
+      // Step 2: Using unified bucket list() architecture to discover files
+      console.log(`[ProcessDocumentOCR] Using unified bucket list() architecture`);
+      console.log(`[ProcessDocumentOCR] Discovering all files at storage location: ${imageStoragePath}`);
+
+      const { data: fileList, error: listError } = await supabase.storage
+        .from('documents')
+        .list(imageStoragePath, {
+          limit: 100,
+          sortBy: { column: 'name', order: 'asc' }
+        });
+
+      if (listError) {
+        throw new Error(`Failed to list files at storage path: ${listError.message}`);
+      }
+
+      if (!fileList || fileList.length === 0) {
+        throw new Error(`No files found at storage path: ${imageStoragePath}`);
+      }
+
+      console.log(`[ProcessDocumentOCR] Found ${fileList.length} file(s) at location`);
+
+      // Create signed URLs for ALL discovered files (unified approach for single/multi-page)
+      const pageUrls = [];
+      for (const file of fileList) {
+        const filePath = `${imageStoragePath}/${file.name}`;
+        console.log(`[ProcessDocumentOCR] Creating signed URL for file: ${filePath}`);
+
+        const { data: urlData, error: urlError } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(filePath, 600);
+
+        if (urlError || !urlData) {
+          throw new Error(`Failed to create signed URL for ${filePath}: ${urlError?.message}`);
+        }
+
+        pageUrls.push({
+          url: urlData.signedUrl,
+          filename: file.name,
+          path: filePath
+        });
+      }
+
+      console.log(`[ProcessDocumentOCR] Created ${pageUrls.length} signed URLs for processing`);
+
+      // For single page processing, use the first file (maintain backwards compatibility)
+      // TODO: Future enhancement could process all pages and combine results
+      const firstPageUrl = pageUrls[0];
+      console.log(`📥 Downloading first image for processing: ${firstPageUrl.filename}`);
+
+      const imageResponse = await fetch(firstPageUrl.url);
       if (!imageResponse.ok) {
         throw new Error(`Failed to download image: ${imageResponse.status}`);
       }
 
       const imageBuffer = await imageResponse.arrayBuffer();
       processedImageBase64 = Buffer.from(imageBuffer).toString('base64');
-      processedMimeType = docRecord.file_type || 'image/jpeg';
+      processedMimeType = firstPageUrl.filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
 
       console.log(`🖼️ Image prepared: ${Math.round(imageBuffer.byteLength / 1024)}KB`);
 
@@ -824,6 +872,8 @@ print(json.dumps(result))
       // Step 4: Parse and validate result
       let finalExtractionData;
       try {
+        console.log(`🔍 Debug - dspyResult type: ${typeof dspyResult}`);
+        console.log(`🔍 Debug - dspyResult preview:`, JSON.stringify(dspyResult).substring(0, 200));
         
         let jsonString: string;
         if (typeof dspyResult === 'string') {
@@ -834,10 +884,13 @@ print(json.dumps(result))
           jsonString = JSON.stringify(dspyResult);
         }
         
+        console.log(`🔍 Debug - jsonString preview:`, jsonString.substring(0, 200));
         
         const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
         if (jsonMatch && jsonMatch[0]) {
           finalExtractionData = JSON.parse(jsonMatch[0]);
+          console.log(`🔍 Debug - finalExtractionData type after parse: ${typeof finalExtractionData}`);
+          console.log(`🔍 Debug - finalExtractionData keys:`, finalExtractionData ? Object.keys(finalExtractionData) : 'null/undefined');
         } else {
           throw new Error("No valid JSON object found in processing output");
         }
@@ -848,6 +901,8 @@ print(json.dumps(result))
       }
       
       // Add type safety check before accessing properties
+      console.log(`🔍 Debug - About to check success. finalExtractionData type: ${typeof finalExtractionData}`);
+      console.log(`🔍 Debug - finalExtractionData value:`, finalExtractionData);
       
       if (typeof finalExtractionData === 'string') {
         console.error("❌ finalExtractionData is still a string after parsing, trying to parse again");

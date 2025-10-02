@@ -1,6 +1,5 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
 import { Clock, CheckCircle, XCircle, AlertCircle, CreditCard, Ban } from 'lucide-react'
 
 interface TransactionStatusBadgeProps {
@@ -9,61 +8,60 @@ interface TransactionStatusBadgeProps {
   showIcon?: boolean
 }
 
-export default function TransactionStatusBadge({
-  status,
+export default function TransactionStatusBadge({ 
+  status, 
   animated = true,
-  showIcon = true
+  showIcon = true 
 }: TransactionStatusBadgeProps) {
-  const t = useTranslations('transactions')
-
+  
   const getStatusConfig = () => {
     switch (status) {
       case 'pending':
         return {
           icon: Clock,
-          text: t('pending'),
+          text: 'Pending',
           className: 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50',
           animate: false
         }
       case 'awaiting_payment':
         return {
           icon: CreditCard,
-          text: t('awaitingPayment'),
+          text: 'Awaiting Payment',
           className: 'bg-blue-900/20 text-blue-300 border-blue-700/50',
           animate: true
         }
       case 'paid':
         return {
           icon: CheckCircle,
-          text: t('paid'),
+          text: 'Paid',
           className: 'bg-green-900/20 text-green-300 border-green-700/50',
           animate: false
         }
       case 'overdue':
         return {
           icon: AlertCircle,
-          text: t('overdue'),
+          text: 'Overdue',
           className: 'bg-red-900/20 text-red-300 border-red-700/50',
           animate: true
         }
       case 'cancelled':
         return {
           icon: Ban,
-          text: t('cancelled'),
+          text: 'Cancelled',
           className: 'bg-gray-900/20 text-gray-300 border-gray-700/50',
           animate: false
         }
       case 'disputed':
         return {
           icon: XCircle,
-          text: t('disputed'),
+          text: 'Disputed',
           className: 'bg-orange-900/20 text-orange-300 border-orange-700/50',
           animate: false
         }
       default:
         return {
           icon: Clock,
-          text: t('status'),
+          text: 'Unknown',
           className: 'bg-gray-900/20 text-gray-300 border-gray-700/50',
           animate: false
         }

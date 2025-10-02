@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { redirect } from 'next/navigation'
-import { useTranslations } from 'next-intl'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import ActionButton from '@/components/ui/action-button'
@@ -76,7 +75,6 @@ interface ConversationData {
 
 export default function AIAssistantPage() {
   const { userId, isLoaded } = useAuth()
-  const t = useTranslations('chat')
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>()
   const [chatKey, setChatKey] = useState<string>('initial')
   const [currentMessages, setCurrentMessages] = useState<Message[]>([])
@@ -180,8 +178,8 @@ export default function AIAssistantPage() {
           <Sidebar />
           <div className="flex-1 flex flex-col">
             <HeaderWithUser
-              title={t('title')}
-              subtitle={t('subtitle')}
+              title="AI Assistant"
+              subtitle="Get intelligent financial guidance powered by LLM"
             />
             <main className="flex-1 overflow-auto p-6">
               <div className="h-[calc(100vh-160px)] max-w-6xl mx-auto">
@@ -197,38 +195,37 @@ export default function AIAssistantPage() {
   return (
     <ClientProviders>
       <div className="flex h-screen bg-gray-900">
-        {/* Main Navigation Sidebar */}
-        <Sidebar />
+          {/* Main Navigation Sidebar */}
+          <Sidebar />
 
-        {/* Chat History Sidebar */}
-        <ConversationSidebar
-          isOpen={isChatSidebarOpen}
-          onClose={() => setIsChatSidebarOpen(false)}
-          currentConversationId={currentConversationId}
-          onConversationSelect={loadConversation}
-          onNewChat={startNewChat}
-          onConversationDeleted={handleConversationDeleted}
-        />
+          {/* Chat History Sidebar */}
+          <ConversationSidebar
+            isOpen={isChatSidebarOpen}
+            onClose={() => setIsChatSidebarOpen(false)}
+            currentConversationId={currentConversationId}
+            onConversationSelect={loadConversation}
+            onNewChat={startNewChat}
+            onConversationDeleted={handleConversationDeleted}
+          />
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col">
-          {/* Header */}
-          <HeaderWithUser
-            title={t('title')}
-            subtitle={t('subtitle')}
-            actions={
-              <>
-                <ActionButton
-                  onClick={startNewChat}
-                  variant="primary"
-                  aria-label="Start new chat conversation"
-                >
-                  {t('newChat')}
-                </ActionButton>
-                <button
-                  onClick={() => setIsChatSidebarOpen(!isChatSidebarOpen)}
-                  className={`relative group inline-flex items-center justify-center px-3 py-2 rounded-md transition-all duration-200 ease-in-out ${
-                    isChatSidebarOpen
+          {/* Main Content */}
+          <div className="flex-1 flex flex-col">
+            {/* Header */}
+            <HeaderWithUser
+              title="AI Assistant"
+              subtitle="Get intelligent financial guidance powered by LLM"
+              actions={
+                <>
+                  <ActionButton
+                    onClick={startNewChat}
+                    variant="primary"
+                    aria-label="Start new chat conversation"
+                  >
+                    New Chat
+                  </ActionButton>
+                  <button
+                    onClick={() => setIsChatSidebarOpen(!isChatSidebarOpen)}
+                    className={`relative group inline-flex items-center justify-center px-3 py-2 rounded-md transition-all duration-200 ease-in-out ${isChatSidebarOpen
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                       }`}
@@ -265,7 +262,7 @@ export default function AIAssistantPage() {
               </div>
             </main>
           </div>
-        </div>
+      </div>
     </ClientProviders>
   )
 }

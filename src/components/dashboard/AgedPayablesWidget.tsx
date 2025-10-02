@@ -6,7 +6,6 @@ import { Clock, TrendingDown, AlertTriangle, CreditCard } from 'lucide-react';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/types/transaction';
 import { DARK_THEME_COLORS } from './types/analytics';
 import { EnhancedAgedPayables } from '@/lib/analytics/engine';
-import { useTranslations } from 'next-intl';
 
 interface AgedPayablesWidgetProps {
   agedPayables: EnhancedAgedPayables;
@@ -34,8 +33,6 @@ export default function AgedPayablesWidget({
   homeCurrency,
   loading
 }: AgedPayablesWidgetProps) {
-  const t = useTranslations('dashboard.agedPayables');
-
   // State to track the index of the hovered bar
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
@@ -53,34 +50,34 @@ export default function AgedPayablesWidget({
     return [
       {
         name: '0-30 days',
-        fullName: t('current030Days'),
+        fullName: 'Current (0-30 days)',
         value: agedPayables.current,
         color: riskColors.low,
         risk: 'low'
       },
       {
         name: '31-60 days',
-        fullName: t('days3160'),
+        fullName: '31-60 days',
         value: agedPayables.late_31_60,
         color: riskColors.medium,
         risk: 'medium'
       },
       {
         name: '61-90 days',
-        fullName: t('days6190'),
+        fullName: '61-90 days',
         value: agedPayables.late_61_90,
         color: riskColors.high,
         risk: 'high'
       },
       {
         name: '90+ days',
-        fullName: t('days90Plus'),
+        fullName: '90+ days',
         value: agedPayables.late_90_plus,
         color: riskColors.critical,
         risk: 'critical'
       }
     ];
-  }, [agedPayables, t]);
+  }, [agedPayables]);
 
   // Calculate max value for chart domain
   const maxValue = Math.max(...chartData.map(d => d.value));
@@ -113,7 +110,7 @@ export default function AgedPayablesWidget({
           </p>
           {data.payload.risk && (
             <p className={`text-xs ${getRiskColor(data.payload.risk)} font-medium`}>
-              {t(`${data.payload.risk}Risk`)}
+              {data.payload.risk} risk
             </p>
           )}
         </div>
@@ -165,11 +162,11 @@ export default function AgedPayablesWidget({
         <div className="flex items-center">
           {getRiskIcon()}
           <h3 className="text-lg font-semibold text-white ml-2">
-            {t('title')}
+            Aged Payables
           </h3>
         </div>
         <div className="text-right">
-          <div className="text-sm text-gray-400">{t('totalOutstanding')}</div>
+          <div className="text-sm text-gray-400">Total Outstanding</div>
           <div className="text-lg font-bold text-white">
             {formatCurrency(totalOutstanding)}
           </div>
@@ -238,8 +235,8 @@ export default function AgedPayablesWidget({
         <div className="h-64 flex items-center justify-center">
           <div className="text-center text-gray-400">
             <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">{t('noOutstandingPayables')}</p>
-            <p className="text-xs mt-1">{t('allInvoicesSettled')}</p>
+            <p className="text-sm">No outstanding payables</p>
+            <p className="text-xs mt-1">All bills are paid or no expense transactions pending</p>
           </div>
         </div>
       )}
@@ -250,23 +247,23 @@ export default function AgedPayablesWidget({
           {/* Traditional Summary */}
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
-              <span className="text-gray-400">{t('currentHealthy')}</span>
+              <span className="text-gray-400">Current (healthy):</span>
               <span className="ml-2 text-green-400 font-medium">
                 {formatCurrency(agedPayables.current)}
               </span>
             </div>
             <div>
-              <span className="text-gray-400">{t('atRisk60Days')}</span>
+              <span className="text-gray-400">At risk (60+ days):</span>
               <span className="ml-2 text-red-400 font-medium">
                 {formatCurrency(agedPayables.late_61_90 + agedPayables.late_90_plus)}
               </span>
             </div>
           </div>
-
+          
           {/* Dynamic Risk Insights */}
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
-              <span className="text-gray-400">{t('avgRiskScore')}</span>
+              <span className="text-gray-400">Avg Risk Score:</span>
               <span className={`ml-2 font-medium ${
                 agedPayables.average_risk_score > 75 ? 'text-red-400' :
                 agedPayables.average_risk_score > 50 ? 'text-yellow-400' :
@@ -276,7 +273,7 @@ export default function AgedPayablesWidget({
               </span>
             </div>
             <div>
-              <span className="text-gray-400">{t('highRiskItems')}</span>
+              <span className="text-gray-400">High-Risk Items:</span>
               <span className="ml-2 text-red-400 font-medium">
                 {agedPayables.high_risk_transactions}
               </span>

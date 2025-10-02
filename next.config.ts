@@ -40,8 +40,7 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
 
-  // Temporarily disable ESLint during builds while security fixes are validated
-  // TODO: Re-enable after addressing existing linting warnings
+  // Temporarily ignore ESLint during builds - will address warnings in separate task
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -51,8 +50,7 @@ const nextConfig = {
     typedRoutes: false,
   },
 
-  // Enable React StrictMode for better development safety
-  // Helps catch potential issues early in development
+  // Enable React StrictMode to catch potential issues early
   reactStrictMode: true,
 };
 

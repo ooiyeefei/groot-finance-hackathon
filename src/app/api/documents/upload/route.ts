@@ -2,6 +2,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { uploadRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter'
+import { StoragePathBuilder, generateUniqueFilename, type DocumentType } from '@/lib/storage-paths'
 
 // File validation constants
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
@@ -14,12 +15,28 @@ const MAGIC_BYTES = {
   'application/pdf': [0x25, 0x50, 0x44, 0x46] // %PDF
 }
 
-// Sanitize filename to prevent security issues
-function sanitizeFilename(filename: string): string {
-  return filename
-    .replace(/[^a-zA-Z0-9.-]/g, '_')
-    .replace(/_{2,}/g, '_')
-    .toLowerCase()
+/**
+ * Detect document type from filename or form data
+ * This will eventually be enhanced by AI classification
+ */
+function detectDocumentType(filename: string, formData: FormData): DocumentType {
+  const lowerFilename = filename.toLowerCase()
+  const explicitType = formData.get('documentType') as string
+
+  // Check for explicit type from form
+  if (explicitType && ['invoice', 'receipt', 'application_form', 'payslip', 'ic', 'other'].includes(explicitType)) {
+    return explicitType as DocumentType
+  }
+
+  // Detect from filename patterns
+  if (lowerFilename.includes('invoice')) return 'invoice'
+  if (lowerFilename.includes('receipt')) return 'receipt'
+  if (lowerFilename.includes('application') || lowerFilename.includes('form')) return 'application_form'
+  if (lowerFilename.includes('payslip') || lowerFilename.includes('salary')) return 'payslip'
+  if (lowerFilename.includes('identity') || lowerFilename.includes('ic') || lowerFilename.includes('mykad')) return 'ic'
+
+  // Default to invoice for general business documents
+  return 'invoice'
 }
 
 // Validate file type using magic bytes
@@ -157,29 +174,70 @@ export async function POST(request: NextRequest) {
       businessId = userData.business_id
     }
 
-    // Generate unique filename with business-based storage structure
-    const sanitizedName = sanitizeFilename(file.name)
-    const timestamp = Date.now()
-    const uniqueFilename = `${timestamp}_${sanitizedName}`
-    // Business-segmented storage: business_id/user_id/filename
-    const storagePath = `${businessId}/${userId}/${uniqueFilename}`
+    // Detect document type
+    const documentType = detectDocumentType(file.name, formData)
+    console.log(`[Upload API] Detected document type: ${documentType} for file: ${file.name}`)
 
-    // Convert file to buffer for upload and validation
+    // Convert file to buffer for validation
     const fileBuffer = await file.arrayBuffer()
     const buffer = new Uint8Array(fileBuffer)
 
     // Validate file type using magic bytes to prevent file type spoofing
     if (!validateFileMagicBytes(fileBuffer, file.type)) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'File type mismatch. The file content does not match the declared type.' 
+        {
+          success: false,
+          error: 'File type mismatch. The file content does not match the declared type.'
         },
         { status: 400 }
       )
     }
 
-    // Upload to Supabase Storage using regular client with permissive policies
+    // Step 1: Create document record first to get documentId
+    const { data: documentData, error: dbError } = await supabase
+      .from('documents')
+      .insert({
+        user_id: userData.id, // Use the actual users.id, not clerk_user_id
+        business_id: businessId,
+        file_name: file.name,
+        file_type: file.type,
+        file_size: file.size,
+        storage_path: 'temp_pending_upload', // Temporary placeholder
+        processing_status: 'pending',
+        document_type: documentType, // Store detected document type
+        document_metadata: {
+          storage_version: '3.0', // Track new documentId-based storage format
+          original_filename: file.name,
+          detected_type: documentType,
+          use_case: 'documents', // Context: documents/ page for invoices and general business documents
+          upload_context: {
+            page: 'documents',
+            description: 'General business document upload for invoices and financial records'
+          }
+        }
+      })
+      .select()
+      .single()
+
+    if (dbError) {
+      console.error('Database insert error:', dbError)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to create document record'
+        },
+        { status: 500 }
+      )
+    }
+
+    // Step 2: Generate storage path with documentId
+    const storageBuilder = new StoragePathBuilder(businessId, userData.id, undefined, documentData.id)
+    const uniqueFilename = generateUniqueFilename(file.name)
+    const storagePath = storageBuilder.forDocument(documentType).raw(uniqueFilename)
+
+    console.log(`[Upload API] Generated storage path with documentId: ${storagePath}`)
+
+    // Step 3: Upload to Supabase Storage with documentId-based path
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('documents')
       .upload(storagePath, buffer, {
@@ -189,42 +247,43 @@ export async function POST(request: NextRequest) {
 
     if (uploadError) {
       console.error('Storage upload error:', uploadError)
+
+      // Clean up document record if upload fails
+      await supabase.from('documents').delete().eq('id', documentData.id)
+
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to upload file to storage' 
+        {
+          success: false,
+          error: 'Failed to upload file to storage'
         },
         { status: 500 }
       )
     }
 
-    // Create database record with business_id
-    const { data: documentData, error: dbError } = await supabase
+    // Step 4: Update document record with final storage path
+    const { error: updateError } = await supabase
       .from('documents')
-      .insert({
-        user_id: userId,
-        business_id: businessId,
-        file_name: file.name,
-        file_type: file.type,
-        file_size: file.size,
+      .update({
         storage_path: uploadData.path,
         processing_status: 'pending'
       })
-      .select()
-      .single()
+      .eq('id', documentData.id)
 
-    if (dbError) {
-      console.error('Database insert error:', dbError)
-      
-      // Clean up uploaded file if database insert fails
+    if (updateError) {
+      console.error('Database update error:', updateError)
+
+      // Clean up uploaded file if database update fails
       await supabase.storage
         .from('documents')
         .remove([storagePath])
 
+      // Clean up document record
+      await supabase.from('documents').delete().eq('id', documentData.id)
+
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to create document record' 
+        {
+          success: false,
+          error: 'Failed to update document record with storage path'
         },
         { status: 500 }
       )

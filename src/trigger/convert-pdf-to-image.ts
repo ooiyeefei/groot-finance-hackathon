@@ -4,13 +4,15 @@
  * This task handles PDF to image conversion using Python's pdf2image library,
  * which is more reliable in containerized environments than Node.js alternatives.
  * 
- * Flow: PDF → Python conversion → Upload image → Trigger OCR task
+ * Flow: PDF → Python conversion → Upload image → Trigger classification task
  */
 
 import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
 import { createClient } from '@supabase/supabase-js';
-import { processDocumentOCR } from './process-document-ocr';
+import { classifyDocument } from './classify-document';
+import { analyzeStoragePath, generateProcessedPath, StoragePathBuilder, type DocumentType } from '@/lib/storage-paths';
+
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -20,25 +22,78 @@ const supabase = createClient(
 
 export const convertPdfToImage = task({
   id: "convert-pdf-to-image",
-  run: async (payload: { documentId: string; pdfStoragePath: string }) => {
+  run: async (payload: {
+    documentId: string;
+    pdfStoragePath?: string;
+    expectedDocumentType?: string;
+    applicationId?: string;
+    documentSlot?: string;
+  }) => {
     console.log(`✅ Starting PDF to image conversion for document: ${payload.documentId}`);
 
     try {
-      // Step 1: Download PDF from Supabase Storage
-      console.log(`📥 Downloading PDF from: ${payload.pdfStoragePath}`);
+      // Step 1: Get PDF storage path if not provided (for Applications workflow)
+      let pdfStoragePath = payload.pdfStoragePath;
+
+      if (!pdfStoragePath) {
+        console.log(`🔍 Fetching storage path for document: ${payload.documentId}`);
+        const { data: document, error: fetchError } = await supabase
+          .from('documents')
+          .select('storage_path')
+          .eq('id', payload.documentId)
+          .single();
+
+        if (fetchError || !document) {
+          throw new Error(`Failed to fetch document storage path: ${fetchError?.message}`);
+        }
+
+        pdfStoragePath = document.storage_path;
+        console.log(`📥 Retrieved storage path: ${pdfStoragePath}`);
+      }
+
+      if (!pdfStoragePath) {
+        throw new Error('PDF storage path is required but not provided');
+      }
+
+      // Step 2: Download PDF from Supabase Storage
+      console.log(`📥 Downloading PDF from: ${pdfStoragePath}`);
+
+      // First, check if file exists
+      const { data: fileExists, error: listError } = await supabase.storage
+        .from('documents')
+        .list(pdfStoragePath.split('/').slice(0, -1).join('/'), {
+          limit: 1000,
+          search: pdfStoragePath.split('/').pop()
+        });
+
+      if (listError) {
+        console.error(`❌ Error checking file existence:`, listError);
+      } else if (!fileExists || fileExists.length === 0) {
+        console.error(`❌ File not found in storage: ${pdfStoragePath}`);
+        throw new Error(`PDF file not found in storage: ${pdfStoragePath}`);
+      } else {
+        console.log(`✅ File exists in storage: ${fileExists[0].name} (${fileExists[0].metadata?.size || 'unknown size'})`);
+      }
+
+      // Now attempt download
       const { data: pdfData, error: downloadError } = await supabase.storage
         .from('documents')
-        .download(payload.pdfStoragePath);
+        .download(pdfStoragePath);
 
-      if (downloadError || !pdfData) {
-        throw new Error(`Failed to download PDF: ${downloadError?.message}`);
+      if (downloadError) {
+        console.error(`❌ Download error details:`, JSON.stringify(downloadError, null, 2));
+        throw new Error(`Failed to download PDF: ${downloadError.message || JSON.stringify(downloadError)}`);
+      }
+
+      if (!pdfData) {
+        throw new Error(`No data received from PDF download`);
       }
 
       // Convert Blob to Buffer for Python processing
       const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
       console.log(`📄 PDF downloaded successfully: ${pdfBuffer.length} bytes`);
 
-      // Step 2: Convert PDF to PNG using Python pdf2image
+      // Step 3: Convert PDF to PNG using Python pdf2image
       console.log(`🐍 Converting PDF to image using Python pdf2image`);
       console.log(`📊 PDF Buffer size: ${pdfBuffer.length} bytes`);
       
@@ -51,6 +106,7 @@ import io
 import sys
 import traceback
 import subprocess
+import json
 
 try:
     # Check system dependencies first
@@ -63,7 +119,7 @@ try:
             print("[Python] WARNING: pdftoppm not found - this may cause issues")
     except Exception as dep_error:
         print(f"[Python] WARNING: Could not check dependencies: {dep_error}")
-    
+
     # Import PDF processing libraries
     print("[Python] Importing pdf2image library...")
     from pdf2image import convert_from_bytes
@@ -74,172 +130,309 @@ try:
     # PDF data is passed as base64 string
     pdf_base64 = """${pdfBuffer.toString('base64')}"""
     print(f"[Python] Base64 string length: {len(pdf_base64)}")
-    
+
     pdf_bytes = base64.b64decode(pdf_base64)
     print(f"[Python] Processing PDF of size: {len(pdf_bytes)} bytes")
-    
+
     # Validate PDF header
     if not pdf_bytes.startswith(b'%PDF'):
         raise Exception("Invalid PDF format - missing PDF header")
-    
-    # Convert PDF to images (first page only)
-    print("[Python] Starting PDF conversion...")
+
+    # Convert PDF to images (ALL pages)
+    print("[Python] Starting multi-page PDF conversion...")
     images = convert_from_bytes(
         pdf_bytes,
         dpi=150,  # Good balance of quality and file size
-        first_page=1,
-        last_page=1,
         fmt='PNG'
     )
-    
+
     if not images:
         raise Exception("No images generated from PDF")
-    
-    # Get the first (and only) image
-    image = images[0]
-    image_width, image_height = image.size
-    print(f"[Python] Image converted: {image_width}x{image_height} pixels")
-    
-    # Convert to PNG bytes
-    img_buffer = io.BytesIO()
-    image.save(img_buffer, format='PNG', optimize=True)
-    png_bytes = img_buffer.getvalue()
-    
-    print(f"[Python] PNG size: {len(png_bytes)} bytes")
-    
-    # Validate PNG output
-    if len(png_bytes) == 0:
-        raise Exception("Generated PNG is empty")
-    
-    # Output both base64 and dimensions for capture
-    base64_result = base64.b64encode(png_bytes).decode('utf-8')
-    print(f"[Python] Base64 result length: {len(base64_result)}")
-    print("RESULT_START")
-    print(base64_result)
-    print("RESULT_END")
-    print("DIMENSIONS_START")
-    print(f"{image_width},{image_height}")
-    print("DIMENSIONS_END")
-    
+
+    print(f"[Python] Generated {len(images)} page(s) from PDF")
+
+    # Process all pages
+    pages_data = []
+
+    for page_num, image in enumerate(images, start=1):
+        image_width, image_height = image.size
+        print(f"[Python] Processing page {page_num}: {image_width}x{image_height} pixels")
+
+        # Convert to PNG bytes
+        img_buffer = io.BytesIO()
+        image.save(img_buffer, format='PNG', optimize=True)
+        png_bytes = img_buffer.getvalue()
+
+        # Validate PNG output
+        if len(png_bytes) == 0:
+            raise Exception(f"Generated PNG for page {page_num} is empty")
+
+        # Convert to base64
+        base64_image = base64.b64encode(png_bytes).decode('utf-8')
+
+        # Add to pages array
+        pages_data.append({
+            "page_number": page_num,
+            "base64_image": base64_image,
+            "width": image_width,
+            "height": image_height
+        })
+
+        print(f"[Python] Page {page_num} processed: {len(png_bytes)} bytes, base64 length: {len(base64_image)}")
+
+    # Output final JSON result
+    result_json = {
+        "success": True,
+        "pages": pages_data
+    }
+
+    print("JSON_RESULT_START")
+    print(json.dumps(result_json, separators=(',', ':')))
+    print("JSON_RESULT_END")
+
 except Exception as e:
     print(f"[Python] ERROR: {str(e)}")
     print(f"[Python] Traceback: {traceback.format_exc()}")
-    
-    # Additional debugging information
-    print("[Python] Environment debugging:")
-    print(f"[Python] Python version: {sys.version}")
-    try:
-        import platform
-        print(f"[Python] Platform: {platform.platform()}")
-    except:
-        pass
-    
+
+    # Output error as JSON
+    error_result = {
+        "success": False,
+        "error": str(e),
+        "pages": []
+    }
+
+    print("JSON_RESULT_START")
+    print(json.dumps(error_result, separators=(',', ':')))
+    print("JSON_RESULT_END")
+
     sys.exit(1)
 `);
 
       console.log(`✅ Python PDF conversion completed`);
       console.log(`📝 Python stdout:`, result.stdout);
       console.log(`❌ Python stderr:`, result.stderr);
-      
-      // Extract base64 string between markers
-      const stdout = result.stdout;
-      const startMarker = 'RESULT_START';
-      const endMarker = 'RESULT_END';
-      const dimStartMarker = 'DIMENSIONS_START';
-      const dimEndMarker = 'DIMENSIONS_END';
-      
-      const startIndex = stdout.indexOf(startMarker);
-      const endIndex = stdout.indexOf(endMarker);
-      
-      if (startIndex === -1 || endIndex === -1) {
-        throw new Error(`Failed to extract conversion result from Python output. Exit code: ${result.exitCode}`);
-      }
-      
-      const base64String = stdout.substring(startIndex + startMarker.length, endIndex).trim();
-      
-      if (!base64String) {
-        throw new Error('Empty base64 result from Python conversion');
-      }
-      
-      // Extract dimensions
-      const dimStartIndex = stdout.indexOf(dimStartMarker);
-      const dimEndIndex = stdout.indexOf(dimEndMarker);
-      let imageDimensions = null;
-      
-      if (dimStartIndex !== -1 && dimEndIndex !== -1) {
-        const dimensionsString = stdout.substring(dimStartIndex + dimStartMarker.length, dimEndIndex).trim();
-        const [width, height] = dimensionsString.split(',').map(d => parseInt(d.trim()));
-        if (width && height) {
-          imageDimensions = { width, height };
-          console.log(`📐 Extracted image dimensions: ${width}x${height}`);
-        }
-      }
-      
-      console.log(`🔍 Extracted base64 length: ${base64String.length}`);
-      const imageBuffer = Buffer.from(base64String, 'base64');
-      console.log(`📦 Final image buffer size: ${imageBuffer.length} bytes`);
 
-      // Step 3: Upload to Supabase - construct proper path for converted images
-      // Original path: "cc5fdbbc-1459-43ad-9736-3cc65649d23b/user_31B9ml2Dwl2q8qxYFS4E13ABXSe/1755448953936_magpie_i-2507_0042.pdf"
-      // Target path: "converted/cc5fdbbc-1459-43ad-9736-3cc65649d23b/MAGPIE I-2507_0042.png" (use original filename from database)
-      const pathParts = payload.pdfStoragePath.split('/');
-      const directory = pathParts[0]; // Get the first directory (UUID)
-      
-      // Get the document record to extract the original filename
-      const { data: document } = await supabase.from('documents').select('file_name').eq('id', payload.documentId).single();
-      const originalFilename = document?.file_name || pathParts[pathParts.length - 1];
-      
-      const imagePath = `converted/${directory}/${originalFilename.replace('.pdf', '.png')}`;
-      
-      console.log(`📤 Uploading converted image to: ${imagePath}`);
-      const { error: uploadError } = await supabase.storage
+      // Extract JSON result between markers
+      const stdout = result.stdout;
+      const jsonStartMarker = 'JSON_RESULT_START';
+      const jsonEndMarker = 'JSON_RESULT_END';
+
+      const jsonStartIndex = stdout.indexOf(jsonStartMarker);
+      const jsonEndIndex = stdout.indexOf(jsonEndMarker);
+
+      if (jsonStartIndex === -1 || jsonEndIndex === -1) {
+        throw new Error(`Failed to extract JSON result from Python output. Exit code: ${result.exitCode}`);
+      }
+
+      const jsonString = stdout.substring(jsonStartIndex + jsonStartMarker.length, jsonEndIndex).trim();
+
+      if (!jsonString) {
+        throw new Error('Empty JSON result from Python conversion');
+      }
+
+      // Parse the multi-page conversion result
+      let conversionResult;
+      try {
+        conversionResult = JSON.parse(jsonString);
+      } catch (parseError) {
+        throw new Error(`Failed to parse Python JSON output: ${parseError}`);
+      }
+
+      if (!conversionResult.success) {
+        throw new Error(`Python conversion failed: ${conversionResult.error}`);
+      }
+
+      if (!conversionResult.pages || conversionResult.pages.length === 0) {
+        throw new Error('No pages generated from PDF conversion');
+      }
+
+      console.log(`🎯 Successfully converted PDF to ${conversionResult.pages.length} page(s)`);
+
+      // Step 4: Upload all pages to Supabase using standardized StoragePathBuilder
+      console.log(`🔍 Analyzing storage path: ${pdfStoragePath}`);
+
+      // Get the document record for context
+      const { data: document, error: docError } = await supabase
         .from('documents')
-        .upload(imagePath, imageBuffer, {
-          contentType: 'image/png',
-          upsert: true
+        .select('file_name, business_id, user_id, document_type, document_metadata')
+        .eq('id', payload.documentId)
+        .single();
+
+      if (docError || !document) {
+        throw new Error(`Failed to fetch document context: ${docError?.message}`);
+      }
+
+      const originalFilename = document.file_name;
+      console.log(`📁 Document context: ${originalFilename}, type: ${document.document_type}`);
+
+      // Always try to use standardized paths when possible
+      const hasRequiredContext = document.business_id && document.user_id;
+
+      // Determine document type for standardized paths
+      // If not yet classified, use expectedDocumentType or fallback to 'application_form'
+      const documentType = document.document_type || payload.expectedDocumentType || 'application_form';
+
+      console.log(`📊 Context analysis: business_id=${!!document.business_id}, user_id=${!!document.user_id}, document_type=${documentType}`);
+
+      let imagePaths: string[];
+      let approach: string;
+      let convertedFolderPath: string;
+
+      if (hasRequiredContext) {
+        // Use standardized paths with documentId for unique folder structure
+        const storageBuilder = new StoragePathBuilder(document.business_id, document.user_id, payload.applicationId, payload.documentId);
+        const docType = documentType as DocumentType;
+        console.log(`📤 Using standardized storage structure for ${docType} documents with unique documentId folder`);
+
+        // Use timestamp folder to separate reprocessing runs
+        const processTimestamp = Date.now().toString(); // Full timestamp for folder uniqueness
+        const shortTimestamp = processTimestamp.slice(-8); // Last 8 digits for filename
+
+        imagePaths = conversionResult.pages.map((page: any) => {
+          // Create filename with timestamp prefix inside timestamp folder
+          const originalFilenamePart = document.file_name.replace(/\.[^/.]+$/, ""); // Remove extension
+          const pageFilename = `${shortTimestamp}_${originalFilenamePart}_page_${page.page_number}.png`;
+          const baseConvertedPath = storageBuilder.forDocument(docType).converted(pageFilename);
+
+          // Insert timestamp folder between converted/ and filename: converted/1234567890/file.png
+          const pathParts = baseConvertedPath.split('/');
+          const filename = pathParts.pop();
+          const convertedTimestampPath = `${pathParts.join('/')}/${processTimestamp}/${filename}`;
+          return convertedTimestampPath;
         });
 
-      if (uploadError) {
-        throw new Error(`Failed to upload converted image: ${uploadError.message}`);
+        // Extract the converted folder path (without filename) - now includes timestamp folder
+        const firstImagePath = imagePaths[0];
+        convertedFolderPath = firstImagePath.substring(0, firstImagePath.lastIndexOf('/'));
+
+        approach = 'standardized';
+        console.log(`✅ Standardized folder structure with timestamp folder: ${convertedFolderPath}`);
+      } else {
+        // Fallback only when business_id/user_id are genuinely missing
+        console.log(`⚠️ Missing context fields - using fallback folder structure with documentId`);
+        console.log(`📊 Missing: business_id=${!document.business_id}, user_id=${!document.user_id}`);
+
+        // Create converted folder structure from legacy path with unique documentId + timestamp folder
+        const pathParts = pdfStoragePath.split('/');
+        const processTimestamp = Date.now().toString(); // Full timestamp for folder uniqueness
+        const shortTimestamp = processTimestamp.slice(-8); // Last 8 digits for filename
+        convertedFolderPath = `${pathParts.slice(0, -1).join('/')}/${payload.documentId}/converted/${processTimestamp}`;
+
+        imagePaths = conversionResult.pages.map((page: any) => {
+          // Create filename with timestamp prefix inside timestamp folder (fallback)
+          const originalFilenamePart = document.file_name.replace(/\.[^/.]+$/, ""); // Remove extension
+          const pageFilename = `${shortTimestamp}_${originalFilenamePart}_page_${page.page_number}.png`;
+          return `${convertedFolderPath}/${pageFilename}`;
+        });
+        approach = 'fallback';
+        console.log(`⚠️ Fallback folder structure with timestamp folder: ${convertedFolderPath}`);
       }
 
-      console.log(`✅ Image uploaded successfully to: ${imagePath}`);
+      // Step 4: Upload all pages using unified logic
+      const uploadPromises = conversionResult.pages.map(async (page: any, index: number) => {
+        const imagePath = imagePaths[index];
 
-      // Step 3.5: Update document record with converted image path and dimensions
-      console.log(`💾 Updating document record with converted image path and dimensions`);
+        // Convert base64 to buffer for upload
+        const imageBuffer = Buffer.from(page.base64_image, 'base64');
+
+        console.log(`📄 Uploading page ${page.page_number} (${imageBuffer.length} bytes) to: ${imagePath}`);
+
+        // Upload to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(imagePath, imageBuffer, {
+            contentType: 'image/png',
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.error(`❌ Upload error for page ${page.page_number}:`, JSON.stringify(uploadError, null, 2));
+          throw new Error(`Failed to upload page ${page.page_number}: ${JSON.stringify(uploadError)}`);
+        }
+
+        return {
+          page_number: page.page_number,
+          path: imagePath,
+          width: page.width,
+          height: page.height
+        };
+      });
+
+      // Execute all uploads in parallel for maximum efficiency
+      const uploadedPages = await Promise.all(uploadPromises);
+      console.log(`✅ All ${uploadedPages.length} page(s) uploaded successfully using ${approach} approach`);
+
+      // Step 5: Update document record with converted folder path (keep original storage_path)
+      console.log(`💾 Updating document converted_image_path to: ${convertedFolderPath}`);
+
+      // Store page metadata for reference
+      const pageMetadata = uploadedPages.map(page => ({
+        page_number: page.page_number,
+        path: page.path,
+        width: page.width,
+        height: page.height
+      }));
+
       const updateData: any = {
-        converted_image_path: imagePath
+        converted_image_path: convertedFolderPath, // Store converted folder path without overwriting storage_path
+        converted_image_width: uploadedPages[0]?.width || null, // First page dimensions for compatibility
+        converted_image_height: uploadedPages[0]?.height || null,
+        document_metadata: {
+          ...document.document_metadata,
+          pages: pageMetadata, // Detailed page metadata
+          total_pages: uploadedPages.length
+        }
       };
-      
-      // Add dimensions if available
-      if (imageDimensions) {
-        updateData.converted_image_width = imageDimensions.width;
-        updateData.converted_image_height = imageDimensions.height;
-        console.log(`📐 Storing image dimensions: ${imageDimensions.width}x${imageDimensions.height}`);
-      }
-      
+
       const { error: updateError } = await supabase.from('documents').update(updateData).eq('id', payload.documentId);
 
       if (updateError) {
-        console.warn(`⚠️ Failed to update document with converted image path: ${updateError.message}`);
-        // Don't throw error - continue with OCR processing
+        console.warn(`⚠️ Failed to update document converted_image_path: ${updateError.message}`);
+        // Don't throw error - continue with classification
       } else {
-        console.log(`✅ Document record updated with converted image path and dimensions`);
+        console.log(`✅ Document converted_image_path updated to: ${convertedFolderPath} with ${uploadedPages.length} pages`);
       }
 
-      // Step 4: Trigger OCR processing task with the image path
-      console.log(`🔗 Triggering OCR processing for converted image`);
-      await processDocumentOCR.trigger({
-        documentId: payload.documentId,
-        imageStoragePath: imagePath
-      });
+      // Step 6: Trigger classification task for the converted image
+      console.log(`🔗 Triggering document classification for converted image`);
 
-      console.log(`✅ PDF conversion pipeline completed for document: ${payload.documentId}`);
-      
-      return { 
-        success: true, 
+      // Create classification payload, preserving Applications workflow context
+      const classificationPayload: any = {
+        documentId: payload.documentId
+      };
+
+      // Pass along Applications workflow context if present
+      if (payload.expectedDocumentType) {
+        classificationPayload.expectedDocumentType = payload.expectedDocumentType;
+      }
+      if (payload.applicationId) {
+        classificationPayload.applicationId = payload.applicationId;
+      }
+      if (payload.documentSlot) {
+        classificationPayload.documentSlot = payload.documentSlot;
+      }
+
+      // Note: converted_image_path already updated above, just update status
+      const { error: statusUpdateError } = await supabase.from('documents').update({
+        processing_status: 'classifying' // Update status as it moves to classification
+      }).eq('id', payload.documentId);
+
+      if (statusUpdateError) {
+        console.error(`❌ Failed to update document status:`, statusUpdateError);
+        // Don't throw - continue with classification as conversion succeeded
+      }
+
+      await classifyDocument.trigger(classificationPayload);
+
+      console.log(`✅ Multi-page PDF conversion pipeline completed for document: ${payload.documentId}`);
+
+      return {
+        success: true,
         documentId: payload.documentId,
-        imagePath: imagePath 
+        totalPages: uploadedPages.length,
+        convertedFolderPath: convertedFolderPath,
+        pagesPaths: uploadedPages.map(page => page.path),
+        approach: approach
       };
 
     } catch (error) {

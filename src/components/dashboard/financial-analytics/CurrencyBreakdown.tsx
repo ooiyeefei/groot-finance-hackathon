@@ -4,7 +4,6 @@ import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/types/transaction';
 import { CurrencyChartData, DARK_THEME_COLORS } from '../types/analytics';
-import { useTranslations } from 'next-intl';
 
 interface CurrencyBreakdownProps {
   currencyData: Record<string, number>;
@@ -17,7 +16,6 @@ export default function CurrencyBreakdown({
   homeCurrency,
   loading
 }: CurrencyBreakdownProps) {
-  const t = useTranslations('dashboard.currencyBreakdown');
   const chartData = useMemo(() => {
     if (!currencyData || Object.keys(currencyData).length === 0) {
       return [];
@@ -53,11 +51,11 @@ export default function CurrencyBreakdown({
   if (chartData.length === 0) {
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-6">{t('title')}</h3>
+        <h3 className="text-lg font-semibold text-white mb-6">Currency Breakdown</h3>
         <div className="flex items-center justify-center h-64 text-gray-400">
           <div className="text-center">
-            <p className="text-sm">{t('noCurrencyData')}</p>
-            <p className="text-xs mt-1">{t('addTransactions')}</p>
+            <p className="text-sm">No currency data available</p>
+            <p className="text-xs mt-1">Complete some transactions to see breakdown</p>
           </div>
         </div>
       </div>
@@ -85,7 +83,7 @@ export default function CurrencyBreakdown({
             style={{ backgroundColor: data.color }}
           />
           <span className={`text-xs ${data.displayValue >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {data.displayValue >= 0 ? t('netPositive') : t('netNegative')}
+            {data.displayValue >= 0 ? 'Net Positive' : 'Net Negative'}
           </span>
         </div>
       </div>
@@ -116,7 +114,7 @@ export default function CurrencyBreakdown({
   return (
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white">{t('title')}</h3>
+        <h3 className="text-lg font-semibold text-white">Currency Breakdown</h3>
         <span className="text-xs text-gray-400">
           {chartData.length} {chartData.length === 1 ? 'currency' : 'currencies'}
         </span>
@@ -154,13 +152,13 @@ export default function CurrencyBreakdown({
       <div className="mt-6 pt-4 border-t border-gray-700">
         <div className="grid grid-cols-2 gap-4 text-center">
           <div>
-            <p className="text-xs text-gray-400 mb-1">{t('homeCurrency')}</p>
+            <p className="text-xs text-gray-400 mb-1">Home Currency</p>
             <p className="text-sm font-medium text-white">
               {CURRENCY_SYMBOLS[homeCurrency]} {homeCurrency}
             </p>
           </div>
           <div>
-            <p className="text-xs text-gray-400 mb-1">{t('totalVolume')}</p>
+            <p className="text-xs text-gray-400 mb-1">Total Volume</p>
             <p className="text-sm font-medium text-white">
               {chartData.reduce((sum, entry) => sum + entry.value, 0).toLocaleString()}
             </p>

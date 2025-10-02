@@ -5,7 +5,6 @@ import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock 
 import { Transaction, CreateTransactionRequest, LineItem, SupportedCurrency, TRANSACTION_CATEGORIES, TransactionType } from '@/types/transaction'
 import { formatCurrency } from '@/hooks/use-transactions'
 import { useHomeCurrency } from '@/components/settings/currency-settings'
-import { useTranslations } from 'next-intl'
 
 interface TransactionFormModalProps {
   transaction?: Transaction
@@ -29,15 +28,14 @@ const getAvailableCategories = (transactionType: TransactionType) => {
 
 const TRANSACTION_TYPES = ['income', 'expense', 'transfer', 'asset', 'liability', 'equity'] as const
 
-// Move status labels inside component to access translations
-const getTransactionStatuses = (t: any) => [
-  { value: 'pending', label: t('pending') },
-  { value: 'awaiting_payment', label: t('awaitingPayment') },
-  { value: 'paid', label: t('paid') },
-  { value: 'overdue', label: t('overdue') },
-  { value: 'cancelled', label: t('cancelled') },
-  { value: 'disputed', label: t('disputed') }
-]
+const TRANSACTION_STATUSES = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'awaiting_payment', label: 'Awaiting Payment' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'disputed', label: 'Disputed' }
+] as const
 
 export default function TransactionFormModal({
   transaction,
@@ -45,8 +43,6 @@ export default function TransactionFormModal({
   onClose,
   onSubmit
 }: TransactionFormModalProps) {
-  const t = useTranslations('transactions')
-  const tCommon = useTranslations('common')
   const [isLoading, setIsLoading] = useState(false)
   const userHomeCurrency = useHomeCurrency()
   
@@ -252,10 +248,10 @@ export default function TransactionFormModal({
             </div>
             <div>
               <h3 className="text-lg font-medium text-white">
-                {transaction ? t('editTransaction') : prefilledData ? t('createFromDocument') : t('createNew')}
+                {transaction ? 'Edit Transaction' : prefilledData ? 'Create Transaction from Document' : 'Create New Transaction'}
               </h3>
               <p className="text-sm text-gray-400 mt-1">
-                {prefilledData?.source_document_id ? t('prefilledFromDocument') : t('manualEntry')}
+                {prefilledData?.source_document_id ? 'Pre-filled from document extraction' : 'Manual transaction entry'}
               </p>
             </div>
           </div>
@@ -266,7 +262,7 @@ export default function TransactionFormModal({
               disabled={isLoading}
               className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
             >
-              {isLoading ? tCommon('saving') : (transaction ? t('updateTransaction') : t('createTransaction'))}
+              {isLoading ? 'Saving...' : (transaction ? 'Update Transaction' : 'Create Transaction')}
             </button>
             <button
               onClick={onClose}
@@ -286,7 +282,7 @@ export default function TransactionFormModal({
                 {/* Transaction Details */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {t('transactionType')} *
+                    Transaction Type *
                   </label>
                   <select
                     value={formData.transaction_type}
@@ -317,21 +313,21 @@ export default function TransactionFormModal({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {tCommon('description')} *
+                    Description *
                   </label>
                   <input
                     type="text"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder={t('enterDescription')}
+                    placeholder="Enter transaction description"
                     required
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {t('category')} *
+                    Category *
                   </label>
                   <select
                     value={formData.category}
@@ -349,21 +345,21 @@ export default function TransactionFormModal({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {t('subcategory')}
+                    Subcategory
                   </label>
                   <input
                     type="text"
                     value={formData.subcategory}
                     onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder={t('optionalSubcategory')}
+                    placeholder="Optional subcategory"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     <Calendar className="w-4 h-4 inline mr-1" />
-                    {t('transactionDate')} *
+                    Transaction Date *
                   </label>
                   <input
                     type="date"
@@ -377,7 +373,7 @@ export default function TransactionFormModal({
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     <DollarSign className="w-4 h-4 inline mr-1" />
-                    {t('amount')} *
+                    Amount *
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -408,7 +404,7 @@ export default function TransactionFormModal({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {t('homeCurrency')}
+                    Home Currency
                   </label>
                   <select
                     value={formData.home_currency}
@@ -428,12 +424,12 @@ export default function TransactionFormModal({
                 {/* Exchange Rate Preview */}
                 {previewAmount !== null && exchangeRate !== null && (
                   <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
-                    <div className="text-sm text-blue-300 mb-1">{t('currencyConversionPreview')}:</div>
+                    <div className="text-sm text-blue-300 mb-1">Currency Conversion Preview:</div>
                     <div className="text-white font-medium">
                       {formatCurrency(previewAmount, formData.home_currency)}
                     </div>
                     <div className="text-xs text-blue-400">
-                      {t('exchangeRateLabel')}: 1 {formData.original_currency} = {exchangeRate.toFixed(6)} {formData.home_currency}
+                      Rate: 1 {formData.original_currency} = {exchangeRate.toFixed(6)} {formData.home_currency}
                     </div>
                   </div>
                 )}
@@ -441,42 +437,42 @@ export default function TransactionFormModal({
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     <Building className="w-4 h-4 inline mr-1" />
-                    {t('vendorName')}
+                    Vendor Name
                   </label>
                   <input
                     type="text"
                     value={formData.vendor_name}
                     onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder={t('vendorPlaceholder')}
+                    placeholder="Company or vendor name"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     <Hash className="w-4 h-4 inline mr-1" />
-                    {t('documentNumber')}
+                    Document Number
                   </label>
                   <input
                     type="text"
                     value={formData.document_number}
                     onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder={t('documentNumberPlaceholder')}
+                    placeholder="Document number, reference ID, etc."
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     <Clock className="w-4 h-4 inline mr-1" />
-                    {t('transactionStatus')}
+                    Transaction Status
                   </label>
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {getTransactionStatuses(t).map(status => (
+                    {TRANSACTION_STATUSES.map(status => (
                       <option key={status.value} value={status.value}>
                         {status.label}
                       </option>
@@ -489,7 +485,7 @@ export default function TransactionFormModal({
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       <Calendar className="w-4 h-4 inline mr-1" />
-                      {t('dueDate')}
+                      Due Date
                     </label>
                     <input
                       type="date"
@@ -505,7 +501,7 @@ export default function TransactionFormModal({
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
                         <Calendar className="w-4 h-4 inline mr-1" />
-                        {t('paymentDate')}
+                        Payment Date
                       </label>
                       <input
                         type="date"
@@ -517,14 +513,14 @@ export default function TransactionFormModal({
                     
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        {t('paymentMethod')}
+                        Payment Method
                       </label>
                       <input
                         type="text"
                         value={formData.payment_method}
                         onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder={t('paymentMethodPlaceholder')}
+                        placeholder="Cash, Card, Transfer, etc."
                       />
                     </div>
                   </>
@@ -533,13 +529,13 @@ export default function TransactionFormModal({
                 {/* Notes field for additional details */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {t('notes')}
+                    Notes
                   </label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder={t('notesPlaceholder')}
+                    placeholder="Additional notes or details..."
                     rows={3}
                   />
                 </div>
@@ -549,11 +545,11 @@ export default function TransactionFormModal({
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       <FileText className="w-4 h-4 inline mr-1" />
-                      {t('documentType')}
+                      Document Type
                     </label>
                     <div className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400">
                       <span className="capitalize">{formData.document_type}</span>
-                      <span className="text-xs ml-2 text-blue-400">({t('fromOCR')})</span>
+                      <span className="text-xs ml-2 text-blue-400">(from OCR)</span>
                     </div>
                   </div>
                 )}
@@ -570,7 +566,7 @@ export default function TransactionFormModal({
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                     <FileText className="w-4 h-4 mr-2" />
-                    {tCommon('lineItems')} ({lineItems.length})
+                    Line Items ({lineItems.length})
                   </h4>
                   <button
                     type="button"
@@ -578,7 +574,7 @@ export default function TransactionFormModal({
                     className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-2"
                   >
                     <Plus className="w-4 h-4" />
-                    {tCommon('add')} {tCommon('item')}
+                    Add Item
                   </button>
                 </div>
 
@@ -590,13 +586,13 @@ export default function TransactionFormModal({
                         <thead className="bg-gray-800">
                           <tr>
                             <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
-                            <th className="px-3 py-2 text-left text-gray-400 font-medium">{tCommon('description')}</th>
-                            <th className="px-3 py-2 text-left text-gray-400 font-medium">{t('itemCode')}</th>
-                            <th className="px-3 py-2 text-right text-gray-400 font-medium">{tCommon('qty')}</th>
-                            <th className="px-3 py-2 text-left text-gray-400 font-medium">{t('unit')}</th>
-                            <th className="px-3 py-2 text-right text-gray-400 font-medium">{tCommon('unitPrice')}</th>
-                            <th className="px-3 py-2 text-right text-gray-400 font-medium">{tCommon('total')}</th>
-                            <th className="px-3 py-2 text-center text-gray-400 font-medium">{t('actions')}</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
+                            <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
+                            <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                            <th className="px-3 py-2 text-center text-gray-400 font-medium">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-700">
@@ -609,7 +605,7 @@ export default function TransactionFormModal({
                                   value={item.description || ''}
                                   onChange={(e) => updateLineItem(index, 'description', e.target.value)}
                                   className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                  placeholder={t('itemDescriptionPlaceholder')}
+                                  placeholder="Item description"
                                 />
                               </td>
                               <td className="px-3 py-2">
@@ -618,7 +614,7 @@ export default function TransactionFormModal({
                                   value={item.item_code || ''}
                                   onChange={(e) => updateLineItem(index, 'item_code', e.target.value)}
                                   className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                  placeholder={t('skuPlaceholder')}
+                                  placeholder="SKU"
                                 />
                               </td>
                               <td className="px-3 py-2">
@@ -637,7 +633,7 @@ export default function TransactionFormModal({
                                   value={item.unit_measurement || ''}
                                   onChange={(e) => updateLineItem(index, 'unit_measurement', e.target.value)}
                                   className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                  placeholder={t('unitPlaceholder')}
+                                  placeholder="kg, pkt"
                                 />
                               </td>
                               <td className="px-3 py-2">
@@ -658,7 +654,7 @@ export default function TransactionFormModal({
                                   type="button"
                                   onClick={() => removeLineItem(index)}
                                   className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded transition-colors"
-                                  title={t('removeItem')}
+                                  title="Remove item"
                                 >
                                   <Trash2 className="w-3 h-3" />
                                 </button>
@@ -672,22 +668,22 @@ export default function TransactionFormModal({
                 ) : (
                   <div className="text-center py-8 text-gray-400">
                     <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p>{t('noLineItemsYet')}</p>
-                    <p className="text-xs mt-1">{t('clickAddItemToStart')}</p>
+                    <p>No line items added yet</p>
+                    <p className="text-xs mt-1">Click &quot;Add Item&quot; to start adding line items</p>
                   </div>
                 )}
 
                 {/* Transaction Summary */}
                 {lineItems.length > 0 && (
                   <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
-                    <h5 className="text-sm font-medium text-white mb-3">{t('transactionSummary')}</h5>
+                    <h5 className="text-sm font-medium text-white mb-3">Transaction Summary</h5>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-400">{t('itemsCount')}:</span>
+                        <span className="text-gray-400">Items Count:</span>
                         <span className="text-white">{lineItems.length}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-400">{t('subtotal')}:</span>
+                        <span className="text-gray-400">Subtotal:</span>
                         <span className="text-white">
                           {formatCurrency(
                             lineItems.reduce((sum, item) => sum + (item.line_total || 0), 0),
@@ -696,7 +692,7 @@ export default function TransactionFormModal({
                         </span>
                       </div>
                       <div className="flex justify-between border-t border-gray-700 pt-2">
-                        <span className="text-gray-300 font-medium">{tCommon('totalAmount')}:</span>
+                        <span className="text-gray-300 font-medium">Total Amount:</span>
                         <span className="text-green-400 font-medium">
                           {formatCurrency(formData.original_amount, formData.original_currency)}
                         </span>

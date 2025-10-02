@@ -7,7 +7,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useTranslations } from 'next-intl'
 import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,8 +42,6 @@ interface ManagementDashboardData {
 }
 
 export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDashboardProps) {
-  const t = useTranslations('manager')
-  const tCommon = useTranslations('common')
   const [activeTab, setActiveTab] = useState('overview')
   const [dashboardData, setDashboardData] = useState<ManagementDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -100,7 +97,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
   }
 
   if (!dashboardData) {
-    return <div className="text-center text-gray-400 p-8">{t('failedToLoadDashboard')}</div>
+    return <div className="text-center text-gray-400 p-8">Failed to load management dashboard data</div>
   }
 
   return (
@@ -109,25 +106,25 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
       {/* Management Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <ManagementSummaryCard
-          title={t('pendingApprovals')}
+          title="Pending Approvals"
           value={dashboardData.summary.pending_approval.toString()}
           icon={<Clock className="w-5 h-5" />}
           variant="warning"
         />
         <ManagementSummaryCard
-          title={t('approvedAmount')}
+          title="Approved Amount"
           value={`$${dashboardData.summary.approved_amount.toFixed(2)}`}
           icon={<CheckCircle className="w-5 h-5" />}
           variant="success"
         />
         <ManagementSummaryCard
-          title={t('totalClaims')}
+          title="Total Claims"
           value={dashboardData.summary.total_claims.toString()}
           icon={<User className="w-5 h-5" />}
           variant="default"
         />
         <ManagementSummaryCard
-          title={t('rejected')}
+          title="Rejected Claims"
           value={dashboardData.summary.rejected_count.toString()}
           icon={<XCircle className="w-5 h-5" />}
           variant="error"
@@ -144,26 +141,26 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
       }} className="space-y-4">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 bg-gray-800 border border-gray-700">
           <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-            {t('teamOverview')}
+            Overview
           </TabsTrigger>
           <TabsTrigger value="approvals" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
-            {t('approvals')}
+            Approvals
           </TabsTrigger>
           {dashboardData.role.admin && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-              {t('reimbursements')}
+              Reimbursements
             </TabsTrigger>
           )}
           <TabsTrigger value="categories" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">
-            {t('expenseCategories')}
+            Categories
           </TabsTrigger>
           <TabsTrigger value="reports" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
-            {t('reports')}
+            Reports
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          <ManagementOverviewContent data={dashboardData} setActiveTab={setActiveTab} t={t} />
+          <ManagementOverviewContent data={dashboardData} setActiveTab={setActiveTab} />
         </TabsContent>
 
         <TabsContent value="approvals" className="space-y-4">
@@ -189,42 +186,27 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 }
 
 // Management Overview Content
-function ManagementOverviewContent({ data, setActiveTab, t }: {
+function ManagementOverviewContent({ data, setActiveTab }: {
   data: ManagementDashboardData
   setActiveTab: (tab: string) => void
-  t: (key: string) => string
 }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Company Analytics - 2/3 width, positioned left */}
-      <Card className="bg-gray-800 border-gray-700 lg:col-span-2 lg:order-1">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <BarChart3 className="w-5 h-5" />
-            {t('companyAnalytics')}
-          </CardTitle>
-          <CardDescription>{t('realTimeExpenseInsights')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ExpenseAnalytics scope={data.role.admin ? "company" : "department"} />
-        </CardContent>
-      </Card>
-
-      {/* Priority Approvals - 1/3 width, positioned right */}
-      <Card className="bg-gray-800 border-gray-700 lg:col-span-1 lg:order-2">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Pending Approvals Queue */}
+      <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <Clock className="w-5 h-5" />
-            {t('priorityApprovals')}
+            Priority Approvals
           </CardTitle>
-          <CardDescription>{t('claimsRequiringImmediateAttention')}</CardDescription>
+          <CardDescription>Claims requiring immediate attention</CardDescription>
         </CardHeader>
         <CardContent>
           {data.recent_claims.filter(claim => ['submitted', 'under_review', 'pending_approval'].includes(claim.status)).length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               <CheckCircle className="w-12 h-12 mx-auto mb-4" />
-              <p>{t('noPendingApprovals')}</p>
-              <p className="text-sm">{t('allClaimsReviewed')}</p>
+              <p>No pending approvals</p>
+              <p className="text-sm">All claims have been reviewed</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -238,10 +220,10 @@ function ManagementOverviewContent({ data, setActiveTab, t }: {
                 >
                   <div className="flex-1 text-left">
                     <p className="text-white text-sm font-medium">
-                      {claim.employee?.full_name || t('unknownEmployee')}
+                      {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                     </p>
                     <p className="text-gray-400 text-xs">
-                      {claim.transaction?.description || claim.description} •
+                      {claim.transaction?.description || claim.description} • 
                       {claim.expense_category?.replace('_', ' ').toUpperCase()}
                     </p>
                   </div>
@@ -262,11 +244,25 @@ function ManagementOverviewContent({ data, setActiveTab, t }: {
                   onClick={() => setActiveTab('approvals')}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  {t('reviewAll')} {data.recent_claims.filter(claim => ['submitted', 'under_review', 'pending_approval'].includes(claim.status)).length} {t('pendingClaims')}
+                  Review all {data.recent_claims.filter(claim => ['submitted', 'under_review', 'pending_approval'].includes(claim.status)).length} pending claims
                 </Button>
               )}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Company Analytics */}
+      <Card className="bg-gray-800 border-gray-700">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            Company Analytics
+          </CardTitle>
+          <CardDescription>Real-time expense insights</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ExpenseAnalytics scope={data.role.admin ? "company" : "department"} />
         </CardContent>
       </Card>
 
@@ -276,23 +272,21 @@ function ManagementOverviewContent({ data, setActiveTab, t }: {
 
 // Reimbursement Queue Content (Admin Only)
 function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) {
-  const tExpense = useTranslations('expenseClaims.admin')
-  const t = useTranslations('manager')
   return (
     <Card className="bg-gray-800 border-gray-700">
       <CardHeader>
         <CardTitle className="text-white flex items-center gap-2">
           <DollarSign className="w-5 h-5" />
-          {tExpense('reimbursementQueue')}
+          Reimbursement Processing
         </CardTitle>
-        <CardDescription>{tExpense('approvedClaimsPayment')}</CardDescription>
+        <CardDescription>Approved claims ready for payment processing</CardDescription>
       </CardHeader>
       <CardContent>
         {data.recent_claims.filter(claim => claim.status === 'approved').length === 0 ? (
           <div className="text-center text-gray-400 py-12">
             <CheckCircle className="w-12 h-12 mx-auto mb-4" />
-            <p>{tExpense('noPendingReimbursements')}</p>
-            <p className="text-sm">{t('allApprovedProcessed')}</p>
+            <p>No pending reimbursements</p>
+            <p className="text-sm">All approved claims have been processed</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -300,15 +294,15 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
             <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
               <div className="flex items-center gap-4">
                 <input type="checkbox" className="rounded border-gray-600" />
-                <span className="text-white font-medium">{t('selectAll')} ({data.recent_claims.filter(claim => claim.status === 'approved').length} claims)</span>
+                <span className="text-white font-medium">Select All ({data.recent_claims.filter(claim => claim.status === 'approved').length} claims)</span>
               </div>
               <div className="flex gap-2">
                 <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white">
                   <DollarSign className="w-4 h-4 mr-2" />
-                  {t('processSelected')}
+                  Process Selected
                 </Button>
                 <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
-                  {t('exportList')}
+                  Export List
                 </Button>
               </div>
             </div>
@@ -325,7 +319,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
                           {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                         </p>
                         <p className="text-gray-400 text-xs">
-                          {claim.employee?.department || t('noDepartment')} •
+                          {claim.employee?.department || 'No Department'} • 
                           {claim.transaction?.description || 'Expense Claim'}
                         </p>
                       </div>
@@ -334,7 +328,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
                           ${parseFloat(claim.transaction?.home_currency_amount || '0').toFixed(2)}
                         </p>
                         <p className="text-green-400 text-xs">
-                          {t('approved')} {new Date(claim.approval_date || claim.created_at).toLocaleDateString()}
+                          Approved {new Date(claim.approval_date || claim.created_at).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
@@ -343,7 +337,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
                     size="sm"
                     className="bg-green-600 hover:bg-green-700 text-white"
                   >
-                    {t('process')}
+                    Process
                   </Button>
                 </div>
               ))}
@@ -357,17 +351,15 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
 
 // Management Reports Content - Full employee selection
 function ManagementReportsContent({ userRole }: { userRole: UserRole }) {
-  const tReports = useTranslations('reports.monthlyReport')
-  const tManager = useTranslations('manager')
   return (
     <div className="space-y-6">
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
-            {tReports('generateMonthlyReport')}
+            Management Reports
           </CardTitle>
-          <CardDescription>{tReports('detailedExpenseReports')}</CardDescription>
+          <CardDescription>Generate comprehensive expense reports with full employee selection</CardDescription>
         </CardHeader>
         <CardContent>
           <MonthlyReportGenerator personalOnly={false} />
@@ -376,8 +368,8 @@ function ManagementReportsContent({ userRole }: { userRole: UserRole }) {
 
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">{tManager('exportIntegration')}</CardTitle>
-          <CardDescription>{tManager('exportDataToSystems')}</CardDescription>
+          <CardTitle className="text-white">Export & Integration</CardTitle>
+          <CardDescription>Export data to external systems</CardDescription>
         </CardHeader>
         <CardContent>
           <GoogleSheetsExport userRole={userRole} />
@@ -440,7 +432,6 @@ function ApprovalTabContent({ data, onRefreshNeeded }: {
 
 // Streamlined Approvals List Component - Core approval functionality without nested UI
 function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
-  const t = useTranslations('manager')
   const [claims, setClaims] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [processingClaims, setProcessingClaims] = useState<Set<string>>(new Set())
@@ -520,7 +511,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
       <Card className="bg-gray-800 border-gray-700">
         <CardContent className="p-12 text-center">
           <Clock className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-400" />
-          <p className="text-gray-400">{t('loadingExpenseApprovals')}</p>
+          <p className="text-gray-400">Loading expense approvals...</p>
         </CardContent>
       </Card>
     )
@@ -542,8 +533,8 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
       <Card className="bg-gray-800 border-gray-700">
         <CardContent className="p-12 text-center">
           <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-400" />
-          <h3 className="text-xl font-semibold text-white mb-2">{t('allCaughtUp')}</h3>
-          <p className="text-gray-400">{t('noExpenseClaimsPending')}</p>
+          <h3 className="text-xl font-semibold text-white mb-2">All Caught Up!</h3>
+          <p className="text-gray-400">No expense claims pending your approval.</p>
         </CardContent>
       </Card>
     )
@@ -608,7 +599,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 
                 {/* Business Purpose */}
                 <div>
-                  <p className="text-gray-400 text-sm">{t('businessPurpose')}:</p>
+                  <p className="text-gray-400 text-sm">Business Purpose:</p>
                   <p className="text-gray-300">{claim.business_purpose}</p>
                 </div>
 
@@ -620,7 +611,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     <Eye className="w-4 h-4 mr-2" />
-                    {t('review')}
+                    Review
                   </Button>
 
                   <Button
@@ -634,7 +625,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     ) : (
                       <CheckCircle className="w-4 h-4 mr-2" />
                     )}
-                    {t('approve')}
+                    Approve
                   </Button>
 
                   <Button
@@ -644,7 +635,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     className="bg-red-600 hover:bg-red-700 text-white"
                   >
                     <XCircle className="w-4 h-4 mr-2" />
-                    {t('reject')}
+                    Reject
                   </Button>
                 </div>
               </CardContent>
@@ -658,34 +649,34 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
         <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50 p-4">
           <Card className="bg-gray-800 border-gray-700 w-full max-w-2xl max-h-[90vh] overflow-hidden">
             <CardHeader>
-              <CardTitle className="text-white">{t('reviewExpenseClaim')}</CardTitle>
+              <CardTitle className="text-white">Review Expense Claim</CardTitle>
               <CardDescription className="text-gray-400">
-                {t('detailedReview')} {selectedClaim.employee_name}
+                Detailed review for {selectedClaim.employee_name}
               </CardDescription>
             </CardHeader>
 
             <CardContent className="space-y-6 overflow-y-auto max-h-[calc(90vh-200px)]">
               {/* Claim Details */}
               <div className="space-y-4">
-                <h4 className="text-white font-semibold">{t('claimInformation')}</h4>
+                <h4 className="text-white font-semibold">Claim Information</h4>
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-400">{t('employee')}:</span>
+                    <span className="text-gray-400">Employee:</span>
                     <p className="text-white">{selectedClaim.employee_name}</p>
                   </div>
                   <div>
-                    <span className="text-gray-400">{t('amount')}:</span>
+                    <span className="text-gray-400">Amount:</span>
                     <p className="text-white">
                       {selectedClaim.original_amount} {selectedClaim.original_currency}
                     </p>
                   </div>
                   <div>
-                    <span className="text-gray-400">{t('category')}:</span>
+                    <span className="text-gray-400">Category:</span>
                     <p className="text-white">{selectedClaim.category_name}</p>
                   </div>
                   <div>
-                    <span className="text-gray-400">{t('date')}:</span>
+                    <span className="text-gray-400">Date:</span>
                     <p className="text-white">
                       {new Date(selectedClaim.transaction_date).toLocaleDateString()}
                     </p>
@@ -693,7 +684,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                 </div>
 
                 <div>
-                  <span className="text-gray-400">{t('businessPurpose')}:</span>
+                  <span className="text-gray-400">Business Purpose:</span>
                   <p className="text-white mt-1">{selectedClaim.business_purpose}</p>
                 </div>
               </div>
@@ -701,13 +692,13 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
               {/* Approval Notes */}
               <div className="space-y-2">
                 <Label htmlFor="approval_notes" className="text-white">
-                  {t('approvalNotes')}
+                  Approval Notes (Optional)
                 </Label>
                 <Textarea
                   id="approval_notes"
                   value={approvalNotes}
                   onChange={(e) => setApprovalNotes(e.target.value)}
-                  placeholder={t('approvalNotesPlaceholder')}
+                  placeholder="Add notes about this approval decision..."
                   className="bg-gray-700 border-gray-600 text-white"
                   rows={3}
                 />
@@ -723,7 +714,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                   }}
                   className="border-gray-600 text-gray-300 hover:bg-gray-700"
                 >
-                  {t('cancel')}
+                  Cancel
                 </Button>
 
                 <Button
@@ -733,7 +724,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                   className="border-red-600 text-red-400 hover:bg-red-600/20"
                 >
                   <XCircle className="w-4 h-4 mr-2" />
-                  {t('reject')}
+                  Reject
                 </Button>
 
                 <Button
@@ -746,7 +737,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                   ) : (
                     <CheckCircle className="w-4 h-4 mr-2" />
                   )}
-                  {t('approve')}
+                  Approve
                 </Button>
               </div>
             </CardContent>

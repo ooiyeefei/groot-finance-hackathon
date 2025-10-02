@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useTranslations } from 'next-intl'
 
 export interface ExpenseCategory {
   id: string
@@ -62,7 +61,6 @@ export default function CategoryFormModal({
   isLoading = false,
   error
 }: CategoryFormModalProps) {
-  const t = useTranslations('categories')
   const [formData, setFormData] = useState<CategoryFormData>({
     category_name: '',
     category_code: '',
@@ -146,19 +144,19 @@ export default function CategoryFormModal({
     const errors: Record<string, string> = {}
 
     if (!formData.category_name.trim()) {
-      errors.category_name = t('form.validation.categoryNameRequired')
+      errors.category_name = 'Category name is required'
     }
 
     if (!formData.category_code.trim()) {
-      errors.category_code = t('form.validation.categoryCodeRequired')
+      errors.category_code = 'Category code is required'
     }
 
     if (formData.requires_receipt && formData.receipt_threshold < 0) {
-      errors.receipt_threshold = t('form.validation.receiptThresholdInvalid')
+      errors.receipt_threshold = 'Receipt threshold must be 0 or greater'
     }
 
     if (formData.policy_limit < 0) {
-      errors.policy_limit = t('form.validation.policyLimitInvalid')
+      errors.policy_limit = 'Policy limit must be 0 or greater'
     }
 
     setValidationErrors(errors)
@@ -214,10 +212,10 @@ export default function CategoryFormModal({
           <div className="flex items-center justify-between p-6 border-b border-gray-700 flex-shrink-0">
             <div>
               <h3 className="text-lg font-semibold text-white">
-                {editingCategory ? t('form.editCategory') : t('form.addNewCategory')}
+                {editingCategory ? 'Edit Category' : 'Add New Category'}
               </h3>
               <p className="text-sm text-gray-400 mt-1">
-                {t('form.configureSettings')}
+                Configure expense category settings and auto-categorization rules
               </p>
             </div>
             <button
@@ -242,16 +240,16 @@ export default function CategoryFormModal({
 
               {/* Basic Information */}
               <div className="space-y-4">
-                <h4 className="text-sm font-medium text-white">{t('form.basicInformation')}</h4>
-
+                <h4 className="text-sm font-medium text-white">Basic Information</h4>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="category_name" className="text-white">{t('form.categoryNameLabel')}</Label>
+                    <Label htmlFor="category_name" className="text-white">Category Name *</Label>
                     <Input
                       id="category_name"
                       value={formData.category_name}
                       onChange={(e) => setFormData(prev => ({ ...prev, category_name: e.target.value }))}
-                      placeholder={t('form.categoryNamePlaceholder')}
+                      placeholder="e.g., Travel & Accommodation"
                       className="bg-gray-700 border-gray-600 text-white mt-1"
                       disabled={isLoading}
                     />
@@ -261,12 +259,12 @@ export default function CategoryFormModal({
                   </div>
 
                   <div>
-                    <Label htmlFor="category_code" className="text-white">{t('form.categoryCodeLabel')}</Label>
+                    <Label htmlFor="category_code" className="text-white">Category Code *</Label>
                     <Input
                       id="category_code"
                       value={formData.category_code}
                       onChange={(e) => setFormData(prev => ({ ...prev, category_code: e.target.value }))}
-                      placeholder={t('form.categoryCodePlaceholder')}
+                      placeholder="e.g., TRAVEL"
                       className="bg-gray-700 border-gray-600 text-white font-mono mt-1"
                       disabled={isLoading}
                     />
@@ -277,12 +275,12 @@ export default function CategoryFormModal({
                 </div>
 
                 <div>
-                  <Label htmlFor="description" className="text-white">{t('form.descriptionLabel')}</Label>
+                  <Label htmlFor="description" className="text-white">Description</Label>
                   <Textarea
                     id="description"
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder={t('form.descriptionPlaceholder')}
+                    placeholder="Brief description of this category"
                     className="bg-gray-700 border-gray-600 text-white mt-1"
                     rows={2}
                     disabled={isLoading}
@@ -292,48 +290,48 @@ export default function CategoryFormModal({
 
               {/* Auto-Categorization Rules */}
               <div className="space-y-4">
-                <h4 className="text-sm font-medium text-white">{t('form.autoCategorizationRules')}</h4>
-
+                <h4 className="text-sm font-medium text-white">Auto-Categorization Rules</h4>
+                
                 <div>
-                  <Label htmlFor="ai_keywords" className="text-white">{t('form.keywordsLabel')}</Label>
+                  <Label htmlFor="ai_keywords" className="text-white">Keywords (comma-separated)</Label>
                   <Input
                     id="ai_keywords"
                     value={formData.ai_keywords}
                     onChange={(e) => setFormData(prev => ({ ...prev, ai_keywords: e.target.value }))}
-                    placeholder={t('form.keywordsPlaceholder')}
+                    placeholder="travel, hotel, flight, accommodation"
                     className="bg-gray-700 border-gray-600 text-white mt-1"
                     disabled={isLoading}
                   />
                   <p className="text-gray-400 text-xs mt-1">
-                    {t('form.keywordsHelp')}
+                    Keywords found in receipt descriptions will auto-categorize to this category
                   </p>
                 </div>
 
                 <div>
-                  <Label htmlFor="vendor_patterns" className="text-white">{t('form.vendorPatternsLabel')}</Label>
+                  <Label htmlFor="vendor_patterns" className="text-white">Vendor Patterns (comma-separated)</Label>
                   <Input
                     id="vendor_patterns"
                     value={formData.vendor_patterns}
                     onChange={(e) => setFormData(prev => ({ ...prev, vendor_patterns: e.target.value }))}
-                    placeholder={t('form.vendorPatternsPlaceholder')}
+                    placeholder="*airline*, *hotel*, booking.com"
                     className="bg-gray-700 border-gray-600 text-white mt-1"
                     disabled={isLoading}
                   />
                   <p className="text-gray-400 text-xs mt-1">
-                    {t('form.vendorPatternsHelp')}
+                    Use * as wildcards. Vendor names matching these patterns will auto-categorize
                   </p>
                 </div>
               </div>
 
               {/* Policy Settings */}
               <div className="space-y-4">
-                <h4 className="text-sm font-medium text-white">{t('form.policySettings')}</h4>
-
+                <h4 className="text-sm font-medium text-white">Policy Settings</h4>
+                
                 <div>
-                  <Label htmlFor="tax_treatment" className="text-white">{t('form.taxTreatmentLabel')}</Label>
+                  <Label htmlFor="tax_treatment" className="text-white">Tax Treatment</Label>
                   <Select
                     value={formData.tax_treatment}
-                    onValueChange={(value: 'deductible' | 'non_deductible' | 'partial') =>
+                    onValueChange={(value: 'deductible' | 'non_deductible' | 'partial') => 
                       setFormData(prev => ({ ...prev, tax_treatment: value }))
                     }
                     disabled={isLoading}
@@ -342,9 +340,9 @@ export default function CategoryFormModal({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-gray-700 border-gray-600">
-                      <SelectItem value="deductible" className="text-white">{t('form.fullyDeductible')}</SelectItem>
-                      <SelectItem value="partial" className="text-white">{t('form.partiallyDeductible')}</SelectItem>
-                      <SelectItem value="non_deductible" className="text-white">{t('form.nonDeductible')}</SelectItem>
+                      <SelectItem value="deductible" className="text-white">Fully Deductible</SelectItem>
+                      <SelectItem value="partial" className="text-white">Partially Deductible</SelectItem>
+                      <SelectItem value="non_deductible" className="text-white">Non-Deductible</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -360,7 +358,7 @@ export default function CategoryFormModal({
                     className="border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
                   />
                   <Label htmlFor="requires_receipt" className="text-gray-300">
-                    {t('form.requiresReceiptAttachment')}
+                    Requires receipt attachment
                   </Label>
                 </div>
 
@@ -375,12 +373,12 @@ export default function CategoryFormModal({
                     className="border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
                   />
                   <Label htmlFor="requires_manager_approval" className="text-gray-300">
-                    {t('form.requiresManagerApproval')}
+                    Requires manager approval
                   </Label>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-white">{t('form.categoryStatus')}</Label>
+                  <Label className="text-white">Category Status</Label>
                   <div className="flex items-center space-x-3">
                     <button
                       type="button"
@@ -397,27 +395,27 @@ export default function CategoryFormModal({
                       />
                     </button>
                     <span className={`text-sm font-medium ${formData.is_active ? 'text-green-400' : 'text-gray-400'}`}>
-                      {formData.is_active ? t('form.enabled') : t('form.disabled')}
+                      {formData.is_active ? 'Enabled' : 'Disabled'}
                     </span>
                   </div>
                   <p className="text-xs text-gray-400">
-                    {formData.is_active
-                      ? t('form.enabledHelp')
-                      : t('form.disabledHelp')
+                    {formData.is_active 
+                      ? 'Category is available for expense submissions' 
+                      : 'Category is hidden from expense forms'
                     }
                   </p>
                 </div>
 
                 {formData.requires_receipt && (
                   <div>
-                    <Label htmlFor="receipt_threshold" className="text-white">{t('form.receiptThresholdLabel')}</Label>
+                    <Label htmlFor="receipt_threshold" className="text-white">Receipt Required Above Amount</Label>
                     <Input
                       id="receipt_threshold"
                       type="number"
                       step="0.01"
                       value={formData.receipt_threshold}
                       onChange={(e) => setFormData(prev => ({ ...prev, receipt_threshold: Number(e.target.value) }))}
-                      placeholder={t('form.receiptThresholdPlaceholder')}
+                      placeholder="0.00"
                       className="bg-gray-700 border-gray-600 text-white mt-1"
                       disabled={isLoading}
                     />
@@ -428,14 +426,14 @@ export default function CategoryFormModal({
                 )}
 
                 <div>
-                  <Label htmlFor="policy_limit" className="text-white">{t('form.policyLimitLabel')}</Label>
+                  <Label htmlFor="policy_limit" className="text-white">Policy Limit (SGD)</Label>
                   <Input
                     id="policy_limit"
                     type="number"
                     step="0.01"
                     value={formData.policy_limit}
                     onChange={(e) => setFormData(prev => ({ ...prev, policy_limit: Number(e.target.value) }))}
-                    placeholder={t('form.policyLimitPlaceholder')}
+                    placeholder="0.00 (0 = no limit)"
                     className="bg-gray-700 border-gray-600 text-white mt-1"
                     disabled={isLoading}
                   />
@@ -457,7 +455,7 @@ export default function CategoryFormModal({
                 disabled={isLoading}
                 className="bg-gray-600 text-white hover:bg-gray-500 border-gray-600"
               >
-                {t('form.cancel')}
+                Cancel
               </Button>
               <Button
                 type="submit"
@@ -468,12 +466,12 @@ export default function CategoryFormModal({
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    {t('form.saving')}
+                    Saving...
                   </>
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    {editingCategory ? t('form.updateCategory') : t('form.createCategory')}
+                    {editingCategory ? 'Update' : 'Create'} Category
                   </>
                 )}
               </Button>

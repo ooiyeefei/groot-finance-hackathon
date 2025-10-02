@@ -120,8 +120,35 @@ from pydantic import BaseModel, Field
 import hashlib
 import traceback
 
-# Removed hardcoded vendor patterns - now uses only business-specific categories
-# This ensures each business can define their own categorization rules
+# Southeast Asian Vendor Patterns Cache (Performance Optimization)
+SEASIA_VENDOR_PATTERNS = {
+    # Major chains - Simple processing
+    "7-ELEVEN": {"confidence": 0.98, "category": "retail", "complexity": "simple"},
+    "STARBUCKS": {"confidence": 0.98, "category": "entertainment", "complexity": "simple"},
+    "MCDONALDS": {"confidence": 0.98, "category": "entertainment", "complexity": "simple"},
+    "KFC": {"confidence": 0.98, "category": "entertainment", "complexity": "simple"},
+    "SHELL": {"confidence": 0.97, "category": "petrol", "complexity": "simple"},
+    "ESSO": {"confidence": 0.97, "category": "petrol", "complexity": "simple"},
+    "CALTEX": {"confidence": 0.97, "category": "petrol", "complexity": "simple"},
+    "PETRON": {"confidence": 0.97, "category": "petrol", "complexity": "simple"},
+    
+    # Regional chains
+    "WATSONS": {"confidence": 0.95, "category": "office_supplies", "complexity": "simple"},
+    "GUARDIAN": {"confidence": 0.95, "category": "office_supplies", "complexity": "simple"},
+    "NTUC FAIRPRICE": {"confidence": 0.96, "category": "retail", "complexity": "simple"},
+    "GIANT": {"confidence": 0.95, "category": "retail", "complexity": "simple"},
+    "COLD STORAGE": {"confidence": 0.95, "category": "retail", "complexity": "simple"},
+    
+    # Thai patterns
+    "เซเว่น": {"confidence": 0.95, "category": "retail", "complexity": "medium"},  # 7-Eleven Thai
+    "ทีเอสซี": {"confidence": 0.94, "category": "retail", "complexity": "medium"},  # TSC
+    "บิ๊กซี": {"confidence": 0.94, "category": "retail", "complexity": "medium"},   # Big C
+    
+    # Malaysian patterns  
+    "MYDIN": {"confidence": 0.94, "category": "retail", "complexity": "simple"},
+    "AEON": {"confidence": 0.94, "category": "retail", "complexity": "simple"},
+    "TESCO": {"confidence": 0.94, "category": "retail", "complexity": "simple"},
+}
 
 # Supported currencies for validation (let Gemini intelligently detect from context)
 SUPPORTED_CURRENCIES = [
@@ -286,7 +313,15 @@ class HybridReceiptClassifier:
             )
     
     def _match_known_vendor(self, text_upper: str) -> Optional[VendorMatch]:
-        """Vendor matching removed - now uses only business-specific categories"""
+        """Match against Southeast Asian vendor patterns"""
+        for vendor, info in SEASIA_VENDOR_PATTERNS.items():
+            if vendor.upper() in text_upper:
+                return VendorMatch(
+                    vendor_name=vendor,
+                    confidence=info['confidence'],
+                    suggested_category=info['category'],
+                    complexity=info['complexity']
+                )
         return None
 
 # 🚀 Modern Adaptive DSPy Extractor with Structured Output + Assertions
@@ -867,17 +902,21 @@ class GeminiLM(dspy.LM):
             (r'(\\d{1,2})/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/(\\d{4})', 
              lambda m: self._convert_month_name_date(m.group(1), m.group(2), m.group(3))),
             
-            # Southeast Asian DD/MM/YYYY format: "28/09/2025", "15/12/2024", "3/1/2024"
-            (r'(\\d{1,2})/(\\d{1,2})/(\\d{4})',
-             lambda m: f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"),
+            # Common formats: "27/07/2025", "15/12/2024", "3/1/2024"
+            (r'(\\d{1,2})/(\\d{1,2})/(\\d{4})', 
+             lambda m: f"{m.group(3)}-{m.group(2):0>2}-{m.group(1):0>2}"),
+             
+            # US format: "12/15/2024" (MM/DD/YYYY)
+            (r'(\\d{1,2})/(\\d{1,2})/(\\d{4})', 
+             lambda m: f"{m.group(3)}-{m.group(1):0>2}-{m.group(2):0>2}"),
              
             # Dot separated: "27.07.2025", "15.12.2024"
-            (r'(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})',
-             lambda m: f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"),
-
-            # Hyphen separated: "27-07-2025", "15-12-2024"
-            (r'(\\d{1,2})-(\\d{1,2})-(\\d{4})',
-             lambda m: f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"),
+            (r'(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})', 
+             lambda m: f"{m.group(3)}-{m.group(2):0>2}-{m.group(1):0>2}"),
+             
+            # Hyphen separated: "27-07-2025", "15-12-2024"  
+            (r'(\\d{1,2})-(\\d{1,2})-(\\d{4})', 
+             lambda m: f"{m.group(3)}-{m.group(2):0>2}-{m.group(1):0>2}"),
         ]
         
         for pattern, converter in date_patterns:
@@ -1335,25 +1374,25 @@ def run_multi_stage_receipt_processing(receipt_input, business_categories, image
         # Generate smart business purpose
         business_purpose = _generate_business_purpose(extracted_data.vendor_name, suggested_category, extracted_data.line_items)
 
-        # Convert to JSON-serializable format with safe type conversion
+        # Convert to JSON-serializable format
         output_data = {
             "success": True,
-            "vendor_name": str(extracted_data.vendor_name or ""),
-            "total_amount": float(extracted_data.total_amount or 0.0),
-            "currency": str(extracted_data.currency or "USD"),
-            "transaction_date": str(extracted_data.transaction_date or ""),
-            "description": f"{str(extracted_data.vendor_name or 'Unknown')} - {str(extracted_data.transaction_date or '')}",
+            "vendor_name": extracted_data.vendor_name,
+            "total_amount": extracted_data.total_amount,
+            "currency": extracted_data.currency,
+            "transaction_date": extracted_data.transaction_date,
+            "description": f"{extracted_data.vendor_name} - {extracted_data.transaction_date}",
             "suggested_category": suggested_category,
             "business_purpose": business_purpose,
             "line_items": [
                 {
-                    "description": str(item.description or ""),
-                    "quantity": float(item.quantity or 1.0),
-                    "unit_price": float(item.unit_price or 0.0),
-                    "line_total": float(item.line_total or 0.0),
-                    "total_amount": float(item.line_total or 0.0)  # Keep both for compatibility
+                    "description": item.description,
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                    "line_total": item.line_total,
+                    "total_amount": item.line_total  # Keep both for compatibility
                 }
-                for item in (extracted_data.line_items or [])
+                for item in extracted_data.line_items
             ],
             "tax_amount": extracted_data.tax_amount,
             "tax_rate": None,  # Calculate from tax_amount/subtotal if needed
@@ -1367,13 +1406,13 @@ def run_multi_stage_receipt_processing(receipt_input, business_categories, image
             "processing_time_ms": processing_time,
             "extraction_quality": extracted_data.extraction_quality,
             "reasoning_steps": {
-                "step1_vendor_analysis": str(result.thinking.step1_vendor_analysis or "")[:500],  # Limit to prevent truncation
-                "step2_date_identification": str(result.thinking.step2_date_identification or "")[:500],
-                "step3_amount_parsing": str(result.thinking.step3_amount_parsing or "")[:500],
-                "step4_tax_calculation": str(result.thinking.step4_tax_calculation or "")[:500],
-                "step5_line_items_extraction": str(result.thinking.step5_line_items_extraction or "")[:500],
-                "step6_validation_checks": str(result.thinking.step6_validation_checks or "")[:500],
-                "final_confidence_assessment": str(result.thinking.final_confidence_assessment or "")[:500]
+                "step1_vendor_analysis": result.thinking.step1_vendor_analysis,
+                "step2_date_identification": result.thinking.step2_date_identification,
+                "step3_amount_parsing": result.thinking.step3_amount_parsing,
+                "step4_tax_calculation": result.thinking.step4_tax_calculation,
+                "step5_line_items_extraction": result.thinking.step5_line_items_extraction,
+                "step6_validation_checks": result.thinking.step6_validation_checks,
+                "final_confidence_assessment": result.thinking.final_confidence_assessment
             },
             "suggested_corrections": result.suggested_corrections,
             # Add document_summary structure for UI compatibility
@@ -1513,31 +1552,7 @@ def main():
         )
     
     # CRITICAL: Only this line outputs to stdout - everything else goes to stderr
-    # Use compact JSON serialization to prevent truncation issues
-    try:
-        # Serialize with compact formatting to reduce size
-        json_output = response.model_dump_json(indent=None)
-
-        # Check output size and warn if too large
-        output_size = len(json_output)
-        if output_size > 100000:  # 100KB limit
-            print(f"⚠️ Large JSON output detected: {output_size} bytes", file=sys.stderr)
-
-        # Ensure stdout buffer is flushed properly
-        sys.stdout.write(json_output)
-        sys.stdout.flush()
-
-        print(f"✅ JSON output written successfully: {output_size} bytes", file=sys.stderr)
-    except Exception as json_error:
-        # Fallback to manual JSON construction if Pydantic fails
-        print(f"❌ JSON serialization error: {json_error}", file=sys.stderr)
-        fallback_response = {
-            "success": response.success,
-            "error": getattr(response, 'error', None),
-            "data": response.data if hasattr(response, 'data') else None
-        }
-        sys.stdout.write(json.dumps(fallback_response, ensure_ascii=False))
-        sys.stdout.flush()
+    print(response.model_dump_json())
 
 # Execute the main function
 if __name__ == "__main__":
@@ -1711,25 +1726,71 @@ else:
         if (expenseClaim.transaction_id) {
           console.log(`💳 Updating transaction ${expenseClaim.transaction_id} with financial data`);
 
-          // User home currency will be handled in the UI, not during background processing
-          console.log(`💳 Updating transaction with extracted financial data`);
+          // Get user's home currency preference
+          let userHomeCurrency = 'SGD'; // Default
+          try {
+            const { data: userProfile } = await supabase
+              .from('users')
+              .select('home_currency')
+              .eq('id', payload.userId)
+              .single();
+
+            if (userProfile?.home_currency) {
+              userHomeCurrency = userProfile.home_currency;
+              console.log(`👤 User home currency: ${userHomeCurrency}`);
+            }
+          } catch (error) {
+            console.log(`⚠️ Could not get user home currency, using default: ${userHomeCurrency}`);
+          }
 
           // Prepare transaction update data
           const transactionUpdateData: any = {
             description: extractionResult.description,
             original_amount: extractionResult.total_amount,
             original_currency: extractionResult.currency,
-            home_currency: extractionResult.currency, // UI will update this if user converts
+            home_currency: userHomeCurrency,
             transaction_date: extractionResult.transaction_date,
             vendor_name: extractionResult.vendor_name,
             reference_number: extractionResult.receipt_number || null,
             updated_at: new Date().toISOString()
           };
 
-          // Don't perform currency conversion in background task - let UI handle it
-          // This avoids authentication issues and gives users control over conversion
-          transactionUpdateData.home_currency_amount = extractionResult.total_amount;
-          console.log(`💰 Storing original amount ${extractionResult.total_amount} ${extractionResult.currency} - UI will handle conversion if needed`);
+          // Calculate home currency amount if currencies are different
+          if (extractionResult.currency !== userHomeCurrency) {
+            console.log(`💱 Converting ${extractionResult.total_amount} ${extractionResult.currency} to ${userHomeCurrency}`);
+
+            try {
+              // Call currency conversion API
+              const conversionResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3005'}/api/currency/convert`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  amount: extractionResult.total_amount,
+                  from_currency: extractionResult.currency,
+                  to_currency: userHomeCurrency
+                })
+              });
+
+              if (conversionResponse.ok) {
+                const conversionResult = await conversionResponse.json();
+                if (conversionResult.success && conversionResult.data) {
+                  transactionUpdateData.home_currency_amount = conversionResult.data.conversion.converted_amount;
+                  transactionUpdateData.exchange_rate = conversionResult.data.conversion.exchange_rate;
+                  console.log(`✅ Converted to ${conversionResult.data.conversion.converted_amount} ${userHomeCurrency} (rate: ${conversionResult.data.conversion.exchange_rate})`);
+                }
+              } else {
+                console.log(`⚠️ Currency conversion failed, setting home currency amount same as original`);
+                transactionUpdateData.home_currency_amount = extractionResult.total_amount;
+              }
+            } catch (conversionError) {
+              console.log(`⚠️ Currency conversion error: ${conversionError}, setting home currency amount same as original`);
+              transactionUpdateData.home_currency_amount = extractionResult.total_amount;
+            }
+          } else {
+            // Same currency - just copy the amount
+            transactionUpdateData.home_currency_amount = extractionResult.total_amount;
+            console.log(`💰 Same currency (${extractionResult.currency}), no conversion needed`);
+          }
 
           // Also store the full DSPy extraction result in processing_metadata for later access
           transactionUpdateData.processing_metadata = {

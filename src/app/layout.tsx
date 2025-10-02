@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from '@clerk/nextjs';
-import { LanguageProvider } from '@/contexts/language-context';
 import { ToastProvider } from '@/components/ui/toast';
 import "./globals.css";
 
@@ -49,11 +48,9 @@ export default function RootLayout({
           <link rel="manifest" href="/manifest.json" />
         </head>
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-900 text-white`}>
-          <LanguageProvider>
-            <ToastProvider>
-              {children}
-            </ToastProvider>
-          </LanguageProvider>
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </body>
       </html>
     </ClerkProvider>

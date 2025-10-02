@@ -30,10 +30,28 @@ export async function GET(
       )
     }
 
-    console.log(`[API] Fetching document ${documentId} for user ${userId}`)
+    console.log(`[API] Fetching document ${documentId} - Clerk ID: ${userId}`)
 
     // Create Supabase client with service role
     const supabase = createServiceSupabaseClient()
+
+    // Convert Clerk user ID to Supabase UUID
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('clerk_user_id', userId)
+      .single()
+
+    if (userError || !user) {
+      console.error(`[API] User lookup failed for clerk_user_id ${userId}:`, userError)
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    const supabaseUserId = user.id
+    console.log(`[API] Converted Clerk ID ${userId} to Supabase UUID ${supabaseUserId}`)
 
     // Get document record and verify ownership (exclude deleted documents)
     const { data: document, error: fetchError } = await supabase
@@ -56,7 +74,7 @@ export async function GET(
         annotated_image_path
       `)
       .eq('id', documentId)
-      .eq('user_id', userId)
+      .eq('user_id', supabaseUserId)
       .is('deleted_at', null)
       .single()
 
@@ -110,17 +128,35 @@ export async function DELETE(
       )
     }
 
-    console.log(`[API] Deleting document ${documentId} for user ${userId}`)
+    console.log(`[API] Deleting document ${documentId} - Clerk ID: ${userId}`)
 
     // Create Supabase client with service role
     const supabase = createServiceSupabaseClient()
+
+    // Convert Clerk user ID to Supabase UUID
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('clerk_user_id', userId)
+      .single()
+
+    if (userError || !user) {
+      console.error(`[API] User lookup failed for clerk_user_id ${userId}:`, userError)
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    const supabaseUserId = user.id
+    console.log(`[API] Converted Clerk ID ${userId} to Supabase UUID ${supabaseUserId}`)
 
     // Get document record and verify ownership (exclude deleted documents)
     const { data: document, error: fetchError } = await supabase
       .from('documents')
       .select('*')
       .eq('id', documentId)
-      .eq('user_id', userId)
+      .eq('user_id', supabaseUserId)
       .is('deleted_at', null)
       .single()
 
@@ -134,14 +170,19 @@ export async function DELETE(
     const deletedAt = new Date().toISOString()
 
     // Soft delete document record from database first
+    // Also clear application association when deleting
+    // Use the document's actual user_id (could be either Supabase UUID or legacy Clerk ID)
     const { error: deleteError } = await supabase
       .from('documents')
-      .update({ 
+      .update({
         deleted_at: deletedAt,
-        updated_at: deletedAt
+        updated_at: deletedAt,
+        application_id: null,
+        document_slot: null,
+        slot_position: null
       })
       .eq('id', documentId)
-      .eq('user_id', userId)
+      .eq('user_id', document.user_id)
 
     if (deleteError) {
       console.error('[API] Database soft deletion failed:', deleteError)
@@ -174,13 +215,13 @@ export async function DELETE(
     /*
     try {
       const filesToDelete = [document.storage_path]
-      
+
       // Also delete converted image if it exists
       if (document.converted_image_path) {
         filesToDelete.push(document.converted_image_path)
         console.log(`[API] Will also delete converted image: ${document.converted_image_path}`)
       }
-      
+
       // Also delete annotated image if it exists
       if (document.annotated_image_path) {
         filesToDelete.push(document.annotated_image_path)

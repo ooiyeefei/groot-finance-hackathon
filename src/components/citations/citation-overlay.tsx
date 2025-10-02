@@ -244,7 +244,7 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                     <div className="relative">
                       {/* PDF Embed with proxy for CORS bypassing */}
                       <iframe
-                        src={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/pdf-proxy?url=${encodeURIComponent(citation.pdf_url)}${citation.page_number ? `#page=${citation.page_number}` : ''}`}
+                        src={`/api/pdf-proxy?url=${encodeURIComponent(citation.pdf_url)}${citation.page_number ? `#page=${citation.page_number}` : ''}`}
                         className="w-full h-96 border-0"
                         title="PDF Document Preview"
                         onLoad={() => {

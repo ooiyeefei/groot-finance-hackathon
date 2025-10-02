@@ -4,7 +4,6 @@ import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/types/transaction';
 import { CategoryChartData, DARK_THEME_COLORS } from '../types/analytics';
-import { useTranslations } from 'next-intl';
 
 interface CategoryAnalysisProps {
   categoryData: Record<string, number>;
@@ -32,7 +31,6 @@ export default function CategoryAnalysis({
   homeCurrency,
   loading
 }: CategoryAnalysisProps) {
-  const t = useTranslations('dashboard.categoryAnalysis');
   // State to track the index of the hovered bar
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
@@ -70,11 +68,11 @@ export default function CategoryAnalysis({
   if (chartData.length === 0) {
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-6">{t('title')}</h3>
+        <h3 className="text-lg font-semibold text-white mb-6">Expense Categories</h3>
         <div className="flex items-center justify-center h-64 text-gray-400">
           <div className="text-center">
-            <p className="text-sm">{t('noCategoryData')}</p>
-            <p className="text-xs mt-1">{t('addExpenses')}</p>
+            <p className="text-sm">No category data available</p>
+            <p className="text-xs mt-1">Record some expenses to see breakdown</p>
           </div>
         </div>
       </div>
@@ -93,10 +91,10 @@ export default function CategoryAnalysis({
       <div className="bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 shadow-xl">
         <p className="text-gray-200 font-medium text-sm">{data.name}</p>
         <p className="text-gray-300 font-semibold text-base">
-          {t('amount')}: {symbol}{data.value.toLocaleString()}
+          Amount: {symbol}{data.value.toLocaleString()}
         </p>
         <p className="text-gray-400 text-xs">
-          {t('share')}: {data.percentage.toFixed(1)}%
+          Share: {data.percentage.toFixed(1)}%
         </p>
       </div>
     );
@@ -117,9 +115,9 @@ export default function CategoryAnalysis({
   return (
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white">{t('title')}</h3>
+        <h3 className="text-lg font-semibold text-white">Expense Categories</h3>
         <span className="text-xs text-gray-400">
-          {t('topCategories')} {chartData.length}
+          Top {chartData.length} {chartData.length === 1 ? 'category' : 'categories'}
         </span>
       </div>
 
@@ -194,15 +192,15 @@ export default function CategoryAnalysis({
       <div className="mt-6 pt-4 border-t border-gray-700">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center text-sm">
           <div>
-            <p className="text-gray-400 mb-1">{t('totalCategories')}</p>
+            <p className="text-gray-400 mb-1">Total Categories</p>
             <p className="font-medium text-white">{Object.keys(categoryData).length}</p>
           </div>
           <div>
-            <p className="text-gray-400 mb-1">{t('largestExpense')}</p>
-            <p className="font-medium text-white">{chartData[0]?.name || t('noData')}</p>
+            <p className="text-gray-400 mb-1">Largest Expense</p>
+            <p className="font-medium text-white">{chartData[0]?.name || 'N/A'}</p>
           </div>
           <div>
-            <p className="text-gray-400 mb-1">{t('totalAmount')}</p>
+            <p className="text-gray-400 mb-1">Total Amount</p>
             <p className="font-medium text-white">
               {CURRENCY_SYMBOLS[homeCurrency]}{chartData.reduce((sum, entry) => sum + entry.value, 0).toLocaleString()}
             </p>
@@ -211,7 +209,7 @@ export default function CategoryAnalysis({
 
         {/* Top Categories List (Mobile friendly) */}
         <div className="mt-4 sm:hidden">
-          <p className="text-xs text-gray-400 mb-2">{t('topCategories')}:</p>
+          <p className="text-xs text-gray-400 mb-2">Top Categories:</p>
           <div className="space-y-1">
             {chartData.slice(0, 5).map((item, index) => (
               <div key={item.category} className="flex items-center justify-between text-xs">

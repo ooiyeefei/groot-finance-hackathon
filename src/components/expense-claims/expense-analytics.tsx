@@ -6,7 +6,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
 import { TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -38,7 +37,6 @@ interface AnalyticsData {
 }
 
 export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
-  const t = useTranslations('analytics')
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -79,7 +77,7 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
       <Card className="bg-gray-800 border-gray-700">
         <CardContent className="p-6 text-center text-gray-400">
           <PieChart className="w-12 h-12 mx-auto mb-4" />
-          <p>{t('noDataAvailable')}</p>
+          <p>No analytics data available</p>
         </CardContent>
       </Card>
     )
@@ -90,25 +88,25 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryMetric
-          title={t('totalAmount')}
+          title="Total Amount"
           value={`$${(data.summary.total_amount || 0).toFixed(2)}`}
           change={data.summary.month_over_month_change || 0}
           icon={<DollarSign className="w-5 h-5" />}
         />
         <SummaryMetric
-          title={t('totalClaims')}
+          title="Total Claims"
           value={(data.summary.total_claims || 0).toString()}
           change={data.summary.month_over_month_change || 0}
           icon={<PieChart className="w-5 h-5" />}
         />
         <SummaryMetric
-          title={t('avgClaim')}
+          title="Avg Claim"
           value={`$${(data.summary.avg_claim_amount || 0).toFixed(2)}`}
           change={0} // No change data available for avg claim
           icon={<TrendingUp className="w-5 h-5" />}
         />
         <SummaryMetric
-          title={t('monthlyChange')}
+          title="Monthly Change"
           value={`${(data.summary.month_over_month_change || 0) > 0 ? '+' : ''}${(data.summary.month_over_month_change || 0).toFixed(1)}%`}
           change={data.summary.month_over_month_change || 0}
           icon={(data.summary.month_over_month_change || 0) >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
@@ -118,19 +116,19 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
       {/* Category Breakdown */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">{t('expenseCategories')}</CardTitle>
+          <CardTitle className="text-white">Expense Categories</CardTitle>
           <CardDescription>
-            {scope === 'personal' && t('personalExpenseBreakdown')}
-            {scope === 'department' && t('departmentExpenseBreakdown')}
-            {scope === 'company' && t('companyExpenseBreakdown')}
+            {scope === 'personal' && 'Your expense breakdown by category'}
+            {scope === 'department' && 'Department expense breakdown by category'}
+            {scope === 'company' && 'Company-wide expense breakdown by category'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {data.category_breakdown.length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               <PieChart className="w-12 h-12 mx-auto mb-4" />
-              <p>{t('noCategoryData')}</p>
-              <p className="text-sm">{t('submitClaimsToSeeCategories')}</p>
+              <p>No category data available</p>
+              <p className="text-sm">Submit some expense claims to see category breakdown</p>
             </div>
           ) : (
             data.category_breakdown.map((item, index) => (
@@ -140,7 +138,7 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
                     <Badge variant="secondary" className="bg-gray-700 text-gray-300">
                       📊 {item.category_name || item.category}
                     </Badge>
-                    <span className="text-gray-400 text-sm">({item.count} {t('claims')})</span>
+                    <span className="text-gray-400 text-sm">({item.count} claims)</span>
                   </div>
                   <div className="text-right">
                     <div className="text-white font-semibold">${item.amount.toFixed(2)}</div>
@@ -164,16 +162,16 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
       {/* Monthly Trends */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">{t('monthlyTrends')}</CardTitle>
-          <CardDescription>{t('expenseTrendsDescription')}</CardDescription>
+          <CardTitle className="text-white">Monthly Trends</CardTitle>
+          <CardDescription>Expense trends over the last 3 months</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {data.monthly_trends.length === 0 ? (
               <div className="text-center text-gray-400 py-8">
                 <TrendingUp className="w-12 h-12 mx-auto mb-4" />
-                <p>{t('noTrendData')}</p>
-                <p className="text-sm">{t('submitClaimsToSeeTrends')}</p>
+                <p>No trend data available</p>
+                <p className="text-sm">Submit expense claims over multiple months to see trends</p>
               </div>
             ) : (
               data.monthly_trends.map((month, index) => (
@@ -185,7 +183,7 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
                         month: 'long' 
                       })}
                     </div>
-                    <div className="text-gray-400 text-sm">{month.claim_count} {t('claims')}</div>
+                    <div className="text-gray-400 text-sm">{month.claim_count} claims</div>
                   </div>
                   
                   <div className="text-right">

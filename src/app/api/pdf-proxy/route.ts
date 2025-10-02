@@ -15,7 +15,6 @@ export async function GET(request: NextRequest) {
     const allowedDomains = ['ssm.com.my', 'gov.sg', 'jhi.gov.my', 'mida.gov.my']
     const urlObj = new URL(url)
     const isAllowed = allowedDomains.some(domain => urlObj.hostname.includes(domain))
-
     
     if (!isAllowed) {
       return NextResponse.json({ error: 'Domain not allowed' }, { status: 403 })

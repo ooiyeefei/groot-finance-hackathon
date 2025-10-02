@@ -52,6 +52,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     console.log(`[Expense Submission API] Found employee profile: ${employeeProfile.id} for user ${userId}`)
+    console.log(`[Expense Submission API] Employee profile debug:`, {
+      id: employeeProfile.id,
+      user_id: employeeProfile.user_id,
+      employee_id: employeeProfile.employee_id
+    })
 
     // Fetch expense claim with related data (use service client to bypass RLS issues)
     console.log(`[Expense Submission API] Looking for expense claim ${expenseClaimId}`)

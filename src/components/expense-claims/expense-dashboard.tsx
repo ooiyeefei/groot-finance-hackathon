@@ -7,7 +7,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User } from 'lucide-react'
-import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -42,12 +41,10 @@ interface DashboardData {
 }
 
 export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
-  const t = useTranslations('expenseClaims');
   const [activeTab, setActiveTab] = useState('overview')
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [showSubmissionForm, setShowSubmissionForm] = useState(false)
-  const [submissionMode, setSubmissionMode] = useState<'camera' | 'manual'>('camera')
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingClaimId, setEditingClaimId] = useState<string | null>(null)
 
@@ -125,7 +122,7 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
   }
 
   if (!dashboardData) {
-    return <div className="text-center text-gray-400 p-8">{t('dashboard.failedToLoadDashboard')}</div>
+    return <div className="text-center text-gray-400 p-8">Failed to load dashboard data</div>
   }
 
   // Mel's role-adaptive content based on user permissions
@@ -137,15 +134,7 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
     } else if (role.manager) {
       return <ManagerDashboardContent data={dashboardData} />
     } else {
-      return <EmployeeDashboardContent
-        data={dashboardData}
-        onNewClaim={(mode: 'camera' | 'manual') => {
-          setSubmissionMode(mode)
-          setShowSubmissionForm(true)
-        }}
-        onEditClaim={handleEditClaim}
-        t={t}
-      />
+      return <EmployeeDashboardContent data={dashboardData} onNewClaim={() => setShowSubmissionForm(true)} onEditClaim={handleEditClaim} />
     }
   }
 
@@ -155,14 +144,14 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white mb-2">
-            {dashboardData.role.admin && t('dashboard.adminDashboard')}
-            {dashboardData.role.manager && !dashboardData.role.admin && t('dashboard.teamExpenseManagement')}
-            {!dashboardData.role.manager && !dashboardData.role.admin && t('dashboard.myExpenseClaims')}
+            {dashboardData.role.admin && 'Admin Dashboard'}
+            {dashboardData.role.manager && !dashboardData.role.admin && 'Team Expense Management'}
+            {!dashboardData.role.manager && !dashboardData.role.admin && 'My Expense Claims'}
           </h2>
           <p className="text-gray-400">
-            {dashboardData.role.admin && t('dashboard.processReimbursements')}
-            {dashboardData.role.manager && !dashboardData.role.admin && t('dashboard.reviewApproveTeam')}
-            {!dashboardData.role.manager && !dashboardData.role.admin && t('dashboard.submitTrackClaims')}
+            {dashboardData.role.admin && 'Process reimbursements and generate compliance reports'}
+            {dashboardData.role.manager && !dashboardData.role.admin && 'Review and approve team expense claims'}
+            {!dashboardData.role.manager && !dashboardData.role.admin && 'Submit and track your expense claims'}
           </p>
         </div>
 
@@ -170,25 +159,19 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
         <div className="flex gap-3">
           {/* Everyone can submit expense claims */}
           <Button
-            onClick={() => {
-              setSubmissionMode('camera')
-              setShowSubmissionForm(true)
-            }}
+            onClick={() => setShowSubmissionForm(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             <Camera className="w-4 h-4 mr-2" />
-            {t('dashboard.captureReceipt')}
+            Capture Receipt
           </Button>
           <Button
             variant="outline"
             className="border-gray-600 text-gray-300 hover:bg-gray-800"
-            onClick={() => {
-              setSubmissionMode('manual')
-              setShowSubmissionForm(true)
-            }}
+            onClick={() => setShowSubmissionForm(true)}
           >
             <Plus className="w-4 h-4 mr-2" />
-            {t('dashboard.manualEntry')}
+            Manual Entry
           </Button>
           
           {/* Manager-specific actions */}
@@ -198,7 +181,7 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
               className="bg-green-600 hover:bg-green-700 text-white"
             >
               <CheckCircle className="w-4 h-4 mr-2" />
-              {t('dashboard.reviewClaims')}
+              Review Claims
             </Button>
           )}
           
@@ -209,7 +192,7 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
               className="bg-purple-600 hover:bg-purple-700 text-white"
             >
               <FileText className="w-4 h-4 mr-2" />
-              {t('dashboard.processPayments')}
+              Process Payments
             </Button>
           )}
         </div>
@@ -218,25 +201,25 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
       {/* Summary Cards - Common to all roles */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard
-          title={t('dashboard.totalClaims')}
+          title="Total Claims"
           value={dashboardData.summary.total_claims.toString()}
           icon={<FileText className="w-5 h-5" />}
           variant="default"
         />
         <SummaryCard
-          title={t('dashboard.pendingApproval')}
+          title="Pending Approval"
           value={dashboardData.summary.pending_approval.toString()}
           icon={<Clock className="w-5 h-5" />}
           variant="warning"
         />
         <SummaryCard
-          title={t('dashboard.approvedAmount')}
+          title="Approved Amount"
           value={`$${dashboardData.summary.approved_amount.toFixed(2)}`}
           icon={<CheckCircle className="w-5 h-5" />}
           variant="success"
         />
         <SummaryCard
-          title={t('dashboard.rejected')}
+          title="Rejected"
           value={dashboardData.summary.rejected_count.toString()}
           icon={<XCircle className="w-5 h-5" />}
           variant="error"
@@ -247,29 +230,29 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className={`grid w-full ${dashboardData.role.manager || dashboardData.role.admin ? 'grid-cols-3 lg:grid-cols-5' : 'grid-cols-2'} bg-gray-800 border border-gray-700`}>
           <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-            {t('overview')}
+            Overview
           </TabsTrigger>
           
           {dashboardData.role.manager && (
             <TabsTrigger value="approvals" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
-              {t('navigation.approvals')}
+              Approvals
             </TabsTrigger>
           )}
           
           {dashboardData.role.admin && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-              {t('dashboard.reimbursements')}
+              Reimbursements
             </TabsTrigger>
           )}
           
           {(dashboardData.role.manager || dashboardData.role.admin) && (
             <TabsTrigger value="categories" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">
-              {t('navigation.categories')}
+              Categories
             </TabsTrigger>
           )}
           
           <TabsTrigger value="reports" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
-            {t('dashboard.reports')}
+            Reports
           </TabsTrigger>
         </TabsList>
 
@@ -290,7 +273,7 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
               <CardContent className="p-6">
                 <div className="text-center text-gray-400">
                   <FileText className="w-12 h-12 mx-auto mb-4" />
-                  <p>{t('dashboard.reimbursementProcessing')}</p>
+                  <p>Reimbursement processing interface coming soon</p>
                 </div>
               </CardContent>
             </Card>
@@ -313,8 +296,7 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
 
       {/* DSPy Expense Submission Flow */}
       {showSubmissionForm && (
-        <DSPyExpenseSubmissionFlow
-          initialStep={submissionMode === 'manual' ? 'form' : 'upload'}
+        <DSPyExpenseSubmissionFlow 
           onClose={() => {
             setShowSubmissionForm(false)
             // Refresh dashboard when form closes
@@ -386,31 +368,29 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
 }
 
 // Role-specific dashboard content components
-function EmployeeDashboardContent({ data, onNewClaim, onEditClaim, t }: { data: DashboardData; onNewClaim: (mode: 'camera' | 'manual') => void; onEditClaim: (claimId: string) => void; t: any }) {
-  const tEmployee = useTranslations('expenseClaims.employee');
+function EmployeeDashboardContent({ data, onNewClaim, onEditClaim }: { data: DashboardData; onNewClaim: () => void; onEditClaim: (claimId: string) => void }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Quick Actions */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">{tEmployee('quickActions')}</CardTitle>
-          <CardDescription>{tEmployee('submitNewClaims')}</CardDescription>
+          <CardTitle className="text-white">Quick Actions</CardTitle>
+          <CardDescription>Submit new expense claims</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button
-            onClick={() => onNewClaim('camera')}
+          <Button 
+            onClick={onNewClaim}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white justify-start"
           >
             <Camera className="w-4 h-4 mr-2" />
-            {t('employee.captureReceiptCamera')}
+            Capture Receipt with Camera
           </Button>
-          <Button
-            variant="outline"
+          <Button 
+            variant="outline" 
             className="w-full border-gray-600 text-gray-300 hover:bg-gray-700 justify-start"
-            onClick={() => onNewClaim('manual')}
           >
             <Plus className="w-4 h-4 mr-2" />
-            {t('dashboard.manualEntry')}
+            Manual Entry
           </Button>
         </CardContent>
       </Card>
@@ -420,16 +400,16 @@ function EmployeeDashboardContent({ data, onNewClaim, onEditClaim, t }: { data: 
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            {t('employee.myExpenseClaims')}
+            My Expense Claims
           </CardTitle>
-          <CardDescription>{t('employee.trackApprovalWorkflow')}</CardDescription>
+          <CardDescription>Track your expense claims through the approval workflow</CardDescription>
         </CardHeader>
         <CardContent>
           {data.recent_claims.length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               <FileText className="w-12 h-12 mx-auto mb-4" />
-              <p>{t('employee.noClaimsYet')}</p>
-              <p className="text-sm">{t('employee.submitFirstClaim')}</p>
+              <p>No expense claims yet</p>
+              <p className="text-sm">Submit your first expense claim to get started</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -439,7 +419,7 @@ function EmployeeDashboardContent({ data, onNewClaim, onEditClaim, t }: { data: 
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <p className="text-white font-medium">
-                        {claim.transaction?.description || claim.description || t('expenseClaim')}
+                        {claim.transaction?.description || claim.description || 'Expense Claim'}
                       </p>
                       <p className="text-gray-400 text-sm">
                         {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} • 
@@ -476,7 +456,7 @@ function EmployeeDashboardContent({ data, onNewClaim, onEditClaim, t }: { data: 
                       
                       {claim.current_approver_name && ['submitted', 'under_review', 'pending_approval'].includes(claim.status) && (
                         <span className="text-xs text-gray-400">
-                          {t('with')} {claim.current_approver_name}
+                          With: {claim.current_approver_name}
                         </span>
                       )}
                     </div>
@@ -506,14 +486,14 @@ function EmployeeDashboardContent({ data, onNewClaim, onEditClaim, t }: { data: 
                         onClick={() => onEditClaim(claim.id)}
                       >
                         <Edit3 className="w-3 h-3 mr-1" />
-                        {t('edit')}
+                        Edit
                       </Button>
                       <Button 
                         size="sm"
                         className="text-xs bg-blue-600 hover:bg-blue-700"
                       >
                         <CheckCircle className="w-3 h-3 mr-1" />
-                        {t('submit')}
+                        Submit
                       </Button>
                     </div>
                   )}
@@ -523,7 +503,7 @@ function EmployeeDashboardContent({ data, onNewClaim, onEditClaim, t }: { data: 
               {data.recent_claims.length > 5 && (
                 <Button variant="ghost" className="w-full text-blue-400 hover:text-blue-300">
                   <FileText className="w-4 h-4 mr-2" />
-                  {t('employee.viewAllClaims', { count: data.recent_claims.length })}
+                  View all {data.recent_claims.length} claims
                 </Button>
               )}
             </div>
@@ -535,21 +515,20 @@ function EmployeeDashboardContent({ data, onNewClaim, onEditClaim, t }: { data: 
 }
 
 function ManagerDashboardContent({ data }: { data: DashboardData }) {
-  const t = useTranslations('expenseClaims.manager');
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Pending Approvals */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">{t('pendingApprovals')}</CardTitle>
-          <CardDescription>{t('claimsAwaitingReview')}</CardDescription>
+          <CardTitle className="text-white">Pending Approvals</CardTitle>
+          <CardDescription>Claims awaiting your review</CardDescription>
         </CardHeader>
         <CardContent>
           {data.recent_claims.length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               <Clock className="w-12 h-12 mx-auto mb-4" />
-              <p>{t('noPendingApprovals')}</p>
-              <p className="text-sm">{t('allClaimsReviewed')}</p>
+              <p>No pending approvals</p>
+              <p className="text-sm">All claims have been reviewed</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -560,7 +539,7 @@ function ManagerDashboardContent({ data }: { data: DashboardData }) {
                       {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                     </p>
                     <p className="text-gray-400 text-xs">
-                      {claim.description || t('expenseClaim')} • 
+                      {claim.description || 'Expense Claim'} • 
                       {claim.expense_category?.replace('_', ' ').toUpperCase()}
                     </p>
                   </div>
@@ -576,7 +555,7 @@ function ManagerDashboardContent({ data }: { data: DashboardData }) {
               ))}
               {data.recent_claims.length > 5 && (
                 <Button variant="ghost" className="w-full text-blue-400 hover:text-blue-300">
-                  {t('viewAllPendingClaims')}
+                  View all pending claims
                 </Button>
               )}
             </div>
@@ -587,8 +566,8 @@ function ManagerDashboardContent({ data }: { data: DashboardData }) {
       {/* Team Analytics */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">{t('teamOverview')}</CardTitle>
-          <CardDescription>{t('monthlyExpenseTrends')}</CardDescription>
+          <CardTitle className="text-white">Team Overview</CardTitle>
+          <CardDescription>Monthly expense trends</CardDescription>
         </CardHeader>
         <CardContent>
           <ExpenseAnalytics scope="department" />
@@ -599,7 +578,6 @@ function ManagerDashboardContent({ data }: { data: DashboardData }) {
 }
 
 function AdminDashboardContent({ data }: { data: DashboardData }) {
-  const t = useTranslations('expenseClaims.admin');
   // Separate personal claims from company claims
   const personalClaims = data.recent_claims.filter((claim: any) => claim._is_personal)
   const companyClaims = data.recent_claims.filter((claim: any) => !claim._is_personal)
@@ -612,9 +590,9 @@ function AdminDashboardContent({ data }: { data: DashboardData }) {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <User className="w-5 h-5" />
-              {t('myPersonalClaims')}
+              My Personal Claims
             </CardTitle>
-            <CardDescription>{t('yourOwnClaims')}</CardDescription>
+            <CardDescription>Your own expense claims</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -623,7 +601,7 @@ function AdminDashboardContent({ data }: { data: DashboardData }) {
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
                       <p className="text-white font-medium text-sm">
-                        {claim.transaction?.description || claim.description || t('expenseClaim')}
+                        {claim.transaction?.description || claim.description || 'Expense Claim'}
                       </p>
                       <p className="text-gray-400 text-xs">
                         {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} • 
@@ -660,7 +638,7 @@ function AdminDashboardContent({ data }: { data: DashboardData }) {
               ))}
               {personalClaims.length > 3 && (
                 <Button variant="ghost" className="w-full text-blue-400 hover:text-blue-300 text-sm">
-                  {t('viewAllPersonalClaims', { count: personalClaims.length })}
+                  View all {personalClaims.length} personal claims
                 </Button>
               )}
             </div>
@@ -673,14 +651,14 @@ function AdminDashboardContent({ data }: { data: DashboardData }) {
         {/* Reimbursement Queue */}
         <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle className="text-white">{t('reimbursementQueue')}</CardTitle>
-            <CardDescription>{t('approvedClaimsPayment')}</CardDescription>
+            <CardTitle className="text-white">Reimbursement Queue</CardTitle>
+            <CardDescription>Approved claims ready for payment</CardDescription>
           </CardHeader>
           <CardContent>
             {companyClaims.length === 0 ? (
               <div className="text-center text-gray-400 py-8">
                 <CheckCircle className="w-12 h-12 mx-auto mb-4" />
-                <p>{t('noPendingReimbursements')}</p>
+                <p>No pending reimbursements</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -698,8 +676,8 @@ function AdminDashboardContent({ data }: { data: DashboardData }) {
                       {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                     </p>
                     <p className="text-gray-400 text-xs">
-                      {claim.employee?.department || t('noDepartment')} • 
-                      {claim.transaction?.description || t('expenseClaim')}
+                      {claim.employee?.department || 'No Department'} • 
+                      {claim.transaction?.description || 'Expense Claim'}
                     </p>
                   </div>
                   <div className="text-right">
@@ -707,14 +685,14 @@ function AdminDashboardContent({ data }: { data: DashboardData }) {
                       ${parseFloat(claim.transaction?.home_currency_amount || '0').toFixed(2)}
                     </p>
                     <p className="text-green-400 text-xs">
-                      {t('approved')} {new Date(claim.approval_date || claim.created_at).toLocaleDateString()}
+                      Approved {new Date(claim.approval_date || claim.created_at).toLocaleDateString()}
                     </p>
                   </div>
                 </button>
                 ))}
                 {companyClaims.length > 5 && (
                   <Button variant="ghost" className="w-full text-blue-400 hover:text-blue-300">
-                    {t('viewAllReimbursements')}
+                    View all reimbursements
                   </Button>
                 )}
               </div>
@@ -725,8 +703,8 @@ function AdminDashboardContent({ data }: { data: DashboardData }) {
         {/* Company Analytics */}
         <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle className="text-white">{t('companyOverview')}</CardTitle>
-            <CardDescription>{t('enterpriseExpenseAnalytics')}</CardDescription>
+            <CardTitle className="text-white">Company Overview</CardTitle>
+            <CardDescription>Enterprise expense analytics</CardDescription>
           </CardHeader>
           <CardContent>
             <ExpenseAnalytics scope="company" />

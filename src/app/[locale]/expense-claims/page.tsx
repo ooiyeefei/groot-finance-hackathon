@@ -5,13 +5,12 @@
 
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import PersonalExpenseDashboard from '@/components/expense-claims/personal-expense-dashboard'
 import { ClientProviders } from '@/components/providers/client-providers'
 
-export default async function ExpenseClaimsPage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function ExpenseClaimsPage() {
   // Server-side authentication check
   const { userId } = await auth()
 
@@ -28,12 +27,6 @@ export default async function ExpenseClaimsPage({ params }: { params: Promise<{ 
     console.warn('Failed to fetch user details for display name:', error)
   }
 
-  // Await params in Next.js 15
-  const { locale } = await params
-
-  // Get translations for server component with explicit locale
-  const t = await getTranslations({locale, namespace: 'expenseClaims'})
-
   return (
     <ClientProviders>
       <div className="flex h-screen bg-gray-900">
@@ -44,8 +37,8 @@ export default async function ExpenseClaimsPage({ params }: { params: Promise<{ 
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <HeaderWithUser
-            title={t('title')}
-            subtitle={t('subtitle')}
+            title="Expense Claims"
+            subtitle=""
           />
 
           {/* Main Content Area */}

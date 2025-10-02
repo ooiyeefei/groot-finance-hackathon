@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { storagePath, documentId } = body
+    const { storagePath, documentId, useRawFile = false } = body
 
     if (!storagePath || !documentId) {
       return NextResponse.json(
@@ -28,17 +28,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[ImageURL] Generating signed URL for: ${storagePath}`)
+    console.log(`[ImageURL] Generating signed URL for: ${storagePath} (useRawFile: ${useRawFile})`)
 
-    // Create Supabase client with service role
+    // Create service Supabase client for user lookup and document access
     const supabase = createServiceSupabaseClient()
 
-    // Verify document ownership
+    // Convert Clerk user ID to Supabase UUID for document ownership verification
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('clerk_user_id', userId)
+      .single()
+
+    if (userError || !user) {
+      console.error(`[ImageURL API] User lookup failed for clerk_user_id ${userId}:`, userError)
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    const supabaseUserId = user.id
+
+    // Verify document ownership with correct user_id
     const { data: document, error: docError } = await supabase
       .from('documents')
-      .select('id, user_id')
+      .select('id, user_id, converted_image_path')
       .eq('id', documentId)
-      .eq('user_id', userId)
+      .eq('user_id', supabaseUserId)
       .single()
 
     if (docError || !document) {
@@ -48,32 +65,121 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate signed URL for the image
-    const { data: signedUrlData, error: urlError } = await supabase.storage
-      .from('documents')
-      .createSignedUrl(storagePath, 3600) // 1 hour expiry
+    if (useRawFile) {
+      // For raw files: use the exact storagePath sent from frontend
+      console.log(`[ImageURL] Using raw file path: ${storagePath}`)
 
-    if (urlError) {
-      console.error('[ImageURL] Failed to generate signed URL:', urlError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to generate image URL' },
-        { status: 500 }
+      const { data: signedUrlData, error: urlError } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(storagePath, 3600) // 1 hour expiry
+
+      if (urlError) {
+        console.error('[ImageURL] Failed to generate signed URL for raw file:', urlError)
+        return NextResponse.json(
+          { success: false, error: `Failed to generate signed URL: ${urlError.message}` },
+          { status: 500 }
+        )
+      }
+
+      if (!signedUrlData?.signedUrl) {
+        return NextResponse.json(
+          { success: false, error: 'No signed URL returned' },
+          { status: 500 }
+        )
+      }
+
+      // Extract filename from storage path
+      const filename = storagePath.split('/').pop() || 'document'
+      console.log(`[ImageURL] Generated signed URL successfully for raw file: ${filename}`)
+
+      return NextResponse.json({
+        success: true,
+        imageUrl: signedUrlData.signedUrl,
+        filename: filename,
+        storagePath: storagePath
+      })
+    } else {
+      // For converted images: use existing logic with file discovery
+      const actualStoragePath = document.converted_image_path || storagePath
+      console.log(`[ImageURL] Using converted image path: ${actualStoragePath} (from ${document.converted_image_path ? 'database' : 'request'})`)
+
+      // Use unified bucket list() architecture to find actual image files
+      console.log(`[ImageURL] Using unified bucket list() architecture to discover converted files`)
+      const { data: fileList, error: listError } = await supabase.storage
+        .from('documents')
+        .list(actualStoragePath, {
+          limit: 100,
+          sortBy: { column: 'name', order: 'asc' }
+        })
+
+      if (listError) {
+        console.error('[ImageURL] Failed to list files at storage path:', listError)
+        return NextResponse.json(
+          { success: false, error: `Failed to list files: ${listError.message}` },
+          { status: 500 }
+        )
+      }
+
+      if (!fileList || fileList.length === 0) {
+        console.error(`[ImageURL] No files found at storage path: ${actualStoragePath}`)
+        return NextResponse.json(
+          { success: false, error: 'No converted image files found' },
+          { status: 404 }
+        )
+      }
+
+      console.log(`[ImageURL] Found ${fileList.length} file(s) at location`)
+
+      // Find the first image file (prioritize page_1 or first available image)
+      const imageFile = fileList.find(file =>
+        file.name.includes('page_1') && file.name.toLowerCase().endsWith('.png')
+      ) || fileList.find(file =>
+        file.name.toLowerCase().endsWith('.png') ||
+        file.name.toLowerCase().endsWith('.jpg') ||
+        file.name.toLowerCase().endsWith('.jpeg')
       )
+
+      if (!imageFile) {
+        console.error(`[ImageURL] No image files found. Available files: ${fileList.map(f => f.name).join(', ')}`)
+        return NextResponse.json(
+          { success: false, error: `No image files found at ${actualStoragePath}` },
+          { status: 404 }
+        )
+      }
+
+      // Create full path for the discovered image file
+      const fullImagePath = `${actualStoragePath}/${imageFile.name}`
+      console.log(`[ImageURL] Creating signed URL for file: ${fullImagePath}`)
+
+      // Generate signed URL for the specific image file
+      const { data: signedUrlData, error: urlError } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(fullImagePath, 3600) // 1 hour expiry
+
+      if (urlError) {
+        console.error('[ImageURL] Failed to generate signed URL:', urlError)
+        return NextResponse.json(
+          { success: false, error: `Failed to generate signed URL: ${urlError.message}` },
+          { status: 500 }
+        )
+      }
+
+      if (!signedUrlData?.signedUrl) {
+        return NextResponse.json(
+          { success: false, error: 'No signed URL returned' },
+          { status: 500 }
+        )
+      }
+
+      console.log(`[ImageURL] Generated signed URL successfully for: ${imageFile.name}`)
+
+      return NextResponse.json({
+        success: true,
+        imageUrl: signedUrlData.signedUrl,
+        filename: imageFile.name,
+        storagePath: fullImagePath
+      })
     }
-
-    if (!signedUrlData?.signedUrl) {
-      return NextResponse.json(
-        { success: false, error: 'No signed URL returned' },
-        { status: 500 }
-      )
-    }
-
-    console.log(`[ImageURL] Generated signed URL successfully`)
-
-    return NextResponse.json({
-      success: true,
-      imageUrl: signedUrlData.signedUrl
-    })
 
   } catch (error) {
     console.error('[ImageURL] Unexpected error:', error)

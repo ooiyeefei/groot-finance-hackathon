@@ -368,7 +368,7 @@ Base your analysis strictly on the regulatory knowledge provided above.`
       const genAI = new GoogleGenAI({ apiKey })
 
       const result = await genAI.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }]
       })
       

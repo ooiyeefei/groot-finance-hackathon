@@ -7,7 +7,8 @@ interface Document {
   file_name: string
   file_type: string
   file_size: number
-  processing_status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed'
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed' | 'classifying' | 'classification_failed' | 'pending_extraction' | 'extracting'
+  document_type?: string
   created_at: string
   processed_at?: string
   error_message?: string
@@ -139,7 +140,7 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
         setProcessingDocuments(prev => {
           const newSet = new Set(prev)
           newDocuments.forEach((doc: Document) => {
-            if (doc.processing_status !== 'processing' && doc.processing_status !== 'ocr_processing') {
+            if (doc.processing_status !== 'processing' && doc.processing_status !== 'classifying' && doc.processing_status !== 'pending_extraction' && doc.processing_status !== 'extracting') {
               newSet.delete(doc.id)
             }
           })
@@ -288,7 +289,7 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
     
     pollingInterval.current = setInterval(() => {
       const hasProcessingDocuments = documents.some(doc => 
-        doc.processing_status === 'processing' || doc.processing_status === 'ocr_processing'
+        doc.processing_status === 'processing' || doc.processing_status === 'classifying' || doc.processing_status === 'pending_extraction' || doc.processing_status === 'extracting'
       )
       
       if (hasProcessingDocuments) {
@@ -313,7 +314,7 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
   // Start/stop polling based on processing documents
   useEffect(() => {
     const hasProcessingDocuments = documents.some(doc => 
-      doc.processing_status === 'processing' || doc.processing_status === 'ocr_processing'
+      doc.processing_status === 'processing' || doc.processing_status === 'classifying' || doc.processing_status === 'pending_extraction' || doc.processing_status === 'extracting'
     )
     
     if (hasProcessingDocuments) {

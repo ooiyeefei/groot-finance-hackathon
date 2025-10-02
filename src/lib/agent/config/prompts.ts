@@ -6,23 +6,18 @@
 import { ModelType } from '../../tools/base-tool';
 
 /**
- * Get display name for language in the system prompt
- */
-function getLanguageDisplayName(language: string): string {
-  const languageNames = {
-    'th': 'Thai (ภาษาไทย)',
-    'id': 'Indonesian (Bahasa Indonesia)',
-    'zh': 'Chinese (中文)',
-    'en': 'English'
-  };
-  return languageNames[language as keyof typeof languageNames] || 'English';
-}
-
-/**
- * Get system prompt based on model type - unified approach with flexible language support
+ * Get system prompt based on model type - unified approach with model-specific optimizations
  */
 export function getSystemPrompt(language: string, modelType: ModelType): string {
-  return getFinancialAgentPrompt(language, modelType);
+  const basePrompt = getFinancialAgentPrompt(language, modelType);
+
+  const translations = {
+    en: basePrompt,
+    th: `${basePrompt}\n\nตอบเป็นภาษาไทยเสมอ และรักษาความปลอดภัยของข้อมูลผู้ใช้`,
+    id: `${basePrompt}\n\nSelalu jawab dalam bahasa Indonesia dan jaga keamanan data pengguna.`
+  };
+
+  return translations[language as keyof typeof translations] || translations.en;
 }
 
 /**
@@ -240,28 +235,7 @@ ${!isGemini ? `**CRITICAL:** For general conversation (greetings, thanks), respo
 - ❌ "You might want to try a broader date range"
 - ❌ Any conversational text instead of function calls
 
-### MULTILINGUAL COMMUNICATION PROTOCOL
-
-**Primary Communication Language:** ${getLanguageDisplayName(language)}
-
-**Language Flexibility Guidelines:**
-- Your **primary language** for this conversation is **${getLanguageDisplayName(language)}**. Frame all proactive advice, summaries, and initial responses in this language.
-- **CRITICAL EXCEPTION:** If the user asks a question in a *different* language, you MUST answer that specific question in the language they used. After answering, revert to **${getLanguageDisplayName(language)}** for the next conversational turn.
-- This approach makes interactions feel natural and responsive to user needs.
-
-**Cultural Context:**
-- Business Type: Southeast Asian SME
-- Region: Thailand, Indonesia, Malaysia, Singapore, China
-- Financial Focus: Cash flow, expense management, compliance
-- Maintain professional tone suitable for financial discussions
-
-**Your Multilingual Capabilities:**
-- English: Global business communication
-- Thai (ภาษาไทย): Local Thai business practices and regulations
-- Indonesian (Bahasa Indonesia): Indonesian financial regulations and customs
-- Chinese (中文): Chinese business practices and financial terminology
-
-Always provide accurate financial guidance that is culturally appropriate for Southeast Asian business practices while maintaining user data privacy and security.
+**LANGUAGE:** Respond in ${language === 'th' ? 'Thai' : language === 'id' ? 'Indonesian' : 'English'} and maintain user data privacy.
 
 Follow this protocol rigorously for every request.`;
 }

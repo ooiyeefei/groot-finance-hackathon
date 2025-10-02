@@ -15,15 +15,28 @@ export async function GET() {
 
     // Create Supabase client with service role for bypassing RLS
     const supabase = createServiceSupabaseClient()
-    
-    // Debug: Check connection
-    console.log('[API] List documents - User ID:', userId)
-    console.log('[API] Supabase URL configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL)
-    console.log('[API] Service role key configured:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
+
+    console.log('[API] List documents - Clerk ID:', userId)
+
+    // Convert Clerk user ID to Supabase UUID
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('clerk_user_id', userId)
+      .single()
+
+    if (userError || !user) {
+      console.error(`[Documents List API] User lookup failed for clerk_user_id ${userId}:`, userError)
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    const supabaseUserId = user.id
+    console.log(`[Documents List API] Converted Clerk ID ${userId} to Supabase UUID ${supabaseUserId}`)
 
     // Fetch user's documents with linked transaction information ordered by creation date (newest first)
-    // Using Clerk user ID directly since RLS is disabled
-    // Exclude soft-deleted documents by filtering on deleted_at IS NULL
     const { data: documents, error } = await supabase
       .from('documents')
       .select(`
@@ -32,7 +45,7 @@ export async function GET() {
           id, description, original_amount, original_currency, created_at
         )
       `)
-      .eq('user_id', userId)
+      .eq('user_id', supabaseUserId)
       .is('deleted_at', null)
       .or('deleted_at.is.null', { foreignTable: 'transactions' })
       .order('created_at', { ascending: false })

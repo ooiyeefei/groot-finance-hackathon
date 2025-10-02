@@ -6,7 +6,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useTranslations } from 'next-intl'
 import {
   X,
   Edit3,
@@ -86,10 +85,6 @@ export default function ExpenseEditModal({
   onDelete,
   onReprocess
 }: ExpenseEditModalProps) {
-  const t = useTranslations('expenseClaims')
-  const tCommon = useTranslations('common')
-  const tTransactions = useTranslations('transactions')
-  const tManager = useTranslations('manager')
   console.log('ExpenseEditModal render called - isOpen:', isOpen, 'expenseClaimId:', expenseClaimId)
 
   // Fetch dynamic categories and user home currency
@@ -227,17 +222,17 @@ export default function ExpenseEditModal({
         
         // Handle specific authentication errors with user-friendly messages
         if (response.status === 404 || errorData.error?.includes('not found') || errorData.error?.includes('access denied')) {
-          throw new Error(t('cannotEditClaim'))
+          throw new Error('This expense claim cannot be edited. It may belong to a different user or may have been deleted.')
         }
         
-        throw new Error(errorData.error || t('failedToLoadClaim'))
+        throw new Error(errorData.error || 'Failed to load expense claim')
       }
 
       const result = await response.json()
       const claim = result.data
 
       if (!claim) {
-        throw new Error(t('claimNotFound'))
+        throw new Error('Expense claim not found')
       }
 
       // Capture claim status and processing status for reprocessing logic
@@ -345,22 +340,22 @@ export default function ExpenseEditModal({
     const newErrors: Record<string, string> = {}
 
     if (!formData.description.trim()) {
-      newErrors.description = t('descriptionRequired')
+      newErrors.description = 'Description is required'
     }
     if (!formData.business_purpose.trim()) {
-      newErrors.business_purpose = t('businessPurposeRequired')
+      newErrors.business_purpose = 'Business purpose is required'
     }
     if (!formData.expense_category) {
-      newErrors.expense_category = t('categoryRequired')
+      newErrors.expense_category = 'Category is required'
     }
     if (formData.original_amount <= 0) {
-      newErrors.original_amount = t('amountMustBeGreaterThanZero')
+      newErrors.original_amount = 'Amount must be greater than 0'
     }
     if (!formData.vendor_name.trim()) {
-      newErrors.vendor_name = t('vendorNameRequired')
+      newErrors.vendor_name = 'Vendor name is required'
     }
     if (!formData.transaction_date) {
-      newErrors.transaction_date = t('dateRequired')
+      newErrors.transaction_date = 'Date is required'
     }
 
     setErrors(newErrors)
@@ -535,9 +530,9 @@ export default function ExpenseEditModal({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
           <div>
-            <h2 className="text-xl font-semibold text-white">{t('edit')}</h2>
+            <h2 className="text-xl font-semibold text-white">Edit Expense Claim</h2>
             <p className="text-gray-400 text-sm">
-              {t('dashboard.reviewApproveTeam')}
+              Modify your expense claim details
             </p>
           </div>
           <Button 
@@ -556,17 +551,17 @@ export default function ExpenseEditModal({
             <div className="text-center py-12">
               <Loader2 className="w-12 h-12 mx-auto text-blue-500 mb-4 animate-spin" />
               <h3 className="text-lg font-semibold text-white mb-2">
-                {tCommon('loading')}
+                Loading Expense Claim
               </h3>
               <p className="text-gray-400">
-                {tCommon('loading')}...
+                Please wait while we load your expense details...
               </p>
             </div>
           ) : loadError ? (
             <div className="text-center py-12">
               <AlertCircle className="w-12 h-12 mx-auto text-red-500 mb-4" />
               <h3 className="text-lg font-semibold text-white mb-2">
-                {tCommon('error')}
+                Cannot Load Expense Claim
               </h3>
               <p className="text-gray-400 mb-6">
                 {loadError}
@@ -577,7 +572,7 @@ export default function ExpenseEditModal({
                 className="border-gray-600 text-gray-300"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                {tCommon('close')}
+                Close
               </Button>
             </div>
           ) : (
@@ -597,7 +592,7 @@ export default function ExpenseEditModal({
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
                     <FileText className="w-5 h-5" />
-                    {t('expenseClaim')}
+                    Expense Information
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -605,13 +600,13 @@ export default function ExpenseEditModal({
                     <div className="space-y-2">
                       <Label className="text-white flex items-center gap-2">
                         <Building className="w-4 h-4" />
-                        {tTransactions('vendor')} *
+                        Vendor Name *
                       </Label>
                       <Input
                         value={formData.vendor_name}
                         onChange={(e) => setFormData({...formData, vendor_name: e.target.value})}
                         className="bg-gray-600 border-gray-500 text-white"
-                        placeholder={tTransactions('vendorPlaceholder')}
+                        placeholder="Vendor or merchant name"
                       />
                       {errors.vendor_name && <p className="text-red-400 text-sm">{errors.vendor_name}</p>}
                     </div>
@@ -619,7 +614,7 @@ export default function ExpenseEditModal({
                     <div className="space-y-2">
                       <Label className="text-white flex items-center gap-2">
                         <DollarSign className="w-4 h-4" />
-                        {tTransactions('amount')} *
+                        Amount *
                       </Label>
                       <div className="flex gap-2">
                         <Input
@@ -628,7 +623,7 @@ export default function ExpenseEditModal({
                           value={formData.original_amount}
                           onChange={(e) => setFormData({...formData, original_amount: parseFloat(e.target.value) || 0})}
                           className="bg-gray-600 border-gray-500 text-white flex-1"
-                          placeholder={tTransactions('enterAmount')}
+                          placeholder="0.00"
                         />
                         <Select
                           value={formData.original_currency}
@@ -648,7 +643,7 @@ export default function ExpenseEditModal({
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-white">{tTransactions('homeCurrency')}</Label>
+                      <Label className="text-white">Home Currency</Label>
                       <Select
                         value={formData.home_currency}
                         onValueChange={(value) => setFormData({...formData, home_currency: value as SupportedCurrency})}
@@ -668,12 +663,12 @@ export default function ExpenseEditModal({
                   {/* Exchange Rate Preview */}
                   {previewAmount !== null && exchangeRate !== null && (
                     <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
-                      <div className="text-sm text-blue-300 mb-1">{tTransactions('currencyConversionPreview')}:</div>
+                      <div className="text-sm text-blue-300 mb-1">Currency Conversion Preview:</div>
                       <div className="text-white font-medium">
                         {formatCurrency(previewAmount, formData.home_currency as SupportedCurrency)}
                       </div>
                       <div className="text-xs text-blue-400">
-{tTransactions('exchangeRateLabel')}: 1 {formData.original_currency} = {exchangeRate.toFixed(6)} {formData.home_currency}
+                        Rate: 1 {formData.original_currency} = {exchangeRate.toFixed(6)} {formData.home_currency}
                       </div>
                     </div>
                   )}
@@ -682,7 +677,7 @@ export default function ExpenseEditModal({
                     <div className="space-y-2">
                       <Label className="text-white flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
-                        {tTransactions('date')} *
+                        Transaction Date *
                       </Label>
                       <Input
                         type="date"
@@ -696,23 +691,23 @@ export default function ExpenseEditModal({
                     <div className="space-y-2">
                       <Label className="text-white flex items-center gap-2">
                         <Tag className="w-4 h-4" />
-                        {tTransactions('category')} *
+                        Category *
                       </Label>
                       <Select 
                         value={formData.expense_category} 
                         onValueChange={(value) => setFormData({...formData, expense_category: value})}
                       >
                         <SelectTrigger className="bg-gray-600 border-gray-500 text-white">
-                          <SelectValue placeholder={tTransactions('selectCategory')} />
+                          <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                         <SelectContent className="bg-gray-700 border-gray-600">
                           {categoriesLoading ? (
                             <SelectItem value="loading" className="text-gray-400" disabled>
-{tCommon('loading')}...
+                              Loading categories...
                             </SelectItem>
                           ) : categoriesError ? (
                             <SelectItem value="error" className="text-red-400" disabled>
-{tCommon('error')} loading categories
+                              Error loading categories
                             </SelectItem>
                           ) : categories.length > 0 ? (
                             categories.map((category) => (
@@ -722,7 +717,7 @@ export default function ExpenseEditModal({
                             ))
                           ) : (
                             <SelectItem value="empty" className="text-gray-400" disabled>
-{tTransactions('allCategories')} available
+                              No categories available
                             </SelectItem>
                           )}
                         </SelectContent>
@@ -732,23 +727,23 @@ export default function ExpenseEditModal({
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-white">{tTransactions('description')} *</Label>
+                    <Label className="text-white">Description *</Label>
                     <Input
                       value={formData.description}
                       onChange={(e) => setFormData({...formData, description: e.target.value})}
                       className="bg-gray-600 border-gray-500 text-white"
-                      placeholder={tTransactions('enterDescription')}
+                      placeholder="Brief description of expense"
                     />
                     {errors.description && <p className="text-red-400 text-sm">{errors.description}</p>}
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-white">{tManager('businessPurpose')} *</Label>
+                    <Label className="text-white">Business Purpose *</Label>
                     <Textarea
                       value={formData.business_purpose}
                       onChange={(e) => setFormData({...formData, business_purpose: e.target.value})}
                       className="bg-gray-600 border-gray-500 text-white"
-                      placeholder={tManager('businessPurposePlaceholder')}
+                      placeholder="Explain the business reason for this expense"
                       rows={3}
                     />
                     {errors.business_purpose && <p className="text-red-400 text-sm">{errors.business_purpose}</p>}
@@ -756,22 +751,22 @@ export default function ExpenseEditModal({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label className="text-white">{tTransactions('reference')}</Label>
+                      <Label className="text-white">Reference Number</Label>
                       <Input
                         value={formData.reference_number || ''}
                         onChange={(e) => setFormData({...formData, reference_number: e.target.value})}
                         className="bg-gray-600 border-gray-500 text-white"
-                        placeholder={tTransactions('documentNumberPlaceholder')}
+                        placeholder="Receipt or reference number"
                       />
                     </div>
                     
                     <div className="space-y-2">
-                      <Label className="text-white">{tTransactions('notes')}</Label>
+                      <Label className="text-white">Additional Notes</Label>
                       <Input
                         value={formData.notes || ''}
                         onChange={(e) => setFormData({...formData, notes: e.target.value})}
                         className="bg-gray-600 border-gray-500 text-white"
-                        placeholder={tTransactions('notesPlaceholder')}
+                        placeholder="Any additional information"
                       />
                     </div>
                   </div>
@@ -784,7 +779,7 @@ export default function ExpenseEditModal({
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-white flex items-center gap-2">
                       <DollarSign className="w-5 h-5" />
-{tCommon('lineItems')} ({lineItems.length})
+                      Line Items ({lineItems.length})
                     </CardTitle>
                     <Button
                       type="button"
@@ -794,7 +789,7 @@ export default function ExpenseEditModal({
                       className="bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
                     >
                       <Plus className="w-4 h-4 mr-2" />
-{tCommon('add')} {tCommon('item')}
+                      Add Item
                     </Button>
                   </div>
                 </CardHeader>
@@ -806,13 +801,13 @@ export default function ExpenseEditModal({
                           <thead className="bg-gray-900">
                             <tr>
                               <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">{tCommon('description')}</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">{tTransactions('itemCode')}</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">{tCommon('qty')}</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">{tTransactions('unit')}</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">{tCommon('unitPrice')}</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">{tCommon('total')}</th>
-                              <th className="px-3 py-2 text-center text-gray-400 font-medium">{tTransactions('actions')}</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
+                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
+                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                              <th className="px-3 py-2 text-center text-gray-400 font-medium">Actions</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-700">
@@ -825,7 +820,7 @@ export default function ExpenseEditModal({
                                     value={item.description || ''}
                                     onChange={(e) => updateLineItem(index, 'description', e.target.value)}
                                     className="w-full px-2 py-1 bg-gray-600 border-gray-500 text-white text-sm"
-                                    placeholder={tTransactions('itemDescriptionPlaceholder')}
+                                    placeholder="Item description"
                                   />
                                 </td>
                                 <td className="px-3 py-2">
@@ -834,7 +829,7 @@ export default function ExpenseEditModal({
                                     value={item.item_code || ''}
                                     onChange={(e) => updateLineItem(index, 'item_code', e.target.value)}
                                     className="w-full px-2 py-1 bg-gray-600 border-gray-500 text-white text-sm"
-                                    placeholder={tTransactions('skuPlaceholder')}
+                                    placeholder="SKU"
                                   />
                                 </td>
                                 <td className="px-3 py-2">
@@ -853,7 +848,7 @@ export default function ExpenseEditModal({
                                     value={item.unit_measurement || ''}
                                     onChange={(e) => updateLineItem(index, 'unit_measurement', e.target.value)}
                                     className="w-full px-2 py-1 bg-gray-600 border-gray-500 text-white text-sm"
-                                    placeholder={tTransactions('unitPlaceholder')}
+                                    placeholder="kg, pkt"
                                   />
                                 </td>
                                 <td className="px-3 py-2">
@@ -876,7 +871,7 @@ export default function ExpenseEditModal({
                                     variant="ghost"
                                     size="sm"
                                     className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-600"
-                                    title={tTransactions('removeItem')}
+                                    title="Remove item"
                                   >
                                     <Trash2 className="w-3 h-3" />
                                   </Button>
@@ -890,22 +885,22 @@ export default function ExpenseEditModal({
                   ) : (
                     <div className="text-center py-8 text-gray-400">
                       <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">{tTransactions('noLineItemsYet')}</p>
-                      <p className="text-xs mt-1">{tTransactions('clickAddItemToStart')}</p>
+                      <p className="text-sm">No line items added yet</p>
+                      <p className="text-xs mt-1">Click &quot;Add Item&quot; to start adding line items</p>
                     </div>
                   )}
 
                   {/* Transaction Summary */}
                   {lineItems.length > 0 && (
                     <div className="bg-gray-800 rounded-lg p-4 border border-gray-600 mt-4">
-                      <h5 className="text-sm font-medium text-white mb-3">{tTransactions('transactionSummary')}</h5>
+                      <h5 className="text-sm font-medium text-white mb-3">Transaction Summary</h5>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-400">{tTransactions('itemsCount')}:</span>
+                          <span className="text-gray-400">Items Count:</span>
                           <span className="text-white">{lineItems.length}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-400">{tTransactions('subtotal')}:</span>
+                          <span className="text-gray-400">Subtotal:</span>
                           <span className="text-white">
                             {formatCurrency(
                               lineItems.reduce((sum, item) => sum + (item.total_amount || 0), 0),
@@ -914,7 +909,7 @@ export default function ExpenseEditModal({
                           </span>
                         </div>
                         <div className="flex justify-between font-medium border-t border-gray-600 pt-2">
-                          <span className="text-blue-300">{tCommon('totalAmount')}:</span>
+                          <span className="text-blue-300">Total Amount:</span>
                           <span className="text-blue-300 text-lg">
                             {formatCurrency(formData.original_amount, formData.original_currency as SupportedCurrency)}
                           </span>
@@ -938,7 +933,7 @@ export default function ExpenseEditModal({
                 className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
               >
                 <ArrowLeft className="w-4 h-4 mr-1.5" />
-                {tCommon('cancel')}
+                Cancel
               </button>
               {onDelete && (
                 <button
@@ -947,7 +942,7 @@ export default function ExpenseEditModal({
                   className="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
-                  {tCommon('delete')}
+                  Delete
                 </button>
               )}
               {onReprocess && (processingStatus === 'failed' || processingStatus === 'completed') && (
@@ -963,12 +958,12 @@ export default function ExpenseEditModal({
                   {isReprocessing ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                      {processingStatus === 'failed' ? `${t('reprocess')}...` : `${t('reExtract')}...`}
+                      {processingStatus === 'failed' ? 'Reprocessing...' : 'Re-extracting...'}
                     </>
                   ) : (
                     <>
                       <RotateCcw className="w-4 h-4 mr-1.5" />
-                      {processingStatus === 'failed' ? t('reprocess') : t('reExtract')}
+                      {processingStatus === 'failed' ? 'Reprocess' : 'Re-extract'}
                     </>
                   )}
                 </button>
@@ -981,12 +976,12 @@ export default function ExpenseEditModal({
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-{tCommon('loading')}...
+                    Saving...
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4 mr-1.5" />
-{tCommon('save')} Draft
+                    Save Draft
                   </>
                 )}
               </button>
@@ -998,12 +993,12 @@ export default function ExpenseEditModal({
                 {submitting ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-{t('submitting')}...
+                    Submitting...
                   </>
                 ) : (
                   <>
                     <Send className="w-4 h-4 mr-1.5" />
-{t('submit')}
+                    Submit
                   </>
                 )}
               </button>
@@ -1017,10 +1012,10 @@ export default function ExpenseEditModal({
         isOpen={showDeleteConfirm}
         onClose={handleCloseDeleteConfirm}
         onConfirm={handleDeleteConfirmed}
-        title={t('deleteConfirmTitle')}
-        message={t('deleteConfirmMessage')}
-        confirmText={t('deleteText')}
-        cancelText={t('cancelText')}
+        title="Delete Expense Claim"
+        message="Are you sure you want to delete this draft expense claim? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
         confirmVariant="danger"
         isLoading={isDeleting}
       />

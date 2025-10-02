@@ -14,6 +14,7 @@ import {
   getBusinessExpenseCategory,
   isValidExpenseCategory
 } from '@/lib/expense-category-mapper'
+import { StoragePathBuilder, generateUniqueFilename } from '@/lib/storage-paths'
 
 // Simple in-memory deduplication store (in production, use Redis)
 const recentRequests = new Map<string, number>()
@@ -108,12 +109,53 @@ export async function POST(request: NextRequest) {
     console.log(`[Expense Receipt API] Processing receipt upload for user ${userId}`)
     console.log(`[Expense Receipt API] File: ${file.name}, Category: ${expenseCategory}`)
 
-    // Generate unique file path for Supabase Storage
-    const fileExtension = file.name.split('.').pop()
-    const fileName = `expense-receipt-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExtension}`
-    const filePath = `expense-receipts/${userId}/${fileName}`
+    // Step 1: Create document record first for receipt to get documentId
+    const { data: documentData, error: docError } = await serviceSupabase
+      .from('documents')
+      .insert({
+        user_id: userId,
+        business_id: employeeProfile.business_id,
+        file_name: file.name,
+        file_type: file.type,
+        file_size: file.size,
+        storage_path: 'temp_pending_upload', // Temporary placeholder
+        processing_status: 'pending',
+        document_type: 'receipt', // Use standard 'receipt' instead of 'expense_receipts'
+        document_metadata: {
+          storage_version: '3.0', // Track new documentId-based storage format
+          original_filename: file.name,
+          detected_type: 'receipt',
+          use_case: 'expense_claims', // Context: expense-claims/ page for expense receipts
+          upload_context: {
+            page: 'expense-claims',
+            description: 'Expense receipt upload for claims and reimbursements'
+          },
+          expense_context: {
+            business_purpose: businessPurpose,
+            expense_category: expenseCategory,
+            use_auto_categorization: useAutoCategorization
+          }
+        }
+      })
+      .select()
+      .single()
 
-    // Upload to Supabase Storage
+    if (docError) {
+      console.error('[Expense Receipt API] Failed to create document record:', docError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to create document record' },
+        { status: 500 }
+      )
+    }
+
+    // Step 2: Generate standardized storage path with documentId
+    const storageBuilder = new StoragePathBuilder(employeeProfile.business_id, userId, undefined, documentData.id)
+    const uniqueFilename = generateUniqueFilename(file.name, 'expense-receipt')
+    const filePath = storageBuilder.forDocument('receipt').raw(uniqueFilename)
+
+    console.log(`[Expense Receipt API] Generated storage path with documentId: ${filePath}`)
+
+    // Step 3: Upload to Supabase Storage with documentId-based path
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('documents')
       .upload(filePath, file, {
@@ -123,8 +165,34 @@ export async function POST(request: NextRequest) {
 
     if (uploadError) {
       console.error('[Expense Receipt Upload API] Storage upload failed:', uploadError)
+
+      // Clean up document record if upload fails
+      await serviceSupabase.from('documents').delete().eq('id', documentData.id)
+
       return NextResponse.json(
         { success: false, error: 'Failed to upload file' },
+        { status: 500 }
+      )
+    }
+
+    // Step 4: Update document record with final storage path
+    const { error: pathUpdateError } = await serviceSupabase
+      .from('documents')
+      .update({
+        storage_path: filePath,
+        processing_status: 'pending'
+      })
+      .eq('id', documentData.id)
+
+    if (pathUpdateError) {
+      console.error('[Expense Receipt API] Failed to update storage path:', pathUpdateError)
+
+      // Clean up uploaded file and document record
+      await supabase.storage.from('documents').remove([filePath])
+      await serviceSupabase.from('documents').delete().eq('id', documentData.id)
+
+      return NextResponse.json(
+        { success: false, error: 'Failed to update document storage path' },
         { status: 500 }
       )
     }
@@ -206,7 +274,8 @@ export async function POST(request: NextRequest) {
           original_filename: file.name,
           file_path: filePath,
           file_size: file.size,
-          file_type: file.type
+          file_type: file.type,
+          document_id: documentData.id // Link to document record
         },
         processing_source: 'receipt_upload',
         use_auto_categorization: useAutoCategorization
@@ -224,7 +293,8 @@ export async function POST(request: NextRequest) {
           name: file.name,
           size: file.size,
           type: file.type,
-          path: filePath
+          path: filePath,
+          document_id: documentData.id // Link to document record
         },
         extraction_method: 'dspy',
         processing_stage: 'ocr_extraction',

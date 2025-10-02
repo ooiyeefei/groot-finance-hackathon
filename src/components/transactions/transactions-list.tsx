@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Search, Filter, Plus, Eye, Edit, Trash2, RefreshCw, Calendar, Building, DollarSign, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { useTranslations } from 'next-intl'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import CategorySelector from './CategorySelector'
@@ -31,8 +30,6 @@ export default function TransactionsList({
   onEdit,
   onDelete
 }: TransactionsListProps) {
-  const t = useTranslations('transactions')
-  const tCommon = useTranslations('common')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [selectedType, setSelectedType] = useState('')
@@ -135,15 +132,15 @@ export default function TransactionsList({
 
     if (!hasActiveFilters) {
       // No filters active - show simple total display
-      return `${t('displaying')} ${displayedStart}-${displayedEnd} ${t('of')} ${totalCount} ${t('totalTransactions')}`
+      return `Displaying ${displayedStart}-${displayedEnd} of ${totalCount} total transactions`
     } else {
       // Filters active - show filtered vs total context
       if (filteredCount === totalCount) {
         // All transactions match filters
-        return `${t('displaying')} ${displayedStart}-${displayedEnd} ${t('of')} ${totalCount} ${t('transactions')}`
+        return `Displaying ${displayedStart}-${displayedEnd} of ${totalCount} transactions`
       } else {
         // Some transactions filtered out
-        return `${t('displaying')} ${displayedStart}-${displayedEnd} ${t('of')} ${filteredCount} ${t('matchingTransactions')} (${t('filteredFrom')} ${totalCount} ${t('total')})`
+        return `Displaying ${displayedStart}-${displayedEnd} of ${filteredCount} matching transactions (filtered from ${totalCount} total)`
       }
     }
   }
@@ -154,7 +151,7 @@ export default function TransactionsList({
 
     if (searchQuery) {
       filters.push({
-        label: t('search'),
+        label: 'Search',
         value: searchQuery,
         onRemove: () => setSearchQuery('')
       })
@@ -162,7 +159,7 @@ export default function TransactionsList({
 
     if (selectedCategory) {
       filters.push({
-        label: t('category'),
+        label: 'Category',
         value: formatCategoryName(selectedCategory),
         onRemove: () => setSelectedCategory('')
       })
@@ -170,7 +167,7 @@ export default function TransactionsList({
 
     if (selectedType) {
       filters.push({
-        label: t('type'),
+        label: 'Type',
         value: formatCategoryName(selectedType),
         onRemove: () => setSelectedType('')
       })
@@ -178,7 +175,7 @@ export default function TransactionsList({
 
     if (dateFrom) {
       filters.push({
-        label: t('from'),
+        label: 'From',
         value: new Date(dateFrom).toLocaleDateString(),
         onRemove: () => setDateFrom('')
       })
@@ -186,7 +183,7 @@ export default function TransactionsList({
 
     if (dateTo) {
       filters.push({
-        label: t('to'),
+        label: 'To',
         value: new Date(dateTo).toLocaleDateString(),
         onRemove: () => setDateTo('')
       })
@@ -222,14 +219,14 @@ export default function TransactionsList({
           <div className="w-16 h-16 bg-red-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">⚠️</span>
           </div>
-          <h3 className="text-xl font-semibold text-white mb-2">{t('errorLoadingTransactions')}</h3>
+          <h3 className="text-xl font-semibold text-white mb-2">Error Loading Transactions</h3>
           <p className="text-gray-400 mb-4">{error}</p>
           <button
             onClick={onRefresh}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors inline-flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />
-            {t('retry')}
+            Retry
           </button>
         </div>
       </div>
@@ -248,7 +245,7 @@ export default function TransactionsList({
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder={t('searchPlaceholder')}
+                placeholder="Search transactions, vendors, line items..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -261,7 +258,7 @@ export default function TransactionsList({
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">{t('allCategories')}</option>
+              <option value="">All Categories</option>
               {uniqueCategories.map(category => (
                 <option key={category} value={category}>
                   {formatCategoryName(category)}
@@ -275,7 +272,7 @@ export default function TransactionsList({
               onChange={(e) => setSelectedType(e.target.value)}
               className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">{t('allTypes')}</option>
+              <option value="">All Types</option>
               {transactionTypes.map(type => (
                 <option key={type} value={type}>
                   {formatCategoryName(type)}
@@ -289,7 +286,7 @@ export default function TransactionsList({
             {/* Date Range */}
             <div className="flex items-center gap-3">
               <Calendar className="w-4 h-4 text-gray-400" />
-              <span className="text-sm text-gray-400">{t('dateRange')}</span>
+              <span className="text-sm text-gray-400">Date Range:</span>
               <input
                 type="date"
                 value={dateFrom}
@@ -297,7 +294,7 @@ export default function TransactionsList({
                 className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="From"
               />
-              <span className="text-gray-400">{t('to')}</span>
+              <span className="text-gray-400">to</span>
               <input
                 type="date"
                 value={dateTo}
@@ -316,7 +313,7 @@ export default function TransactionsList({
               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors inline-flex items-center gap-2 disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              {t('refresh')}
+              Refresh
             </button>
           </div>
         </div>
@@ -327,7 +324,7 @@ export default function TransactionsList({
         <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-3">
           <div className="flex items-center gap-2 flex-wrap">
             <Filter className="w-4 h-4 text-blue-400" />
-            <span className="text-sm text-gray-400">{t('activeFilters')}</span>
+            <span className="text-sm text-gray-400">Active filters:</span>
             {getActiveFilters().map((filter, index) => (
               <div
                 key={index}
@@ -338,7 +335,7 @@ export default function TransactionsList({
                 <button
                   onClick={filter.onRemove}
                   className="ml-1 hover:bg-blue-600/30 rounded-full p-0.5 transition-colors"
-                  title={t('removeFilter', { label: filter.label })}
+                  title={`Remove ${filter.label} filter`}
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -355,7 +352,7 @@ export default function TransactionsList({
               }}
               className="text-xs text-gray-400 hover:text-white transition-colors ml-2"
             >
-              {t('clearAllFilters')}
+              Clear all filters
             </button>
           </div>
         </div>
@@ -368,7 +365,7 @@ export default function TransactionsList({
             {generateResultsSummary()}
           </span>
           <div className="flex items-center gap-2">
-            <span>{t('show')}</span>
+            <span>Show:</span>
             <select
               value={itemsPerPage}
               onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
@@ -378,7 +375,7 @@ export default function TransactionsList({
               <option value={30}>30</option>
               <option value={50}>50</option>
             </select>
-            <span>{t('perPage')}</span>
+            <span>per page</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -394,7 +391,7 @@ export default function TransactionsList({
               }}
               className="text-blue-400 hover:text-blue-300"
             >
-              {t('clearFilters')}
+              Clear filters
             </button>
           )}
         </div>
@@ -410,12 +407,12 @@ export default function TransactionsList({
               <DollarSign className="w-8 h-8 text-gray-400" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-2">
-              {transactions.length === 0 ? t('noTransactionsYet') : t('noResultsFound')}
+              {transactions.length === 0 ? 'No Transactions Yet' : 'No Results Found'}
             </h3>
             <p className="text-gray-400 mb-4">
-              {transactions.length === 0
-                ? t('noTransactionsMessage')
-                : t('noResultsMessage')
+              {transactions.length === 0 
+                ? 'Start by creating your first transaction or uploading financial documents.'
+                : 'Try adjusting your search criteria or clearing filters.'
               }
             </p>
           </div>
@@ -503,7 +500,7 @@ export default function TransactionsList({
                     <button
                       onClick={() => onView(transaction)}
                       className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors"
-                      title={t('viewDetails')}
+                      title="View Details"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
@@ -511,7 +508,7 @@ export default function TransactionsList({
                     <button
                       onClick={() => onEdit(transaction)}
                       className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors"
-                      title={t('editTransaction')}
+                      title="Edit Transaction"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
@@ -519,7 +516,7 @@ export default function TransactionsList({
                     <button
                       onClick={() => handleDeleteClick(transaction)}
                       className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded-lg transition-colors"
-                      title={t('deleteTransaction')}
+                      title="Delete Transaction"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -535,14 +532,14 @@ export default function TransactionsList({
       {filteredTransactions.length > 0 && totalPages > 1 && (
         <div className="flex items-center justify-between bg-gray-800 rounded-lg border border-gray-700 p-4">
           <div className="text-sm text-gray-400">
-            {t('page')} {currentPage} {t('of')} {totalPages}
+            Page {currentPage} of {totalPages}
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title={t('previousPage')}
+              title="Previous Page"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -581,7 +578,7 @@ export default function TransactionsList({
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title={t('nextPage')}
+              title="Next Page"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -594,14 +591,14 @@ export default function TransactionsList({
         isOpen={deleteConfirmation.isOpen}
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        title={t('deleteConfirmTitle')}
+        title="Delete Transaction"
         message={
           deleteConfirmation.transaction
-            ? t('deleteConfirmMessage', { type: deleteConfirmation.transaction.transaction_type })
+            ? `Are you sure you want to delete this ${deleteConfirmation.transaction.transaction_type}? This action cannot be undone.`
             : ''
         }
-        confirmText={t('delete')}
-        cancelText={tCommon('cancel')}
+        confirmText="Delete"
+        cancelText="Cancel"
         confirmVariant="danger"
         isLoading={deleteConfirmation.isLoading}
       />

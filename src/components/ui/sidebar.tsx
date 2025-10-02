@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, ChevronLeft, Users, CheckCircle } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, ChevronLeft, Users, CheckCircle, ClipboardList } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import { useBusinessProfile } from '@/contexts/business-profile-context'
@@ -36,6 +36,7 @@ export default function Sidebar() {
     { name: t('dashboard'), href: localizedHref('/'), icon: Home },
     { name: t('documents'), href: localizedHref('/documents'), icon: FileText },
     { name: t('transactions'), href: localizedHref('/transactions'), icon: CreditCard },
+    { name: t('applications'), href: localizedHref('/applications'), icon: ClipboardList },
     { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
     { name: t('aiAssistant'), href: localizedHref('/ai-assistant'), icon: MessageSquare },
   ]
@@ -156,7 +157,7 @@ export default function Sidebar() {
           <div className={`flex items-center ${isExpanded ? 'justify-between' : 'justify-center'}`}>
             {isExpanded ? (
               <>
-                <Link href="/" className="flex items-center space-x-3 min-w-0">
+                <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0">
                   <div className="flex-shrink-0">
                     {shouldShowLogo() && businessProfile?.logo_url ? (
                       <Image
@@ -193,7 +194,7 @@ export default function Sidebar() {
               </>
             ) : (
               <div className="flex flex-col items-center space-y-2">
-                <Link href="/" className="flex-shrink-0">
+                <Link href={`/${locale}`} className="flex-shrink-0">
                   {shouldShowLogo() && businessProfile?.logo_url ? (
                     <Image
                       src={businessProfile.logo_url}

@@ -7,7 +7,6 @@
 
 import { useState, useEffect } from 'react'
 import { Download, FileText, Calendar, User, Printer } from 'lucide-react'
-import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -36,7 +35,6 @@ interface MonthlyReportGeneratorProps {
 }
 
 export default function MonthlyReportGenerator({ personalOnly = false }: MonthlyReportGeneratorProps) {
-  const t = useTranslations('reports.monthlyReport')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedEmployee, setSelectedEmployee] = useState('')
   const [reportData, setReportData] = useState<ReportData | null>(null)
@@ -106,7 +104,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
   const generateReport = async (format: 'json' | 'pdf' | 'csv' = 'json') => {
     if (!selectedMonth) {
-      setError(t('pleaseSelectMonth'))
+      setError('Please select a month')
       return
     }
 
@@ -130,7 +128,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
         if (result.success) {
           setReportData(result.data)
         } else {
-          setError(result.error || t('failedToGenerate'))
+          setError(result.error || 'Failed to generate report')
         }
       } else {
         // Handle file downloads for PDF/CSV
@@ -151,12 +149,12 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
           window.URL.revokeObjectURL(url)
         } else {
           const result = await response.json()
-          setError(result.error || t('failedToGenerate'))
+          setError(result.error || 'Failed to download report')
         }
       }
     } catch (error) {
       console.error('Report generation failed:', error)
-      setError(t('networkError'))
+      setError('Network error. Please try again.')
     } finally {
       setGenerating(false)
     }
@@ -167,9 +165,9 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
       {/* Report Configuration */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">{t('generateTitle')}</CardTitle>
+          <CardTitle className="text-white">Generate Monthly Report</CardTitle>
           <CardDescription>
-            {t('generateDescription')}
+            Create detailed expense reports for compliance and reimbursement processing
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -182,10 +180,10 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Month Selection */}
             <div className="space-y-2">
-              <label className="text-white text-sm font-medium">{t('reportMonthLabel')} *</label>
+              <label className="text-white text-sm font-medium">Report Month *</label>
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                 <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                  <SelectValue placeholder={t('selectMonthPlaceholder')} />
+                  <SelectValue placeholder="Select month" />
                 </SelectTrigger>
                 <SelectContent className="bg-gray-700 border-gray-600">
                   {monthOptions.map((month) => (
@@ -202,10 +200,10 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
             {/* Employee Selection (for managers/finance) */}
             <div className="space-y-2">
-              <label className="text-white text-sm font-medium">{t('employeeLabel')}</label>
+              <label className="text-white text-sm font-medium">Employee</label>
               <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
                 <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                  <SelectValue placeholder={t('selectEmployeePlaceholder')} />
+                  <SelectValue placeholder="Select employee (optional)" />
                 </SelectTrigger>
                 <SelectContent className="bg-gray-700 border-gray-600">
                   {employees.map((employee) => (
@@ -229,7 +227,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
               className="bg-blue-600 hover:bg-blue-700"
             >
               <FileText className="w-4 h-4 mr-2" />
-              {t('previewReportButton')}
+              Preview Report
             </Button>
             
             <Button
@@ -238,7 +236,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               <Download className="w-4 h-4 mr-2" />
-              {t('downloadPdfButton')}
+              Download PDF
             </Button>
 
             <Button
@@ -247,7 +245,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               <Download className="w-4 h-4 mr-2" />
-              {t('exportCsvButton')}
+              Export CSV
             </Button>
           </div>
         </CardContent>
@@ -259,11 +257,11 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-white">{t('monthlyExpenseReport')}</CardTitle>
+                <CardTitle className="text-white">Monthly Expense Report</CardTitle>
                 <CardDescription>
-                  {reportData.employee_name} - {new Date(reportData.report_month + '-01').toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long'
+                  {reportData.employee_name} - {new Date(reportData.report_month + '-01').toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long' 
                   })}
                 </CardDescription>
               </div>
@@ -274,7 +272,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
                 className="border-gray-600 text-gray-300"
               >
                 <Printer className="w-4 h-4 mr-2" />
-                {t('printButton')}
+                Print
               </Button>
             </div>
           </CardHeader>
@@ -282,27 +280,27 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             {/* Summary Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <ReportSummaryCard
-                title={t('totalClaims')}
+                title="Total Claims"
                 value={reportData.summary.claim_count.toString()}
                 variant="default"
               />
               <ReportSummaryCard
-                title={t('totalAmount')}
+                title="Total Amount"
                 value={`${reportData.summary.total_amount.toFixed(2)} ${reportData.home_currency}`}
                 variant="default"
               />
               <ReportSummaryCard
-                title={t('approved')}
+                title="Approved"
                 value={`${reportData.summary.approved_amount.toFixed(2)} ${reportData.home_currency}`}
                 variant="success"
               />
               <ReportSummaryCard
-                title={t('pending')}
+                title="Pending"
                 value={`${reportData.summary.pending_amount.toFixed(2)} ${reportData.home_currency}`}
                 variant="warning"
               />
               <ReportSummaryCard
-                title={t('rejected')}
+                title="Rejected"
                 value={`${reportData.summary.rejected_amount.toFixed(2)} ${reportData.home_currency}`}
                 variant="error"
               />
@@ -310,7 +308,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
             {/* Category Breakdown */}
             <div className="space-y-4">
-              <h4 className="text-white font-semibold">{t('categoryBreakdownTitle')}</h4>
+              <h4 className="text-white font-semibold">Category Breakdown</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.entries(reportData.category_totals).map(([category, data]) => {
                   const categoryConfig = EXPENSE_CATEGORY_CONFIG[category as keyof typeof EXPENSE_CATEGORY_CONFIG]
@@ -323,7 +321,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
                         <Badge variant="secondary" className="bg-gray-600">
                           {categoryConfig?.icon} {categoryConfig?.label}
                         </Badge>
-                        <span className="text-gray-400 text-sm">{data.count} {t('claimsText')}</span>
+                        <span className="text-gray-400 text-sm">{data.count} claims</span>
                       </div>
                       <div className="text-white font-semibold">
                         {data.amount.toFixed(2)} {reportData.home_currency}
@@ -336,8 +334,8 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
             {/* Report Metadata */}
             <div className="border-t border-gray-700 pt-4 text-gray-400 text-sm">
-              <p>{t('reportGeneratedOn')} {new Date(reportData.generated_at).toLocaleString()}</p>
-              <p>{t('dataAsOf')} {new Date().toLocaleDateString()}</p>
+              <p>Report generated on: {new Date(reportData.generated_at).toLocaleString()}</p>
+              <p>Data as of: {new Date().toLocaleDateString()}</p>
             </div>
           </CardContent>
         </Card>
@@ -346,14 +344,14 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
       {/* Quick Access to Recent Reports */}
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
-          <CardTitle className="text-white">{t('recentReportsTitle')}</CardTitle>
-          <CardDescription>{t('quickAccessDescription')}</CardDescription>
+          <CardTitle className="text-white">Recent Reports</CardTitle>
+          <CardDescription>Quick access to previously generated reports</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center text-gray-400 py-8">
             <FileText className="w-12 h-12 mx-auto mb-4" />
-            <p>{t('noRecentReports')}</p>
-            <p className="text-sm">{t('generateFirstReport')}</p>
+            <p>No recent reports</p>
+            <p className="text-sm">Generate your first monthly report to see it here</p>
           </div>
         </CardContent>
       </Card>

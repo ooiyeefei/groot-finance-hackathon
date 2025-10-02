@@ -2,7 +2,6 @@
 
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations, useLocale } from 'next-intl'
 import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus, Loader2 } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocumentPolling } from '@/hooks/use-document-polling'
@@ -25,18 +24,14 @@ interface DocumentsListRef {
 
 const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefresh }, ref) => {
   const router = useRouter()
-  const locale = useLocale()
-  const t = useTranslations('documents')
-  const tCommon = useTranslations('common')
-  const tActions = useTranslations('documents.actions')
-  const {
-    documents,
-    loading,
-    refreshDocuments,
-    processDocument,
+  const { 
+    documents, 
+    loading, 
+    refreshDocuments, 
+    processDocument, 
     deleteDocument,
     processingDocuments,
-    deletingDocuments
+    deletingDocuments 
   } = useDocumentPolling()
 
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
@@ -136,10 +131,10 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     setEditTransactionData({ documentId, transactionId })
   }
 
-  // Handle viewing linked transaction
+  // Handle viewing linked transaction 
   const openTransactionView = (transactionId: string) => {
     // Navigate to transactions page with the specific transaction focused using Next.js router
-    router.push(`/${locale}/transactions?highlight=${transactionId}`)
+    router.push(`/transactions?highlight=${transactionId}`)
   }
 
   // Close transaction form modal
@@ -289,8 +284,8 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     return (
       <div className="text-center py-12">
         <FileText className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-        <p className="text-gray-400">{t('noDocumentsYet')}</p>
-        <p className="text-gray-500 text-sm mt-1">{t('uploadFirstDocument')}</p>
+        <p className="text-gray-400">No documents uploaded yet.</p>
+        <p className="text-gray-500 text-sm mt-1">Upload your first document above to get started.</p>
       </div>
     )
   }
@@ -298,13 +293,13 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-white">{t('yourDocuments')}</h3>
+        <h3 className="text-lg font-medium text-white">Your Documents</h3>
         <button
           onClick={handleRefresh}
           className="inline-flex items-center text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors"
         >
           <RotateCcw className="w-4 h-4 mr-1" />
-          {tCommon('refresh')}
+          Refresh
         </button>
       </div>
 
@@ -322,11 +317,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   <div className="flex items-center space-x-4 text-sm text-gray-400 mt-1">
                     <span>{formatFileSize(document.file_size)}</span>
                     <span>•</span>
-                    <span>{tActions('uploaded')} {formatDate(document.created_at)}</span>
+                    <span>Uploaded {formatDate(document.created_at)}</span>
                     {document.processed_at && (
                       <>
                         <span>•</span>
-                        <span>{tActions('processed')} {formatDate(document.processed_at)}</span>
+                        <span>Processed {formatDate(document.processed_at)}</span>
                       </>
                     )}
                   </div>
@@ -343,14 +338,14 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   {/* Show transaction linked status */}
                   {document.linked_transaction && (
                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/20 text-green-400 border border-green-700">
-                      💰 {tActions('transactionCreated')}
+                      💰 Transaction Created
                     </span>
                   )}
                   
                   {/* Show reprocessed status for documents that have been reprocessed */}
                   {reprocessedDocuments.has(document.id) && (
                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-900/20 text-orange-400 border border-orange-700">
-                      🔄 {tActions('reprocessed')}
+                      🔄 Reprocessed
                     </span>
                   )}
                   
@@ -373,7 +368,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                       className="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
                     >
                       <Play className="w-4 h-4 mr-1.5" />
-                      {tActions('process')}
+                      Process
                     </button>
                   )}
                   
@@ -385,7 +380,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                       title="Analyze document and view extracted data"
                     >
                       <Eye className="w-4 h-4 mr-1.5" />
-                      {tActions('analyze')}
+                      Analyze
                     </button>
                   )}
 
@@ -400,7 +395,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                           title={`Update transaction with reprocessed data: ${document.linked_transaction.description}`}
                         >
                           <Plus className="w-4 h-4 mr-1.5" />
-                          {tActions('updateTransaction')}
+                          Update Transaction
                         </button>
                       ) : (
                         // Show View Transaction for normal processed documents
@@ -410,7 +405,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                           title={`View transaction: ${document.linked_transaction.description}`}
                         >
                           <Eye className="w-4 h-4 mr-1.5" />
-                          {tActions('viewTransaction')}
+                          View Transaction
                         </button>
                       )
                     ) : (
@@ -420,7 +415,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                         title="Create transaction from extracted document data"
                       >
                         <Plus className="w-4 h-4 mr-1.5" />
-                        {tActions('addTransaction')}
+                        Add Transaction
                       </button>
                     )
                   )}
@@ -438,20 +433,20 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                       ) : (
                         <RotateCcw className="w-4 h-4 mr-1.5" />
                       )}
-                      {processingDocuments.has(document.id) ? tActions('processing') : tActions('reprocess')}
+                      {processingDocuments.has(document.id) ? 'Processing...' : 'Reprocess'}
                     </button>
                   )}
                   
                   {/* Retry button for failed documents */}
-                  {document.processing_status === 'failed' && (
+                  {(document.processing_status === 'failed' || document.processing_status === 'classification_failed') && (
                     <button
                       onClick={() => retryProcessing(document.id)}
                       disabled={processingDocuments.has(document.id)}
                       className="inline-flex items-center px-3 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
-                      title="Retry processing"
+                      title="Retry processing (works for both general failures and classification failures)"
                     >
                       <RotateCcw className="w-4 h-4 mr-1.5" />
-                      {tActions('retry')}
+                      Retry
                     </button>
                   )}
 
@@ -463,7 +458,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     title="Delete this document"
                   >
                     <Trash2 className="w-4 h-4 mr-1.5" />
-                    {tActions('delete')}
+                    Delete
                   </button>
                 </div>
               </div>
@@ -472,7 +467,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
             {/* Show extracted information for completed documents using cleaner ExtractedInfoTags component */}
             {document.processing_status === 'completed' && document.extracted_data && (
               <div className="mt-4 pt-4 border-t border-gray-600">
-                <h5 className="text-sm font-medium text-gray-300 mb-2">{tActions('extractedInformation')}</h5>
+                <h5 className="text-sm font-medium text-gray-300 mb-2">Extracted Information</h5>
                 <ExtractedInfoTags extractedData={document.extracted_data} />
               </div>
             )}
@@ -518,10 +513,10 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         isOpen={deleteConfirmation.isOpen}
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        title={tActions('deleteDocument')}
-        message={tActions('confirmDelete')}
-        confirmText={tActions('delete')}
-        cancelText={tCommon('cancel')}
+        title="Delete Document"
+        message="Are you sure you want to delete this document? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
         confirmVariant="danger"
         isLoading={deleteConfirmation.isLoading}
       />

@@ -137,8 +137,33 @@ export async function POST(
         console.log(`[Expense-Processor] Found linked document: ${document.id}`)
         console.log(`[Expense-Processor] Document storage path: ${document.storage_path}`)
 
-        // Use the converted image path if available, otherwise use original storage path
-        const imagePath = document.converted_image_path || document.storage_path
+        // Determine the best image path for processing
+        let imagePath: string
+        let resolvedFileName: string
+
+        // Check if document has been converted to pages (multi-page PDF)
+        const pageMetadata = document.document_metadata?.pages
+        if (pageMetadata && Array.isArray(pageMetadata) && pageMetadata.length > 0) {
+          // Use the first page for processing (most receipts are single page)
+          imagePath = pageMetadata[0].path
+          resolvedFileName = `page_1.png`
+          console.log(`[Expense-Processor] Using first page of multi-page document: ${imagePath}`)
+        } else {
+          // For single files, storage_path now points to converted folder or raw file
+          // Check if storage_path is a folder (ends without file extension) or a file
+          if (document.storage_path.includes('.')) {
+            // Direct file path (legacy or single image)
+            imagePath = document.storage_path
+            resolvedFileName = document.file_name || 'receipt.jpg'
+          } else {
+            // Folder path (new documentId-based converted folder)
+            // Look for the first available image file in the folder
+            imagePath = `${document.storage_path}/page_1.png`  // Default to first page
+            resolvedFileName = 'page_1.png'
+            console.log(`[Expense-Processor] Converted folder detected, using: ${imagePath}`)
+          }
+        }
+
         console.log(`[Expense-Processor] Using image path: ${imagePath}`)
         console.log(`[Expense-Processor] Downloading and preparing image for DSPy extraction`)
 
@@ -159,7 +184,7 @@ export async function POST(
         const imageBuffer = await imageResponse.arrayBuffer()
         const base64Image = Buffer.from(imageBuffer).toString('base64')
         const mimeType = document.file_type || 'image/jpeg'
-        const fileName = document.file_name || 'receipt.jpg'
+        const fileName = resolvedFileName
 
         console.log(`[Expense-Processor] Image prepared: ${Math.round(imageBuffer.byteLength / 1024)}KB, type: ${mimeType}`)
         console.log(`[Expense-Processor] Triggering DSPy extraction for receipt reprocessing`)

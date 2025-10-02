@@ -4,12 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run validate-translations && next build",
-    "build:unsafe": "next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "validate-translations": "node scripts/validate-translations.js",
     "migrate:backfill": "tsx src/scripts/migrations/backfill_transaction_data.ts"
   },
   "dependencies": {
