@@ -193,9 +193,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
   const [expandedContainers, setExpandedContainers] = useState<Set<string>>(new Set())
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
 
-  // Memoized callback for polling updates
+  // Memoized callback for polling updates - background refresh without loading spinner
   const handlePollingUpdate = useCallback(() => {
-    fetchApplicationDetail()
+    fetchApplicationDetail(false) // Don't show loading spinner for background updates
   }, [])
 
   // Check if there are documents currently processing - be more strict about processing states
@@ -279,9 +279,11 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
     fetchApplicationDetail()
   }, [applicationId])
 
-  const fetchApplicationDetail = async () => {
+  const fetchApplicationDetail = async (showLoading: boolean = true) => {
     try {
-      setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+      }
       const response = await fetch(`/api/applications/${applicationId}`)
       const result = await response.json()
 
@@ -294,7 +296,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
       console.error('Error fetching application:', err)
       setError('An error occurred while fetching application details')
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
   }
 
@@ -598,7 +602,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
               Back to Applications
             </Button>
           </Link>
-          <Button onClick={fetchApplicationDetail} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button onClick={() => fetchApplicationDetail()} className="bg-blue-600 hover:bg-blue-700 text-white">
             Try Again
           </Button>
         </div>
@@ -1213,7 +1217,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
             <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
             <span className="text-gray-400 text-sm">Auto-refresh paused - all documents processed</span>
             <Button
-              onClick={fetchApplicationDetail}
+              onClick={() => fetchApplicationDetail()}
               variant="outline"
               size="sm"
               className="ml-2 bg-gray-700 text-white border-gray-600 hover:bg-gray-600 hover:border-gray-500"

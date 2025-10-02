@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Plus, ClipboardList, Clock, CheckCircle, AlertCircle, FileText, Trash2 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 
 interface Application {
@@ -35,11 +36,13 @@ interface Application {
 
 export default function ApplicationsContainer() {
   const locale = useLocale()
+  const router = useRouter()
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deletingApplication, setDeletingApplication] = useState<string | null>(null)
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ applicationId: string; title: string } | null>(null)
+  const [creatingApplication, setCreatingApplication] = useState(false)
 
   useEffect(() => {
     fetchApplications()
@@ -139,6 +142,50 @@ export default function ApplicationsContainer() {
     setDeleteConfirmation({ applicationId, title })
   }
 
+  const handleCreateNewApplication = async () => {
+    try {
+      setCreatingApplication(true)
+      setError(null)
+
+      const response = await fetch('/api/applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: 'New Application', // Temporary title, will be updated with ID
+          description: '',
+          application_type: 'personal_loan'
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Update the title to use the application ID
+        const updateResponse = await fetch(`/api/applications/${result.data.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: `app-${result.data.id.split('-')[0]}`
+          })
+        })
+
+        // Navigate directly to the application details page
+        router.push(`/${locale}/applications/${result.data.id}`)
+      } else {
+        setError(result.error || 'Failed to create application')
+      }
+    } catch (err) {
+      console.error('Error creating application:', err)
+      setError('An error occurred while creating the application')
+    } finally {
+      setCreatingApplication(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -174,12 +221,23 @@ export default function ApplicationsContainer() {
           <h1 className="text-2xl font-bold text-white">Applications</h1>
           <p className="text-gray-400 mt-1">Manage your personal loan applications</p>
         </div>
-        <Link href={`/${locale}/applications/new`}>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-            <Plus className="w-4 h-4 mr-2" />
-            New Application
-          </Button>
-        </Link>
+        <Button
+          onClick={handleCreateNewApplication}
+          disabled={creatingApplication}
+          className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {creatingApplication ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <Plus className="w-4 h-4 mr-2" />
+              New Application
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Applications List */}
@@ -192,12 +250,23 @@ export default function ApplicationsContainer() {
               Get started by creating your first personal loan application.
               Upload required documents and track your progress.
             </p>
-            <Link href={`/${locale}/applications/new`}>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                <Plus className="w-4 h-4 mr-2" />
-                Create First Application
-              </Button>
-            </Link>
+            <Button
+              onClick={handleCreateNewApplication}
+              disabled={creatingApplication}
+              className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creatingApplication ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create First Application
+                </>
+              )}
+            </Button>
           </CardContent>
         </Card>
       ) : (

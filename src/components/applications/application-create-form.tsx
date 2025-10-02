@@ -62,7 +62,7 @@ export default function ApplicationCreateForm() {
 
       if (result.success) {
         // Redirect to the new application detail page
-        router.push(`/applications/${result.data.id}`)
+        router.push(`/${locale}/applications/${result.data.id}`)
       } else {
         setError(result.error || 'Failed to create application')
       }
