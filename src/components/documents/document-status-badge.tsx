@@ -59,10 +59,10 @@ export default function DocumentStatusBadge({
         }
       case 'pending_extraction':
         return {
-          icon: Eye,
-          text: 'Awaiting Extraction',
-          className: 'bg-amber-900/20 text-amber-300 border-amber-700/50',
-          animate: false
+          icon: Brain,
+          text: 'Processing',
+          className: 'bg-blue-900/20 text-blue-300 border-blue-700/50',
+          animate: true
         }
       case 'extracting':
         return {

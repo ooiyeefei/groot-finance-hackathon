@@ -34,40 +34,72 @@ export const extractApplicationFormData = task({
     // Step 2: Update status to extracting
     await updateDocumentStatus(documentId, 'extracting');
 
-    // UNIFIED ARCHITECTURE: Use bucket list() to discover ALL files at storage_path location
-    console.log(`[ExtractApplication] Using unified bucket list() architecture`);
-    console.log(`[ExtractApplication] Discovering all files at storage location: ${imageStoragePath}`);
-
-    // Use storage.list() to discover all files at the storage_path location
-    const { data: fileList, error: listError } = await supabase.storage
+    // Fetch document metadata to determine path handling approach
+    const { data: document, error: fetchError } = await supabase
       .from('documents')
-      .list(imageStoragePath, {
-        limit: 100,
-        sortBy: { column: 'name', order: 'asc' }
-      });
+      .select('file_type, converted_image_path, storage_path')
+      .eq('id', documentId)
+      .single();
 
-    if (listError) {
-      throw new Error(`Failed to list files at storage path: ${listError.message}`);
+    if (fetchError || !document) {
+      throw new Error(`Document not found: ${fetchError?.message}`);
     }
 
-    if (!fileList || fileList.length === 0) {
-      throw new Error(`No files found at storage path: ${imageStoragePath}`);
-    }
+    // GRACEFUL PATH HANDLING: Different approaches for images vs converted PDFs
+    console.log(`[ExtractApplication] Document type: ${document.file_type}, has converted path: ${!!document.converted_image_path}`);
 
-    console.log(`[ExtractApplication] Found ${fileList.length} file(s) at location`);
+    let pageUrls = [];
 
-    // Create signed URLs for ALL discovered files (unified approach for single/multi-page)
-    const pageUrls = [];
-    for (const file of fileList) {
-      const filePath = `${imageStoragePath}/${file.name}`;
-      console.log(`[ExtractApplication] Creating signed URL for file: ${filePath}`);
+    if (document.converted_image_path) {
+      // PDF CASE: converted_image_path is a folder containing multiple images
+      console.log(`[ExtractApplication] PDF workflow - using converted image folder: ${document.converted_image_path}`);
+
+      const { data: fileList, error: listError } = await supabase.storage
+        .from('documents')
+        .list(document.converted_image_path, {
+          limit: 100,
+          sortBy: { column: 'name', order: 'asc' }
+        });
+
+      if (listError) {
+        throw new Error(`Failed to list converted images: ${listError.message}`);
+      }
+
+      if (!fileList || fileList.length === 0) {
+        throw new Error(`No converted images found in folder: ${document.converted_image_path}`);
+      }
+
+      console.log(`[ExtractApplication] Found ${fileList.length} converted image(s) for processing`);
+
+      // Create signed URLs for ALL discovered files (multi-page PDF processing)
+      for (const file of fileList) {
+        const filePath = `${document.converted_image_path}/${file.name}`;
+        console.log(`[ExtractApplication] Creating signed URL for file: ${filePath}`);
+
+        const { data: urlData, error: urlError } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(filePath, 600);
+
+        if (urlError || !urlData) {
+          throw new Error(`Failed to create signed URL for ${file.name}: ${urlError?.message}`);
+        }
+
+        pageUrls.push(urlData.signedUrl);
+      }
+
+    } else {
+      // IMAGE CASE: storage_path is the direct file path
+      console.log(`[ExtractApplication] Image workflow - using direct file path: ${imageStoragePath}`);
+
+      // Create signed URL for the single image file
+      console.log(`[ExtractApplication] Creating signed URL for single image: ${imageStoragePath}`);
 
       const { data: urlData, error: urlError } = await supabase.storage
         .from('documents')
-        .createSignedUrl(filePath, 600);
+        .createSignedUrl(imageStoragePath, 600);
 
       if (urlError || !urlData) {
-        throw new Error(`Failed to create signed URL for ${file.name}: ${urlError?.message}`);
+        throw new Error(`Failed to create signed URL for ${imageStoragePath}: ${urlError?.message}`);
       }
 
       pageUrls.push(urlData.signedUrl);

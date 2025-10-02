@@ -271,45 +271,75 @@ export const processDocumentOCR = task({
       console.log(`📄 Processing: ${docRecord.file_name} (${docRecord.file_type}, ${Math.round(docRecord.file_size / 1024)}KB)`);
       console.log(`🖼️ Using image storage path: ${imageStoragePath}`);
 
-      // Step 2: Using unified bucket list() architecture to discover files
-      console.log(`[ProcessDocumentOCR] Using unified bucket list() architecture`);
-      console.log(`[ProcessDocumentOCR] Discovering all files at storage location: ${imageStoragePath}`);
+      // Step 2: GRACEFUL PATH HANDLING: Different approaches for images vs converted PDFs
+      console.log(`[ProcessDocumentOCR] Document type: ${docRecord.file_type}, has converted path: ${!!docRecord.converted_image_path}`);
 
-      const { data: fileList, error: listError } = await supabase.storage
-        .from('documents')
-        .list(imageStoragePath, {
-          limit: 100,
-          sortBy: { column: 'name', order: 'asc' }
-        });
+      let processImagePath: string;
+      let pageUrls = [];
 
-      if (listError) {
-        throw new Error(`Failed to list files at storage path: ${listError.message}`);
-      }
+      if (docRecord.converted_image_path) {
+        // PDF CASE: converted_image_path is a folder containing multiple images
+        console.log(`[ProcessDocumentOCR] PDF workflow - using converted image folder: ${docRecord.converted_image_path}`);
 
-      if (!fileList || fileList.length === 0) {
-        throw new Error(`No files found at storage path: ${imageStoragePath}`);
-      }
+        const { data: fileList, error: listError } = await supabase.storage
+          .from('documents')
+          .list(docRecord.converted_image_path, {
+            limit: 100,
+            sortBy: { column: 'name', order: 'asc' }
+          });
 
-      console.log(`[ProcessDocumentOCR] Found ${fileList.length} file(s) at location`);
+        if (listError) {
+          throw new Error(`Failed to list converted images: ${listError.message}`);
+        }
 
-      // Create signed URLs for ALL discovered files (unified approach for single/multi-page)
-      const pageUrls = [];
-      for (const file of fileList) {
-        const filePath = `${imageStoragePath}/${file.name}`;
-        console.log(`[ProcessDocumentOCR] Creating signed URL for file: ${filePath}`);
+        if (!fileList || fileList.length === 0) {
+          throw new Error(`No converted images found in folder: ${docRecord.converted_image_path}`);
+        }
+
+        console.log(`[ProcessDocumentOCR] Found ${fileList.length} converted image(s) for processing`);
+
+        // Create signed URLs for ALL discovered files (multi-page PDF processing)
+        for (const file of fileList) {
+          const filePath = `${docRecord.converted_image_path}/${file.name}`;
+          console.log(`[ProcessDocumentOCR] Creating signed URL for file: ${filePath}`);
+
+          const { data: urlData, error: urlError } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(filePath, 600);
+
+          if (urlError || !urlData) {
+            throw new Error(`Failed to create signed URL for ${filePath}: ${urlError?.message}`);
+          }
+
+          pageUrls.push({
+            url: urlData.signedUrl,
+            filename: file.name,
+            path: filePath
+          });
+        }
+
+      } else {
+        // IMAGE CASE: storage_path is the direct file path
+        console.log(`[ProcessDocumentOCR] Image workflow - using direct file path: ${imageStoragePath}`);
+        processImagePath = imageStoragePath;
+
+        // Create signed URL for the single image file
+        console.log(`[ProcessDocumentOCR] Creating signed URL for single image: ${processImagePath}`);
 
         const { data: urlData, error: urlError } = await supabase.storage
           .from('documents')
-          .createSignedUrl(filePath, 600);
+          .createSignedUrl(processImagePath, 600);
 
         if (urlError || !urlData) {
-          throw new Error(`Failed to create signed URL for ${filePath}: ${urlError?.message}`);
+          throw new Error(`Failed to create signed URL for ${processImagePath}: ${urlError?.message}`);
         }
 
+        // Extract filename from path for consistency
+        const filename = processImagePath.split('/').pop() || 'image';
         pageUrls.push({
           url: urlData.signedUrl,
-          filename: file.name,
-          path: filePath
+          filename: filename,
+          path: processImagePath
         });
       }
 
