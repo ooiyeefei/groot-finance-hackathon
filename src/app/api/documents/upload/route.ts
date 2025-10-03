@@ -1,6 +1,6 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { uploadRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter'
 import { StoragePathBuilder, generateUniqueFilename, type DocumentType } from '@/lib/storage-paths'
 
@@ -122,57 +122,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create Supabase client with service role
-    const supabase = createServiceSupabaseClient()
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    // Get or create user and business relationship
-    const userResult = await supabase
-      .from('users')
-      .select('id, business_id')
-      .eq('clerk_user_id', userId)
-      .single()
-    
-    let userData = userResult.data
-    const userError = userResult.error
-
-    let businessId: string
-
-    if (userError || !userData) {
-      // Get default business
-      const { data: defaultBusiness } = await supabase
-        .from('businesses')
-        .select('id')
-        .eq('slug', 'default-business')
-        .single()
-
-      businessId = defaultBusiness?.id || ''
-
-      // Create user record with business association
-      const { data: newUser, error: createError } = await supabase
-        .from('users')
-        .insert({
-          clerk_user_id: userId,
-          email: user.emailAddresses[0]?.emailAddress || 'temp@example.com',
-          full_name: user.fullName || 'User',
-          business_id: businessId,
-          role: 'owner'
-        })
-        .select('id, business_id')
-        .single()
-
-      if (createError) {
-        console.error('Failed to create user:', createError)
-        return NextResponse.json(
-          { success: false, error: 'Failed to initialize user' },
-          { status: 500 }
-        )
-      }
-      
-      userData = newUser
-      businessId = newUser.business_id
-    } else {
-      businessId = userData.business_id
+    if (!userData.business_id) {
+      return NextResponse.json(
+        { success: false, error: 'User not associated with a business' },
+        { status: 400 }
+      )
     }
+
+    const businessId = userData.business_id
 
     // Detect document type
     const documentType = detectDocumentType(file.name, formData)

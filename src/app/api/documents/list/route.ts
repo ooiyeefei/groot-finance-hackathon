@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 export async function GET() {
   try {
@@ -13,28 +13,11 @@ export async function GET() {
       )
     }
 
-    // Create Supabase client with service role for bypassing RLS
-    const supabase = createServiceSupabaseClient()
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    console.log('[API] List documents - Clerk ID:', userId)
-
-    // Convert Clerk user ID to Supabase UUID
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('clerk_user_id', userId)
-      .single()
-
-    if (userError || !user) {
-      console.error(`[Documents List API] User lookup failed for clerk_user_id ${userId}:`, userError)
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    const supabaseUserId = user.id
-    console.log(`[Documents List API] Converted Clerk ID ${userId} to Supabase UUID ${supabaseUserId}`)
+    console.log('[API] List documents - User ID:', userData.id)
 
     // Fetch user's documents with linked transaction information ordered by creation date (newest first)
     const { data: documents, error } = await supabase
@@ -45,7 +28,7 @@ export async function GET() {
           id, description, original_amount, original_currency, created_at
         )
       `)
-      .eq('user_id', supabaseUserId)
+      .eq('user_id', userData.id) // SECURITY FIX: Use validated Supabase UUID
       .is('deleted_at', null)
       .or('deleted_at.is.null', { foreignTable: 'transactions' })
       .order('created_at', { ascending: false })

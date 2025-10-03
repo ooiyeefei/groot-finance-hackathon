@@ -114,7 +114,6 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Transactions API] Creating ${transaction_type} transaction for user ${userId}`)
 
-    // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
@@ -142,11 +141,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // SECURITY: Create transaction with Supabase UUID and business context validation
     const { data: transaction, error: transactionError } = await supabase
       .from('transactions')
       .insert({
-        user_id: userData.id, // SECURITY FIX: Use Supabase UUID instead of Clerk ID
+        user_id: userData.id,
         document_id: source_document_id || null, // Link to source document if provided
         transaction_type,
         category: finalCategory,
@@ -318,7 +316,6 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Transactions API] Listing transactions for user ${userId}:`, params)
 
-    // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
