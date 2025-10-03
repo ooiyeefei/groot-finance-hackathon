@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { CreateAuditEventRequest } from '@/types/expense-claims'
 
 // Get audit events with filtering
@@ -20,9 +20,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient()
+    // 🚨 CRITICAL SECURITY FIX: Add business context validation to prevent cross-tenant data exposure
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+
     const { searchParams } = new URL(request.url)
-    
+
     // Query parameters
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '100')
@@ -33,7 +36,7 @@ export async function GET(request: NextRequest) {
     const date_from = searchParams.get('date_from')
     const date_to = searchParams.get('date_to')
 
-    // Build query with user/actor information
+    // 🚨 CRITICAL SECURITY FIX: Build query with MANDATORY business context filtering
     let query = supabase
       .from('audit_events')
       .select(`
@@ -44,6 +47,7 @@ export async function GET(request: NextRequest) {
           email
         )
       `)
+      .eq('business_id', userData.business_id) // 🚨 CRITICAL: Prevent cross-business audit log access
       .order('created_at', { ascending: false })
 
     // Apply filters
@@ -122,28 +126,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient()
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    // Get user's business_id
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('business_id')
-      .eq('id', userId)
-      .single()
-
-    if (userError || !user?.business_id) {
-      return NextResponse.json(
-        { success: false, error: 'User business not found' },
-        { status: 400 }
-      )
-    }
-
-    // Create audit event
+    // SECURITY FIX: Create audit event with proper business context and Supabase UUID
     const { data: auditEvent, error: auditError } = await supabase
       .from('audit_events')
       .insert({
-        business_id: user.business_id,
-        actor_user_id: userId,
+        business_id: userData.business_id, // SECURITY FIX: Use validated business context
+        actor_user_id: userData.id, // SECURITY FIX: Use Supabase UUID instead of Clerk ID
         event_type,
         target_entity_type,
         target_entity_id,

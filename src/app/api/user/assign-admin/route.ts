@@ -23,10 +23,7 @@ export async function POST(request: NextRequest) {
     // Method 1: Master admin key (only for you as SaaS owner)
     if (admin_key) {
       const validAdminKey = process.env.MASTER_ADMIN_KEY
-      console.log('[Admin Assignment] Debug - Received key:', admin_key ? `${admin_key.substring(0, 10)}...` : 'NO KEY')
-      console.log('[Admin Assignment] Debug - Expected key:', validAdminKey ? `${validAdminKey.substring(0, 10)}...` : 'NO ENV KEY')
-      console.log('[Admin Assignment] Debug - Keys match:', admin_key === validAdminKey)
-      
+
       if (!validAdminKey || admin_key !== validAdminKey) {
         return NextResponse.json(
           { success: false, error: 'Invalid master admin key' },

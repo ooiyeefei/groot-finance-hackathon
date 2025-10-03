@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
 import { CrossBorderTaxComplianceTool } from '@/lib/tools'
 import { 
@@ -114,6 +114,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Transactions API] Creating ${transaction_type} transaction for user ${userId}`)
 
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Use the submitted home currency from the form
@@ -140,11 +142,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create transaction
+    // SECURITY: Create transaction with Supabase UUID and business context validation
     const { data: transaction, error: transactionError } = await supabase
       .from('transactions')
       .insert({
-        user_id: userId,
+        user_id: userData.id, // SECURITY FIX: Use Supabase UUID instead of Clerk ID
         document_id: source_document_id || null, // Link to source document if provided
         transaction_type,
         category: finalCategory,
@@ -316,14 +318,17 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Transactions API] Listing transactions for user ${userId}:`, params)
 
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
+
     let query = supabase
       .from('transactions')
       .select(`
         *,
-        line_items!left (*) 
+        line_items!left (*)
       `)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id) // SECURITY FIX: Use Supabase UUID instead of Clerk ID
       .is('deleted_at', null)
       .or('deleted_at.is.null', { foreignTable: 'line_items' })
 
@@ -381,11 +386,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get total count for pagination (excluding soft-deleted transactions)
+    // SECURITY: Get total count with proper UUID filtering (excluding soft-deleted transactions)
     const { count: totalCount } = await supabase
       .from('transactions')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
+      .eq('user_id', userData.id) // SECURITY FIX: Use Supabase UUID instead of Clerk ID
       .is('deleted_at', null)
 
     const hasMore = offset + params.limit! < (totalCount || 0)

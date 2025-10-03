@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
 import { CrossBorderTaxComplianceTool } from '@/lib/tools'
 import { UpdateTransactionRequest, SupportedCurrency } from '@/types/transaction'
@@ -36,7 +36,10 @@ export async function GET(
 
     console.log(`[Transaction API] Getting transaction ${transactionId} for user ${userId}`)
 
-    const supabase = createServiceSupabaseClient()
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+
     const { data: transaction, error } = await supabase
       .from('transactions')
       .select(`
@@ -44,7 +47,7 @@ export async function GET(
         line_items!left (*)
       `)
       .eq('id', transactionId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id) // SECURITY FIX: Use Supabase UUID instead of Clerk ID
       .is('deleted_at', null)
       .or('deleted_at.is.null', { foreignTable: 'line_items' })
       .single()
@@ -108,14 +111,16 @@ export async function PUT(
     
     console.log(`[Transaction API] Updating transaction ${transactionId} for user ${userId}`)
 
-    const supabase = createServiceSupabaseClient()
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // First, verify the transaction exists and belongs to the user
     const { data: existingTransaction, error: fetchError } = await supabase
       .from('transactions')
       .select('*')
       .eq('id', transactionId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id) // SECURITY FIX: Use Supabase UUID instead of Clerk ID
       .is('deleted_at', null)
       .single()
 
@@ -237,12 +242,12 @@ export async function PUT(
       }
     }
 
-    // Update the transaction
+    // SECURITY: Update transaction with proper UUID validation
     const { data: updatedTransaction, error: updateError } = await supabase
       .from('transactions')
       .update(updateData)
       .eq('id', transactionId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id) // SECURITY FIX: Use Supabase UUID instead of Clerk ID
       .select(`
         *,
         line_items!left (*)
@@ -342,14 +347,16 @@ export async function DELETE(
 
     console.log(`[Transaction API] Deleting transaction ${transactionId} for user ${userId}`)
 
-    const supabase = createServiceSupabaseClient()
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // First verify the transaction exists and belongs to the user (and is not already deleted)
     const { data: existingTransaction, error: fetchError } = await supabase
       .from('transactions')
       .select('id')
       .eq('id', transactionId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id) // SECURITY FIX: Use Supabase UUID instead of Clerk ID
       .is('deleted_at', null)
       .single()
 
@@ -369,15 +376,15 @@ export async function DELETE(
 
     const deletedAt = new Date().toISOString()
 
-    // Soft delete the transaction by setting deleted_at timestamp
+    // SECURITY: Soft delete with proper UUID validation
     const { error: deleteError } = await supabase
       .from('transactions')
-      .update({ 
+      .update({
         deleted_at: deletedAt,
         updated_at: deletedAt
       })
       .eq('id', transactionId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id) // SECURITY FIX: Use Supabase UUID instead of Clerk ID
 
     if (deleteError) {
       console.error('[Transaction API] Failed to soft delete transaction:', deleteError)

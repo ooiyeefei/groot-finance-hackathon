@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/currency-service'
 import {
@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Expense Claims API] Creating expense claim for user ${userId}`)
 
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Get or create employee profile
@@ -182,7 +184,7 @@ export async function POST(request: NextRequest) {
             status
           )
         `)
-        .eq('user_id', userId)
+        .eq('user_id', userData.id) // SECURITY FIX: Use Supabase UUID instead of Clerk ID
         .eq('reference_number', reference_number)
         .eq('transaction_date', transaction_date)
         .eq('original_amount', original_amount)
@@ -217,7 +219,7 @@ export async function POST(request: NextRequest) {
     const { data: transaction, error: transactionError } = await supabase
       .from('transactions')
       .insert({
-        user_id: userId,
+        user_id: userData.id, // SECURITY FIX: Use Supabase UUID instead of Clerk ID
         transaction_type: 'expense',
         category: accountingCategory, // Use mapped IFRS accounting category
         subcategory: expense_category, // Keep original business category as subcategory
@@ -314,9 +316,8 @@ export async function POST(request: NextRequest) {
       current_approver_id: null // Will be set when submitted
     }
 
-    // Use service role client to bypass RLS for expense claim creation (much simpler!)
-    const serviceSupabase = createServiceSupabaseClient()
-    const { data: expenseClaim, error: claimError } = await serviceSupabase
+    // SECURITY FIX: Use authenticated client with proper business context validation
+    const { data: expenseClaim, error: claimError } = await supabase
       .from('expense_claims')
       .insert(expenseClaimData)
       .select()
@@ -330,12 +331,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log audit event for compliance tracking
-    await serviceSupabase
+    // SECURITY FIX: Log audit event using authenticated client with business context
+    await supabase
       .from('audit_events')
       .insert({
         business_id: employeeProfile.business_id,
-        actor_user_id: userId,
+        actor_user_id: userData.id, // SECURITY FIX: Use Supabase UUID instead of Clerk ID
         event_type: 'expense_claim.created',
         target_entity_type: 'expense_claim',
         target_entity_id: expenseClaim.id,

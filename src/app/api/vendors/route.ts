@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { 
   Vendor, 
   CreateVendorRequest, 
@@ -25,9 +25,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient()
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+
     const { searchParams } = new URL(request.url)
-    
+
     // Query parameters
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
@@ -35,10 +38,11 @@ export async function GET(request: NextRequest) {
     const verification_status = searchParams.get('verification_status')
     const risk_level = searchParams.get('risk_level')
 
-    // Build query
+    // SECURITY: Build query with business context filtering to prevent cross-tenant data exposure
     let query = supabase
       .from('vendors')
       .select('*')
+      .eq('business_id', userData.business_id) // SECURITY FIX: Filter by business_id to prevent data leakage
       .order('name', { ascending: true })
 
     // Apply filters
@@ -108,28 +112,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient()
-
-    // Get user's business_id
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('business_id')
-      .eq('id', userId)
-      .single()
-
-    if (userError || !user?.business_id) {
-      return NextResponse.json(
-        { success: false, error: 'User business not found' },
-        { status: 400 }
-      )
-    }
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Create vendor
     const { data: vendor, error: vendorError } = await supabase
       .from('vendors')
       .insert({
         name: name.trim(),
-        business_id: user.business_id,
+        business_id: userData.business_id, // SECURITY FIX: Use validated business context
         verification_status: verification_status || 'unverified',
         risk_level: risk_level || 'low',
         metadata: metadata || {}
@@ -154,12 +146,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log audit event
+    // SECURITY FIX: Log audit event with proper business context and Supabase UUID
     await supabase
       .from('audit_events')
       .insert({
-        business_id: user.business_id,
-        actor_user_id: userId,
+        business_id: userData.business_id, // SECURITY FIX: Use validated business context
+        actor_user_id: userData.id, // SECURITY FIX: Use Supabase UUID instead of Clerk ID
         event_type: 'vendor.created',
         target_entity_type: 'vendor',
         target_entity_id: vendor.id,
