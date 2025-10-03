@@ -97,7 +97,12 @@ export async function POST(req: NextRequest) {
     })
 
   } catch (err) {
-    console.error('[Clerk Webhook] Error verifying webhook signature:', err)
+    console.error('[Clerk Webhook] Error verifying webhook signature or processing event:', err)
+    console.error('[Clerk Webhook] Request details:', {
+      bodyLength: body.length,
+      hasHeaders: { svixId: !!svixId, svixTimestamp: !!svixTimestamp, svixSignature: !!svixSignature },
+      errorType: err instanceof Error ? err.constructor.name : typeof err
+    })
     return NextResponse.json(
       { error: 'Invalid webhook signature or processing error' },
       { status: 400 }
@@ -109,7 +114,8 @@ export async function POST(req: NextRequest) {
  * Handle user.created event - Main sync logic for both invitation and direct signup
  */
 async function handleUserCreated(user: ClerkUser) {
-  console.log(`[Clerk Webhook] Processing user.created for Clerk ID: ${user.id}`)
+  console.log(`[Clerk Webhook] 🚀 Processing user.created for Clerk ID: ${user.id}`)
+  console.log(`[Clerk Webhook] 📧 User email addresses:`, user.email_addresses.map(e => ({ email: e.email_address, verified: e.verification?.status })))
 
   const supabase = createServiceSupabaseClient()
 
@@ -119,7 +125,7 @@ async function handleUserCreated(user: ClerkUser) {
   ) || user.email_addresses[0]
 
   if (!primaryEmail) {
-    console.error('[Clerk Webhook] User has no email addresses, skipping sync')
+    console.error('[Clerk Webhook] ❌ User has no email addresses, skipping sync')
     return
   }
 
@@ -127,6 +133,8 @@ async function handleUserCreated(user: ClerkUser) {
   const fullName = user.first_name && user.last_name
     ? `${user.first_name} ${user.last_name}`
     : null
+
+  console.log(`[Clerk Webhook] 📝 Processing: email=${email}, fullName=${fullName}`)
 
   try {
     // 🛡️ FIRST: Check if user already exists by clerk_user_id to prevent duplicates
@@ -143,7 +151,7 @@ async function handleUserCreated(user: ClerkUser) {
       return // User already processed, nothing to do
     }
 
-    console.log(`[Clerk Webhook] Checking for existing invitation for email: ${email}`)
+    console.log(`[Clerk Webhook] 🔍 Checking for existing invitation for email: ${email}`)
 
     // SCENARIO 1: Check if user has pending invitation (invitation-based signup)
     const { data: existingInvitation, error: invitationError } = await supabase
@@ -151,12 +159,17 @@ async function handleUserCreated(user: ClerkUser) {
       .select('id, business_id, role, invited_by, clerk_user_id')
       .ilike('email', email)
       .not('invited_by', 'is', null) // Must be an invitation
-      .single()
+      .maybeSingle()  // 🔧 FIX: Use maybeSingle() - no error if no invitation exists
+
+    if (invitationError) {
+      console.log(`[Clerk Webhook] 📄 Invitation check error (expected for direct signups): ${invitationError.message}`)
+    }
 
     if (!invitationError && existingInvitation) {
+      console.log(`[Clerk Webhook] 🎫 SCENARIO 1: Found existing invitation for ${email}`)
       if (!existingInvitation.clerk_user_id) {
         // Link existing invitation to Clerk user
-        console.log(`[Clerk Webhook] SCENARIO 1: Linking invitation to Clerk user: ${email}`)
+        console.log(`[Clerk Webhook] 🔗 Linking invitation to Clerk user: ${email}`)
 
         const { error: linkError } = await supabase
           .from('users')
@@ -168,11 +181,12 @@ async function handleUserCreated(user: ClerkUser) {
           .eq('id', existingInvitation.id)
 
         if (linkError) {
-          console.error('[Clerk Webhook] Error linking invitation:', linkError)
+          console.error('[Clerk Webhook] ❌ Error linking invitation:', linkError)
           return
         }
 
         // Create employee profile with invitation's business and role
+        console.log(`[Clerk Webhook] 👤 Creating employee profile for invitation`)
         await createEmployeeProfile(
           existingInvitation.id,
           existingInvitation.business_id,
@@ -180,61 +194,79 @@ async function handleUserCreated(user: ClerkUser) {
           user.id
         )
 
-        console.log(`[Clerk Webhook] Successfully linked invitation: ${email} → Business: ${existingInvitation.business_id}`)
+        console.log(`[Clerk Webhook] ✅ Successfully linked invitation: ${email} → Business: ${existingInvitation.business_id}`)
       } else {
-        console.log(`[Clerk Webhook] Invitation already linked for: ${email}`)
+        console.log(`[Clerk Webhook] ⚠️ Invitation already linked for: ${email}`)
       }
       return
     }
 
     // SCENARIO 2: Direct signup - create new user with personal business
-    console.log(`[Clerk Webhook] SCENARIO 2: Creating new user from direct signup: ${email}`)
+    console.log(`[Clerk Webhook] 🏢 SCENARIO 2: Creating new user from direct signup: ${email}`)
 
     // Create personal business for direct signup using correct schema
+    const businessName = fullName ? `${fullName}'s Business` : `${email.split('@')[0]}'s Business`
+    const businessSlug = `${email.split('@')[0]}-business-${Date.now()}`
+
+    console.log(`[Clerk Webhook] 🏪 Creating business: name="${businessName}", slug="${businessSlug}"`)
+
     const { data: newBusiness, error: businessError } = await supabase
       .from('businesses')
       .insert({
-        name: fullName ? `${fullName}'s Business` : `${email.split('@')[0]}'s Business`,
-        slug: `${email.split('@')[0]}-business-${Date.now()}`, // Generate unique slug
-        country_code: 'SG', // Use correct column name
-        home_currency: 'SGD', // Use correct column name
-        custom_expense_categories: getDefaultExpenseCategories(), // Add default expense categories
+        name: businessName,
+        slug: businessSlug,
+        country_code: 'SG',
+        home_currency: 'SGD',
+        custom_expense_categories: getDefaultExpenseCategories(),
         created_at: new Date().toISOString()
       })
       .select('id')
       .single()
 
     if (businessError) {
-      console.error('[Clerk Webhook] Error creating personal business:', businessError)
+      console.error('[Clerk Webhook] ❌ Error creating personal business:', businessError)
+      console.error('[Clerk Webhook] 📊 Business creation details:', { businessName, businessSlug })
       return
     }
 
+    console.log(`[Clerk Webhook] ✅ Created business with ID: ${newBusiness.id}`)
+
     // 🛡️ Create user record with additional duplicate protection
+    console.log(`[Clerk Webhook] 👤 Creating user record for ${email} in business ${newBusiness.id}`)
+
+    const userData = {
+      clerk_user_id: user.id,
+      email: email,
+      full_name: fullName,
+      business_id: newBusiness.id,
+      role: 'admin',
+      home_currency: 'SGD',
+      created_at: new Date().toISOString()
+    }
+
+    console.log(`[Clerk Webhook] 📝 User data:`, userData)
+
     const { data: newUser, error: userError } = await supabase
       .from('users')
-      .insert({
-        clerk_user_id: user.id,
-        email: email,
-        full_name: fullName,
-        business_id: newBusiness.id,
-        role: 'admin', // Direct signups are admins of their personal business
-        home_currency: 'SGD',
-        created_at: new Date().toISOString()
-      })
+      .insert(userData)
       .select('id')
       .single()
 
     if (userError) {
       // Handle potential unique constraint violation gracefully
       if (userError.code === '23505' && userError.message.includes('clerk_user_id')) {
-        console.log(`[Clerk Webhook] User with Clerk ID ${user.id} already exists (race condition), skipping creation`)
+        console.log(`[Clerk Webhook] ⚠️ User with Clerk ID ${user.id} already exists (race condition), skipping creation`)
         return
       }
-      console.error('[Clerk Webhook] Error creating user record:', userError)
+      console.error('[Clerk Webhook] ❌ Error creating user record:', userError)
+      console.error('[Clerk Webhook] 📊 User data details:', userData)
       return
     }
 
+    console.log(`[Clerk Webhook] ✅ Created user with ID: ${newUser.id}`)
+
     // Create employee profile for direct signup (they're admin of their own business)
+    console.log(`[Clerk Webhook] 👔 Creating employee profile for user ${newUser.id} in business ${newBusiness.id}`)
     await createEmployeeProfile(
       newUser.id,
       newBusiness.id,
@@ -242,10 +274,16 @@ async function handleUserCreated(user: ClerkUser) {
       user.id
     )
 
-    console.log(`[Clerk Webhook] Successfully created direct signup: ${email} → Business: ${newBusiness.id}`)
+    console.log(`[Clerk Webhook] 🎉 Successfully created direct signup: ${email} → User: ${newUser.id} → Business: ${newBusiness.id}`)
 
   } catch (error) {
-    console.error('[Clerk Webhook] Error in handleUserCreated:', error)
+    console.error('[Clerk Webhook] 💥 Critical error in handleUserCreated for user', user.id, ':', error)
+    console.error('[Clerk Webhook] 📋 User details:', { email, fullName, clerkId: user.id })
+
+    // Ensure error is properly logged with stack trace
+    if (error instanceof Error) {
+      console.error('[Clerk Webhook] 📚 Stack trace:', error.stack)
+    }
   }
 }
 
@@ -332,6 +370,7 @@ async function createEmployeeProfile(
   role: string,
   clerkUserId: string
 ) {
+  console.log(`[Clerk Webhook] 🆔 createEmployeeProfile called with:`, { userId, businessId, role, clerkUserId })
   const supabase = createServiceSupabaseClient()
 
   try {
@@ -342,31 +381,48 @@ async function createEmployeeProfile(
       admin: role === 'admin'
     }
 
+    const employeeId = `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
+    const jobTitle = role === 'admin' ? 'Administrator' :
+                     role === 'manager' ? 'Manager' : 'Employee'
+
+    console.log(`[Clerk Webhook] 📋 Creating employee profile:`, {
+      user_id: userId,
+      business_id: businessId,
+      employee_id: employeeId,
+      job_title: jobTitle,
+      role_permissions: rolePermissions
+    })
+
     // Create employee profile
     const { error } = await supabase
       .from('employee_profiles')
       .insert({
         user_id: userId,
         business_id: businessId,
-        employee_id: `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        employee_id: employeeId,
         department: 'General',
-        job_title: role === 'admin' ? 'Administrator' :
-                   role === 'manager' ? 'Manager' : 'Employee',
+        job_title: jobTitle,
         role_permissions: rolePermissions,
         created_at: new Date().toISOString()
       })
 
     if (error) {
-      console.error('[Clerk Webhook] Error creating employee profile:', error)
+      console.error('[Clerk Webhook] ❌ Error creating employee profile:', error)
       return
     }
 
+    console.log(`[Clerk Webhook] ✅ Employee profile created successfully`)
+
     // Sync role permissions to Clerk metadata
+    console.log(`[Clerk Webhook] 🔄 Syncing role permissions to Clerk metadata`)
     await syncRoleToClerk(clerkUserId, rolePermissions)
 
-    console.log(`[Clerk Webhook] Successfully created employee profile for user: ${userId} with role: ${role}`)
+    console.log(`[Clerk Webhook] 🎯 Successfully created employee profile for user: ${userId} with role: ${role}`)
 
   } catch (error) {
-    console.error('[Clerk Webhook] Error in createEmployeeProfile:', error)
+    console.error('[Clerk Webhook] 💥 Error in createEmployeeProfile:', error)
+    if (error instanceof Error) {
+      console.error('[Clerk Webhook] 📚 createEmployeeProfile stack:', error.stack)
+    }
   }
 }
