@@ -204,41 +204,14 @@ async function handleUserCreated(user: ClerkUser) {
     // SCENARIO 2: Direct signup - create new user with personal business
     console.log(`[Clerk Webhook] 🏢 SCENARIO 2: Creating new user from direct signup: ${email}`)
 
-    // Create personal business for direct signup using correct schema
-    const businessName = fullName ? `${fullName}'s Business` : `${email.split('@')[0]}'s Business`
-    const businessSlug = `${email.split('@')[0]}-business-${Date.now()}`
-
-    console.log(`[Clerk Webhook] 🏪 Creating business: name="${businessName}", slug="${businessSlug}"`)
-
-    const { data: newBusiness, error: businessError } = await supabase
-      .from('businesses')
-      .insert({
-        name: businessName,
-        slug: businessSlug,
-        country_code: 'SG',
-        home_currency: 'SGD',
-        custom_expense_categories: getDefaultExpenseCategories(),
-        created_at: new Date().toISOString()
-      })
-      .select('id')
-      .single()
-
-    if (businessError) {
-      console.error('[Clerk Webhook] ❌ Error creating personal business:', businessError)
-      console.error('[Clerk Webhook] 📊 Business creation details:', { businessName, businessSlug })
-      return
-    }
-
-    console.log(`[Clerk Webhook] ✅ Created business with ID: ${newBusiness.id}`)
-
-    // 🛡️ Create user record with additional duplicate protection
-    console.log(`[Clerk Webhook] 👤 Creating user record for ${email} in business ${newBusiness.id}`)
+    // 🛡️ STEP 1: Create user record FIRST (required for business.owner_id)
+    console.log(`[Clerk Webhook] 👤 Creating user record for ${email}`)
 
     const userData = {
       clerk_user_id: user.id,
       email: email,
       full_name: fullName,
-      business_id: newBusiness.id,
+      business_id: null, // Will be updated after business creation
       role: 'admin',
       home_currency: 'SGD',
       created_at: new Date().toISOString()
@@ -265,7 +238,48 @@ async function handleUserCreated(user: ClerkUser) {
 
     console.log(`[Clerk Webhook] ✅ Created user with ID: ${newUser.id}`)
 
-    // Create employee profile for direct signup (they're admin of their own business)
+    // 🛡️ STEP 2: Create personal business with owner_id = user UUID
+    const businessName = fullName ? `${fullName}'s Business` : `${email.split('@')[0]}'s Business`
+    const businessSlug = `${email.split('@')[0]}-business-${Date.now()}`
+
+    console.log(`[Clerk Webhook] 🏪 Creating business: name="${businessName}", slug="${businessSlug}", owner_id="${newUser.id}"`)
+
+    const { data: newBusiness, error: businessError } = await supabase
+      .from('businesses')
+      .insert({
+        name: businessName,
+        slug: businessSlug,
+        owner_id: newUser.id, // 🔧 FIX: Use the created user UUID as owner
+        country_code: 'SG',
+        home_currency: 'SGD',
+        custom_expense_categories: getDefaultExpenseCategories(),
+        created_at: new Date().toISOString()
+      })
+      .select('id')
+      .single()
+
+    if (businessError) {
+      console.error('[Clerk Webhook] ❌ Error creating personal business:', businessError)
+      console.error('[Clerk Webhook] 📊 Business creation details:', { businessName, businessSlug, owner_id: newUser.id })
+      return
+    }
+
+    console.log(`[Clerk Webhook] ✅ Created business with ID: ${newBusiness.id}`)
+
+    // 🛡️ STEP 3: Update user record with business_id
+    console.log(`[Clerk Webhook] 🔗 Linking user ${newUser.id} to business ${newBusiness.id}`)
+
+    const { error: linkError } = await supabase
+      .from('users')
+      .update({ business_id: newBusiness.id, updated_at: new Date().toISOString() })
+      .eq('id', newUser.id)
+
+    if (linkError) {
+      console.error('[Clerk Webhook] ❌ Error linking user to business:', linkError)
+      return
+    }
+
+    // 🛡️ STEP 4: Create employee profile for direct signup (they're admin of their own business)
     console.log(`[Clerk Webhook] 👔 Creating employee profile for user ${newUser.id} in business ${newBusiness.id}`)
     await createEmployeeProfile(
       newUser.id,
