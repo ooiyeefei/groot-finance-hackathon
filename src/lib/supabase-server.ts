@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { getDefaultExpenseCategories } from '@/lib/default-expense-categories'
+import { syncRoleToClerk } from '@/lib/rbac'
 
 // Retry utility for network operations
 async function retryOperation<T>(
@@ -208,6 +209,12 @@ async function createMissingUserRecords(
       console.error('[User Recovery] ❌ Error creating employee profile:', employeeError)
       return null
     }
+
+    console.log(`[User Recovery] ✅ Employee profile created successfully`)
+
+    // 🛡️ STEP 5: Sync role permissions to Clerk metadata (critical for middleware access)
+    console.log(`[User Recovery] 🔄 Syncing role permissions to Clerk metadata`)
+    await syncRoleToClerk(clerkUserId, rolePermissions)
 
     console.log(`[User Recovery] 🎉 Successfully recovered user: ${email} → User: ${newUser.id} → Business: ${newBusiness.id}`)
 
