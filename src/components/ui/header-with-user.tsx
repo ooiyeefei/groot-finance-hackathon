@@ -3,6 +3,7 @@
 import React from 'react'
 import { UserButton } from '@clerk/nextjs'
 import { LanguageSwitcher } from '@/components/language-switcher'
+import BusinessSwitcher from '@/components/ui/business-switcher'
 
 interface HeaderWithUserProps {
   title?: string
@@ -29,8 +30,9 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
           </div>
         )}
 
-        {/* Right: Language switcher and user button */}
+        {/* Right: Business switcher, language switcher and user button */}
         <div className="flex items-center gap-4">
+          <BusinessSwitcher />
           <LanguageSwitcher />
           <UserButton
             appearance={{

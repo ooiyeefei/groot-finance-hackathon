@@ -433,3 +433,39 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
 
   return supabase
 }
+
+// NEW: Multi-tenant Supabase client with business context from JWT
+export async function createBusinessContextSupabaseClient(clerkUserId?: string) {
+  const authenticatedClerkUserId = clerkUserId || (await auth()).userId
+
+  if (!authenticatedClerkUserId) {
+    throw new Error('Authentication required')
+  }
+
+  // Get active business from Clerk JWT
+  const user = await (await clerkClient()).users.getUser(authenticatedClerkUserId)
+  const activeBusinessId = user.publicMetadata?.activeBusinessId as string
+
+  if (!activeBusinessId) {
+    throw new Error('No active business context in JWT - user must switch business first')
+  }
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
+  // Set both user and business context for RLS
+  const supabaseUserUuid = await getSupabaseUserUuid(authenticatedClerkUserId)
+
+  await supabase.rpc('set_user_context', { user_id: supabaseUserUuid })
+  await supabase.rpc('set_tenant_context', { business_id: activeBusinessId })
+
+  console.log('[Supabase Client] Multi-tenant RLS context set:', {
+    clerkUserId: authenticatedClerkUserId,
+    supabaseUuid: supabaseUserUuid,
+    activeBusinessId
+  })
+
+  return supabase
+}

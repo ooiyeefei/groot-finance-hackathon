@@ -5,6 +5,7 @@ import { locales, type Locale } from '@/i18n';
 import { notFound } from 'next/navigation';
 import { I18nErrorBoundary } from '@/components/i18n-error-boundary';
 import { QueryProvider } from '@/components/providers/QueryProvider';
+import { BusinessContextProvider } from '@/contexts/business-context';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -55,7 +56,9 @@ export default async function LocaleLayout({
       <QueryProvider>
         <I18nErrorBoundary fallbackLocale={locale}>
           <NextIntlClientProvider locale={locale} messages={messages}>
-            {children}
+            <BusinessContextProvider>
+              {children}
+            </BusinessContextProvider>
           </NextIntlClientProvider>
         </I18nErrorBoundary>
       </QueryProvider>
