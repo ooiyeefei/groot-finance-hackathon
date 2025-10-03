@@ -217,10 +217,7 @@ export default function ApplicationsContainer() {
     <div className="space-y-6">
       {/* Header with Create Button */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Applications</h1>
-          <p className="text-gray-400 mt-1">Manage your personal loan applications</p>
-        </div>
+        <div>{/* Intentionally left blank to push the button to the right */}</div>
         <Button
           onClick={handleCreateNewApplication}
           disabled={creatingApplication}
