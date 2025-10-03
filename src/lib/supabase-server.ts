@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import { auth } from '@clerk/nextjs/server'
+import { auth, clerkClient } from '@clerk/nextjs/server'
+import { getDefaultExpenseCategories } from '@/lib/default-expense-categories'
 
 // Retry utility for network operations
 async function retryOperation<T>(
@@ -80,6 +81,147 @@ async function getSupabaseUserUuid(clerkUserId: string): Promise<string> {
   })
 }
 
+/**
+ * 🚑 RECOVERY FUNCTION: Create missing user + business records for orphaned Clerk users
+ * This handles cases where Clerk user exists but webhook failed to create Supabase records
+ */
+async function createMissingUserRecords(
+  clerkUserId: string,
+  supabase: any
+): Promise<{id: string, business_id: string | null} | null> {
+  try {
+    console.log(`[User Recovery] 🚑 Starting recovery process for Clerk user: ${clerkUserId}`)
+
+    // Get user details from Clerk
+    const clerkUser = await (await clerkClient()).users.getUser(clerkUserId)
+    if (!clerkUser) {
+      console.error(`[User Recovery] ❌ Clerk user not found: ${clerkUserId}`)
+      return null
+    }
+
+    const primaryEmail = clerkUser.emailAddresses.find(
+      email => email.verification?.status === 'verified'
+    ) || clerkUser.emailAddresses[0]
+
+    if (!primaryEmail) {
+      console.error(`[User Recovery] ❌ No email found for Clerk user: ${clerkUserId}`)
+      return null
+    }
+
+    const email = primaryEmail.emailAddress.toLowerCase()
+    const fullName = clerkUser.firstName && clerkUser.lastName
+      ? `${clerkUser.firstName} ${clerkUser.lastName}`
+      : null
+
+    console.log(`[User Recovery] 📧 Processing recovery for: email=${email}, fullName=${fullName}`)
+
+    // 🛡️ STEP 1: Create user record FIRST (same as webhook flow)
+    console.log(`[User Recovery] 👤 Creating user record for ${email}`)
+
+    const userData = {
+      clerk_user_id: clerkUserId,
+      email: email,
+      full_name: fullName,
+      business_id: null, // Will be updated after business creation
+      role: 'admin',
+      home_currency: 'SGD',
+      created_at: new Date().toISOString()
+    }
+
+    const { data: newUser, error: userError } = await supabase
+      .from('users')
+      .insert(userData)
+      .select('id')
+      .single()
+
+    if (userError) {
+      console.error('[User Recovery] ❌ Error creating user record:', userError)
+      return null
+    }
+
+    console.log(`[User Recovery] ✅ Created user with ID: ${newUser.id}`)
+
+    // 🛡️ STEP 2: Create business with owner_id = user UUID
+    const businessName = fullName ? `${fullName}'s Business` : `${email.split('@')[0]}'s Business`
+    const businessSlug = `${email.split('@')[0]}-business-${Date.now()}`
+
+    console.log(`[User Recovery] 🏪 Creating business: name="${businessName}", slug="${businessSlug}", owner_id="${newUser.id}"`)
+
+    const { data: newBusiness, error: businessError } = await supabase
+      .from('businesses')
+      .insert({
+        name: businessName,
+        slug: businessSlug,
+        owner_id: newUser.id, // 🔧 Use the created user UUID as owner
+        country_code: 'SG',
+        home_currency: 'SGD',
+        custom_expense_categories: getDefaultExpenseCategories(),
+        created_at: new Date().toISOString()
+      })
+      .select('id')
+      .single()
+
+    if (businessError) {
+      console.error('[User Recovery] ❌ Error creating business:', businessError)
+      return null
+    }
+
+    console.log(`[User Recovery] ✅ Created business with ID: ${newBusiness.id}`)
+
+    // 🛡️ STEP 3: Update user record with business_id
+    console.log(`[User Recovery] 🔗 Linking user ${newUser.id} to business ${newBusiness.id}`)
+
+    const { error: linkError } = await supabase
+      .from('users')
+      .update({ business_id: newBusiness.id, updated_at: new Date().toISOString() })
+      .eq('id', newUser.id)
+
+    if (linkError) {
+      console.error('[User Recovery] ❌ Error linking user to business:', linkError)
+      return null
+    }
+
+    // 🛡️ STEP 4: Create employee profile
+    console.log(`[User Recovery] 👔 Creating employee profile for user ${newUser.id}`)
+
+    const rolePermissions = {
+      employee: true,
+      manager: true, // Admin has all permissions
+      admin: true
+    }
+
+    const employeeId = `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
+
+    const { error: employeeError } = await supabase
+      .from('employee_profiles')
+      .insert({
+        user_id: newUser.id,
+        business_id: newBusiness.id,
+        employee_id: employeeId,
+        department: 'General',
+        job_title: 'Administrator',
+        role_permissions: rolePermissions,
+        created_at: new Date().toISOString()
+      })
+
+    if (employeeError) {
+      console.error('[User Recovery] ❌ Error creating employee profile:', employeeError)
+      return null
+    }
+
+    console.log(`[User Recovery] 🎉 Successfully recovered user: ${email} → User: ${newUser.id} → Business: ${newBusiness.id}`)
+
+    return {
+      id: newUser.id,
+      business_id: newBusiness.id
+    }
+
+  } catch (error) {
+    console.error('[User Recovery] 💥 Critical error in createMissingUserRecords:', error)
+    return null
+  }
+}
+
 // Helper function to get user data including business_id (bypasses RLS)
 export async function getUserData(clerkUserId: string): Promise<{id: string, business_id: string | null}> {
   return retryOperation(async () => {
@@ -118,6 +260,16 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
     }
 
     if (!users || users.length === 0) {
+      console.log(`[User Recovery] No Supabase record found for Clerk user: ${clerkUserId}`)
+      console.log(`[User Recovery] Attempting to create missing user records using webhook flow...`)
+
+      // 🚑 CATCH-UP: Create missing user + business records for orphaned Clerk users
+      const recoveredUser = await createMissingUserRecords(clerkUserId, serviceClient)
+      if (recoveredUser) {
+        console.log(`[User Recovery] ✅ Successfully created missing records for: ${clerkUserId}`)
+        return recoveredUser
+      }
+
       throw new Error('Failed to fetch user data: User not found')
     }
 
