@@ -102,11 +102,12 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
       }
     )
 
-    const { data: user, error } = await serviceClient
+    // 🛡️ RESILIENT QUERY: Handle potential duplicate records gracefully
+    const { data: users, error } = await serviceClient
       .from('users')
-      .select('id, business_id')
+      .select('id, business_id, created_at')
       .eq('clerk_user_id', clerkUserId)
-      .single()
+      .order('created_at', { ascending: false }) // Get most recent first
 
     if (error) {
       // Check if it's a network error or database error
@@ -116,9 +117,20 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
       throw new Error(`Failed to fetch user data: ${error.message}`)
     }
 
-    if (!user) {
+    if (!users || users.length === 0) {
       throw new Error('Failed to fetch user data: User not found')
     }
+
+    // 🚨 DETECT AND HANDLE DUPLICATE RECORDS
+    if (users.length > 1) {
+      console.error(`[CRITICAL] Found ${users.length} duplicate user records for clerk_user_id: ${clerkUserId}`)
+      console.error(`[CRITICAL] Duplicate user IDs:`, users.map(u => u.id))
+      console.error(`[CRITICAL] Using most recent record: ${users[0].id}`)
+
+      // TODO: Set up automated cleanup job for duplicates
+    }
+
+    const user = users[0] // Use the most recent record
 
     return user
   })

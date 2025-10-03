@@ -129,6 +129,20 @@ async function handleUserCreated(user: ClerkUser) {
     : null
 
   try {
+    // 🛡️ FIRST: Check if user already exists by clerk_user_id to prevent duplicates
+    console.log(`[Clerk Webhook] Checking for existing user with Clerk ID: ${user.id}`)
+
+    const { data: existingUser, error: existingUserError } = await supabase
+      .from('users')
+      .select('id, business_id, role, invited_by, clerk_user_id, email')
+      .eq('clerk_user_id', user.id)
+      .single()
+
+    if (!existingUserError && existingUser) {
+      console.log(`[Clerk Webhook] User already exists with Clerk ID: ${user.id}, email: ${existingUser.email}`)
+      return // User already processed, nothing to do
+    }
+
     console.log(`[Clerk Webhook] Checking for existing invitation for email: ${email}`)
 
     // SCENARIO 1: Check if user has pending invitation (invitation-based signup)
@@ -195,7 +209,7 @@ async function handleUserCreated(user: ClerkUser) {
       return
     }
 
-    // Create user record for direct signup
+    // 🛡️ Create user record with additional duplicate protection
     const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
@@ -211,6 +225,11 @@ async function handleUserCreated(user: ClerkUser) {
       .single()
 
     if (userError) {
+      // Handle potential unique constraint violation gracefully
+      if (userError.code === '23505' && userError.message.includes('clerk_user_id')) {
+        console.log(`[Clerk Webhook] User with Clerk ID ${user.id} already exists (race condition), skipping creation`)
+        return
+      }
       console.error('[Clerk Webhook] Error creating user record:', userError)
       return
     }
