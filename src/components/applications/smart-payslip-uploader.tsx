@@ -451,6 +451,30 @@ export default function SmartPayslipUploader({
         </div>
       )}
 
+      {/* Uploading Progress Section */}
+      {Array.from(uploadingSlots).length > 0 && (
+        <div className="mt-4 space-y-3">
+          <h4 className="text-sm font-medium text-gray-300">Uploading Files</h4>
+          {Array.from(uploadingSlots).map((slotName) => {
+            const slot = payslipSlots.find(s => s.slot === slotName)
+            return (
+              <div key={`uploading-${slotName}`} className="bg-gray-700 p-4 rounded-lg">
+                <div className="space-y-3">
+                  <Loader2 className="w-8 h-8 text-blue-400 mx-auto animate-spin" />
+                  <div>
+                    <p className="text-blue-300 font-medium">Uploading document...</p>
+                    <p className="text-gray-400 text-sm mt-1">Processing will begin automatically</p>
+                  </div>
+                  <div className="max-w-xs mx-auto">
+                    <Progress value={65} className="h-2" />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* File List */}
       {uploadedFiles.length > 0 && (
         <div className="mt-4 space-y-3">

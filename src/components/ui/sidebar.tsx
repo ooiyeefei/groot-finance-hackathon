@@ -163,13 +163,13 @@ export default function Sidebar() {
                       <Image
                         src={businessProfile.logo_url}
                         alt="Business Logo"
-                        width={37}
-                        height={37}
+                        width={48}
+                        height={48}
                         className="rounded-lg object-cover"
                       />
                     ) : (
                       <div
-                        className="w-[37px] h-[37px] rounded-lg flex items-center justify-center text-white font-bold text-lg"
+                        className="w-[48px] h-[48px] rounded-lg flex items-center justify-center text-white font-bold text-lg"
                         style={{ backgroundColor: businessProfile?.logo_fallback_color || '#3b82f6' }}
                         suppressHydrationWarning={true}
                       >
@@ -199,13 +199,13 @@ export default function Sidebar() {
                     <Image
                       src={businessProfile.logo_url}
                       alt="Business Logo"
-                      width={33}
-                      height={33}
+                      width={43}
+                      height={43}
                       className="rounded-lg object-cover hover:opacity-80 transition-opacity"
                     />
                   ) : (
                     <div
-                      className="w-[33px] h-[33px] rounded-lg flex items-center justify-center text-white font-bold text-base hover:opacity-80 transition-opacity"
+                      className="w-[43px] h-[43px] rounded-lg flex items-center justify-center text-white font-bold text-base hover:opacity-80 transition-opacity"
                       style={{ backgroundColor: businessProfile?.logo_fallback_color || '#3b82f6' }}
                       suppressHydrationWarning={true}
                     >

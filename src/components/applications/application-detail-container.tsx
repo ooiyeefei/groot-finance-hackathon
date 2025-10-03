@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Input } from '@/components/ui/input'
 import {
   ArrowLeft,
   Upload,
@@ -23,7 +24,10 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
-  Shield
+  Shield,
+  Edit3,
+  Save,
+  XCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
@@ -191,6 +195,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
   const [deletingDocument, setDeletingDocument] = useState<string | null>(null)
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ documentId: string; fileName: string } | null>(null)
   const [expandedContainers, setExpandedContainers] = useState<Set<string>>(new Set())
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [editedTitle, setEditedTitle] = useState('')
+  const [savingTitle, setSavingTitle] = useState(false)
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
 
   // Memoized callback for polling updates - background refresh without loading spinner
@@ -486,6 +493,53 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
     setDeleteConfirmation({ documentId, fileName })
   }
 
+  const handleStartEditTitle = () => {
+    if (application) {
+      setEditedTitle(application.title)
+      setIsEditingTitle(true)
+    }
+  }
+
+  const handleCancelEditTitle = () => {
+    setIsEditingTitle(false)
+    setEditedTitle('')
+  }
+
+  const handleSaveTitle = async () => {
+    if (!application || !editedTitle.trim() || editedTitle.trim() === application.title) {
+      handleCancelEditTitle()
+      return
+    }
+
+    setSavingTitle(true)
+    try {
+      const response = await fetch(`/api/applications/${applicationId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: editedTitle.trim()
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setApplication(prev => prev ? { ...prev, title: editedTitle.trim() } : null)
+        setIsEditingTitle(false)
+        setEditedTitle('')
+      } else {
+        setError(result.error || 'Failed to update application title')
+      }
+    } catch (err) {
+      console.error('Error updating application title:', err)
+      setError('An error occurred while updating the application title')
+    } finally {
+      setSavingTitle(false)
+    }
+  }
+
   const toggleContainer = (containerId: string) => {
     setExpandedContainers(prev => {
       const newSet = new Set(prev)
@@ -634,9 +688,62 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
             Back
           </Button>
         </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-white">{application.title}</h1>
-          <p className="text-gray-400">{application.application_types.display_name}</p>
+        <div className="flex-1">
+          {isEditingTitle ? (
+            <div className="flex items-center gap-3">
+              <Input
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                className="text-2xl font-bold bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+                placeholder="Enter application title"
+                maxLength={100}
+                disabled={savingTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveTitle()
+                  } else if (e.key === 'Escape') {
+                    handleCancelEditTitle()
+                  }
+                }}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleSaveTitle}
+                  disabled={savingTitle || !editedTitle.trim()}
+                  className="bg-green-600 hover:bg-green-700 text-white border-0"
+                >
+                  {savingTitle ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleCancelEditTitle}
+                  disabled={savingTitle}
+                  className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                >
+                  <XCircle className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-white">{application.title}</h1>
+              <Button
+                size="sm"
+                onClick={handleStartEditTitle}
+                className="bg-gray-700 hover:bg-gray-600 text-gray-300 border-gray-600 hover:border-gray-500"
+                title="Edit application title"
+              >
+                <Edit3 className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+          <p className="text-gray-400 mt-1">{application.application_types.display_name}</p>
         </div>
       </div>
 

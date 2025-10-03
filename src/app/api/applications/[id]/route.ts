@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -28,9 +28,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Applications API GET] User ${userId} accessing application ${id}`)
 
+    // Get user data for explicit security filtering
+    const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    // Fetch application with related data
+    // Fetch application with related data and EXPLICIT user filtering
     const { data: application, error } = await supabase
       .from('applications')
       .select(`
@@ -58,6 +60,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         )
       `)
       .eq('id', id)
+      .eq('user_id', userData.id) // 🛡️ EXPLICIT USER ISOLATION
       .is('documents.deleted_at', null)
       .single()
 
@@ -226,13 +229,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Applications API PUT] User ${userId} updating application ${id}`)
 
+    // Get user data for explicit security filtering
+    const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    // Check if application exists and is accessible
+    // Check if application exists and is accessible with EXPLICIT user filtering
     const { data: existingApp, error: fetchError } = await supabase
       .from('applications')
       .select('id, status, user_id')
       .eq('id', id)
+      .eq('user_id', userData.id) // 🛡️ EXPLICIT USER ISOLATION
       .single()
 
     if (fetchError || !existingApp) {
@@ -312,13 +318,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Applications API DELETE] User ${userId} deleting application ${id}`)
 
+    // Get user data for explicit security filtering
+    const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    // Check if application exists and is accessible
+    // Check if application exists and is accessible with EXPLICIT user filtering
     const { data: existingApp, error: fetchError } = await supabase
       .from('applications')
       .select('id, status, user_id')
       .eq('id', id)
+      .eq('user_id', userData.id) // 🛡️ EXPLICIT USER ISOLATION
       .single()
 
     if (fetchError || !existingApp) {
