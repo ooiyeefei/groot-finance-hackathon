@@ -13,6 +13,7 @@ import { Webhook } from 'svix'
 import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { syncRoleToClerk } from '@/lib/rbac'
 import { getDefaultExpenseCategories } from '@/lib/default-expense-categories'
+import { createUserFirstBusiness } from '@/lib/business-context'
 
 // Clerk webhook event types
 interface ClerkUser {
@@ -201,94 +202,16 @@ async function handleUserCreated(user: ClerkUser) {
       return
     }
 
-    // SCENARIO 2: Direct signup - create new user with personal business
-    console.log(`[Clerk Webhook] 🏢 SCENARIO 2: Creating new user from direct signup: ${email}`)
+    // SCENARIO 2: Direct signup - create new user with multi-tenant business
+    console.log(`[Clerk Webhook] SCENARIO 2: Creating new user from direct signup: ${email}`)
 
-    // 🛡️ STEP 1: Create user record FIRST (required for business.owner_id)
-    console.log(`[Clerk Webhook] 👤 Creating user record for ${email}`)
+    // Use new multi-tenant business creation
+    const { businessId, userId } = await createUserFirstBusiness(user.id, {
+      full_name: fullName || `${email.split('@')[0]}`,
+      email: email
+    })
 
-    const userData = {
-      clerk_user_id: user.id,
-      email: email,
-      full_name: fullName,
-      business_id: null, // Will be updated after business creation
-      role: 'admin',
-      home_currency: 'SGD',
-      created_at: new Date().toISOString()
-    }
-
-    console.log(`[Clerk Webhook] 📝 User data:`, userData)
-
-    const { data: newUser, error: userError } = await supabase
-      .from('users')
-      .insert(userData)
-      .select('id')
-      .single()
-
-    if (userError) {
-      // Handle potential unique constraint violation gracefully
-      if (userError.code === '23505' && userError.message.includes('clerk_user_id')) {
-        console.log(`[Clerk Webhook] ⚠️ User with Clerk ID ${user.id} already exists (race condition), skipping creation`)
-        return
-      }
-      console.error('[Clerk Webhook] ❌ Error creating user record:', userError)
-      console.error('[Clerk Webhook] 📊 User data details:', userData)
-      return
-    }
-
-    console.log(`[Clerk Webhook] ✅ Created user with ID: ${newUser.id}`)
-
-    // 🛡️ STEP 2: Create personal business with owner_id = user UUID
-    const businessName = fullName ? `${fullName}'s Business` : `${email.split('@')[0]}'s Business`
-    const businessSlug = `${email.split('@')[0]}-business-${Date.now()}`
-
-    console.log(`[Clerk Webhook] 🏪 Creating business: name="${businessName}", slug="${businessSlug}", owner_id="${newUser.id}"`)
-
-    const { data: newBusiness, error: businessError } = await supabase
-      .from('businesses')
-      .insert({
-        name: businessName,
-        slug: businessSlug,
-        owner_id: newUser.id, // 🔧 FIX: Use the created user UUID as owner
-        country_code: 'SG',
-        home_currency: 'SGD',
-        custom_expense_categories: getDefaultExpenseCategories(),
-        created_at: new Date().toISOString()
-      })
-      .select('id')
-      .single()
-
-    if (businessError) {
-      console.error('[Clerk Webhook] ❌ Error creating personal business:', businessError)
-      console.error('[Clerk Webhook] 📊 Business creation details:', { businessName, businessSlug, owner_id: newUser.id })
-      return
-    }
-
-    console.log(`[Clerk Webhook] ✅ Created business with ID: ${newBusiness.id}`)
-
-    // 🛡️ STEP 3: Update user record with business_id
-    console.log(`[Clerk Webhook] 🔗 Linking user ${newUser.id} to business ${newBusiness.id}`)
-
-    const { error: linkError } = await supabase
-      .from('users')
-      .update({ business_id: newBusiness.id, updated_at: new Date().toISOString() })
-      .eq('id', newUser.id)
-
-    if (linkError) {
-      console.error('[Clerk Webhook] ❌ Error linking user to business:', linkError)
-      return
-    }
-
-    // 🛡️ STEP 4: Create employee profile for direct signup (they're admin of their own business)
-    console.log(`[Clerk Webhook] 👔 Creating employee profile for user ${newUser.id} in business ${newBusiness.id}`)
-    await createEmployeeProfile(
-      newUser.id,
-      newBusiness.id,
-      'admin',
-      user.id
-    )
-
-    console.log(`[Clerk Webhook] 🎉 Successfully created direct signup: ${email} → User: ${newUser.id} → Business: ${newBusiness.id}`)
+    console.log(`[Clerk Webhook] Successfully created multi-tenant signup: ${email} → Business: ${businessId}, User: ${userId}`)
 
   } catch (error) {
     console.error('[Clerk Webhook] 💥 Critical error in handleUserCreated for user', user.id, ':', error)

@@ -4,8 +4,9 @@
  */
 
 import { auth, clerkClient } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { ensureEmployeeProfile, EmployeeProfile } from '@/lib/ensure-employee-profile'
+import { getCurrentBusinessContext, checkBusinessOwnership, type BusinessContext } from '@/lib/business-context'
 
 export type UserRole = 'employee' | 'manager' | 'admin'
 
@@ -24,10 +25,13 @@ export interface UserContext {
   canManageCategories: boolean
   canViewAllExpenses: boolean
   canManageUsers: boolean
+  // NEW: Multi-tenant context
+  businessContext?: BusinessContext
+  isBusinessOwner?: boolean
 }
 
 /**
- * Get current user context with role information
+ * Get current user context with role information (LEGACY - single business)
  */
 export async function getCurrentUserContext(): Promise<UserContext | null> {
   try {
@@ -38,7 +42,7 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
     if (!profile) return null
 
     const roles = determineUserRoles(profile.role_permissions)
-    
+
     return {
       userId,
       profile,
@@ -51,6 +55,56 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
     }
   } catch (error) {
     console.error('[RBAC] Error getting user context:', error)
+    return null
+  }
+}
+
+/**
+ * Get current user context with multi-tenant business context (NEW)
+ */
+export async function getCurrentUserContextWithBusiness(): Promise<UserContext | null> {
+  try {
+    const { userId } = await auth()
+    if (!userId) return null
+
+    // Get business context from JWT
+    const businessContext = await getCurrentBusinessContext(userId)
+    if (!businessContext) {
+      console.warn('[RBAC] No active business context for user')
+      return null
+    }
+
+    // For backwards compatibility, also get employee profile
+    const profile = await ensureEmployeeProfile(userId)
+    if (!profile) return null
+
+    // Check if user is owner of the active business
+    const isOwner = await checkBusinessOwnership(businessContext.businessId, userId)
+
+    // Use business context permissions instead of employee_profiles
+    const permissions: RolePermissions = {
+      employee: true,
+      manager: businessContext.role === 'manager' || businessContext.role === 'admin',
+      admin: businessContext.role === 'admin'
+    }
+
+    const roles = determineUserRoles(permissions)
+
+    return {
+      userId,
+      profile,
+      roles,
+      permissions,
+      canApprove: permissions.manager || permissions.admin,
+      canManageCategories: permissions.manager || permissions.admin,
+      canViewAllExpenses: permissions.manager || permissions.admin,
+      canManageUsers: permissions.admin,
+      // NEW: Business context
+      businessContext,
+      isBusinessOwner: isOwner
+    }
+  } catch (error) {
+    console.error('[RBAC] Error getting user context with business:', error)
     return null
   }
 }
@@ -215,11 +269,48 @@ function roleToPermissions(role: UserRole): RolePermissions {
 }
 
 /**
- * Check if user has specific permission
+ * Check if user has specific permission (LEGACY)
  */
 export async function hasPermission(permission: keyof RolePermissions): Promise<boolean> {
   const context = await getCurrentUserContext()
   return context?.permissions[permission] ?? false
+}
+
+/**
+ * Check if user has specific permission in current business context (NEW)
+ */
+export async function hasBusinessPermission(permission: keyof RolePermissions): Promise<boolean> {
+  const context = await getCurrentUserContextWithBusiness()
+  return context?.permissions[permission] ?? false
+}
+
+/**
+ * Check if user is owner of the current active business
+ */
+export async function isCurrentBusinessOwner(): Promise<boolean> {
+  const context = await getCurrentUserContextWithBusiness()
+  return context?.isBusinessOwner ?? false
+}
+
+/**
+ * Check if user can delete the current business (owner-only permission)
+ */
+export async function canDeleteCurrentBusiness(): Promise<boolean> {
+  return await isCurrentBusinessOwner()
+}
+
+/**
+ * Check if user can manage subscription for current business (owner-only)
+ */
+export async function canManageSubscription(): Promise<boolean> {
+  return await isCurrentBusinessOwner()
+}
+
+/**
+ * Check if user can transfer ownership of current business (owner-only)
+ */
+export async function canTransferOwnership(): Promise<boolean> {
+  return await isCurrentBusinessOwner()
 }
 
 /**
