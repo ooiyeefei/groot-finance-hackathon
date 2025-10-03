@@ -136,7 +136,7 @@ async function handleUserCreated(user: ClerkUser) {
       .from('users')
       .select('id, business_id, role, invited_by, clerk_user_id, email')
       .eq('clerk_user_id', user.id)
-      .single()
+      .maybeSingle()  // 🔧 FIX: Use maybeSingle() instead of single() for new users
 
     if (!existingUserError && existingUser) {
       console.log(`[Clerk Webhook] User already exists with Clerk ID: ${user.id}, email: ${existingUser.email}`)
