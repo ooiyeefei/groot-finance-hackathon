@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { SupportedCurrency } from '@/types/transaction';
 import { AnalyticsResponse, AnalyticsData, AnalyticsTrends } from '../types/analytics';
 
@@ -22,6 +23,41 @@ interface UseFinancialAnalyticsReturn {
   lastUpdated: Date | null;
 }
 
+/**
+ * Query function for TanStack Query
+ * Fetches financial analytics data from the API endpoint
+ */
+const fetchFinancialAnalytics = async ({ queryKey }: { queryKey: any[] }): Promise<AnalyticsResponse> => {
+  const [_key, period, homeCurrency, includeTrends, forceRefresh] = queryKey;
+
+  const params = new URLSearchParams({
+    period,
+    homeCurrency,
+    includeTrends: includeTrends.toString(),
+    ...(forceRefresh && { forceRefresh: 'true' })
+  });
+
+  const response = await fetch(`/api/analytics?${params}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Analytics request failed: ${response.status}`);
+  }
+
+  const data: AnalyticsResponse = await response.json();
+
+  if (!data.success) {
+    throw new Error('Analytics calculation failed');
+  }
+
+  return data;
+};
+
 export default function useFinancialAnalytics(
   options: UseFinancialAnalyticsOptions = {}
 ): UseFinancialAnalyticsReturn {
@@ -33,86 +69,56 @@ export default function useFinancialAnalytics(
     refreshInterval = 300000 // 5 minutes
   } = options;
 
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [trends, setTrends] = useState<AnalyticsTrends | null>(null);
-  const [previousPeriod, setPreviousPeriod] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-
-  const fetchAnalytics = useCallback(async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Use period-based approach but fallback to 60-day window for consistency
-      const params = new URLSearchParams({
-        period,
-        homeCurrency,
-        includeTrends: includeTrends.toString(),
-        ...(forceRefresh && { forceRefresh: 'true' })
-      });
-
-      const response = await fetch(`/api/analytics?${params}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Analytics request failed: ${response.status}`);
-      }
-
-      const data: AnalyticsResponse = await response.json();
-
-      if (!data.success) {
-        throw new Error('Analytics calculation failed');
-      }
-
-      setAnalytics(data.analytics);
-      setTrends(data.trends || null);
-      setPreviousPeriod(data.previous_period || null);
-      setLastUpdated(new Date());
-
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch analytics';
-      setError(errorMessage);
-      console.error('Analytics fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [period, homeCurrency, includeTrends]);
-
-  const refresh = useCallback(async () => {
-    await fetchAnalytics(true); // Force refresh
-  }, [fetchAnalytics]);
-
-  // Initial fetch and period/currency change effect
-  useEffect(() => {
-    fetchAnalytics();
-  }, [fetchAnalytics]);
-
-  // Auto-refresh effect
-  useEffect(() => {
-    if (!autoRefresh || refreshInterval <= 0) return;
-
-    const interval = setInterval(() => {
-      fetchAnalytics();
-    }, refreshInterval);
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, fetchAnalytics]);
-
-  return {
-    analytics,
-    trends,
-    previousPeriod,
-    loading,
+  // Use TanStack Query for data fetching with smart caching
+  const {
+    data,
+    isLoading,
+    isError,
     error,
+    refetch,
+    dataUpdatedAt
+  } = useQuery({
+    // Unique query key that includes all parameters that affect the data
+    queryKey: ['financialAnalytics', period, homeCurrency, includeTrends, false],
+
+    // The function that fetches the data
+    queryFn: fetchFinancialAnalytics,
+
+    // Cache configuration for optimal performance
+    staleTime: 1 * 60 * 1000, // 1 minute - data considered fresh (faster than our 7.5ms RPC!)
+    gcTime: 10 * 60 * 1000, // 10 minutes - cache garbage collection time
+
+    // Auto-refresh configuration - use TanStack Query's built-in refetch
+    refetchInterval: autoRefresh ? refreshInterval : false,
+    refetchOnWindowFocus: false, // Prevent unnecessary refetches on window focus
+    refetchOnReconnect: true, // Refetch when network reconnects
+
+    // Retry configuration
+    retry: (failureCount, error) => {
+      // Don't retry on 4xx errors (client errors)
+      if (error instanceof Error && error.message.includes('Analytics request failed: 4')) {
+        return false;
+      }
+      // Retry up to 3 times for network/server errors
+      return failureCount < 3;
+    },
+  });
+
+  // Manual refresh function that forces a fresh fetch
+  const refresh = async () => {
+    // Force refetch bypassing cache - this is equivalent to the original force refresh
+    await refetch();
+  };
+
+  // Map TanStack Query results to the original hook interface
+  return {
+    analytics: data?.analytics || null,
+    trends: data?.trends || null,
+    previousPeriod: data?.previous_period || null,
+    loading: isLoading,
+    error: isError ? (error instanceof Error ? error.message : 'Failed to fetch analytics') : null,
     refresh,
-    lastUpdated
+    lastUpdated: dataUpdatedAt ? new Date(dataUpdatedAt) : null
   };
 }
 

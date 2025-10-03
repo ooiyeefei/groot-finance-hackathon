@@ -1,38 +1,68 @@
-'use client'
+'use client';
 
-import { useState, useEffect, useCallback } from 'react'
-import { 
-  Transaction, 
-  CreateTransactionRequest, 
+import { useState, useCallback } from 'react';
+import { useInfiniteQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import {
+  Transaction,
+  CreateTransactionRequest,
   UpdateTransactionRequest,
   TransactionListParams,
   SupportedCurrency
-} from '@/types/transaction'
+} from '@/types/transaction';
+
+interface TransactionListResponse {
+  success: boolean;
+  data: {
+    transactions: Transaction[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      has_more: boolean;
+      total_pages: number;
+    };
+    nextCursor?: string | null;
+  };
+  error?: string;
+}
+
+interface TransactionResponse {
+  success: boolean;
+  data: {
+    transaction: Transaction;
+  };
+  error?: string;
+}
+
+export interface TransactionFilters {
+  search?: string;
+  category?: string;
+  transaction_type?: string;
+  date_from?: string;
+  date_to?: string;
+  vendor_name?: string;
+  status?: string;
+}
 
 interface UseTransactionsReturn {
-  transactions: Transaction[]
-  loading: boolean
-  creating: boolean
-  updating: Set<string>
-  deleting: Set<string>
-  pagination: {
-    page: number
-    limit: number
-    total: number
-    has_more: boolean
-    total_pages: number
-  }
+  transactions: Transaction[];
+  loading: boolean;
+  error: string | null;
+  creating: boolean;
+  updating: Set<string>;
+  deleting: Set<string>;
+  hasMore: boolean;
+  isFetchingMore: boolean;
+  totalCount: number;
   // CRUD operations
-  createTransaction: (data: CreateTransactionRequest) => Promise<Transaction | null>
-  updateTransaction: (id: string, data: UpdateTransactionRequest) => Promise<Transaction | null>
-  deleteTransaction: (id: string) => Promise<boolean>
-  refreshTransactions: () => Promise<void>
-  // List management
-  setFilters: (filters: Partial<TransactionListParams>) => void
-  clearFilters: () => void
-  goToPage: (page: number) => void
+  createTransaction: (data: CreateTransactionRequest) => Promise<Transaction | null>;
+  updateTransaction: (id: string, data: UpdateTransactionRequest) => Promise<Transaction | null>;
+  deleteTransaction: (id: string) => Promise<boolean>;
+  refreshTransactions: () => Promise<void>;
+  // Infinite scroll operations
+  fetchNextPage: () => void;
   // Utility
-  getTransactionById: (id: string) => Transaction | undefined
+  getTransactionById: (id: string) => Transaction | undefined;
 }
 
 const DEFAULT_FILTERS: TransactionListParams = {
@@ -40,281 +70,381 @@ const DEFAULT_FILTERS: TransactionListParams = {
   limit: 20,
   sort_by: 'created_at',
   sort_order: 'desc'
-}
+};
 
-export function useTransactions(): UseTransactionsReturn {
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [loading, setLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
-  const [updating, setUpdating] = useState(new Set<string>())
-  const [deleting, setDeleting] = useState(new Set<string>())
-  const [filters, setFiltersState] = useState<TransactionListParams>(DEFAULT_FILTERS)
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    has_more: false,
-    total_pages: 0
-  })
+/**
+ * Query function for TanStack Query useInfiniteQuery
+ * Fetches transactions list from the API endpoint with server-side filtering and cursor-based pagination
+ */
+const fetchTransactions = async ({ queryKey, pageParam }: { queryKey: any[]; pageParam?: string }): Promise<TransactionListResponse> => {
+  const [_key, filters] = queryKey;
 
-  // Fetch transactions from API
-  const fetchTransactions = useCallback(async (params: TransactionListParams = filters) => {
-    try {
-      const searchParams = new URLSearchParams()
-      
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          searchParams.append(key, String(value))
-        }
-      })
+  const searchParams = new URLSearchParams();
 
-      const response = await fetch(`/api/transactions?${searchParams.toString()}`)
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+  // Add pagination parameters
+  searchParams.append('limit', '20'); // Default page size for infinite scroll
+
+  // Add cursor parameter for infinite scroll
+  if (pageParam) {
+    searchParams.append('cursor', pageParam);
+  }
+
+  // Add filter parameters for server-side filtering
+  if (filters && typeof filters === 'object') {
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        searchParams.append(key, String(value));
       }
+    });
+  }
 
-      const result = await response.json()
-      
-      if (result.success) {
-        setTransactions(result.data.transactions)
-        setPagination(result.data.pagination)
-      } else {
-        console.error('Failed to fetch transactions:', result.error)
-        setTransactions([])
+  const response = await fetch(`/api/transactions?${searchParams.toString()}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Transactions request failed: ${response.status}`);
+  }
+
+  const data: TransactionListResponse = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error || 'Transactions fetch failed');
+  }
+
+  return data;
+};
+
+export function useTransactions(filters: TransactionFilters = {}): UseTransactionsReturn {
+  const queryClient = useQueryClient();
+
+  // State for tracking operations
+  const [updating, setUpdating] = useState(new Set<string>());
+  const [deleting, setDeleting] = useState(new Set<string>());
+
+  // TanStack Query useInfiniteQuery for transactions with server-side filtering
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
+    // CRITICAL: Query key includes filters for automatic cache invalidation and server-side filtering
+    queryKey: ['transactions', filters],
+
+    // The function that fetches the data
+    queryFn: fetchTransactions,
+
+    // Initial page parameter (no cursor for first page)
+    initialPageParam: undefined as string | undefined,
+
+    // Function to determine the next page parameter (cursor)
+    getNextPageParam: (lastPage) => {
+      return lastPage.data.nextCursor || undefined;
+    },
+
+    // Cache configuration optimized for transactions (following useFinancialAnalytics gold standard)
+    staleTime: 2 * 60 * 1000, // 2 minutes - transactions change moderately
+    gcTime: 10 * 60 * 1000, // 10 minutes - standard cache garbage collection
+
+    // Refetch configuration
+    refetchOnWindowFocus: false, // Prevent unnecessary refetches on window focus
+    refetchOnReconnect: true, // Refetch when network reconnects
+
+    // Retry configuration (following useFinancialAnalytics pattern)
+    retry: (failureCount, error) => {
+      // Don't retry on 4xx errors (client errors)
+      if (error instanceof Error && error.message.includes('Transactions request failed: 4')) {
+        return false;
       }
-    } catch (error) {
-      console.error('Error fetching transactions:', error)
-      setTransactions([])
-    } finally {
-      setLoading(false)
-    }
-  }, [filters])
+      // Retry up to 3 times for network/server errors
+      return failureCount < 3;
+    },
+  });
 
-  // Public refresh function
-  const refreshTransactions = useCallback(async () => {
-    setLoading(true)
-    await fetchTransactions()
-  }, [fetchTransactions])
-
-  // Create new transaction
-  const createTransaction = useCallback(async (data: CreateTransactionRequest): Promise<Transaction | null> => {
-    setCreating(true)
-    
-    try {
+  // Create transaction mutation with optimistic updates
+  const createMutation = useMutation({
+    mutationFn: async (data: CreateTransactionRequest): Promise<TransactionResponse> => {
       const response = await fetch('/api/transactions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
-      })
-      
-      const result = await response.json()
-      
-      if (result.success) {
-        const newTransaction = result.data.transaction
-        
-        // Add to the beginning of the list if we're on the first page
-        if (filters.page === 1) {
-          setTransactions(prev => [newTransaction, ...prev.slice(0, (filters.limit || 20) - 1)])
-        }
-        
-        // Refresh to get accurate counts
-        await fetchTransactions()
-        
-        return newTransaction
-      } else {
-        console.error('Failed to create transaction:', result.error)
-        throw new Error(result.error || 'Failed to create transaction')
-      }
-    } catch (error) {
-      console.error('Error creating transaction:', error)
-      throw error
-    } finally {
-      setCreating(false)
-    }
-  }, [filters, fetchTransactions])
+      });
 
-  // Update existing transaction
-  const updateTransaction = useCallback(async (id: string, data: UpdateTransactionRequest): Promise<Transaction | null> => {
-    setUpdating(prev => new Set(prev).add(id))
-    
-    try {
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to create transaction');
+      }
+
+      return result;
+    },
+    onSuccess: (response) => {
+      // Optimistically update the transactions list for infinite query
+      queryClient.setQueryData(['transactions', filters], (oldData: any) => {
+        if (!oldData) return oldData;
+
+        const newTransaction = response.data.transaction;
+
+        // Add to the beginning of the first page
+        const newPages = [...oldData.pages];
+        if (newPages.length > 0) {
+          newPages[0] = {
+            ...newPages[0],
+            data: {
+              ...newPages[0].data,
+              transactions: [newTransaction, ...newPages[0].data.transactions]
+            }
+          };
+        }
+
+        return {
+          ...oldData,
+          pages: newPages
+        };
+      });
+
+      // Refetch to get accurate counts and pagination
+      refetch();
+    },
+    onError: (error) => {
+      console.error('Error creating transaction:', error);
+    }
+  });
+
+  // Update transaction mutation with optimistic updates
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: UpdateTransactionRequest }): Promise<TransactionResponse> => {
       const response = await fetch(`/api/transactions/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
-      })
-      
-      const result = await response.json()
-      
-      if (result.success) {
-        const updatedTransaction = result.data.transaction
-        
-        // Update in local state
-        setTransactions(prev => 
-          prev.map(t => t.id === id ? updatedTransaction : t)
-        )
-        
-        return updatedTransaction
-      } else {
-        console.error('Failed to update transaction:', result.error)
-        throw new Error(result.error || 'Failed to update transaction')
-      }
-    } catch (error) {
-      console.error('Error updating transaction:', error)
-      throw error
-    } finally {
-      setUpdating(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(id)
-        return newSet
-      })
-    }
-  }, [])
+      });
 
-  // Delete transaction
-  const deleteTransaction = useCallback(async (id: string): Promise<boolean> => {
-    setDeleting(prev => new Set(prev).add(id))
-    
-    try {
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to update transaction');
+      }
+
+      return result;
+    },
+    onMutate: async ({ id }) => {
+      setUpdating(prev => new Set(prev).add(id));
+    },
+    onSuccess: (response, { id }) => {
+      // Optimistically update the transaction in the infinite query list
+      queryClient.setQueryData(['transactions', filters], (oldData: any) => {
+        if (!oldData) return oldData;
+
+        const updatedTransaction = response.data.transaction;
+
+        // Update transaction across all pages
+        const newPages = oldData.pages.map((page: TransactionListResponse) => ({
+          ...page,
+          data: {
+            ...page.data,
+            transactions: page.data.transactions.map(t =>
+              t.id === id ? updatedTransaction : t
+            )
+          }
+        }));
+
+        return {
+          ...oldData,
+          pages: newPages
+        };
+      });
+    },
+    onSettled: (_, __, { id }) => {
+      setUpdating(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    },
+    onError: (error, { id }) => {
+      console.error('Error updating transaction:', error);
+    }
+  });
+
+  // Delete transaction mutation with optimistic updates
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string): Promise<{ success: boolean }> => {
       const response = await fetch(`/api/transactions/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      const result = await response.json()
-      
-      if (result.success) {
-        // Remove from local state
-        setTransactions(prev => prev.filter(t => t.id !== id))
-        
-        // Refresh pagination counts
-        await fetchTransactions()
-        
-        return true
-      } else {
-        console.error('Failed to delete transaction:', result.error)
-        throw new Error(result.error || 'Failed to delete transaction')
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to delete transaction');
       }
-    } catch (error) {
-      console.error('Error deleting transaction:', error)
-      throw error
-    } finally {
+
+      return result;
+    },
+    onMutate: async (id) => {
+      setDeleting(prev => new Set(prev).add(id));
+
+      // Optimistically remove from the infinite query list
+      queryClient.setQueryData(['transactions', filters], (oldData: any) => {
+        if (!oldData) return oldData;
+
+        // Remove transaction from all pages
+        const newPages = oldData.pages.map((page: TransactionListResponse) => ({
+          ...page,
+          data: {
+            ...page.data,
+            transactions: page.data.transactions.filter(t => t.id !== id)
+          }
+        }));
+
+        return {
+          ...oldData,
+          pages: newPages
+        };
+      });
+    },
+    onSuccess: () => {
+      // Refetch to get accurate pagination counts
+      refetch();
+    },
+    onSettled: (_, __, id) => {
       setDeleting(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(id)
-        return newSet
-      })
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    },
+    onError: (error, id) => {
+      console.error('Error deleting transaction:', error);
+      // Refetch to restore correct state on error
+      refetch();
     }
-  }, [fetchTransactions])
+  });
 
-  // Set filters and refetch
-  const setFilters = useCallback((newFilters: Partial<TransactionListParams>) => {
-    const updatedFilters = { ...filters, ...newFilters, page: 1 } // Reset to page 1 when filtering
-    setFiltersState(updatedFilters)
-    setLoading(true)
-    fetchTransactions(updatedFilters)
-  }, [filters, fetchTransactions])
+  // Manual refresh function
+  const refreshTransactions = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
-  // Clear all filters
-  const clearFilters = useCallback(() => {
-    setFiltersState(DEFAULT_FILTERS)
-    setLoading(true)
-    fetchTransactions(DEFAULT_FILTERS)
-  }, [fetchTransactions])
+  // CRUD operation wrappers
+  const createTransaction = useCallback(async (data: CreateTransactionRequest): Promise<Transaction | null> => {
+    try {
+      const result = await createMutation.mutateAsync(data);
+      return result.data.transaction;
+    } catch (error) {
+      throw error;
+    }
+  }, [createMutation]);
 
-  // Navigate to specific page
-  const goToPage = useCallback((page: number) => {
-    const updatedFilters = { ...filters, page }
-    setFiltersState(updatedFilters)
-    setLoading(true)
-    fetchTransactions(updatedFilters)
-  }, [filters, fetchTransactions])
+  const updateTransaction = useCallback(async (id: string, data: UpdateTransactionRequest): Promise<Transaction | null> => {
+    try {
+      const result = await updateMutation.mutateAsync({ id, data });
+      return result.data.transaction;
+    } catch (error) {
+      throw error;
+    }
+  }, [updateMutation]);
 
-  // Get transaction by ID
+  const deleteTransaction = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      await deleteMutation.mutateAsync(id);
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }, [deleteMutation]);
+
+  // Get transaction by ID across all pages
   const getTransactionById = useCallback((id: string): Transaction | undefined => {
-    return transactions.find(t => t.id === id)
-  }, [transactions])
+    if (!data?.pages) return undefined;
 
-  // Initial fetch
-  useEffect(() => {
-    fetchTransactions()
-  }, [fetchTransactions])
+    for (const page of data.pages) {
+      const transaction = page.data.transactions.find(t => t.id === id);
+      if (transaction) return transaction;
+    }
+    return undefined;
+  }, [data?.pages]);
+
+  // Extract data with fallbacks for infinite query
+  const transactions = data?.pages?.flatMap(page => page.data.transactions) || [];
+  const totalCount = data?.pages?.[0]?.data?.pagination?.total || 0;
 
   return {
     transactions,
-    loading,
-    creating,
+    loading: isLoading,
+    error: isError ? (error instanceof Error ? error.message : 'Failed to fetch transactions') : null,
+    creating: createMutation.isPending,
     updating,
     deleting,
-    pagination,
+    hasMore: hasNextPage || false,
+    isFetchingMore: isFetchingNextPage,
+    totalCount,
     createTransaction,
     updateTransaction,
     deleteTransaction,
     refreshTransactions,
-    setFilters,
-    clearFilters,
-    goToPage,
+    fetchNextPage,
     getTransactionById
-  }
+  };
 }
 
-// Utility functions for currency formatting
+// Utility functions for currency formatting (unchanged from original)
 export function formatCurrency(amount: number | null | undefined, currency: SupportedCurrency): string {
   // Handle null/undefined amounts
   if (amount === null || amount === undefined || isNaN(amount)) {
-    return `${currency} 0.00`
+    return `${currency} 0.00`;
   }
 
   try {
     // Use explicit currency code format for better clarity (e.g., "SGD 108.61")
-    return `${currency} ${amount.toFixed(2)}`
+    return `${currency} ${amount.toFixed(2)}`;
   } catch {
     // Fallback for unsupported currencies
-    return `0.00 ${currency}`
+    return `0.00 ${currency}`;
   }
 }
 
 export function getTransactionTypeColor(type: string): string {
   switch (type) {
     case 'income':
-      return 'text-green-400'
+      return 'text-green-400';
     case 'expense':
-      return 'text-red-400'
+      return 'text-red-400';
     case 'transfer':
-      return 'text-blue-400'
+      return 'text-blue-400';
     case 'asset':
-      return 'text-purple-400'
+      return 'text-purple-400';
     case 'liability':
-      return 'text-orange-400'
+      return 'text-orange-400';
     case 'equity':
-      return 'text-yellow-400'
+      return 'text-yellow-400';
     default:
-      return 'text-gray-400'
+      return 'text-gray-400';
   }
 }
 
 export function getTransactionTypeIcon(type: string): string {
   switch (type) {
     case 'income':
-      return '↗️'
+      return '↗️';
     case 'expense':
-      return '↙️'
+      return '↙️';
     case 'transfer':
-      return '↔️'
+      return '↔️';
     case 'asset':
-      return '📈'
+      return '📈';
     case 'liability':
-      return '📊'
+      return '📊';
     case 'equity':
-      return '🏛️'
+      return '🏛️';
     default:
-      return '💰'
+      return '💰';
   }
 }

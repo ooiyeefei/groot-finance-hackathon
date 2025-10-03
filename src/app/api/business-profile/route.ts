@@ -49,6 +49,21 @@ export async function GET() {
         return NextResponse.json({ error: 'Failed to create business profile' }, { status: 500 })
       }
 
+      // CRITICAL FIX: Update user's business_id to link them to the newly created business
+      const { error: linkError } = await supabase
+        .from('users')
+        .update({
+          business_id: newProfile.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('clerk_user_id', userId)
+
+      if (linkError) {
+        console.error('Error linking user to new business:', linkError)
+        return NextResponse.json({ error: 'Failed to link user to business' }, { status: 500 })
+      }
+
+      console.log(`[Business Profile] Successfully created and linked business ${newProfile.id} to user ${userId}`)
       return NextResponse.json({ success: true, data: newProfile })
     }
 

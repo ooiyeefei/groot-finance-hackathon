@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import { locales, type Locale } from '@/i18n';
 import { notFound } from 'next/navigation';
 import { I18nErrorBoundary } from '@/components/i18n-error-boundary';
+import { QueryProvider } from '@/components/providers/QueryProvider';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -51,11 +52,13 @@ export default async function LocaleLayout({
 
   return (
     <ClerkProvider>
-      <I18nErrorBoundary fallbackLocale={locale}>
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          {children}
-        </NextIntlClientProvider>
-      </I18nErrorBoundary>
+      <QueryProvider>
+        <I18nErrorBoundary fallbackLocale={locale}>
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            {children}
+          </NextIntlClientProvider>
+        </I18nErrorBoundary>
+      </QueryProvider>
     </ClerkProvider>
   );
 }
