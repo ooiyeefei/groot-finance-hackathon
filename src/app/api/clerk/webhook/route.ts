@@ -427,9 +427,14 @@ async function createEmployeeProfile(
 
     console.log(`[Clerk Webhook] ✅ Employee profile created successfully`)
 
-    // Sync role permissions to Clerk metadata
+    // Sync role permissions to Clerk metadata (add small delay to avoid race conditions)
     console.log(`[Clerk Webhook] 🔄 Syncing role permissions to Clerk metadata`)
-    await syncRoleToClerk(clerkUserId, rolePermissions)
+    await new Promise(resolve => setTimeout(resolve, 500)) // 500ms delay for Clerk user to be fully available
+    const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
+
+    if (!syncResult.success) {
+      console.error(`[Clerk Webhook] ⚠️ Failed to sync permissions to Clerk: ${syncResult.error}`)
+    }
 
     console.log(`[Clerk Webhook] 🎯 Successfully created employee profile for user: ${userId} with role: ${role}`)
 

@@ -136,24 +136,66 @@ export async function updateUserRole(
 /**
  * Sync employee profile permissions to Clerk metadata
  * Call this during profile creation or updates
+ * Includes retry logic and better error categorization
  */
-export async function syncRoleToClerk(userId: string, permissions: RolePermissions): Promise<void> {
-  try {
-    const roles = determineUserRoles(permissions)
-    const primaryRole = roles[roles.length - 1] // Highest role
-    
-    await (await clerkClient()).users.updateUser(userId, {
-      publicMetadata: {
-        role: primaryRole,
-        permissions,
-        syncedAt: new Date().toISOString()
+export async function syncRoleToClerk(userId: string, permissions: RolePermissions): Promise<{ success: boolean; error?: string }> {
+  const maxRetries = 3
+  const baseDelay = 1000 // 1 second
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const roles = determineUserRoles(permissions)
+      const primaryRole = roles[roles.length - 1] // Highest role
+
+      // Add timeout to Clerk API call
+      const updatePromise = (await clerkClient()).users.updateUser(userId, {
+        publicMetadata: {
+          role: primaryRole,
+          permissions,
+          syncedAt: new Date().toISOString()
+        }
+      })
+
+      // 10 second timeout for Clerk API
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Clerk API timeout')), 10000)
+      )
+
+      await Promise.race([updatePromise, timeoutPromise])
+
+      console.log(`[RBAC] ✅ Synced role to Clerk: ${userId} → ${primaryRole} (attempt ${attempt})`)
+      return { success: true }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.error(`[RBAC] ❌ Attempt ${attempt}/${maxRetries} failed:`, errorMessage)
+
+      // Categorize error types for better debugging
+      const isRateLimit = errorMessage.includes('rate') || errorMessage.includes('429')
+      const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT')
+      const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network')
+      const isUserNotFound = errorMessage.includes('user') && errorMessage.includes('not found')
+
+      console.error(`[RBAC] 📊 Error analysis: rateLimit=${isRateLimit}, timeout=${isTimeout}, network=${isNetworkError}, userNotFound=${isUserNotFound}`)
+
+      // Don't retry on permanent errors
+      if (isUserNotFound) {
+        return { success: false, error: `Clerk user not found: ${errorMessage}` }
       }
-    })
-    
-    console.log(`[RBAC] Synced role to Clerk: ${userId} → ${primaryRole}`)
-  } catch (error) {
-    console.error('[RBAC] Error syncing role to Clerk:', error)
+
+      // If this was the last attempt, return the error
+      if (attempt === maxRetries) {
+        return { success: false, error: `Failed after ${maxRetries} attempts: ${errorMessage}` }
+      }
+
+      // Exponential backoff with jitter for retry
+      const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000
+      console.log(`[RBAC] ⏳ Retrying in ${Math.round(delay)}ms...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
   }
+
+  return { success: false, error: 'Max retries exceeded' }
 }
 
 /**

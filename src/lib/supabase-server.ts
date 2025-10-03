@@ -214,7 +214,15 @@ async function createMissingUserRecords(
 
     // 🛡️ STEP 5: Sync role permissions to Clerk metadata (critical for middleware access)
     console.log(`[User Recovery] 🔄 Syncing role permissions to Clerk metadata`)
-    await syncRoleToClerk(clerkUserId, rolePermissions)
+    await new Promise(resolve => setTimeout(resolve, 500)) // 500ms delay to ensure Clerk user is fully available
+    const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
+
+    if (!syncResult.success) {
+      console.error(`[User Recovery] ❌ CRITICAL: Clerk sync failed after all retries: ${syncResult.error}`)
+      console.error(`[User Recovery] 📋 User will have database access but middleware will block manager routes`)
+    } else {
+      console.log(`[User Recovery] ✅ Clerk sync successful`)
+    }
 
     console.log(`[User Recovery] 🎉 Successfully recovered user: ${email} → User: ${newUser.id} → Business: ${newBusiness.id}`)
 

@@ -220,7 +220,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Sync role to Clerk metadata
-    await syncRoleToClerk(userId, rolePermissions)
+    const syncResult = await syncRoleToClerk(userId, rolePermissions)
+    if (!syncResult.success) {
+      console.error(`[Invitation Accept] Warning: Failed to sync permissions to Clerk: ${syncResult.error}`)
+    }
 
     console.log(`[Invitation Accept API] Invitation accepted: ${userEmail} → ${invitation.business_id}`)
 

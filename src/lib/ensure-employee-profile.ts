@@ -75,7 +75,12 @@ export async function ensureEmployeeProfile(userId: string): Promise<EmployeePro
         .single()
 
       if (!createError && newProfile) {
-        await syncRoleToClerk(userId, rolePermissions)
+        // Add delay before Clerk sync to avoid race conditions
+        await new Promise(resolve => setTimeout(resolve, 300))
+        const syncResult = await syncRoleToClerk(userId, rolePermissions)
+        if (!syncResult.success) {
+          console.error(`[EnsureProfile] Warning: Failed to sync permissions to Clerk after all retries: ${syncResult.error}`)
+        }
         return newProfile as EmployeeProfile
       }
     }
@@ -136,7 +141,12 @@ export async function ensureEmployeeProfile(userId: string): Promise<EmployeePro
 
           if (!profileCreateError && newProfile) {
             console.log(`[Employee Profile] Created employee profile from invitation for user ${userId}`)
-            await syncRoleToClerk(userId, rolePermissions)
+            // Add delay before Clerk sync to avoid race conditions
+            await new Promise(resolve => setTimeout(resolve, 300))
+            const syncResult = await syncRoleToClerk(userId, rolePermissions)
+            if (!syncResult.success) {
+              console.error(`[EnsureProfile] Warning: Failed to sync permissions to Clerk after all retries: ${syncResult.error}`)
+            }
             return newProfile as EmployeeProfile
           }
         }
@@ -268,8 +278,12 @@ export async function ensureEmployeeProfile(userId: string): Promise<EmployeePro
         return null
       }
 
-      // Sync role to Clerk metadata
-      await syncRoleToClerk(userId, rolePermissions)
+      // Sync role to Clerk metadata (add delay to avoid race conditions)
+      await new Promise(resolve => setTimeout(resolve, 300))
+      const syncResult = await syncRoleToClerk(userId, rolePermissions)
+      if (!syncResult.success) {
+        console.error(`[EnsureProfile] Warning: Failed to sync permissions to Clerk after all retries: ${syncResult.error}`)
+      }
 
       console.log(`[Employee Profile] Successfully created direct signup: ${userEmail} → Business: ${newBusiness.id}`)
       return newProfile as EmployeeProfile
