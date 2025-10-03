@@ -29,13 +29,14 @@ const isPublicRoute = createRouteMatcher([
   '/api/internal/(.*)', // Internal service APIs with their own authentication
   '/api/pdf-proxy(.*)', // PDF proxy handles its own authentication for government documents
   '/api/clerk/webhook(.*)', // Clerk webhook for user synchronization
+  '/api/user/assign-admin(.*)', // Admin assignment with master key (no auth required)
   '/manifest.json', // PWA manifest file should be publicly accessible
   '/manifest(.*)', // Any manifest-related requests
 ])
 
 // Special routes that need authentication but bypass role checks
 const isSpecialAuthRoute = createRouteMatcher([
-  '/(en|th|id|zh)?/api/user/assign-admin(.*)', // Admin assignment API (validates master key internally)
+  // Currently no routes - admin assignment moved to public routes
 ])
 
 // Define role-based route matchers following Clerk patterns (with locale support)
