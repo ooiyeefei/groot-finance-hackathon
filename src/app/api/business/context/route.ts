@@ -24,14 +24,18 @@ export async function GET(request: NextRequest) {
     if (!context) {
       return NextResponse.json({
         success: true,
-        context: null,
+        data: {
+          context: null
+        },
         message: 'No active business context'
       })
     }
 
     return NextResponse.json({
       success: true,
-      context
+      data: {
+        context
+      }
     })
 
   } catch (error) {

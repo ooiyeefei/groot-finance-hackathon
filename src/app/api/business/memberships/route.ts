@@ -23,8 +23,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      businesses,
-      total: businesses.length
+      data: {
+        memberships: businesses
+      }
     })
 
   } catch (error) {

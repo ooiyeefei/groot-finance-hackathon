@@ -705,10 +705,10 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           </>
         )}
 
-        {/* Reprocess button for failed claims and completed AI processing (exclude submitted workflow states) */}
+        {/* Reprocess button for failed claims and completed AI processing (exclude submitted and final workflow states) */}
         {(claim.processing_status === 'failed' || claim.processing_status === 'completed') &&
          claim.status !== 'pending' &&
-         !['submitted', 'under_review', 'pending_approval'].includes(claim.status) && (
+         !['submitted', 'under_review', 'pending_approval', 'approved', 'rejected'].includes(claim.status) && (
           <button
             onClick={async () => {
               try {

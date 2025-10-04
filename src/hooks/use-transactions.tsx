@@ -125,6 +125,12 @@ export function useTransactions(filters: TransactionFilters = {}): UseTransactio
   const [updating, setUpdating] = useState(new Set<string>());
   const [deleting, setDeleting] = useState(new Set<string>());
 
+  // Merge user filters with defaults to ensure consistent sorting
+  const mergedFilters = {
+    ...DEFAULT_FILTERS,
+    ...filters
+  };
+
   // TanStack Query useInfiniteQuery for transactions with server-side filtering
   const {
     data,
@@ -137,7 +143,7 @@ export function useTransactions(filters: TransactionFilters = {}): UseTransactio
     isFetchingNextPage
   } = useInfiniteQuery({
     // CRITICAL: Query key includes filters for automatic cache invalidation and server-side filtering
-    queryKey: ['transactions', filters],
+    queryKey: ['transactions', mergedFilters],
 
     // The function that fetches the data
     queryFn: fetchTransactions,
@@ -187,7 +193,7 @@ export function useTransactions(filters: TransactionFilters = {}): UseTransactio
     },
     onSuccess: (response) => {
       // Optimistically update the transactions list for infinite query
-      queryClient.setQueryData(['transactions', filters], (oldData: any) => {
+      queryClient.setQueryData(['transactions', mergedFilters], (oldData: any) => {
         if (!oldData) return oldData;
 
         const newTransaction = response.data.transaction;
@@ -239,7 +245,7 @@ export function useTransactions(filters: TransactionFilters = {}): UseTransactio
     },
     onSuccess: (response, { id }) => {
       // Optimistically update the transaction in the infinite query list
-      queryClient.setQueryData(['transactions', filters], (oldData: any) => {
+      queryClient.setQueryData(['transactions', mergedFilters], (oldData: any) => {
         if (!oldData) return oldData;
 
         const updatedTransaction = response.data.transaction;
@@ -292,7 +298,7 @@ export function useTransactions(filters: TransactionFilters = {}): UseTransactio
       setDeleting(prev => new Set(prev).add(id));
 
       // Optimistically remove from the infinite query list
-      queryClient.setQueryData(['transactions', filters], (oldData: any) => {
+      queryClient.setQueryData(['transactions', mergedFilters], (oldData: any) => {
         if (!oldData) return oldData;
 
         // Remove transaction from all pages

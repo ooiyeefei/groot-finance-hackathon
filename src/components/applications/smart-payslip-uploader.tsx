@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import PayslipDataDisplay from '@/components/documents/payslip-data-display'
+import { getErrorSuggestions } from '@/lib/error-message-transformer'
 
 interface PayslipFile {
   slot: string
@@ -334,7 +335,23 @@ export default function SmartPayslipUploader({
     }
   }
 
-  const getStatusText = (status: string) => {
+  // Helper function to get specific error type from error message
+  const getErrorType = (errorMessage: string | null | undefined) => {
+    if (!errorMessage) return 'Processing Failed'
+
+    if (errorMessage.toLowerCase().includes('wrong file uploaded') || errorMessage.toLowerCase().includes('document type mismatch')) {
+      return 'Incorrect Document'
+    }
+    if (errorMessage.toLowerCase().includes('not supported')) {
+      return 'Unsupported Format'
+    }
+    if (errorMessage.toLowerCase().includes('classification')) {
+      return 'Classification Failed'
+    }
+    return 'Processing Failed'
+  }
+
+  const getStatusText = (status: string, errorMessage?: string | null | undefined) => {
     switch (status) {
       case 'completed':
         return 'Completed'
@@ -345,7 +362,8 @@ export default function SmartPayslipUploader({
       case 'extracting':
         return 'Extracting Data'
       case 'failed':
-        return 'Failed'
+      case 'classification_failed':
+        return `Failed: ${getErrorType(errorMessage)}`
       default:
         return 'Processing'
     }
@@ -451,29 +469,36 @@ export default function SmartPayslipUploader({
         </div>
       )}
 
-      {/* Uploading Progress Section */}
-      {Array.from(uploadingSlots).length > 0 && (
-        <div className="mt-4 space-y-3">
-          <h4 className="text-sm font-medium text-gray-300">Uploading Files</h4>
-          {Array.from(uploadingSlots).map((slotName) => {
-            const slot = payslipSlots.find(s => s.slot === slotName)
-            return (
-              <div key={`uploading-${slotName}`} className="bg-gray-700 p-4 rounded-lg">
-                <div className="space-y-3">
-                  <Loader2 className="w-8 h-8 text-blue-400 mx-auto animate-spin" />
-                  <div>
-                    <p className="text-blue-300 font-medium">Uploading document...</p>
-                    <p className="text-gray-400 text-sm mt-1">Processing will begin automatically</p>
-                  </div>
-                  <div className="max-w-xs mx-auto">
-                    <Progress value={65} className="h-2" />
+      {/* Uploading Progress Section - Only show for payslip-related slots */}
+      {(() => {
+        const payslipSlotNames = payslipSlots.map(slot => slot.slot)
+        const uploadingPayslipSlots = Array.from(uploadingSlots).filter(slotName =>
+          payslipSlotNames.includes(slotName)
+        )
+
+        return uploadingPayslipSlots.length > 0 && (
+          <div className="mt-4 space-y-3">
+            <h4 className="text-sm font-medium text-gray-300">Uploading Files</h4>
+            {uploadingPayslipSlots.map((slotName) => {
+              const slot = payslipSlots.find(s => s.slot === slotName)
+              return (
+                <div key={`uploading-${slotName}`} className="bg-gray-700 p-4 rounded-lg">
+                  <div className="space-y-3">
+                    <Loader2 className="w-8 h-8 text-blue-400 mx-auto animate-spin" />
+                    <div>
+                      <p className="text-blue-300 font-medium">Uploading payslip document...</p>
+                      <p className="text-gray-400 text-sm mt-1">Processing will begin automatically</p>
+                    </div>
+                    <div className="max-w-xs mx-auto">
+                      <Progress value={65} className="h-2" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {/* File List */}
       {uploadedFiles.length > 0 && (
@@ -496,36 +521,17 @@ export default function SmartPayslipUploader({
                       <span className="text-white font-medium">{doc.file_name}</span>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(doc.processing_status, slot.is_critical)}`}>
                         {getStatusIcon(doc.processing_status, true)}
-                        <span className="ml-1">{getStatusText(doc.processing_status)}</span>
+                        <span className="ml-1">{getStatusText(doc.processing_status, doc.error_message)}</span>
                       </span>
 
-                      {/* Unified Validation Badge (Server validation takes priority) */}
-                      {doc.processing_status === 'completed' && (validation || clientValidation) && (() => {
-                        // Use server validation if available, otherwise fall back to client validation
-                        const validationData = validation || {
-                          isValid: clientValidation!.isValid,
-                          validationMessage: clientValidation!.message
-                        }
-
-                        // Simplify validation messages
-                        let displayMessage = validationData.validationMessage
-                        if (validationData.validationMessage.includes('too old') || validationData.validationMessage.includes('Outside')) {
-                          displayMessage = 'Outdated payslip'
-                        } else if (validationData.isValid) {
-                          displayMessage = 'Recent payslip'
-                        }
-
-                        return (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
-                            validationData.isValid
-                              ? 'bg-green-900/20 text-green-300 border-green-700/50'
-                              : 'bg-red-900/20 text-red-300 border-red-700/50'
-                          }`}>
-                            {validationData.isValid ? '✅' : '❌'}
-                            <span className="ml-1">{displayMessage}</span>
-                          </span>
-                        )
-                      })()}
+                      {/* Show success validation badge only for valid payslips */}
+                      {doc.processing_status === 'completed' &&
+                       ((validation && validation.isValid) || (clientValidation && clientValidation.isValid)) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-green-900/20 text-green-300 border-green-700/50">
+                          ✅
+                          <span className="ml-1">Recent payslip</span>
+                        </span>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -581,14 +587,74 @@ export default function SmartPayslipUploader({
 
                   <div className="text-sm text-gray-400 space-y-1">
                     <div>Uploaded: {formatDate(doc.uploaded_at)}</div>
-                    {doc.document_type && (
-                      <div>Detected Type: {doc.document_type}</div>
-                    )}
-                    {doc.classification_confidence > 0 && (
-                      <div>Confidence: {Math.round(doc.classification_confidence * 100)}%</div>
-                    )}
-                    {doc.processing_status === 'failed' && doc.error_message && (
-                      <div className="text-red-400">Error: {doc.error_message}</div>
+                    {/* Show errors for failed documents OR completed documents with validation failures */}
+                    {((doc.processing_status === 'failed' || doc.processing_status === 'classification_failed') ||
+                      (doc.processing_status === 'completed' && validation && !validation.isValid) ||
+                      (doc.processing_status === 'completed' && clientValidation && !clientValidation.isValid)) && (
+                      <div className="space-y-2">
+                        <div className="text-red-400 flex items-start gap-2">
+                          <span className="text-red-400 mt-0.5">🚫</span>
+                          <div>
+                            {/* Priority: classification error > validation error */}
+                            {doc.error_message ||
+                             (validation && !validation.isValid ? validation.validationMessage : '') ||
+                             (clientValidation && !clientValidation.isValid ? clientValidation.message : '') ||
+                             'Document processing failed. Please try uploading again.'}
+                          </div>
+                        </div>
+                        {(() => {
+                          // Enhanced contextual suggestions based on error type
+                          const getContextualSuggestions = (errorMsg: string | null, slotName: string) => {
+                            const msg = errorMsg?.toLowerCase() || ''
+
+                            // Validation errors (outdated payslip)
+                            if (msg.includes('outdated') || msg.includes('too old')) {
+                              return [
+                                'Check the payslip date to ensure it\'s from recent months',
+                                'Upload a more recent payslip from the last 3 months',
+                                'Verify the payslip shows current employment status'
+                              ]
+                            }
+
+                            // Wrong document type errors
+                            if (msg.includes('wrong file') || msg.includes('expected') || msg.includes('received')) {
+                              const slotInfo = {
+                                'payslip_recent': 'recent payslip',
+                                'payslip_month1': 'payslip document',
+                                'payslip_month2': 'payslip document'
+                              }[slotName] || 'payslip'
+
+                              return [
+                                `Ensure you're uploading a ${slotInfo}`,
+                                'Check that the document image is clear and readable',
+                                'Verify you\'re uploading to the correct document slot'
+                              ]
+                            }
+
+                            // Fallback to original function
+                            return getErrorSuggestions(slotName, errorMsg)
+                          }
+
+                          const errorMsg = doc.error_message ||
+                            (validation && !validation.isValid ? validation.validationMessage : '') ||
+                            (clientValidation && !clientValidation.isValid ? clientValidation.message : '')
+
+                          const suggestions = getContextualSuggestions(errorMsg, slot.slot)
+                          return suggestions.length > 0 && (
+                            <div className="text-gray-400 text-xs">
+                              <div className="font-medium mb-1">💡 Suggestions:</div>
+                              <ul className="space-y-1">
+                                {suggestions.slice(0, 3).map((suggestion, idx) => (
+                                  <li key={idx} className="flex items-start gap-1">
+                                    <span className="text-gray-500">•</span>
+                                    <span>{suggestion}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )
+                        })()}
+                      </div>
                     )}
                   </div>
 

@@ -37,6 +37,7 @@ import DynamicFieldRenderer from '@/components/documents/dynamic-field-renderer'
 import SmartPayslipUploader from '@/components/applications/smart-payslip-uploader'
 import ICDataDisplay from '@/components/documents/ic-data-display'
 import ApplicationFormDataDisplay from '@/components/documents/application-form-data-display'
+import { transformErrorMessage, getErrorSuggestions } from '@/lib/error-message-transformer'
 import PayslipDataDisplay from '@/components/documents/payslip-data-display'
 
 // Component to display extracted data for completed documents
@@ -594,7 +595,23 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
     }
   }
 
-  const getSlotStatusText = (status: string, isCritical: boolean) => {
+  // Helper function to get specific error type from error message
+  const getErrorType = (errorMessage: string | null | undefined) => {
+    if (!errorMessage) return 'Processing Failed'
+
+    if (errorMessage.toLowerCase().includes('wrong file uploaded') || errorMessage.toLowerCase().includes('document type mismatch')) {
+      return 'Incorrect Document'
+    }
+    if (errorMessage.toLowerCase().includes('not supported')) {
+      return 'Unsupported Format'
+    }
+    if (errorMessage.toLowerCase().includes('classification')) {
+      return 'Classification Failed'
+    }
+    return 'Processing Failed'
+  }
+
+  const getSlotStatusText = (status: string, isCritical: boolean, errorMessage?: string | null | undefined) => {
     switch (status) {
       case 'completed':
         return 'Completed'
@@ -608,9 +625,8 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
         return 'Extracting Data'
       case 'error':
       case 'classification_failed':
-        return 'Classification Failed'
       case 'failed':
-        return 'Failed'
+        return `Failed: ${getErrorType(errorMessage)}`
       case 'empty':
         return isCritical ? 'Required' : 'Optional'
       default:
@@ -913,7 +929,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                       return (
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getSlotStatusColor(status, slot.is_critical)}`}>
                           {getSlotStatusIcon(status, true)}
-                          <span className="ml-1">{getSlotStatusText(status, slot.is_critical)}</span>
+                          <span className="ml-1">{getSlotStatusText(status, slot.is_critical, slot.document?.error_message)}</span>
                         </span>
                       )
                     })()}
@@ -1190,8 +1206,63 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
                       <div className="text-sm text-gray-400 space-y-1">
                         <div>Uploaded: {formatDate(slot.document.uploaded_at)}</div>
-                        {slot.document.processing_status === 'failed' && slot.document.error_message && (
-                          <div className="text-red-400">Error: {slot.document.error_message}</div>
+                        {(slot.document.processing_status === 'failed' || slot.document.processing_status === 'classification_failed') && (
+                          <div className="space-y-2">
+                            <div className="text-red-400 flex items-start gap-2">
+                              <span className="text-red-400 mt-0.5">🚫</span>
+                              <div>
+                                {slot.document.error_message || 'Document processing failed. Please try uploading again.'}
+                              </div>
+                            </div>
+                            {(() => {
+                              // Enhanced contextual suggestions based on error type
+                              const getContextualSuggestions = (errorMsg: string | null, slotName: string) => {
+                                const msg = errorMsg?.toLowerCase() || ''
+
+                                // Wrong document type errors
+                                if (msg.includes('wrong file') || msg.includes('expected') || msg.includes('received')) {
+                                  const slotInfo = {
+                                    'identity_card': 'identity card (IC)',
+                                    'bank_application_form': 'completed bank application form',
+                                    'application_form': 'application form'
+                                  }[slotName] || 'correct document'
+
+                                  return [
+                                    `Ensure you're uploading a ${slotInfo}`,
+                                    'Check that the document image is clear and readable',
+                                    'Verify you\'re uploading to the correct document slot'
+                                  ]
+                                }
+
+                                // Document quality/processing errors
+                                if (msg.includes('classification') || msg.includes('processing')) {
+                                  return [
+                                    'Check that the document image is clear and readable',
+                                    'Verify the file is in PDF, JPG, or PNG format',
+                                    'Make sure the file size is under 10MB'
+                                  ]
+                                }
+
+                                // Fallback to original function
+                                return getErrorSuggestions(slotName, errorMsg)
+                              }
+
+                              const suggestions = getContextualSuggestions(slot.document.error_message, slot.slot)
+                              return suggestions.length > 0 && (
+                                <div className="text-gray-400 text-xs">
+                                  <div className="font-medium mb-1">💡 Suggestions:</div>
+                                  <ul className="space-y-1">
+                                    {suggestions.slice(0, 3).map((suggestion, idx) => (
+                                      <li key={idx} className="flex items-start gap-1">
+                                        <span className="text-gray-500">•</span>
+                                        <span>{suggestion}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )
+                            })()}
+                          </div>
                         )}
                       </div>
 

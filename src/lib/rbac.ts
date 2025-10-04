@@ -168,9 +168,9 @@ export async function updateUserRole(
       return { success: false, error: 'Failed to update employee profile' }
     }
 
-    // Sync with Clerk metadata (using private metadata for better security)
+    // Sync with Clerk metadata (using public metadata per Clerk RBAC guide)
     await (await clerkClient()).users.updateUser(targetUserId, {
-      privateMetadata: {
+      publicMetadata: {
         role,
         permissions,
         updatedBy,
@@ -201,9 +201,9 @@ export async function syncRoleToClerk(userId: string, permissions: RolePermissio
       const roles = determineUserRoles(permissions)
       const primaryRole = roles[roles.length - 1] // Highest role
 
-      // Add timeout to Clerk API call (using private metadata for better security)
+      // Add timeout to Clerk API call (using public metadata per Clerk RBAC guide)
       const updatePromise = (await clerkClient()).users.updateUser(userId, {
-        privateMetadata: {
+        publicMetadata: {
           role: primaryRole,
           permissions,
           syncedAt: new Date().toISOString()

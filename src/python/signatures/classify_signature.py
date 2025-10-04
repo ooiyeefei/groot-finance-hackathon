@@ -52,6 +52,16 @@ class DocumentClassificationSignature(dspy.Signature):
         desc="JSON list of currently supported document types with descriptions"
     )
 
+    expected_type: str = dspy.InputField(
+        desc="Expected document type for slot validation (e.g., 'ic', 'payslip') - empty string if no validation needed",
+        default=""
+    )
+
+    slot_context: str = dspy.InputField(
+        desc="Document slot context for user-friendly messaging (e.g., 'identity_card', 'payslip_recent') - empty string if not applicable",
+        default=""
+    )
+
     classification: DocumentClassification = dspy.OutputField(
         desc="""Classify the document by analyzing the supported_types list and the document image:
 
@@ -69,12 +79,24 @@ class DocumentClassificationSignature(dspy.Signature):
         5. If document does NOT clearly match any supported type: use document_type="other"
         6. If you are uncertain, err on the side of marking as "other" rather than guessing
 
+        SLOT VALIDATION (when expected_type is provided):
+        7. If expected_type is not empty, compare the detected document_type with expected_type
+        8. Normalize types for comparison: 'identity_card'↔'ic', 'payslip'↔'payslip', etc.
+        9. Generate appropriate user_message based on validation result:
+           - MATCH: Success message with friendly type name
+           - MISMATCH: Clear explanation with expected vs detected types using friendly names
+           - UNSUPPORTED: Helpful message about document type not being supported yet
+
         OUTPUT REQUIREMENTS - CLASSIFICATION WITH AUDIT METADATA:
         - document_type: Use EXACT type from supported_types JSON OR "other" (never invent new types)
         - confidence_score: High (0.8+) for clear matches, lower (0.3-0.7) for uncertain cases, very low (<0.3) for other
         - reasoning: Brief explanation of WHY this document type (visual layout indicators that justify the classification, NOT personal data)
         - is_supported: true if document_type matches a type in supported_types, false if "other"
-        - user_message: Friendly message explaining the classification result
+        - user_message: Context-aware friendly message explaining the classification result:
+          * SUCCESS: "Document successfully classified as [friendly_type_name]"
+          * SLOT MISMATCH: "Wrong file uploaded. Expected [expected_friendly_name], but received [detected_friendly_name]. Please upload the correct document."
+          * UNSUPPORTED: "Document type not supported yet. Please contact support for assistance."
+          * Use friendly names: 'ic'→'identity card', 'payslip'→'payslip', 'application_form'→'application form'
         - detected_elements: List visual/layout indicators that justify classification (e.g., "invoice header format", "ID card layout", "salary table structure" - NO personal content)
         - context_metadata: Basic context only (country, currency format, document format) - NO detailed extraction:
           * identity_card: {"country": "Malaysia/Singapore/etc", "id_format": "MyKad/NRIC/etc"}

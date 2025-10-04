@@ -52,8 +52,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Business switched successfully',
-      businessId,
-      context: result.context
+      data: {
+        context: result.context
+      }
     })
 
   } catch (error) {

@@ -57,10 +57,19 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next()
   }
 
-  // Protect all other routes
+  // Check if this is an API route
+  const isApiRoute = req.nextUrl.pathname.startsWith('/api/')
+
+  if (isApiRoute) {
+    // API routes get Clerk context without protection - they handle their own auth
+    console.log(`[Middleware] API route: ${req.nextUrl.pathname} - providing auth context`)
+    return NextResponse.next()
+  }
+
+  // Protect page routes (redirect to sign-in if not authenticated)
   const { userId } = await auth.protect()
 
-  console.log(`[Middleware] Authenticated user: ${userId} accessing: ${req.url}`)
+  console.log(`[Middleware] Authenticated user: ${userId} accessing page: ${req.url}`)
 
   return NextResponse.next()
 })

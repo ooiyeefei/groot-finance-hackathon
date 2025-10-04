@@ -172,35 +172,36 @@ export async function getCurrentBusinessContext(userId?: string): Promise<Busine
   if (!clerkUserId) return null
 
   try {
-    // Get active business from Clerk publicMetadata
-    const user = await (await clerkClient()).users.getUser(clerkUserId)
-    const activeBusinessId = user.publicMetadata?.activeBusinessId as string
+    // Get business context from database (users.business_id)
+    // No need for JWT business context - simpler approach
+    const userData = await getUserData(clerkUserId)
+    const businessId = userData.business_id
 
-    if (!activeBusinessId) {
-      // No active business set - might be first time user
+    if (!businessId) {
+      // No business associated with user
       return null
     }
 
     // Verify membership and get business details
-    const membership = await verifyBusinessMembership(activeBusinessId, clerkUserId)
+    const membership = await verifyBusinessMembership(businessId, clerkUserId)
     if (!membership) {
-      console.warn('[BusinessContext] User has invalid activeBusinessId in JWT:', activeBusinessId)
+      console.warn('[BusinessContext] User has invalid businessId in database:', businessId)
       return null
     }
 
     // Check if user is owner
-    const isOwner = await checkBusinessOwnership(activeBusinessId, clerkUserId)
+    const isOwner = await checkBusinessOwnership(businessId, clerkUserId)
 
     // Get business name
     const supabase = createServiceSupabaseClient()
     const { data: business } = await supabase
       .from('businesses')
       .select('name')
-      .eq('id', activeBusinessId)
+      .eq('id', businessId)
       .single()
 
     return {
-      businessId: activeBusinessId,
+      businessId: businessId,
       businessName: business?.name || 'Unknown Business',
       role: membership.role,
       isOwner,
@@ -230,16 +231,19 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
       return { success: false, error: 'Access denied to business' }
     }
 
-    // Update Clerk publicMetadata with new active business
-    await (await clerkClient()).users.updateUserMetadata(clerkUserId, {
-      publicMetadata: {
-        activeBusinessId: businessId
-      }
-    })
-
-    // Update last accessed time
+    // Update user's business_id in database (simpler approach)
     const userData = await getUserData(clerkUserId)
     const supabase = createServiceSupabaseClient()
+
+    await supabase
+      .from('users')
+      .update({
+        business_id: businessId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userData.id)
+
+    // Update last accessed time in business_memberships
 
     await supabase
       .from('business_memberships')
@@ -340,12 +344,14 @@ export async function createUserFirstBusiness(
 
     if (membershipError) throw membershipError
 
-    // 4. Set active business in Clerk JWT
-    await (await clerkClient()).users.updateUserMetadata(clerkUserId, {
-      publicMetadata: {
-        activeBusinessId: business.id
-      }
-    })
+    // 4. Update user's business_id in database
+    await supabase
+      .from('users')
+      .update({
+        business_id: business.id,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', user.id)
 
     console.log(`[BusinessContext] First business created: ${clerkUserId} → ${business.id}`)
     return { businessId: business.id, userId: user.id }

@@ -98,7 +98,7 @@ class DocumentClassifier:
             error_msg = truncate_error_message(str(e))
             raise ValueError(f"Failed to process image: {error_msg}")
 
-    def classify_document(self, image_data: str) -> Dict[str, Any]:
+    def classify_document(self, image_data: str, expected_type: str = "", slot_context: str = "") -> Dict[str, Any]:
         """Classify document using structured AI signatures with supported types validation"""
         try:
             print("[Classify] Starting structured document classification", file=sys.stderr)
@@ -133,11 +133,13 @@ class DocumentClassifier:
             # Process image
             ai_image = self.process_image(image_data)
 
-            # Run AI classification with supported types
-            print("[Classify] Running structured AI classification with supported types validation", file=sys.stderr)
+            # Run AI classification with supported types and slot validation
+            print(f"[Classify] Running structured AI classification with slot validation - expected: '{expected_type}', slot: '{slot_context}'", file=sys.stderr)
             prediction = self.classifier(
                 document_image=ai_image,
-                supported_types=supported_types_json
+                supported_types=supported_types_json,
+                expected_type=expected_type,
+                slot_context=slot_context
             )
 
             # Extract classification result (already a Pydantic object)
@@ -178,11 +180,13 @@ class DocumentClassifier:
 
 def main():
     """Main entry point for CLI usage"""
-    if len(sys.argv) != 2:
-        print("Usage: python classify_document_dspy.py <base64_image_data>")
+    if len(sys.argv) < 2 or len(sys.argv) > 4:
+        print("Usage: python classify_document.py <image_data> [expected_type] [slot_context]")
         sys.exit(1)
 
     image_data = sys.argv[1]
+    expected_type = sys.argv[2] if len(sys.argv) > 2 else ""
+    slot_context = sys.argv[3] if len(sys.argv) > 3 else ""
 
     # Check for missing dependencies first
     if not DEPENDENCIES_AVAILABLE:
@@ -197,7 +201,7 @@ def main():
         return
 
     classifier = DocumentClassifier()
-    result = classifier.classify_document(image_data)
+    result = classifier.classify_document(image_data, expected_type, slot_context)
 
     print(json.dumps(result, indent=2))
 

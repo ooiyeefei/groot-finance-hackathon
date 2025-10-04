@@ -231,33 +231,33 @@ export default function ExpenseApprovalDashboard() {
                   return (
                     <div
                       key={claim.id}
-                      className={`p-4 flex items-center justify-between hover:bg-gray-700/30 transition-colors ${
+                      className={`p-4 flex items-center gap-4 hover:bg-gray-700/30 transition-colors ${
                         index !== claims.length - 1 ? 'border-b border-gray-700' : ''
                       }`}
                     >
                       {/* Left Section - Employee & Description */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                          <div className={`w-2 h-2 rounded-full ${getRiskColor(riskLevel)}`} />
+                      <div className="flex-1 min-w-0 max-w-md">
+                        <div className="flex items-center gap-3 mb-1 overflow-hidden">
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getRiskColor(riskLevel)}`} />
                           <p className="text-white font-medium text-sm truncate">
                             {claim.employee_name}
                           </p>
-                          <Badge variant="outline" className={`${getStatusColor(claim.status)} text-xs`}>
+                          <Badge variant="outline" className={`${getStatusColor(claim.status)} text-xs flex-shrink-0`}>
                             {claim.status.replace('_', ' ')}
                           </Badge>
                         </div>
                         <p className="text-gray-300 text-sm mb-1 truncate">{claim.description}</p>
-                        <div className="flex items-center gap-4 text-xs text-gray-400">
-                          <span className="flex items-center gap-1">
+                        <div className="flex items-center gap-4 text-xs text-gray-400 flex-wrap">
+                          <span className="flex items-center gap-1 flex-shrink-0">
                             <Tag className="w-3 h-3" />
-                            {claim.category_name}
+                            <span className="truncate max-w-24">{claim.category_name}</span>
                           </span>
-                          <span className="flex items-center gap-1">
+                          <span className="flex items-center gap-1 flex-shrink-0">
                             <Calendar className="w-3 h-3" />
                             {new Date(claim.submission_date).toLocaleDateString()}
                           </span>
                           {(claim.is_over_limit || (claim.receipt_confidence && claim.receipt_confidence < 80)) && (
-                            <span className="flex items-center gap-1 text-red-400">
+                            <span className="flex items-center gap-1 text-red-400 flex-shrink-0">
                               <AlertCircle className="w-3 h-3" />
                               Risk
                             </span>
@@ -266,7 +266,7 @@ export default function ExpenseApprovalDashboard() {
                       </div>
 
                       {/* Center Section - Amount */}
-                      <div className="text-right px-4">
+                      <div className="text-right px-4 flex-shrink-0 w-28">
                         <p className="text-white font-semibold text-sm">
                           {claim.original_amount} {claim.original_currency}
                         </p>
@@ -278,7 +278,7 @@ export default function ExpenseApprovalDashboard() {
                       </div>
 
                       {/* Right Section - Actions */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <Button
                           size="sm"
                           onClick={() => setSelectedClaim(claim)}

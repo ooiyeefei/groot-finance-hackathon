@@ -421,15 +421,14 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
     hasToken: !!jwtToken
   })
 
-  // Create Supabase client with Clerk JWT token in Authorization header
+  // Create Supabase client with JWT token as the primary auth method
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // Still needed for initialization
     {
       global: {
         headers: {
-          // Pass Clerk JWT token to Supabase for RLS auth.jwt() access
-          Authorization: `Bearer ${jwtToken}`
+          Authorization: `Bearer ${jwtToken}` // Use JWT directly in headers
         },
         fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
           return fetch(url, {

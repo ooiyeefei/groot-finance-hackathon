@@ -1,12 +1,12 @@
-import { SignIn } from '@clerk/nextjs'
+import { SignUp } from '@clerk/nextjs'
 
-interface SignInPageProps {
+interface SignUpPageProps {
   params: Promise<{
     locale: string
   }>
 }
 
-export default async function SignInPage({ params }: SignInPageProps) {
+export default async function SignUpPage({ params }: SignUpPageProps) {
   const { locale } = await params
 
   return (
@@ -20,10 +20,10 @@ export default async function SignInPage({ params }: SignInPageProps) {
             Your Financial Co-Pilot for Southeast Asia
           </p>
         </div>
-        <SignIn
+        <SignUp
           afterSignInUrl={`/${locale}`}
           afterSignUpUrl={`/${locale}`}
-          signUpUrl={`/${locale}/sign-up`}
+          signInUrl={`/${locale}/sign-in`}
           appearance={{
             elements: {
               rootBox: "mx-auto",
