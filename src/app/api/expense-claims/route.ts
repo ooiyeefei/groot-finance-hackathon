@@ -127,22 +127,7 @@ export async function POST(request: NextRequest) {
     const categoryInfo = await getBusinessExpenseCategory(employeeProfile.business_id, expense_category)
     const accountingCategory = categoryInfo?.accounting_category || mapExpenseCategoryToAccounting(expense_category)
 
-    // Get user's home currency from users table
-    const { data: userInfo, error: userError } = await supabase
-      .from('users')
-      .select('home_currency')
-      .eq('clerk_user_id', userId)
-      .single()
-
-    if (userError || !userInfo) {
-      console.error('[Expense Claims API] Failed to get user currency info:', userError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to get user information' },
-        { status: 500 }
-      )
-    }
-
-    const userHomeCurrency = userInfo.home_currency
+    const userHomeCurrency = userData.home_currency
 
     // Convert to home currency
     let homeAmount = original_amount

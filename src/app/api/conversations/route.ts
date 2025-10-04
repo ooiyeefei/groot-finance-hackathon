@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 export async function GET() {
   try {
@@ -10,10 +10,18 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Initialize Supabase client
-    const supabase = createServerSupabaseClient()
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+
+    console.log(`[Conversations API] Fetching conversations for user:`, {
+      clerkUserId: userId,
+      supabaseUserId: userData.id,
+      businessId: userData.business_id
+    })
 
     // Get user's conversations ordered by most recent (excluding deleted ones)
+    // SECURITY FIX: Use Supabase UUID instead of Clerk ID
     const { data: conversations, error } = await supabase
       .from('conversations')
       .select(`
@@ -32,7 +40,7 @@ export async function GET() {
           deleted_at
         )
       `)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id)
       .is('deleted_at', null)
       .order('updated_at', { ascending: false })
       .limit(50)

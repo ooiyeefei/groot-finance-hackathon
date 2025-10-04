@@ -238,7 +238,7 @@ async function createMissingUserRecords(
 }
 
 // Helper function to get user data including business_id (bypasses RLS)
-export async function getUserData(clerkUserId: string): Promise<{id: string, business_id: string | null}> {
+export async function getUserData(clerkUserId: string): Promise<{id: string, business_id: string | null, home_currency: string, email: string, full_name: string | null}> {
   return retryOperation(async () => {
     const serviceClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -262,7 +262,7 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
     // 🛡️ RESILIENT QUERY: Handle potential duplicate records gracefully
     const { data: users, error } = await serviceClient
       .from('users')
-      .select('id, business_id, created_at')
+      .select('id, business_id, home_currency, email, full_name, created_at')
       .eq('clerk_user_id', clerkUserId)
       .order('created_at', { ascending: false }) // Get most recent first
 
@@ -282,7 +282,19 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
       const recoveredUser = await createMissingUserRecords(clerkUserId, serviceClient)
       if (recoveredUser) {
         console.log(`[User Recovery] ✅ Successfully created missing records for: ${clerkUserId}`)
-        return recoveredUser
+
+        // Query for complete user data after recovery
+        const { data: completeUser, error: recoveryError } = await serviceClient
+          .from('users')
+          .select('id, business_id, home_currency, email, full_name, created_at')
+          .eq('id', recoveredUser.id)
+          .single()
+
+        if (recoveryError || !completeUser) {
+          throw new Error('Failed to fetch complete user data after recovery')
+        }
+
+        return completeUser
       }
 
       throw new Error('Failed to fetch user data: User not found')
@@ -381,7 +393,7 @@ export function createServiceSupabaseClient() {
   )
 }
 
-// Safe helper for user-specific operations with automatic RLS enforcement
+// SECURITY: Proper Clerk+Supabase JWT integration following official docs
 export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
   const authenticatedClerkUserId = clerkUserId || (await auth()).userId
 
@@ -389,14 +401,36 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
     throw new Error('Authentication required')
   }
 
-  // Resolve Clerk ID to Supabase UUID and get business_id
-  const userData = await getUserData(authenticatedClerkUserId)
+  // Get Clerk JWT token for Supabase authentication
+  let jwtToken: string | null = null
+  try {
+    // In server components, we need to get the token differently
+    const { getToken } = await auth()
+    jwtToken = await getToken({ template: 'supabase' })
+  } catch (error) {
+    console.error('[Supabase Client] Failed to get Clerk JWT token:', error)
+    throw new Error('Failed to authenticate with Clerk')
+  }
 
+  if (!jwtToken) {
+    throw new Error('No JWT token available')
+  }
+
+  console.log('[Supabase Client] Using proper Clerk JWT authentication for:', {
+    clerkUserId: authenticatedClerkUserId,
+    hasToken: !!jwtToken
+  })
+
+  // Create Supabase client with Clerk JWT token in Authorization header
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       global: {
+        headers: {
+          // Pass Clerk JWT token to Supabase for RLS auth.jwt() access
+          Authorization: `Bearer ${jwtToken}`
+        },
         fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
           return fetch(url, {
             ...options,
@@ -406,30 +440,6 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
       }
     }
   )
-
-  // Debug: Log context being set
-  console.log('[Supabase Client] Setting RLS context with:', {
-    clerkUserId: authenticatedClerkUserId,
-    supabaseUuid: userData.id,
-    businessId: userData.business_id
-  })
-
-  // Set up RLS context with both user and business context
-  await retryOperation(async () => {
-    // Set user context for auth.uid()
-    const { error: userError } = await supabase.rpc('set_user_context', { user_id: userData.id })
-    if (userError) {
-      throw new Error(`Failed to set user context: ${userError.message}`)
-    }
-
-    // Set business context for current_business_id() if user has a business
-    if (userData.business_id) {
-      const { error: businessError } = await supabase.rpc('set_tenant_context', { business_id: userData.business_id })
-      if (businessError) {
-        throw new Error(`Failed to set business context: ${businessError.message}`)
-      }
-    }
-  })
 
   return supabase
 }

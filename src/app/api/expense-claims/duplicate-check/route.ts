@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import crypto from 'crypto'
 
 interface DuplicateCheckResult {
@@ -26,6 +26,9 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
 
     const formData = await request.formData()
     const file = formData.get('receipt_image') as File
@@ -53,17 +56,17 @@ export async function POST(request: NextRequest) {
     if (file) {
       const imageBuffer = Buffer.from(await file.arrayBuffer())
       const imageHash = generatePerceptualHash(imageBuffer)
-      
-      duplicateResult = await checkImageDuplicates(supabase, userId, imageHash)
+
+      duplicateResult = await checkImageDuplicates(supabase, userData.id, imageHash)
     }
 
     // If no image match and we have metadata, check metadata patterns
     if (!duplicateResult.duplicate_found && vendorName && amount && transactionDate) {
       const metadataResult = await checkMetadataDuplicates(
-        supabase, 
-        userId, 
-        vendorName, 
-        amount, 
+        supabase,
+        userData.id,
+        vendorName,
+        amount,
         transactionDate
       )
       
@@ -103,8 +106,8 @@ function generatePerceptualHash(imageBuffer: Buffer): string {
 }
 
 async function checkImageDuplicates(
-  supabase: any, 
-  userId: string, 
+  supabase: any,
+  supabaseUserId: string,
   imageHash: string
 ): Promise<DuplicateCheckResult> {
   try {
@@ -116,7 +119,7 @@ async function checkImageDuplicates(
         claim:expense_claims!inner(id, status, created_at)
       `)
       .eq('image_hash', imageHash)
-      .eq('user_id', userId)
+      .eq('user_id', supabaseUserId)
       .neq('claim.status', 'rejected') // Don't flag rejected claims as duplicates
       .not('image_hash', 'is', null)
 
@@ -165,7 +168,7 @@ async function checkImageDuplicates(
 
 async function checkMetadataDuplicates(
   supabase: any,
-  userId: string,
+  supabaseUserId: string,
   vendorName: string,
   amount: number,
   transactionDate: string
@@ -173,10 +176,10 @@ async function checkMetadataDuplicates(
   try {
     const dateRange = 7 // Check within 7 days
     const amountTolerance = 0.01 // 1% tolerance for amount differences
-    
+
     const startDate = new Date(transactionDate)
     startDate.setDate(startDate.getDate() - dateRange)
-    
+
     const endDate = new Date(transactionDate)
     endDate.setDate(endDate.getDate() + dateRange)
 
@@ -188,7 +191,7 @@ async function checkMetadataDuplicates(
         claim:expense_claims!inner(id, status, created_at, business_purpose),
         transaction:transactions(vendor_name, original_amount, transaction_date)
       `)
-      .eq('user_id', userId)
+      .eq('user_id', supabaseUserId)
       .gte('transaction.transaction_date', startDate.toISOString().split('T')[0])
       .lte('transaction.transaction_date', endDate.toISOString().split('T')[0])
       .neq('claim.status', 'rejected')

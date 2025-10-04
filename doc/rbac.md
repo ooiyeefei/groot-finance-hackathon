@@ -69,8 +69,8 @@
   5. Security & Best Practices
 
   ✅ Default Employee Role - Everyone starts as employee for security
-  ✅ Admin Key Protection - Only you know the initial admin key✅ Clerk Integration - Roles sync
-  to publicMetadata automatically
+  ✅ Admin Key Protection - Only you know the initial admin key
+  ✅ Clerk Integration - Roles sync to privateMetadata for enhanced security
   ✅ Middleware Protection - Routes protected at middleware level
   ✅ Database Consistency - Permissions stored in business database
   ✅ UI Auto-Updates - Manager features appear based on permissions
@@ -80,7 +80,7 @@
   1. You (SaaS Owner): Use MASTER_ADMIN_KEY to create business admins
   2. Business Admin: Gets finance role, manages their team via /manager/team
   3. Employees: Sign up as employee, get promoted by business admin
-  4. Role Storage: Active roles in Clerk publicMetadata, users table as backup
+  4. Role Storage: Active roles in Clerk privateMetadata, users table as backup
 
   ✅ Database Structure:
 
@@ -104,10 +104,30 @@
 
   ✅ Clerk Integration:
 
-  - Active roles: Stored in publicMetadata.role and publicMetadata.permissions
-  - Session access: Available via sessionClaims.metadata
-  - Client access: Available via user.publicMetadata
-  - Security: Only backend can update publicMetadata
+  - Active roles: Stored in privateMetadata.role and privateMetadata.permissions for enhanced security
+  - Session access: Available via sessionClaims.metadata (configured via JWT template)
+  - Client access: Available via user.sessionClaims.metadata (not directly accessible for security)
+  - Security: Only backend can update privateMetadata, client access via JWT claims only
+
+  📋 Required JWT Template Configuration:
+
+  In your Clerk Dashboard, create a JWT template named "supabase" with the following claims:
+  ```json
+  {
+    "aud": "authenticated",
+    "exp": {{exp}},
+    "iat": {{iat}},
+    "iss": "{{iss}}",
+    "sub": "{{user.id}}",
+    "metadata": {
+      "role": "{{user.private_metadata.role}}",
+      "permissions": {{user.private_metadata.permissions}}
+    },
+    "user_metadata": {}
+  }
+  ```
+
+  This template ensures that role data from private metadata is securely exposed in JWT claims for client-side access.
 
   🚀 Steps to Test Admin Access:
 

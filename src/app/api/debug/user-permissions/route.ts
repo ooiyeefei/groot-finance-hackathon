@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       },
       comparison: {
         supabasePermissions: profileData?.role_permissions,
-        clerkPermissions: clerkUser.publicMetadata?.permissions
+        clerkPermissions: clerkUser.privateMetadata?.permissions
       }
     })
 

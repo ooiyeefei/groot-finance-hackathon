@@ -3,11 +3,13 @@
  * Enforces security-first architecture with mandatory user context validation
  */
 
-import { createServerSupabaseClient, createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createServerSupabaseClient, createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface UserContext {
-  userId: string
+  userId: string // Clerk user ID
+  supabaseUserId?: string // Supabase UUID
+  businessId?: string // Business ID for tenant isolation
   conversationId?: string
 }
 
@@ -86,7 +88,28 @@ export abstract class BaseTool {
         }
       }
 
-      // CRITICAL: Create authenticated client for this specific user
+      // SECURITY: Get complete user data including business context for proper tenant isolation
+      let userData: { id: string; business_id: string | null; home_currency: string; email: string; full_name: string | null }
+      try {
+        userData = await getUserData(userContext.userId)
+
+        // Enrich user context with business information for proper security validation
+        userContext.supabaseUserId = userData.id
+        userContext.businessId = userData.business_id || undefined
+
+        console.log(`[${this.getToolName()}] Enhanced user context:`, {
+          clerkUserId: userContext.userId,
+          supabaseUserId: userData.id,
+          businessId: userData.business_id
+        })
+      } catch (userDataError) {
+        return {
+          success: false,
+          error: 'Authentication failed: Unable to resolve user data'
+        }
+      }
+
+      // CRITICAL: Create authenticated client for this specific user with business context
       try {
         this.authenticatedSupabase = await createAuthenticatedSupabaseClient(userContext.userId)
       } catch (authError) {
@@ -141,23 +164,19 @@ export abstract class BaseTool {
   protected async checkUserPermissions(userContext: UserContext): Promise<boolean> {
     try {
       console.log(`[${this.getToolName()}] Checking permissions for user: ${userContext.userId}`)
-      
-      // Verify user exists and is active
-      // Query by clerk_user_id since userContext.userId contains Clerk user ID
-      const { data: user, error } = await this.supabase
-        .from('users')
-        .select('id, clerk_user_id')
-        .eq('clerk_user_id', userContext.userId)
-        .single()
 
-      console.log(`[${this.getToolName()}] User lookup result:`, { user, error })
-
-      if (error || !user) {
-        console.warn(`[${this.getToolName()}] User validation failed - user not found in users table:`, error)
+      // SECURITY: Use enhanced user context with business validation
+      if (!userContext.supabaseUserId || !userContext.businessId) {
+        console.warn(`[${this.getToolName()}] Missing enhanced user context - security validation failed`)
         return false
       }
 
-      console.log(`[${this.getToolName()}] User validation passed for: ${userContext.userId}`)
+      // Additional validation: User exists and has business context
+      console.log(`[${this.getToolName()}] User validation passed:`, {
+        clerkUserId: userContext.userId,
+        supabaseUserId: userContext.supabaseUserId,
+        businessId: userContext.businessId
+      })
       return true
     } catch (error) {
       console.error(`[${this.getToolName()}] Permission check error:`, error)
@@ -167,16 +186,29 @@ export abstract class BaseTool {
 
   /**
    * Utility method to create RLS-enabled database queries using authenticated client
+   * SECURITY: Now includes proper business context validation for multi-tenant isolation
    */
   protected createSecureQuery<T = any>(tableName: string, userContext: UserContext) {
     if (!this.authenticatedSupabase) {
       throw new Error('Authenticated client not available - ensure execute() method created it')
     }
-    
-    return this.authenticatedSupabase
+
+    if (!userContext.supabaseUserId) {
+      throw new Error('Supabase user ID not available in user context')
+    }
+
+    let query = this.authenticatedSupabase
       .from(tableName)
       .select('*')
-      .eq('clerk_user_id', userContext.userId) as any
+      .eq('user_id', userContext.supabaseUserId)
+
+    // SECURITY: Add business context validation for multi-tenant tables
+    if (userContext.businessId) {
+      query = query.eq('business_id', userContext.businessId)
+      console.log(`[${this.getToolName()}] Applied business context filter: ${userContext.businessId}`)
+    }
+
+    return query as any
   }
 
   /**

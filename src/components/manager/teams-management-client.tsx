@@ -585,7 +585,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                       <h4 className="text-white font-medium">
                                         {member.clerk_user?.firstName && member.clerk_user?.lastName
                                           ? `${member.clerk_user.firstName} ${member.clerk_user.lastName}`
-                                          : member.full_name || 'Unknown User'
+                                          : member.clerk_user?.firstName || member.full_name
+                                          || member.email?.split('@')[0]
+                                          || 'User'
                                         }
                                       </h4>
                                       <Button
@@ -595,7 +597,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                           member.id,
                                           member.clerk_user?.firstName && member.clerk_user?.lastName
                                             ? `${member.clerk_user.firstName} ${member.clerk_user.lastName}`
-                                            : member.full_name || ''
+                                            : member.clerk_user?.firstName || member.full_name
+                                            || member.email?.split('@')[0] || ''
                                         )}
                                         className="h-6 px-1 border-gray-600 hover:bg-gray-700"
                                       >
@@ -696,7 +699,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                             )}
                                             {manager.clerk_user?.firstName && manager.clerk_user?.lastName
                                               ? `${manager.clerk_user.firstName} ${manager.clerk_user.lastName}`
-                                              : manager.full_name || manager.email || 'Unknown'
+                                              : manager.clerk_user?.firstName || manager.full_name
+                                              || manager.email?.split('@')[0] || 'User'
                                             }
                                           </div>
                                         </SelectItem>

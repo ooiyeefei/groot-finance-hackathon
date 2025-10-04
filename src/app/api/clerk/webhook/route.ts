@@ -131,9 +131,11 @@ async function handleUserCreated(user: ClerkUser) {
   }
 
   const email = primaryEmail.email_address.toLowerCase()
-  const fullName = user.first_name && user.last_name
-    ? `${user.first_name} ${user.last_name}`
-    : null
+
+  // 🔧 IMPROVED: Handle partial names better with fallbacks
+  const fullName = user.first_name || user.last_name
+    ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
+    : email.split('@')[0] // Use email username as final fallback
 
   console.log(`[Clerk Webhook] 📝 Processing: email=${email}, fullName=${fullName}`)
 
@@ -242,9 +244,11 @@ async function handleUserUpdated(user: ClerkUser) {
   }
 
   const email = primaryEmail.email_address.toLowerCase()
-  const fullName = user.first_name && user.last_name
-    ? `${user.first_name} ${user.last_name}`
-    : null
+
+  // 🔧 IMPROVED: Handle partial names better with fallbacks (same logic as user creation)
+  const fullName = user.first_name || user.last_name
+    ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
+    : email.split('@')[0] // Use email username as final fallback
 
   try {
     const { error } = await supabase

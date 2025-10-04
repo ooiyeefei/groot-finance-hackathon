@@ -5,14 +5,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
 
 // GET - Fetch pending expense claims for approval
 export async function GET(request: NextRequest) {
   try {
     console.log('[Approvals API] Starting GET request')
-    // Get employee profile using the same method as dashboard API
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json(
@@ -21,12 +20,24 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Use ensureEmployeeProfile just like dashboard API
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+
+    // Get employee profile for permission validation
     const employeeProfile = await ensureEmployeeProfile(userId)
     if (!employeeProfile) {
       return NextResponse.json(
         { success: false, error: 'Failed to create or retrieve employee profile' },
         { status: 500 }
+      )
+    }
+
+    // SECURITY: Validate business context matches
+    if (employeeProfile.business_id !== userData.business_id) {
+      return NextResponse.json(
+        { success: false, error: 'Business context mismatch' },
+        { status: 403 }
       )
     }
 
@@ -38,20 +49,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('[Approvals API] User context obtained:', {
-      userId: userId,
-      businessId: employeeProfile.business_id,
-      permissions: employeeProfile.role_permissions
-    })
+    // SECURITY: Use authenticated client with business context validation
+    console.log('[Approvals API] Querying business claims for business_id:', employeeProfile.business_id)
 
-    // Use service client to bypass RLS, exactly like dashboard API
-    const adminSupabase = createServiceSupabaseClient()
-
-    // Copy exact approach from dashboard API that works
-    console.log('[Approvals API] Using admin mode - querying business claims for business_id:', employeeProfile.business_id)
-
-    // First, get all employee_ids in this business (exact same as dashboard API)
-    const { data: businessEmployees } = await adminSupabase
+    // First, get all employee_ids in this business using authenticated client
+    const { data: businessEmployees } = await supabase
       .from('employee_profiles')
       .select('id')
       .eq('business_id', employeeProfile.business_id)
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     // Debug: Check what claims exist in the database first
     console.log('[Approvals API] DEBUG: Checking ALL claims in database...')
-    const { data: allClaims, error: allClaimsError } = await adminSupabase
+    const { data: allClaims, error: allClaimsError } = await supabase
       .from('expense_claims')
       .select('id, employee_id, status, deleted_at')
       .is('deleted_at', null)
@@ -88,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     // Debug: Check claims for our specific employee IDs
     console.log('[Approvals API] DEBUG: Checking claims for our employee IDs...')
-    const { data: employeeSpecificClaims } = await adminSupabase
+    const { data: employeeSpecificClaims } = await supabase
       .from('expense_claims')
       .select('id, employee_id, status, deleted_at')
       .in('employee_id', employeeIds)
@@ -104,20 +106,20 @@ export async function GET(request: NextRequest) {
     })
 
     // Use exact same approach as dashboard API - simple query first
-    console.log('[Approvals API] Dashboard API approach - Admin service client query...')
-    const { data: simpleClaims, error: simpleError } = await adminSupabase
+    console.log('[Approvals API] Dashboard API approach - Authenticated client query...')
+    const { data: simpleClaims, error: simpleError } = await supabase
       .from('expense_claims')
       .select('*')
       .in('employee_id', employeeIds)
 
-    console.log('[Approvals API] Admin service client query result:', {
+    console.log('[Approvals API] Authenticated client query result:', {
       claimsCount: simpleClaims?.length || 0,
       error: simpleError,
       sampleClaim: simpleClaims?.[0]?.id || 'none'
     })
 
     // Now use the exact same query pattern as dashboard API that works
-    const { data: claims, error: claimsError } = await adminSupabase
+    const { data: claims, error: claimsError } = await supabase
       .from('expense_claims')
       .select(`
         *,
@@ -151,7 +153,7 @@ export async function GET(request: NextRequest) {
 
     // Debug: Check if filtering by status is the issue
     console.log('[Approvals API] DEBUG: Testing query without status filter...')
-    const { data: claimsWithoutStatusFilter } = await adminSupabase
+    const { data: claimsWithoutStatusFilter } = await supabase
       .from('expense_claims')
       .select('id, employee_id, status, deleted_at')
       .in('employee_id', employeeIds)
@@ -177,7 +179,7 @@ export async function GET(request: NextRequest) {
     // Employee details are already included in the query above via join
 
     // Get business categories from JSONB column
-    const { data: businessData, error: businessError } = await adminSupabase
+    const { data: businessData, error: businessError } = await supabase
       .from('businesses')
       .select('custom_expense_categories')
       .eq('id', employeeProfile.business_id)
@@ -242,7 +244,7 @@ export async function GET(request: NextRequest) {
     // Get approved count for today
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const { count: approvedToday } = await adminSupabase
+    const { count: approvedToday } = await supabase
       .from('expense_claims')
       .select('*', { count: 'exact', head: true })
       .in('employee_id', employeeIds)
@@ -315,9 +317,9 @@ export async function POST(request: NextRequest) {
     }
     console.log('[Approvals API POST] Step 3 SUCCESS: Manager permissions confirmed')
 
-    console.log('[Approvals API POST] Step 4: Creating Supabase client')
-    const supabase = createServiceSupabaseClient() // Use service client like GET endpoint
-    console.log('[Approvals API POST] Step 4 SUCCESS: Service client created (bypassing RLS)')
+    console.log('[Approvals API POST] Step 4: Creating authenticated Supabase client')
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+    console.log('[Approvals API POST] Step 4 SUCCESS: Authenticated client created with business context')
 
     console.log('[Approvals API POST] Step 5: Parsing request body')
     const body = await request.json()

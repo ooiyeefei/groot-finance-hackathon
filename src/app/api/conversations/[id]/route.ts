@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 // GET - Fetch specific conversation
 export async function GET(
@@ -16,10 +16,12 @@ export async function GET(
 
     const { id: conversationId } = await params
 
-    // Initialize Supabase client
-    const supabase = createServerSupabaseClient()
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Get specific conversation with all messages
+    // SECURITY FIX: Use Supabase UUID instead of Clerk ID
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
       .select(`
@@ -32,7 +34,7 @@ export async function GET(
         updated_at
       `)
       .eq('id', conversationId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id)
       .is('deleted_at', null)
       .single()
 
@@ -45,6 +47,7 @@ export async function GET(
     }
 
     // Get all messages for this conversation
+    // SECURITY FIX: Use Supabase UUID instead of Clerk ID
     const { data: messages, error: messagesError } = await supabase
       .from('messages')
       .select(`
@@ -56,7 +59,7 @@ export async function GET(
         created_at
       `)
       .eq('conversation_id', conversationId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: true })
 
@@ -96,14 +99,18 @@ export async function DELETE(
     }
 
     const { id: conversationId } = await params
-    const supabase = createServerSupabaseClient()
-    
+
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+
     // Soft delete the conversation (updates deleted_at timestamp)
+    // SECURITY FIX: Use Supabase UUID instead of Clerk ID
     const { error: conversationError } = await supabase
       .from('conversations')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', conversationId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id)
       .is('deleted_at', null)
 
     if (conversationError) {
@@ -115,11 +122,12 @@ export async function DELETE(
     }
 
     // Soft delete all messages in the conversation
+    // SECURITY FIX: Use Supabase UUID instead of Clerk ID
     const { error: messagesError } = await supabase
       .from('messages')
       .update({ deleted_at: new Date().toISOString() })
       .eq('conversation_id', conversationId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id)
       .is('deleted_at', null)
 
     if (messagesError) {

@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 // DELETE - Soft delete message
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ messageId: string }> }) {
@@ -13,10 +13,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       )
     }
 
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
     const { messageId } = await params
-    const supabase = createServerSupabaseClient()
-    
-    // First verify the message belongs to the user by checking the conversation ownership
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+
+    // SECURITY: Verify the message belongs to the user by checking conversation ownership using Supabase UUID
     const { data: message, error: fetchError } = await supabase
       .from('messages')
       .select(`
@@ -27,7 +29,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         )
       `)
       .eq('id', messageId)
-      .eq('conversations.user_id', userId)
+      .eq('conversations.user_id', userData.id)
       .is('deleted_at', null)
       .single()
 

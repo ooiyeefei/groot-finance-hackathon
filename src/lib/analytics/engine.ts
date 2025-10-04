@@ -127,16 +127,18 @@ export async function calculateFinancialAnalytics(
     .from('transactions')
     .select('id, transaction_date, transaction_type, original_amount, home_currency_amount')
     .eq('user_id', supabaseUserId)
+    .eq('business_id', businessId)
     .order('transaction_date', { ascending: false })
     .limit(10);
 
   console.log('[Analytics Engine] Last 10 transactions for user:', allUserTransactions);
 
-  // SECURITY: Fetch transactions with proper UUID and business context
+  // SECURITY: Fetch transactions with proper UUID and business context validation
   const { data: transactions, error: transactionError } = await supabase
     .from('transactions')
     .select('*')
     .eq('user_id', supabaseUserId)
+    .eq('business_id', businessId)
     .gte('transaction_date', periodStart.toISOString().split('T')[0])
     .lte('transaction_date', periodEnd.toISOString().split('T')[0])
     .order('transaction_date', { ascending: true });
@@ -236,6 +238,7 @@ export async function calculateFinancialAnalytics(
     .from('transactions')
     .select('*')
     .eq('user_id', supabaseUserId)
+    .eq('business_id', businessId)
     .eq('transaction_type', 'income')
     .in('status', ['pending', 'awaiting_payment', 'overdue']);
 
@@ -332,6 +335,7 @@ export async function calculateFinancialAnalytics(
     .from('transactions')
     .select('*')
     .eq('user_id', supabaseUserId)
+    .eq('business_id', businessId)
     .eq('transaction_type', 'expense')
     .in('status', ['pending', 'awaiting_payment', 'overdue']);
 
@@ -428,6 +432,7 @@ export async function calculateFinancialAnalytics(
     .from('transactions')
     .select('id, compliance_analysis, description, vendor_name, original_amount, original_currency')
     .eq('user_id', supabaseUserId)
+    .eq('business_id', businessId)
     .not('compliance_analysis', 'is', null);
     
   if (complianceError) {

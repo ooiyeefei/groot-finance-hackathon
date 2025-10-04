@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { type Locale, isValidLocale } from '@/i18n'
 import { createFinancialAgent, createAgentState } from '@/lib/langgraph-agent'
 import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages'
@@ -166,7 +166,7 @@ function extractEstablishedFacts(message: string): Record<string, string> {
  * by analyzing conversation history for recent clarification questions
  */
 async function checkIfClarificationResponse(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
+  supabase: any,
   conversationId: string,
   userId: string,
   message: string,
@@ -307,11 +307,11 @@ async function checkIfClarificationResponse(
 
 export async function POST(request: NextRequest) {
   console.log('[Chat API] Starting LangGraph agent request...')
-  
+
   try {
     // Authenticate the user
     const { userId } = await auth()
-    
+
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -329,8 +329,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Chat API] Request language: ${rawLanguage}, validated language: ${language}`)
 
-    // Initialize Supabase client
-    const supabase = createServerSupabaseClient()
+    // SECURITY: Get user data with business context for proper tenant isolation
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
     let currentConversationId = conversationId
 
@@ -339,7 +340,7 @@ export async function POST(request: NextRequest) {
       const { data: newConversation, error: conversationError } = await supabase
         .from('conversations')
         .insert({
-          user_id: userId,
+          user_id: userData.id,
           title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
           language: language
         })
@@ -359,7 +360,7 @@ export async function POST(request: NextRequest) {
       .from('messages')
       .select('role, content, metadata')
       .eq('conversation_id', currentConversationId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id)
       .order('created_at', { ascending: false })
       .limit(10)
 
@@ -380,6 +381,8 @@ export async function POST(request: NextRequest) {
     // Create user context for enhanced agent
     const userContext = {
       userId: userId,
+      supabaseUserId: userData.id,
+      businessId: userData.business_id || undefined,
       conversationId: currentConversationId || undefined
     }
 
@@ -555,7 +558,7 @@ export async function POST(request: NextRequest) {
       .from('messages')
       .insert({
         conversation_id: currentConversationId,
-        user_id: userId,
+        user_id: userData.id,
         role: 'user',
         content: message
       })
@@ -588,7 +591,7 @@ export async function POST(request: NextRequest) {
       .from('messages')
       .insert({
         conversation_id: currentConversationId,
-        user_id: userId,
+        user_id: userData.id,
         role: 'assistant',
         content: assistantResponse,
         metadata: Object.keys(assistantMetadata).length > 0 ? assistantMetadata : null
@@ -605,7 +608,7 @@ export async function POST(request: NextRequest) {
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', currentConversationId)
-      .eq('user_id', userId)
+      .eq('user_id', userData.id)
 
     console.log(`[Chat API] Successfully completed enhanced agent interaction with ${citations.length} citations, confidence: ${result.confidence?.toFixed(3) || 'unknown'}`)
 

@@ -6,17 +6,21 @@
 'use client'
 
 import React from 'react'
-import { useUser } from '@clerk/nextjs'
+import { useUser, useAuth } from '@clerk/nextjs'
 import { UserRole, RolePermissions } from './rbac'
 
 /**
  * Client-side role checking hook following Clerk patterns
+ * Uses session claims instead of metadata for security (private metadata not accessible on client)
  */
 export function useUserRole() {
   const { user } = useUser()
-  
-  const role = user?.publicMetadata?.role as UserRole
-  const permissions = user?.publicMetadata?.permissions as RolePermissions
+  const { sessionClaims } = useAuth()
+
+  // Access role data from JWT session claims instead of metadata for security
+  const metadata = sessionClaims?.metadata as any
+  const role = metadata?.role as UserRole
+  const permissions = metadata?.permissions as RolePermissions
   
   return {
     role,
@@ -32,25 +36,28 @@ export function useUserRole() {
 }
 
 /**
- * Check if user has specific role (Clerk pattern)
+ * Check if user has specific role (using session claims for security)
+ * Note: Use useUserRole() hook for most cases. This is for direct session claims access.
  */
-export function checkRole(user: any, role: UserRole): boolean {
-  return user?.publicMetadata?.role === role
+export function checkRole(sessionClaims: any, role: UserRole): boolean {
+  return sessionClaims?.metadata?.role === role
 }
 
 /**
- * Check if user has any of the specified roles
+ * Check if user has any of the specified roles (using session claims for security)
+ * Note: Use useUserRole() hook for most cases. This is for direct session claims access.
  */
-export function checkAnyRole(user: any, roles: UserRole[]): boolean {
-  const userRole = user?.publicMetadata?.role as UserRole
+export function checkAnyRole(sessionClaims: any, roles: UserRole[]): boolean {
+  const userRole = sessionClaims?.metadata?.role as UserRole
   return roles.includes(userRole)
 }
 
 /**
- * Check if user has specific permission
+ * Check if user has specific permission (using session claims for security)
+ * Note: Use useUserRole() hook for most cases. This is for direct session claims access.
  */
-export function checkPermission(user: any, permission: keyof RolePermissions): boolean {
-  const permissions = user?.publicMetadata?.permissions as RolePermissions
+export function checkPermission(sessionClaims: any, permission: keyof RolePermissions): boolean {
+  const permissions = sessionClaims?.metadata?.permissions as RolePermissions
   return permissions?.[permission] ?? false
 }
 
@@ -64,22 +71,22 @@ interface RoleGuardProps {
   fallback?: React.ReactNode
 }
 
-export function RoleGuard({ 
-  children, 
-  allowedRoles, 
-  requiredPermission, 
-  fallback = null 
+export function RoleGuard({
+  children,
+  allowedRoles,
+  requiredPermission,
+  fallback = null
 }: RoleGuardProps) {
-  const { user } = useUser()
-  
+  const { sessionClaims } = useAuth()
+
   let hasAccess = false
-  
+
   if (allowedRoles) {
-    hasAccess = checkAnyRole(user, allowedRoles)
+    hasAccess = checkAnyRole(sessionClaims, allowedRoles)
   } else if (requiredPermission) {
-    hasAccess = checkPermission(user, requiredPermission)
+    hasAccess = checkPermission(sessionClaims, requiredPermission)
   }
-  
+
   return hasAccess ? (children as React.ReactNode) : (fallback as React.ReactNode)
 }
 

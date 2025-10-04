@@ -547,21 +547,27 @@ export class TransactionLookupTool extends BaseTool {
       const startDate = dateRange.startDate
       const endDate = dateRange.endDate
 
-      // CRITICAL: Use consistent user_id column (from CLAUDE.md: Users → All entities via user_id)
-      // Based on architecture docs, all entities use user_id column for relationships
-      console.log(`[TransactionLookupTool] Using user_id column for transactions query: ${userContext.userId}`)
+      // SECURITY: Use Supabase UUID and business context for proper tenant isolation
+      if (!userContext.supabaseUserId || !userContext.businessId) {
+        throw new Error('Missing user context: Supabase UUID and business ID required for secure queries')
+      }
+
+      console.log(`[TransactionLookupTool] SECURITY: Using proper identifiers:`, {
+        supabaseUserId: userContext.supabaseUserId,
+        businessId: userContext.businessId
+      })
 
       // OPTIMIZED DATABASE QUERY STRATEGY
-      // PERFORMANCE: Requires database indexes on (user_id, transaction_date) and (user_id, document_type, transaction_date)
+      // PERFORMANCE: Requires database indexes on (user_id, business_id, transaction_date)
       // Phase 1: Broad Search - Use only high-confidence filters for optimal index usage
-      console.log(`[TransactionLookupTool] Phase 1: Optimized broad search with high-confidence filters`)
+      console.log(`[TransactionLookupTool] Phase 1: Optimized broad search with business context validation`)
 
       // Use authenticated client for RLS enforcement
       if (!this.authenticatedSupabase) {
         throw new Error('Authenticated Supabase client not available')
       }
 
-      // PERFORMANCE OPTIMIZATION: Structure query to leverage composite indexes
+      // SECURITY: Structure query with proper business context validation
       let broadQuery = this.authenticatedSupabase
         .from('transactions')
         .select(`
@@ -577,7 +583,8 @@ export class TransactionLookupTool extends BaseTool {
           document_type,
           created_at
         `)
-        .eq('user_id', userContext.userId)
+        .eq('user_id', userContext.supabaseUserId)
+        .eq('business_id', userContext.businessId)
 
       // Apply high-confidence filters (dates, amounts, specific category)
       if (startDate) {
@@ -655,18 +662,19 @@ export class TransactionLookupTool extends BaseTool {
           const { count } = await this.authenticatedSupabase!
             .from('transactions')
             .select('*', { count: 'exact', head: true })
-            .eq('user_id', userContext.userId);
+            .eq('user_id', userContext.supabaseUserId!)
+            .eq('business_id', userContext.businessId!);
           totalCount = count || 0;
         } catch (countError) {
           console.warn(`[TransactionLookupTool] Could not fetch user transaction count:`, countError);
           // Continue without count rather than failing
         }
 
-        console.log(`[TransactionLookupTool] User has ${totalCount} total transactions with user_id=${userContext.userId}`)
+        console.log(`[TransactionLookupTool] User has ${totalCount} total transactions for business ${userContext.businessId}`)
 
-        // User has no transactions with the provided user_id
+        // User has no transactions in their business context
         if (totalCount === 0) {
-          console.log(`[TransactionLookupTool] User has no transactions in the database with user_id=${userContext.userId}`)
+          console.log(`[TransactionLookupTool] User has no transactions in business ${userContext.businessId}`)
         }
 
         return {
@@ -1099,29 +1107,24 @@ Your response must be valid JSON only. Nothing else.`
   }
 
   /**
-   * Enhanced permission check for transaction access
+   * Enhanced permission check for transaction access with business context validation
    */
   protected async checkUserPermissions(userContext: UserContext): Promise<boolean> {
-    // Call parent permission check first
+    // Call parent permission check first (now includes business context validation)
     const basePermission = await super.checkUserPermissions(userContext)
     if (!basePermission) {
       return false
     }
 
     try {
-      // Additional check: verify user has access to transactions
-      // Query by clerk_user_id since that's the actual column in users table
-      const { data: userProfile, error } = await this.supabase
-        .from('users')
-        .select('id, home_currency, clerk_user_id')
-        .eq('clerk_user_id', userContext.userId)
-        .single()
-
-      if (error || !userProfile) {
-        console.error('[TransactionLookupTool] User profile check failed:', error)
+      // SECURITY: Business context validation already performed in parent method
+      // Additional check: verify user has proper business context for transaction access
+      if (!userContext.businessId) {
+        console.error('[TransactionLookupTool] Missing business context - transaction access denied')
         return false
       }
 
+      console.log(`[TransactionLookupTool] Transaction access granted for business: ${userContext.businessId}`)
       return true
 
     } catch (error) {

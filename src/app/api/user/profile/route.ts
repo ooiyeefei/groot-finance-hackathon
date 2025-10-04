@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { SupportedCurrency } from '@/types/transaction'
 
 // GET /api/user/profile - Fetch user profile
@@ -20,16 +20,17 @@ export async function GET() {
       )
     }
 
+    const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    // Get user profile from users table
+    // Get additional user profile data
     const { data: userProfile, error } = await supabase
       .from('users')
-      .select('id, email, full_name, home_currency, language_preference, timezone, created_at, updated_at')
-      .eq('clerk_user_id', userId)
+      .select('language_preference, timezone, created_at, updated_at')
+      .eq('id', userData.id)
       .single()
 
-    if (error || !userProfile) {
+    if (error) {
       console.error('Error fetching user profile:', error)
       return NextResponse.json(
         { success: false, error: 'User profile not found' },
@@ -37,9 +38,20 @@ export async function GET() {
       )
     }
 
+    const completeProfile = {
+      id: userData.id,
+      email: userData.email,
+      full_name: userData.full_name,
+      home_currency: userData.home_currency,
+      language_preference: userProfile.language_preference,
+      timezone: userProfile.timezone,
+      created_at: userProfile.created_at,
+      updated_at: userProfile.updated_at
+    }
+
     return NextResponse.json({
       success: true,
-      data: userProfile
+      data: completeProfile
     })
 
   } catch (error) {
@@ -63,6 +75,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
+    const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Validate supported fields
@@ -99,7 +112,7 @@ export async function PATCH(request: NextRequest) {
     const { data: updatedProfile, error } = await supabase
       .from('users')
       .update(updateData)
-      .eq('clerk_user_id', userId)
+      .eq('id', userData.id)
       .select('id, email, full_name, home_currency, language_preference, timezone, created_at, updated_at')
       .single()
 

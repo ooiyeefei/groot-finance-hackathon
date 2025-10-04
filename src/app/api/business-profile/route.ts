@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserData, createServerSupabaseClient } from '@/lib/supabase-server'
+import { getUserData, createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 
 // GET - Fetch business profile for current user
 export async function GET() {
@@ -11,15 +11,15 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user data including business_id (bypasses RLS)
+    // SECURITY: Get user data with business context for proper tenant isolation
     const user = await getUserData(userId)
 
     if (!user.business_id) {
       return NextResponse.json({ error: 'No business associated with user' }, { status: 404 })
     }
 
-    // Use server client to fetch business data
-    const supabase = createServerSupabaseClient()
+    // SECURITY: Use authenticated client with RLS enforcement
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Fetch business profile using the user's business_id
     const { data: businessProfile, error } = await supabase
@@ -56,7 +56,7 @@ export async function GET() {
           business_id: newProfile.id,
           updated_at: new Date().toISOString()
         })
-        .eq('clerk_user_id', userId)
+        .eq('id', user.id)
 
       if (linkError) {
         console.error('Error linking user to new business:', linkError)
@@ -91,15 +91,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Business name is required' }, { status: 400 })
     }
 
-    // Get user data including business_id (bypasses RLS)
+    // SECURITY: Get user data with business context for proper tenant isolation
     const user = await getUserData(userId)
 
     if (!user.business_id) {
       return NextResponse.json({ error: 'No business associated with user' }, { status: 404 })
     }
 
-    // Use server client for business operations
-    const supabase = createServerSupabaseClient()
+    // SECURITY: Use authenticated client with RLS enforcement
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
     const updateData: any = {
       name: name.trim(),
