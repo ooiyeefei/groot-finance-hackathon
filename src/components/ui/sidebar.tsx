@@ -4,10 +4,10 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, ChevronLeft, Users, CheckCircle, ClipboardList } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, ClipboardList } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
-import { useBusinessProfile } from '@/contexts/business-profile-context'
+import EnhancedBusinessDisplay from '@/components/ui/enhanced-business-display'
 import { getCachedUserRole, cacheUserRole } from '@/lib/cache-utils'
 import { useTranslations, useLocale } from 'next-intl'
 
@@ -27,7 +27,6 @@ export default function Sidebar() {
 
   // Initialize user role with default state to prevent hydration mismatch
   const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, admin: false })
-  const { profile: businessProfile, isLoading } = useBusinessProfile()
 
   // Helper function to create localized hrefs (our i18n feature)
   const localizedHref = (path: string) => `/${locale}${path}`
@@ -126,17 +125,6 @@ export default function Sidebar() {
     }
   }
 
-
-  const getBusinessInitial = () => {
-    return businessProfile?.name?.[0]?.toUpperCase() || 'B'
-  }
-
-  // Determine if we should show logo image (prevents hydration mismatch)
-  const shouldShowLogo = () => {
-    return isHydrated && !isLoading && businessProfile?.logo_url
-  }
-
-
   // Save state to localStorage
   const toggleSidebar = () => {
     const newState = !isExpanded
@@ -152,79 +140,13 @@ export default function Sidebar() {
         transition-all duration-300 ease-in-out
         ${isMobile ? 'fixed left-0 top-0 h-full z-50' : 'relative'}
       `}>
-        {/* Business Profile and Toggle */}
-        <div className={`${isExpanded ? 'p-6' : 'p-4'} transition-all duration-300 ease-in-out`}>
-          <div className={`flex items-center ${isExpanded ? 'justify-between' : 'justify-center'}`}>
-            {isExpanded ? (
-              <>
-                <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0">
-                  <div className="flex-shrink-0">
-                    {shouldShowLogo() && businessProfile?.logo_url ? (
-                      <Image
-                        src={businessProfile.logo_url}
-                        alt="Business Logo"
-                        width={48}
-                        height={48}
-                        className="rounded-lg object-cover"
-                      />
-                    ) : (
-                      <div
-                        className="w-[48px] h-[48px] rounded-lg flex items-center justify-center text-white font-bold text-lg"
-                        style={{ backgroundColor: businessProfile?.logo_fallback_color || '#3b82f6' }}
-                        suppressHydrationWarning={true}
-                      >
-                        {isHydrated ? getBusinessInitial() : 'B'}
-                      </div>
-                    )}
-                  </div>
-                  <div className="transition-all duration-300 ease-in-out overflow-hidden">
-                    <h2 className="text-lg font-semibold text-white whitespace-nowrap" suppressHydrationWarning={true}>
-                      {isHydrated ? (businessProfile?.name || 'My Business') : 'My Business'}
-                    </h2>
-                  </div>
-                </Link>
-
-                <button
-                  onClick={toggleSidebar}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0"
-                  aria-label="Collapse sidebar"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-              </>
-            ) : (
-              <div className="flex flex-col items-center space-y-2">
-                <Link href={`/${locale}`} className="flex-shrink-0">
-                  {shouldShowLogo() && businessProfile?.logo_url ? (
-                    <Image
-                      src={businessProfile.logo_url}
-                      alt="Business Logo"
-                      width={43}
-                      height={43}
-                      className="rounded-lg object-cover hover:opacity-80 transition-opacity"
-                    />
-                  ) : (
-                    <div
-                      className="w-[43px] h-[43px] rounded-lg flex items-center justify-center text-white font-bold text-base hover:opacity-80 transition-opacity"
-                      style={{ backgroundColor: businessProfile?.logo_fallback_color || '#3b82f6' }}
-                      suppressHydrationWarning={true}
-                    >
-                      {isHydrated ? getBusinessInitial() : 'B'}
-                    </div>
-                  )}
-                </Link>
-
-                <button
-                  onClick={toggleSidebar}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-                  aria-label="Expand sidebar"
-                >
-                  <Menu className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Enhanced Business Display with Switching */}
+        <EnhancedBusinessDisplay
+          isExpanded={isExpanded}
+          isHydrated={isHydrated}
+          locale={locale}
+          onToggleExpand={toggleSidebar}
+        />
         
         {/* Navigation */}
         <nav className="flex-1 p-4">
