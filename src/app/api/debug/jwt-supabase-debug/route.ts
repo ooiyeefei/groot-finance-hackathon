@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
+import { validateDebugAccess, logDebugAccess, createDebugErrorResponse } from '@/lib/debug-auth'
 
 /**
  * Debug JWT token passing to Supabase step by step
  */
 export async function GET(request: NextRequest) {
   try {
-    const { userId, getToken } = await auth()
+    // SECURITY: Validate debug access (authentication + environment checks)
+    const authResult = await validateDebugAccess()
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    if (!authResult.authorized) {
+      return authResult.response!
     }
+
+    const userId = authResult.userId!
+
+    // Log access for audit purposes
+    logDebugAccess(userId, '/api/debug/jwt-supabase-debug', 'accessed')
+
+    const { getToken } = await auth()
 
     console.log('[JWT DEBUG] Step 1: Getting JWT token from Clerk...')
 
@@ -19,10 +28,10 @@ export async function GET(request: NextRequest) {
     let jwtToken: string | null = null
     try {
       jwtToken = await getToken({ template: 'supabase' })
-      console.log('[JWT DEBUG] JWT token obtained:', {
+      // SECURITY: Don't log JWT tokens or previews - sensitive data
+      console.log('[JWT DEBUG] JWT token retrieval completed:', {
         hasToken: !!jwtToken,
-        tokenLength: jwtToken?.length,
-        tokenPreview: jwtToken ? `${jwtToken.slice(0, 50)}...` : null
+        tokenLength: jwtToken?.length || 0
       })
     } catch (tokenError) {
       console.error('[JWT DEBUG] Error getting JWT token:', tokenError)
@@ -90,8 +99,9 @@ export async function GET(request: NextRequest) {
       step1_clerkUserId: userId,
       step2_jwtToken: {
         hasToken: !!jwtToken,
-        tokenLength: jwtToken?.length,
-        tokenPreview: jwtToken ? `${jwtToken.slice(0, 50)}...${jwtToken.slice(-50)}` : null
+        tokenLength: jwtToken?.length || 0,
+        // SECURITY: Remove token preview - contains sensitive data
+        tokenSecure: true
       },
       step3_decodedToken: decodedToken,
       step4_supabaseJwtClaims: {
@@ -107,10 +117,6 @@ export async function GET(request: NextRequest) {
     }, { status: 200 })
 
   } catch (error) {
-    console.error('[JWT DEBUG] Critical error:', error)
-    return NextResponse.json({
-      error: 'Debug failed',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+    return createDebugErrorResponse(error, 'JWT Supabase debug')
   }
 }

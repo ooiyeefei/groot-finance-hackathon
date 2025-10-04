@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
+import { validateDebugAccess, logDebugAccess, createDebugErrorResponse } from '@/lib/debug-auth'
 
 /**
  * Debug endpoint to inspect JWT claims structure
@@ -9,15 +10,20 @@ export async function GET(request: NextRequest) {
   try {
     console.log('[DEBUG JWT] Starting JWT claims inspection...')
 
-    // Get Clerk authentication
-    const { userId, getToken } = await auth()
+    // SECURITY: Validate debug access (authentication + environment checks)
+    const authResult = await validateDebugAccess()
 
-    if (!userId) {
-      return NextResponse.json({
-        error: 'Not authenticated',
-        authenticated: false
-      }, { status: 401 })
+    if (!authResult.authorized) {
+      return authResult.response!
     }
+
+    const userId = authResult.userId!
+
+    // Log access for audit purposes
+    logDebugAccess(userId, '/api/debug/jwt-claims', 'accessed')
+
+    // Get Clerk authentication
+    const { getToken } = await auth()
 
     console.log(`[DEBUG JWT] User ID: ${userId}`)
 
@@ -25,7 +31,8 @@ export async function GET(request: NextRequest) {
     let supabaseToken: string | null = null
     try {
       supabaseToken = await getToken({ template: 'supabase' })
-      console.log(`[DEBUG JWT] Got Supabase token: ${supabaseToken ? 'YES' : 'NO'}`)
+      // SECURITY: Don't log token existence to prevent information leakage
+      console.log(`[DEBUG JWT] Token retrieval attempt completed`)
     } catch (tokenError) {
       console.error('[DEBUG JWT] Error getting Supabase token:', tokenError)
       return NextResponse.json({
@@ -138,11 +145,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result, { status: 200 })
 
   } catch (error) {
-    console.error('[DEBUG JWT] Unexpected error:', error)
-    return NextResponse.json({
-      error: 'Internal server error during JWT debug',
-      message: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    }, { status: 500 })
+    return createDebugErrorResponse(error, 'JWT claims debug')
   }
 }
