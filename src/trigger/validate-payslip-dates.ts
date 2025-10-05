@@ -7,8 +7,16 @@ import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
 import { supabase } from './utils/db-helpers';
 
+// ✅ PHASE 4H: Domain-to-table mapping for multi-domain architecture
+const DOMAIN_TABLE_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
+
 interface ValidatePayslipDatesPayload {
   applicationId: string;
+  documentDomain: 'invoices' | 'expense_claims' | 'applications';  // ✅ PHASE 4H: Domain routing parameter
 }
 
 interface PayslipValidationResult {
@@ -28,15 +36,17 @@ interface PayslipValidationResult {
 export const validatePayslipDates = task({
   id: "validate-payslip-dates",
   run: async (payload: ValidatePayslipDatesPayload, { ctx }) => {
-    const { applicationId } = payload;
+    const { applicationId, documentDomain } = payload;
 
-    console.log(`[ValidatePayslip] Starting payslip date validation for application ${applicationId}`);
+    // ✅ PHASE 4H: Route to correct table based on domain
+    const tableName = DOMAIN_TABLE_MAP[documentDomain];
+    console.log(`[ValidatePayslip] Starting payslip date validation for application ${applicationId} in ${tableName} (domain: ${documentDomain})`);
 
     try {
       // Fetch all payslip documents associated with the application
       // Support both individual payslip documents and payslip_group documents
       const { data: documents, error: fetchError } = await supabase
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4H: Routed based on domain
         .select('*')
         .eq('application_id', applicationId)
         .in('document_type', ['payslip', 'payslip_group', 'multi_payslip'])

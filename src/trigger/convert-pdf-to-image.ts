@@ -20,11 +20,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// ✅ PHASE 4B-2: Domain-to-table mapping for multi-domain architecture
+const DOMAIN_TABLE_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
+
 export const convertPdfToImage = task({
   id: "convert-pdf-to-image",
   run: async (payload: {
     documentId: string;
     pdfStoragePath?: string;
+    documentDomain: 'invoices' | 'expense_claims' | 'applications'; // ✅ PHASE 4B-2: Domain routing parameter
     expectedDocumentType?: string;
     applicationId?: string;
     documentSlot?: string;
@@ -32,13 +40,17 @@ export const convertPdfToImage = task({
     console.log(`✅ Starting PDF to image conversion for document: ${payload.documentId}`);
 
     try {
+      // ✅ PHASE 4B-2: Route to correct table based on domain
+      const tableName = DOMAIN_TABLE_MAP[payload.documentDomain];
+      console.log(`🔍 Using table: ${tableName} for domain: ${payload.documentDomain}`);
+
       // Step 1: Get PDF storage path if not provided (for Applications workflow)
       let pdfStoragePath = payload.pdfStoragePath;
 
       if (!pdfStoragePath) {
         console.log(`🔍 Fetching storage path for document: ${payload.documentId}`);
         const { data: document, error: fetchError } = await supabase
-          .from('documents')
+          .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
           .select('storage_path')
           .eq('id', payload.documentId)
           .single();
@@ -253,7 +265,7 @@ except Exception as e:
 
       // Get the document record for context
       const { data: document, error: docError } = await supabase
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
         .select('file_name, business_id, user_id, document_type, document_metadata')
         .eq('id', payload.documentId)
         .single();
@@ -384,13 +396,16 @@ except Exception as e:
         }
       };
 
-      const { error: updateError } = await supabase.from('documents').update(updateData).eq('id', payload.documentId);
+      const { error: updateError } = await supabase
+        .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
+        .update(updateData)
+        .eq('id', payload.documentId);
 
       if (updateError) {
-        console.warn(`⚠️ Failed to update document converted_image_path: ${updateError.message}`);
+        console.warn(`⚠️ Failed to update ${tableName} converted_image_path: ${updateError.message}`);
         // Don't throw error - continue with classification
       } else {
-        console.log(`✅ Document converted_image_path updated to: ${convertedFolderPath} with ${uploadedPages.length} pages`);
+        console.log(`✅ ${tableName} converted_image_path updated to: ${convertedFolderPath} with ${uploadedPages.length} pages`);
       }
 
       // Step 6: Trigger classification task for the converted image
@@ -398,7 +413,8 @@ except Exception as e:
 
       // Create classification payload, preserving Applications workflow context
       const classificationPayload: any = {
-        documentId: payload.documentId
+        documentId: payload.documentId,
+        documentDomain: payload.documentDomain  // ✅ PHASE 4B-2: Pass domain to next task
       };
 
       // Pass along Applications workflow context if present
@@ -413,12 +429,15 @@ except Exception as e:
       }
 
       // Note: converted_image_path already updated above, just update status
-      const { error: statusUpdateError } = await supabase.from('documents').update({
-        processing_status: 'classifying' // Update status as it moves to classification
-      }).eq('id', payload.documentId);
+      const { error: statusUpdateError } = await supabase
+        .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
+        .update({
+          processing_status: 'classifying' // Update status as it moves to classification
+        })
+        .eq('id', payload.documentId);
 
       if (statusUpdateError) {
-        console.error(`❌ Failed to update document status:`, statusUpdateError);
+        console.error(`❌ Failed to update ${tableName} status:`, statusUpdateError);
         // Don't throw - continue with classification as conversion succeeded
       }
 
@@ -437,14 +456,20 @@ except Exception as e:
 
     } catch (error) {
       console.error("❌ PDF conversion failed:", error);
-      
+
+      // ✅ PHASE 4B-2: Route error update to correct table
+      const errorTableName = DOMAIN_TABLE_MAP[payload.documentDomain];
+
       // Update document status to failed
-      await supabase.from('documents').update({
-        processing_status: 'failed',
-        error_message: error instanceof Error ? error.message : 'PDF conversion failed',
-        processed_at: new Date().toISOString()
-      }).eq('id', payload.documentId);
-      
+      await supabase
+        .from(errorTableName)  // ✅ PHASE 4B-2: Routed based on domain
+        .update({
+          processing_status: 'failed',
+          error_message: error instanceof Error ? error.message : 'PDF conversion failed',
+          processed_at: new Date().toISOString()
+        })
+        .eq('id', payload.documentId);
+
       throw error;
     }
   },

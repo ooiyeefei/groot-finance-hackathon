@@ -133,7 +133,7 @@ export async function POST(
         await tasks.trigger<typeof convertPdfToImage>("convert-pdf-to-image", {
           documentId: documentId,
           pdfStoragePath: document.storage_path,
-          documentDomain: 'invoices' as const  // ✅ PHASE 4B-2: Legacy route - defaults to invoices
+          documentDomain: 'invoices' as const  // ✅ PHASE 4D: Add domain parameter for invoices
         });
         console.log(`[Document-Processor] Successfully triggered PDF conversion pipeline for document ${documentId}`);
       } else {
@@ -141,7 +141,7 @@ export async function POST(
         console.log(`[Document-Processor] Triggering classification pipeline for image document ${documentId}`);
         await tasks.trigger<typeof classifyDocument>("classify-document", {
           documentId: documentId,
-          documentDomain: 'invoices' as const  // ✅ PHASE 4B-2: Legacy route - defaults to invoices
+          documentDomain: 'invoices' as const  // ✅ PHASE 4D: Add domain parameter for invoices
         });
         console.log(`[Document-Processor] Successfully triggered classification pipeline for document ${documentId}`);
       }

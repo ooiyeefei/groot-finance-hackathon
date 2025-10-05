@@ -8,10 +8,17 @@ import { python } from "@trigger.dev/python";
 import { supabase, updateDocumentStatus, updateExtractionResults, fetchDocumentImage } from './utils/db-helpers';
 import { ExtractionResultSchema, validatePythonScriptResult, type ExtractionResult } from './utils/schemas';
 
+// ✅ PHASE 4C: Domain-to-table mapping for multi-domain architecture
+const DOMAIN_TABLE_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
 
 interface ExtractIcDataPayload {
   documentId: string;
   imageStoragePath: string;
+  documentDomain: 'invoices' | 'expense_claims' | 'applications';  // ✅ PHASE 4C: Domain routing parameter
 }
 
 
@@ -19,24 +26,26 @@ interface ExtractIcDataPayload {
 export const extractIcData = task({
   id: "extract-ic-data",
   run: async (payload: ExtractIcDataPayload, { ctx }) => {
-  const { documentId, imageStoragePath } = payload;
+  const { documentId, imageStoragePath, documentDomain } = payload;
 
-  console.log(`[ExtractIC] Starting IC extraction for document ${documentId}`);
+  // ✅ PHASE 4C: Route to correct table based on domain
+  const tableName = DOMAIN_TABLE_MAP[documentDomain];
+  console.log(`[ExtractIC] Starting IC extraction for document ${documentId} in ${tableName} (domain: ${documentDomain})`);
   console.log(`[ExtractIC] Image storage path: ${imageStoragePath}`);
 
   try {
     // Step 1: Update status to pending_extraction (consistent with payslip flow)
-    await updateDocumentStatus(documentId, 'pending_extraction');
+    await updateDocumentStatus(documentId, 'pending_extraction', undefined, tableName);  // ✅ PHASE 4C: Pass tableName
 
     // Brief delay to allow UI to show the status update
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Step 2: Update status to extracting
-    await updateDocumentStatus(documentId, 'extracting');
+    await updateDocumentStatus(documentId, 'extracting', undefined, tableName);  // ✅ PHASE 4C: Pass tableName
 
     // Fetch document metadata to determine path handling approach
     const { data: document, error: fetchError } = await supabase
-      .from('documents')
+      .from(tableName)  // ✅ PHASE 4C: Routed based on domain
       .select('file_type, converted_image_path, storage_path')
       .eq('id', documentId)
       .single();
@@ -55,7 +64,7 @@ export const extractIcData = task({
       console.log(`[ExtractIC] PDF workflow - using converted image folder: ${document.converted_image_path}`);
 
       const { data: fileList, error: listError } = await supabase.storage
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
         .list(document.converted_image_path, {
           limit: 100,
           sortBy: { column: 'name', order: 'asc' }
@@ -77,7 +86,7 @@ export const extractIcData = task({
         console.log(`[ExtractIC] Creating signed URL for file: ${filePath}`);
 
         const { data: urlData, error: urlError } = await supabase.storage
-          .from('documents')
+          .from(tableName)  // ✅ PHASE 4C: Routed based on domain
           .createSignedUrl(filePath, 600);
 
         if (urlError || !urlData) {
@@ -95,7 +104,7 @@ export const extractIcData = task({
       console.log(`[ExtractIC] Creating signed URL for single image: ${imageStoragePath}`);
 
       const { data: urlData, error: urlError } = await supabase.storage
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
         .createSignedUrl(imageStoragePath, 600);
 
       if (urlError || !urlData) {
@@ -164,7 +173,7 @@ export const extractIcData = task({
       }
 
       console.error(`[ExtractIC] Technical error details:`, pythonResult.error);
-      await updateDocumentStatus(documentId, 'failed', userFriendlyError);
+      await updateDocumentStatus(documentId, 'failed', userFriendlyError, tableName);  // ✅ PHASE 4C: Pass tableName
       throw new Error(userFriendlyError);
     }
 
@@ -176,13 +185,13 @@ export const extractIcData = task({
     if (!extractionResult.success) {
       const userFriendlyError = 'Unable to extract data from your identity card. Please ensure the document is clear and all information is visible, then try again.';
       console.error(`[ExtractIC] Technical extraction failure:`, extractionResult.error);
-      await updateDocumentStatus(documentId, 'failed', userFriendlyError);
+      await updateDocumentStatus(documentId, 'failed', userFriendlyError, tableName);  // ✅ PHASE 4C: Pass tableName
       throw new Error(userFriendlyError);
     }
 
     // Update database with extraction results
     console.log(`[ExtractIC] Updating database with extracted data`);
-    await updateExtractionResults(documentId, extractionResult);
+    await updateExtractionResults(documentId, extractionResult, tableName);  // ✅ PHASE 4C: Pass tableName
 
     // Trigger downstream image annotation if bounding boxes exist
     if (extractionResult.extracted_data?.metadata?.boundingBoxes) {
@@ -213,7 +222,7 @@ export const extractIcData = task({
       ? errorMessage
       : 'Unable to process your identity card at this time. Please try uploading the document again or contact support if the issue persists.';
 
-    await updateDocumentStatus(documentId, 'failed', finalErrorMessage);
+    await updateDocumentStatus(documentId, 'failed', finalErrorMessage, tableName);  // ✅ PHASE 4C: Pass tableName
     throw new Error(finalErrorMessage);
   }
   }

@@ -347,7 +347,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     // Disassociate documents from application (preserve documents, clear application_id)
     const { error: documentsError } = await supabase
-      .from('documents')
+      .from('application_documents')  // ✅ PHASE 4G: Fixed DELETE endpoint
       .update({
         application_id: null,
         document_slot: null,

@@ -26,7 +26,7 @@ const getAvailableCategories = (transactionType: TransactionType) => {
   return [] // Return empty array for unknown transaction types
 }
 
-const TRANSACTION_TYPES = ['income', 'expense', 'transfer', 'asset', 'liability', 'equity'] as const
+const TRANSACTION_TYPES = ['Income', 'Cost of Goods Sold', 'Expense'] as const
 
 const TRANSACTION_STATUSES = [
   { value: 'pending', label: 'Pending' },
@@ -52,7 +52,7 @@ export default function TransactionFormModal({
     return availableCategories[0] || ''
   }
 
-  const initialTransactionType = transaction?.transaction_type || prefilledData?.transaction_type || 'expense' as const
+  const initialTransactionType = transaction?.transaction_type || prefilledData?.transaction_type || 'Expense' as const
 
   const [formData, setFormData] = useState({
     transaction_type: initialTransactionType,
@@ -62,7 +62,6 @@ export default function TransactionFormModal({
     home_currency: transaction?.home_currency || prefilledData?.home_currency || userHomeCurrency,
     transaction_date: transaction?.transaction_date?.split('T')[0] || prefilledData?.transaction_date || new Date().toISOString().split('T')[0],
     category: transaction?.category || prefilledData?.category || getDefaultCategory(initialTransactionType),
-    subcategory: transaction?.subcategory || prefilledData?.subcategory || '',
     vendor_name: transaction?.vendor_name || prefilledData?.vendor_name || '',
     document_number: transaction?.reference_number || prefilledData?.reference_number || '',
     document_type: transaction?.document_type || prefilledData?.document_type || undefined,
@@ -343,18 +342,6 @@ export default function TransactionFormModal({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Subcategory
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.subcategory}
-                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Optional subcategory"
-                  />
-                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">

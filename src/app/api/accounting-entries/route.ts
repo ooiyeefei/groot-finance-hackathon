@@ -1,6 +1,7 @@
 /**
- * Transactions CRUD API Endpoints
- * Handles transaction creation, listing, and management
+ * Accounting Entries CRUD API Endpoints
+ * Handles P&L accounting entry creation, listing, and management
+ * REFACTOR: Renamed from transactions → accounting_entries for proper P&L structure
  */
 
 import { auth } from '@clerk/nextjs/server'
@@ -8,14 +9,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
 import { CrossBorderTaxComplianceTool } from '@/lib/tools'
-import { 
-  CreateTransactionRequest, 
-  SupportedCurrency, 
+import {
+  CreateTransactionRequest,
+  SupportedCurrency,
   TransactionListParams,
-  TRANSACTION_CATEGORIES 
+  TRANSACTION_CATEGORIES
 } from '@/types/transaction'
 
-// Create new transaction
+// Create new accounting entry
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth()
@@ -40,11 +41,11 @@ export async function POST(request: NextRequest) {
       reference_number,
       document_type, // From OCR extraction
       line_items = [],
-      source_document_id  // Optional field to link transaction to document
+      source_document_id  // Optional field to link entry to document
     } = body
 
     // Validate required fields
-    if (!transaction_type || !category || !description || !transaction_date || 
+    if (!transaction_type || !category || !description || !transaction_date ||
         !original_currency || !original_amount || !home_currency) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
@@ -52,10 +53,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate transaction type
-    if (!['income', 'expense', 'transfer', 'asset', 'liability', 'equity'].includes(transaction_type)) {
+    // P&L VALIDATION: Only allow Income, Cost of Goods Sold, Expense
+    if (!['Income', 'Cost of Goods Sold', 'Expense'].includes(transaction_type)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid transaction type' },
+        { success: false, error: 'Invalid accounting entry type. Only Income, Cost of Goods Sold, and Expense are allowed.' },
         { status: 400 }
       )
     }
@@ -79,10 +80,10 @@ export async function POST(request: NextRequest) {
     // Flexible category validation - handles both top-level categories and subcategories
     const typeCategories = TRANSACTION_CATEGORIES[transaction_type]
     const validTopLevelCategories = Object.keys(typeCategories)
-    
+
     let finalCategory = category
     let finalSubcategory = subcategory
-    
+
     // Check if it's a top-level category
     if (validTopLevelCategories.includes(category)) {
       // Valid top-level category, use as-is
@@ -97,22 +98,22 @@ export async function POST(request: NextRequest) {
           break
         }
       }
-      
+
       if (foundParentCategory) {
         // Map subcategory to parent category
         finalCategory = foundParentCategory
         finalSubcategory = category
-        console.log(`[Transactions API] Mapped subcategory '${category}' to parent category '${foundParentCategory}'`)
+        console.log(`[Accounting Entries API] Mapped subcategory '${category}' to parent category '${foundParentCategory}'`)
       } else {
         // Invalid category/subcategory
         return NextResponse.json(
-          { success: false, error: `Invalid category '${category}' for transaction type '${transaction_type}'` },
+          { success: false, error: `Invalid category '${category}' for accounting entry type '${transaction_type}'` },
           { status: 400 }
         )
       }
     }
 
-    console.log(`[Transactions API] Creating ${transaction_type} transaction for user ${userId}`)
+    console.log(`[Accounting Entries API] Creating ${transaction_type} entry for user ${userId}`)
 
     const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
@@ -136,12 +137,12 @@ export async function POST(request: NextRequest) {
         exchangeRate = conversion.exchange_rate
         exchangeRateDate = conversion.rate_date
       } catch (error) {
-        console.error('[Transactions API] Currency conversion failed:', error)
+        console.error('[Accounting Entries API] Currency conversion failed:', error)
         // Continue with original amount as fallback
       }
     }
 
-    const { data: transaction, error: transactionError } = await supabase
+    const { data: accountingEntry, error: entryError } = await supabase
       .from('accounting_entries')
       .insert({
         user_id: userData.id,
@@ -170,10 +171,10 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    if (transactionError) {
-      console.error('[Transactions API] Failed to create transaction:', transactionError)
+    if (entryError) {
+      console.error('[Accounting Entries API] Failed to create accounting entry:', entryError)
       return NextResponse.json(
-        { success: false, error: 'Failed to create transaction' },
+        { success: false, error: 'Failed to create accounting entry' },
         { status: 500 }
       )
     }
@@ -184,11 +185,11 @@ export async function POST(request: NextRequest) {
       for (let i = 0; i < line_items.length; i++) {
         const lineItem = line_items[i]
         const lineTotal = lineItem.quantity * lineItem.unit_price
-        
+
         const { data: createdLineItem, error: lineItemError } = await supabase
           .from('line_items')
           .insert({
-            transaction_id: transaction.id,
+            transaction_id: accountingEntry.id,
             item_description: lineItem.description,
             item_code: lineItem.item_code || null,
             quantity: lineItem.quantity,
@@ -205,9 +206,9 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (lineItemError) {
-          console.error('[Transactions API] Failed to create line item:', lineItemError)
-          console.error('[Transactions API] Line item data that failed:', {
-            transaction_id: transaction.id,
+          console.error('[Accounting Entries API] Failed to create line item:', lineItemError)
+          console.error('[Accounting Entries API] Line item data that failed:', {
+            transaction_id: accountingEntry.id,
             item_description: lineItem.description,
             quantity: lineItem.quantity,
             unit_price: lineItem.unit_price,
@@ -220,28 +221,28 @@ export async function POST(request: NextRequest) {
           })
           // Continue creating other line items
         } else {
-          console.log('[Transactions API] Successfully created line item:', createdLineItem)
+          console.log('[Accounting Entries API] Successfully created line item:', createdLineItem)
           createdLineItems.push(createdLineItem)
         }
       }
     }
 
-    console.log(`[Transactions API] Created transaction ${transaction.id} with ${createdLineItems.length} line items`)
+    console.log(`[Accounting Entries API] Created accounting entry ${accountingEntry.id} with ${createdLineItems.length} line items`)
 
     // TASK 2: Cross-border compliance analysis
     // Check if this is a cross-border transaction (currency different from home currency)
     const isCrossBorderTransaction = original_currency !== homeCurrency
-    
+
     if (isCrossBorderTransaction) {
-      console.log(`[Transactions API] Cross-border transaction detected: ${original_currency} → ${homeCurrency}`)
-      
+      console.log(`[Accounting Entries API] Cross-border transaction detected: ${original_currency} → ${homeCurrency}`)
+
       // Asynchronously trigger compliance analysis (don't block response)
       setImmediate(async () => {
         try {
           const complianceTool = new CrossBorderTaxComplianceTool()
-          
+
           const analysisResult = await complianceTool.execute({
-            transaction_id: transaction.id,
+            transaction_id: accountingEntry.id,
             amount: original_amount,
             original_currency: original_currency,
             home_currency: homeCurrency,
@@ -254,41 +255,41 @@ export async function POST(request: NextRequest) {
           })
 
           if (analysisResult.success) {
-            console.log(`[Transactions API] Compliance analysis completed for transaction ${transaction.id}`)
+            console.log(`[Accounting Entries API] Compliance analysis completed for entry ${accountingEntry.id}`)
           } else {
-            console.error(`[Transactions API] Compliance analysis failed for transaction ${transaction.id}:`, analysisResult.error)
+            console.error(`[Accounting Entries API] Compliance analysis failed for entry ${accountingEntry.id}:`, analysisResult.error)
           }
         } catch (error) {
-          console.error(`[Transactions API] Compliance analysis error for transaction ${transaction.id}:`, error)
+          console.error(`[Accounting Entries API] Compliance analysis error for entry ${accountingEntry.id}:`, error)
         }
       })
     } else {
-      console.log(`[Transactions API] Domestic transaction (${original_currency}), skipping compliance analysis`)
+      console.log(`[Accounting Entries API] Domestic transaction (${original_currency}), skipping compliance analysis`)
     }
 
     return NextResponse.json({
       success: true,
       data: {
         transaction: {
-          ...transaction,
+          ...accountingEntry,
           line_items: createdLineItems
         }
       }
     })
 
   } catch (error) {
-    console.error('[Transactions API] Unexpected error:', error)
+    console.error('[Accounting Entries API] Unexpected error:', error)
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to create transaction'
+        error: 'Failed to create accounting entry'
       },
       { status: 500 }
     )
   }
 }
 
-// List transactions with filtering and pagination
+// List accounting entries with filtering and pagination
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth()
@@ -300,7 +301,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    
+
     // Parse query parameters
     const params: TransactionListParams = {
       page: parseInt(searchParams.get('page') || '1'),
@@ -314,7 +315,7 @@ export async function GET(request: NextRequest) {
       sort_order: (searchParams.get('sort_order') as any) || 'desc'
     }
 
-    console.log(`[Transactions API] Listing transactions for user ${userId}:`, params)
+    console.log(`[Accounting Entries API] Listing entries for user ${userId}:`, params)
 
     const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
@@ -357,7 +358,7 @@ export async function GET(request: NextRequest) {
     // Apply sorting with whitelist validation to prevent SQL injection
     const validSortColumns = ['transaction_date', 'original_amount', 'description', 'vendor_name', 'category', 'created_at']
     let sortColumn = 'transaction_date' // Safe default
-    
+
     if (params.sort_by === 'amount') {
       sortColumn = 'original_amount'
     } else if (params.sort_by === 'date') {
@@ -365,7 +366,7 @@ export async function GET(request: NextRequest) {
     } else if (params.sort_by && validSortColumns.includes(params.sort_by)) {
       sortColumn = params.sort_by
     }
-    
+
     const sortOrder = params.sort_order === 'asc' ? 'asc' : 'desc' // Safe default
     query = query.order(sortColumn, { ascending: sortOrder === 'asc' })
 
@@ -373,17 +374,17 @@ export async function GET(request: NextRequest) {
     const offset = (params.page! - 1) * params.limit!
     query = query.range(offset, offset + params.limit! - 1)
 
-    const { data: transactions, error, count } = await query
+    const { data: accountingEntries, error, count } = await query
 
     if (error) {
-      console.error('[Transactions API] Failed to fetch transactions:', error)
+      console.error('[Accounting Entries API] Failed to fetch entries:', error)
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch transactions' },
+        { success: false, error: 'Failed to fetch accounting entries' },
         { status: 500 }
       )
     }
 
-    // SECURITY: Get total count with proper UUID filtering (excluding soft-deleted transactions)
+    // SECURITY: Get total count with proper UUID filtering (excluding soft-deleted entries)
     const { count: totalCount } = await supabase
       .from('accounting_entries')
       .select('*', { count: 'exact', head: true })
@@ -395,7 +396,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        transactions: transactions || [],
+        transactions: accountingEntries || [], // Keep "transactions" key for backwards compatibility
         pagination: {
           page: params.page!,
           limit: params.limit!,
@@ -407,11 +408,11 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[Transactions API] Unexpected error:', error)
+    console.error('[Accounting Entries API] Unexpected error:', error)
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch transactions'
+        error: 'Failed to fetch accounting entries'
       },
       { status: 500 }
     )

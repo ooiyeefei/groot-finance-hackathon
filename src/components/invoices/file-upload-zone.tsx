@@ -78,7 +78,7 @@ export default function FileUploadZone({
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await fetch('/api/documents/upload', {
+      const response = await fetch('/api/invoices/upload', {
         method: 'POST',
         body: formData
       })
@@ -92,7 +92,7 @@ export default function FileUploadZone({
         if (autoProcess) {
           try {
             // Immediately trigger processing without delay
-            const processResponse = await fetch(`/api/documents/${uploadedDocument.id}/process`, {
+            const processResponse = await fetch(`/api/invoices/${uploadedDocument.id}/process`, {
               method: 'POST'
             })
             

@@ -30,8 +30,8 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
-    "documents": "Dokumen",
-    "transactions": "Transaksi",
+    "invoices": "Faktur",
+    "transactions": "Akuntansi",
     "applications": "Aplikasi",
     "expenseClaims": "Klaim Pengeluaran",
     "aiAssistant": "Asisten AI",

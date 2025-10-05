@@ -30,8 +30,8 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
-    "documents": "Documents",
-    "transactions": "Transactions",
+    "invoices": "Invoices",
+    "transactions": "Accounting",
     "applications": "Applications",
     "expenseClaims": "Expense Claims",
     "aiAssistant": "AI Assistant",

@@ -3,8 +3,8 @@
  * Supporting Southeast Asian SME multi-currency operations
  */
 
-// Core transaction types - Following accounting standards (Income Statement + Balance Sheet)  
-export type TransactionType = 'income' | 'expense' | 'transfer' | 'asset' | 'liability' | 'equity'
+// Core P&L transaction types - Following accounting standards (Income Statement only for P&L focus)
+export type TransactionType = 'Income' | 'Cost of Goods Sold' | 'Expense'
 export type CreationMethod = 'manual' | 'document_extract'
 
 // Document types from OCR extraction
@@ -22,16 +22,18 @@ export type SupportedCurrency =
   | 'VND' // Vietnamese Dong
   | 'PHP' // Philippine Peso
 
-// Hierarchical Chart of Accounts structure following IFRS standards
+// P&L Chart of Accounts structure following accounting standards
 export interface TransactionCategories {
-  income: {
+  Income: {
     operating_revenue: string[]
     other_income: string[]
     investment_income: string[]
     government_grants: string[]
   }
-  expense: {
+  'Cost of Goods Sold': {
     cost_of_goods_sold: string[]
+  }
+  Expense: {
     administrative_expenses: string[]
     marketing_advertising: string[]
     travel_entertainment: string[]
@@ -42,25 +44,8 @@ export interface TransactionCategories {
     depreciation: string[]
     interest_expense: string[]
     other_operating: string[]
-  }
-  transfer: {
-    internal_transfer: string[]
-    bank_transfer: string[]
-    credit_payment: string[]
-  }
-  asset: {
-    current_assets: string[]
-    fixed_assets: string[]
-    intangible_assets: string[]
-  }
-  liability: {
-    current_liabilities: string[]
-    long_term_liabilities: string[]
-  }
-  equity: {
-    owner_investment: string[]
-    retained_earnings: string[]
-    owner_withdrawal: string[]
+    software_subscriptions: string[]
+    professional_services: string[]
   }
 }
 
@@ -260,16 +245,18 @@ export interface TransactionError {
   details?: Record<string, any>
 }
 
-// IFRS-Aligned Chart of Accounts for SME Financial Management
+// P&L-Focused Chart of Accounts for SME Financial Management
 export const TRANSACTION_CATEGORIES: TransactionCategories = {
-  income: {
+  Income: {
     operating_revenue: ['product_sales', 'service_income', 'consultation_fees', 'subscription_revenue'],
     other_income: ['rental_income', 'commission_income', 'misc_income', 'foreign_exchange_gain'],
     investment_income: ['interest_received', 'dividend_income', 'capital_gains', 'investment_returns'],
     government_grants: ['business_grants', 'subsidies', 'tax_refunds', 'covid_relief']
   },
-  expense: {
-    cost_of_goods_sold: ['raw_materials', 'direct_labor', 'manufacturing_overhead', 'inventory_cost'],
+  'Cost of Goods Sold': {
+    cost_of_goods_sold: ['raw_materials', 'direct_labor', 'manufacturing_overhead', 'inventory_cost']
+  },
+  Expense: {
     administrative_expenses: ['office_supplies', 'software_subscriptions', 'professional_services', 'bank_fees'],
     marketing_advertising: ['digital_marketing', 'trade_shows', 'advertising', 'promotional_materials'],
     travel_entertainment: ['business_travel', 'meals_entertainment', 'accommodation', 'transport', 'travel_expenses'],
@@ -279,26 +266,9 @@ export const TRANSACTION_CATEGORIES: TransactionCategories = {
     taxes_licenses: ['income_tax', 'sales_tax', 'business_licenses', 'regulatory_fees'],
     depreciation: ['equipment_depreciation', 'building_depreciation', 'vehicle_depreciation', 'asset_depreciation'],
     interest_expense: ['loan_interest', 'credit_interest', 'finance_charges', 'bank_interest'],
-    other_operating: ['repairs_maintenance', 'security', 'cleaning', 'miscellaneous']
-  },
-  transfer: {
-    internal_transfer: ['account_transfer', 'cash_movement', 'internal_allocation', 'fund_transfer'],
-    bank_transfer: ['wire_transfer', 'ach_transfer', 'international_transfer', 'currency_exchange'],
-    credit_payment: ['credit_card_payment', 'loan_payment', 'line_of_credit', 'financing_payment']
-  },
-  asset: {
-    current_assets: ['cash_purchase', 'inventory_purchase', 'prepaid_expenses', 'accounts_receivable'],
-    fixed_assets: ['equipment_purchase', 'building_purchase', 'vehicle_purchase', 'furniture_purchase'],
-    intangible_assets: ['software_license', 'patents', 'trademarks', 'goodwill']
-  },
-  liability: {
-    current_liabilities: ['accounts_payable', 'short_term_loan', 'accrued_expenses', 'tax_payable'],
-    long_term_liabilities: ['long_term_loan', 'mortgage', 'bonds_payable', 'lease_obligations']
-  },
-  equity: {
-    owner_investment: ['capital_contribution', 'additional_investment', 'share_purchase', 'equity_injection'],
-    retained_earnings: ['profit_retention', 'earnings_reinvestment', 'accumulated_profits', 'reserve_funds'],
-    owner_withdrawal: ['owner_draws', 'dividend_payment', 'capital_withdrawal', 'distribution']
+    other_operating: ['repairs_maintenance', 'security', 'cleaning', 'miscellaneous'],
+    software_subscriptions: ['saas_tools', 'cloud_services', 'productivity_software', 'accounting_software'],
+    professional_services: ['legal_fees', 'accounting_services', 'consulting', 'advisory_services']
   }
 }
 

@@ -484,7 +484,7 @@ export default function TransactionsList({
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <div className={`text-lg font-bold ${getTransactionTypeColor(transaction.transaction_type)}`}>
-                      {transaction.transaction_type === 'expense' && '-'}
+                      {transaction.transaction_type === 'Expense' && '-'}
                       {formatCurrency(transaction.original_amount, transaction.original_currency)}
                     </div>
                     {transaction.home_currency_amount &&

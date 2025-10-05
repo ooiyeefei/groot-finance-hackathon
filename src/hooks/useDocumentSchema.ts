@@ -55,7 +55,7 @@ const fetcher = async (url: string): Promise<DocumentSchema> => {
  */
 export function useDocumentSchema(documentType: string | null) {
   const { data, error, isLoading, mutate } = useSWR(
-    documentType ? `/api/documents/schemas/${documentType}` : null,
+    documentType ? `/api/invoices/schemas/${documentType}` : null,
     fetcher,
     {
       // Cache for 5 minutes to avoid redundant API calls

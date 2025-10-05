@@ -17,14 +17,14 @@ export async function GET() {
     const userData = await getUserData(userId)
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    console.log('[API] List documents - User ID:', userData.id)
+    console.log('[API] List invoices - User ID:', userData.id)
 
-    // Fetch user's documents with linked accounting entry information ordered by creation date (newest first)
-    const { data: documents, error } = await supabase
+    // Fetch user's invoices with linked accounting entry information ordered by creation date (newest first)
+    const { data: invoices, error } = await supabase
       .from('invoices')
       .select(`
         id, file_name, file_type, file_size, storage_path, converted_image_path, converted_image_width, converted_image_height, processing_status, created_at, processed_at, error_message, extracted_data,
-        accounting_entries:accounting_entries!invoice_id!left (
+        accounting_entries:accounting_entries!document_id!left (
           id, description, original_amount, original_currency, created_at
         )
       `)
@@ -36,21 +36,21 @@ export async function GET() {
     if (error) {
       console.error('Database error:', error)
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch documents' },
+        { success: false, error: 'Failed to fetch invoices' },
         { status: 500 }
       )
     }
 
-    // Process documents to include linked accounting entry data
-    const processedDocuments = (documents || []).map((doc: any) => ({
-      ...doc,
-      linked_accounting_entry: doc.accounting_entries && doc.accounting_entries.length > 0 ? doc.accounting_entries[0] : null,
+    // Process invoices to include linked accounting entry data
+    const processedInvoices = (invoices || []).map((invoice: any) => ({
+      ...invoice,
+      linked_accounting_entry: invoice.accounting_entries && invoice.accounting_entries.length > 0 ? invoice.accounting_entries[0] : null,
       accounting_entries: undefined // Remove the raw accounting_entries array from the response
     }))
 
     return NextResponse.json({
       success: true,
-      data: processedDocuments
+      data: processedInvoices
     })
 
   } catch (error) {

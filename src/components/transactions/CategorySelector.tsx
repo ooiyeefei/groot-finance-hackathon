@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import { Check, ChevronDown, Tag } from 'lucide-react'
 import { COMPLETE_CATEGORY_OPTIONS, CategoryOption } from '@/lib/constants/ifrs-categories'
+import { TransactionType } from '@/types/transaction'
 
 interface CategorySelectorProps {
   transactionId: string
   currentCategory: string | null
-  transactionType: 'income' | 'expense' | 'transfer' | 'asset' | 'liability' | 'equity'
+  transactionType: TransactionType
   onCategoryUpdate?: (newCategory: string) => void
   className?: string
 }
@@ -27,16 +28,21 @@ export default function CategorySelector({
 
   // Filter categories based on transaction type
   const getFilteredCategories = () => {
-    if (transactionType === 'income') {
+    if (transactionType === 'Income') {
       return CATEGORY_OPTIONS.filter(opt =>
         opt.group === 'Income'
       )
-    } else if (transactionType === 'expense') {
+    } else if (transactionType === 'Expense') {
+      return CATEGORY_OPTIONS.filter(opt =>
+        opt.group !== 'Income'
+      )
+    } else if (transactionType === 'Cost of Goods Sold') {
+      // COGS uses expense categories but focuses on product/manufacturing costs
       return CATEGORY_OPTIONS.filter(opt =>
         opt.group !== 'Income'
       )
     } else {
-      // For other transaction types, show all categories
+      // For any other transaction types, show all categories
       return CATEGORY_OPTIONS
     }
   }

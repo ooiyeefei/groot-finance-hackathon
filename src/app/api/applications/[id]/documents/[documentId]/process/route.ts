@@ -18,7 +18,7 @@ export async function POST(
 
     // Fetch document with application context
     const { data: document, error: fetchError } = await supabase
-      .from('documents')
+      .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .select('storage_path, file_type, document_slot, application_id')
       .eq('id', documentId)
       .eq('application_id', applicationId)
@@ -48,7 +48,7 @@ export async function POST(
 
     // Update document status to pending
     const { error: updateError } = await supabase
-      .from('documents')
+      .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .update({
         processing_status: 'pending',
         error_message: null,
@@ -69,6 +69,7 @@ export async function POST(
     const payload = {
       documentId: documentId,
       pdfStoragePath: document.storage_path,
+      documentDomain: 'applications' as const,  // ✅ PHASE 4B-2: Add domain parameter
       expectedDocumentType: expectedDocumentType,
       applicationId: applicationId,
       documentSlot: document.document_slot

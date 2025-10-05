@@ -30,8 +30,8 @@
   },
   "navigation": {
     "dashboard": "仪表板",
-    "documents": "文档",
-    "transactions": "交易记录",
+    "invoices": "发票",
+    "transactions": "会计",
     "applications": "申请",
     "expenseClaims": "费用报销",
     "aiAssistant": "AI助手",

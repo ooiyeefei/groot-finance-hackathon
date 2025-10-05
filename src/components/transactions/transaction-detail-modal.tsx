@@ -146,12 +146,6 @@ export default function TransactionDetailModal({
                       <span className="text-white">{formatCategoryName(transaction.category)}</span>
                     </div>
                     
-                    {transaction.subcategory && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-400">Subcategory:</span>
-                        <span className="text-white">{formatCategoryName(transaction.subcategory)}</span>
-                      </div>
-                    )}
                     
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400 flex items-center gap-1">
@@ -194,7 +188,7 @@ export default function TransactionDetailModal({
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400">Original Amount:</span>
                       <span className={`text-xl font-bold ${getTransactionTypeColor(transaction.transaction_type)}`}>
-                        {transaction.transaction_type === 'expense' && '-'}
+                        {transaction.transaction_type === 'Expense' && '-'}
                         {formatCurrency(transaction.original_amount, transaction.original_currency)}
                       </span>
                     </div>

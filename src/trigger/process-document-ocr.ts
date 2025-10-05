@@ -23,6 +23,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// ✅ PHASE 4C: Domain-to-table mapping for multi-domain architecture
+const DOMAIN_TABLE_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
+
 // Helper function to fetch enabled categories directly from database
 async function fetchEnabledCategoriesFromDB(businessId: string): Promise<DynamicExpenseCategory[]> {
   try {
@@ -234,9 +241,13 @@ function categorizeWithIFRSAccountingCategories(
 
 export const processDocumentOCR = task({
   id: "process-document-ocr",
-  run: async (payload: { documentId: string; imageStoragePath?: string; expenseCategory?: string }) => {
+  run: async (payload: { documentId: string; imageStoragePath?: string; expenseCategory?: string; documentDomain: 'invoices' | 'expense_claims' | 'applications' }) => {  // ✅ PHASE 4C: Add domain parameter
+    // ✅ PHASE 4C: Route to correct table based on domain
+    const tableName = DOMAIN_TABLE_MAP[payload.documentDomain];
+
     console.log(`🚀 Starting DSPy Document OCR extraction`);
     console.log(`📄 Document ID: ${payload.documentId}`);
+    console.log(`📊 Table: ${tableName} (domain: ${payload.documentDomain})`);
     console.log(`🖼️ Image storage path: ${payload.imageStoragePath || 'Will fetch from document record'}`);
     console.log(`🏷️ Expense category: ${payload.expenseCategory || 'Not provided'}`);
 
@@ -249,7 +260,7 @@ export const processDocumentOCR = task({
     try {
       // Step 1: Fetch document record and determine image path
       const { data: fetchedDocRecord, error: fetchError } = await supabase
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
         .select('file_name, file_type, file_size, user_id, business_id, storage_path, converted_image_path')
         .eq('id', payload.documentId)
         .single();
@@ -282,7 +293,7 @@ export const processDocumentOCR = task({
         console.log(`[ProcessDocumentOCR] PDF workflow - using converted image folder: ${docRecord.converted_image_path}`);
 
         const { data: fileList, error: listError } = await supabase.storage
-          .from('documents')
+          .from(tableName)  // ✅ PHASE 4C: Routed based on domain
           .list(docRecord.converted_image_path, {
             limit: 100,
             sortBy: { column: 'name', order: 'asc' }
@@ -304,7 +315,7 @@ export const processDocumentOCR = task({
           console.log(`[ProcessDocumentOCR] Creating signed URL for file: ${filePath}`);
 
           const { data: urlData, error: urlError } = await supabase.storage
-            .from('documents')
+            .from(tableName)  // ✅ PHASE 4C: Routed based on domain
             .createSignedUrl(filePath, 600);
 
           if (urlError || !urlData) {
@@ -327,7 +338,7 @@ export const processDocumentOCR = task({
         console.log(`[ProcessDocumentOCR] Creating signed URL for single image: ${processImagePath}`);
 
         const { data: urlData, error: urlError } = await supabase.storage
-          .from('documents')
+          .from(tableName)  // ✅ PHASE 4C: Routed based on domain
           .createSignedUrl(processImagePath, 600);
 
         if (urlError || !urlData) {
@@ -1004,8 +1015,10 @@ print(json.dumps(result))
 
       // Step 7: Update database with raw DSPy structure
       console.log(`💾 Updating database with extraction results...`);
-      const { error: updateError } = await supabase.from('documents').update({
-        processing_status: 'completed',
+      const { error: updateError } = await supabase
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
+        .update({
+          processing_status: 'completed',
         extracted_data: finalDspyResult, // Store raw DSPy structure directly
         confidence_score: finalExtractionData.confidence_score,
         processed_at: new Date().toISOString(),
@@ -1359,8 +1372,10 @@ print(json.dumps(result))
 
           // Update database with vLLM raw DSPy structure
           console.log(`💾 Updating database with vLLM fallback results...`);
-          const { error: vllmUpdateError } = await supabase.from('documents').update({
-            processing_status: 'completed',
+          const { error: vllmUpdateError } = await supabase
+            .from(tableName)  // ✅ PHASE 4C: Routed based on domain
+            .update({
+              processing_status: 'completed',
             extracted_data: finalVllmDspyResult, // Store raw DSPy structure directly
             confidence_score: vllmExtractionData.confidence_score,
             processed_at: new Date().toISOString(),
@@ -1402,8 +1417,10 @@ print(json.dumps(result))
           console.error("❌ vLLM fallback also failed:", fallbackError);
           
           // Both DSPy and vLLM failed - mark as failed
-          await supabase.from('documents').update({
-            processing_status: 'failed',
+          await supabase
+            .from(tableName)  // ✅ PHASE 4C: Routed based on domain
+            .update({
+              processing_status: 'failed',
             error_message: `Primary DSPy processing failed: ${dspyError instanceof Error ? dspyError.message : 'Unknown error'}. vLLM fallback failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`,
             processed_at: new Date().toISOString(),
             processing_method: 'both_methods_failed'
@@ -1415,8 +1432,10 @@ print(json.dumps(result))
         console.warn("⚠️ No OCR_ENDPOINT_URL configured for vLLM fallback");
         
         // No fallback available - mark as failed
-        await supabase.from('documents').update({
-          processing_status: 'failed',
+        await supabase
+          .from(tableName)  // ✅ PHASE 4C: Routed based on domain
+          .update({
+            processing_status: 'failed',
           error_message: `DSPy processing failed: ${dspyError instanceof Error ? dspyError.message : 'Processing failed'}. No vLLM fallback configured.`,
           processed_at: new Date().toISOString(),
           processing_method: 'dspy_only_failed'

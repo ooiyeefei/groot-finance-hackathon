@@ -8,10 +8,17 @@ import { python } from "@trigger.dev/python";
 import { supabase, updateDocumentStatus, updateExtractionResults, fetchDocumentImage } from './utils/db-helpers';
 import { ExtractionResultSchema, validatePythonScriptResult, type ExtractionResult } from './utils/schemas';
 
+// ✅ PHASE 4C: Domain-to-table mapping for multi-domain architecture
+const DOMAIN_TABLE_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
 
 interface ExtractApplicationFormDataPayload {
   documentId: string;
   imageStoragePath: string; // This is now storage_path - can be single file or folder
+  documentDomain: 'invoices' | 'expense_claims' | 'applications';  // ✅ PHASE 4C: Domain routing parameter
 }
 
 
@@ -19,24 +26,26 @@ interface ExtractApplicationFormDataPayload {
 export const extractApplicationFormData = task({
   id: "extract-application-form-data",
   run: async (payload: ExtractApplicationFormDataPayload, { ctx }) => {
-  const { documentId, imageStoragePath } = payload;
+  const { documentId, imageStoragePath, documentDomain } = payload;
 
-  console.log(`[ExtractApplication] Starting application form extraction for document ${documentId}`);
+  // ✅ PHASE 4C: Route to correct table based on domain
+  const tableName = DOMAIN_TABLE_MAP[documentDomain];
+  console.log(`[ExtractApplication] Starting application form extraction for document ${documentId} in ${tableName} (domain: ${documentDomain})`);
   console.log(`[ExtractApplication] Image storage path: ${imageStoragePath}`);
 
   try {
     // Step 1: Update status to pending_extraction (consistent with payslip flow)
-    await updateDocumentStatus(documentId, 'pending_extraction');
+    await updateDocumentStatus(documentId, 'pending_extraction', undefined, tableName);
 
     // Brief delay to allow UI to show the status update
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Step 2: Update status to extracting
-    await updateDocumentStatus(documentId, 'extracting');
+    await updateDocumentStatus(documentId, 'extracting', undefined, tableName);
 
     // Fetch document metadata to determine path handling approach
     const { data: document, error: fetchError } = await supabase
-      .from('documents')
+      .from(tableName)  // ✅ PHASE 4C: Routed based on domain
       .select('file_type, converted_image_path, storage_path')
       .eq('id', documentId)
       .single();
@@ -55,7 +64,7 @@ export const extractApplicationFormData = task({
       console.log(`[ExtractApplication] PDF workflow - using converted image folder: ${document.converted_image_path}`);
 
       const { data: fileList, error: listError } = await supabase.storage
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
         .list(document.converted_image_path, {
           limit: 100,
           sortBy: { column: 'name', order: 'asc' }
@@ -77,7 +86,7 @@ export const extractApplicationFormData = task({
         console.log(`[ExtractApplication] Creating signed URL for file: ${filePath}`);
 
         const { data: urlData, error: urlError } = await supabase.storage
-          .from('documents')
+          .from(tableName)  // ✅ PHASE 4C: Routed based on domain
           .createSignedUrl(filePath, 600);
 
         if (urlError || !urlData) {
@@ -95,7 +104,7 @@ export const extractApplicationFormData = task({
       console.log(`[ExtractApplication] Creating signed URL for single image: ${imageStoragePath}`);
 
       const { data: urlData, error: urlError } = await supabase.storage
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
         .createSignedUrl(imageStoragePath, 600);
 
       if (urlError || !urlData) {
@@ -189,7 +198,7 @@ export const extractApplicationFormData = task({
       }
 
       console.error(`[ExtractApplication] Technical error details:`, pythonResult.error);
-      await updateDocumentStatus(documentId, 'failed', userFriendlyError);
+      await updateDocumentStatus(documentId, 'failed', userFriendlyError, tableName);
       throw new Error(userFriendlyError);
     }
 
@@ -201,13 +210,13 @@ export const extractApplicationFormData = task({
     if (!extractionResult.success) {
       const userFriendlyError = 'Unable to extract data from your application form. Please ensure the document is clear and all information is visible, then try again.';
       console.error(`[ExtractApplication] Technical extraction failure:`, extractionResult.error);
-      await updateDocumentStatus(documentId, 'failed', userFriendlyError);
+      await updateDocumentStatus(documentId, 'failed', userFriendlyError, tableName);
       throw new Error(userFriendlyError);
     }
 
     // Update database with extraction results
     console.log(`[ExtractApplication] Updating database with extracted data`);
-    await updateExtractionResults(documentId, extractionResult);
+    await updateExtractionResults(documentId, extractionResult, tableName);
 
     // Trigger downstream image annotation if bounding boxes exist
     if (extractionResult.extracted_data?.metadata?.boundingBoxes) {
@@ -238,7 +247,7 @@ export const extractApplicationFormData = task({
       ? errorMessage
       : 'Unable to process your application form at this time. Please try uploading the document again or contact support if the issue persists.';
 
-    await updateDocumentStatus(documentId, 'failed', finalErrorMessage);
+    await updateDocumentStatus(documentId, 'failed', finalErrorMessage, tableName);
     throw new Error(finalErrorMessage);
   }
   }

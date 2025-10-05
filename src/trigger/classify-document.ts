@@ -20,9 +20,16 @@ import type { extractIcData } from './extract-ic-data';
 import type { extractPayslipData } from './extract-payslip-data';
 import type { extractApplicationFormData } from './extract-application-form-data';
 
+// ✅ PHASE 4B-3: Domain-to-table mapping for multi-domain architecture
+const DOMAIN_TABLE_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
 
 interface ClassifyDocumentPayload {
   documentId: string;
+  documentDomain: 'invoices' | 'expense_claims' | 'applications';  // ✅ PHASE 4B-3: Domain routing parameter
   expectedDocumentType?: string; // NEW: For slot validation
   applicationId?: string; // NEW: For application context
   documentSlot?: string; // NEW: For slot context
@@ -33,18 +40,20 @@ interface ClassifyDocumentPayload {
 export const classifyDocument = task({
   id: "classify-document",
   run: async (payload: ClassifyDocumentPayload, { ctx }) => {
-  const { documentId, expectedDocumentType, applicationId, documentSlot } = payload;
+  const { documentId, documentDomain, expectedDocumentType, applicationId, documentSlot } = payload;
   const taskId = ctx.run.id;
 
-  console.log(`[Classify] Starting classification for document ${documentId}`);
+  // ✅ PHASE 4B-3: Route to correct table based on domain
+  const tableName = DOMAIN_TABLE_MAP[documentDomain];
+  console.log(`[Classify] Starting classification for document ${documentId} in ${tableName} (domain: ${documentDomain})`);
 
   try {
     // Update status to classifying
-    await updateDocumentStatus(documentId, 'classifying');
+    await updateDocumentStatus(documentId, 'classifying', undefined, tableName);  // ✅ PHASE 4B-3: Pass tableName
 
     // Fetch document metadata (needed for task routing)
     const { data: document, error: fetchError } = await supabase
-      .from('documents')
+      .from(tableName)  // ✅ PHASE 4B-3: Routed based on domain
       .select('storage_path, converted_image_path, file_type, document_metadata')
       .eq('id', documentId)
       .single();
@@ -132,7 +141,7 @@ export const classifyDocument = task({
     if (!validationResult.success) {
       const errorMsg = `Classification validation failed: ${validationResult.error}`;
       console.error(`[Classify] ${errorMsg}`);
-      await updateDocumentStatus(documentId, 'classification_failed', errorMsg);
+      await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);  // ✅ PHASE 4B-3: Pass tableName
       throw new Error(errorMsg);
     }
 
@@ -142,20 +151,20 @@ export const classifyDocument = task({
     // Handle classification failure from Python script
     if (!classificationResult.success) {
       const errorMsg = `Classification failed: ${classificationResult.error}`;
-      await updateDocumentStatus(documentId, 'classification_failed', errorMsg);
+      await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);  // ✅ PHASE 4B-3: Pass tableName
       throw new Error(errorMsg);
     }
 
     // Validate classification result
     if (!classificationResult.document_type) {
       const errorMsg = 'Invalid classification result: missing document_type';
-      await updateDocumentStatus(documentId, 'classification_failed', errorMsg);
+      await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);  // ✅ PHASE 4B-3: Pass tableName
       throw new Error(errorMsg);
     }
 
     // Update database with classification results
     console.log(`[Classify] Updating database with classification: ${classificationResult.document_type}`);
-    await updateDocumentClassification(documentId, classificationResult, taskId);
+    await updateDocumentClassification(documentId, classificationResult, taskId, tableName);  // ✅ PHASE 4B-3: Pass tableName
 
     // Check for slot validation failures in DSPy result
     if (expectedDocumentType && applicationId && documentSlot) {
@@ -181,7 +190,7 @@ export const classifyDocument = task({
 
         console.log(`[Classify] Slot validation failed - using DSPy-generated message: ${userFriendlyErrorMsg}`);
 
-        await updateDocumentStatus(documentId, 'classification_failed', userFriendlyErrorMsg);
+        await updateDocumentStatus(documentId, 'classification_failed', userFriendlyErrorMsg, tableName);  // ✅ PHASE 4B-3: Pass tableName
 
         // Throw error to mark task as failed in Trigger.dev
         throw new Error(userFriendlyErrorMsg);
@@ -206,7 +215,8 @@ export const classifyDocument = task({
 
         const invoiceRun = await tasks.trigger<typeof processDocumentOCR>("process-document-ocr", {
           documentId: documentId,
-          imageStoragePath: imagePath // Pass the actual path
+          imageStoragePath: imagePath,  // Pass the actual path
+          documentDomain: documentDomain  // ✅ PHASE 4B-3: Pass domain to extraction task
         });
         extractionTaskId = invoiceRun.id;
         break;
@@ -215,7 +225,8 @@ export const classifyDocument = task({
         console.log(`[Classify] Triggering IC extraction`);
         const icRun = await tasks.trigger<typeof extractIcData>("extract-ic-data", {
           documentId: documentId,
-          imageStoragePath: imagePath
+          imageStoragePath: imagePath,
+          documentDomain: documentDomain  // ✅ PHASE 4B-3: Pass domain to extraction task
         });
         extractionTaskId = icRun.id;
         break;
@@ -224,7 +235,8 @@ export const classifyDocument = task({
         console.log(`[Classify] Triggering payslip extraction`);
         const payslipRun = await tasks.trigger<typeof extractPayslipData>("extract-payslip-data", {
           documentId: documentId,
-          imageStoragePath: imagePath
+          imageStoragePath: imagePath,
+          documentDomain: documentDomain  // ✅ PHASE 4B-3: Pass domain to extraction task
         });
         extractionTaskId = payslipRun.id;
         break;
@@ -233,7 +245,8 @@ export const classifyDocument = task({
         console.log(`[Classify] Triggering application form extraction`);
         const appRun = await tasks.trigger<typeof extractApplicationFormData>("extract-application-form-data", {
           documentId: documentId,
-          imageStoragePath: imagePath
+          imageStoragePath: imagePath,
+          documentDomain: documentDomain  // ✅ PHASE 4B-3: Pass domain to extraction task
         });
         extractionTaskId = appRun.id;
         break;
@@ -243,12 +256,12 @@ export const classifyDocument = task({
         console.log(`[Classify] Document type is 'other' - not currently supported for extraction. Stopping pipeline gracefully.`);
         // Update status to 'completed' as the classification process is done successfully.
         // The UI can show the user-friendly message from the classification metadata.
-        await updateDocumentStatus(documentId, 'completed');
+        await updateDocumentStatus(documentId, 'completed', undefined, tableName);  // ✅ PHASE 4B-3: Pass tableName
         break; // Stop processing
 
       default:
         const errorMsg = `Router error: Unknown document type returned by classifier: ${docType}`;
-        await updateDocumentStatus(documentId, 'classification_failed', errorMsg);
+        await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);  // ✅ PHASE 4B-3: Pass tableName
         throw new Error(errorMsg);
     }
 
@@ -256,7 +269,7 @@ export const classifyDocument = task({
     if (extractionTaskId) {
       console.log(`[Classify] Updating extraction task ID: ${extractionTaskId}`);
       await supabase
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4B-3: Routed based on domain
         .update({ extraction_task_id: extractionTaskId })
         .eq('id', documentId);
     }
@@ -281,9 +294,12 @@ export const classifyDocument = task({
   } catch (error) {
     console.error(`[Classify] Classification failed for ${documentId}:`, error);
 
+    // ✅ PHASE 4B-3: Route error update to correct table
+    const errorTableName = DOMAIN_TABLE_MAP[payload.documentDomain];
+
     // Update document status to failed
     const errorMessage = error instanceof Error ? error.message : 'Unknown classification error';
-    await updateDocumentStatus(documentId, 'classification_failed', errorMessage);
+    await updateDocumentStatus(documentId, 'classification_failed', errorMessage, errorTableName);  // ✅ PHASE 4B-3: Pass tableName
 
     // Re-throw for Trigger.dev error handling
     throw error;

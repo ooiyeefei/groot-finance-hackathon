@@ -107,7 +107,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 3. Check if slot is already filled (for replacement functionality)
     const { data: existingDoc, error: checkError } = await supabase
-      .from('documents')
+      .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .select('id, file_name, storage_path')
       .eq('application_id', applicationId)
       .eq('document_slot', documentSlot)
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Update existing document record for replacement
       console.log(`[Application Documents API] Updating existing document ID: ${existingDoc.id}`)
       const { data: updatedDoc, error: updateError } = await supabase
-        .from('documents')
+        .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
         .update({
           file_name: file.name,
           storage_path: 'temp_pending_upload', // Temporary placeholder
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Create new document record
       console.log(`[Application Documents API] Creating new document record for slot: ${documentSlot}`)
       const { data: newDoc, error: insertError } = await supabase
-        .from('documents')
+        .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
         .insert({
           user_id: supabaseUserId,
           business_id: application.business_id,
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // 6. Upload to Supabase Storage with documentId-based path
     const supabaseAdmin = createServiceSupabaseClient()
     const { data: uploadResult, error: uploadError } = await supabaseAdmin.storage
-      .from('documents')
+      .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .upload(storagePath, file, {
         cacheControl: '3600',
         upsert: false
@@ -215,7 +215,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       // Clean up document record if upload fails
       if (!isReplacement) {
-        await supabase.from('documents').delete().eq('id', document.id)
+        await supabase.from('application_documents').delete().eq('id', document.id)  // ✅ PHASE 4G: Fixed cleanup query
       }
 
       return NextResponse.json(
@@ -226,7 +226,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 7. Update document record with final storage path
     const { error: pathUpdateError } = await supabase
-      .from('documents')
+      .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .update({
         storage_path: storagePath,
         processing_status: 'pending'
@@ -237,11 +237,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       console.error('[Application Documents API] Failed to update storage path:', pathUpdateError)
 
       // Clean up uploaded file
-      await supabaseAdmin.storage.from('documents').remove([storagePath])
+      await supabaseAdmin.storage.from('application_documents').remove([storagePath])  // ✅ PHASE 4G: Fixed storage bucket
 
       // Clean up document record if it was newly created
       if (!isReplacement) {
-        await supabase.from('documents').delete().eq('id', document.id)
+        await supabase.from('application_documents').delete().eq('id', document.id)  // ✅ PHASE 4G: Fixed cleanup query
       }
 
       return NextResponse.json(
@@ -258,6 +258,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Create payload for workflow
       const payload = {
         documentId: document.id,
+        documentDomain: 'applications' as const,  // ✅ PHASE 4B-2: Add domain parameter
         expectedDocumentType, // For slot validation
         applicationId: applicationId, // For context
         documentSlot // For context
@@ -287,7 +288,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
         // Update document with task ID
         await supabase
-          .from('documents')
+          .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
           .update({
             classification_task_id: processingRun.id,
             processing_status: 'processing'
@@ -317,7 +318,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
         // Update document with task ID
         await supabase
-          .from('documents')
+          .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
           .update({
             classification_task_id: processingRun.id,
             processing_status: 'classifying'
@@ -330,7 +331,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       // Update document with error status
       await supabase
-        .from('documents')
+        .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
         .update({
           processing_status: 'failed',
           error_message: 'Failed to start document processing'
@@ -417,7 +418,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Get all documents for this application
     const { data: documents, error: docsError } = await supabase
-      .from('documents')
+      .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .select(`
         id,
         document_slot,

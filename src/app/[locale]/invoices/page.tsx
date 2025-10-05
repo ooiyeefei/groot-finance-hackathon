@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import DocumentsContainer from '@/components/documents/documents-container'
+import DocumentsContainer from '@/components/invoices/documents-container'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 export default async function DocumentsPage() {

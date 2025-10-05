@@ -7,7 +7,7 @@ import ActionButton from '@/components/ui/action-button'
 import TransactionsList from '@/components/transactions/transactions-list'
 import TransactionFormModal from '@/components/transactions/transaction-form-modal'
 import TransactionDetailModal from '@/components/transactions/transaction-detail-modal'
-import DocumentAnalysisModal from '@/components/documents/document-analysis-modal'
+import DocumentAnalysisModal from '@/components/invoices/document-analysis-modal'
 import { useTransactions } from '@/hooks/use-transactions'
 import { Transaction } from '@/types/transaction'
 import { Plus } from 'lucide-react'
@@ -70,7 +70,7 @@ export default function TransactionsClient() {
   const handleViewDocument = async (documentId: string) => {
     try {
       // Fetch the document by ID
-      const response = await fetch(`/api/documents/${documentId}`)
+      const response = await fetch(`/api/invoices/${documentId}`)
       if (response.ok) {
         const result = await response.json()
         if (result.success && result.data) {

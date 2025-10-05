@@ -283,7 +283,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
   }
 
   // Map basic transaction information
-  mappedData.transaction_type = 'expense' // Most documents are expenses
+  mappedData.transaction_type = 'Cost of Goods Sold' // Invoices are supplier invoices (business purchases)
 
   const extractedData = document.extracted_data as any
 

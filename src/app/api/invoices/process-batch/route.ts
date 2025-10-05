@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
           await tasks.trigger<typeof convertPdfToImage>("convert-pdf-to-image", {
             documentId: documentId,
             pdfStoragePath: document.storage_path,
-            documentDomain: 'invoices' as const  // ✅ PHASE 4B-2: Legacy batch route - defaults to invoices
+            documentDomain: 'invoices' as const  // ✅ PHASE 4E-FIX: Add missing domain parameter
           });
           
           triggerResults.push({
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
           await tasks.trigger<typeof processDocumentOCR>("process-document-ocr", {
             documentId: documentId,
             imageStoragePath: document.storage_path,
-            documentDomain: 'invoices' as const  // ✅ PHASE 4B-3: Legacy batch route - defaults to invoices
+            documentDomain: 'invoices' as const  // ✅ PHASE 4E-FIX: Add missing domain parameter
           });
           
           triggerResults.push({

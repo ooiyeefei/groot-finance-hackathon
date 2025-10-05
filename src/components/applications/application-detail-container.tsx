@@ -33,12 +33,12 @@ import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import { useDocumentPolling } from '@/hooks/useDocumentPolling'
 import { useDocumentSchema } from '@/hooks/useDocumentSchema'
-import DynamicFieldRenderer from '@/components/documents/dynamic-field-renderer'
+import DynamicFieldRenderer from '@/components/invoices/dynamic-field-renderer'
 import SmartPayslipUploader from '@/components/applications/smart-payslip-uploader'
-import ICDataDisplay from '@/components/documents/ic-data-display'
-import ApplicationFormDataDisplay from '@/components/documents/application-form-data-display'
+import ICDataDisplay from '@/components/invoices/ic-data-display'
+import ApplicationFormDataDisplay from '@/components/invoices/application-form-data-display'
 import { transformErrorMessage, getErrorSuggestions } from '@/lib/error-message-transformer'
-import PayslipDataDisplay from '@/components/documents/payslip-data-display'
+import PayslipDataDisplay from '@/components/invoices/payslip-data-display'
 
 // Component to display extracted data for completed documents
 function ExtractedDataDisplay({ documentType, extractedData }: { documentType: string, extractedData: any }) {
@@ -388,7 +388,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
       }
 
       // Use the unified image-url endpoint with useRawFile parameter
-      const response = await fetch('/api/documents/image-url', {
+      const response = await fetch('/api/invoices/image-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -431,7 +431,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
         }
       }
 
-      const response = await fetch('/api/documents/image-url', {
+      const response = await fetch('/api/invoices/image-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -130,7 +130,7 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
   // Fetch documents from API
   const fetchDocuments = useCallback(async () => {
     try {
-      const response = await fetch('/api/documents/list')
+      const response = await fetch('/api/invoices/list')
       if (response.ok) {
         const result = await response.json()
         const newDocuments = result.data || []
@@ -195,7 +195,7 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
     let processingStartedSuccessfully = false
     
     try {
-      const response = await fetch(`/api/documents/${documentId}/process`, {
+      const response = await fetch(`/api/invoices/${documentId}/process`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -253,7 +253,7 @@ export function useDocumentPolling(): UseDocumentPollingReturn {
     setDeletingDocuments(prev => new Set(prev).add(documentId))
     
     try {
-      const response = await fetch(`/api/documents/${documentId}`, {
+      const response = await fetch(`/api/invoices/${documentId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'

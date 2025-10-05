@@ -24,7 +24,7 @@ import {
   ChevronUp
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import PayslipDataDisplay from '@/components/documents/payslip-data-display'
+import PayslipDataDisplay from '@/components/invoices/payslip-data-display'
 import { getErrorSuggestions } from '@/lib/error-message-transformer'
 
 interface PayslipFile {

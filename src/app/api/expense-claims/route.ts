@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
       
       // Check for exact duplicates that would violate business rules
       const { data: existingTransactions, error: duplicateError } = await supabase
-        .from('transactions')
+        .from('accounting_entries')
         .select(`
           id,
           reference_number,
@@ -200,14 +200,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create transaction record (Otto's approach: expense claims are transactions)
+    // Create accounting entry record (P&L structure: expense claims are Expense entries)
     const { data: transaction, error: transactionError } = await supabase
-      .from('transactions')
+      .from('accounting_entries')
       .insert({
         user_id: userData.id, // SECURITY FIX: Use Supabase UUID instead of Clerk ID
-        transaction_type: 'expense',
+        transaction_type: 'Expense',
         category: accountingCategory, // Use mapped IFRS accounting category
-        subcategory: expense_category, // Keep original business category as subcategory
         description,
         reference_number,
         document_type: null, // No document_id dependency

@@ -241,7 +241,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
             console.log('[Document Preview] Using stored converted image path:', document.converted_image_path)
             
             try {
-              const response = await fetch('/api/documents/image-url', {
+              const response = await fetch('/api/invoices/image-url', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -270,7 +270,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
             console.log('[Document Preview] Trying constructed PDF conversion path:', convertedImagePath)
 
             try {
-              const response = await fetch('/api/documents/image-url', {
+              const response = await fetch('/api/invoices/image-url', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -299,7 +299,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         if (document.storage_path) {
           console.log('[Document Preview] Trying original file path:', document.storage_path)
           
-          const response = await fetch('/api/documents/image-url', {
+          const response = await fetch('/api/invoices/image-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 

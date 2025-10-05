@@ -11,10 +11,17 @@ import { ExtractionResultSchema, validatePythonScriptResult, type ExtractionResu
 // Import List type for TypeScript
 type List<T> = T[];
 
+// ✅ PHASE 4C: Domain-to-table mapping for multi-domain architecture
+const DOMAIN_TABLE_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
 
 interface ExtractPayslipDataPayload {
   documentId: string;
   imageStoragePath: string;
+  documentDomain: 'invoices' | 'expense_claims' | 'applications';  // ✅ PHASE 4C: Domain routing parameter
 }
 
 /**
@@ -110,18 +117,20 @@ function extractPythonResult(rawResult: any): any {
 export const extractPayslipData = task({
   id: "extract-payslip-data",
   run: async (payload: ExtractPayslipDataPayload, { ctx }) => {
-  const { documentId, imageStoragePath } = payload;
+  const { documentId, imageStoragePath, documentDomain } = payload;
 
-  console.log(`[ExtractPayslip] Starting payslip extraction for document ${documentId}`);
+  // ✅ PHASE 4C: Route to correct table based on domain
+  const tableName = DOMAIN_TABLE_MAP[documentDomain];
+  console.log(`[ExtractPayslip] Starting payslip extraction for document ${documentId} in ${tableName} (domain: ${documentDomain})`);
   console.log(`[ExtractPayslip] Image storage path: ${imageStoragePath}`);
 
   try {
     // Update status to extracting
-    await updateDocumentStatus(documentId, 'extracting');
+    await updateDocumentStatus(documentId, 'extracting', undefined, tableName)  // ✅ PHASE 4C: Pass tableName;
 
     // Fetch document metadata to determine path handling approach
     const { data: document, error: fetchError } = await supabase
-      .from('documents')
+      .from(tableName)  // ✅ PHASE 4C: Routed based on domain
       .select('file_type, converted_image_path, storage_path')
       .eq('id', documentId)
       .single();
@@ -140,7 +149,7 @@ export const extractPayslipData = task({
       console.log(`[ExtractPayslip] PDF workflow - using converted image folder: ${document.converted_image_path}`);
 
       const { data: fileList, error: listError } = await supabase.storage
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
         .list(document.converted_image_path, {
           limit: 100,
           sortBy: { column: 'name', order: 'asc' }
@@ -162,7 +171,7 @@ export const extractPayslipData = task({
         console.log(`[ExtractPayslip] Creating signed URL for file: ${filePath}`);
 
         const { data: urlData, error: urlError } = await supabase.storage
-          .from('documents')
+          .from(tableName)  // ✅ PHASE 4C: Routed based on domain
           .createSignedUrl(filePath, 600);
 
         if (urlError || !urlData) {
@@ -180,7 +189,7 @@ export const extractPayslipData = task({
       console.log(`[ExtractPayslip] Creating signed URL for single image: ${imageStoragePath}`);
 
       const { data: urlData, error: urlError } = await supabase.storage
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
         .createSignedUrl(imageStoragePath, 600);
 
       if (urlError || !urlData) {
@@ -229,7 +238,7 @@ export const extractPayslipData = task({
         }
 
         console.error(`[ExtractPayslip] Technical error details:`, pythonResult.error);
-        await updateDocumentStatus(documentId, 'failed', userFriendlyError);
+        await updateDocumentStatus(documentId, 'failed', userFriendlyError, tableName);  // ✅ PHASE 4C: Pass tableName
         throw new Error(userFriendlyError);
       }
 
@@ -241,7 +250,7 @@ export const extractPayslipData = task({
       if (!extractionResult.success) {
         const userFriendlyError = 'Unable to extract data from your payslip. Please ensure the document is clear and all information is visible, then try again.';
         console.error(`[ExtractPayslip] Technical extraction failure:`, extractionResult.error);
-        await updateDocumentStatus(documentId, 'failed', userFriendlyError);
+        await updateDocumentStatus(documentId, 'failed', userFriendlyError, tableName);  // ✅ PHASE 4C: Pass tableName
         throw new Error(userFriendlyError);
       }
 
@@ -274,7 +283,7 @@ export const extractPayslipData = task({
 
     // Update database with extraction results
     console.log(`[ExtractPayslip] Updating database with extracted data`);
-    await updateExtractionResults(documentId, finalResult);
+    await updateExtractionResults(documentId, finalResult, tableName);  // ✅ PHASE 4C: Pass tableName
 
     console.log(`[ExtractPayslip] Successfully completed ${documentType} extraction for ${documentId}`);
 
@@ -282,7 +291,7 @@ export const extractPayslipData = task({
     try {
       // Get the applicationId from the document to trigger validation
       const { data: document, error: docError } = await supabase
-        .from('documents')
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
         .select('application_id')
         .eq('id', documentId)
         .single();
@@ -292,7 +301,8 @@ export const extractPayslipData = task({
 
         // Trigger validation task (fire-and-forget)
         await tasks.trigger("validate-payslip-dates", {
-          applicationId: document!.application_id
+          applicationId: document!.application_id,
+          documentDomain: documentDomain  // ✅ PHASE 4H: Pass domain to validation task
         });
 
         console.log(`[ExtractPayslip] Payslip validation triggered successfully`);
@@ -340,7 +350,7 @@ export const extractPayslipData = task({
 
     if (isLastAttempt) {
       console.log(`[ExtractPayslip] Final attempt failed, updating document status to failed`);
-      await updateDocumentStatus(documentId, 'failed', finalErrorMessage);
+      await updateDocumentStatus(documentId, 'failed', finalErrorMessage, tableName);  // ✅ PHASE 4C: Pass tableName
     } else {
       console.log(`[ExtractPayslip] Attempt ${ctx.attempt?.number || 1}/3 failed, will retry`);
     }

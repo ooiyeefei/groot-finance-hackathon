@@ -30,8 +30,8 @@
   },
   "navigation": {
     "dashboard": "แดชบอร์ด",
-    "documents": "เอกสาร",
-    "transactions": "รายการธุรกรรม",
+    "invoices": "ใบแจ้งหนี้",
+    "transactions": "บัญชี",
     "applications": "แอปพลิเคชัน",
     "expenseClaims": "เคลมค่าใช้จ่าย",
     "aiAssistant": "ผู้ช่วย AI",

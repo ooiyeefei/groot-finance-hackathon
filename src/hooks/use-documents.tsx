@@ -178,7 +178,7 @@ const fetchDocuments = async ({ queryKey, pageParam }: { queryKey: any[]; pagePa
     });
   }
 
-  const response = await fetch(`/api/documents/list?${searchParams.toString()}`, {
+  const response = await fetch(`/api/invoices/list?${searchParams.toString()}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -261,7 +261,7 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
   // Process document mutation with optimistic updates
   const processMutation = useMutation({
     mutationFn: async (documentId: string) => {
-      const response = await fetch(`/api/documents/${documentId}/process`, {
+      const response = await fetch(`/api/invoices/${documentId}/process`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -351,7 +351,7 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
   // Delete document mutation with optimistic updates
   const deleteMutation = useMutation({
     mutationFn: async (documentId: string) => {
-      const response = await fetch(`/api/documents/${documentId}`, {
+      const response = await fetch(`/api/invoices/${documentId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'

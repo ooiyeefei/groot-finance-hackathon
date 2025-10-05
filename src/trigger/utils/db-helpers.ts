@@ -30,7 +30,8 @@ export interface ExtractionResult {
 export async function updateDocumentStatus(
   documentId: string,
   status: string,
-  errorMessage?: string
+  errorMessage?: string,
+  tableName: string = 'documents'  // ✅ PHASE 4B-1: Dynamic table routing with safe default
 ): Promise<void> {
   const updateData: any = {
     processing_status: status
@@ -56,24 +57,25 @@ export async function updateDocumentStatus(
     updateData.failed_at = new Date().toISOString();
   }
 
-  console.log(`[DB] Updating document ${documentId} status to: ${status}`, updateData);
+  console.log(`[DB] Updating ${tableName}.${documentId} status to: ${status}`, updateData);
 
   const { error } = await supabase
-    .from('documents')
+    .from(tableName)  // ✅ PHASE 4B-1: Route to correct table based on domain
     .update(updateData)
     .eq('id', documentId);
 
   if (error) {
-    console.error(`[DB] Failed to update document status:`, error);
+    console.error(`[DB] Failed to update document status in ${tableName}:`, error);
     throw new Error(`Failed to update document status: ${error.message}`);
   }
 
-  console.log(`[DB] Successfully updated document ${documentId} status to: ${status}`);
+  console.log(`[DB] Successfully updated ${tableName}.${documentId} status to: ${status}`);
 }
 
 export async function updateExtractionResults(
   documentId: string,
-  result: ExtractionResult
+  result: ExtractionResult,
+  tableName: string = 'documents'  // ✅ PHASE 4B-1: Dynamic table routing with safe default
 ): Promise<void> {
   const updateData: any = {
     processing_status: 'completed',
@@ -82,26 +84,36 @@ export async function updateExtractionResults(
     processed_at: new Date().toISOString()
   };
 
+  console.log(`[DB] Updating ${tableName}.${documentId} extraction results`);
+
   const { error } = await supabase
-    .from('documents')
+    .from(tableName)  // ✅ PHASE 4B-1: Route to correct table based on domain
     .update(updateData)
     .eq('id', documentId);
 
   if (error) {
+    console.error(`[DB] Failed to update extraction results in ${tableName}:`, error);
     throw new Error(`Failed to update extraction results: ${error.message}`);
   }
+
+  console.log(`[DB] Successfully updated ${tableName}.${documentId} extraction results`);
 }
 
-export async function fetchDocumentImage(documentId: string): Promise<string> {
+export async function fetchDocumentImage(
+  documentId: string,
+  tableName: string = 'documents'  // ✅ PHASE 4B-1: Dynamic table routing with safe default
+): Promise<string> {
   try {
+    console.log(`[DB] Fetching image for ${tableName}.${documentId}`);
+
     const { data: document, error: fetchError } = await supabase
-      .from('documents')
+      .from(tableName)  // ✅ PHASE 4B-1: Route to correct table based on domain
       .select('storage_path, file_type, converted_image_path')
       .eq('id', documentId)
       .single();
 
     if (fetchError || !document) {
-      throw new Error(`Document not found: ${fetchError?.message}`);
+      throw new Error(`Document not found in ${tableName}: ${fetchError?.message}`);
     }
 
     let imagePath = document.storage_path;
@@ -110,7 +122,7 @@ export async function fetchDocumentImage(documentId: string): Promise<string> {
     }
 
     const { data: imageData, error: downloadError } = await supabase.storage
-      .from('documents')
+      .from('documents')  // Storage bucket name (separate from table name)
       .download(imagePath);
 
     if (downloadError || !imageData) {
@@ -120,9 +132,10 @@ export async function fetchDocumentImage(documentId: string): Promise<string> {
     const arrayBuffer = await imageData.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString('base64');
 
+    console.log(`[DB] Successfully fetched image for ${tableName}.${documentId}`);
     return base64;
   } catch (error) {
-    console.error(`Image fetch failed for ${documentId}:`, error);
+    console.error(`Image fetch failed for ${tableName}.${documentId}:`, error);
     throw error;
   }
 }
@@ -130,7 +143,8 @@ export async function fetchDocumentImage(documentId: string): Promise<string> {
 export async function updateDocumentClassification(
   documentId: string,
   classification: any,
-  taskId: string
+  taskId: string,
+  tableName: string = 'documents'  // ✅ PHASE 4B-1: Dynamic table routing with safe default
 ): Promise<void> {
   // Handle unsupported document types by setting appropriate status
   const status = classification.is_supported === false ? 'classification_failed' : 'pending_extraction';
@@ -154,12 +168,17 @@ export async function updateDocumentClassification(
     }
   };
 
+  console.log(`[DB] Updating ${tableName}.${documentId} classification (type: ${classification.document_type})`);
+
   const { error } = await supabase
-    .from('documents')
+    .from(tableName)  // ✅ PHASE 4B-1: Route to correct table based on domain
     .update(updateData)
     .eq('id', documentId);
 
   if (error) {
+    console.error(`[DB] Failed to update classification in ${tableName}:`, error);
     throw new Error(`Failed to update classification: ${error.message}`);
   }
+
+  console.log(`[DB] Successfully updated ${tableName}.${documentId} classification`);
 }

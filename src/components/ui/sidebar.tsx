@@ -33,8 +33,8 @@ export default function Sidebar() {
   // Base navigation items
   const baseNavigation = [
     { name: t('dashboard'), href: localizedHref('/'), icon: Home },
-    { name: t('documents'), href: localizedHref('/documents'), icon: FileText },
-    { name: t('transactions'), href: localizedHref('/transactions'), icon: CreditCard },
+    { name: t('invoices'), href: localizedHref('/invoices'), icon: FileText },
+    { name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard },
     { name: t('applications'), href: localizedHref('/applications'), icon: ClipboardList },
     { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
     { name: t('aiAssistant'), href: localizedHref('/ai-assistant'), icon: MessageSquare },

@@ -57,7 +57,7 @@ export async function DELETE(
     // First verify the document belongs to this user and application
     // Include soft-deleted documents since disassociation should work on them too
     const { data: document, error: fetchError } = await supabase
-      .from('documents')
+      .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .select('id, file_name, application_id, user_id, storage_path, business_id, deleted_at')
       .eq('id', documentId)
       .eq('application_id', applicationId)
@@ -117,7 +117,7 @@ export async function DELETE(
     // Disassociate document from application (clear application_id and document_slot)
     // But keep the document in the documents table and preserve file in storage
     const { error: disassociateError } = await supabase
-      .from('documents')
+      .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .update({
         application_id: null,
         document_slot: null,
