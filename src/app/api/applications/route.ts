@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createServiceSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 interface CreateApplicationRequest {
   title: string
