@@ -73,7 +73,7 @@ export async function POST(
     if (expenseClaim.document_id) {
       console.log(`[Expense-Processor] Fetching linked document: ${expenseClaim.document_id}`)
       const { data: documentData, error: documentError } = await supabase
-        .from('documents')
+        .from('expense_claims')
         .select('*')
         .eq('id', expenseClaim.document_id)
         .single()
@@ -169,7 +169,7 @@ export async function POST(
 
         // Download the image from Supabase storage and convert to base64
         const { data: urlData, error: urlError } = await supabase.storage
-          .from('documents')
+          .from('expense_claims')
           .createSignedUrl(imagePath, 600)
 
         if (urlError || !urlData) {
@@ -211,7 +211,7 @@ export async function POST(
 
         // Download the image from Supabase storage and convert to base64
         const { data: urlData, error: urlError } = await supabase.storage
-          .from('documents')
+          .from('expense_claims')
           .createSignedUrl(filePath, 600)
 
         if (urlError || !urlData) {

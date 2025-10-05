@@ -28,9 +28,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Applications API GET] User ${userId} accessing application ${id}`)
 
-    // Get user data for explicit security filtering
+    // Get user data and use service client to bypass RLS (explicit filtering below)
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = createServiceSupabaseClient()
 
     // Fetch application with related data and EXPLICIT user filtering
     const { data: application, error } = await supabase
@@ -229,9 +229,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Applications API PUT] User ${userId} updating application ${id}`)
 
-    // Get user data for explicit security filtering
+    // Get user data and use service client to bypass RLS (explicit filtering below)
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = createServiceSupabaseClient()
 
     // Check if application exists and is accessible with EXPLICIT user filtering
     const { data: existingApp, error: fetchError } = await supabase
@@ -318,9 +318,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Applications API DELETE] User ${userId} deleting application ${id}`)
 
-    // Get user data for explicit security filtering
+    // Get user data and use service client to bypass RLS (explicit filtering below)
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = createServiceSupabaseClient()
 
     // Check if application exists and is accessible with EXPLICIT user filtering
     const { data: existingApp, error: fetchError } = await supabase

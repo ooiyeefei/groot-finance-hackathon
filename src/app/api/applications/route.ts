@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Applications API] Creating application for user ${userId}`)
 
-    // Get user data including business_id
+    // Get user data and use service client to bypass RLS (explicit filtering below)
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = createServiceSupabaseClient()
 
     // Verify application type exists
     const { data: appType, error: appTypeError } = await supabase
@@ -138,9 +138,9 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Applications API] Fetching applications for user ${userId}`)
 
-    // Get user data and create authenticated client with explicit user context
+    // Get user data and use service client to bypass RLS (explicit filtering below)
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = createServiceSupabaseClient()
 
     // Build query with EXPLICIT user_id filtering for security
     let query = supabase

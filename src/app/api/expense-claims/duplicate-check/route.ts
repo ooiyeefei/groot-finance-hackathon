@@ -113,7 +113,7 @@ async function checkImageDuplicates(
   try {
     // Check for exact image hash matches
     const { data: exactMatches, error: hashError } = await supabase
-      .from('documents')
+      .from('expense_claims')
       .select(`
         *,
         claim:expense_claims!inner(id, status, created_at)
@@ -185,7 +185,7 @@ async function checkMetadataDuplicates(
 
     // Check for similar vendor + amount + date combinations
     const { data: metadataMatches, error: metadataError } = await supabase
-      .from('documents')
+      .from('expense_claims')
       .select(`
         *,
         claim:expense_claims!inner(id, status, created_at, business_purpose),

@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Create document record first for receipt to get documentId
     const { data: documentData, error: docError } = await serviceSupabase
-      .from('documents')
+      .from('expense_claims')
       .insert({
         user_id: userId,
         business_id: employeeProfile.business_id,
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Upload to Supabase Storage with documentId-based path
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('documents')
+      .from('expense_claims')
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: false
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
       console.error('[Expense Receipt Upload API] Storage upload failed:', uploadError)
 
       // Clean up document record if upload fails
-      await serviceSupabase.from('documents').delete().eq('id', documentData.id)
+      await serviceSupabase.from('expense_claims').delete().eq('id', documentData.id)
 
       return NextResponse.json(
         { success: false, error: 'Failed to upload file' },
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
 
     // Step 4: Update document record with final storage path
     const { error: pathUpdateError } = await serviceSupabase
-      .from('documents')
+      .from('expense_claims')
       .update({
         storage_path: filePath,
         processing_status: 'pending'
@@ -188,8 +188,8 @@ export async function POST(request: NextRequest) {
       console.error('[Expense Receipt API] Failed to update storage path:', pathUpdateError)
 
       // Clean up uploaded file and document record
-      await supabase.storage.from('documents').remove([filePath])
-      await serviceSupabase.from('documents').delete().eq('id', documentData.id)
+      await supabase.storage.from('expense_claims').remove([filePath])
+      await serviceSupabase.from('expense_claims').delete().eq('id', documentData.id)
 
       return NextResponse.json(
         { success: false, error: 'Failed to update document storage path' },
@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
 
       // Cleanup uploaded file
       await supabase.storage
-        .from('documents')
+        .from('expense_claims')
         .remove([filePath])
 
       return NextResponse.json(
@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
 
       // Cleanup uploaded file and transaction
       await supabase.storage
-        .from('documents')
+        .from('expense_claims')
         .remove([filePath])
 
       return NextResponse.json(
@@ -520,7 +520,7 @@ export async function GET(request: NextRequest) {
     let fileUrl = null
     if (fileInfo.path) {
       const { data: urlData } = supabase.storage
-        .from('documents')
+        .from('expense_claims')
         .getPublicUrl(fileInfo.path)
       fileUrl = urlData?.publicUrl || null
     }
