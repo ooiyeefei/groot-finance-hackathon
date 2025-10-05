@@ -69,6 +69,13 @@ export const uploadRateLimiter = new RateLimiter(60000, 5) // 5 uploads per minu
 export const processRateLimiter = new RateLimiter(60000, 3) // 3 processing requests per minute
 export const apiRateLimiter = new RateLimiter(60000, 30) // 30 API requests per minute
 
+// SECURITY: Rate limiters for expensive RPC endpoints (Phase 3)
+export const analyticsRateLimiter = new RateLimiter(60000, 10) // 10 analytics requests per minute
+export const dashboardRateLimiter = new RateLimiter(60000, 15) // 15 dashboard requests per minute
+export const reportsRateLimiter = new RateLimiter(300000, 5) // 5 reports per 5 minutes (expensive)
+export const teamManagementRateLimiter = new RateLimiter(60000, 20) // 20 team requests per minute
+export const realtimeRateLimiter = new RateLimiter(60000, 30) // 30 real-time requests per minute
+
 // Helper function to get client identifier
 export function getClientIdentifier(request: Request, userId?: string): string {
   // Use userId if available (authenticated requests)

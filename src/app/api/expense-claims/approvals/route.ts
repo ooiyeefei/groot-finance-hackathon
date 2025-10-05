@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { dashboardRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter'
+import { auditLogger } from '@/lib/audit-logger'
 
 // GET - Fetch pending expense claims for approval
 export async function GET(request: NextRequest) {
@@ -17,6 +19,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
+      )
+    }
+
+    // SECURITY: Apply rate limiting for expensive approvals queries
+    const clientId = getClientIdentifier(request, userId)
+    const rateLimitResult = applyRateLimit(dashboardRateLimiter, clientId)
+
+    if (!rateLimitResult.allowed) {
+      console.log(`[Approvals API] Rate limit exceeded for user: ${userId}`)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Too many requests. Please wait before making another request.',
+          rateLimitExceeded: true
+        },
+        {
+          status: 429,
+          headers: rateLimitResult.headers
+        }
       )
     }
 
@@ -234,24 +255,62 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Calculate stats
-    const stats = {
+    // PERFORMANCE: Use optimized RPC function for team expense summary
+    console.log('[Approvals API] Using get_team_expense_summary RPC for business:', employeeProfile.business_id)
+
+    // AUDIT: Log RPC call start for approvals stats
+    const approvalsRpcStartTime = Date.now()
+    const approvalsRpcParameters = { business_id_param: employeeProfile.business_id }
+
+    const { data: rpcStats, error: rpcError } = await supabase
+      .rpc('get_team_expense_summary', approvalsRpcParameters)
+
+    // AUDIT: Log RPC call completion for approvals stats
+    const approvalsExecutionTime = Date.now() - approvalsRpcStartTime
+    auditLogger.logRPCCall(
+      userId,
+      employeeProfile.business_id,
+      'get_team_expense_summary',
+      approvalsRpcParameters,
+      !rpcError,
+      request,
+      approvalsExecutionTime,
+      rpcStats ? 1 : 0,
+      rpcError?.message
+    )
+
+    // Initialize stats with fallback to manual calculation if RPC fails
+    let stats = {
       pending: enrichedClaims.length,
-      approved_today: 0, // Will implement separate query for this
+      approved_today: 0,
       total_pending_amount: enrichedClaims.reduce((sum, claim) => sum + claim.converted_amount, 0)
     }
 
-    // Get approved count for today
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const { count: approvedToday } = await supabase
-      .from('expense_claims')
-      .select('*', { count: 'exact', head: true })
-      .in('employee_id', employeeIds)
-      .eq('status', 'approved')
-      .gte('updated_at', today.toISOString())
+    if (rpcError) {
+      console.error('[Approvals API] RPC function failed, using manual calculation fallback:', rpcError)
+      // Fallback: Get approved count for today manually
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const { count: approvedToday } = await supabase
+        .from('expense_claims')
+        .select('*', { count: 'exact', head: true })
+        .in('employee_id', employeeIds)
+        .eq('status', 'approved')
+        .gte('updated_at', today.toISOString())
 
-    stats.approved_today = approvedToday || 0
+      stats.approved_today = approvedToday || 0
+    } else {
+      // Use optimized RPC results with proper type conversion
+      console.log('[Approvals API] RPC function completed successfully:', rpcStats)
+
+      stats = {
+        pending: Number(rpcStats.pending_count) || enrichedClaims.length,
+        approved_today: Number(rpcStats.approved_today) || 0,
+        total_pending_amount: Number(rpcStats.pending_amount) || enrichedClaims.reduce((sum, claim) => sum + claim.converted_amount, 0)
+      }
+
+      console.log('[Approvals API] Using RPC-optimized stats:', stats)
+    }
 
     return NextResponse.json({
       success: true,
@@ -259,6 +318,8 @@ export async function GET(request: NextRequest) {
         claims: enrichedClaims,
         stats
       }
+    }, {
+      headers: rateLimitResult.headers
     })
 
   } catch (error) {
@@ -294,6 +355,25 @@ export async function POST(request: NextRequest) {
       )
     }
     console.log('[Approvals API POST] Step 1 SUCCESS: Got userId:', userId)
+
+    // SECURITY: Apply rate limiting for approval actions
+    const clientId = getClientIdentifier(request, userId)
+    const rateLimitResult = applyRateLimit(dashboardRateLimiter, clientId)
+
+    if (!rateLimitResult.allowed) {
+      console.log(`[Approvals API POST] Rate limit exceeded for user: ${userId}`)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Too many requests. Please wait before making another request.',
+          rateLimitExceeded: true
+        },
+        {
+          status: 429,
+          headers: rateLimitResult.headers
+        }
+      )
+    }
 
     console.log('[Approvals API POST] Step 2: Getting employee profile')
     const employeeProfile = await ensureEmployeeProfile(userId)
@@ -474,6 +554,8 @@ export async function POST(request: NextRequest) {
         action,
         status: newStatus
       }
+    }, {
+      headers: rateLimitResult.headers
     })
 
   } catch (error) {

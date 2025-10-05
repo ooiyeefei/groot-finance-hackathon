@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 import { 
   MonthlyExpenseReport, 
   ExpenseCategory,
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = createServiceSupabaseClient()
+    const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Get user's employee profile using Clerk user ID
     const { data: userProfile, error: profileError } = await supabase
@@ -117,8 +117,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Calculate summary statistics (Otto's financial analysis)
-    const summary = {
+    // PERFORMANCE: Use optimized RPC function instead of manual calculations
+    console.log('[Monthly Report API] Using get_company_expense_summary RPC for business:', targetEmployee.business_id)
+
+    const { data: rpcSummary, error: rpcError } = await supabase
+      .rpc('get_company_expense_summary', {
+        business_id_param: targetEmployee.business_id
+      })
+
+    // Initialize summary with consistent typing
+    let summary = {
       total_amount: 0,
       claim_count: expenseClaims?.length || 0,
       approved_amount: 0,
@@ -126,7 +134,42 @@ export async function GET(request: NextRequest) {
       rejected_amount: 0
     }
 
-    // Calculate category totals
+    if (rpcError) {
+      console.error('[Monthly Report API] RPC function failed:', rpcError)
+      // Fallback to manual calculation if RPC fails
+      expenseClaims?.forEach(claim => {
+        const amount = claim.transaction?.home_currency_amount || 0
+        summary.total_amount += amount
+
+        // Categorize by status
+        switch (claim.status) {
+          case 'approved':
+          case 'reimbursed':
+          case 'paid':
+            summary.approved_amount += amount
+            break
+          case 'rejected':
+            summary.rejected_amount += amount
+            break
+          default:
+            summary.pending_amount += amount
+        }
+      })
+    } else {
+      // Use optimized RPC results with proper type conversion
+      console.log('[Monthly Report API] RPC summary results:', rpcSummary)
+      summary.approved_amount = Number(rpcSummary.total_approved) || 0
+      summary.pending_amount = Number(rpcSummary.pending_reimbursement) || 0
+      summary.rejected_amount = Number(rpcSummary.total_rejected) || 0
+
+      // Still calculate total_amount from individual claims for accuracy
+      expenseClaims?.forEach(claim => {
+        const amount = claim.transaction?.home_currency_amount || 0
+        summary.total_amount += amount
+      })
+    }
+
+    // Calculate category totals (keep manual for detailed breakdown)
     const categoryTotals: Record<ExpenseCategory, { amount: number; count: number }> = {
       travel_accommodation: { amount: 0, count: 0 },
       petrol: { amount: 0, count: 0 },
@@ -135,24 +178,9 @@ export async function GET(request: NextRequest) {
       other: { amount: 0, count: 0 }
     }
 
-    // Process each claim for statistics
+    // Process each claim for category statistics
     expenseClaims?.forEach(claim => {
       const amount = claim.transaction?.home_currency_amount || 0
-      summary.total_amount += amount
-
-      // Categorize by status
-      switch (claim.status) {
-        case 'approved':
-        case 'reimbursed':
-        case 'paid':
-          summary.approved_amount += amount
-          break
-        case 'rejected':
-          summary.rejected_amount += amount
-          break
-        default:
-          summary.pending_amount += amount
-      }
 
       // Category breakdown
       const category = claim.expense_category as ExpenseCategory

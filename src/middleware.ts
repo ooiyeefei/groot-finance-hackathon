@@ -52,24 +52,21 @@ const isAdminOnlyForUpdates = createRouteMatcher([
 ])
 
 export default clerkMiddleware(async (auth, req) => {
-  // Handle public routes
+  // Handle public routes (includes legitimate public API routes)
   if (isPublicRoute(req)) {
     return NextResponse.next()
   }
 
-  // Check if this is an API route
+  // SECURITY: Protect ALL routes (both pages and API routes) with authentication
+  const { userId } = await auth.protect()
+
   const isApiRoute = req.nextUrl.pathname.startsWith('/api/')
 
   if (isApiRoute) {
-    // API routes get Clerk context without protection - they handle their own auth
-    console.log(`[Middleware] API route: ${req.nextUrl.pathname} - providing auth context`)
-    return NextResponse.next()
+    console.log(`[Middleware] Protected API route: ${req.nextUrl.pathname} - authenticated user: ${userId}`)
+  } else {
+    console.log(`[Middleware] Protected page route: ${req.nextUrl.pathname} - authenticated user: ${userId}`)
   }
-
-  // Protect page routes (redirect to sign-in if not authenticated)
-  const { userId } = await auth.protect()
-
-  console.log(`[Middleware] Authenticated user: ${userId} accessing page: ${req.url}`)
 
   return NextResponse.next()
 })

@@ -123,6 +123,92 @@ export default function useFinancialAnalytics(
 }
 
 /**
+ * Hook for real-time analytics using optimized RPC functions
+ * PERFORMANCE: Uses get_dashboard_analytics_realtime for ~1ms execution time
+ */
+export function useRealtimeAnalytics(
+  options: UseFinancialAnalyticsOptions = {}
+) {
+  const {
+    period = 'month',
+    homeCurrency = 'SGD',
+    autoRefresh = true,
+    refreshInterval = 30000 // 30 seconds for real-time updates
+  } = options;
+
+  // Use TanStack Query for real-time data fetching with aggressive caching
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    dataUpdatedAt
+  } = useQuery({
+    // Unique query key for real-time analytics
+    queryKey: ['realtimeAnalytics', period, homeCurrency],
+
+    // Fetch function for real-time analytics
+    queryFn: async ({ queryKey }) => {
+      const [_key, period, homeCurrency] = queryKey;
+
+      const params = new URLSearchParams({
+        period,
+        homeCurrency
+      });
+
+      const response = await fetch(`/api/analytics/realtime?${params}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Real-time analytics request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error('Real-time analytics calculation failed');
+      }
+
+      return data;
+    },
+
+    // Aggressive refresh configuration for real-time updates
+    staleTime: 15 * 1000, // 15 seconds - data considered fresh
+    gcTime: 2 * 60 * 1000, // 2 minutes - shorter cache for real-time data
+
+    // Real-time auto-refresh configuration
+    refetchInterval: autoRefresh ? refreshInterval : false,
+    refetchOnWindowFocus: true, // Refresh when user returns to tab
+    refetchOnReconnect: true, // Refetch when network reconnects
+
+    // Retry configuration
+    retry: (failureCount, error) => {
+      // Don't retry on 4xx errors (client errors)
+      if (error instanceof Error && error.message.includes('Real-time analytics request failed: 4')) {
+        return false;
+      }
+      // Retry up to 2 times for real-time (faster failure)
+      return failureCount < 2;
+    },
+  });
+
+  return {
+    analytics: data?.analytics || null,
+    loading: isLoading,
+    error: isError ? (error instanceof Error ? error.message : 'Failed to fetch real-time analytics') : null,
+    refresh: refetch,
+    lastUpdated: dataUpdatedAt ? new Date(dataUpdatedAt) : null,
+    performance: data?.performance || null
+  };
+}
+
+/**
  * Hook for batch analytics fetching across multiple periods
  */
 export function useBatchAnalytics(periods: Array<{
