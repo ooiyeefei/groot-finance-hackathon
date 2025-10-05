@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     // AUDIT: Log RPC call completion for team management
     const teamExecutionTime = Date.now() - teamRpcStartTime
     auditLogger.logRPCCall(
-      userContext.userId,
+      userContext.profile.user_id,  // ✅ Use Supabase UUID instead of Clerk ID
       userContext.profile.business_id,
       'get_manager_team_employees',
       teamRpcParameters,

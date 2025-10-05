@@ -13,7 +13,7 @@ import { withApiHandler, type ApiContext, createApiSuccessResponse } from '@/lib
 async function handleRealtimeAnalytics(context: ApiContext) {
   console.log('[Real-time Analytics API] Starting real-time analytics calculation...')
 
-  const { userId, businessId, supabase, request, rateLimitResult } = context
+  const { userId, businessId, supabase, request, rateLimitResult, userProfile } = context
 
   const { searchParams } = new URL(request.url)
   const period = searchParams.get('period') || 'month'
@@ -57,7 +57,7 @@ async function handleRealtimeAnalytics(context: ApiContext) {
   // AUDIT: Log RPC call completion
   const executionTime = Date.now() - rpcStartTime
   auditLogger.logRPCCall(
-    userId,
+    userProfile.user_id,  // ✅ Use Supabase UUID instead of Clerk ID
     businessId,
     'get_dashboard_analytics_realtime',
     rpcParameters,

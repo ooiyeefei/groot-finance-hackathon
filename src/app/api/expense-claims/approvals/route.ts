@@ -268,7 +268,7 @@ export async function GET(request: NextRequest) {
     // AUDIT: Log RPC call completion for approvals stats
     const approvalsExecutionTime = Date.now() - approvalsRpcStartTime
     auditLogger.logRPCCall(
-      userId,
+      userProfile.user_id,  // ✅ Use Supabase UUID instead of Clerk ID
       userProfile.business_id,
       'get_team_expense_summary',
       approvalsRpcParameters,

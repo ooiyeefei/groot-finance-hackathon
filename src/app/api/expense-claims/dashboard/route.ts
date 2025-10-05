@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
       // AUDIT: Log RPC call completion for admin dashboard
       const adminExecutionTime = Date.now() - adminRpcStartTime
       auditLogger.logRPCCall(
-        userId,
+        employeeProfile.user_id,  // ✅ Use Supabase UUID instead of Clerk ID
         employeeProfile.business_id,
         'get_company_expense_summary',
         adminRpcParameters,
@@ -337,7 +337,7 @@ export async function GET(request: NextRequest) {
       // AUDIT: Log RPC call completion for manager dashboard
       const managerExecutionTime = Date.now() - managerRpcStartTime
       auditLogger.logRPCCall(
-        userId,
+        employeeProfile.user_id,  // ✅ Use Supabase UUID instead of Clerk ID
         employeeProfile.business_id,
         'get_team_expense_summary',
         managerRpcParameters,
