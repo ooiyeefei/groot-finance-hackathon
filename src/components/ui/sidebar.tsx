@@ -8,7 +8,7 @@ import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Use
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/components/ui/enhanced-business-display'
-import { getCachedUserRole, cacheUserRole } from '@/lib/cache-utils'
+import { getCachedUserRole, cacheUserRole, clearUserRoleCache } from '@/lib/cache-utils'
 import { useTranslations, useLocale } from 'next-intl'
 
 interface UserRole {
@@ -85,16 +85,16 @@ export default function Sidebar() {
     checkMobile()
     window.addEventListener('resize', checkMobile)
 
-    // Load user role from cache first, then fetch from API if needed
+    // Load user role from cache first, then always validate with API
     const loadUserRole = async () => {
-      // Try to load from cache first (after hydration)
+      // Try to load from cache first for immediate display (after hydration)
       const cached = getCachedUserRole()
       if (cached) {
         setUserRole(cached)
-        return // Skip API fetch if we have cached data
       }
 
-      // Fallback to API fetch if no cache
+      // SECURITY: Always validate with API to ensure permissions are current
+      // This will detect and clear stale caches automatically
       await fetchUserRole()
     }
 
@@ -106,22 +106,44 @@ export default function Sidebar() {
   }, [])
 
 
-  // Fetch user role and cache the result
+  // Fetch user role and cache the result with validation
   const fetchUserRole = async () => {
     try {
+      console.log('[Sidebar] Fetching user role from API...')
+
       // Get user role from employee profile
       const roleResponse = await fetch('/api/user/role')
       if (roleResponse.ok) {
         const roleResult = await roleResponse.json()
         if (roleResult.success) {
-          const permissions = roleResult.data.permissions
-          setUserRole(permissions)
-          // Cache the result using the utility function
-          cacheUserRole(permissions)
+          const freshPermissions = roleResult.data.permissions
+          const cachedPermissions = getCachedUserRole()
+
+          // SECURITY FIX: Validate cached permissions against fresh API data
+          const rolesMatch = cachedPermissions &&
+            cachedPermissions.admin === freshPermissions.admin &&
+            cachedPermissions.manager === freshPermissions.manager &&
+            cachedPermissions.employee === freshPermissions.employee
+
+          if (!rolesMatch && cachedPermissions) {
+            console.log('[Sidebar] Role permissions changed, clearing stale cache:', {
+              cached: cachedPermissions,
+              fresh: freshPermissions
+            })
+            clearUserRoleCache()
+          }
+
+          console.log('[Sidebar] Setting user role permissions:', freshPermissions)
+          setUserRole(freshPermissions)
+
+          // Cache the fresh result
+          cacheUserRole(freshPermissions)
         }
+      } else {
+        console.error('[Sidebar] Role API request failed:', roleResponse.status)
       }
     } catch (error) {
-      console.error('Failed to fetch user role:', error)
+      console.error('[Sidebar] Failed to fetch user role:', error)
     }
   }
 

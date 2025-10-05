@@ -300,16 +300,47 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
       throw new Error('Failed to fetch user data: User not found')
     }
 
-    // 🚨 DETECT AND HANDLE DUPLICATE RECORDS
+    // 🚨 CRITICAL BUG FIX: Robust duplicate record handling
     if (users.length > 1) {
       console.error(`[CRITICAL] Found ${users.length} duplicate user records for clerk_user_id: ${clerkUserId}`)
       console.error(`[CRITICAL] Duplicate user IDs:`, users.map(u => u.id))
-      console.error(`[CRITICAL] Using most recent record: ${users[0].id}`)
+      console.error(`[CRITICAL] Duplicate emails:`, users.map(u => u.email))
+      console.error(`[CRITICAL] Duplicate business_ids:`, users.map(u => u.business_id))
 
-      // TODO: Set up automated cleanup job for duplicates
+      // 🛡️ SECURITY: Validate all duplicates have same email to prevent cross-user contamination
+      const emails = users.map(u => u.email).filter(Boolean)
+      const uniqueEmails = [...new Set(emails)]
+
+      if (uniqueEmails.length > 1) {
+        console.error(`[CRITICAL SECURITY] Duplicate records have DIFFERENT EMAILS - potential cross-user contamination!`)
+        console.error(`[CRITICAL SECURITY] Emails found:`, uniqueEmails)
+        throw new Error(`SECURITY VIOLATION: Duplicate user records have different emails for ${clerkUserId}`)
+      }
+
+      // 🛡️ SECURITY: Validate business_id consistency to prevent cross-business data leakage
+      const businessIds = users.map(u => u.business_id).filter(Boolean)
+      const uniqueBusinessIds = [...new Set(businessIds)]
+
+      if (uniqueBusinessIds.length > 1) {
+        console.error(`[CRITICAL SECURITY] Duplicate records have DIFFERENT BUSINESS_IDs - potential cross-business contamination!`)
+        console.error(`[CRITICAL SECURITY] Business IDs found:`, uniqueBusinessIds)
+        throw new Error(`SECURITY VIOLATION: Duplicate user records have different business_ids for ${clerkUserId}`)
+      }
+
+      // If validation passes, use the most recent record with business_id
+      const recordsWithBusiness = users.filter(u => u.business_id)
+      if (recordsWithBusiness.length > 0) {
+        console.log(`[User Data] Using most recent record with business context: ${recordsWithBusiness[0].id}`)
+        // TODO: URGENT - Set up automated cleanup job for duplicates
+      } else {
+        console.log(`[User Data] Using most recent record: ${users[0].id}`)
+        // TODO: URGENT - Set up automated cleanup job for duplicates
+      }
     }
 
-    const user = users[0] // Use the most recent record
+    // Select the best user record (prioritize records with business_id)
+    const recordsWithBusiness = users.filter(u => u.business_id)
+    const user = recordsWithBusiness.length > 0 ? recordsWithBusiness[0] : users[0]
 
     return user
   })

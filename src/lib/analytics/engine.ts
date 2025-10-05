@@ -4,7 +4,7 @@
  * SECURITY: Now uses authenticated clients with business context validation
  */
 
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server';
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server';
 import { SupportedCurrency } from '@/types/transaction';
 import { AgedReceivables, AgedPayables } from '@/components/dashboard/types/analytics';
 import { calculateRiskScore, TransactionRiskContext, RiskScore, DEFAULT_RISK_CONFIG } from './risk-scoring';
@@ -67,28 +67,34 @@ export interface AnalyticsCalculationOptions {
 /**
  * Get user data including business context for secure analytics
  * SECURITY: Returns both Supabase UUID and business_id for proper tenant isolation
+ * FIXED: Use getUserData helper for reliable Clerk ID to UUID conversion
  */
 async function getUserDataForAnalytics(clerkUserId: string): Promise<{ supabaseUserId: string; businessId: string }> {
-  const supabase = await createAuthenticatedSupabaseClient(clerkUserId);
+  console.log('[Analytics Engine] Converting Clerk ID to UUID:', clerkUserId);
 
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('id, business_id')
-    .eq('clerk_user_id', clerkUserId)
-    .single();
+  try {
+    // SECURITY FIX: Use the reliable getUserData function that handles user recovery
+    const userData = await getUserData(clerkUserId);
 
-  if (error) {
-    throw new Error(`Failed to find user with Clerk ID ${clerkUserId}: ${error.message}`);
+    if (!userData.business_id) {
+      throw new Error(`User ${clerkUserId} missing business context: ${userData.email}`);
+    }
+
+    console.log('[Analytics Engine] Successfully converted:', {
+      clerkUserId,
+      supabaseUserId: userData.id,
+      businessId: userData.business_id,
+      email: userData.email
+    });
+
+    return {
+      supabaseUserId: userData.id,
+      businessId: userData.business_id
+    };
+  } catch (error) {
+    console.error('[Analytics Engine] Failed to get user data for analytics:', error);
+    throw new Error(`Failed to resolve user for analytics: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
-
-  if (!user || !user.business_id) {
-    throw new Error(`User not found or missing business context: ${clerkUserId}`);
-  }
-
-  return {
-    supabaseUserId: user.id,
-    businessId: user.business_id
-  };
 }
 
 /**

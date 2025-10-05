@@ -1,10 +1,12 @@
 /**
  * Manager Approvals Page
  * Dashboard for managers to review and approve expense claims
+ * SECURITY: Server-side role authorization required
  */
 
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
+import { requirePermission } from '@/lib/rbac'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import EnhancedApprovalDashboard from '@/components/manager/enhanced-approval-dashboard'
@@ -13,11 +15,19 @@ import { ClientProviders } from '@/components/providers/client-providers'
 export default async function ApprovalsPage() {
   // Server-side authentication check
   const { userId } = await auth()
-  
+
   if (!userId) {
     redirect('/sign-in')
   }
-  
+
+  // SECURITY: Server-side role authorization - require manager permission for approvals
+  try {
+    await requirePermission('manager')
+  } catch (error) {
+    console.error('[Approvals Page] Authorization failed:', error)
+    redirect('/')
+  }
+
   const user = await currentUser()
   
   return (
