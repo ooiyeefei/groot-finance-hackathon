@@ -6,7 +6,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 
 interface EnabledCategory {
   id: string
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createAuthenticatedSupabaseClient(userId)
     
     // Get or create employee profile
-    const employeeProfile = await ensureEmployeeProfile(userId)
+    const employeeProfile = await ensureUserProfile(userId)
 
     if (!employeeProfile) {
       return NextResponse.json(

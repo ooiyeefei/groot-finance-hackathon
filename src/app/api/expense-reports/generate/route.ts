@@ -7,7 +7,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 
 // Types for expense report generation
 export interface ExpenseReportParams {
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
     const serviceSupabase = createServiceSupabaseClient()
 
     // Get current user's employee profile for permission checking
-    const currentUserProfile = await ensureEmployeeProfile(userId)
+    const currentUserProfile = await ensureUserProfile(userId)
     if (!currentUserProfile) {
       return NextResponse.json(
         { success: false, error: 'Employee profile not found' },
@@ -488,7 +488,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Get current user's employee profile for permission checking
-    const currentUserProfile = await ensureEmployeeProfile(userId)
+    const currentUserProfile = await ensureUserProfile(userId)
     if (!currentUserProfile) {
       return NextResponse.json(
         { success: false, error: 'Employee profile not found' },

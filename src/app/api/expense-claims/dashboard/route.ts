@@ -6,7 +6,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { dashboardRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter'
 import { auditLogger } from '@/lib/audit-logger'
 
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Get or create employee profile using the fixed utility function
-    const employeeProfile = await ensureEmployeeProfile(userId)
+    const employeeProfile = await ensureUserProfile(userId)
 
     if (!employeeProfile) {
       console.error('[Expense Dashboard API] Failed to create or retrieve employee profile')

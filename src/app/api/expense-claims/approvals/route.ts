@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { dashboardRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter'
 import { auditLogger } from '@/lib/audit-logger'
 
@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Get employee profile for permission validation
-    const employeeProfile = await ensureEmployeeProfile(userId)
-    if (!employeeProfile) {
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
       return NextResponse.json(
         { success: false, error: 'Failed to create or retrieve employee profile' },
         { status: 500 }
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     }
 
     // SECURITY: Validate business context matches
-    if (employeeProfile.business_id !== userData.business_id) {
+    if (userProfile.business_id !== userData.business_id) {
       return NextResponse.json(
         { success: false, error: 'Business context mismatch' },
         { status: 403 }
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user has manager permissions
-    if (!employeeProfile.role_permissions.manager) {
+    if (!userProfile.role_permissions.manager) {
       return NextResponse.json(
         { success: false, error: 'Insufficient permissions. Manager access required.' },
         { status: 403 }
@@ -71,13 +71,13 @@ export async function GET(request: NextRequest) {
     }
 
     // SECURITY: Use authenticated client with business context validation
-    console.log('[Approvals API] Querying business claims for business_id:', employeeProfile.business_id)
+    console.log('[Approvals API] Querying business claims for business_id:', userProfile.business_id)
 
     // First, get all employee_ids in this business using authenticated client
     const { data: businessEmployees } = await supabase
       .from('employee_profiles')
       .select('id')
-      .eq('business_id', employeeProfile.business_id)
+      .eq('business_id', userProfile.business_id)
 
     const employeeIds = businessEmployees?.map(emp => emp.id) || []
     console.log('[Approvals API] Found employee IDs (dashboard API approach):', employeeIds)
@@ -203,7 +203,7 @@ export async function GET(request: NextRequest) {
     const { data: businessData, error: businessError } = await supabase
       .from('businesses')
       .select('custom_expense_categories')
-      .eq('id', employeeProfile.business_id)
+      .eq('id', userProfile.business_id)
       .single()
 
     if (businessError) {
@@ -256,11 +256,11 @@ export async function GET(request: NextRequest) {
     })
 
     // PERFORMANCE: Use optimized RPC function for team expense summary
-    console.log('[Approvals API] Using get_team_expense_summary RPC for business:', employeeProfile.business_id)
+    console.log('[Approvals API] Using get_team_expense_summary RPC for business:', userProfile.business_id)
 
     // AUDIT: Log RPC call start for approvals stats
     const approvalsRpcStartTime = Date.now()
-    const approvalsRpcParameters = { business_id_param: employeeProfile.business_id }
+    const approvalsRpcParameters = { business_id_param: userProfile.business_id }
 
     const { data: rpcStats, error: rpcError } = await supabase
       .rpc('get_team_expense_summary', approvalsRpcParameters)
@@ -269,7 +269,7 @@ export async function GET(request: NextRequest) {
     const approvalsExecutionTime = Date.now() - approvalsRpcStartTime
     auditLogger.logRPCCall(
       userId,
-      employeeProfile.business_id,
+      userProfile.business_id,
       'get_team_expense_summary',
       approvalsRpcParameters,
       !rpcError,
@@ -376,19 +376,19 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[Approvals API POST] Step 2: Getting employee profile')
-    const employeeProfile = await ensureEmployeeProfile(userId)
-    if (!employeeProfile) {
-      console.log('[Approvals API POST] Step 2 FAILED: No employeeProfile')
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
+      console.log('[Approvals API POST] Step 2 FAILED: No userProfile')
       return NextResponse.json(
         { success: false, error: 'Failed to create or retrieve employee profile' },
         { status: 500 }
       )
     }
-    console.log('[Approvals API POST] Step 2 SUCCESS: Got employeeProfile:', employeeProfile.id)
+    console.log('[Approvals API POST] Step 2 SUCCESS: Got userProfile:', userProfile.id)
 
     console.log('[Approvals API POST] Step 3: Checking manager permissions')
     // Check if user has manager permissions
-    if (!employeeProfile.role_permissions.manager) {
+    if (!userProfile.role_permissions.manager) {
       console.log('[Approvals API POST] Step 3 FAILED: No manager permissions')
       return NextResponse.json(
         { success: false, error: 'Insufficient permissions. Manager access required.' },
@@ -473,7 +473,7 @@ export async function POST(request: NextRequest) {
     console.log('[Approvals API POST] Step 7 SUCCESS: Claim found')
 
     console.log('[Approvals API POST] Step 8: Validating business authorization')
-    if ((claim.employee_profiles as any)?.business_id !== employeeProfile.business_id) {
+    if ((claim.employee_profiles as any)?.business_id !== userProfile.business_id) {
       console.log('[Approvals API POST] Step 8 FAILED: Business ID mismatch')
       return NextResponse.json(
         { success: false, error: 'Unauthorized to approve this claim' },
@@ -503,14 +503,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'approve') {
-      updateData.approved_by = employeeProfile.id
+      updateData.approved_by = userProfile.id
       updateData.approved_at = new Date().toISOString()
       if (notes) {
         updateData.internal_notes = notes
       }
     } else {
       // For rejection
-      updateData.reviewed_by = employeeProfile.id
+      updateData.reviewed_by = userProfile.id
       updateData.rejected_at = new Date().toISOString()
       if (notes) {
         updateData.rejection_reason = notes
@@ -537,14 +537,14 @@ export async function POST(request: NextRequest) {
       .from('approval_history')
       .insert({
         expense_claim_id: claim_id,
-        approved_by: employeeProfile.id,
+        approved_by: userProfile.id,
         action: newStatus,
         notes: notes || null,
         created_at: new Date().toISOString()
       })
 
     console.log('[Approvals API POST] Step 11 SUCCESS: Approval history logged')
-    console.log(`[Approvals API] Claim ${claim_id} ${action}ed by ${employeeProfile.employee_id}`)
+    console.log(`[Approvals API] Claim ${claim_id} ${action}ed by user ${userProfile.user_id}`)
 
     console.log('[Approvals API POST] Step 12: Returning success response')
     return NextResponse.json({

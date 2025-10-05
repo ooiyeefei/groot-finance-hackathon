@@ -7,7 +7,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/currency-service'
 import {
   CreateExpenseClaimRequest,
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Get or create employee profile
-    const employeeProfile = await ensureEmployeeProfile(userId)
+    const employeeProfile = await ensureUserProfile(userId)
 
     if (!employeeProfile) {
       console.error('[Expense Claims API] Failed to create or retrieve employee profile')
@@ -391,7 +391,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Get or create employee profile to determine role and permissions
-    const employeeProfile = await ensureEmployeeProfile(userId)
+    const employeeProfile = await ensureUserProfile(userId)
 
     if (!employeeProfile) {
       return NextResponse.json(

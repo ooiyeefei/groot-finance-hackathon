@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/currency-service'
 import { SupportedCurrency } from '@/types/transaction'
 
@@ -28,26 +28,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params
 
-    // Get employee profile to convert Clerk userId to employee UUID
-    const employeeProfile = await ensureEmployeeProfile(userId)
-    if (!employeeProfile) {
+    // Get user profile to convert Clerk userId to user UUID
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
       return NextResponse.json(
-        { success: false, error: 'Failed to get employee profile' },
+        { success: false, error: 'Failed to get user profile' },
         { status: 500 }
       )
     }
 
     console.log(`[Individual Claim API GET] User ${userId} accessing claim ${id}`)
-    console.log(`[Individual Claim API GET] Employee profile:`, {
-      profileId: employeeProfile.id,
-      userId: employeeProfile.user_id,
-      employeeId: employeeProfile.employee_id,
-      rolePermissions: employeeProfile.role_permissions
+    console.log(`[Individual Claim API GET] User profile:`, {
+      membershipId: userProfile.id,
+      userId: userProfile.user_id,
+      businessId: userProfile.business_id,
+      role: userProfile.role,
+      rolePermissions: userProfile.role_permissions
     })
 
     // Determine which Supabase client to use based on user roles
-    const isAdmin = employeeProfile.role_permissions.admin
-    const isManager = employeeProfile.role_permissions.manager
+    const isAdmin = userProfile.role_permissions.admin
+    const isManager = userProfile.role_permissions.manager
     
     let supabase
     if (isAdmin || isManager) {
@@ -93,10 +94,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // For service client, we need to manually check access permissions
     if (isAdmin || isManager) {
       // Admin/Manager can access claims within their business
-      claimQuery = claimQuery.eq('business_id', employeeProfile.business_id)
+      claimQuery = claimQuery.eq('business_id', userProfile.business_id)
     } else {
       // Regular employees can only access their own claims
-      claimQuery = claimQuery.eq('employee_id', employeeProfile.id)
+      claimQuery = claimQuery.eq('employee_id', userProfile.id)
     }
 
     const { data: claim, error } = await claimQuery.single()
@@ -151,8 +152,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const body = await request.json()
     
     // Get employee profile to convert Clerk userId to employee UUID
-    const employeeProfile = await ensureEmployeeProfile(userId)
-    if (!employeeProfile) {
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
       return NextResponse.json(
         { success: false, error: 'Failed to get employee profile' },
         { status: 500 }
@@ -161,13 +162,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Individual Claim API PUT] User ${userId} updating claim ${id}`)
     console.log(`[Individual Claim API PUT] Employee profile:`, {
-      profileId: employeeProfile.id,
-      rolePermissions: employeeProfile.role_permissions
+      profileId: userProfile.id,
+      rolePermissions: userProfile.role_permissions
     })
 
     // Determine which Supabase client to use based on user roles
-    const isAdmin = employeeProfile.role_permissions.admin
-    const isManager = employeeProfile.role_permissions.manager
+    const isAdmin = userProfile.role_permissions.admin
+    const isManager = userProfile.role_permissions.manager
     
     let supabase
     if (isAdmin || isManager) {
@@ -210,10 +211,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     // Apply appropriate access control based on role
     if (isAdmin || isManager) {
       // Admin/Manager can access claims within their business
-      existingClaimQuery = existingClaimQuery.eq('business_id', employeeProfile.business_id)
+      existingClaimQuery = existingClaimQuery.eq('business_id', userProfile.business_id)
     } else {
       // Regular employees can only access their own claims
-      existingClaimQuery = existingClaimQuery.eq('employee_id', employeeProfile.id)
+      existingClaimQuery = existingClaimQuery.eq('employee_id', userProfile.id)
     }
 
     const { data: existingClaim, error: fetchError } = await existingClaimQuery.single()
@@ -435,8 +436,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params
     
     // Get employee profile to convert Clerk userId to employee UUID
-    const employeeProfile = await ensureEmployeeProfile(userId)
-    if (!employeeProfile) {
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
       return NextResponse.json(
         { success: false, error: 'Failed to get employee profile' },
         { status: 500 }
@@ -446,8 +447,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     console.log(`[Individual Claim API DELETE] User ${userId} deleting claim ${id}`)
 
     // Determine which Supabase client to use based on user roles
-    const isAdmin = employeeProfile.role_permissions.admin
-    const isManager = employeeProfile.role_permissions.manager
+    const isAdmin = userProfile.role_permissions.admin
+    const isManager = userProfile.role_permissions.manager
     
     let supabase
     if (isAdmin || isManager) {
@@ -469,10 +470,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // Apply appropriate access control based on role
     if (isAdmin || isManager) {
       // Admin/Manager can access claims within their business
-      existingClaimQuery = existingClaimQuery.eq('business_id', employeeProfile.business_id)
+      existingClaimQuery = existingClaimQuery.eq('business_id', userProfile.business_id)
     } else {
       // Regular employees can only access their own claims
-      existingClaimQuery = existingClaimQuery.eq('employee_id', employeeProfile.id)
+      existingClaimQuery = existingClaimQuery.eq('employee_id', userProfile.id)
     }
 
     const { data: existingClaim, error: fetchError } = await existingClaimQuery.single()

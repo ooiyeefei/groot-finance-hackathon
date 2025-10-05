@@ -7,7 +7,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { tasks } from '@trigger.dev/sdk/v3'
 import {
   mapExpenseCategoryToAccounting,
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     const serviceSupabase = createServiceSupabaseClient()
 
     // Get employee profile
-    const employeeProfile = await ensureEmployeeProfile(userId)
+    const employeeProfile = await ensureUserProfile(userId)
     if (!employeeProfile) {
       return NextResponse.json(
         { success: false, error: 'Failed to create employee profile' },
@@ -475,7 +475,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const employeeProfile = await ensureEmployeeProfile(userId)
+    const employeeProfile = await ensureUserProfile(userId)
     if (!employeeProfile) {
       return NextResponse.json(
         { success: false, error: 'Employee profile not found' },

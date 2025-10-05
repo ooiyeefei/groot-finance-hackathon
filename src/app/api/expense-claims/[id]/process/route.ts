@@ -13,7 +13,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { tasks } from '@trigger.dev/sdk/v3'
 import type { dspyReceiptExtraction } from '@/trigger/dspy-receipt-extraction'
 
@@ -44,7 +44,7 @@ export async function POST(
     const supabase = createServiceSupabaseClient()
 
     // Get employee profile to convert Clerk userId to employee UUID
-    const employeeProfile = await ensureEmployeeProfile(userId)
+    const employeeProfile = await ensureUserProfile(userId)
     if (!employeeProfile) {
       return NextResponse.json(
         { success: false, error: 'Failed to get employee profile' },
@@ -305,7 +305,7 @@ export async function POST(
       if (expenseClaimId) {
         const { userId } = await auth()
         if (userId) {
-          const employeeProfile = await ensureEmployeeProfile(userId)
+          const employeeProfile = await ensureUserProfile(userId)
           if (employeeProfile) {
             const supabase = createServiceSupabaseClient()
             await supabase
