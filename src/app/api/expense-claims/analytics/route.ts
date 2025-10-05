@@ -6,7 +6,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = await createAuthenticatedSupabaseClient(userId)
-    const employeeProfile = await ensureEmployeeProfile(userId)
+    const employeeProfile = await ensureUserProfile(userId)
 
     if (!employeeProfile) {
       return NextResponse.json(

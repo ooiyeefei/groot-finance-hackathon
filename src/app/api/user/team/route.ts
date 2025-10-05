@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     // AUDIT: Log RPC call start for team management
     const teamRpcStartTime = Date.now()
-    const teamRpcParameters = { manager_business_id: userContext.profile.business_id }
+    const teamRpcParameters = { manager_user_id: userContext.profile.user_id }
 
     const { data: rpcTeamData, error: rpcError } = await supabase
       .rpc('get_manager_team_employees', teamRpcParameters)
@@ -66,9 +66,21 @@ export async function GET(request: NextRequest) {
     if (rpcError) {
       console.error('[Team API] RPC function error:', rpcError)
       // Fallback to manual approach if RPC fails
-      const { data: profiles, error: fallbackError } = await supabase
-        .from('employee_profiles')
-        .select('*')
+      const { data: memberships, error: fallbackError } = await supabase
+        .from('business_memberships')
+        .select(`
+          id,
+          user_id,
+          business_id,
+          role,
+          created_at,
+          users!business_memberships_user_id_fkey(
+            id,
+            email,
+            full_name,
+            home_currency
+          )
+        `)
         .eq('business_id', userContext.profile.business_id)
         .order('created_at', { ascending: false })
 
@@ -80,7 +92,26 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      enrichedProfiles = profiles || []
+      // Transform business_memberships to profile format
+      enrichedProfiles = (memberships || []).map(membership => ({
+        id: membership.id,
+        user_id: membership.user_id,
+        business_id: membership.business_id,
+        full_name: membership.users?.[0]?.full_name || null,
+        email: membership.users?.[0]?.email || null,
+        role_permissions: {
+          employee: true,
+          manager: membership.role === 'admin' || membership.role === 'manager',
+          admin: membership.role === 'admin'
+        },
+        home_currency: membership.users?.[0]?.home_currency || null,
+        manager_id: null, // Not available in business_memberships
+        manager_name: null,
+        manager_user_id: null,
+        created_at: membership.created_at,
+        updated_at: membership.created_at, // Use created_at as fallback
+        clerk_user: null
+      }))
     } else {
       console.log('[Team API] RPC function completed successfully, got', rpcTeamData?.length || 0, 'team members')
 
@@ -96,7 +127,7 @@ export async function GET(request: NextRequest) {
         home_currency: member.home_currency,
         manager_id: member.manager_id,
         manager_name: member.manager_name,
-        manager_user_id: member.manager_user_id,
+        manager_user_id: member.manager_user_id_field,
         created_at: member.created_at,
         updated_at: member.updated_at,
         // Keep clerk_user as null for now since RPC doesn't include Clerk data

@@ -22,6 +22,9 @@ const isPublicRoute = createRouteMatcher([
   '/api/user/assign-admin(.*)', // Admin assignment with master key (no auth required)
   '/manifest.json', // PWA manifest file should be publicly accessible
   '/manifest(.*)', // Any manifest-related requests
+  '/(en|th|id|zh)?/invitations/accept(.*)', // Invitation acceptance pages (public)
+  '/invitations/accept(.*)', // Invitation acceptance (fallback without locale)
+  '/api/invitations/accept(.*)', // Invitation acceptance API (public)
 ])
 
 // Special routes that need authentication but bypass role checks

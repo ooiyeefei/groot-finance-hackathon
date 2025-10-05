@@ -334,16 +334,13 @@ async function createEmployeeProfile(
       role_permissions: rolePermissions
     })
 
-    // Create employee profile
+    // Create business membership
     const { error } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .insert({
         user_id: userId,
         business_id: businessId,
-        employee_id: employeeId,
-        department: 'General',
-        job_title: jobTitle,
-        role_permissions: rolePermissions,
+        role: role,
         created_at: new Date().toISOString()
       })
 

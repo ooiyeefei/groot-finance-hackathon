@@ -37,7 +37,7 @@ export async function POST(
     // Get the invitation record
     const { data: invitation, error: fetchError } = await supabase
       .from('users')
-      .select('id, email, created_at, role, business_id, invited_by')
+      .select('id, email, created_at, business_id, invited_by')
       .eq('id', invitationId)
       .eq('business_id', userContext.profile.business_id)
       .is('clerk_user_id', null) // Only pending invitations
@@ -87,14 +87,14 @@ export async function POST(
       ? `${inviterUser.firstName} ${inviterUser.lastName}`
       : inviterUser.emailAddresses[0]?.emailAddress || 'Team Admin'
 
-    // Send invitation email using user ID as token
-    const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${invitation.id}`
+    // Send invitation email using user ID as token (with default locale)
+    const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/en/invitations/accept?token=${invitation.id}`
     
     const emailResult = await emailService.sendInvitation({
       email: invitation.email,
       businessName: business?.name || 'FinanSEAL Business',
       inviterName,
-      role: invitation.role, // Use actual role from invitation
+      role: 'team member', // Generic role since not stored in users table anymore
       invitationToken: invitation.id, // Use user ID as token
       invitationUrl
     })

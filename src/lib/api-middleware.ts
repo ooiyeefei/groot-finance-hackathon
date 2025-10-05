@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { ensureEmployeeProfile, type EmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile, type UserProfile } from '@/lib/ensure-employee-profile'
 import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { auditLogger } from '@/lib/audit-logger'
 import { getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter'
@@ -14,7 +14,7 @@ import type { RolePermissions, UserRole } from '@/lib/rbac'
 export interface ApiContext {
   userId: string
   businessId: string
-  employeeProfile: EmployeeProfile
+  userProfile: UserProfile
   supabase: any
   request: NextRequest
   rateLimitResult: {
@@ -122,29 +122,29 @@ export async function withApiMiddleware(
       }
     }
 
-    // Step 3: Business context and employee profile (if auth required)
-    let employeeProfile: EmployeeProfile | null = null
+    // Step 3: Business context and user profile (if auth required)
+    let userProfile: UserProfile | null = null
     let businessId: string | null = null
     let supabase: any = null
 
     if (requireAuth && userId) {
-      // Get employee profile for business context
-      employeeProfile = await ensureEmployeeProfile(userId)
-      if (!employeeProfile) {
+      // Get user profile for business context
+      userProfile = await ensureUserProfile(userId)
+      if (!userProfile) {
         auditLogger.logAuthEvent(
           userId,
           null,
-          'employee_profile',
+          'user_profile',
           false,
           request,
           undefined,
           undefined,
-          'Failed to create or retrieve employee profile'
+          'Failed to create or retrieve user profile'
         )
-        throw new ApiError('Failed to create or retrieve employee profile', 500)
+        throw new ApiError('Failed to create or retrieve user profile', 500)
       }
 
-      businessId = employeeProfile.business_id
+      businessId = userProfile.business_id
 
       // Create authenticated Supabase client
       supabase = await createAuthenticatedSupabaseClient(userId)
@@ -153,14 +153,14 @@ export async function withApiMiddleware(
       if (!skipBusinessContext) {
         const userData = await getUserData(userId)
 
-        if (employeeProfile.business_id !== userData.business_id) {
+        if (userProfile.business_id !== userData.business_id) {
           auditLogger.logAuthEvent(
             userId,
-            employeeProfile.business_id,
+            userProfile.business_id,
             'business_context',
             false,
             request,
-            employeeProfile.role_permissions,
+            userProfile.role_permissions,
             false,
             'Business context mismatch'
           )
@@ -175,14 +175,14 @@ export async function withApiMiddleware(
         'business_context',
         true,
         request,
-        employeeProfile.role_permissions,
+        userProfile.role_permissions,
         true
       )
     }
 
     // Step 4: Role-based authorization (if specified)
-    if (requiredRole && employeeProfile) {
-      const hasRequiredRole = employeeProfile.role_permissions[requiredRole]
+    if (requiredRole && userProfile) {
+      const hasRequiredRole = userProfile.role_permissions[requiredRole]
 
       if (!hasRequiredRole) {
         auditLogger.logAuthEvent(
@@ -191,7 +191,7 @@ export async function withApiMiddleware(
           'role_authorization',
           false,
           request,
-          employeeProfile.role_permissions,
+          userProfile.role_permissions,
           undefined,
           `Insufficient permissions. ${requiredRole} access required.`
         )
@@ -208,7 +208,7 @@ export async function withApiMiddleware(
         'role_authorization',
         true,
         request,
-        employeeProfile.role_permissions
+        userProfile.role_permissions
       )
     }
 
@@ -220,7 +220,7 @@ export async function withApiMiddleware(
         auditAction,
         true,
         request,
-        employeeProfile?.role_permissions
+        userProfile?.role_permissions
       )
     }
 
@@ -228,7 +228,7 @@ export async function withApiMiddleware(
     return {
       userId: userId!,
       businessId: businessId!,
-      employeeProfile: employeeProfile!,
+      userProfile: userProfile!,
       supabase: supabase!,
       request,
       rateLimitResult

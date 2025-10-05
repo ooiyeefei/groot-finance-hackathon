@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // Validate the invitation token (user ID)
     const { data: invitation, error: fetchError } = await supabase
       .from('users')
-      .select('id, email, created_at, role, business_id, invited_by')
+      .select('id, email, created_at, business_id, invited_by')
       .eq('id', token)
       .is('clerk_user_id', null) // Only pending invitations
       .not('invited_by', 'is', null) // Must be an invitation
@@ -60,11 +60,10 @@ export async function GET(request: NextRequest) {
       .eq('id', invitation.business_id)
       .single()
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       invitation: {
         email: invitation.email,
-        role: invitation.role,
         businessName: business?.name || 'FinanSEAL Business'
       }
     })
@@ -106,7 +105,7 @@ export async function POST(request: NextRequest) {
     // Get the invitation record
     const { data: invitation, error: fetchError } = await supabase
       .from('users')
-      .select('id, email, created_at, role, business_id, invited_by')
+      .select('id, email, created_at, business_id, invited_by')
       .eq('id', token)
       .is('clerk_user_id', null) // Only pending invitations
       .not('invited_by', 'is', null) // Must be an invitation
@@ -190,23 +189,21 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Create employee profile with invited business and role
+    // Create business membership with default employee role
+    // Note: Role was specified during invitation creation but not stored in users table
+    // Admin can update role later if needed through team management
     const rolePermissions = {
       employee: true,
-      manager: invitation.role === 'admin' || invitation.role === 'manager' ? true : false,
-      admin: invitation.role === 'admin' ? true : false
+      manager: false,
+      admin: false
     }
 
-    const { data: employeeProfile, error: profileError } = await supabase
-      .from('employee_profiles')
+    const { data: businessMembership, error: profileError } = await supabase
+      .from('business_memberships')
       .insert({
-        user_id: invitation.id, // Keep using invitation UUID as this links to the users table record
+        user_id: invitation.id, // Links to the users table record
         business_id: invitation.business_id,
-        employee_id: `EMP-${crypto.randomUUID()}`, // Use secure UUID
-        department: 'General',
-        job_title: invitation.role === 'admin' ? 'Administrator' : 
-                   invitation.role === 'manager' ? 'Manager' : 'Employee',
-        role_permissions: rolePermissions
+        role: 'employee' // Default to employee role (admin can update later)
       })
       .select('*')
       .single()
@@ -230,7 +227,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       message: 'Invitation accepted successfully',
-      profile: employeeProfile
+      profile: businessMembership
     })
 
   } catch (error) {

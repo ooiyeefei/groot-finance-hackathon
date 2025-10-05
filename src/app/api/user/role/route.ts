@@ -32,10 +32,10 @@ export async function GET(request: NextRequest) {
           canManageUsers: userContext.canManageUsers
         },
         profile: {
-          employeeId: userContext.profile.employee_id,
+          membershipId: userContext.profile.id,
+          userId: userContext.profile.user_id,
           businessId: userContext.profile.business_id,
-          department: userContext.profile.department,
-          jobTitle: userContext.profile.job_title
+          role: userContext.profile.role
         }
       }
     })

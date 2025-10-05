@@ -5,7 +5,7 @@
 
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile, EmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile, UserProfile } from '@/lib/ensure-employee-profile'
 import { getCurrentBusinessContext, checkBusinessOwnership, type BusinessContext } from '@/lib/business-context'
 
 export type UserRole = 'employee' | 'manager' | 'admin'
@@ -18,7 +18,7 @@ export interface RolePermissions {
 
 export interface UserContext {
   userId: string
-  profile: EmployeeProfile
+  profile: UserProfile
   roles: UserRole[]
   permissions: RolePermissions
   canApprove: boolean
@@ -38,7 +38,7 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
     const { userId } = await auth()
     if (!userId) return null
 
-    const profile = await ensureEmployeeProfile(userId)
+    const profile = await ensureUserProfile(userId)
     if (!profile) return null
 
     const roles = determineUserRoles(profile.role_permissions)
@@ -75,7 +75,7 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
     }
 
     // For backwards compatibility, also get employee profile
-    const profile = await ensureEmployeeProfile(userId)
+    const profile = await ensureUserProfile(userId)
     if (!profile) return null
 
     // Check if user is owner of the active business
@@ -142,7 +142,7 @@ export async function updateUserRole(
     }
 
     // Ensure employee profile exists first (creates if missing)
-    const employeeProfile = await ensureEmployeeProfile(targetUserId)
+    const employeeProfile = await ensureUserProfile(targetUserId)
     if (!employeeProfile) {
       return { success: false, error: 'Failed to create or access employee profile' }
     }
@@ -156,12 +156,12 @@ export async function updateUserRole(
     const permissions = roleToPermissions(role)
     
     const { error: updateError } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .update({
-        role_permissions: permissions,
+        role: role,
         updated_at: new Date().toISOString()
       })
-      .eq('user_id', employeeProfile.user_id) // Use the UUID from employee profile
+      .eq('user_id', employeeProfile.user_id) // Update business membership role
 
     if (updateError) {
       console.error('[RBAC] Error updating employee profile:', updateError)
@@ -335,7 +335,7 @@ export async function requirePermission(permission: keyof RolePermissions): Prom
  */
 export async function getBusinessUsers(businessId: string): Promise<{
   success: boolean
-  users?: Array<EmployeeProfile & { clerk_user?: any }>
+  users?: Array<UserProfile & { clerk_user?: any }>
   error?: string
 }> {
   try {
@@ -348,8 +348,20 @@ export async function getBusinessUsers(businessId: string): Promise<{
     const supabase = await createAuthenticatedSupabaseClient(context.userId)
     
     const { data: profiles, error } = await supabase
-      .from('employee_profiles')
-      .select('*')
+      .from('business_memberships')
+      .select(`
+        id,
+        user_id,
+        business_id,
+        role,
+        created_at,
+        users!business_memberships_user_id_fkey(
+          id,
+          email,
+          full_name,
+          home_currency
+        )
+      `)
       .eq('business_id', businessId)
       .order('created_at', { ascending: false })
 
@@ -357,14 +369,48 @@ export async function getBusinessUsers(businessId: string): Promise<{
       return { success: false, error: 'Failed to fetch users' }
     }
 
-    // Enrich with Clerk user data
+    // Transform business memberships to UserProfile format and enrich with Clerk user data
     const enrichedUsers = await Promise.all(
-      profiles.map(async (profile) => {
+      profiles.map(async (membership) => {
         try {
-          const clerkUser = await (await clerkClient()).users.getUser(profile.user_id)
-          return { ...profile, clerk_user: clerkUser }
+          const clerkUser = await (await clerkClient()).users.getUser(membership.user_id)
+
+          // Transform business membership to UserProfile format
+          const userProfile: UserProfile & { clerk_user?: any } = {
+            id: membership.id,
+            user_id: membership.user_id,
+            business_id: membership.business_id,
+            role: membership.role,
+            role_permissions: {
+              employee: true,
+              manager: membership.role === 'admin' || membership.role === 'manager',
+              admin: membership.role === 'admin'
+            },
+            home_currency: membership.users?.[0]?.home_currency,
+            created_at: membership.created_at,
+            updated_at: membership.created_at, // Use created_at as fallback for updated_at
+            clerk_user: clerkUser
+          }
+
+          return userProfile
         } catch {
-          return profile
+          // Transform without Clerk data if fetch fails
+          const userProfile: UserProfile = {
+            id: membership.id,
+            user_id: membership.user_id,
+            business_id: membership.business_id,
+            role: membership.role,
+            role_permissions: {
+              employee: true,
+              manager: membership.role === 'admin' || membership.role === 'manager',
+              admin: membership.role === 'admin'
+            },
+            home_currency: membership.users?.[0]?.home_currency,
+            created_at: membership.created_at,
+            updated_at: membership.created_at
+          }
+
+          return userProfile
         }
       })
     )

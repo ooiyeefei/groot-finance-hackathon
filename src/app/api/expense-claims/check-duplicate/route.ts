@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Ensure employee profile exists and get user context
-    const employeeProfile = await ensureEmployeeProfile(userId)
+    const employeeProfile = await ensureUserProfile(userId)
     if (!employeeProfile) {
       return NextResponse.json({ 
         success: false, 

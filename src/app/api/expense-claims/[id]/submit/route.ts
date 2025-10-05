@@ -7,7 +7,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
-import { ensureEmployeeProfile } from '@/lib/ensure-employee-profile'
+import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { 
   EXPENSE_WORKFLOW_TRANSITIONS,
   ExpenseClaimApprovalRequest,
@@ -42,8 +42,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const serviceSupabase = createServiceSupabaseClient()
 
     // Get employee profile to validate permissions
-    const employeeProfile = await ensureEmployeeProfile(userId)
-    if (!employeeProfile) {
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
       console.error(`[Expense Submission API] Employee profile not found for user ${userId}`)
       return NextResponse.json(
         { success: false, error: 'Employee profile not found' },
@@ -51,11 +51,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       )
     }
 
-    console.log(`[Expense Submission API] Found employee profile: ${employeeProfile.id} for user ${userId}`)
-    console.log(`[Expense Submission API] Employee profile debug:`, {
-      id: employeeProfile.id,
-      user_id: employeeProfile.user_id,
-      employee_id: employeeProfile.employee_id
+    console.log(`[Expense Submission API] Found employee profile: ${userProfile.id} for user ${userId}`)
+    console.log(`[Expense Submission API] User profile debug:`, {
+      id: userProfile.id,
+      user_id: userProfile.user_id,
+      business_id: userProfile.business_id,
+      role: userProfile.role
     })
 
     // Fetch expense claim with related data (use service client to bypass RLS issues)
@@ -85,10 +86,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Manual authorization check - ensure user owns this claim
-    if (expenseClaim.employee_id !== employeeProfile.id) {
+    if (expenseClaim.employee_id !== userProfile.id) {
       console.error('[Expense Submission API] Access denied - claim belongs to different employee:', {
         claimEmployeeId: expenseClaim.employee_id,
-        currentEmployeeId: employeeProfile.id,
+        currentEmployeeId: userProfile.id,
         userId
       })
       
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       )
     }
 
-    console.log(`[Expense Submission API] Successfully found and authorized expense claim ${expenseClaimId} for employee ${employeeProfile.id}`)
+    console.log(`[Expense Submission API] Successfully found and authorized expense claim ${expenseClaimId} for employee ${userProfile.id}`)
 
     // Validate workflow transition using Kevin's state machine
     const validTransition = EXPENSE_WORKFLOW_TRANSITIONS.find(
@@ -126,30 +127,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       )
     }
 
-    // Find the appropriate approver (manager)
+    // Find the appropriate approver (manager or admin)
     let reviewerId: string | null = null
-    
-    // If employee has a manager, set them as the reviewer
-    if (employeeProfile.manager_id) {
-      reviewerId = employeeProfile.manager_id
-    } else {
-      // Fallback: find any manager in the same business
-      const { data: managers, error: managerError } = await serviceSupabase
-        .from('employee_profiles')
-        .select('id')
-        .eq('business_id', employeeProfile.business_id)
-        .eq('role_permissions->manager', true)
-        .limit(1)
 
-      if (managerError) {
-        console.error('[Expense Submission API] Failed to find manager:', managerError)
-      } else if (managers && managers.length > 0) {
-        reviewerId = managers[0].id
-        
-        // Log if this results in self-review (which is allowed for single-admin scenarios)
-        if (reviewerId === employeeProfile.id) {
-          console.log(`[Expense Submission API] Self-review assigned for admin/manager ${employeeProfile.id}. This is allowed when no other managers exist.`)
-        }
+    // Find any manager or admin in the same business to serve as reviewer
+    const { data: reviewers, error: reviewerError } = await serviceSupabase
+      .from('business_memberships')
+      .select('id, user_id')
+      .eq('business_id', userProfile.business_id)
+      .in('role', ['manager', 'admin'])
+      .neq('user_id', userProfile.user_id) // Don't assign self as reviewer
+      .limit(1)
+
+    if (reviewerError) {
+      console.error('[Expense Submission API] Failed to find reviewer:', reviewerError)
+    } else if (reviewers && reviewers.length > 0) {
+      reviewerId = reviewers[0].user_id // Use user_id since that's what expense_claims table expects
+    } else {
+      // If no other managers/admins exist, allow self-review for admin users
+      if (userProfile.role === 'admin') {
+        reviewerId = userProfile.user_id
+        console.log(`[Expense Submission API] Self-review assigned for admin ${userProfile.user_id}. No other admins/managers exist.`)
       }
     }
 
@@ -221,8 +219,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const serviceSupabase = createServiceSupabaseClient()
 
     // Get employee profile
-    const employeeProfile = await ensureEmployeeProfile(userId)
-    if (!employeeProfile) {
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
       return NextResponse.json(
         { success: false, error: 'Employee profile not found' },
         { status: 404 }
@@ -234,7 +232,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .from('expense_claims')
       .select('*')
       .eq('id', expenseClaimId)
-      .eq('employee_id', employeeProfile.id)
+      .eq('employee_id', userProfile.id)
       .single()
 
     if (fetchError || !expenseClaim) {
