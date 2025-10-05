@@ -43,7 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           description,
           required_documents
         ),
-        documents (
+        application_documents (
           id,
           document_slot,
           slot_position,
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (reqDoc.group_slots && Array.isArray(reqDoc.group_slots)) {
         // Find all documents in this group
         const groupDocuments = reqDoc.group_slots
-          .map((slot: string) => application.documents.find((doc: any) => doc.document_slot === slot))
+          .map((slot: string) => application.application_documents.find((doc: any) => doc.document_slot === slot))
           .filter(Boolean)
 
         // Determine group status based on all documents
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       // Handle individual documents
-      const document = application.documents.find((doc: any) => doc.document_slot === reqDoc.slot)
+      const document = application.application_documents.find((doc: any) => doc.document_slot === reqDoc.slot)
 
       let slotStatus = 'empty'
       if (document) {

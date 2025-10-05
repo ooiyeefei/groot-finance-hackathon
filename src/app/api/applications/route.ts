@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
           description,
           required_documents
         ),
-        documents (
+        application_documents (
           id,
           document_slot,
           processing_status,
@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
 
           // Check if all documents in group are completed
           const groupDocuments = reqDoc.group_slots
-            .map((slot: string) => app.documents.find((doc: any) => doc.document_slot === slot))
+            .map((slot: string) => app.application_documents.find((doc: any) => doc.document_slot === slot))
             .filter(Boolean)
 
           const allCompleted = groupDocuments.length === reqDoc.group_slots.length &&
@@ -233,7 +233,7 @@ export async function GET(request: NextRequest) {
 
         // Handle individual documents
         totalSlots += 1
-        const document = app.documents.find((doc: any) => doc.document_slot === reqDoc.slot)
+        const document = app.application_documents.find((doc: any) => doc.document_slot === reqDoc.slot)
         const isCompleted = document && document.processing_status === 'completed'
 
         if (isCompleted) {
