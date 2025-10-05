@@ -34,6 +34,13 @@ const createSupabaseClient = () => {
 
 const supabase = createSupabaseClient();
 
+// ✅ PHASE 4L: Domain-to-table mapping for multi-domain architecture
+const DOMAIN_TABLE_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
+
 export const dspyReceiptExtraction = task({
   id: "dspy-receipt-extraction",
   maxDuration: 180, // 3 minutes - with vLLM fallback system
@@ -58,6 +65,7 @@ export const dspyReceiptExtraction = task({
     };
     forcedProcessingMethod?: 'simple' | 'complex' | 'auto';
     requestId?: string;
+    documentDomain?: 'invoices' | 'expense_claims'; // ✅ PHASE 4L: Domain routing parameter
   }) => {
     console.log(`🚀 Starting DSPy receipt extraction`);
     console.log(`📝 Receipt text length: ${payload.receiptText?.length || 0} chars`);
@@ -65,6 +73,11 @@ export const dspyReceiptExtraction = task({
     console.log(`📄 Document ID: ${payload.documentId}`);
     console.log(`💰 Expense Claim ID: ${payload.expenseClaimId}`);
     console.log(`🔍 Request ID: ${payload.requestId}`);
+
+    // ✅ PHASE 4L: Route to correct table based on domain (fallback to 'invoices' for backward compatibility)
+    const documentDomain = payload.documentDomain || 'invoices';
+    const tableName = DOMAIN_TABLE_MAP[documentDomain];
+    console.log(`🔍 Using table: ${tableName} for domain: ${documentDomain}`);
 
     try {
       // Step 1: Fetch business categories for enhanced categorization (if expense claim provided)
@@ -1638,9 +1651,9 @@ else:
       // Step 3: Update document if documentId provided
       if (payload.documentId) {
         console.log(`💾 Updating document ${payload.documentId} with DSPy results`);
-        
+
         const { error: updateError } = await supabase
-          .from('documents')
+          .from(tableName)  // ✅ PHASE 4L: Route to correct table
           .update({
             processing_status: extractionResult.requires_validation ? 
               'requires_validation' : 'completed',
@@ -1894,11 +1907,11 @@ else:
 
     } catch (error) {
       console.error("❌ DSPy extraction task failed:", error);
-      
+
       // Update document status to failed if documentId provided
       if (payload.documentId) {
         await supabase
-          .from('documents')
+          .from(tableName)  // ✅ PHASE 4L: Route to correct table
           .update({
             processing_status: 'failed',
             error_message: error instanceof Error ? error.message : 'DSPy processing failed',

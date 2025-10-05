@@ -17,6 +17,20 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// ✅ PHASE 4L: Domain-to-table mapping for multi-domain architecture
+const DOMAIN_TABLE_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
+
+// ✅ PHASE 4L: Domain-to-bucket mapping for multi-bucket architecture
+const DOMAIN_BUCKET_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
+
 interface BoundingBox {
   x1: number;
   y1: number;
@@ -165,12 +179,18 @@ function filterBoundingBoxes(boundingBoxes: BoundingBox[]): BoundingBox[] {
 
 export const annotateDocumentImage = task({
   id: "annotate-document-image",
-  run: async (payload: { 
-    documentId: string; 
+  run: async (payload: {
+    documentId: string;
     imageStoragePath: string;
     extractedData: any;
+    documentDomain: 'invoices' | 'expense_claims' | 'applications'; // ✅ PHASE 4L: Domain routing parameter
   }) => {
     console.log(`✅ Starting annotation process for document: ${payload.documentId}`);
+
+    // ✅ PHASE 4L: Route to correct table and bucket based on domain
+    const tableName = DOMAIN_TABLE_MAP[payload.documentDomain];
+    const bucketName = DOMAIN_BUCKET_MAP[payload.documentDomain];
+    console.log(`🔍 Using table: ${tableName} and bucket: ${bucketName} for domain: ${payload.documentDomain}`);
 
     try {
       // Step 1: Extract and filter bounding boxes from OCR results
@@ -203,7 +223,7 @@ export const annotateDocumentImage = task({
 
       // Step 2: Create signed URL for original image
       const { data: urlData, error: urlError } = await supabase.storage
-        .from('documents')
+        .from(bucketName)  // ✅ PHASE 4L: Route to correct bucket
         .createSignedUrl(payload.imageStoragePath, 600); // 10 minutes validity
 
       if (urlError || !urlData) {
@@ -240,7 +260,7 @@ export const annotateDocumentImage = task({
 
       // Step 8: Store annotated image to Supabase Storage
       const { error: uploadError } = await supabase.storage
-        .from('documents')
+        .from(bucketName)  // ✅ PHASE 4L: Route to correct bucket
         .upload(annotatedImagePath, annotatedImageBuffer, {
           contentType: 'image/png',
           upsert: true
@@ -260,10 +280,10 @@ export const annotateDocumentImage = task({
 
       console.log(`[Annotation] Uploaded annotated image to: ${annotatedImagePath}`);
 
-      // Step 10: Update document record with annotated image path  
+      // Step 10: Update document record with annotated image path
       const { error: updateError } = await supabase
-        .from('documents')
-        .update({ 
+        .from(tableName)  // ✅ PHASE 4L: Route to correct table
+        .update({
           annotated_image_path: annotatedImagePath, // Store the actual annotated image path
           annotation_status: 'completed',
           annotation_processed_at: new Date().toISOString()
@@ -283,18 +303,18 @@ export const annotateDocumentImage = task({
       };
 
     } catch (error) {
-      console.error("❌ Annotation process failed.", { 
+      console.error("❌ Annotation process failed.", {
         error: error instanceof Error ? error.message : 'Unknown error',
-        documentId: payload.documentId 
+        documentId: payload.documentId
       });
-      
+
       // Update document annotation status to failed
-      await supabase.from('documents').update({
+      await supabase.from(tableName).update({  // ✅ PHASE 4L: Route to correct table
         annotation_status: 'failed',
         annotation_error_message: error instanceof Error ? error.message : 'Annotation failed',
         annotation_processed_at: new Date().toISOString()
       }).eq('id', payload.documentId);
-      
+
       throw error;
     }
   },
