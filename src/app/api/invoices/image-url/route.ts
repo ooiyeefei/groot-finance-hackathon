@@ -7,6 +7,21 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
 
+// ✅ PHASE 4J: Domain-to-bucket mapping for multi-bucket architecture
+const DOMAIN_BUCKET_MAP: Record<string, string> = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents',
+  'application_documents': 'application_documents'  // Support both formats
+};
+
+// ✅ PHASE 4J: Bucket-to-table mapping for document verification
+const BUCKET_TABLE_MAP: Record<string, string> = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'application_documents': 'application_documents'
+};
+
 export async function POST(request: NextRequest) {
   try {
     // Check authentication
@@ -19,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { storagePath, documentId, useRawFile = false } = body
+    const { storagePath, documentId, useRawFile = false, bucketName: requestedBucket } = body
 
     if (!storagePath || !documentId) {
       return NextResponse.json(
@@ -28,7 +43,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[ImageURL] Generating signed URL for: ${storagePath} (useRawFile: ${useRawFile})`)
+    // ✅ PHASE 4J: Route to correct bucket (default to 'invoices' for backward compatibility)
+    const bucketName = requestedBucket ? DOMAIN_BUCKET_MAP[requestedBucket] || 'invoices' : 'invoices'
+
+    console.log(`[ImageURL] Generating signed URL for: ${storagePath} (useRawFile: ${useRawFile}, bucket: ${bucketName})`)
 
     // Create service Supabase client for user lookup and document access
     const supabase = createServiceSupabaseClient()
@@ -50,9 +68,13 @@ export async function POST(request: NextRequest) {
 
     const supabaseUserId = user.id
 
+    // ✅ PHASE 4J: Route to correct table based on bucket for document verification
+    const tableName = BUCKET_TABLE_MAP[bucketName] || 'invoices'
+    console.log(`[ImageURL] Verifying document ownership in table: ${tableName}`)
+
     // Verify document ownership with correct user_id
     const { data: document, error: docError } = await supabase
-      .from('invoices')
+      .from(tableName)  // ✅ PHASE 4J: Dynamic table routing based on bucket
       .select('id, user_id, converted_image_path')
       .eq('id', documentId)
       .eq('user_id', supabaseUserId)
@@ -70,7 +92,7 @@ export async function POST(request: NextRequest) {
       console.log(`[ImageURL] Using raw file path: ${storagePath}`)
 
       const { data: signedUrlData, error: urlError } = await supabase.storage
-        .from('documents')
+        .from(bucketName)  // ✅ PHASE 4J: Route to correct bucket dynamically
         .createSignedUrl(storagePath, 3600) // 1 hour expiry
 
       if (urlError) {
@@ -106,7 +128,7 @@ export async function POST(request: NextRequest) {
       // Use unified bucket list() architecture to find actual image files
       console.log(`[ImageURL] Using unified bucket list() architecture to discover converted files`)
       const { data: fileList, error: listError } = await supabase.storage
-        .from('documents')
+        .from(bucketName)  // ✅ PHASE 4J: Route to correct bucket dynamically
         .list(actualStoragePath, {
           limit: 100,
           sortBy: { column: 'name', order: 'asc' }
@@ -153,7 +175,7 @@ export async function POST(request: NextRequest) {
 
       // Generate signed URL for the specific image file
       const { data: signedUrlData, error: urlError } = await supabase.storage
-        .from('documents')
+        .from(bucketName)  // ✅ PHASE 4J: Route to correct bucket dynamically
         .createSignedUrl(fullImagePath, 3600) // 1 hour expiry
 
       if (urlError) {

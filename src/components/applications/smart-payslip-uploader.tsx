@@ -552,17 +552,20 @@ export default function SmartPayslipUploader({
                           >
                             <Download className="w-4 h-4" />
                           </Button>
-                          <Button
-                            size="sm"
-                            className="bg-gray-600 hover:bg-gray-700 text-white border-0"
-                            onClick={() => onReprocess(doc.id)}
-                            title="Reprocess Document"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                          </Button>
                         </>
                       )}
-                      {doc.processing_status === 'failed' && (
+                      {/* ✅ PHASE 4K: Always show reprocess button for all statuses, not just failed */}
+                      {(doc.processing_status === 'completed' || doc.processing_status === 'failed' || doc.processing_status === 'classification_failed') && (
+                        <Button
+                          size="sm"
+                          className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                          onClick={() => onReprocess(doc.id)}
+                          title="Reprocess Document"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {(doc.processing_status === 'failed' || doc.processing_status === 'classification_failed') && (
                         <Button
                           size="sm"
                           className="bg-red-600 hover:bg-red-700 text-white border-0"

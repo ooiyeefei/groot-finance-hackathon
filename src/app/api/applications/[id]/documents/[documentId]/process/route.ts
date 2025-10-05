@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server';
+import { auth } from '@clerk/nextjs/server';
+import { createServiceSupabaseClient, getUserData } from '@/lib/supabase-server';
 import { tasks } from '@trigger.dev/sdk/v3';
 
 // Import task types
@@ -13,15 +14,35 @@ export async function POST(
   try {
     const { id: applicationId, documentId } = await params;
 
-    // Get authenticated Supabase client with proper RLS context
-    const supabase = await createAuthenticatedSupabaseClient();
+    // Check authentication
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
 
-    // Fetch document with application context
+    // Get user data and use service client to bypass RLS
+    const userData = await getUserData(userId);
+    const supabase = createServiceSupabaseClient();
+
+    // Verify user is associated with a business
+    if (!userData.business_id) {
+      return NextResponse.json(
+        { success: false, error: 'User not associated with a business' },
+        { status: 400 }
+      );
+    }
+
+    // Fetch document with application context and explicit user+business isolation
     const { data: document, error: fetchError } = await supabase
       .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
-      .select('storage_path, file_type, document_slot, application_id')
+      .select('storage_path, file_type, document_slot, application_id, user_id')
       .eq('id', documentId)
       .eq('application_id', applicationId)
+      .eq('user_id', userData.id)  // 🛡️ EXPLICIT USER ISOLATION with UUID
+      .eq('business_id', userData.business_id)  // 🛡️ EXTRA LAYER: Business isolation
       .single();
 
     if (fetchError || !document) {
@@ -32,15 +53,27 @@ export async function POST(
     }
 
     // Get expected document type for slot validation
+    // First fetch the application to get application_type
+    const { data: application, error: appError } = await supabase
+      .from('applications')
+      .select('application_type')
+      .eq('id', applicationId)
+      .eq('user_id', userData.id)  // 🛡️ EXPLICIT USER ISOLATION with UUID
+      .eq('business_id', userData.business_id)  // 🛡️ EXTRA LAYER: Business isolation
+      .single();
+
+    if (appError || !application) {
+      return NextResponse.json(
+        { success: false, error: 'Application not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    // Then fetch the slot configuration
     const { data: slotConfig, error: slotError } = await supabase
       .from('application_document_types')
       .select('document_type')
-      .eq('application_type', (await supabase
-        .from('applications')
-        .select('application_type')
-        .eq('id', applicationId)
-        .single()
-      ).data?.application_type)
+      .eq('application_type', application.application_type)
       .eq('slot', document.document_slot)
       .single();
 
@@ -55,7 +88,9 @@ export async function POST(
         processed_at: null,
         updated_at: new Date().toISOString()
       })
-      .eq('id', documentId);
+      .eq('id', documentId)
+      .eq('user_id', userData.id)  // 🛡️ EXPLICIT USER ISOLATION with UUID
+      .eq('business_id', userData.business_id);  // 🛡️ EXTRA LAYER: Business isolation
 
     if (updateError) {
       console.error('Failed to update document status:', updateError);

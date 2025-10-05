@@ -61,7 +61,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       `)
       .eq('id', id)
       .eq('user_id', userData.id) // 🛡️ EXPLICIT USER ISOLATION
-      .is('documents.deleted_at', null)
+      .is('application_documents.deleted_at', null)
       .single()
 
     if (error) {

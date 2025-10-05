@@ -229,7 +229,7 @@ export async function DELETE(
       }
 
       const { error: storageError } = await supabase.storage
-        .from('documents')
+        .from('invoices')  // ✅ PHASE 4J: Route to invoices bucket
         .remove(filesToDelete)
 
       if (storageError) {

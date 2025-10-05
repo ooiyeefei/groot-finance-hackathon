@@ -114,27 +114,27 @@ export async function DELETE(
 
     console.log(`[API] Document verified: ${document.file_name}`)
 
-    // Disassociate document from application (clear application_id and document_slot)
-    // But keep the document in the documents table and preserve file in storage
-    const { error: disassociateError } = await supabase
+    // ✅ PHASE 4K: Proper soft delete - only set deleted_at timestamp
+    // Keep application_id and document_slot intact for audit trail
+    // The file in storage is preserved (we're not deleting from storage bucket)
+    const { error: softDeleteError } = await supabase
       .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .update({
-        application_id: null,
-        document_slot: null,
+        deleted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
       .eq('id', documentId)
       .eq('user_id', supabaseUserId)
 
-    if (disassociateError) {
-      console.error('[API] Document disassociation failed:', disassociateError)
+    if (softDeleteError) {
+      console.error('[API] Document soft delete failed:', softDeleteError)
       return NextResponse.json(
-        { success: false, error: 'Failed to disassociate document from application' },
+        { success: false, error: 'Failed to remove document from application' },
         { status: 500 }
       )
     }
 
-    console.log(`[API] Successfully disassociated document ${documentId} from application ${applicationId}`)
+    console.log(`[API] Successfully soft deleted document ${documentId} (application_id and document_slot preserved for audit trail)`)
     console.log(`[API] Document file preserved in storage at: ${document.storage_path}`)
 
     return NextResponse.json({

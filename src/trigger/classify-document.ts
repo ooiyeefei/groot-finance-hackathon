@@ -27,6 +27,13 @@ const DOMAIN_TABLE_MAP = {
   'applications': 'application_documents'
 } as const;
 
+// ✅ PHASE 4J: Domain-to-bucket mapping for multi-bucket architecture
+const DOMAIN_BUCKET_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
+
 interface ClassifyDocumentPayload {
   documentId: string;
   documentDomain: 'invoices' | 'expense_claims' | 'applications';  // ✅ PHASE 4B-3: Domain routing parameter
@@ -45,7 +52,9 @@ export const classifyDocument = task({
 
   // ✅ PHASE 4B-3: Route to correct table based on domain
   const tableName = DOMAIN_TABLE_MAP[documentDomain];
-  console.log(`[Classify] Starting classification for document ${documentId} in ${tableName} (domain: ${documentDomain})`);
+  // ✅ PHASE 4J: Route to correct bucket based on domain
+  const bucketName = DOMAIN_BUCKET_MAP[documentDomain];
+  console.log(`[Classify] Starting classification for document ${documentId} in ${tableName} (domain: ${documentDomain}, bucket: ${bucketName})`);
 
   try {
     // Update status to classifying
@@ -72,7 +81,7 @@ export const classifyDocument = task({
       console.log(`[Classify] PDF workflow - using converted image folder: ${document.converted_image_path}`);
 
       const { data: fileList, error: listError } = await supabase.storage
-        .from('documents')
+        .from(bucketName)  // ✅ PHASE 4J: Route to correct bucket
         .list(document.converted_image_path, {
           limit: 100,
           sortBy: { column: 'name', order: 'asc' }
@@ -102,7 +111,7 @@ export const classifyDocument = task({
 
     // Create signed URL for the discovered file
     const { data: urlData, error: urlError } = await supabase.storage
-      .from('documents')
+      .from(bucketName)  // ✅ PHASE 4J: Route to correct bucket
       .createSignedUrl(classifyImagePath, 600); // 10 minute expiry
 
     if (urlError || !urlData) {

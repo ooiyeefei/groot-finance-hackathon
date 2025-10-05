@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Upload to Supabase Storage with documentId-based path
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('documents')
+      .from('invoices')  // ✅ PHASE 4J: Route to invoices bucket
       .upload(storagePath, buffer, {
         contentType: file.type,
         upsert: false
@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
 
       // Clean up uploaded file if database update fails
       await supabase.storage
-        .from('documents')
+        .from('invoices')  // ✅ PHASE 4J: Route to invoices bucket
         .remove([storagePath])
 
       // Clean up document record

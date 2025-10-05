@@ -15,6 +15,23 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+// ✅ PHASE 4J: Domain-to-bucket mapping for multi-bucket architecture
+const DOMAIN_BUCKET_MAP: Record<string, string> = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'application_documents': 'application_documents',
+  'documents': 'documents'  // Fallback for legacy references
+};
+
+/**
+ * Get storage bucket name from table name
+ * @param tableName - The table name (also serves as bucket identifier)
+ * @returns Storage bucket name
+ */
+export function getBucketName(tableName: string = 'documents'): string {
+  return DOMAIN_BUCKET_MAP[tableName] || 'documents';
+}
+
 export interface ExtractionResult {
   success: boolean;
   document_type?: string;
@@ -121,8 +138,9 @@ export async function fetchDocumentImage(
       imagePath = document.converted_image_path;
     }
 
+    const bucketName = getBucketName(tableName);  // ✅ PHASE 4J: Route to correct bucket
     const { data: imageData, error: downloadError } = await supabase.storage
-      .from('documents')  // Storage bucket name (separate from table name)
+      .from(bucketName)
       .download(imagePath);
 
     if (downloadError || !imageData) {

@@ -168,7 +168,7 @@ interface ApplicationDetail {
     display_name: string
     description: string
   }
-  documents: any[]
+  application_documents: any[]  // ✅ PHASE 4G: Renamed from documents
   slot_details: DocumentSlot[]
   progress_stats: {
     total_slots: number
@@ -233,11 +233,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
       case 'extracting':
         return 'extracting'
       default:
-        // For unknown statuses, be conservative - assume processing unless clearly failed
-        // Only show failed if there's an error_message AND no extracted_data
-        if (slot.document.extracted_data) {
-          return 'completed'
-        } else if (slot.document.error_message) {
+        // ✅ PHASE 4K: Trust processing_status field - don't check extracted_data
+        // During reprocessing, old extracted_data may exist but status is not 'completed'
+        if (slot.document.error_message) {
           return 'failed'
         } else {
           // Unknown status but no error - assume still processing
@@ -260,9 +258,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
     if (application) {
       console.log('🔍 [DEBUG] Application data loaded:', {
         applicationId: application.id,
-        totalDocuments: application.documents?.length || 0,
+        totalDocuments: application.application_documents?.length || 0,
         totalSlots: application.slot_details?.length || 0,
-        documents: application.documents?.map(doc => ({
+        documents: application.application_documents?.map(doc => ({
           id: doc.id,
           filename: doc.file_name,
           document_type: doc.document_type,
@@ -394,7 +392,8 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
         body: JSON.stringify({
           storagePath,
           documentId: document.id,
-          useRawFile: true // Request raw file instead of converted image
+          useRawFile: true, // Request raw file instead of converted image
+          bucketName: 'application_documents' // ✅ PHASE 4J: Route to application_documents bucket
         })
       })
 
@@ -437,7 +436,8 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
         body: JSON.stringify({
           storagePath,
           documentId: document.id,
-          useRawFile: true // Request raw file for download
+          useRawFile: true, // Request raw file for download
+          bucketName: 'application_documents' // ✅ PHASE 4J: Route to application_documents bucket
         })
       })
 
@@ -838,7 +838,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
             // Convert group documents back to individual slot format for the uploader
             const payslipSlots = payslipGroupSlot.group_slots?.map(slotName => {
               const doc = payslipGroupSlot.group_documents?.find((groupDoc: any) =>
-                application.documents.find((appDoc: any) =>
+                application.application_documents.find((appDoc: any) =>
                   appDoc.id === groupDoc.id && appDoc.document_slot === slotName
                 )
               )

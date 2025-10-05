@@ -35,7 +35,7 @@ class FinancingDetailsSignature(dspy.Signature):
     1. Look for the TOP SECTION of the form - financing details are usually at the very beginning
     2. Scan for CHECKBOX SELECTIONS - look for ticked/marked boxes next to financing options
     3. Find AMOUNT FIELDS - look for "Amount Requested" or "Jumlah Dipohon" with numerical values
-    4. Identify TENURE/TENOR fields - may be labeled as years or months
+    4. Identify TENURE/TENOR fields - extract ONLY the numeric value without units (no "years", "months", "Months", etc.)
     5. Look for APPLICATION TYPE checkboxes - Single vs Joint application
 
     SEARCH PATTERNS:

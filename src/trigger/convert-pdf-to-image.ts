@@ -27,6 +27,13 @@ const DOMAIN_TABLE_MAP = {
   'applications': 'application_documents'
 } as const;
 
+// ✅ PHASE 4J: Domain-to-bucket mapping for multi-bucket architecture
+const DOMAIN_BUCKET_MAP = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims',
+  'applications': 'application_documents'
+} as const;
+
 export const convertPdfToImage = task({
   id: "convert-pdf-to-image",
   run: async (payload: {
@@ -42,7 +49,8 @@ export const convertPdfToImage = task({
     try {
       // ✅ PHASE 4B-2: Route to correct table based on domain
       const tableName = DOMAIN_TABLE_MAP[payload.documentDomain];
-      console.log(`🔍 Using table: ${tableName} for domain: ${payload.documentDomain}`);
+      const bucketName = DOMAIN_BUCKET_MAP[payload.documentDomain];  // ✅ PHASE 4J: Route to correct bucket
+      console.log(`🔍 Using table: ${tableName} and bucket: ${bucketName} for domain: ${payload.documentDomain}`);
 
       // Step 1: Get PDF storage path if not provided (for Applications workflow)
       let pdfStoragePath = payload.pdfStoragePath;
@@ -72,7 +80,7 @@ export const convertPdfToImage = task({
 
       // First, check if file exists
       const { data: fileExists, error: listError } = await supabase.storage
-        .from('documents')
+        .from(bucketName)  // ✅ PHASE 4J: Routed to correct bucket
         .list(pdfStoragePath.split('/').slice(0, -1).join('/'), {
           limit: 1000,
           search: pdfStoragePath.split('/').pop()
@@ -89,7 +97,7 @@ export const convertPdfToImage = task({
 
       // Now attempt download
       const { data: pdfData, error: downloadError } = await supabase.storage
-        .from('documents')
+        .from(bucketName)  // ✅ PHASE 4J: Routed to correct bucket
         .download(pdfStoragePath);
 
       if (downloadError) {
@@ -280,11 +288,23 @@ except Exception as e:
       // Always try to use standardized paths when possible
       const hasRequiredContext = document.business_id && document.user_id;
 
-      // Determine document type for standardized paths
-      // If not yet classified, use expectedDocumentType or fallback to 'application_form'
-      const documentType = document.document_type || payload.expectedDocumentType || 'application_form';
+      // ✅ PHASE 4K: Use domain-aware parameters for storage path determination
+      // Priority: classified type > expectedDocumentType (domain param) > slot mapping (last resort)
+      const mapSlotToDocumentType = (slot: string | undefined): string => {
+        if (!slot) return 'application_form';
+        if (slot === 'identity_card') return 'ic';
+        if (slot.startsWith('payslip_')) return 'payslip';
+        if (slot === 'application_form') return 'application_form';
+        return 'application_form';
+      };
 
-      console.log(`📊 Context analysis: business_id=${!!document.business_id}, user_id=${!!document.user_id}, document_type=${documentType}`);
+      // Determine document type using domain-aware parameters
+      const documentType = document.document_type ||
+                          payload.expectedDocumentType ||
+                          mapSlotToDocumentType(payload.documentSlot) ||
+                          'application_form';
+
+      console.log(`📊 Context analysis: business_id=${!!document.business_id}, user_id=${!!document.user_id}, domain=${payload.documentDomain}, expectedType=${payload.expectedDocumentType}, determined_type=${documentType}`);
 
       let imagePaths: string[];
       let approach: string;
@@ -351,7 +371,7 @@ except Exception as e:
 
         // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
-          .from('documents')
+          .from(bucketName)  // ✅ PHASE 4J: Routed to correct bucket
           .upload(imagePath, imageBuffer, {
             contentType: 'image/png',
             upsert: true
