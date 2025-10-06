@@ -260,7 +260,10 @@ export async function GET(request: NextRequest) {
 
     // AUDIT: Log RPC call start for approvals stats
     const approvalsRpcStartTime = Date.now()
-    const approvalsRpcParameters = { business_id_param: userProfile.business_id }
+    const approvalsRpcParameters = {
+      business_id_param: userProfile.business_id,
+      user_id_param: userProfile.user_id  // ✅ Pass Supabase UUID to RPC
+    }
 
     const { data: rpcStats, error: rpcError } = await supabase
       .rpc('get_team_expense_summary', approvalsRpcParameters)

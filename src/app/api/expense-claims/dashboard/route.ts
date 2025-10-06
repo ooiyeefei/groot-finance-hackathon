@@ -165,7 +165,10 @@ export async function GET(request: NextRequest) {
 
       // AUDIT: Log RPC call start for admin dashboard
       const adminRpcStartTime = Date.now()
-      const adminRpcParameters = { business_id_param: employeeProfile.business_id }
+      const adminRpcParameters = {
+        business_id_param: employeeProfile.business_id,
+        user_id_param: employeeProfile.user_id  // ✅ Pass Supabase UUID to RPC
+      }
 
       const { data: rpcSummary, error: rpcError } = await supabase
         .rpc('get_company_expense_summary', adminRpcParameters)
@@ -329,7 +332,10 @@ export async function GET(request: NextRequest) {
 
       // AUDIT: Log RPC call start for manager dashboard
       const managerRpcStartTime = Date.now()
-      const managerRpcParameters = { business_id_param: employeeProfile.business_id }
+      const managerRpcParameters = {
+        business_id_param: employeeProfile.business_id,
+        user_id_param: employeeProfile.user_id  // ✅ Pass Supabase UUID to RPC
+      }
 
       const { data: rpcTeamSummary, error: rpcTeamError } = await supabase
         .rpc('get_team_expense_summary', managerRpcParameters)

@@ -48,7 +48,8 @@ async function handleRealtimeAnalytics(context: ApiContext) {
   const rpcStartTime = Date.now()
   const rpcParameters = {
     p_start_date: startDate.toISOString().split('T')[0],
-    p_end_date: endDate.toISOString().split('T')[0]
+    p_end_date: endDate.toISOString().split('T')[0],
+    user_id_param: userProfile.user_id  // ✅ Pass Supabase UUID to RPC
   }
 
   const { data: rpcResult, error: rpcError } = await supabase
