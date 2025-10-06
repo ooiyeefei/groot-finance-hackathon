@@ -30,6 +30,7 @@ import {
   XCircle
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useDocumentPolling } from '@/hooks/useDocumentPolling'
 import { useDocumentSchema } from '@/hooks/useDocumentSchema'
@@ -189,6 +190,7 @@ interface ApplicationDetailContainerProps {
 
 export default function ApplicationDetailContainer({ applicationId }: ApplicationDetailContainerProps) {
   const locale = useLocale()
+  const router = useRouter()
   const [application, setApplication] = useState<ApplicationDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -761,6 +763,13 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
           )}
           <p className="text-gray-400 mt-1">{application.application_types.display_name}</p>
         </div>
+        <Button
+          className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+          onClick={() => router.push(`/${locale}/applications/${applicationId}/summary`)}
+        >
+          <FileText className="w-4 h-4 mr-2" />
+          View Summary
+        </Button>
       </div>
 
       {/* Progress Overview */}
@@ -1405,6 +1414,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
             </Button>
           </div>
         )}
+
 
         {application.progress_stats.can_submit && (
           <Button className="bg-green-600 hover:bg-green-700 text-white border-0">

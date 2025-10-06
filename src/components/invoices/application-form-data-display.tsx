@@ -422,10 +422,10 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
         </div>
       </div>
 
-      {/* AI Extraction Disclaimer - Bottom Left Corner */}
-      <div className="flex items-center gap-1 mt-4 text-xs text-gray-400">
-        <Shield className="w-3 h-3" />
-        <span>AI Extraction</span>
+      {/* AI Extraction Warning - Bottom Left Corner */}
+      <div className="flex items-center gap-2 mt-4 p-2 bg-amber-900/20 border border-amber-700/50 rounded">
+        <span className="text-amber-400">⚠️</span>
+        <span className="text-xs text-amber-300 font-medium">AI Extraction - Please verify accuracy</span>
       </div>
     </div>
   )

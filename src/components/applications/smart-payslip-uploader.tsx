@@ -300,6 +300,25 @@ export default function SmartPayslipUploader({
     }
   }
 
+  // Helper function to get effective status considering both processing status and validation
+  const getEffectiveStatus = (slot: PayslipFile) => {
+    const doc = slot.document
+    if (!doc) return 'empty'
+
+    // If completed, check for validation errors first
+    if (doc.processing_status === 'completed') {
+      const validation = validationResults?.details?.find(d => d.slot === slot.slot)
+      const clientValidation = validatePayslipDateClientSide(doc)
+
+      // If there's a validation error, treat as failed
+      if ((validation && !validation.isValid) || (clientValidation && !clientValidation.isValid)) {
+        return 'validation_failed'
+      }
+    }
+
+    return doc.processing_status
+  }
+
   const getStatusColor = (status: string, isCritical: boolean) => {
     switch (status) {
       case 'completed':
@@ -313,6 +332,7 @@ export default function SmartPayslipUploader({
       case 'extracting':
         return 'bg-cyan-900/20 text-cyan-300 border-cyan-700/50'
       case 'failed':
+      case 'validation_failed':
         return 'bg-red-900/20 text-red-300 border-red-700/50'
       default:
         return 'bg-gray-900/20 text-gray-300 border-gray-700/50'
@@ -329,7 +349,8 @@ export default function SmartPayslipUploader({
       case 'extracting':
         return <Brain className={`w-4 h-4 ${animated ? 'animate-spin' : ''}`} />
       case 'failed':
-        return <AlertCircle className="w-4 h-4" />
+      case 'validation_failed':
+        return <X className="w-4 h-4" />
       default:
         return <FileText className="w-4 h-4" />
     }
@@ -351,7 +372,21 @@ export default function SmartPayslipUploader({
     return 'Processing Failed'
   }
 
-  const getStatusText = (status: string, errorMessage?: string | null | undefined) => {
+  const getStatusText = (status: string, errorMessage?: string | null | undefined, slot?: PayslipFile) => {
+    // Priority 1: Check for validation failures even if processing is completed
+    if (status === 'completed' && slot) {
+      const validation = validationResults?.details?.find(d => d.slot === slot.slot)
+      const clientValidation = validatePayslipDateClientSide(slot.document)
+
+      // If there's a validation error, show that instead of "Completed"
+      if (validation && !validation.isValid) {
+        return `Error: ${validation.validationMessage}`
+      }
+      if (clientValidation && !clientValidation.isValid) {
+        return `Error: ${clientValidation.message}`
+      }
+    }
+
     switch (status) {
       case 'completed':
         return 'Completed'
@@ -483,14 +518,11 @@ export default function SmartPayslipUploader({
               const slot = payslipSlots.find(s => s.slot === slotName)
               return (
                 <div key={`uploading-${slotName}`} className="bg-gray-700 p-4 rounded-lg">
-                  <div className="space-y-3">
-                    <Loader2 className="w-8 h-8 text-blue-400 mx-auto animate-spin" />
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
                     <div>
-                      <p className="text-blue-300 font-medium">Uploading payslip document...</p>
-                      <p className="text-gray-400 text-sm mt-1">Processing will begin automatically</p>
-                    </div>
-                    <div className="max-w-xs mx-auto">
-                      <Progress value={65} className="h-2" />
+                      <p className="text-blue-300 font-medium">Uploading document...</p>
+                      <p className="text-gray-400 text-sm">Processing will begin automatically</p>
                     </div>
                   </div>
                 </div>
@@ -519,9 +551,9 @@ export default function SmartPayslipUploader({
                     <div className="flex items-center gap-3">
                       <FileText className="w-4 h-4 text-gray-400" />
                       <span className="text-white font-medium">{doc.file_name}</span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(doc.processing_status, slot.is_critical)}`}>
-                        {getStatusIcon(doc.processing_status, true)}
-                        <span className="ml-1">{getStatusText(doc.processing_status, doc.error_message)}</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(getEffectiveStatus(slot), slot.is_critical)}`}>
+                        {getStatusIcon(getEffectiveStatus(slot), true)}
+                        <span className="ml-1">{getStatusText(doc.processing_status, doc.error_message, slot)}</span>
                       </span>
 
                       {/* Show success validation badge only for valid payslips */}
@@ -665,37 +697,12 @@ export default function SmartPayslipUploader({
                   {(['classifying', 'pending_extraction', 'extracting'].includes(doc.processing_status)) && (
                     <div className="mt-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg">
                       <div className="flex items-center gap-2 text-blue-300">
-                        {doc.processing_status === 'classifying' && (
-                          <>
-                            <Brain className="w-4 h-4 animate-spin" />
-                            <span className="text-sm font-medium">Analyzing document type...</span>
-                          </>
-                        )}
-                        {doc.processing_status === 'pending_extraction' && (
-                          <>
-                            <Brain className="w-4 h-4 animate-spin" />
-                            <span className="text-sm font-medium">Document classified, preparing extraction...</span>
-                          </>
-                        )}
-                        {doc.processing_status === 'extracting' && (
-                          <>
-                            <Brain className="w-4 h-4 animate-spin" />
-                            <span className="text-sm font-medium">Extracting structured data from payslip...</span>
-                          </>
-                        )}
-                      </div>
-                      <div className="mt-2">
-                        <div className="flex justify-between text-xs text-blue-400 mb-1">
-                          <span>Processing</span>
-                          <span>Live updates enabled</span>
-                        </div>
-                        <Progress
-                          value={
-                            doc.processing_status === 'classifying' ? 25 :
-                            doc.processing_status === 'pending_extraction' ? 50 : 75
-                          }
-                          className="h-1"
-                        />
+                        <Brain className="w-4 h-4 animate-spin" />
+                        <span className="text-sm font-medium">
+                          {doc.processing_status === 'classifying' && 'Analyzing document type...'}
+                          {doc.processing_status === 'pending_extraction' && 'Document classified, preparing extraction...'}
+                          {doc.processing_status === 'extracting' && 'Extracting data from payslip...'}
+                        </span>
                       </div>
                     </div>
                   )}
