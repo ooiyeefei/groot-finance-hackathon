@@ -191,22 +191,17 @@ export async function GET(request: NextRequest) {
         console.error('[Expense Dashboard API] RPC function failed, using authenticated client fallback:', rpcError)
         // Fallback to authenticated client approach for admin dashboard
         const { data: businessEmployees } = await supabase
-          .from('employee_profiles')
-          .select('id')
+          .from('business_memberships')
+          .select('user_id')
           .eq('business_id', employeeProfile.business_id)
 
-        const employeeIds = businessEmployees?.map(emp => emp.id) || []
+        const employeeUserIds = businessEmployees?.map(emp => emp.user_id) || []
         const { data: allBusinessClaims } = await supabase
           .from('expense_claims')
           .select(`
-            *,
-            employee:employee_profiles!expense_claims_employee_id_fkey(
-              department,
-              business_id,
-              user:users!employee_profiles_user_id_fkey(full_name)
-            )
+            *
           `)
-          .in('employee_id', employeeIds)
+          .in('employee_id', employeeUserIds)
           .is('deleted_at', null)
 
         if (allBusinessClaims) {
@@ -219,10 +214,9 @@ export async function GET(request: NextRequest) {
             .from('expense_claims')
             .select(`
               *,
-              transaction:transactions(home_currency_amount, home_currency),
-              employee:employee_profiles!expense_claims_employee_id_fkey(business_id)
+              transaction:transactions(home_currency_amount, home_currency)
             `)
-            .in('employee_id', employeeIds)
+            .in('employee_id', employeeUserIds)
             .eq('status', 'approved')
             .is('deleted_at', null)
 
@@ -243,14 +237,9 @@ export async function GET(request: NextRequest) {
           .from('expense_claims')
           .select(`
             *,
-            transaction:transactions(*),
-            employee:employee_profiles!expense_claims_employee_id_fkey(
-              department,
-              business_id,
-              user:users!employee_profiles_user_id_fkey(full_name)
-            )
+            transaction:transactions(*)
           `)
-          .in('employee_id', employeeIds)
+          .in('employee_id', employeeUserIds)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
@@ -269,23 +258,18 @@ export async function GET(request: NextRequest) {
 
         // Still need to get recent claims for the UI - use authenticated client
         const { data: businessEmployees } = await supabase
-          .from('employee_profiles')
-          .select('id')
+          .from('business_memberships')
+          .select('user_id')
           .eq('business_id', employeeProfile.business_id)
 
-        const employeeIds = businessEmployees?.map(emp => emp.id) || []
+        const employeeUserIds = businessEmployees?.map(emp => emp.user_id) || []
         const { data: recentClaims } = await supabase
           .from('expense_claims')
           .select(`
             *,
-            transaction:transactions(*),
-            employee:employee_profiles!expense_claims_employee_id_fkey(
-              department,
-              business_id,
-              user:users!employee_profiles_user_id_fkey(full_name)
-            )
+            transaction:transactions(*)
           `)
-          .in('employee_id', employeeIds)
+          .in('employee_id', employeeUserIds)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
@@ -300,7 +284,7 @@ export async function GET(request: NextRequest) {
           *,
           transaction:transactions(*)
         `)
-        .eq('employee_id', employeeProfile.id)
+        .eq('employee_id', employeeProfile.user_id)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(10)
@@ -358,22 +342,17 @@ export async function GET(request: NextRequest) {
         console.error('[Expense Dashboard API] Team RPC function failed, using authenticated client fallback:', rpcTeamError)
         // Fallback to manual calculation with authenticated client
         const { data: businessEmployees } = await supabase
-          .from('employee_profiles')
-          .select('id')
+          .from('business_memberships')
+          .select('user_id')
           .eq('business_id', employeeProfile.business_id)
 
-        const employeeIds = businessEmployees?.map(emp => emp.id) || []
+        const employeeUserIds = businessEmployees?.map(emp => emp.user_id) || []
         const { data: allBusinessClaims } = await supabase
           .from('expense_claims')
           .select(`
-            *,
-            employee:employee_profiles!expense_claims_employee_id_fkey(
-              department,
-              business_id,
-              user:users!employee_profiles_user_id_fkey(full_name)
-            )
+            *
           `)
-          .in('employee_id', employeeIds)
+          .in('employee_id', employeeUserIds)
           .is('deleted_at', null)
 
         if (allBusinessClaims) {
@@ -384,10 +363,9 @@ export async function GET(request: NextRequest) {
             .from('expense_claims')
             .select(`
               *,
-              transaction:transactions(home_currency_amount, home_currency),
-              employee:employee_profiles!expense_claims_employee_id_fkey(business_id)
+              transaction:transactions(home_currency_amount, home_currency)
             `)
-            .in('employee_id', employeeIds)
+            .in('employee_id', employeeUserIds)
             .eq('status', 'approved')
             .is('deleted_at', null)
 
@@ -408,14 +386,9 @@ export async function GET(request: NextRequest) {
           .from('expense_claims')
           .select(`
             *,
-            transaction:transactions(*),
-            employee:employee_profiles!expense_claims_employee_id_fkey(
-              department,
-              business_id,
-              user:users!employee_profiles_user_id_fkey(full_name)
-            )
+            transaction:transactions(*)
           `)
-          .in('employee_id', employeeIds)
+          .in('employee_id', employeeUserIds)
           .eq('status', 'pending_approval')
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
@@ -435,23 +408,18 @@ export async function GET(request: NextRequest) {
 
         // Still need to get recent claims for the UI - use authenticated client
         const { data: businessEmployees } = await supabase
-          .from('employee_profiles')
-          .select('id')
+          .from('business_memberships')
+          .select('user_id')
           .eq('business_id', employeeProfile.business_id)
 
-        const employeeIds = businessEmployees?.map(emp => emp.id) || []
+        const employeeUserIds = businessEmployees?.map(emp => emp.user_id) || []
         const { data: pendingClaims } = await supabase
           .from('expense_claims')
           .select(`
             *,
-            transaction:transactions(*),
-            employee:employee_profiles!expense_claims_employee_id_fkey(
-              department,
-              business_id,
-              user:users!employee_profiles_user_id_fkey(full_name)
-            )
+            transaction:transactions(*)
           `)
-          .in('employee_id', employeeIds)
+          .in('employee_id', employeeUserIds)
           .eq('status', 'pending_approval')
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
@@ -462,15 +430,15 @@ export async function GET(request: NextRequest) {
 
     } else {
       // Employees see only their own data with full workflow status
-      console.log(`[Expense Dashboard API] Querying expense claims for employee_id: ${employeeProfile.id}`)
-      
+      console.log(`[Expense Dashboard API] Querying expense claims for employee_id: ${employeeProfile.user_id}`)
+
       const { data: userClaims, error: claimsError } = await supabase
         .from('expense_claims')
         .select(`
           *,
           transaction:transactions(*)
         `)
-        .eq('employee_id', employeeProfile.id)
+        .eq('employee_id', employeeProfile.user_id)
         .is('deleted_at', null)
       
       console.log(`[Expense Dashboard API] Query result - userClaims count: ${userClaims?.length || 0}`)
