@@ -117,7 +117,7 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
 
   const formatTenor = (tenor: number | string | undefined) => {
     if (!tenor) return 'Not specified'
-    return `${tenor} ${typeof tenor === 'number' && tenor === 1 ? 'Month' : 'Months'}`
+    return `${tenor} ${typeof tenor === 'number' && tenor === 1 ? 'Year' : 'Years'}`
   }
 
   const formatDate = (dateString: string | number | undefined) => {
@@ -206,7 +206,7 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
                 </div>
                 <div>
                   <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
-                    Tenor
+                    Tenure
                   </label>
                   <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
                     {formatTenor(getFinancingValue('tenor'))}
