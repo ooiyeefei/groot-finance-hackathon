@@ -28,11 +28,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Applications API GET] User ${userId} accessing application ${id}`)
 
-    // Get user data and use service client to bypass RLS (explicit filtering below)
+    // SECURITY FIX: Use authenticated client to enforce RLS
     const userData = await getUserData(userId)
-    const supabase = createServiceSupabaseClient()
+    const supabase = await createAuthenticatedSupabaseClient()
 
-    // Fetch application with related data and EXPLICIT user filtering
+    // Fetch application with RLS enforcing business_id filtering
     const { data: application, error } = await supabase
       .from('applications')
       .select(`
@@ -60,7 +60,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         )
       `)
       .eq('id', id)
-      .eq('user_id', userData.id) // 🛡️ EXPLICIT USER ISOLATION
       .is('application_documents.deleted_at', null)
       .single()
 
@@ -229,16 +228,15 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Applications API PUT] User ${userId} updating application ${id}`)
 
-    // Get user data and use service client to bypass RLS (explicit filtering below)
+    // SECURITY FIX: Use authenticated client to enforce RLS
     const userData = await getUserData(userId)
-    const supabase = createServiceSupabaseClient()
+    const supabase = await createAuthenticatedSupabaseClient()
 
-    // Check if application exists and is accessible with EXPLICIT user filtering
+    // Check if application exists and is accessible with RLS enforcement
     const { data: existingApp, error: fetchError } = await supabase
       .from('applications')
       .select('id, status, user_id')
       .eq('id', id)
-      .eq('user_id', userData.id) // 🛡️ EXPLICIT USER ISOLATION
       .single()
 
     if (fetchError || !existingApp) {
@@ -318,16 +316,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Applications API DELETE] User ${userId} deleting application ${id}`)
 
-    // Get user data and use service client to bypass RLS (explicit filtering below)
+    // SECURITY FIX: Use authenticated client to enforce RLS
     const userData = await getUserData(userId)
-    const supabase = createServiceSupabaseClient()
+    const supabase = await createAuthenticatedSupabaseClient()
 
-    // Check if application exists and is accessible with EXPLICIT user filtering
+    // Check if application exists and is accessible with RLS enforcement
     const { data: existingApp, error: fetchError } = await supabase
       .from('applications')
       .select('id, status, user_id')
       .eq('id', id)
-      .eq('user_id', userData.id) // 🛡️ EXPLICIT USER ISOLATION
       .single()
 
     if (fetchError || !existingApp) {

@@ -19,8 +19,10 @@ import { Building2, Crown, ChevronDown, Loader2, AlertCircle } from 'lucide-reac
 import {
   useActiveBusiness,
   useBusinessMemberships,
-  useBusinessSwitcher
+  useBusinessSwitcher,
+  useBusinessState
 } from '@/contexts/business-context'
+import { NoBusinessFallbackCompact } from './no-business-fallback'
 import {
   Select,
   SelectContent,
@@ -102,6 +104,7 @@ export default function BusinessSwitcher() {
   const { business, isLoading: contextLoading, error: contextError } = useActiveBusiness()
   const { memberships, isLoading: membershipsLoading, error: membershipsError } = useBusinessMemberships()
   const { switchBusiness, isSwitching, error: switchError } = useBusinessSwitcher()
+  const { state, hasActualError, isInitialLoading, hasNoBusinessAccess } = useBusinessState()
 
   // ============================================================================
   // Event Handlers
@@ -125,7 +128,7 @@ export default function BusinessSwitcher() {
   // Loading and Error States
   // ============================================================================
 
-  if (contextLoading || membershipsLoading) {
+  if (isInitialLoading) {
     return (
       <div className="flex items-center gap-2 text-gray-300">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -134,13 +137,17 @@ export default function BusinessSwitcher() {
     )
   }
 
-  if (contextError || membershipsError) {
+  if (hasActualError) {
     return (
       <div className="flex items-center gap-2 text-red-400">
         <AlertCircle className="h-4 w-4" />
         <span className="text-sm">Error loading businesses</span>
       </div>
     )
+  }
+
+  if (hasNoBusinessAccess) {
+    return <NoBusinessFallbackCompact />
   }
 
   if (!business) {

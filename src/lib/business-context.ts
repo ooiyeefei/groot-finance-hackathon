@@ -11,7 +11,6 @@ export interface BusinessMembership {
   user_id: string
   business_id: string
   role: 'admin' | 'manager' | 'employee'
-  invited_by_id?: string
   invited_at?: string
   joined_at: string
   last_accessed_at?: string
@@ -97,7 +96,6 @@ export async function getUserBusinessMemberships(userId?: string): Promise<Busin
       user_id: membership.user_id,
       business_id: membership.business_id,
       role: membership.role,
-      invited_by_id: membership.invited_by_id,
       invited_at: membership.invited_at,
       joined_at: membership.joined_at,
       last_accessed_at: membership.last_accessed_at,

@@ -80,15 +80,15 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
   const getIcon = () => {
     switch (toast.type) {
       case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-400" />
+        return <CheckCircle className="w-5 h-5 !text-green-400" />
       case 'error':
-        return <XCircle className="w-5 h-5 text-red-400" />
+        return <XCircle className="w-5 h-5 !text-red-400" />
       case 'warning':
-        return <AlertCircle className="w-5 h-5 text-yellow-400" />
+        return <AlertCircle className="w-5 h-5 !text-yellow-400" />
       case 'info':
-        return <Info className="w-5 h-5 text-blue-400" />
+        return <Info className="w-5 h-5 !text-blue-400" />
       default:
-        return <Info className="w-5 h-5 text-blue-400" />
+        return <Info className="w-5 h-5 !text-blue-400" />
     }
   }
 
@@ -107,6 +107,21 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
     }
   }
 
+  const getTextColor = () => {
+    switch (toast.type) {
+      case 'success':
+        return '!text-green-400'
+      case 'error':
+        return '!text-red-400'
+      case 'warning':
+        return '!text-yellow-400'
+      case 'info':
+        return '!text-blue-400'
+      default:
+        return '!text-white'
+    }
+  }
+
   return (
     <div
       className={`
@@ -121,7 +136,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
           {getIcon()}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-white">
+          <p className={`text-sm font-medium ${getTextColor()}`}>
             {toast.title}
           </p>
           {toast.description && (

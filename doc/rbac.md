@@ -77,29 +77,71 @@
 
   ✅ Multi-Tenant SaaS Flow:
 
-  1. You (SaaS Owner): Use MASTER_ADMIN_KEY to create business admins
-  2. Business Admin: Gets finance role, manages their team via /manager/team
-  3. Employees: Sign up as employee, get promoted by business admin
-  4. Role Storage: Active roles in Clerk privateMetadata, users table as backup
+  1. You (SaaS Owner): Use MASTER_ADMIN_KEY to create initial business admins
+  2. Business Admin: Gets admin role, manages their team via /manager/teams
+  3. New Users: Can either:
+     - Be invited to join existing business (gets assigned role)
+     - Sign up independently (creates own business as owner/admin)
+  4. Existing Users: Can be invited to multiple businesses (cross-business memberships)
+  5. Role Storage: Active roles in Clerk privateMetadata per business, business_memberships as source of truth
 
-  ✅ Database Structure:
+  ✅ Enhanced Multi-Tenant Database Structure:
 
-  -- businesses table now contains categories
+  -- businesses table with ownership tracking
   businesses {
-    id,
-    name,
-    custom_expense_categories: JSONB -- Array of category objects
+    id: UUID PRIMARY KEY,
+    name: TEXT,
+    owner_id: TEXT REFERENCES users(id), -- Business owner (cannot be removed)
+    custom_expense_categories: JSONB,
+    slug: TEXT UNIQUE,
+    country_code: TEXT,
+    home_currency: TEXT
   }
 
-  -- users table keeps enum for potential future use
+  -- users table with status tracking
   users {
-    role: user_role -- owner/admin/member/viewer (legacy)
+    id: UUID PRIMARY KEY,
+    email: TEXT UNIQUE,
+    clerk_user_id: TEXT UNIQUE,
+    status: TEXT DEFAULT 'active', -- active, pending, removed, suspended
+    business_id: UUID, -- Primary business (backwards compatibility)
+    invited_by: TEXT, -- Who invited this user (for new user invitations)
+    invited_role: TEXT -- Fallback role for invitations
   }
 
-  -- employee_profiles links to businesses
+  -- business_memberships: The source of truth for user-business relationships
+  business_memberships {
+    id: UUID PRIMARY KEY,
+    user_id: TEXT REFERENCES users(id),
+    business_id: UUID REFERENCES businesses(id),
+    role: TEXT CHECK (role IN ('admin', 'manager', 'employee')), -- Operational role
+    status: TEXT DEFAULT 'active', -- active, pending, removed, suspended
+    invited_by_id: TEXT REFERENCES users(id),
+    invited_at: TIMESTAMPTZ,
+    joined_at: TIMESTAMPTZ,
+    last_accessed_at: TIMESTAMPTZ,
+    UNIQUE(user_id, business_id)
+  }
+
+  -- employee_profiles: Legacy table (being phased out in favor of business_memberships)
   employee_profiles {
     business_id,
-    role_permissions: { employee, manager, finance }
+    role_permissions: { employee, manager, admin } -- Legacy format
+  }
+
+  -- business_memberships_audit: Complete audit trail
+  business_memberships_audit {
+    id: UUID PRIMARY KEY,
+    user_id: TEXT,
+    business_id: UUID,
+    action: TEXT, -- added, removed, role_changed, reactivated
+    old_status: TEXT,
+    new_status: TEXT,
+    old_role: TEXT,
+    new_role: TEXT,
+    performed_by: TEXT,
+    performed_at: TIMESTAMPTZ,
+    notes: TEXT
   }
 
   ✅ Clerk Integration:
@@ -280,3 +322,217 @@
 
   The invitation system is more user-friendly and secure, but requires more implementation
   work. What's your preference?
+
+  ---
+
+  ## Multi-Tenant User Management APIs
+
+  ### Business Creation API
+  ```bash
+  # Any authenticated user can create a new business
+  curl -X POST /api/business/create \
+    -H "Content-Type: application/json" \
+    -d '{
+      "name": "My New Business",
+      "country_code": "SG",
+      "home_currency": "SGD",
+      "description": "Optional description"
+    }'
+  ```
+
+  **Result**: User becomes business owner and gets admin operational role
+
+  ### User Removal API (Soft Deletion)
+  ```bash
+  # Admin removes user from business (soft deletion)
+  curl -X POST /api/business/memberships/remove \
+    -H "Content-Type: application/json" \
+    -d '{
+      "user_id": "target_user_uuid",
+      "business_id": "business_uuid",
+      "reason": "Optional reason for removal"
+    }'
+  ```
+
+  **Safety Features**:
+  - Cannot remove business owner
+  - Soft removal (status = 'removed', not deleted)
+  - Complete audit trail
+  - Automatic Clerk metadata cleanup
+  - Graceful degradation if user has no other businesses
+
+  ### User Reactivation API
+  ```bash
+  # Admin reactivates previously removed user
+  curl -X POST /api/business/memberships/reactivate \
+    -H "Content-Type: application/json" \
+    -d '{
+      "user_id": "target_user_uuid",
+      "business_id": "business_uuid",
+      "role": "employee"
+    }'
+  ```
+
+  **Features**:
+  - Reactivates soft-deleted memberships
+  - Can update role during reactivation
+  - Restores full access and permissions
+  - Updates Clerk metadata
+
+  ### Enhanced Cross-Business Invitations
+  ```bash
+  # Invite user to business (handles both new and existing users)
+  curl -X POST /api/invitations \
+    -H "Content-Type: application/json" \
+    -d '{
+      "email": "user@example.com",
+      "role": "manager",
+      "department": "Engineering",
+      "job_title": "Senior Developer"
+    }'
+  ```
+
+  **Multi-Tenant Intelligence**:
+  - Detects if user already exists in system
+  - Creates cross-business invitations for existing users
+  - Handles removed users (suggests reactivation)
+  - Prevents duplicate active memberships
+  - Proper email context for invitation type
+
+  ## User Lifecycle Scenarios
+
+  ### Scenario 1: Brand New User
+  ```
+  1. User signs up via Clerk (/sign-up)
+  2. User recovery detects no invitation history
+  3. System creates new business with user as owner
+  4. User gets admin role and full access to their business
+  5. Can invite other users to join their business
+  ```
+
+  ### Scenario 2: Invited New User
+  ```
+  1. Business admin sends invitation to new email
+  2. User receives email and clicks invitation link
+  3. User signs up via Clerk with invitation context
+  4. User recovery processes pending invitation
+  5. User joins invited business with assigned role
+  6. No new business created (joins existing)
+  ```
+
+  ### Scenario 3: Cross-Business Invitation (Existing User)
+  ```
+  1. Business admin invites user who already has FinanSEAL account
+  2. System detects existing user, creates cross-business membership
+  3. User receives invitation email for additional business
+  4. User can accept invitation and switch between businesses
+  5. Each business maintains separate roles and permissions
+  ```
+
+  ### Scenario 4: User Removal and Recovery
+  ```
+  1. Admin removes user from business (soft deletion)
+  2. User loses access to that specific business
+  3. If user has other businesses: continues using system normally
+  4. If no other businesses: redirected to create new or accept invitations
+  5. Admin can reactivate user later if needed (reversible)
+  ```
+
+  ### Scenario 5: Existing User Creates New Business
+  ```
+  1. User with existing account creates additional business
+  2. Uses /api/business/create endpoint
+  3. Becomes owner and admin of new business
+  4. Can switch between multiple businesses they own/belong to
+  5. Independent roles and permissions per business
+  ```
+
+  ## Security Model
+
+  ### Business Ownership vs Operational Roles
+  ```
+  Business Owner (businesses.owner_id):
+    - Legal/financial ownership of business entity
+    - Cannot be removed from business by anyone
+    - Usually the person who created the business
+    - Has ultimate control over business settings
+
+  Operational Roles (business_memberships.role):
+    - admin: Full operational control, can manage users and settings
+    - manager: Can approve expenses, manage categories, view team data
+    - employee: Basic access to own data and core features
+  ```
+
+  ### Multi-Tenant Data Isolation
+  - Each business operates completely independently
+  - No data leakage between businesses
+  - User permissions scoped per business
+  - RLS (Row Level Security) enforces business context
+  - Active business stored in Clerk publicMetadata
+
+  ### Soft Deletion Benefits
+  - **No Data Loss**: All user data preserved during removal
+  - **Audit Trail**: Complete history of membership changes
+  - **Reversible Operations**: Can undo user removals
+  - **Graceful UX**: Users get proper guidance on next steps
+  - **Business Continuity**: Removed users don't lose their other businesses
+
+  ## Database Helper Functions
+
+  ### User Business Association Counting
+  ```sql
+  SELECT get_user_business_count('user_uuid');
+  -- Returns JSON with membership counts and ownership status
+  ```
+
+  ### Safe User Removal
+  ```sql
+  SELECT remove_user_from_business(
+    target_user_id := 'user_uuid',
+    target_business_id := 'business_uuid',
+    removed_by_user_id := 'admin_uuid'
+  );
+  -- Returns success/error with detailed information
+  ```
+
+  ### Membership Reactivation
+  ```sql
+  SELECT reactivate_user_membership(
+    target_user_id := 'user_uuid',
+    target_business_id := 'business_uuid'
+  );
+  -- Reactivates soft-deleted membership
+  ```
+
+  ## Migration and Compatibility
+
+  ### From Single-Tenant to Multi-Tenant
+  1. **Database Migration**: Run migration to add new tables and columns
+  2. **Data Migration**: Migrate employee_profiles to business_memberships
+  3. **Owner Assignment**: Set existing users as business owners
+  4. **Code Updates**: Update APIs to use new multi-tenant structure
+  5. **Testing**: Validate all user scenarios work correctly
+
+  ### Backwards Compatibility
+  - `users.business_id` field maintained during transition
+  - `employee_profiles` table can coexist with new system
+  - Gradual migration path for UI components
+  - Legacy APIs continue working during transition
+
+  ## Monitoring and Maintenance
+
+  ### Key Metrics to Track
+  - Business creation rate and patterns
+  - Cross-business invitation acceptance rates
+  - User removal and reactivation patterns
+  - Multi-business user growth
+  - Audit log activity and patterns
+
+  ### Regular Maintenance Tasks
+  - Clean up expired pending invitations (7+ day old)
+  - Monitor for orphaned user records
+  - Verify Clerk metadata sync health
+  - Check for duplicate user records
+  - Audit business ownership assignments
+
+  This enhanced RBAC system provides a robust foundation for multi-tenant SaaS operations while maintaining security, data integrity, and excellent user experience.

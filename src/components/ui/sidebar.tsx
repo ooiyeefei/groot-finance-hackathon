@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, ClipboardList, Tag } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/components/ui/enhanced-business-display'
 import { getCachedUserRole, cacheUserRole, clearUserRoleCache } from '@/lib/cache-utils'
 import { useTranslations, useLocale } from 'next-intl'
+import { useActiveBusiness } from '@/contexts/business-context'
 
 interface UserRole {
   employee: boolean
@@ -28,6 +29,9 @@ export default function Sidebar() {
   // Initialize user role with default state to prevent hydration mismatch
   const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, admin: false })
 
+  // CRITICAL FIX: Listen to active business context changes
+  const { business, businessId } = useActiveBusiness()
+
   // Helper function to create localized hrefs (our i18n feature)
   const localizedHref = (path: string) => `/${locale}${path}`
   // Base navigation items
@@ -40,10 +44,14 @@ export default function Sidebar() {
     { name: t('aiAssistant'), href: localizedHref('/ai-assistant'), icon: MessageSquare },
   ]
 
-  // Manager-specific navigation items
+  // Manager-specific navigation items (approvals and categories)
   const managerNavigation = [
     { name: t('approvals'), href: localizedHref('/manager/approvals'), icon: CheckCircle },
     { name: t('categories'), href: localizedHref('/manager/categories'), icon: Tag },
+  ]
+
+  // Admin-only navigation items (team management)
+  const adminNavigation = [
     { name: t('team'), href: localizedHref('/manager/teams'), icon: Users },
   ]
 
@@ -56,6 +64,7 @@ export default function Sidebar() {
   const navigation = [
     ...baseNavigation,
     ...(userRole.manager || userRole.admin ? managerNavigation : []),
+    ...(userRole.admin ? adminNavigation : []),
     ...settingsNavigation
   ]
 
@@ -108,7 +117,7 @@ export default function Sidebar() {
 
 
   // Fetch user role and cache the result with validation
-  const fetchUserRole = async () => {
+  const fetchUserRole = useCallback(async () => {
     try {
       console.log('[Sidebar] Fetching user role from API...')
 
@@ -146,7 +155,20 @@ export default function Sidebar() {
     } catch (error) {
       console.error('[Sidebar] Failed to fetch user role:', error)
     }
-  }
+  }, [])
+
+  // CRITICAL FIX: Re-fetch user role when active business context changes
+  useEffect(() => {
+    if (businessId) {
+      console.log('[Sidebar] Active business changed, refreshing user role:', businessId)
+
+      // Clear stale cached permissions when business changes
+      clearUserRoleCache()
+
+      // Fetch fresh permissions for new business context
+      fetchUserRole()
+    }
+  }, [businessId, fetchUserRole])
 
   // Save state to localStorage
   const toggleSidebar = () => {
@@ -163,12 +185,12 @@ export default function Sidebar() {
         transition-all duration-300 ease-in-out
         ${isMobile ? 'fixed left-0 top-0 h-full z-50' : 'relative'}
       `}>
-        {/* Enhanced Business Display with Switching */}
+        {/* Material Design Workspace Header */}
         <EnhancedBusinessDisplay
           isExpanded={isExpanded}
           isHydrated={isHydrated}
           locale={locale}
-          onToggleExpand={toggleSidebar}
+          onToggleSidebar={toggleSidebar}
         />
         
         {/* Navigation */}
@@ -237,6 +259,7 @@ export default function Sidebar() {
             })}
           </ul>
         </nav>
+
 
         {/* Powered by FinanSEAL */}
         <div className="p-4">

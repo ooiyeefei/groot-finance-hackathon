@@ -117,14 +117,7 @@ export async function calculateFinancialAnalyticsRPC(
   const userData = await getUserDataForAnalytics(clerkUserId);
   const { supabaseUserId, businessId } = userData;
 
-  // Check for existing analytics in cache (unless force refresh)
-  if (!forceRefresh) {
-    const cachedAnalytics = await getCachedAnalytics(clerkUserId, periodStart, periodEnd);
-    if (cachedAnalytics) {
-      console.log('[Analytics RPC] Returning cached analytics');
-      return cachedAnalytics;
-    }
-  }
+  // PERFORMANCE: RPC functions are already optimized, no need for additional caching
 
   // SECURITY: Create authenticated client for this specific user with business context
   const supabase = await createAuthenticatedSupabaseClient(clerkUserId);
@@ -216,9 +209,6 @@ export async function calculateFinancialAnalyticsRPC(
       transaction_count: analytics.transaction_count
     });
 
-    // Cache the calculated analytics
-    // await cacheAnalytics(analytics, clerkUserId); // Disabled temporarily for security audit
-
     return analytics;
 
   } catch (error) {
@@ -306,13 +296,7 @@ export async function calculateFinancialAnalyticsOriginal(
   const userData = await getUserDataForAnalytics(clerkUserId);
   const { supabaseUserId, businessId } = userData;
 
-  // Check for existing analytics in cache (unless force refresh)
-  if (!forceRefresh) {
-    const cachedAnalytics = await getCachedAnalytics(clerkUserId, periodStart, periodEnd);
-    if (cachedAnalytics) {
-      return cachedAnalytics;
-    }
-  }
+  // PERFORMANCE: Using original calculation method as fallback only
 
   // SECURITY: Create authenticated client for this specific user with business context
   const supabase = await createAuthenticatedSupabaseClient(clerkUserId);
@@ -323,7 +307,7 @@ export async function calculateFinancialAnalyticsOriginal(
 
   // SECURITY: First check transaction count with business_id validation
   const { data: allUserTransactions, error: checkError } = await supabase
-    .from('transactions')
+    .from('accounting_entries')
     .select('id, transaction_date, transaction_type, original_amount, home_currency_amount')
     .eq('user_id', supabaseUserId)
     .eq('business_id', businessId)
@@ -334,7 +318,7 @@ export async function calculateFinancialAnalyticsOriginal(
 
   // SECURITY: Fetch transactions with proper UUID and business context validation
   const { data: transactions, error: transactionError } = await supabase
-    .from('transactions')
+    .from('accounting_entries')
     .select('*')
     .eq('user_id', supabaseUserId)
     .eq('business_id', businessId)
@@ -387,8 +371,7 @@ export async function calculateFinancialAnalyticsOriginal(
       compliance_alerts: [],
       calculated_at: new Date()
     };
-    
-    // await cacheAnalytics(emptyAnalytics); // Disabled temporarily due to schema issues
+
     return emptyAnalytics;
   }
 
@@ -434,7 +417,7 @@ export async function calculateFinancialAnalyticsOriginal(
   // SECURITY: Fetch income transactions with business context validation
   // Include 'pending' status as per accounting standards - pending income represents unpaid receivables
   const { data: receivableTransactions, error: receivableError } = await supabase
-    .from('transactions')
+    .from('accounting_entries')
     .select('*')
     .eq('user_id', supabaseUserId)
     .eq('business_id', businessId)
@@ -531,7 +514,7 @@ export async function calculateFinancialAnalyticsOriginal(
   // SECURITY: Fetch expense transactions with business context validation
   // Include 'pending' status as per accounting standards - pending expenses represent unpaid payables
   const { data: payableTransactions, error: payableError } = await supabase
-    .from('transactions')
+    .from('accounting_entries')
     .select('*')
     .eq('user_id', supabaseUserId)
     .eq('business_id', businessId)
@@ -628,7 +611,7 @@ export async function calculateFinancialAnalyticsOriginal(
   
   // SECURITY: Fetch compliance transactions with business context validation
   const { data: complianceTransactions, error: complianceError } = await supabase
-    .from('transactions')
+    .from('accounting_entries')
     .select('id, compliance_analysis, description, vendor_name, original_amount, original_currency')
     .eq('user_id', supabaseUserId)
     .eq('business_id', businessId)
@@ -693,108 +676,9 @@ export async function calculateFinancialAnalyticsOriginal(
     calculated_at: new Date()
   };
 
-  // Cache the calculated analytics
-  // await cacheAnalytics(analytics, clerkUserId); // Disabled temporarily for security audit
-
   return analytics;
 }
 
-/**
- * Get cached analytics from database if available and recent
- * SECURITY: Now uses authenticated client with business context
- */
-async function getCachedAnalytics(
-  clerkUserId: string,
-  periodStart: Date,
-  periodEnd: Date
-): Promise<FinancialAnalytics | null> {
-  try {
-    const supabase = await createAuthenticatedSupabaseClient(clerkUserId);
-    const userData = await getUserDataForAnalytics(clerkUserId);
-
-    const { data: cached, error } = await supabase
-      .from('financial_analytics')
-      .select('*')
-      .eq('user_id', userData.supabaseUserId)
-      .eq('period_start', periodStart.toISOString().split('T')[0])
-      .eq('period_end', periodEnd.toISOString().split('T')[0])
-      .order('calculated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !cached) {
-      return null;
-    }
-
-    // Check if cache is recent (within 1 hour)
-    const cacheAge = Date.now() - new Date(cached.calculated_at).getTime();
-    const maxCacheAge = 60 * 60 * 1000; // 1 hour in milliseconds
-
-    if (cacheAge > maxCacheAge) {
-      return null; // Cache expired
-    }
-
-    return {
-    id: cached.id,
-    user_id: cached.user_id,
-    period_start: new Date(cached.period_start),
-    period_end: new Date(cached.period_end),
-    total_income: cached.total_income,
-    total_expenses: cached.total_expenses,
-    net_profit: cached.net_profit,
-    transaction_count: cached.transaction_count || 0,
-    currency_breakdown: cached.currency_breakdown || {},
-    category_breakdown: cached.category_breakdown || {},
-    aged_receivables: cached.aged_receivables || {
-      current: 0,
-      late_31_60: 0,
-      late_61_90: 0,
-      late_90_plus: 0,
-      total_outstanding: 0,
-      risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
-      average_risk_score: 0,
-      high_risk_transactions: 0
-    },
-    aged_payables: cached.aged_payables || {
-      current: 0,
-      late_31_60: 0,
-      late_61_90: 0,
-      late_90_plus: 0,
-      total_outstanding: 0,
-      risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
-      average_risk_score: 0,
-      high_risk_transactions: 0
-    },
-    compliance_alerts: cached.compliance_alerts || [],
-    calculated_at: new Date(cached.calculated_at)
-    };
-  } catch (error) {
-    console.error('[Analytics Engine] Error accessing cached analytics:', error);
-    return null;
-  }
-}
-
-/**
- * Store analytics in database cache
- * SECURITY: Now uses authenticated client (disabled temporarily due to schema complexity)
- */
-async function cacheAnalytics(analytics: FinancialAnalytics, clerkUserId: string): Promise<void> {
-  try {
-    // SECURITY: Use authenticated client instead of service role
-    // Currently disabled due to schema complexity - will be enabled after RLS implementation
-    console.log('[Analytics Engine] Analytics caching temporarily disabled for security audit');
-    return;
-
-    // TODO: Re-enable after RLS implementation
-    // const supabase = await createAuthenticatedSupabaseClient(clerkUserId);
-    // const { error } = await supabase
-    //   .from('financial_analytics')
-    //   .upsert({...}, { onConflict: 'user_id,period_start,period_end' });
-  } catch (error) {
-    console.error('Failed to cache analytics:', error);
-    // Don't throw - caching failure shouldn't break analytics calculation
-  }
-}
 
 /**
  * Generate date ranges for common periods

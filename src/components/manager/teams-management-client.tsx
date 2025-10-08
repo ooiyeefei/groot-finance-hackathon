@@ -42,7 +42,7 @@ interface TeamMember {
 interface PendingInvitation {
   id: string
   email: string
-  role: 'member' | 'admin' | 'owner' // Use backend role values
+  role: 'employee' | 'manager' | 'admin' // Updated to match modern role values from API
   invited_by: string
   invited_at: string // Changed from created_at to match API response
   status: 'pending' | 'accepted'
@@ -66,6 +66,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   const [inviteLoading, setInviteLoading] = useState(false)
   const [editingName, setEditingName] = useState<Set<string>>(new Set())
   const [editingNameValue, setEditingNameValue] = useState<string>('')
+  const [businessOwner, setBusinessOwner] = useState<string | null>(null)
   const router = useRouter()
 
 
@@ -133,38 +134,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     }
   }
 
-  const updateUserRole = async (userId: string, newRole: UserRole) => {
-    try {
-      setUpdating(prev => new Set([...prev, userId]))
-      setError(null)
-      setSuccess(null)
-
-      const response = await fetch('/api/user/role', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, role: newRole })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        setSuccess(`User role updated successfully`)
-        // Clear user role cache so sidebar updates immediately
-        clearUserRoleCache()
-        await fetchTeamMembers() // Refresh the list
-      } else {
-        setError(result.error || 'Failed to update user role')
-      }
-    } catch (error) {
-      console.error('Failed to update role:', error)
-      setError('Network error while updating role')
-    } finally {
-      setUpdating(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(userId)
-        return newSet
-      })
-    }
+  const updateUserRole = async (membershipId: string, newRole: UserRole) => {
+    // Use the simplified CRUD endpoint
+    await updateMembership(membershipId, { role: newRole })
   }
 
   const assignManager = async (employeeId: string, managerId: string) => {
@@ -312,6 +284,47 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     setEditingNameValue('')
   }
 
+  // Simplified CRUD operation for membership management
+  const updateMembership = async (
+    membershipId: string,
+    updates: { status?: 'active' | 'inactive' | 'suspended'; role?: UserRole; reason?: string }
+  ) => {
+    try {
+      setUpdating(prev => new Set([...prev, membershipId]))
+      setError(null)
+      setSuccess(null)
+
+      const response = await fetch(`/api/business/memberships/${membershipId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        const action = updates.status === 'inactive' ? 'removed' :
+                      updates.status === 'active' ? 'reactivated' :
+                      updates.role ? 'role updated for' : 'updated'
+
+        setSuccess(`User ${action} successfully`)
+        clearUserRoleCache()
+        await fetchTeamMembers() // Refresh the list
+      } else {
+        setError(result.error || 'Failed to update membership')
+      }
+    } catch (error) {
+      console.error('Failed to update membership:', error)
+      setError('Network error while updating membership')
+    } finally {
+      setUpdating(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(membershipId)
+        return newSet
+      })
+    }
+  }
+
   const updateUserName = async (memberId: string, isCurrentUser: boolean = false) => {
     if (!editingNameValue.trim()) {
       setError('Please enter a valid name')
@@ -364,15 +377,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     return 'employee'
   }
 
-  // Map backend invitation roles to display roles
-  const mapInvitationRoleToDisplay = (backendRole: string): UserRole => {
-    switch (backendRole) {
-      case 'owner': return 'admin'
-      case 'admin': return 'manager'
-      case 'member': return 'employee'
-      default: return 'employee'
-    }
-  }
+  // No mapping needed - API now returns modern role names directly
 
   const getRoleColor = (role: UserRole) => {
     switch (role) {
@@ -426,14 +431,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       {/* Status Messages */}
       {error && (
         <Alert className="bg-red-900/20 border-red-700">
-          <AlertCircle className="w-4 h-4" />
+          <AlertCircle className="w-4 h-4" style={{ color: '#f87171' }} />
           <AlertDescription className="text-red-400">{error}</AlertDescription>
         </Alert>
       )}
 
       {success && (
         <Alert className="bg-green-900/20 border-green-700">
-          <CheckCircle className="w-4 h-4" />
+          <CheckCircle className="w-4 h-4" style={{ color: '#4ade80' }} />
           <AlertDescription className="text-green-400">{success}</AlertDescription>
         </Alert>
       )}
@@ -565,7 +570,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                       />
                                       <Button
                                         size="sm"
-                                        onClick={() => updateUserName(member.user_id, member.user_id === userId)}
+                                        onClick={() => updateUserName(member.user_id, member.clerk_user?.id === userId)}
                                         disabled={updating.has(member.id)}
                                         className="h-8 px-2 bg-green-600 hover:bg-green-700"
                                       >
@@ -589,6 +594,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                           || member.email?.split('@')[0]
                                           || 'User'
                                         }
+                                        {member.clerk_user?.id === userId && (
+                                          <span className="text-gray-400 font-normal ml-1">(You)</span>
+                                        )}
                                       </h4>
                                       <Button
                                         size="sm"
@@ -606,10 +614,21 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                       </Button>
                                     </div>
                                   )}
-                                  <Badge variant="outline" className={getRoleColor(currentRole)}>
-                                    <RoleIcon className="w-3 h-3 mr-1" />
-                                    {currentRole}
-                                  </Badge>
+
+                                  {/* Role and Owner Badges */}
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className={getRoleColor(currentRole)}>
+                                      <RoleIcon className="w-3 h-3 mr-1" />
+                                      {currentRole}
+                                    </Badge>
+                                    {/* Show Owner badge for the current logged-in user (temporary) */}
+                                    {member.clerk_user?.id === userId && (
+                                      <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                                        <Crown className="w-3 h-3 mr-1" />
+                                        Owner
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                                 
                                 <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
@@ -635,15 +654,17 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                              <div className="min-w-[120px]">
-                                <Label className="text-gray-400 text-sm">Role</Label>
+                            {/* Controls Section - Clean layout without column headers */}
+                            <div className="flex items-center gap-4">
+                              {/* Role Selection */}
+                              <div className="flex flex-col">
+                                <span className="text-xs text-gray-500 mb-1">Role</span>
                                 <Select
                                   value={currentRole}
-                                  onValueChange={(newRole: UserRole) => updateUserRole(member.user_id, newRole)}
+                                  onValueChange={(newRole: UserRole) => updateUserRole(member.id, newRole)}
                                   disabled={isUpdating}
                                 >
-                                  <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8">
+                                  <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8 min-w-[110px]">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent className="bg-gray-700 border-gray-600">
@@ -669,16 +690,16 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                 </Select>
                               </div>
 
-                              {/* Manager Assignment - Only show for employees */}
+                              {/* Manager Assignment - Only for employees */}
                               {currentRole === 'employee' && (
-                                <div className="min-w-[140px]">
-                                  <Label className="text-gray-400 text-sm">Manager</Label>
+                                <div className="flex flex-col">
+                                  <span className="text-xs text-gray-500 mb-1">Manager</span>
                                   <Select
                                     value={member.manager_user_id || 'none'}
                                     onValueChange={(managerId: string) => assignManager(member.user_id, managerId)}
                                     disabled={isUpdating}
                                   >
-                                    <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8">
+                                    <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8 min-w-[130px]">
                                       <SelectValue placeholder="Assign manager" />
                                     </SelectTrigger>
                                     <SelectContent className="bg-gray-700 border-gray-600">
@@ -710,8 +731,26 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                 </div>
                               )}
 
+                              {/* Actions */}
+                              <div className="flex flex-col">
+                                <span className="text-xs text-gray-500 mb-1">Action</span>
+                                <Button
+                                  size="sm"
+                                  onClick={() => updateMembership(member.id, {
+                                    status: 'inactive',
+                                    reason: `Removed by admin`
+                                  })}
+                                  disabled={isUpdating}
+                                  className="h-8 bg-red-600 hover:bg-red-700 text-white"
+                                >
+                                  <Trash2 className="w-3 h-3 mr-1" />
+                                  Remove
+                                </Button>
+                              </div>
+
+                              {/* Loading Indicator */}
                               {isUpdating && (
-                                <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                                <Loader2 className="w-4 h-4 animate-spin text-blue-400 ml-2" />
                               )}
                             </div>
                           </div>
@@ -746,7 +785,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
               ) : (
                 <div className="space-y-4">
                   {pendingInvitations.map((invitation) => {
-                    const displayRole = mapInvitationRoleToDisplay(invitation.role)
+                    const displayRole = invitation.role as UserRole // Use role directly from API
                     const RoleIcon = getRoleIcon(displayRole)
                     
                     return (
@@ -786,9 +825,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   </Button>
                                   <Button
                                     size="sm"
-                                    variant="outline"
                                     onClick={() => deleteInvitation(invitation.id)}
-                                    className="border-red-600 text-red-400 hover:bg-red-900/20"
+                                    className="bg-red-600 hover:bg-red-700 text-white border-red-600"
                                   >
                                     <Trash2 className="w-3 h-3 mr-1" />
                                     Delete

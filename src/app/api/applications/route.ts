@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Applications API] Creating application for user ${userId}`)
 
-    // Get user data and use service client to bypass RLS (explicit filtering below)
+    // SECURITY FIX: Use authenticated client with RLS
     const userData = await getUserData(userId)
-    const supabase = createServiceSupabaseClient()
+    const supabase = await createAuthenticatedSupabaseClient()
 
     // Verify application type exists
     const { data: appType, error: appTypeError } = await supabase
@@ -138,11 +138,10 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Applications API] Fetching applications for user ${userId}`)
 
-    // Get user data and use service client to bypass RLS (explicit filtering below)
-    const userData = await getUserData(userId)
-    const supabase = createServiceSupabaseClient()
+    // SECURITY FIX: Use authenticated client with RLS + business_id filtering
+    const supabase = await createAuthenticatedSupabaseClient()
 
-    // Build query with EXPLICIT user_id filtering for security
+    // Build query - RLS handles business_id filtering automatically
     let query = supabase
       .from('applications')
       .select(`
@@ -160,7 +159,6 @@ export async function GET(request: NextRequest) {
           created_at
         )
       `)
-      .eq('user_id', userData.id) // 🛡️ EXPLICIT USER ISOLATION
 
     // Apply filters
     if (params.status) {
@@ -186,11 +184,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get total count for pagination with EXPLICIT user filtering
+    // Get total count for pagination - RLS handles business filtering
     const { count: totalCount } = await supabase
       .from('applications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userData.id) // 🛡️ EXPLICIT USER ISOLATION
 
     const hasMore = (params.page! - 1) * params.limit! + (applications?.length || 0) < (totalCount || 0)
 

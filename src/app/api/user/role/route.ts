@@ -5,12 +5,20 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserContext, updateUserRole } from '@/lib/rbac'
+import { getCurrentUserContextWithBusiness, updateUserRole } from '@/lib/rbac'
+import { rateLimiters } from '@/lib/rate-limit'
+import { csrfProtection } from '@/lib/csrf-protection'
 
-// GET - Get current user role and permissions
+// GET - Get current user role and permissions (FIXED: Now uses multi-tenant business context)
 export async function GET(request: NextRequest) {
   try {
-    const userContext = await getCurrentUserContext()
+    // Apply rate limiting for role queries
+    const rateLimitResponse = await rateLimiters.query(request)
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
+    const userContext = await getCurrentUserContextWithBusiness()
     
     if (!userContext) {
       return NextResponse.json(
@@ -36,7 +44,14 @@ export async function GET(request: NextRequest) {
           userId: userContext.profile.user_id,
           businessId: userContext.profile.business_id,
           role: userContext.profile.role
-        }
+        },
+        // FIXED: Include business context information for multi-tenant debugging
+        businessContext: userContext.businessContext ? {
+          businessId: userContext.businessContext.businessId,
+          businessName: userContext.businessContext.businessName,
+          role: userContext.businessContext.role,
+          isOwner: userContext.isBusinessOwner
+        } : null
       }
     })
 
@@ -49,10 +64,22 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT - Update user role (admin administrators only)
+// PUT - Update user role (admin administrators only) (FIXED: Now uses multi-tenant business context)
 export async function PUT(request: NextRequest) {
   try {
-    const userContext = await getCurrentUserContext()
+    // Apply rate limiting for role updates (admin operation)
+    const rateLimitResponse = await rateLimiters.admin(request)
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
+    // Apply CSRF protection
+    const csrfResponse = await csrfProtection(request)
+    if (csrfResponse) {
+      return csrfResponse
+    }
+
+    const userContext = await getCurrentUserContextWithBusiness()
     
     if (!userContext?.canManageUsers) {
       return NextResponse.json(

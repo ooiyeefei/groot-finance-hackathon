@@ -17,7 +17,7 @@
 import React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Crown, ChevronDown, ChevronUp, Building2, Loader2, AlertCircle } from 'lucide-react'
+import { Crown, ChevronDown, Building2, Loader2, AlertCircle, Check, PanelLeftClose, PanelLeftOpen, MoreVertical } from 'lucide-react'
 import {
   useActiveBusiness,
   useBusinessMemberships,
@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 // ============================================================================
@@ -46,11 +47,13 @@ interface RoleBadgeProps {
 }
 
 function RoleBadge({ role, isOwner, className, size = 'xs' }: RoleBadgeProps) {
-  const getRoleVariant = (role: string, isOwner: boolean) => {
-    if (isOwner) return 'default' // Primary color for owners
-    if (role === 'admin') return 'secondary'
-    if (role === 'manager') return 'outline'
-    return 'outline' // Employee
+  const getRoleColors = (role: string, isOwner: boolean) => {
+    if (isOwner) return 'bg-yellow-900/30 text-yellow-400 border-yellow-500/30' // Owner - dark theme
+    switch (role) {
+      case 'admin': return 'bg-purple-900/30 text-purple-400 border-purple-500/30'
+      case 'manager': return 'bg-blue-900/30 text-blue-400 border-blue-500/30'
+      default: return 'bg-gray-700/50 text-gray-300 border-gray-600/50' // Employee - dark theme
+    }
   }
 
   const getRoleLabel = (role: string, isOwner: boolean) => {
@@ -60,10 +63,13 @@ function RoleBadge({ role, isOwner, className, size = 'xs' }: RoleBadgeProps) {
 
   return (
     <div className={cn('flex items-center gap-1', className)}>
-      {isOwner && <Crown className={cn('text-yellow-500', size === 'xs' ? 'h-2.5 w-2.5' : 'h-3 w-3')} />}
+      {isOwner && <Crown className={cn('text-yellow-400', size === 'xs' ? 'h-2.5 w-2.5' : 'h-3 w-3')} />}
       <Badge
-        variant={getRoleVariant(role, isOwner || false)}
-        className={cn(size === 'xs' ? 'text-[10px] px-1.5 py-0.5 h-4' : 'text-xs px-2 py-1 h-5')}
+        variant="outline"
+        className={cn(
+          getRoleColors(role, isOwner || false),
+          size === 'xs' ? 'text-[10px] px-1.5 py-0.5 h-4' : 'text-xs px-2 py-1 h-5'
+        )}
       >
         {getRoleLabel(role, isOwner || false)}
       </Badge>
@@ -72,24 +78,20 @@ function RoleBadge({ role, isOwner, className, size = 'xs' }: RoleBadgeProps) {
 }
 
 // ============================================================================
-// Business Logo Display
+// Material Design Workspace Logo Component
 // ============================================================================
 
-interface BusinessLogoProps {
+interface WorkspaceLogoProps {
   businessProfile: any
   isHydrated: boolean
-  isExpanded: boolean
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'standard' | 'compact'
 }
 
-function BusinessLogo({ businessProfile, isHydrated, isExpanded, size = 'md' }: BusinessLogoProps) {
-  const getSizes = () => {
-    if (size === 'sm') return { width: 32, height: 32, className: 'w-8 h-8' }
-    if (size === 'lg') return { width: 56, height: 56, className: 'w-14 h-14' }
-    return { width: isExpanded ? 48 : 43, height: isExpanded ? 48 : 43, className: isExpanded ? 'w-12 h-12' : 'w-[43px] h-[43px]' }
-  }
+function WorkspaceLogo({ businessProfile, isHydrated, size = 'standard' }: WorkspaceLogoProps) {
+  // Material Design: Maximized logo sizes - 56px for standard, 48px for compact
+  const dimensions = size === 'standard' ? { width: 56, height: 56, className: 'w-14 h-14' } : { width: 48, height: 48, className: 'w-12 h-12' }
+  const { width, height, className } = dimensions
 
-  const { width, height, className } = getSizes()
   const shouldShowLogo = isHydrated && businessProfile?.logo_url
   const getBusinessInitial = () => businessProfile?.name?.[0]?.toUpperCase() || 'B'
 
@@ -97,17 +99,21 @@ function BusinessLogo({ businessProfile, isHydrated, isExpanded, size = 'md' }: 
     return (
       <Image
         src={businessProfile.logo_url}
-        alt="Business Logo"
+        alt="Workspace Logo"
         width={width}
         height={height}
-        className={cn(className, 'rounded-lg object-cover')}
+        className={cn(className, 'rounded-xl object-cover')} // Material Design: 12px border radius for squircle
       />
     )
   }
 
   return (
     <div
-      className={cn(className, 'rounded-lg flex items-center justify-center text-white font-bold', size === 'sm' ? 'text-sm' : size === 'lg' ? 'text-xl' : 'text-lg')}
+      className={cn(
+        className,
+        'rounded-xl flex items-center justify-center text-white font-semibold',
+        size === 'standard' ? 'text-lg' : 'text-base'
+      )}
       style={{ backgroundColor: businessProfile?.logo_fallback_color || '#3b82f6' }}
       suppressHydrationWarning={true}
     >
@@ -124,14 +130,14 @@ interface EnhancedBusinessDisplayProps {
   isExpanded: boolean
   isHydrated: boolean
   locale: string
-  onToggleExpand?: () => void
+  onToggleSidebar: () => void
 }
 
 export default function EnhancedBusinessDisplay({
   isExpanded,
   isHydrated,
   locale,
-  onToggleExpand
+  onToggleSidebar
 }: EnhancedBusinessDisplayProps) {
 
   // Business context hooks
@@ -168,13 +174,13 @@ export default function EnhancedBusinessDisplay({
 
   if (!isHydrated || isLoading) {
     return (
-      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-6' : 'p-4')}>
+      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}>
         <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
           <div className={cn('flex items-center', isExpanded ? 'space-x-3' : 'flex-col space-y-2')}>
-            <BusinessLogo
+            <WorkspaceLogo
               businessProfile={businessProfile}
               isHydrated={isHydrated}
-              isExpanded={isExpanded}
+              size={isExpanded ? 'standard' : 'compact'}
             />
             {isExpanded && (
               <div className="flex flex-col">
@@ -190,7 +196,7 @@ export default function EnhancedBusinessDisplay({
 
   if (hasError || !business) {
     return (
-      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-6' : 'p-4')}>
+      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}>
         <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
           <div className={cn('flex items-center text-red-400', isExpanded ? 'space-x-3' : 'flex-col space-y-2')}>
             <AlertCircle className="w-8 h-8" />
@@ -204,188 +210,316 @@ export default function EnhancedBusinessDisplay({
   }
 
   // ============================================================================
-  // Single Business Case - No Dropdown Needed
+  // Material Design: Single Workspace Display (No Switcher Needed)
   // ============================================================================
 
   if (memberships.length <= 1) {
     return (
-      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-6' : 'p-4')}>
-        <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
-          {isExpanded ? (
-            <>
-              <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 flex-1">
-                <BusinessLogo
+      <div className={cn('transition-all duration-300 ease-in-out')}>
+        {isExpanded ? (
+          // Brainwave-style: Clean expanded workspace header
+          <div className="p-3 border-b border-gray-700/50 relative">
+            <button
+              onClick={onToggleSidebar}
+              className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+              aria-label="Collapse sidebar"
+            >
+              <PanelLeftClose className="w-5 h-5" />
+            </button>
+            <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-gray-700/30 p-3 transition-colors mr-12">
+              <div className="relative">
+                <WorkspaceLogo
                   businessProfile={businessProfile}
                   isHydrated={isHydrated}
-                  isExpanded={isExpanded}
+                  size="standard"
                 />
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-lg font-semibold text-white whitespace-nowrap truncate" suppressHydrationWarning={true}>
+                {/* Dropdown indicator for multiple businesses - only show if multiple */}
+                {memberships.length > 1 && (
+                  <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
+                    <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-gray-600/50 bg-gray-600 hover:bg-gray-500 rounded-full flex items-center justify-center focus:ring-1 focus:ring-blue-500 focus:ring-offset-0 transition-colors [&>svg]:hidden">
+                      <ChevronDown className="w-3 h-3 text-white" />
+                    </SelectTrigger>
+                    <SelectContent className="w-80 bg-gray-800 border border-gray-600/50 shadow-2xl backdrop-blur-sm"
+                      style={{
+                        boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3), 0px 0px 0px 1px rgba(255, 255, 255, 0.1)'
+                      }}>
+                      {memberships.map((membership) => {
+                        const isSelected = membership.id === business?.businessId
+                        return (
+                          <SelectItem
+                            key={membership.id}
+                            value={membership.id}
+                            className={cn(
+                              "focus:bg-gray-700 focus:text-gray-100 py-3 cursor-pointer",
+                              isSelected && "bg-gray-100/10 backdrop-blur-sm"
+                            )}
+                          >
+                            <div className="flex items-center gap-3 w-full">
+                              <Building2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-gray-100 truncate">
+                                    {membership.name}
+                                  </span>
+                                </div>
+                                <span className="text-xs text-gray-400 truncate mt-1">
+                                  {membership.country_code} • {membership.home_currency}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <RoleBadge
+                                  role={membership.membership.role}
+                                  isOwner={membership.isOwner}
+                                  size="xs"
+                                />
+                                {/* MANAGE link placeholder for future implementation */}
+                                <span className="text-xs text-blue-400 opacity-0">MANAGE</span>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                {/* Brainwave-style: Clean business name with better typography */}
+                <div className="flex items-center gap-2">
+                  <h2
+                    className="text-base font-bold text-white leading-tight group-hover:text-blue-300 transition-colors truncate"
+                    suppressHydrationWarning={true}
+                  >
                     {business.businessName}
                   </h2>
-                  <div className="flex items-center mt-0.5">
-                    <RoleBadge role={business.role} isOwner={business.isOwner} />
-                  </div>
                 </div>
-              </Link>
-              {onToggleExpand && (
-                <button
-                  onClick={onToggleExpand}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0 ml-3"
-                  aria-label="Toggle sidebar"
+                {/* Brainwave-style: Subtle role indicator */}
+                <div className="mt-2">
+                  <RoleBadge role={business.role} isOwner={business.isOwner} size="sm" />
+                </div>
+              </div>
+            </Link>
+          </div>
+        ) : (
+          // Collapsed state: Logo with Brainwave-style tooltip
+          <div className="p-1 flex flex-col items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href={`/${locale}`} className="flex-shrink-0 rounded-lg hover:bg-gray-700/30 p-2 transition-colors">
+                    <WorkspaceLogo
+                      businessProfile={businessProfile}
+                      isHydrated={isHydrated}
+                      size="compact"
+                    />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="right"
+                  className="bg-gray-900 border-gray-700 text-white px-3 py-2 ml-2 max-w-xs"
                 >
-                  <ChevronUp className="w-5 h-5 rotate-90" />
-                </button>
-              )}
-            </>
-          ) : (
-            <div className="flex flex-col items-center space-y-2">
-              <Link href={`/${locale}`} className="flex-shrink-0">
-                <BusinessLogo
-                  businessProfile={businessProfile}
-                  isHydrated={isHydrated}
-                  isExpanded={isExpanded}
-                />
-              </Link>
-              {onToggleExpand && (
-                <button
-                  onClick={onToggleExpand}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-                  aria-label="Toggle sidebar"
-                >
-                  <ChevronDown className="w-4 h-4 rotate-90" />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{business.businessName}</span>
+                    </div>
+                    <RoleBadge role={business.role} isOwner={business.isOwner} size="xs" />
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <button
+              onClick={onToggleSidebar}
+              className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+              aria-label="Expand sidebar"
+            >
+              <PanelLeftOpen className="w-5 h-5" />
+            </button>
+          </div>
+        )}
       </div>
     )
   }
 
   // ============================================================================
-  // Multiple Business Case - Show Select Switcher
+  // Unified Business Display (Single and Multiple Businesses)
   // ============================================================================
 
   return (
-    <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-6' : 'p-4')}>
-      <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
-        {isExpanded ? (
-          <>
-            <div className="flex items-center space-x-3 min-w-0 flex-1">
-              <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
-                <SelectTrigger className="border-none bg-transparent hover:bg-gray-700/50 p-2 h-auto min-h-0 focus:ring-0 focus:ring-offset-0">
-                  <div className="flex items-center space-x-3 min-w-0 flex-1">
-                    <BusinessLogo
-                      businessProfile={businessProfile}
-                      isHydrated={isHydrated}
-                      isExpanded={isExpanded}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-white whitespace-nowrap truncate" suppressHydrationWarning={true}>
-                          {business.businessName}
-                        </h2>
-                        <ChevronDown className="w-4 h-4 text-gray-400 ml-2 flex-shrink-0" />
-                      </div>
-                      <div className="flex items-center mt-0.5">
-                        <RoleBadge role={business.role} isOwner={business.isOwner} />
-                      </div>
-                    </div>
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="w-80">
-                  {memberships.map((membership) => (
-                    <SelectItem key={membership.id} value={membership.id}>
-                      <div className="flex items-center gap-3 w-full">
-                        <Building2 className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <div className="flex flex-col min-w-0 flex-1">
-                          <span className="font-medium text-gray-900 truncate">
-                            {membership.name}
-                          </span>
-                          <span className="text-xs text-gray-500 truncate">
-                            {membership.country_code} • {membership.home_currency}
-                          </span>
-                        </div>
-                        <div className="flex-shrink-0">
-                          <RoleBadge
-                            role={membership.membership.role}
-                            isOwner={membership.isOwner}
-                            size="xs"
-                          />
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {onToggleExpand && (
-              <button
-                onClick={onToggleExpand}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0 ml-3"
-                aria-label="Toggle sidebar"
-              >
-                <ChevronUp className="w-5 h-5 rotate-90" />
-              </button>
-            )}
-          </>
-        ) : (
-          <div className="flex flex-col items-center space-y-2">
+    <div className={cn('transition-all duration-300 ease-in-out')}>
+      {isExpanded ? (
+        // Brainwave-style: Clean expanded workspace header with logo overlay dropdown
+        <div className="p-3 border-b border-gray-700/50 relative">
+          <button
+            onClick={onToggleSidebar}
+            className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftClose className="w-5 h-5" />
+          </button>
+          <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-gray-700/30 p-3 transition-colors mr-2">
             <div className="relative">
-              <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
-                <SelectTrigger className="border-none bg-transparent hover:bg-gray-700/50 p-1 h-auto min-h-0 focus:ring-0 focus:ring-offset-0 w-auto">
-                  <div className="relative">
-                    <BusinessLogo
+              <WorkspaceLogo
+                businessProfile={businessProfile}
+                isHydrated={isHydrated}
+                size="standard"
+              />
+              {/* Dropdown indicator for multiple businesses - only show if multiple */}
+              {memberships.length > 1 && (
+                <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
+                  <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-gray-600/50 bg-gray-600 hover:bg-gray-500 rounded-full flex items-center justify-center focus:ring-1 focus:ring-blue-500 focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
+                    <ChevronDown className="w-3 h-3 text-white" />
+                  </SelectTrigger>
+                  <SelectContent className="w-80 bg-gray-800 border border-gray-600/50 shadow-2xl backdrop-blur-sm"
+                    style={{
+                      boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3), 0px 0px 0px 1px rgba(255, 255, 255, 0.1)'
+                    }}>
+                    {memberships.map((membership) => {
+                      const isSelected = membership.id === business?.businessId
+                      return (
+                        <SelectItem
+                          key={membership.id}
+                          value={membership.id}
+                          className={cn(
+                            "focus:bg-gray-700 focus:text-gray-100 py-3 cursor-pointer",
+                            isSelected && "bg-gray-100/10 backdrop-blur-sm"
+                          )}
+                        >
+                          <div className="flex items-center gap-3 w-full">
+                            <Building2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-100 truncate">
+                                  {membership.name}
+                                </span>
+                              </div>
+                              <span className="text-xs text-gray-400 truncate mt-1">
+                                {membership.country_code} • {membership.home_currency}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <RoleBadge
+                                role={membership.membership.role}
+                                isOwner={membership.isOwner}
+                                size="xs"
+                              />
+                              {/* MANAGE link placeholder for future implementation */}
+                              <span className="text-xs text-blue-400 opacity-0">MANAGE</span>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              {/* Brainwave-style: Clean business name with better typography */}
+              <div className="flex items-center gap-2">
+                <h2
+                  className="text-base font-bold text-white leading-tight group-hover:text-blue-300 transition-colors truncate"
+                  suppressHydrationWarning={true}
+                >
+                  {business.businessName}
+                </h2>
+              </div>
+              {/* Brainwave-style: Subtle role indicator */}
+              <div className="mt-2">
+                <RoleBadge role={business.role} isOwner={business.isOwner} size="sm" />
+              </div>
+            </div>
+          </Link>
+        </div>
+      ) : (
+        // Collapsed state: Logo with tooltip and optional dropdown overlay
+        <div className="p-1 flex flex-col items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="relative">
+                  <Link href={`/${locale}`} className="flex-shrink-0 rounded-lg hover:bg-gray-700/30 p-2 transition-colors block">
+                    <WorkspaceLogo
                       businessProfile={businessProfile}
                       isHydrated={isHydrated}
-                      isExpanded={isExpanded}
+                      size="compact"
                     />
-                    <div className="absolute -bottom-0.5 -right-0.5 bg-gray-800 rounded-full p-0.5">
-                      <ChevronDown className="w-3 h-3 text-gray-400" />
-                    </div>
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="w-80">
-                  {memberships.map((membership) => (
-                    <SelectItem key={membership.id} value={membership.id}>
-                      <div className="flex items-center gap-3 w-full">
-                        <Building2 className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <div className="flex flex-col min-w-0 flex-1">
-                          <span className="font-medium text-gray-900 truncate">
-                            {membership.name}
-                          </span>
-                          <span className="text-xs text-gray-500 truncate">
-                            {membership.country_code} • {membership.home_currency}
-                          </span>
-                        </div>
-                        <div className="flex-shrink-0">
-                          <RoleBadge
-                            role={membership.membership.role}
-                            isOwner={membership.isOwner}
-                            size="xs"
-                          />
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {onToggleExpand && (
-              <button
-                onClick={onToggleExpand}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-                aria-label="Toggle sidebar"
+                  </Link>
+                  {/* Dropdown indicator for multiple businesses in collapsed state */}
+                  {memberships.length > 1 && (
+                    <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
+                      <SelectTrigger className="absolute -bottom-1 -right-1 w-5 h-5 p-0 border-2 border-gray-600/50 bg-gray-600 hover:bg-gray-500 rounded-full flex items-center justify-center focus:ring-1 focus:ring-blue-500 focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
+                        <ChevronDown className="w-2.5 h-2.5 text-white" />
+                      </SelectTrigger>
+                      <SelectContent className="w-80 bg-gray-800 border border-gray-600/50 shadow-2xl backdrop-blur-sm"
+                        style={{
+                          boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3), 0px 0px 0px 1px rgba(255, 255, 255, 0.1)'
+                        }}>
+                        {memberships.map((membership) => {
+                          const isSelected = membership.id === business?.businessId
+                          return (
+                            <SelectItem
+                              key={membership.id}
+                              value={membership.id}
+                              className={cn(
+                                "focus:bg-gray-700 focus:text-gray-100 py-3 cursor-pointer",
+                                isSelected && "bg-gray-100/10 backdrop-blur-sm"
+                              )}
+                            >
+                              <div className="flex items-center gap-3 w-full">
+                                <Building2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-gray-100 truncate">
+                                      {membership.name}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs text-gray-400 truncate mt-1">
+                                    {membership.country_code} • {membership.home_currency}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <RoleBadge
+                                    role={membership.membership.role}
+                                    isOwner={membership.isOwner}
+                                    size="xs"
+                                  />
+                                  {/* MANAGE link placeholder for future implementation */}
+                                  <span className="text-xs text-blue-400 opacity-0">MANAGE</span>
+                                </div>
+                              </div>
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                side="right"
+                className="bg-gray-900 border-gray-700 text-white px-3 py-2 ml-2 max-w-xs"
               >
-                <ChevronDown className="w-4 h-4 rotate-90" />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium truncate">{business.businessName}</span>
+                  </div>
+                  <RoleBadge role={business.role} isOwner={business.isOwner} size="xs" />
+                  <div className="text-xs text-gray-400">
+                    {memberships.length} workspace{memberships.length > 1 ? 's' : ''}
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <button
+            onClick={onToggleSidebar}
+            className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+            aria-label="Expand sidebar"
+          >
+            <PanelLeftOpen className="w-5 h-5" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

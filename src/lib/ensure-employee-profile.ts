@@ -38,11 +38,15 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
       // User exists, check for business membership
       console.log(`[User Profile] Found existing user UUID: ${existingUser.id} for Clerk ID: ${userId}`)
 
-      const { data: membership, error: membershipError } = await supabase
+      const { data: memberships, error: membershipError } = await supabase
         .from('business_memberships')
         .select('id, business_id, role, created_at')
         .eq('user_id', existingUser.id)
-        .single()
+        .eq('status', 'active')  // CRITICAL FIX: Only check active memberships
+        .order('created_at', { ascending: false }) // Get most recent first
+        .limit(1)
+
+      const membership = memberships?.[0] || null
 
       // If membership exists, return profile
       if (!membershipError && membership) {
