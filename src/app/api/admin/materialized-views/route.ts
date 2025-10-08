@@ -1,13 +1,14 @@
 /**
- * Materialized Views Management API
- * Provides monitoring and manual refresh capabilities
+ * DEPRECATED: Materialized Views Management API
+ * This API is deprecated as financial analytics now use RPC functions for performance
+ * RPC functions provide real-time results without the need for materialized views
  */
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 
-// GET: Fetch refresh history and status
+// DEPRECATED: Fetch refresh history and status
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth()
@@ -18,70 +19,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
-
-    // Check if user has admin/finance permissions
-    const { data: employeeProfile } = await supabase
-      .from('employee_profiles')
-      .select('role_permissions')
-      .eq('user_id', userId)
-      .single()
-
-    if (!employeeProfile?.role_permissions?.admin) {
-      return NextResponse.json(
-        { success: false, error: 'Insufficient permissions' },
-        { status: 403 }
-      )
-    }
-
-    const { searchParams } = new URL(request.url)
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
-    const viewName = searchParams.get('view_name') || 'financial_analytics_mv'
-
-    // Get refresh history
-    const { data: refreshHistory, error: historyError } = await supabase
-      .from('materialized_view_refresh_log')
-      .select('*')
-      .eq('view_name', viewName)
-      .order('refresh_started_at', { ascending: false })
-      .limit(limit)
-
-    if (historyError) {
-      console.error('[Materialized Views API] Failed to fetch history:', historyError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to fetch refresh history' },
-        { status: 500 }
-      )
-    }
-
-    // Get current view status
-    const { data: viewStats, error: statsError } = await supabase
-      .from('financial_analytics_mv')
-      .select('*', { count: 'exact', head: true })
-
-    const totalRows = viewStats ? 0 : (statsError?.message?.includes('does not exist') ? 0 : null)
-
-    // Get last refresh info
-    const lastRefresh = refreshHistory?.[0] || null
+    console.log('[Materialized Views API] DEPRECATED: This API is no longer needed')
+    console.log('[Materialized Views API] Financial analytics now use RPC functions for real-time performance')
 
     return NextResponse.json({
       success: true,
+      deprecated: true,
+      message: 'Materialized views are deprecated. Financial analytics now use RPC functions for optimal performance.',
       data: {
-        view_name: viewName,
-        total_rows: totalRows,
-        last_refresh: lastRefresh ? {
-          timestamp: lastRefresh.refresh_completed_at || lastRefresh.refresh_started_at,
-          success: lastRefresh.success,
-          duration: lastRefresh.duration,
-          rows_refreshed: lastRefresh.rows_refreshed,
-          error_message: lastRefresh.error_message
-        } : null,
-        refresh_history: refreshHistory || [],
-        pagination: {
-          limit,
-          total: refreshHistory?.length || 0,
-          has_more: (refreshHistory?.length || 0) >= limit
-        }
+        view_name: 'deprecated',
+        total_rows: 0,
+        last_refresh: null,
+        refresh_history: [],
+        pagination: { limit: 0, total: 0, has_more: false }
       }
     })
 
@@ -90,14 +40,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch materialized view status'
+        error: 'API is deprecated'
       },
-      { status: 500 }
+      { status: 410 }
     )
   }
 }
 
-// POST: Trigger manual refresh
+// DEPRECATED: Trigger manual refresh
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth()
@@ -108,59 +58,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
-
-    // Check if user has admin/finance permissions
-    const { data: employeeProfile } = await supabase
-      .from('employee_profiles')
-      .select('role_permissions')
-      .eq('user_id', userId)
-      .single()
-
-    if (!employeeProfile?.role_permissions?.admin) {
-      return NextResponse.json(
-        { success: false, error: 'Insufficient permissions' },
-        { status: 403 }
-      )
-    }
-
-    const { view_name = 'financial_analytics_mv' } = await request.json()
-
-    console.log(`[Materialized Views API] Manual refresh triggered for ${view_name} by user ${userId}`)
-
-    // Execute refresh with logging
-    const { error: refreshError } = await supabase
-      .rpc('refresh_financial_analytics_with_logging')
-
-    if (refreshError) {
-      console.error('[Materialized Views API] Manual refresh failed:', refreshError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to refresh materialized view' },
-        { status: 500 }
-      )
-    }
-
-    // Get the latest log entry to return results
-    const { data: latestLog } = await supabase
-      .from('materialized_view_refresh_log')
-      .select('*')
-      .eq('view_name', view_name)
-      .order('refresh_started_at', { ascending: false })
-      .limit(1)
-      .single()
+    console.log(`[Materialized Views API] DEPRECATED: Manual refresh no longer needed for user ${userId}`)
+    console.log('[Materialized Views API] Financial analytics now use RPC functions for real-time performance')
 
     return NextResponse.json({
       success: true,
+      deprecated: true,
+      message: 'Manual refresh is deprecated. Financial analytics now use RPC functions for optimal performance.',
       data: {
-        view_name,
-        refresh_triggered: true,
-        refresh_result: latestLog ? {
-          success: latestLog.success,
-          duration: latestLog.duration,
-          rows_refreshed: latestLog.rows_refreshed,
-          error_message: latestLog.error_message,
-          timestamp: latestLog.refresh_completed_at || latestLog.refresh_started_at
-        } : null
+        view_name: 'deprecated',
+        refresh_triggered: false,
+        refresh_result: null
       }
     })
 
@@ -169,9 +77,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to trigger materialized view refresh'
+        error: 'API is deprecated'
       },
-      { status: 500 }
+      { status: 410 }
     )
   }
 }

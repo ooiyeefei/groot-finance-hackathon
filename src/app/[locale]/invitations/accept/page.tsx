@@ -6,7 +6,7 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams, useRouter, useParams } from 'next/navigation'
 import { useAuth, useUser } from '@clerk/nextjs'
 import { Loader2, CheckCircle, AlertCircle, UserPlus, User } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,8 +24,11 @@ interface InvitationData {
 function AcceptInvitationContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const params = useParams()
   const { isLoaded, isSignedIn } = useAuth()
   const { user } = useUser()
+
+  const locale = (params.locale as string) || 'en'
   
   const [loading, setLoading] = useState(true)
   const [accepting, setAccepting] = useState(false)
@@ -65,7 +68,7 @@ function AcceptInvitationContent() {
       
       // Redirect to dashboard after successful acceptance
       setTimeout(() => {
-        router.push('/')
+        router.push(`/${locale}`)
       }, 2000)
 
     } catch (err) {
@@ -124,14 +127,15 @@ function AcceptInvitationContent() {
         setShowNameForm(true)
       }
     } else if (userEmail) {
-      setError(`This invitation is for ${invitation.email}, but you are signed in as ${userEmail}. Please sign out and create an account with the invited email.`)
+      setError(`This invitation is for ${invitation.email}, but you are signed in as ${userEmail}.\n\nPlease sign out and create an account with the invited email.`)
     }
   }, [isLoaded, isSignedIn, user, invitation, accepting, success, showNameForm])
 
   const handleSignUp = () => {
-    // Redirect to signup with pre-filled email and return URL
-    const signupUrl = `/sign-up?email=${encodeURIComponent(invitation?.email || '')}&redirect_url=${encodeURIComponent(window.location.href)}`
-    router.push(signupUrl)
+    // Use direct browser navigation to avoid CORS issues with Clerk redirects
+    // Use locale-aware sign-up route
+    const signupUrl = `/${locale}/sign-up?email=${encodeURIComponent(invitation?.email || '')}&redirect_url=${encodeURIComponent(window.location.href)}`
+    window.location.href = signupUrl
   }
 
   const handleSignOut = async () => {
@@ -190,15 +194,13 @@ function AcceptInvitationContent() {
           </CardHeader>
           <CardContent>
             <Alert className="bg-red-900/20 border-red-700 mb-4">
-              <AlertCircle className="w-4 h-4" />
-              <AlertDescription className="text-red-400">
+              <AlertDescription className="text-gray-300">
                 {error}
               </AlertDescription>
             </Alert>
-            <Button 
-              onClick={() => router.push('/')}
-              variant="outline"
-              className="w-full border-gray-600 text-gray-300"
+            <Button
+              onClick={() => router.push(`/${locale}`)}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
             >
               Return to Home
             </Button>
@@ -285,8 +287,7 @@ function AcceptInvitationContent() {
                 )}
                 <Button
                   onClick={handleSignOut}
-                  variant="outline"
-                  className="w-full border-gray-600 text-gray-300"
+                  className="w-full bg-red-600 hover:bg-red-700 text-white"
                   type="button"
                 >
                   Sign Out & Use Different Account
@@ -341,10 +342,9 @@ function AcceptInvitationContent() {
                   >
                     Accept Invitation
                   </Button>
-                  <Button 
+                  <Button
                     onClick={handleSignOut}
-                    variant="outline"
-                    className="w-full border-gray-600 text-gray-300"
+                    className="w-full bg-red-600 hover:bg-red-700 text-white"
                   >
                     Sign Out & Use Different Account
                   </Button>

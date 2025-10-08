@@ -1,6 +1,7 @@
 /**
- * Scheduled Refresh Management API
- * Sets up periodic materialized view refreshes via Trigger.dev
+ * DEPRECATED: Scheduled Refresh Management API
+ * This API is deprecated as financial analytics now use RPC functions for performance
+ * RPC functions provide real-time results without the need for scheduled refreshes
  */
 
 import { auth } from '@clerk/nextjs/server'
@@ -8,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 import { tasks } from '@trigger.dev/sdk/v3'
 
+// DEPRECATED: Schedule refresh
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth()
@@ -18,68 +20,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
-
-    // Check if user has admin/finance permissions
-    const { data: employeeProfile } = await supabase
-      .from('employee_profiles')
-      .select('role_permissions')
-      .eq('user_id', userId)
-      .single()
-
-    if (!employeeProfile?.role_permissions?.admin) {
-      return NextResponse.json(
-        { success: false, error: 'Insufficient permissions' },
-        { status: 403 }
-      )
-    }
-
-    const { 
-      schedule_type = 'immediate', 
-      delay_minutes = 0,
-      views = ['financial_analytics_mv'],
-      force_refresh = false 
-    } = await request.json()
-
-    console.log(`[Schedule Refresh API] Scheduling ${schedule_type} refresh for views: ${views.join(', ')} by user ${userId}`)
-
-    let taskResult
-
-    if (schedule_type === 'immediate') {
-      // Trigger immediate refresh
-      taskResult = await tasks.trigger('refresh-materialized-views', {
-        views,
-        force_refresh,
-        triggered_by: `manual_${userId}`
-      })
-    } else if (schedule_type === 'delayed' && delay_minutes > 0) {
-      // Schedule delayed refresh (useful for maintenance windows)
-      const delayString = `${delay_minutes}m` // Convert to string format: "30m", "60m", etc.
-      taskResult = await tasks.trigger('refresh-materialized-views', {
-        views,
-        force_refresh,
-        triggered_by: `scheduled_delayed_${userId}`
-      }, {
-        delay: delayString
-      })
-    } else {
-      return NextResponse.json(
-        { success: false, error: 'Invalid schedule_type or delay_minutes' },
-        { status: 400 }
-      )
-    }
+    console.log(`[Schedule Refresh API] DEPRECATED: Scheduled refresh no longer needed for user ${userId}`)
+    console.log('[Schedule Refresh API] Financial analytics now use RPC functions for real-time performance')
 
     return NextResponse.json({
       success: true,
+      deprecated: true,
+      message: 'Scheduled refresh is deprecated. Financial analytics now use RPC functions for optimal performance.',
       data: {
-        task_id: taskResult.id,
-        schedule_type,
-        delay_minutes,
-        views,
+        task_id: 'deprecated',
+        schedule_type: 'deprecated',
+        delay_minutes: 0,
+        views: [],
         scheduled_at: new Date().toISOString(),
-        estimated_execution: schedule_type === 'delayed' 
-          ? new Date(Date.now() + (delay_minutes * 60 * 1000)).toISOString()
-          : new Date().toISOString()
+        estimated_execution: new Date().toISOString()
       }
     })
 
@@ -88,14 +42,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to schedule materialized view refresh'
+        error: 'API is deprecated'
       },
-      { status: 500 }
+      { status: 410 }
     )
   }
 }
 
-// GET: Check scheduled refresh status
+// DEPRECATED: Check scheduled refresh status
 export async function GET() {
   try {
     const { userId } = await auth()
@@ -106,37 +60,19 @@ export async function GET() {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
-
-    // Check if user has admin/finance permissions
-    const { data: employeeProfile } = await supabase
-      .from('employee_profiles')
-      .select('role_permissions')
-      .eq('user_id', userId)
-      .single()
-
-    if (!employeeProfile?.role_permissions?.admin) {
-      return NextResponse.json(
-        { success: false, error: 'Insufficient permissions' },
-        { status: 403 }
-      )
-    }
-
-    // Get recent refresh history
-    const { data: refreshHistory } = await supabase
-      .from('materialized_view_refresh_log')
-      .select('*')
-      .order('refresh_started_at', { ascending: false })
-      .limit(10)
+    console.log(`[Schedule Refresh API] DEPRECATED: Status check no longer needed for user ${userId}`)
+    console.log('[Schedule Refresh API] Financial analytics now use RPC functions for real-time performance')
 
     return NextResponse.json({
       success: true,
+      deprecated: true,
+      message: 'Scheduled refresh status is deprecated. Financial analytics now use RPC functions for optimal performance.',
       data: {
-        recent_refreshes: refreshHistory || [],
+        recent_refreshes: [],
         scheduling_info: {
-          available_views: ['financial_analytics_mv'],
-          supported_schedules: ['immediate', 'delayed'],
-          max_delay_minutes: 1440 // 24 hours
+          available_views: [],
+          supported_schedules: [],
+          max_delay_minutes: 0
         }
       }
     })
@@ -146,9 +82,9 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch schedule status'
+        error: 'API is deprecated'
       },
-      { status: 500 }
+      { status: 410 }
     )
   }
 }

@@ -8,71 +8,123 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { syncRoleToClerk } from '@/lib/rbac'
+import { validateInvitationToken, isLegacyUuidToken } from '@/lib/invitation-tokens'
+import { rateLimiters } from '@/lib/rate-limit'
 
 /**
  * Validate invitation token (for when user clicks invitation link)
  */
 export async function GET(request: NextRequest) {
   try {
+    // Apply rate limiting for invitation validation
+    const rateLimitResponse = await rateLimiters.auth(request)
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     const { searchParams } = new URL(request.url)
     const token = searchParams.get('token')
 
     if (!token) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invitation token is required' 
+      return NextResponse.json({
+        success: false,
+        error: 'Invitation token is required'
       }, { status: 400 })
     }
 
     const supabase = createServiceSupabaseClient()
 
-    // Validate the invitation token (user ID)
-    const { data: invitation, error: fetchError } = await supabase
-      .from('users')
-      .select('id, email, created_at, business_id, invited_by')
-      .eq('id', token)
-      .is('clerk_user_id', null) // Only pending invitations
-      .not('invited_by', 'is', null) // Must be an invitation
-      .single()
+    // Check if this is a legacy UUID token or new secure token
+    if (isLegacyUuidToken(token)) {
+      console.log('[Invitation Validate] Processing legacy UUID token')
 
-    if (fetchError || !invitation) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invalid or expired invitation' 
-      }, { status: 404 })
-    }
+      // Handle legacy UUID token (backward compatibility)
+      const { data: invitation, error: fetchError } = await supabase
+        .from('users')
+        .select('id, email, created_at, business_id, invited_by, invited_role, clerk_user_id')
+        .eq('id', token)
+        .not('invited_by', 'is', null) // Must be an invitation
+        .single()
 
-    // Check if invitation hasn't expired (7 days)
-    const invitedDate = new Date(invitation.created_at)
-    const expirationDate = new Date(invitedDate.getTime() + (7 * 24 * 60 * 60 * 1000))
-    
-    if (new Date() > expirationDate) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invitation has expired' 
-      }, { status: 410 })
-    }
-
-    // Get business information
-    const { data: business } = await supabase
-      .from('businesses')
-      .select('name')
-      .eq('id', invitation.business_id)
-      .single()
-
-    return NextResponse.json({
-      success: true,
-      invitation: {
-        email: invitation.email,
-        businessName: business?.name || 'FinanSEAL Business'
+      if (fetchError || !invitation) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid invitation'
+        }, { status: 404 })
       }
-    })
+
+      // Get the role from business_memberships separately
+      const { data: membershipData } = await supabase
+        .from('business_memberships')
+        .select('role')
+        .eq('user_id', invitation.id)
+        .eq('business_id', invitation.business_id)
+        .single()
+
+      // Check if invitation hasn't expired (7 days)
+      const invitedDate = new Date(invitation.created_at)
+      const expirationDate = new Date(invitedDate.getTime() + (7 * 24 * 60 * 60 * 1000))
+
+      if (new Date() > expirationDate) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invitation has expired'
+        }, { status: 410 })
+      }
+
+      // Get business information
+      const { data: business } = await supabase
+        .from('businesses')
+        .select('name')
+        .eq('id', invitation.business_id)
+        .single()
+
+      return NextResponse.json({
+        success: true,
+        invitation: {
+          email: invitation.email,
+          role: membershipData?.role || invitation.invited_role || 'employee',
+          businessName: business?.name || 'FinanSEAL Business'
+        }
+      })
+
+    } else {
+      console.log('[Invitation Validate] Processing JWT token')
+
+      // Handle JWT token
+      const tokenValidation = await validateInvitationToken(token)
+
+      if (!tokenValidation.isValid || !tokenValidation.data) {
+        return NextResponse.json({
+          success: false,
+          error: tokenValidation.error || 'Invalid invitation token'
+        }, { status: 404 })
+      }
+
+      const { userId, businessId, email, role } = tokenValidation.data
+
+      // Get business information
+      const { data: business } = await supabase
+        .from('businesses')
+        .select('name')
+        .eq('id', businessId)
+        .single()
+
+      return NextResponse.json({
+        success: true,
+        invitation: {
+          email,
+          role,
+          businessName: business?.name || 'FinanSEAL Business'
+        }
+      })
+    }
 
   } catch (error) {
     console.error('[Invitation Accept API] GET error:', error)
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Internal server error' 
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error'
     }, { status: 500 })
   }
 }
@@ -82,11 +134,17 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting for invitation acceptance
+    const rateLimitResponse = await rateLimiters.auth(request)
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     const { userId } = await auth()
     if (!userId) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Authentication required' 
+      return NextResponse.json({
+        success: false,
+        error: 'Authentication required'
       }, { status: 401 })
     }
 
@@ -102,21 +160,101 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceSupabaseClient()
 
-    // Get the invitation record
-    const { data: invitation, error: fetchError } = await supabase
-      .from('users')
-      .select('id, email, created_at, business_id, invited_by')
-      .eq('id', token)
-      .is('clerk_user_id', null) // Only pending invitations
-      .not('invited_by', 'is', null) // Must be an invitation
-      .single()
+    let invitation: any
+    let invitationBusinessId: string
+    let invitationEmail: string
+    let invitationRole: string
+    let isSecureToken = false
 
-    if (fetchError || !invitation) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invalid invitation or already accepted' 
-      }, { status: 404 })
+    // Check if this is a legacy UUID token or new secure token
+    if (isLegacyUuidToken(token)) {
+      console.log('[Invitation Accept] Processing legacy UUID token')
+
+      // Handle legacy UUID token (backward compatibility)
+      const { data: legacyInvitation, error: fetchError } = await supabase
+        .from('users')
+        .select('id, email, created_at, business_id, invited_by, invited_role, clerk_user_id')
+        .eq('id', token)
+        .not('invited_by', 'is', null) // Must be an invitation
+        .single()
+
+      if (fetchError || !legacyInvitation) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid invitation'
+        }, { status: 404 })
+      }
+
+      invitation = legacyInvitation
+      invitationBusinessId = invitation.business_id
+      invitationEmail = invitation.email
+      invitationRole = invitation.invited_role || 'employee'
+
+    } else {
+      console.log('[Invitation Accept] Processing JWT token')
+      isSecureToken = true
+
+      // Handle JWT token
+      const tokenValidation = await validateInvitationToken(token)
+
+      if (!tokenValidation.isValid || !tokenValidation.data) {
+        return NextResponse.json({
+          success: false,
+          error: tokenValidation.error || 'Invalid invitation token'
+        }, { status: 404 })
+      }
+
+      const { userId, businessId, email, role } = tokenValidation.data
+
+      // Get the user record for this JWT token
+      const { data: userRecord, error: userError } = await supabase
+        .from('users')
+        .select('id, email, created_at, business_id, invited_by, invited_role, clerk_user_id')
+        .eq('id', userId)
+        .single()
+
+      if (userError || !userRecord) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid invitation - user record not found'
+        }, { status: 404 })
+      }
+
+      invitation = userRecord
+      invitationBusinessId = businessId
+      invitationEmail = email
+      invitationRole = role
     }
+
+    // Check if invitation is either pending OR already processed by user recovery for current user
+    const isPending = invitation.clerk_user_id === null
+    const isUserRecoveryProcessed = invitation.clerk_user_id === userId
+
+    if (!isPending && !isUserRecoveryProcessed) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invitation has already been accepted by another user'
+      }, { status: 409 })
+    }
+
+    // If user recovery already processed this invitation, just return success
+    if (isUserRecoveryProcessed) {
+      console.log(`[Invitation Accept] User recovery already processed invitation for ${invitation.email}`)
+
+      return NextResponse.json({
+        success: true,
+        message: 'Invitation already accepted via user recovery',
+        alreadyProcessed: true
+      })
+    }
+
+    // Get the role from business_memberships separately
+    const { data: membershipData } = await supabase
+      .from('business_memberships')
+      .select('role')
+      .eq('user_id', invitation.id)
+      .eq('business_id', invitation.business_id)
+      .single()
 
     // Check if invitation hasn't expired (7 days)
     const invitedDate = new Date(invitation.created_at)
@@ -135,30 +273,186 @@ export async function POST(request: NextRequest) {
     const userEmail = clerkUser.emailAddresses[0]?.emailAddress
 
     // Verify email matches invitation
-    if (!userEmail || userEmail.toLowerCase() !== invitation.email.toLowerCase()) {
+    if (!userEmail || userEmail.toLowerCase() !== invitationEmail.toLowerCase()) {
       return NextResponse.json({
         success: false,
         error: 'Email address does not match invitation'
       }, { status: 403 })
     }
 
-    // Check if user already has records in Supabase (existing user accepting cross-business invitation)
+    // Check if user already has records in Supabase
     const { data: existingUserRecord } = await supabase
       .from('users')
-      .select('id, business_id, role')
+      .select('id, business_id')
       .eq('clerk_user_id', userId)
       .single()
 
     if (existingUserRecord && existingUserRecord.id !== invitation.id) {
-      // User already exists with different business - handle cross-business invitation
-      console.log(`[Invitation Accept] Existing user ${userEmail} accepting cross-business invitation`)
+      // CRITICAL FIX: Handle cross-business invitations properly
+      console.log(`[Invitation Accept] Found existing user ${existingUserRecord.id} for ${userEmail}`)
+      console.log(`[Invitation Accept] Invitation for business: ${invitationBusinessId}`)
 
-      // For now, we'll prevent cross-business memberships to keep it simple
-      // TODO: Implement multi-business support in future
-      return NextResponse.json({
-        success: false,
-        error: 'You already belong to another business. Multi-business support is not yet available.'
-      }, { status: 409 })
+      // Check if this is a re-invitation to the same business (removed user being re-invited)
+      const { data: existingMembership } = await supabase
+        .from('business_memberships')
+        .select('business_id, status')
+        .eq('user_id', existingUserRecord.id)
+        .eq('business_id', invitationBusinessId)
+        .single()
+
+      if (existingMembership) {
+        console.log(`[Invitation Accept] Same-business re-invitation detected - reactivating existing membership`)
+
+        // Get the invited role from business_memberships BEFORE deleting it
+        const { data: membershipData } = await supabase
+          .from('business_memberships')
+          .select('role')
+          .eq('user_id', invitation.id)
+          .eq('business_id', invitationBusinessId)
+          .single()
+
+        const membershipRole = membershipData?.role || invitation.invited_role || 'employee'
+
+        // Reactivate existing inactive business membership for existing user
+        const { data: newMembership, error: membershipError } = await supabase
+          .from('business_memberships')
+          .update({
+            role: membershipRole,
+            status: 'active',
+            joined_at: new Date().toISOString(),
+            invited_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', existingUserRecord.id)
+          .eq('business_id', invitationBusinessId)
+          .select('*')
+          .single()
+
+        if (membershipError) {
+          console.error('[Invitation Accept] Re-invitation membership reactivation error:', membershipError)
+          return NextResponse.json({
+            success: false,
+            error: 'Failed to reactivate membership'
+          }, { status: 500 })
+        }
+
+        // Clean up the invitation user record since we're using existing user
+        await supabase
+          .from('business_memberships')
+          .delete()
+          .eq('user_id', invitation.id)
+          .eq('business_id', invitationBusinessId)
+
+        await supabase
+          .from('users')
+          .delete()
+          .eq('id', invitation.id)
+
+        // Set role permissions and sync to Clerk
+        const rolePermissions = {
+          employee: true,
+          manager: membershipRole === 'manager' || membershipRole === 'admin',
+          admin: membershipRole === 'admin'
+        }
+
+        const syncResult = await syncRoleToClerk(userId, rolePermissions)
+        if (!syncResult.success) {
+          console.error(`[Invitation Accept] Warning: Failed to sync permissions to Clerk: ${syncResult.error}`)
+        }
+
+        console.log(`[Invitation Accept API] Same-business re-invitation accepted: ${userEmail} → ${invitationBusinessId}`)
+
+        return NextResponse.json({
+          success: true,
+          message: 'Re-invitation accepted successfully',
+          profile: newMembership
+        })
+
+      } else {
+        // CRITICAL FIX: Cross-business invitation - don't create duplicate user records
+        console.log(`[Invitation Accept] Cross-business invitation detected for existing user ${existingUserRecord.id}`)
+
+        // Get the invited role from the invitation membership record
+        const { data: invitationMembershipData } = await supabase
+          .from('business_memberships')
+          .select('role')
+          .eq('user_id', invitation.id)
+          .eq('business_id', invitationBusinessId)
+          .single()
+
+        const membershipRole = invitationMembershipData?.role || invitation.invited_role || 'employee'
+
+        // Create new business membership for existing user (cross-business)
+        const { data: newMembership, error: membershipError } = await supabase
+          .from('business_memberships')
+          .insert({
+            user_id: existingUserRecord.id, // Use existing user record
+            business_id: invitationBusinessId,
+            role: membershipRole,
+            status: 'active',
+            joined_at: new Date().toISOString(),
+            invited_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select('*')
+          .single()
+
+        if (membershipError) {
+          console.error('[Invitation Accept] Cross-business membership creation error:', membershipError)
+          return NextResponse.json({
+            success: false,
+            error: 'Failed to create cross-business membership'
+          }, { status: 500 })
+        }
+
+        // Clean up the invitation user record since we're using existing user
+        await supabase
+          .from('business_memberships')
+          .delete()
+          .eq('user_id', invitation.id)
+          .eq('business_id', invitationBusinessId)
+
+        await supabase
+          .from('users')
+          .delete()
+          .eq('id', invitation.id)
+
+        // Set role permissions and sync to Clerk for new business context
+        const rolePermissions = {
+          employee: true,
+          manager: membershipRole === 'manager' || membershipRole === 'admin',
+          admin: membershipRole === 'admin'
+        }
+
+        const syncResult = await syncRoleToClerk(userId, rolePermissions)
+        if (!syncResult.success) {
+          console.error(`[Invitation Accept] Warning: Failed to sync permissions to Clerk: ${syncResult.error}`)
+        }
+
+        // Update active business in Clerk metadata
+        try {
+          const { clerkClient } = await import('@clerk/nextjs/server')
+          const clerkUser = await (await clerkClient()).users.getUser(userId)
+
+          await (await clerkClient()).users.updateUser(userId, {
+            publicMetadata: {
+              ...(clerkUser.publicMetadata || {}),
+              activeBusinessId: invitationBusinessId
+            }
+          })
+        } catch (clerkError) {
+          console.error('[Invitation Accept] Warning: Failed to set active business:', clerkError)
+        }
+
+        console.log(`[Invitation Accept API] Cross-business invitation accepted: ${userEmail} → ${invitationBusinessId}`)
+
+        return NextResponse.json({
+          success: true,
+          message: 'Cross-business invitation accepted successfully',
+          profile: newMembership,
+          crossBusiness: true
+        })
+      }
     }
 
     // Determine the full name to save
@@ -171,7 +465,9 @@ export async function POST(request: NextRequest) {
       finalFullName = `${clerkUser.firstName} ${clerkUser.lastName}`
     }
 
-    // Update the invitation record to associate with Clerk user
+    // CRITICAL FIX: Update the invitation record to associate with Clerk user
+    // Use invitation.id instead of token (which is JWT for secure tokens)
+    const invitationUserId = isSecureToken ? invitation.id : token
     const { error: updateError } = await supabase
       .from('users')
       .update({
@@ -179,7 +475,7 @@ export async function POST(request: NextRequest) {
         full_name: finalFullName,
         updated_at: new Date().toISOString()
       })
-      .eq('id', token)
+      .eq('id', invitationUserId)
 
     if (updateError) {
       console.error('[Invitation Accept API] Update error:', updateError)
@@ -189,24 +485,28 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Create business membership with default employee role
-    // Note: Role was specified during invitation creation but not stored in users table
-    // Admin can update role later if needed through team management
-    const rolePermissions = {
-      employee: true,
-      manager: false,
-      admin: false
-    }
+    // Update existing business membership with joined_at timestamp
+    // The membership record was created during invitation with the correct role
+    const membershipRole = membershipData?.role || invitation.invited_role || 'employee'
 
     const { data: businessMembership, error: profileError } = await supabase
       .from('business_memberships')
-      .insert({
-        user_id: invitation.id, // Links to the users table record
-        business_id: invitation.business_id,
-        role: 'employee' // Default to employee role (admin can update later)
+      .update({
+        status: 'active', // Change from pending to active
+        joined_at: new Date().toISOString(), // Mark as officially joined
+        updated_at: new Date().toISOString()
       })
+      .eq('user_id', invitation.id)
+      .eq('business_id', invitation.business_id)
       .select('*')
       .single()
+
+    // Set role permissions based on the actual invited role
+    const rolePermissions = {
+      employee: membershipRole === 'employee',
+      manager: membershipRole === 'manager',
+      admin: membershipRole === 'admin'
+    }
 
     if (profileError) {
       console.error('[Invitation Accept API] Profile creation error:', profileError)
@@ -222,10 +522,12 @@ export async function POST(request: NextRequest) {
       console.error(`[Invitation Accept] Warning: Failed to sync permissions to Clerk: ${syncResult.error}`)
     }
 
-    console.log(`[Invitation Accept API] Invitation accepted: ${userEmail} → ${invitation.business_id}`)
+    // JWT tokens are stateless - no need to mark as used in database
 
-    return NextResponse.json({ 
-      success: true, 
+    console.log(`[Invitation Accept API] Invitation accepted: ${userEmail} → ${invitationBusinessId}`)
+
+    return NextResponse.json({
+      success: true,
       message: 'Invitation accepted successfully',
       profile: businessMembership
     })

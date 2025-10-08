@@ -1,120 +1,197 @@
-# Invoice Module Fixes and Improvements
+# Business Switcher Component Redesign Plan
 
-## Current Priority
-Focus on stabilizing and improving the invoice processing module after recent refactoring and renaming work.
+## Overview
+Redesigning the `enhanced-business-display.tsx` component to be more minimalist, cleaner, and better aligned with our dark theme financial application aesthetic.
 
-## Background
-After previous refactoring and renaming activities, the invoice module needs fixes to ensure it works properly. We need to identify and resolve any issues introduced during the restructuring.
+## Current Issues Identified
+1. ✗ Redundant dropdown arrow - Radix Select adds its own ChevronDown, creating duplicate arrows
+2. ✗ Selection highlight lacks contrast - need better visual feedback for selected items
+3. ✗ Missing clear selection indicator - no checkmark or highlight for active business
+4. ✗ Menu collapse icon unclear - ChevronUp rotated 90° is confusing
+5. ✗ Business logo too small - needs prominence with better spacing (currently 48px/43px)
 
-## Investigation Tasks
+## Design Approach
 
-### Phase 1: Invoice Module Assessment
-- [ ] Identify specific invoice processing issues from recent refactoring
-- [ ] Test document upload and OCR processing workflow
-- [ ] Verify transaction creation from invoice data
-- [ ] Check document-transaction linking functionality
-- [ ] Test line item extraction and mapping
+### Color Palette (Dark Theme + Blue Accents)
+- **Background**: gray-800/gray-900 (#1f2937, #111827)
+- **Surface**: gray-800 with subtle gray-700/50 hover states
+- **Primary Accent**: blue-500 (#3b82f6) for interactive elements
+- **Selected State**: blue-500/10 background with blue-500 border-left accent
+- **Text Primary**: white (#ffffff)
+- **Text Secondary**: gray-400 (#9ca3af)
+- **Text Muted**: gray-500 (#6b7280)
 
-### Phase 2: Core Invoice Functionality
-- [ ] Verify invoice upload to Supabase Storage works correctly
-- [ ] Test Trigger.dev OCR processing background jobs
-- [ ] Validate document annotation and bounding box display
-- [ ] Check transaction form pre-population from OCR data
-- [ ] Ensure proper error handling throughout invoice workflow
+### Component Structure Improvements
 
-### Phase 3: UI/UX Invoice Components
-- [ ] Test DocumentAnalysisModal component functionality
-- [ ] Verify invoice preview and annotation display
-- [ ] Check transaction creation modal pre-population
-- [ ] Test invoice status updates and processing indicators
-- [ ] Validate responsive design on mobile devices
+#### 1. Business Logo Enhancement
+- **Current**: 48px (expanded) / 43px (collapsed)
+- **New**: 56px (expanded) / 48px (collapsed)
+- **Padding**: Reduce internal padding from p-6/p-4 to p-4/p-3
+- **Visual Impact**: Larger logo creates better hierarchy
 
-### Phase 4: Integration Testing
-- [ ] Test end-to-end invoice processing workflow
-- [ ] Verify database schema compatibility after renaming
-- [ ] Check API route functionality for invoice endpoints
-- [ ] Test error scenarios and user feedback
-- [ ] Run build validation to ensure no breaking changes
+#### 2. Dropdown Arrow Fix
+- **Issue**: SelectTrigger adds its own ChevronDown icon via Radix
+- **Solution**: Hide Radix's default icon with `[&>svg]:hidden` class
+- **Implementation**: Keep single ChevronDown in our custom layout
+- **Position**: Right side of business name, inline with text
 
-## Current Status
-⏳ **Investigation Phase** - Need to identify specific invoice issues
-📋 **Currency Work** - Documented in `tasks/future_currency.md` for later
-✅ **INR Support** - Already completed across all files
+#### 3. Selection Indicator (Checkmark)
+- **Icon**: lucide-react `Check` icon (already imported in select.tsx)
+- **Position**: Right side of each SelectItem
+- **Color**: blue-500 for selected state
+- **Size**: w-4 h-4 for visibility
+- **Behavior**: Only visible on selected business
 
-## Files to Investigate
-- `src/app/api/invoices/[invoiceId]/process/route.ts`
-- `src/app/api/invoices/[invoiceId]/route.ts`
-- `src/app/api/invoices/image-url/route.ts`
-- `src/components/invoices/document-analysis-modal.tsx`
-- `src/trigger/process-document-ocr.ts`
-- `src/trigger/annotate-document-image.ts`
+#### 4. Selection Highlight Enhancement
+- **Default State**: transparent background
+- **Hover State**: bg-gray-700/50
+- **Selected State**:
+  - bg-blue-500/10 (subtle blue tint)
+  - border-l-2 border-l-blue-500 (left accent bar)
+  - text-white font-medium
+- **Transition**: smooth 150ms ease
 
-## Next Steps
-1. **User Input Needed**: What specific invoice issues have you encountered?
-2. **Testing**: Run through invoice upload workflow to identify problems
-3. **Systematic Fixes**: Address issues one by one following our build-fix loop
-4. **Validation**: Ensure all invoice functionality works end-to-end
+#### 5. Menu Collapse Icon Replacement
+- **Current**: ChevronUp rotated 90° (confusing)
+- **New Options**:
+  - **PanelLeftClose** / **PanelLeftOpen** - most semantic for sidebar collapse
+  - **ChevronsLeft** / **ChevronsRight** - clear directional intent
+  - **Menu** - minimal hamburger icon
+- **Recommendation**: PanelLeftClose/PanelLeftOpen for best UX clarity
 
-## Previous Completed Tasks
-✅ Application Summary system implementation completed.
+#### 6. Owner Badge Refinement
+- **Current**: Yellow with Crown icon
+- **Enhancement**:
+  - Darker background: bg-yellow-900/30 border-yellow-600/50
+  - Text: text-yellow-400
+  - Icon: text-yellow-500
+  - Better contrast on dark background
 
-## COGS Categories Implementation - COMPLETED ✅
+### Accessibility Improvements
+- Maintain ARIA labels on all interactive elements
+- Ensure 4.5:1 contrast ratio for all text
+- Keyboard navigation support (already handled by Radix)
+- Focus ring visible on all interactive elements
 
-**Overview**: Successfully implemented Cost of Goods Sold (COGS) categories system for invoices, providing business-scoped category management distinct from expense categories.
+## Implementation Tasks
 
-### Completed Tasks ✅
+### Phase 1: Core Component Refactoring
+- [ ] Increase logo size to 56px/48px with adjusted container padding
+- [ ] Hide Radix's default ChevronDown icon with CSS
+- [ ] Reposition custom ChevronDown for single arrow appearance
+- [ ] Replace collapse icon with PanelLeftClose/PanelLeftOpen
 
-#### 1. Database Schema Implementation ✅
-- **Task**: Add custom_cogs_categories JSONB field to businesses table with comprehensive defaults
-- **Files**: `/migrations/add_cogs_categories.sql`
-- **Changes**:
-  - Added `custom_cogs_categories JSONB` column to businesses table
-  - Applied 10 comprehensive default COGS categories to all existing businesses
-  - Categories include: Purchase (610-000), IT Support (611-000), Subscription Fees (612-000), Wages (613-000), Materials (614-000), Subcontractor Fees (615-000), Manufacturing Overhead (616-000), Equipment (617-000), Shipping (618-000), Other COGS (619-000)
-  - Each category includes GL account, cost type (direct/indirect), keywords, and vendor patterns
+### Phase 2: Selection Styling Enhancement
+- [ ] Add custom SelectItem styling with selected state
+- [ ] Implement blue-500/10 background for selected items
+- [ ] Add left border accent bar (border-l-2 border-l-blue-500)
+- [ ] Add Check icon indicator for selected business
+- [ ] Improve hover states with gray-700/50
 
-#### 2. API Endpoints Development ✅
-- **Task**: Create API endpoints /api/cogs-categories similar to expense categories pattern
-- **Files**:
-  - `/src/app/api/cogs-categories/route.ts`
-  - `/src/app/api/cogs-categories/enabled/route.ts`
-- **Changes**:
-  - Full CRUD operations (GET, POST, PUT, DELETE)
-  - Manager/admin role-based permissions
-  - JSONB structure handling with proper validation
-  - Enabled-only endpoint for dropdowns and AI categorization
+### Phase 3: Badge & Typography Refinement
+- [ ] Update Owner badge colors for dark theme
+- [ ] Adjust role badge colors for better contrast
+- [ ] Fine-tune typography hierarchy
+- [ ] Optimize spacing and padding throughout
 
-#### 3. UI Components Implementation ✅
-- **Task**: Build centralized Category Management UI with COGS categories
-- **Files**:
-  - `/src/app/[locale]/manager/categories/page.tsx` (updated)
-  - `/src/components/invoices/cogs-category-management.tsx` (new)
-  - `/src/components/invoices/cogs-category-form-modal.tsx` (new)
-- **Changes**:
-  - Added tabbed interface to existing categories page (Expense Categories + COGS Categories)
-  - Created comprehensive COGS category management component with search, CRUD operations
-  - Built form modal with COGS-specific fields (GL account, cost type, keywords, vendor patterns)
+### Phase 4: Testing & Polish
+- [ ] Test expanded/collapsed states
+- [ ] Verify single business case (no dropdown)
+- [ ] Verify multiple business case (with dropdown)
+- [ ] Test keyboard navigation
+- [ ] Verify loading and error states
+- [ ] Run `npm run build` to validate
 
-#### 4. DSPy Pipeline Integration ✅
-- **Task**: Update DSPy pipeline to use COGS categories from API instead of hardcoded IFRS
-- **Files**: `/src/trigger/process-document-ocr.ts`
-- **Changes**:
-  - Added `fetchEnabledCOGSCategoriesFromDB()` function for COGS category retrieval
-  - Implemented domain-specific categorization logic (COGS for invoices, expense for claims, IFRS fallback)
-  - Updated categorization flow to use business-defined categories with confidence scoring
+## Technical Implementation Details
 
-### Technical Implementation Summary
-- **Database**: JSONB structure for business-scoped category management
-- **APIs**: RESTful endpoints with manager/admin permissions
-- **UI**: Tabbed interface with comprehensive COGS management
-- **AI**: Domain-specific categorization using business-defined rules
+### Key Component Files to Modify
+1. `/src/components/ui/enhanced-business-display.tsx` - Main component
+2. `/src/components/ui/select.tsx` - May need minor adjustments for dark theme
 
-### Validation Results ✅
-- `npm run build` completed successfully with no errors
-- All TypeScript validation passed
-- All API endpoints functional
-- UI components render correctly
-- Database migration applied successfully
+### Specific Code Changes
 
-**Status**: All COGS categories tasks completed successfully ✅
-**Ready for**: Production deployment and testing
+#### Logo Size Adjustment
+```typescript
+// BusinessLogo component - getSizes function
+if (size === 'lg') return { width: 56, height: 56, className: 'w-14 h-14' }
+return {
+  width: isExpanded ? 56 : 48,
+  height: isExpanded ? 56 : 48,
+  className: isExpanded ? 'w-14 h-14' : 'w-12 h-12'
+}
+```
+
+#### Container Padding Reduction
+```typescript
+// Main container
+className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}
+```
+
+#### Hide Radix Default Icon
+```typescript
+// SelectTrigger
+className="... [&>svg]:hidden focus:ring-blue-500/50"
+```
+
+#### Custom SelectItem with Indicator
+```typescript
+<SelectItem
+  className={cn(
+    "relative flex items-center gap-3 py-2.5 px-3",
+    "hover:bg-gray-700/50 transition-colors",
+    "data-[state=checked]:bg-blue-500/10",
+    "data-[state=checked]:border-l-2 data-[state=checked]:border-l-blue-500"
+  )}
+>
+  {/* Content */}
+  {membership.id === business?.businessId && (
+    <Check className="w-4 h-4 text-blue-500 ml-auto" />
+  )}
+</SelectItem>
+```
+
+#### Collapse Icon Replacement
+```typescript
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+
+// In component
+{onToggleExpand && (
+  <button
+    onClick={onToggleExpand}
+    className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+    aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+  >
+    {isExpanded ? (
+      <PanelLeftClose className="w-5 h-5" />
+    ) : (
+      <PanelLeftOpen className="w-5 h-5" />
+    )}
+  </button>
+)}
+```
+
+#### Owner Badge Dark Theme
+```typescript
+const getRoleColors = (role: string, isOwner: boolean) => {
+  if (isOwner) return 'bg-yellow-900/30 text-yellow-400 border-yellow-600/50'
+  switch (role) {
+    case 'admin': return 'bg-purple-900/30 text-purple-400 border-purple-600/50'
+    case 'manager': return 'bg-blue-900/30 text-blue-400 border-blue-600/50'
+    default: return 'bg-gray-700/50 text-gray-300 border-gray-600/50'
+  }
+}
+```
+
+## Expected Outcomes
+- ✓ Single, clear dropdown arrow on business switcher
+- ✓ Prominent business logo with better visual hierarchy
+- ✓ Clear selection indicator with checkmark and accent bar
+- ✓ Improved color contrast on all interactive elements
+- ✓ Intuitive collapse/expand icon with clear directionality
+- ✓ Elegant, minimalist design matching financial application standards
+- ✓ Maintained accessibility standards (WCAG 2.1 AA)
+- ✓ Smooth transitions and professional polish
+
+## Review Section
+[To be completed after implementation]
+>>>>>>> 2f2f215 (fix(security): Comprehensive security enhancements and sidebar reactivity fixes)

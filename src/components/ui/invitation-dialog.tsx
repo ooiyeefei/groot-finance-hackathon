@@ -225,10 +225,9 @@ export default function InvitationDialog({
             <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
               <Button
                 type="button"
-                variant="outline"
                 onClick={handleClose}
                 disabled={isLoading}
-                className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                className="bg-gray-600 hover:bg-gray-700 text-white border-gray-600"
               >
                 Cancel
               </Button>

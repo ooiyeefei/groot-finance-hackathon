@@ -116,16 +116,259 @@ async function createMissingUserRecords(
 
     console.log(`[User Recovery] 📧 Processing recovery for: email=${email}, fullName=${fullName}`)
 
-    // 🛡️ STEP 1: Create user record FIRST (same as webhook flow)
-    console.log(`[User Recovery] 👤 Creating user record for ${email}`)
+    // 🛡️ STEP 1: Check if user already exists to prevent duplicate key error
+    console.log(`[User Recovery] 🔍 Checking for existing user with clerk_user_id: ${clerkUserId}`)
+
+    const { data: existingUserByClerkId } = await supabase
+      .from('users')
+      .select('id, business_id, email')
+      .eq('clerk_user_id', clerkUserId)
+      .single()
+
+    if (existingUserByClerkId) {
+      console.log(`[User Recovery] ⚠️ User already exists with clerk_user_id: ${clerkUserId}`)
+      console.log(`[User Recovery] 📋 Existing user: ID=${existingUserByClerkId.id}, business_id=${existingUserByClerkId.business_id}`)
+
+      // Return existing user instead of creating duplicate
+      return {
+        id: existingUserByClerkId.id,
+        business_id: existingUserByClerkId.business_id
+      }
+    }
+
+    // 🛡️ STEP 1.5: Enhanced multi-tenant invitation and membership checking
+    console.log(`[User Recovery] 🔍 Checking for pending invitations and removed memberships with email: ${email}`)
+
+    // Check for pending invitations via business_memberships (more reliable in multi-tenant)
+    const { data: pendingMemberships } = await supabase
+      .from('business_memberships')
+      .select(`
+        id,
+        user_id,
+        business_id,
+        role,
+        status,
+        invited_at,
+        users!inner(id, email, invited_by, invited_role, status, business_id)
+      `)
+      .eq('status', 'pending')
+      .ilike('users.email', email)
+      .is('users.clerk_user_id', null) // User doesn't have Clerk account yet
+
+    if (pendingMemberships && pendingMemberships.length > 0) {
+      console.log(`[User Recovery] 🎯 Found ${pendingMemberships.length} pending invitation(s) for ${email}`)
+
+      // For multi-tenant, user might have multiple pending invitations
+      // Process the most recent one or let user choose during onboarding
+      const latestInvitation = pendingMemberships.sort((a: any, b: any) =>
+        new Date(b.invited_at).getTime() - new Date(a.invited_at).getTime()
+      )[0]
+
+      const userData = latestInvitation.users
+      console.log(`[User Recovery] 🔄 Processing latest invitation for business: ${latestInvitation.business_id}`)
+
+      // Update the user record with Clerk user ID
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          clerk_user_id: clerkUserId,
+          full_name: fullName,
+          status: 'active',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userData.id)
+
+      if (updateError) {
+        console.error('[User Recovery] ❌ Failed to update invitation user record:', updateError)
+        return null
+      }
+
+      // Update membership to active with joined_at timestamp
+      const { error: membershipUpdateError } = await supabase
+        .from('business_memberships')
+        .update({
+          status: 'active',
+          joined_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userData.id)
+        .eq('business_id', latestInvitation.business_id)
+
+      if (membershipUpdateError) {
+        console.error('[User Recovery] ❌ Failed to activate membership:', membershipUpdateError)
+        // Continue anyway, user record is updated
+      }
+
+      // Set role permissions based on the invitation role
+      const invitationRole = latestInvitation.role || userData.invited_role || 'employee'
+      const rolePermissions = {
+        employee: true,
+        manager: invitationRole === 'manager' || invitationRole === 'admin',
+        admin: invitationRole === 'admin'
+      }
+
+      // Sync role permissions to Clerk metadata
+      console.log(`[User Recovery] 🔄 Syncing invitation role permissions to Clerk metadata`)
+      const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
+
+      if (!syncResult.success) {
+        console.error(`[User Recovery] ❌ Clerk sync failed: ${syncResult.error}`)
+      } else {
+        console.log(`[User Recovery] ✅ Clerk sync successful for invitation`)
+      }
+
+      // Set active business in Clerk metadata
+      try {
+        const { clerkClient } = await import('@clerk/nextjs/server')
+        const clerkUser = await (await clerkClient()).users.getUser(clerkUserId)
+
+        await (await clerkClient()).users.updateUser(clerkUserId, {
+          publicMetadata: {
+            ...(clerkUser.publicMetadata || {}),
+            activeBusinessId: latestInvitation.business_id
+          }
+        })
+      } catch (clerkError) {
+        console.error('[User Recovery] Warning: Failed to set active business:', clerkError)
+      }
+
+      console.log(`[User Recovery] 🎉 Successfully processed invitation: ${email} → User: ${userData.id} → Business: ${latestInvitation.business_id}`)
+
+      return {
+        id: userData.id,
+        business_id: latestInvitation.business_id
+      }
+    }
+
+    // Check for removed memberships that might indicate a returning user
+    const { data: removedMemberships } = await supabase
+      .from('business_memberships')
+      .select(`
+        id,
+        user_id,
+        business_id,
+        role,
+        status,
+        users!inner(id, email, clerk_user_id, full_name, status)
+      `)
+      .eq('status', 'removed')
+      .ilike('users.email', email)
+      .is('users.clerk_user_id', null) // User doesn't have Clerk account
+
+    if (removedMemberships && removedMemberships.length > 0) {
+      console.log(`[User Recovery] 🔍 Found ${removedMemberships.length} removed membership(s) for ${email}`)
+      console.log(`[User Recovery] ⚠️ This user was previously removed from business(es). They should either:`)
+      console.log(`[User Recovery] 1. Be reactivated via admin action, or`)
+      console.log(`[User Recovery] 2. Create a new business as owner`)
+
+      // For removed users, we'll create a new business instead of auto-reactivating
+      // This follows the "soft removal" principle - removed users don't auto-rejoin
+      console.log(`[User Recovery] 🏗️ Proceeding to create new business for previously removed user`)
+    }
+
+    // 🛡️ STEP 2: COMPREHENSIVE MULTI-TENANT INVITATION CHECK
+    console.log(`[User Recovery] 🚨 COMPREHENSIVE CHECK - Verifying ${email} has no unprocessed invitation history`)
+
+    // Check for ANY unprocessed invitations via business_memberships (more reliable)
+    const { data: allInvitations } = await supabase
+      .from('business_memberships')
+      .select(`
+        id,
+        user_id,
+        business_id,
+        role,
+        status,
+        users!business_memberships_user_id_fkey!inner(id, email, clerk_user_id, invited_by, status)
+      `)
+      .ilike('users.email', email)
+      .not('users.invited_by', 'is', null) // Has invitation history (check via users table)
+      .in('status', ['pending', 'active']) // Active invitations
+
+    if (allInvitations && allInvitations.length > 0) {
+      console.log(`[User Recovery] 🚨 Found ${allInvitations.length} invitation(s) with history for ${email}`)
+
+      // Find the most appropriate invitation to process
+      const activeInvitations = allInvitations.filter((inv: any) => inv.status === 'active')
+      const pendingInvitations = allInvitations.filter((inv: any) => inv.status === 'pending')
+
+      if (activeInvitations.length > 0) {
+        // User already has active memberships - this is an existing user
+        const latestActive = activeInvitations[0]
+        console.log(`[User Recovery] ✅ Found active membership for existing user`)
+
+        // Update user record with Clerk ID if not set
+        if (!latestActive.users.clerk_user_id) {
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({
+              clerk_user_id: clerkUserId,
+              full_name: fullName,
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', latestActive.users.id)
+
+          if (updateError) {
+            console.error('[User Recovery] ❌ Failed to update existing user record:', updateError)
+            return null
+          }
+        }
+
+        return {
+          id: latestActive.users.id,
+          business_id: latestActive.business_id
+        }
+      }
+
+      if (pendingInvitations.length > 0) {
+        // This should have been caught earlier, but process it here as fallback
+        const latestPending = pendingInvitations[0]
+        console.log(`[User Recovery] 🔄 Processing fallback pending invitation`)
+
+        // Update user record
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            clerk_user_id: clerkUserId,
+            full_name: fullName,
+            status: 'active',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', latestPending.users.id)
+
+        if (updateError) {
+          console.error('[User Recovery] ❌ Failed to update pending user record:', updateError)
+          return null
+        }
+
+        // Activate the membership
+        await supabase
+          .from('business_memberships')
+          .update({
+            status: 'active',
+            joined_at: new Date().toISOString()
+          })
+          .eq('id', latestPending.id)
+
+        return {
+          id: latestPending.users.id,
+          business_id: latestPending.business_id
+        }
+      }
+    }
+
+    console.log(`[User Recovery] ✅ Confirmed: ${email} has NO invitation history - safe to create new business`)
+
+    // 🛡️ STEP 3: Create user record FIRST (only for genuinely new users)
+    console.log(`[User Recovery] 👤 Creating user record for NEW user ${email}`)
 
     const userData = {
       clerk_user_id: clerkUserId,
       email: email,
       full_name: fullName,
       business_id: null, // Will be updated after business creation
-      role: 'admin',
       home_currency: 'SGD',
+      status: 'active', // New user is active by default
       created_at: new Date().toISOString()
     }
 
@@ -137,12 +380,33 @@ async function createMissingUserRecords(
 
     if (userError) {
       console.error('[User Recovery] ❌ Error creating user record:', userError)
+
+      // Check if it's a duplicate key error and handle gracefully
+      if (userError.message.includes('duplicate') || userError.message.includes('unique')) {
+        console.log(`[User Recovery] 🔄 Duplicate key error detected, checking for existing user again...`)
+
+        // Race condition: user was created between our check and insert
+        const { data: raceConditionUser } = await supabase
+          .from('users')
+          .select('id, business_id')
+          .eq('clerk_user_id', clerkUserId)
+          .single()
+
+        if (raceConditionUser) {
+          console.log(`[User Recovery] ✅ Found user created by race condition: ${raceConditionUser.id}`)
+          return {
+            id: raceConditionUser.id,
+            business_id: raceConditionUser.business_id
+          }
+        }
+      }
+
       return null
     }
 
     console.log(`[User Recovery] ✅ Created user with ID: ${newUser.id}`)
 
-    // 🛡️ STEP 2: Create business with owner_id = user UUID
+    // 🛡️ STEP 4: Create business with owner_id = user UUID (only for new users)
     const businessName = fullName ? `${fullName}'s Business` : `${email.split('@')[0]}'s Business`
     const businessSlug = `${email.split('@')[0]}-business-${Date.now()}`
 
@@ -447,19 +711,22 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
     throw new Error('No JWT token available')
   }
 
-  console.log('[Supabase Client] Using proper Clerk JWT authentication for:', {
-    clerkUserId: authenticatedClerkUserId,
-    hasToken: !!jwtToken
-  })
+  // JWT authentication configured for Clerk integration
 
-  // Create Supabase client with JWT token as the primary auth method
+  // Create Supabase client with proper JWT authentication
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // Still needed for initialization
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // Use anon key, not JWT token
     {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+      },
       global: {
         headers: {
-          Authorization: `Bearer ${jwtToken}` // Use JWT directly in headers
+          Authorization: `Bearer ${jwtToken}`,
+          'Content-Type': 'application/json'
         },
         fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
           return fetch(url, {
@@ -470,6 +737,14 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
       }
     }
   )
+
+  // 🔧 CRITICAL FIX: Set the session with JWT token for RPC functions to access claims
+  await supabase.auth.setSession({
+    access_token: jwtToken,
+    refresh_token: '' // Empty refresh token since we don't use it
+  })
+
+  // JWT session configured for RPC access
 
   return supabase
 }
@@ -501,11 +776,7 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
   await supabase.rpc('set_user_context', { user_id: supabaseUserUuid })
   await supabase.rpc('set_tenant_context', { business_id: activeBusinessId })
 
-  console.log('[Supabase Client] Multi-tenant RLS context set:', {
-    clerkUserId: authenticatedClerkUserId,
-    supabaseUuid: supabaseUserUuid,
-    activeBusinessId
-  })
+  // Multi-tenant RLS context configured
 
   return supabase
 }

@@ -5,9 +5,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { getCurrentUserContext } from '@/lib/rbac'
 import { emailService } from '@/lib/services/email-service'
+import { createInvitationToken } from '@/lib/invitation-tokens'
+import { rateLimiters } from '@/lib/rate-limit'
+import { csrfProtection } from '@/lib/csrf-protection'
 
 /**
  * Resend existing business invitation
@@ -17,6 +20,18 @@ export async function POST(
   { params }: { params: Promise<{ invitationId: string }> }
 ) {
   try {
+    // Apply rate limiting for resending invitations (admin operation)
+    const rateLimitResponse = await rateLimiters.admin(request)
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
+    // Apply CSRF protection
+    const csrfResponse = await csrfProtection(request)
+    if (csrfResponse) {
+      return csrfResponse
+    }
+
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
@@ -32,12 +47,12 @@ export async function POST(
     }
 
     const { invitationId } = await params
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = createServiceSupabaseClient()
 
-    // Get the invitation record
+    // Get the invitation record with invited_role as fallback
     const { data: invitation, error: fetchError } = await supabase
       .from('users')
-      .select('id, email, created_at, business_id, invited_by')
+      .select('id, email, created_at, business_id, invited_by, invited_role')
       .eq('id', invitationId)
       .eq('business_id', userContext.profile.business_id)
       .is('clerk_user_id', null) // Only pending invitations
@@ -45,11 +60,19 @@ export async function POST(
       .single()
 
     if (fetchError || !invitation) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invitation not found or already accepted' 
+      return NextResponse.json({
+        success: false,
+        error: 'Invitation not found or already accepted'
       }, { status: 404 })
     }
+
+    // Get the role from business_memberships separately
+    const { data: membershipData } = await supabase
+      .from('business_memberships')
+      .select('role')
+      .eq('user_id', invitation.id)
+      .eq('business_id', invitation.business_id)
+      .single()
 
     // Check if invitation hasn't expired (7 days)
     const invitedDate = new Date(invitation.created_at)
@@ -87,15 +110,25 @@ export async function POST(
       ? `${inviterUser.firstName} ${inviterUser.lastName}`
       : inviterUser.emailAddresses[0]?.emailAddress || 'Team Admin'
 
-    // Send invitation email using user ID as token (with default locale)
-    const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/en/invitations/accept?token=${invitation.id}`
-    
+    // Generate new JWT invitation token with 7-day expiration
+    const role = membershipData?.role || invitation.invited_role || 'employee'
+    const secureToken = await createInvitationToken(
+      invitation.id,
+      userContext.profile.business_id,
+      invitation.email,
+      role,
+      7 // 7 days expiration
+    )
+
+    // Send invitation email using JWT token
+    const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/en/invitations/accept?token=${secureToken}`
+
     const emailResult = await emailService.sendInvitation({
       email: invitation.email,
       businessName: business?.name || 'FinanSEAL Business',
       inviterName,
-      role: 'team member', // Generic role since not stored in users table anymore
-      invitationToken: invitation.id, // Use user ID as token
+      role,
+      invitationToken: secureToken,
       invitationUrl
     })
 

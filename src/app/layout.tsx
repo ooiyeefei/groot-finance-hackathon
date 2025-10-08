@@ -42,7 +42,48 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      appearance={{
+        elements: {
+          // OTP input styling - white text and background
+          formFieldInput__phoneNumber: {
+            backgroundColor: '#ffffff',
+            color: '#000000',
+            borderColor: '#d1d5db'
+          },
+          formFieldInput__emailAddress: {
+            backgroundColor: '#ffffff',
+            color: '#000000',
+            borderColor: '#d1d5db'
+          },
+          // OTP code input boxes
+          formFieldInput__identifier: {
+            backgroundColor: '#ffffff',
+            color: '#000000',
+            borderColor: '#d1d5db'
+          },
+          // General input styling for consistency
+          formFieldInput: {
+            backgroundColor: '#ffffff',
+            color: '#000000',
+            borderColor: '#d1d5db'
+          },
+          // OTP verification code inputs specifically
+          otpCodeFieldInput: {
+            backgroundColor: '#ffffff !important',
+            color: '#000000 !important',
+            borderColor: '#d1d5db !important'
+          }
+        },
+        variables: {
+          colorBackground: '#1f2937', // Dark background
+          colorText: '#ffffff',       // White text
+          colorPrimary: '#3b82f6',   // Blue primary
+          colorInputBackground: '#ffffff', // White input background
+          colorInputText: '#000000'  // Black input text
+        }
+      }}
+    >
       <html>
         <head>
           <link rel="manifest" href="/manifest.json" />

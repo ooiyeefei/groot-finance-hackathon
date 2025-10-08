@@ -43,10 +43,11 @@ export async function PUT(request: NextRequest) {
 
     // Validate that the employee exists and belongs to the same business
     const { data: employee, error: employeeError } = await supabase
-      .from('employee_profiles')
-      .select('id, user_id, business_id')
+      .from('business_memberships')
+      .select('id, user_id, business_id, role')
       .eq('user_id', employee_id)
       .eq('business_id', userContext.profile.business_id)
+      .eq('status', 'active')
       .single()
 
     if (employeeError || !employee) {
@@ -57,13 +58,14 @@ export async function PUT(request: NextRequest) {
     }
 
     // If manager_id is provided, validate that the manager exists and has appropriate permissions
-    let managerEmployeeProfileId = null
+    let managerMembershipId = null
     if (manager_id) {
       const { data: manager, error: managerError } = await supabase
-        .from('employee_profiles')
-        .select('id, user_id, role_permissions, business_id')
+        .from('business_memberships')
+        .select('id, user_id, role, business_id')
         .eq('user_id', manager_id)
         .eq('business_id', userContext.profile.business_id)
+        .eq('status', 'active')
         .single()
 
       if (managerError || !manager) {
@@ -74,22 +76,22 @@ export async function PUT(request: NextRequest) {
       }
 
       // Verify that the assigned user has manager or admin permissions
-      if (!manager.role_permissions?.manager && !manager.role_permissions?.admin) {
+      if (manager.role !== 'manager' && manager.role !== 'admin') {
         return NextResponse.json({
           success: false,
-          error: 'Assigned user must have manager or admin permissions'
+          error: 'Assigned user must have manager or admin role'
         }, { status: 400 })
       }
 
-      // Use the employee_profiles.id for the foreign key constraint
-      managerEmployeeProfileId = manager.id
+      // Use the business_memberships.id for the foreign key constraint
+      managerMembershipId = manager.id
     }
 
     // Update the employee's manager assignment
     const { error: updateError } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .update({
-        manager_id: managerEmployeeProfileId,
+        manager_id: managerMembershipId,
         updated_at: new Date().toISOString()
       })
       .eq('user_id', employee_id)
@@ -104,7 +106,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Log the assignment change
-    console.log(`[AssignManager API] Manager assignment updated: ${employee_id} → ${managerEmployeeProfileId || 'none'}`)
+    console.log(`[AssignManager API] Manager assignment updated: ${employee_id} → ${managerMembershipId || 'none'}`)
 
     return NextResponse.json({
       success: true,

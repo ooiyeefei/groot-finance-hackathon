@@ -23,7 +23,6 @@ export interface TBusinessMembership {
   user_id: string
   business_id: string
   role: BusinessRole
-  invited_by_id?: string
   invited_at?: string
   joined_at: string
   last_accessed_at?: string

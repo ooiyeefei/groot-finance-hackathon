@@ -114,13 +114,14 @@ class EmailService {
         }
         .cta-button {
           display: inline-block;
-          background: #3b82f6;
-          color: white;
+          background: #3b82f6 !important;
+          color: #ffffff !important;
           padding: 12px 24px;
           text-decoration: none;
           border-radius: 6px;
           font-weight: 600;
           margin: 20px 0;
+          border: none;
         }
         .footer {
           background: #f9fafb;

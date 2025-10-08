@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { createServiceSupabaseClient, getUserData } from '@/lib/supabase-server';
+import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server';
 import { tasks } from '@trigger.dev/sdk/v3';
 
 // Import task types
@@ -23,9 +23,9 @@ export async function POST(
       );
     }
 
-    // Get user data and use service client to bypass RLS
+    // Get user data and use authenticated client to enforce RLS
     const userData = await getUserData(userId);
-    const supabase = createServiceSupabaseClient();
+    const supabase = await createAuthenticatedSupabaseClient();
 
     // Verify user is associated with a business
     if (!userData.business_id) {
@@ -35,14 +35,12 @@ export async function POST(
       );
     }
 
-    // Fetch document with application context and explicit user+business isolation
+    // Fetch document with RLS enforcing business_id isolation
     const { data: document, error: fetchError } = await supabase
       .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .select('storage_path, file_type, document_slot, application_id, user_id')
       .eq('id', documentId)
       .eq('application_id', applicationId)
-      .eq('user_id', userData.id)  // 🛡️ EXPLICIT USER ISOLATION with UUID
-      .eq('business_id', userData.business_id)  // 🛡️ EXTRA LAYER: Business isolation
       .single();
 
     if (fetchError || !document) {

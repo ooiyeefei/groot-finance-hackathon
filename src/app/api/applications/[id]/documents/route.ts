@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createServiceSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { tasks } from '@trigger.dev/sdk/v3'
 import type { classifyDocument } from '@/trigger/classify-document'
 import type { convertPdfToImage } from '@/trigger/convert-pdf-to-image'
@@ -61,32 +61,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const supabase = createServiceSupabaseClient()
+    // SECURITY FIX: Use authenticated client + getUserData to enforce RLS
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient()
 
-    // Convert Clerk user ID to Supabase UUID
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('clerk_user_id', userId)
-      .single()
+    console.log(`[Application Documents API] User ${userData.email} (${userData.id}) uploading to application ${applicationId}`)
 
-    if (userError || !user) {
-      console.error(`[Application Documents API] User lookup failed for clerk_user_id ${userId}:`, userError)
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    const supabaseUserId = user.id
-    console.log(`[Application Documents API] Converted Clerk ID ${userId} to Supabase UUID ${supabaseUserId}`)
-
-    // 1. Validate application ownership and get business_id
+    // 1. Validate application ownership - RLS will enforce business_id filtering
     const { data: application, error: appError } = await supabase
       .from('applications')
       .select('id, user_id, business_id, status, application_type')
       .eq('id', applicationId)
-      .eq('user_id', supabaseUserId)
       .single()
 
     if (appError || !application) {
@@ -105,13 +90,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // 3. Check if slot is already filled (for replacement functionality)
+    // 3. Check if slot is already filled (for replacement functionality) - RLS enforces business_id filtering
     const { data: existingDoc, error: checkError } = await supabase
       .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .select('id, file_name, storage_path')
       .eq('application_id', applicationId)
       .eq('document_slot', documentSlot)
-      .eq('user_id', supabaseUserId)
       .is('deleted_at', null)
       .maybeSingle() // Use maybeSingle instead of single to avoid error when no row
 
@@ -168,7 +152,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const { data: newDoc, error: insertError } = await supabase
         .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
         .insert({
-          user_id: supabaseUserId,
+          user_id: userData.id,
           business_id: application.business_id,
           application_id: applicationId, // Direct foreign key
           document_slot: documentSlot, // Slot identifier
@@ -195,7 +179,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // 5. Generate standardized storage path with documentId
-    const storageBuilder = new StoragePathBuilder(application.business_id, supabaseUserId, applicationId, document.id)
+    const storageBuilder = new StoragePathBuilder(application.business_id, userData.id, applicationId, document.id)
     const uniqueFilename = generateUniqueFilename(file.name)
     const storagePath = storageBuilder.forDocument(expectedDocumentType as DocumentType).raw(uniqueFilename)
 
@@ -382,31 +366,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[Application Documents API] User ${userId} fetching documents for application ${applicationId}`)
 
-    const supabase = createServiceSupabaseClient()
+    // SECURITY FIX: Use authenticated client to enforce RLS
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient()
 
-    // Convert Clerk user ID to Supabase UUID
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('clerk_user_id', userId)
-      .single()
-
-    if (userError || !user) {
-      console.error(`[Application Documents API GET] User lookup failed for clerk_user_id ${userId}:`, userError)
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    const supabaseUserId = user.id
-
-    // Validate application access
+    // Validate application access - RLS enforces business_id filtering
     const { data: application, error: appError } = await supabase
       .from('applications')
       .select('id, user_id')
       .eq('id', applicationId)
-      .eq('user_id', supabaseUserId)
       .single()
 
     if (appError || !application) {
@@ -416,7 +384,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Get all documents for this application
+    // Get all documents for this application - RLS enforces business_id filtering
     const { data: documents, error: docsError } = await supabase
       .from('application_documents')  // ✅ PHASE 4E: Routed to application_documents
       .select(`
