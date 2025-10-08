@@ -213,6 +213,9 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   const [isTranslating, setIsTranslating] = useState(false)
   const [showRawJson, setShowRawJson] = useState(false)
   const [documentImageUrl, setDocumentImageUrl] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [isLoadingPage, setIsLoadingPage] = useState(false)
   const [highlightedBox, setHighlightedBox] = useState<{
     x1: number
     y1: number
@@ -223,16 +226,16 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   } | null>(null)
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null)
 
-  // Fetch document image URL on component mount
-  useEffect(() => {
-    const fetchDocumentImage = async () => {
-      try {
-        console.log('[Document Preview] Fetching image for document:', {
-          id: document.id,
-          fileName: document.file_name,
-          fileType: document.file_type,
-          storagePath: document.storage_path
-        })
+  // Function to fetch a specific page
+  const fetchDocumentPage = async (pageNumber: number = 1) => {
+    setIsLoadingPage(true)
+    try {
+      console.log('[Document Preview] Fetching page', pageNumber, 'for document:', {
+        id: document.id,
+        fileName: document.file_name,
+        fileType: document.file_type,
+        storagePath: document.storage_path
+      })
 
         // For PDF documents, try the converted image path
         if (document.file_type === 'application/pdf') {
@@ -244,17 +247,22 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
               const response = await fetch('/api/invoices/image-url', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                   storagePath: document.converted_image_path,
-                  documentId: document.id 
+                  documentId: document.id,
+                  bucketName: 'invoices',
+                  pageNumber: pageNumber
                 })
               })
-              
+
               if (response.ok) {
                 const result = await response.json()
                 if (result.success && result.imageUrl) {
-                  console.log('[Document Preview] Successfully loaded stored converted image')
+                  console.log('[Document Preview] Successfully loaded page', pageNumber, '- total pages:', result.totalPages)
                   setDocumentImageUrl(result.imageUrl)
+                  setCurrentPage(result.currentPage || pageNumber)
+                  setTotalPages(result.totalPages || 1)
+                  setIsLoadingPage(false)
                   return
                 }
               }
@@ -273,17 +281,22 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
               const response = await fetch('/api/invoices/image-url', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                   storagePath: convertedImagePath,
-                  documentId: document.id 
+                  documentId: document.id,
+                  bucketName: 'invoices',
+                  pageNumber: pageNumber
                 })
               })
-              
+
               if (response.ok) {
                 const result = await response.json()
                 if (result.success && result.imageUrl) {
-                  console.log('[Document Preview] Successfully found PDF conversion at:', convertedImagePath)
+                  console.log('[Document Preview] Successfully found PDF conversion at:', convertedImagePath, '- total pages:', result.totalPages)
                   setDocumentImageUrl(result.imageUrl)
+                  setCurrentPage(result.currentPage || pageNumber)
+                  setTotalPages(result.totalPages || 1)
+                  setIsLoadingPage(false)
                   return
                 }
               }
@@ -302,30 +315,52 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
           const response = await fetch('/api/invoices/image-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               storagePath: document.storage_path,
-              documentId: document.id 
+              documentId: document.id,
+              bucketName: 'invoices',
+              pageNumber: pageNumber
             })
           })
-          
+
           if (response.ok) {
             const result = await response.json()
             if (result.success && result.imageUrl) {
-              console.log('[Document Preview] Successfully loaded original file')
+              console.log('[Document Preview] Successfully loaded original file - total pages:', result.totalPages)
               setDocumentImageUrl(result.imageUrl)
+              setCurrentPage(result.currentPage || pageNumber)
+              setTotalPages(result.totalPages || 1)
+              setIsLoadingPage(false)
               return
             }
           }
         }
         
-        console.warn('[Document Preview] No valid image path found for document')
+        console.warn('[Document Preview] No valid image path found for document page', pageNumber)
       } catch (error) {
         console.error('[Document Preview] Failed to fetch document image:', error)
+      } finally {
+        setIsLoadingPage(false)
       }
     }
 
-    fetchDocumentImage()
-  }, [document])
+    // Fetch initial page on component mount
+    useEffect(() => {
+      fetchDocumentPage(1)
+    }, [document])
+
+    // Page navigation handlers
+    const handlePreviousPage = () => {
+      if (currentPage > 1) {
+        fetchDocumentPage(currentPage - 1)
+      }
+    }
+
+    const handleNextPage = () => {
+      if (currentPage < totalPages) {
+        fetchDocumentPage(currentPage + 1)
+      }
+    }
 
   const handleTranslate = async () => {
     if (!document.extracted_data) return
@@ -831,11 +866,36 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
           {/* Left Pane - Visual (Scrollable) */}
           <div className="w-1/2 border-r border-gray-700 flex flex-col min-h-0">
             <div className="overflow-y-auto flex-1 p-6">
-              <h4 className="text-sm font-medium text-white mb-4 flex items-center">
-                <FileText className="w-4 h-4 mr-2" />
-                Document Preview
-              </h4>
-              
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-sm font-medium text-white flex items-center">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Document Preview
+                </h4>
+
+                {/* Page Navigation - Only show if more than 1 page */}
+                {totalPages > 1 && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handlePreviousPage}
+                      disabled={currentPage === 1 || isLoadingPage}
+                      className="px-2 py-1 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:opacity-50 text-white text-xs rounded transition-colors"
+                    >
+                      ◀ Previous
+                    </button>
+                    <span className="text-xs text-gray-300 px-2">
+                      {isLoadingPage ? 'Loading...' : `Page ${currentPage} of ${totalPages}`}
+                    </span>
+                    <button
+                      onClick={handleNextPage}
+                      disabled={currentPage === totalPages || isLoadingPage}
+                      className="px-2 py-1 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:opacity-50 text-white text-xs rounded transition-colors"
+                    >
+                      Next ▶
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Document Preview with Fixed Height (50% of screen) */}
               <div className="mb-6" style={{ height: '50vh', minHeight: '400px' }}>
                 <DocumentPreviewWithAnnotations

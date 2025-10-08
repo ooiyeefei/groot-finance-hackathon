@@ -170,7 +170,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
   // Helper function to detect currency from text
   const detectCurrency = (text: string): SupportedCurrency => {
     const textLower = text.toLowerCase()
-    
+
     // Currency detection patterns
     if (textLower.includes('sgd') || textLower.includes('s$') || textLower.includes('singapore')) return 'SGD'
     if (textLower.includes('myr') || textLower.includes('rm') || textLower.includes('malaysia')) return 'MYR'
@@ -180,7 +180,8 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     if (textLower.includes('php') || textLower.includes('₱') || textLower.includes('philippines')) return 'PHP'
     if (textLower.includes('cny') || textLower.includes('¥') || textLower.includes('china') || textLower.includes('yuan')) return 'CNY'
     if (textLower.includes('eur') || textLower.includes('€') || textLower.includes('euro')) return 'EUR'
-    
+    if (textLower.includes('inr') || textLower.includes('₹') || textLower.includes('india') || textLower.includes('rupee')) return 'INR'
+
     return 'USD' // Default fallback
   }
 
@@ -214,76 +215,13 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     }
   }
 
-  // Helper function to categorize transaction based on document content
-  const categorizeTransaction = (text: string, vendorName?: string): string => {
-    const textLower = text.toLowerCase()
-    const vendor = (vendorName || '').toLowerCase()
-    
-    // Office supplies
-    if (textLower.includes('office') || textLower.includes('stationery') || textLower.includes('supplies')) {
-      return 'office_supplies'
-    }
-    
-    // Travel expenses
-    if (textLower.includes('hotel') || textLower.includes('flight') || textLower.includes('taxi') || 
-        textLower.includes('transport') || textLower.includes('travel') || textLower.includes('uber') ||
-        textLower.includes('grab') || textLower.includes('airline')) {
-      return 'travel_expenses'
-    }
-    
-    // Software subscriptions
-    if (textLower.includes('software') || textLower.includes('subscription') || textLower.includes('saas') ||
-        textLower.includes('microsoft') || textLower.includes('google') || textLower.includes('adobe') ||
-        vendor.includes('software') || vendor.includes('tech')) {
-      return 'software_subscriptions'
-    }
-    
-    // Cost of goods sold - raw materials and inventory for food businesses
-    if (textLower.includes('broccoli') || textLower.includes('cabbage') || textLower.includes('carrot') ||
-        textLower.includes('vegetable') || textLower.includes('lettuce') || textLower.includes('spinach') ||
-        textLower.includes('meat') || textLower.includes('ingredient') || textLower.includes('raw material') ||
-        textLower.includes('produce') || textLower.includes('fresh') || 
-        vendor.includes('intertrade') || vendor.includes('supplier') || vendor.includes('wholesale')) {
-      return 'cost_of_goods_sold'
-    }
-    
-    // Travel & entertainment
-    if (textLower.includes('restaurant') || textLower.includes('cafe') || textLower.includes('meal') ||
-        textLower.includes('food') || textLower.includes('drink') || textLower.includes('coffee') ||
-        textLower.includes('lunch') || textLower.includes('dinner')) {
-      return 'travel_entertainment'
-    }
-    
-    // Marketing & advertising
-    if (textLower.includes('marketing') || textLower.includes('advertising') || textLower.includes('promotion') ||
-        textLower.includes('facebook') || textLower.includes('google ads') || textLower.includes('campaign')) {
-      return 'marketing_advertising'
-    }
-    
-    // Equipment (administrative expenses)
-    if (textLower.includes('equipment') || textLower.includes('hardware') || textLower.includes('computer') ||
-        textLower.includes('laptop') || textLower.includes('monitor') || textLower.includes('printer')) {
-      return 'administrative_expenses'
-    }
-    
-    // Utilities & communications
-    if (textLower.includes('electricity') || textLower.includes('water') || textLower.includes('internet') ||
-        textLower.includes('phone') || textLower.includes('utility') || textLower.includes('telecom')) {
-      return 'utilities_communications'
-    }
-    
-    // Professional services (administrative expenses)
-    if (textLower.includes('legal') || textLower.includes('accounting') || textLower.includes('consulting') ||
-        textLower.includes('professional') || textLower.includes('service') || textLower.includes('advisory')) {
-      return 'administrative_expenses'
-    }
-    
-    // Default to administrative expenses for unknown expenses
-    return 'administrative_expenses'
+  // Note: Category determination now handled by DSPy pipeline with business-defined categories
+  // Fallback function for when no DSPy category is available
+  const getDefaultCategoryForInvoice = (): string => {
+    // Default to 'direct_cost' for invoices as it's most appropriate for supplier invoices
+    return 'direct_cost'
   }
 
-  // Map basic transaction information
-  mappedData.transaction_type = 'Cost of Goods Sold' // Invoices are supplier invoices (business purchases)
 
   const extractedData = document.extracted_data as any
 
@@ -294,8 +232,13 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     vendorName: extractedData.vendor_name || 'none',
     totalAmount: extractedData.total_amount || 'none',
     currency: extractedData.currency || 'none',
-    lineItems: extractedData.line_items ? `${extractedData.line_items.length} items` : 'none'
+    lineItems: extractedData.line_items ? `${extractedData.line_items.length} items` : 'none',
+    suggestedCategory: extractedData.suggested_category || 'none',
+    selectedCategory: extractedData.selected_category || 'none'
   });
+
+  // Map basic transaction information
+  mappedData.transaction_type = 'Cost of Goods Sold' // Invoices are supplier invoices (business purchases)
 
   // Declare summary variable for use throughout function
   let summary: any = null
@@ -495,12 +438,21 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
   const vendorName = mappedData.vendor_name || 'Unknown Vendor'
   mappedData.description = `${vendorName} - ${document.file_name.replace(/\.[^/.]+$/, "")}`
 
-  // Categorize transaction
-  mappedData.category = categorizeTransaction(
-    document.extracted_data?.text || '',
-    mappedData.vendor_name
-  )
-  console.log(`[Transaction Mapper] Mapped category: ${mappedData.category}`);
+  // Category assignment - prioritize DSPy-selected category from business definitions
+  // AI should return valid business COGS category codes (MATERIALS, LABOR, SUBCONTRACT, etc.)
+  if (extractedData.suggested_category) {
+    // Use DSPy-selected category from business categories (set by process-document-ocr.ts)
+    mappedData.category = extractedData.suggested_category
+    console.log(`[Transaction Mapper] Using business COGS category from AI: ${mappedData.category}`);
+  } else if (extractedData.selected_category) {
+    // Fallback to raw DSPy category selection (direct from LLM)
+    mappedData.category = extractedData.selected_category
+    console.log(`[Transaction Mapper] Using raw DSPy category: ${mappedData.category}`);
+  } else {
+    // Ultimate fallback to default category for invoices
+    mappedData.category = getDefaultCategoryForInvoice()
+    console.log(`[Transaction Mapper] No DSPy category found, using default: ${mappedData.category}`);
+  }
 
   // Note: vendor_details is not part of CreateTransactionRequest
 
@@ -595,7 +547,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
         quantity: 1,
         unit_price: mappedData.original_amount,
         tax_rate: 0,
-        item_category: mappedData.category || 'administrative_expenses'
+        item_category: mappedData.category || 'direct_cost'
       }]
       console.log(`[Transaction Mapper] Created fallback line item:`, mappedData.line_items[0]);
     }

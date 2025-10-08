@@ -60,7 +60,8 @@ const CURRENCY_RISK_MULTIPLIERS: Record<SupportedCurrency, number> = {
   'IDR': 1.25,  // Emerging market premium
   'CNY': 1.20,  // Political/regulatory risk
   'VND': 1.30,  // High volatility premium
-  'PHP': 1.25   // Regional volatility
+  'PHP': 1.25,  // Regional volatility
+  'INR': 1.20   // Regional emerging market risk
 };
 
 /**
@@ -269,7 +270,8 @@ function formatCurrency(amount: number, currency: SupportedCurrency): string {
     'IDR': 'Rp',
     'CNY': '¥',
     'VND': '₫',
-    'PHP': '₱'
+    'PHP': '₱',
+    'INR': '₹'
   };
   
   const symbol = symbols[currency] || currency;

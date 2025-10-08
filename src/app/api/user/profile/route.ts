@@ -86,7 +86,7 @@ export async function PATCH(request: NextRequest) {
       if (allowedFields.includes(key)) {
         // Validate home_currency if provided
         if (key === 'home_currency') {
-          const supportedCurrencies = ['THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP']
+          const supportedCurrencies = ['THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP', 'INR']
           if (!supportedCurrencies.includes(value as string)) {
             return NextResponse.json(
               { success: false, error: `Unsupported currency: ${value}` },

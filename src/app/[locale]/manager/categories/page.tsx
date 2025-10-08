@@ -1,84 +1,56 @@
 /**
  * Manager Categories Page
- * Interface for managing expense categories
+ * Interface for managing expense and COGS categories
+ * SECURITY: Server-side role authorization required
  */
 
-'use client'
+import { auth, currentUser } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
+import { requirePermission } from '@/lib/rbac'
+import Sidebar from '@/components/ui/sidebar'
+import HeaderWithUser from '@/components/ui/header-with-user'
+import CategoriesManagementClient from '@/components/manager/categories-management-client'
+import { ClientProviders } from '@/components/providers/client-providers'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import CategoryManagement from '@/components/expense-claims/category-management'
-import { Loader2, ShieldAlert } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+export default async function CategoriesManagementPage() {
+  // Server-side authentication check
+  const { userId } = await auth()
 
-export default function CategoriesPage() {
-  const [userRole, setUserRole] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
-
-  useEffect(() => {
-    const checkPermissions = async () => {
-      try {
-        const response = await fetch('/api/user/role')
-        if (response.ok) {
-          const result = await response.json()
-          if (result.success) {
-            setUserRole(result.data.permissions)
-            
-            // Redirect if not manager/finance
-            if (!result.data.permissions.manager && !result.data.permissions.admin) {
-              router.push('/')
-              return
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to check permissions:', error)
-        router.push('/')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    checkPermissions()
-  }, [router])
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center py-12">
-            <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-400" />
-            <p className="text-gray-400">Checking permissions...</p>
-          </div>
-        </div>
-      </div>
-    )
+  if (!userId) {
+    redirect('/sign-in')
   }
 
-  if (!userRole || (!userRole.manager && !userRole.admin)) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="max-w-7xl mx-auto">
-          <Card className="bg-gray-800 border-gray-700">
-            <CardContent className="p-12 text-center">
-              <ShieldAlert className="w-16 h-16 mx-auto mb-4 text-red-400" />
-              <h3 className="text-xl font-semibold text-white mb-2">Access Denied</h3>
-              <p className="text-gray-400">
-                Category management requires manager or finance permissions.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
+  const user = await currentUser()
+
+  if (!user) {
+    redirect('/sign-in')
   }
+
+  // SECURITY: Enforce manager role requirement on server-side
+  await requirePermission('manager')
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        <CategoryManagement userRole={userRole} />
+    <ClientProviders>
+      <div className="flex h-screen bg-gray-900">
+        {/* Sidebar */}
+        <Sidebar />
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {/* Header */}
+          <HeaderWithUser
+            title="Category Management"
+            subtitle="Manage expense and Cost of Goods Sold categories for your organization"
+          />
+
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-auto p-4 sm:p-6">
+            <div className="max-w-7xl mx-auto">
+              <CategoriesManagementClient userId={userId} />
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ClientProviders>
   )
 }

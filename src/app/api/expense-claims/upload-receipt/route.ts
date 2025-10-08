@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
     const transactionData = {
       user_id: userId,
       transaction_type: 'expense',
-      category: useAutoCategorization ? 'administrative_expenses' : accountingCategory, // Placeholder for auto, actual for manual
+      category: useAutoCategorization ? 'other_operating' : accountingCategory, // Placeholder for auto, actual for manual
       subcategory: useAutoCategorization ? 'auto_pending' : expenseCategory, // Placeholder for auto
       description: `Expense from ${file.name}`,
       original_currency: userHomeCurrency, // Will be updated from OCR if different

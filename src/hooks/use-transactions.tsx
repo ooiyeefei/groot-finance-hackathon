@@ -98,7 +98,7 @@ const fetchTransactions = async ({ queryKey, pageParam }: { queryKey: any[]; pag
     });
   }
 
-  const response = await fetch(`/api/transactions?${searchParams.toString()}`, {
+  const response = await fetch(`/api/accounting-entries?${searchParams.toString()}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -178,7 +178,7 @@ export function useTransactions(filters: TransactionFilters = {}): UseTransactio
   // Create transaction mutation with optimistic updates
   const createMutation = useMutation({
     mutationFn: async (data: CreateTransactionRequest): Promise<TransactionResponse> => {
-      const response = await fetch('/api/transactions', {
+      const response = await fetch('/api/accounting-entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -227,7 +227,7 @@ export function useTransactions(filters: TransactionFilters = {}): UseTransactio
   // Update transaction mutation with optimistic updates
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: UpdateTransactionRequest }): Promise<TransactionResponse> => {
-      const response = await fetch(`/api/transactions/${id}`, {
+      const response = await fetch(`/api/accounting-entries/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -282,7 +282,7 @@ export function useTransactions(filters: TransactionFilters = {}): UseTransactio
   // Delete transaction mutation with optimistic updates
   const deleteMutation = useMutation({
     mutationFn: async (id: string): Promise<{ success: boolean }> => {
-      const response = await fetch(`/api/transactions/${id}`, {
+      const response = await fetch(`/api/accounting-entries/${id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });

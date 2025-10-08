@@ -53,7 +53,7 @@ export async function PATCH(
 
       // Expense categories (Level 2) - used for both COGS and Expense P&L types
       'cost_of_goods_sold',
-      'administrative_expenses',
+      'other_operating',
       'marketing_advertising',
       'travel_entertainment',
       'utilities_communications',

@@ -44,7 +44,7 @@ export async function GET() {
     // Process invoices to include linked accounting entry data
     const processedInvoices = (invoices || []).map((invoice: any) => ({
       ...invoice,
-      linked_accounting_entry: invoice.accounting_entries && invoice.accounting_entries.length > 0 ? invoice.accounting_entries[0] : null,
+      linked_transaction: invoice.accounting_entries && invoice.accounting_entries.length > 0 ? invoice.accounting_entries[0] : null,
       accounting_entries: undefined // Remove the raw accounting_entries array from the response
     }))
 

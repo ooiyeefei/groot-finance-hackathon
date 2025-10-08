@@ -186,6 +186,7 @@ const FALLBACK_RATES: Record<string, number> = {
   'USD_PHP': 56.5,
   'USD_CNY': 7.25,
   'USD_EUR': 0.85,
+  'USD_INR': 83.5,
   'THB_USD': 0.028,
   'IDR_USD': 0.000063,
   'MYR_USD': 0.215,
@@ -193,7 +194,8 @@ const FALLBACK_RATES: Record<string, number> = {
   'VND_USD': 0.000042,
   'PHP_USD': 0.018,
   'CNY_USD': 0.138,
-  'EUR_USD': 1.18
+  'EUR_USD': 1.18,
+  'INR_USD': 0.012
 }
 
 function getFallbackRate(from: SupportedCurrency, to: SupportedCurrency): number {
@@ -350,7 +352,7 @@ export class CurrencyService implements ExchangeRateService {
   // Validate currency code
   isSupportedCurrency(currency: string): currency is SupportedCurrency {
     const supportedCurrencies: SupportedCurrency[] = [
-      'THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP'
+      'THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP', 'INR'
     ]
     return supportedCurrencies.includes(currency as SupportedCurrency)
   }
