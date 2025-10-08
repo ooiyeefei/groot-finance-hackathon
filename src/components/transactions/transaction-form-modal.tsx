@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock } from 'lucide-react'
+import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock, AlertCircle } from 'lucide-react'
 import { Transaction, CreateTransactionRequest, LineItem, SupportedCurrency, TRANSACTION_CATEGORIES, TransactionType } from '@/types/transaction'
 import { formatCurrency } from '@/hooks/use-transactions'
 import { useHomeCurrency } from '@/components/settings/currency-settings'
+import { useExpenseCategories, formatCategoriesForSelect, DynamicExpenseCategory } from '@/hooks/use-expense-categories'
+import { useCOGSCategories, formatCOGSCategoriesForSelect, DynamicCOGSCategory } from '@/hooks/use-cogs-categories'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface TransactionFormModalProps {
   transaction?: Transaction
@@ -14,14 +17,22 @@ interface TransactionFormModalProps {
 }
 
 const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
-  'THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP'
+  'THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP', 'INR'
 ]
 
-// Get available categories based on transaction type
-const getAvailableCategories = (transactionType: TransactionType) => {
-  // Ensure we handle all transaction types safely
-  if (transactionType in TRANSACTION_CATEGORIES) {
-    return Object.keys(TRANSACTION_CATEGORIES[transactionType as keyof typeof TRANSACTION_CATEGORIES])
+// Get available categories based on transaction type - now supports dynamic categories
+const getAvailableCategories = (transactionType: TransactionType, expenseCategories: DynamicExpenseCategory[], cogsCategories: DynamicCOGSCategory[]) => {
+  if (transactionType === 'Cost of Goods Sold') {
+    // Use dynamic COGS categories
+    return cogsCategories.map(cat => cat.category_code)
+  } else if (transactionType === 'Expense') {
+    // Use dynamic expense categories
+    return expenseCategories.map(cat => cat.category_code)
+  } else if (transactionType === 'Income') {
+    // Use hardcoded income categories (can be made dynamic later)
+    if (transactionType in TRANSACTION_CATEGORIES) {
+      return Object.keys(TRANSACTION_CATEGORIES[transactionType as keyof typeof TRANSACTION_CATEGORIES])
+    }
   }
   return [] // Return empty array for unknown transaction types
 }
@@ -44,11 +55,16 @@ export default function TransactionFormModal({
   onSubmit
 }: TransactionFormModalProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const userHomeCurrency = useHomeCurrency()
+
+  // Dynamic category hooks
+  const { categories: expenseCategories, loading: expenseCategoriesLoading } = useExpenseCategories()
+  const { categories: cogsCategories, loading: cogsCategoriesLoading } = useCOGSCategories()
   
   // Get default category based on transaction type
   const getDefaultCategory = (transactionType: TransactionType) => {
-    const availableCategories = getAvailableCategories(transactionType)
+    const availableCategories = getAvailableCategories(transactionType, expenseCategories, cogsCategories)
     return availableCategories[0] || ''
   }
 
@@ -98,15 +114,15 @@ export default function TransactionFormModal({
       
       const existingItems = transaction.line_items.map((item, index) => {
         // Try to find matching prefilled item by description
-        const matchingPrefilledItem = prefilledItems.find(prefilled => 
-          prefilled.description?.toLowerCase().trim() === (item.item_description || item.description || '').toLowerCase().trim()
+        const matchingPrefilledItem = prefilledItems.find(prefilled =>
+          prefilled.description?.toLowerCase().trim() === item.item_description.toLowerCase().trim()
         )
-        
+
         return {
           ...item,
-          // Use the correct database field names
-          description: item.item_description || item.description || '',  // Map item_description to description for form
-          line_total: item.total_amount || item.line_total || ((item.quantity || 0) * (item.unit_price || 0) + (item.tax_amount || 0)),  // Use total_amount from DB
+          // Map database fields to form fields
+          item_description: item.item_description,  // Keep database field name for consistency
+          // Use total_amount from DB - no legacy line_total needed
           tax_amount: item.tax_amount || 0,
           tax_rate: item.tax_rate || 0,
           // Merge new OCR fields if available from prefilled data
@@ -117,12 +133,23 @@ export default function TransactionFormModal({
       setLineItems(existingItems)
     } else if (prefilledData?.line_items && prefilledData.line_items.length > 0) {
       console.log('[Transaction Form] Loading prefilled line items:', prefilledData.line_items)
-      const itemsWithTotals = prefilledData.line_items.map(item => ({
-        ...item,
-        line_total: (item.quantity || 0) * (item.unit_price || 0),
-        tax_amount: 0, // Initialize tax_amount for form
-        tax_rate: item.tax_rate || 0
-      }))
+      const itemsWithTotals = prefilledData.line_items.map((item, index) => {
+        console.log(`[Transaction Form] Processing prefilled line item ${index + 1}:`, {
+          original_item: item,
+          description_field: item.description,
+          mapping_to_item_description: item.description || ''
+        });
+
+        return {
+          ...item,
+          // Ensure proper field mapping from extraction data
+          item_description: item.description || '',
+          // Calculate line total from quantity * unit_price - no need to store separately
+          tax_amount: 0, // Initialize tax_amount for form
+          tax_rate: item.tax_rate || 0
+        };
+      })
+      console.log('[Transaction Form] Final prefilled line items after mapping:', itemsWithTotals)
       setLineItems(itemsWithTotals)
     } else {
       setLineItems([])
@@ -169,24 +196,48 @@ export default function TransactionFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
 
     try {
+      // Enhanced validation and logging for line items
+      console.log('[Transaction Form] Raw line items before processing:', lineItems)
+
+      const validLineItems = lineItems.filter(item => {
+        const isValid = item.item_description &&
+                       item.quantity &&
+                       item.unit_price &&
+                       item.quantity > 0 &&
+                       item.unit_price > 0
+
+        if (!isValid) {
+          console.log('[Transaction Form] Filtering out invalid line item:', {
+            item_description: item.item_description,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            reason: !item.item_description ? 'missing description' :
+                   !item.quantity ? 'missing quantity' :
+                   !item.unit_price ? 'missing unit_price' :
+                   item.quantity <= 0 ? 'invalid quantity' :
+                   item.unit_price <= 0 ? 'invalid unit_price' : 'unknown'
+          })
+        }
+        return isValid
+      })
+
+      console.log('[Transaction Form] Valid line items after filtering:', validLineItems.length, 'out of', lineItems.length)
+
       const submitData: CreateTransactionRequest = {
         ...formData,
         reference_number: formData.document_number, // Map document_number to reference_number for API
-        line_items: lineItems
-          .filter(item => 
-            item.description && item.quantity && item.unit_price
-          )
-          .map(item => ({
-            description: item.description!,
-            item_code: item.item_code,
-            quantity: item.quantity!,
-            unit_measurement: item.unit_measurement,
-            unit_price: item.unit_price!,
-            tax_rate: item.tax_rate,
-            item_category: item.item_category
-          }))
+        line_items: validLineItems.map(item => ({
+          description: item.item_description!,
+          item_code: item.item_code || '',
+          quantity: item.quantity!,
+          unit_measurement: item.unit_measurement || '',
+          unit_price: item.unit_price!,
+          tax_rate: item.tax_rate || 0,
+          item_category: item.item_category || ''
+        }))
       }
 
       console.log('[Transaction Form] Submit data:', JSON.stringify(submitData, null, 2))
@@ -195,6 +246,7 @@ export default function TransactionFormModal({
       await onSubmit(submitData)
     } catch (error) {
       console.error('Failed to submit transaction:', error)
+      setError(error instanceof Error ? error.message : 'Failed to create transaction. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -202,12 +254,12 @@ export default function TransactionFormModal({
 
   const addLineItem = () => {
     setLineItems([...lineItems, {
-      description: '',
+      item_description: '',
       item_code: '',
       quantity: 1,
       unit_measurement: '',
       unit_price: 0,
-      line_total: 0,
+      // No need for separate line_total field - calculated from quantity * unit_price
       tax_amount: 0,
       tax_rate: 0,
       item_category: ''
@@ -218,11 +270,10 @@ export default function TransactionFormModal({
     const updatedItems = [...lineItems]
     updatedItems[index] = { ...updatedItems[index], [field]: value }
     
-    // Recalculate line total
+    // Calculate total amount for display (quantity * unit_price + tax)
     if (field === 'quantity' || field === 'unit_price' || field === 'tax_amount') {
       const item = updatedItems[index]
-      const subtotal = (item.quantity || 0) * (item.unit_price || 0)
-      item.line_total = subtotal + (item.tax_amount || 0)
+      // Total is calculated for display only - no need to store in item
     }
     
     setLineItems(updatedItems)
@@ -232,8 +283,18 @@ export default function TransactionFormModal({
     setLineItems(lineItems.filter((_, i) => i !== index))
   }
 
-  const formatCategoryName = (category: string) => {
-    return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  // Format category name - supports both dynamic categories and hardcoded ones
+  const formatCategoryName = (categoryCode: string, transactionType: TransactionType) => {
+    if (transactionType === 'Cost of Goods Sold') {
+      const cogsCategory = cogsCategories.find(cat => cat.category_code === categoryCode)
+      return cogsCategory ? cogsCategory.category_name : categoryCode
+    } else if (transactionType === 'Expense') {
+      const expenseCategory = expenseCategories.find(cat => cat.category_code === categoryCode)
+      return expenseCategory ? expenseCategory.category_name : categoryCode
+    } else {
+      // Fallback to formatted hardcoded category names
+      return categoryCode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    }
   }
 
   return (
@@ -247,7 +308,7 @@ export default function TransactionFormModal({
             </div>
             <div>
               <h3 className="text-lg font-medium text-white">
-                {transaction ? 'Edit Transaction' : prefilledData ? 'Create Transaction from Document' : 'Create New Transaction'}
+                {transaction ? 'Edit Record' : prefilledData ? 'Create Account Record from Document' : 'Create New Record'}
               </h3>
               <p className="text-sm text-gray-400 mt-1">
                 {prefilledData?.source_document_id ? 'Pre-filled from document extraction' : 'Manual transaction entry'}
@@ -261,7 +322,7 @@ export default function TransactionFormModal({
               disabled={isLoading}
               className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Saving...' : (transaction ? 'Update Transaction' : 'Create Transaction')}
+              {isLoading ? 'Saving...' : (transaction ? 'Update Record' : 'Create Record')}
             </button>
             <button
               onClick={onClose}
@@ -278,6 +339,14 @@ export default function TransactionFormModal({
           <div className="w-1/2 border-r border-gray-700 flex flex-col min-h-0">
             <form id="transaction-form" onSubmit={handleSubmit} className="overflow-y-auto flex-1 p-6">
               <div className="space-y-4">
+                {/* Error Alert */}
+                {error && (
+                  <Alert className="bg-red-900/20 border-red-700">
+                    <AlertCircle className="w-4 h-4" />
+                    <AlertDescription className="text-red-400">{error}</AlertDescription>
+                  </Alert>
+                )}
+
                 {/* Transaction Details */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -287,14 +356,14 @@ export default function TransactionFormModal({
                     value={formData.transaction_type}
                     onChange={(e) => {
                       const newType = e.target.value as TransactionType
-                      const availableCategories = getAvailableCategories(newType)
-                      
+                      const availableCategories = getAvailableCategories(newType, expenseCategories, cogsCategories)
+
                       // Only reset category if current category is not valid for new transaction type
                       // This preserves prefilled categories from document extraction
                       const currentCategoryValid = availableCategories.includes(formData.category)
-                      
-                      setFormData({ 
-                        ...formData, 
+
+                      setFormData({
+                        ...formData,
                         transaction_type: newType,
                         category: currentCategoryValid ? formData.category : (availableCategories[0] || '')
                       })
@@ -304,7 +373,7 @@ export default function TransactionFormModal({
                   >
                     {TRANSACTION_TYPES.map(type => (
                       <option key={type} value={type}>
-                        {formatCategoryName(type)}
+                        {type}
                       </option>
                     ))}
                   </select>
@@ -333,12 +402,21 @@ export default function TransactionFormModal({
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
+                    disabled={
+                      (formData.transaction_type === 'Cost of Goods Sold' && cogsCategoriesLoading) ||
+                      (formData.transaction_type === 'Expense' && expenseCategoriesLoading)
+                    }
                   >
-                    {getAvailableCategories(formData.transaction_type).map(category => (
-                      <option key={category} value={category}>
-                        {formatCategoryName(category)}
-                      </option>
-                    ))}
+                    {(formData.transaction_type === 'Cost of Goods Sold' && cogsCategoriesLoading) ||
+                     (formData.transaction_type === 'Expense' && expenseCategoriesLoading) ? (
+                      <option value="">Loading categories...</option>
+                    ) : (
+                      getAvailableCategories(formData.transaction_type, expenseCategories, cogsCategories).map(category => (
+                        <option key={category} value={category}>
+                          {formatCategoryName(category, formData.transaction_type)}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -589,8 +667,8 @@ export default function TransactionFormModal({
                               <td className="px-3 py-2">
                                 <input
                                   type="text"
-                                  value={item.description || ''}
-                                  onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                                  value={item.item_description || ''}
+                                  onChange={(e) => updateLineItem(index, 'item_description', e.target.value)}
                                   className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                                   placeholder="Item description"
                                 />
@@ -634,7 +712,7 @@ export default function TransactionFormModal({
                                 />
                               </td>
                               <td className="px-3 py-2 text-right text-green-400 font-medium">
-                                {formatCurrency(item.line_total || 0, formData.original_currency)}
+                                {formatCurrency((item.quantity || 0) * (item.unit_price || 0), formData.original_currency)}
                               </td>
                               <td className="px-3 py-2 text-center">
                                 <button
@@ -673,7 +751,7 @@ export default function TransactionFormModal({
                         <span className="text-gray-400">Subtotal:</span>
                         <span className="text-white">
                           {formatCurrency(
-                            lineItems.reduce((sum, item) => sum + (item.line_total || 0), 0),
+                            lineItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0),
                             formData.original_currency
                           )}
                         </span>

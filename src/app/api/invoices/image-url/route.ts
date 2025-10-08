@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { storagePath, documentId, useRawFile = false, bucketName: requestedBucket } = body
+    const { storagePath, documentId, useRawFile = false, bucketName: requestedBucket, pageNumber = 1 } = body
 
     if (!storagePath || !documentId) {
       return NextResponse.json(
@@ -118,18 +118,69 @@ export async function POST(request: NextRequest) {
         success: true,
         imageUrl: signedUrlData.signedUrl,
         filename: filename,
-        storagePath: storagePath
+        storagePath: storagePath,
+        // Raw files are single page
+        currentPage: 1,
+        totalPages: 1,
+        availablePages: [{ pageNumber: 1, filename: filename }]
       })
     } else {
-      // For converted images: use existing logic with file discovery
+      // For converted images: check if we have a converted path, otherwise use raw file
       const actualStoragePath = document.converted_image_path || storagePath
-      console.log(`[ImageURL] Using converted image path: ${actualStoragePath} (from ${document.converted_image_path ? 'database' : 'request'})`)
+      console.log(`[ImageURL] Using ${document.converted_image_path ? 'converted' : 'raw'} image path: ${actualStoragePath}`)
 
-      // Use unified bucket list() architecture to find actual image files
+      // If there's no converted image path, try direct file access first
+      if (!document.converted_image_path && actualStoragePath) {
+        console.log(`[ImageURL] No converted image found, trying direct file access for: ${actualStoragePath}`)
+
+        const { data: signedUrlData, error: urlError } = await supabase.storage
+          .from(bucketName)
+          .createSignedUrl(actualStoragePath, 3600) // 1 hour expiry
+
+        if (!urlError && signedUrlData?.signedUrl) {
+          console.log(`[ImageURL] Direct file access successful for: ${actualStoragePath}`)
+          return NextResponse.json({
+            success: true,
+            imageUrl: signedUrlData.signedUrl,
+            filename: actualStoragePath.split('/').pop() || 'document',
+            storagePath: actualStoragePath,
+            // Single direct file
+            currentPage: 1,
+            totalPages: 1,
+            availablePages: [{ pageNumber: 1, filename: actualStoragePath.split('/').pop() || 'document' }]
+          })
+        } else {
+          console.log(`[ImageURL] Direct file access failed, falling back to directory listing:`, urlError)
+        }
+      }
+
+      // Fallback: Use unified bucket list() architecture to find actual image files
       console.log(`[ImageURL] Using unified bucket list() architecture to discover converted files`)
+
+      // For converted images, the path might be a directory (like '1759860188642') rather than a full file path
+      // Check if this looks like a directory path (no file extension)
+      const hasFileExtension = /\.(png|jpg|jpeg|pdf)$/i.test(actualStoragePath)
+
+      let directoryPath, fileName
+
+      if (!hasFileExtension) {
+        // This is likely a directory path, use it directly
+        directoryPath = actualStoragePath
+        fileName = null // We'll search for any image file
+        console.log(`[ImageURL] Path appears to be a directory: ${directoryPath}`)
+      } else {
+        // This is a file path, extract directory and filename
+        const pathParts = actualStoragePath.split('/')
+        fileName = pathParts.pop()
+        directoryPath = pathParts.join('/')
+        console.log(`[ImageURL] Path appears to be a file. Directory: ${directoryPath}, File: ${fileName}`)
+      }
+
+      console.log(`[ImageURL] Listing directory: ${directoryPath}${fileName ? `, looking for file: ${fileName}` : ', searching for any image file'}`)
+
       const { data: fileList, error: listError } = await supabase.storage
         .from(bucketName)  // ✅ PHASE 4J: Route to correct bucket dynamically
-        .list(actualStoragePath, {
+        .list(directoryPath, {
           limit: 100,
           sortBy: { column: 'name', order: 'asc' }
         })
@@ -143,25 +194,36 @@ export async function POST(request: NextRequest) {
       }
 
       if (!fileList || fileList.length === 0) {
-        console.error(`[ImageURL] No files found at storage path: ${actualStoragePath}`)
+        console.error(`[ImageURL] No files found in directory: ${directoryPath}`)
         return NextResponse.json(
-          { success: false, error: 'No converted image files found' },
+          { success: false, error: 'No files found in directory' },
           { status: 404 }
         )
       }
 
-      console.log(`[ImageURL] Found ${fileList.length} file(s) at location`)
+      // Filter and sort image files
+      const imageFiles = fileList
+        .filter(file =>
+          file.name.toLowerCase().endsWith('.png') ||
+          file.name.toLowerCase().endsWith('.jpg') ||
+          file.name.toLowerCase().endsWith('.jpeg')
+        )
+        .sort((a, b) => {
+          // Sort by page number if present in filename
+          const pageA = a.name.match(/page_?(\d+)/i)?.[1] || a.name.match(/_(\d+)\./)?.[1]
+          const pageB = b.name.match(/page_?(\d+)/i)?.[1] || b.name.match(/_(\d+)\./)?.[1]
 
-      // Find the first image file (prioritize page_1 or first available image)
-      const imageFile = fileList.find(file =>
-        file.name.includes('page_1') && file.name.toLowerCase().endsWith('.png')
-      ) || fileList.find(file =>
-        file.name.toLowerCase().endsWith('.png') ||
-        file.name.toLowerCase().endsWith('.jpg') ||
-        file.name.toLowerCase().endsWith('.jpeg')
-      )
+          if (pageA && pageB) {
+            return parseInt(pageA) - parseInt(pageB)
+          }
 
-      if (!imageFile) {
+          // Fallback to alphabetical sort
+          return a.name.localeCompare(b.name)
+        })
+
+      console.log(`[ImageURL] Found ${imageFiles.length} image file(s): ${imageFiles.map(f => f.name).join(', ')}`)
+
+      if (imageFiles.length === 0) {
         console.error(`[ImageURL] No image files found. Available files: ${fileList.map(f => f.name).join(', ')}`)
         return NextResponse.json(
           { success: false, error: `No image files found at ${actualStoragePath}` },
@@ -169,8 +231,14 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Create full path for the discovered image file
-      const fullImagePath = `${actualStoragePath}/${imageFile.name}`
+      // Select the requested page (1-indexed)
+      const requestedPageIndex = Math.max(0, Math.min(pageNumber - 1, imageFiles.length - 1))
+      const selectedImageFile = imageFiles[requestedPageIndex]
+
+      console.log(`[ImageURL] Selected page ${pageNumber} (index ${requestedPageIndex}): ${selectedImageFile.name}`)
+
+      // Create full path for the selected image file
+      const fullImagePath = `${directoryPath}/${selectedImageFile.name}`
       console.log(`[ImageURL] Creating signed URL for file: ${fullImagePath}`)
 
       // Generate signed URL for the specific image file
@@ -193,13 +261,21 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      console.log(`[ImageURL] Generated signed URL successfully for: ${imageFile.name}`)
+      console.log(`[ImageURL] Generated signed URL successfully for: ${selectedImageFile.name}`)
 
+      // Return enhanced response with page information
       return NextResponse.json({
         success: true,
         imageUrl: signedUrlData.signedUrl,
-        filename: imageFile.name,
-        storagePath: fullImagePath
+        filename: selectedImageFile.name,
+        storagePath: fullImagePath,
+        // Page information
+        currentPage: requestedPageIndex + 1,
+        totalPages: imageFiles.length,
+        availablePages: imageFiles.map((file, index) => ({
+          pageNumber: index + 1,
+          filename: file.name
+        }))
       })
     }
 

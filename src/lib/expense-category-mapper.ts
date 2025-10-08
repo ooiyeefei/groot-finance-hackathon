@@ -9,7 +9,6 @@ import { createServiceSupabaseClient } from './supabase-server'
 // Standard IFRS accounting categories for transactions table
 export const ACCOUNTING_CATEGORIES = {
   // Operating Expenses
-  ADMINISTRATIVE_EXPENSES: 'administrative_expenses',
   TRAVEL_EXPENSES: 'travel_expenses',
   PROFESSIONAL_SERVICES: 'professional_services',
   MARKETING_ADVERTISING: 'marketing_advertising',
@@ -22,7 +21,7 @@ export const ACCOUNTING_CATEGORIES = {
 
   // Other Categories
   MISCELLANEOUS: 'miscellaneous_expenses',
-  OTHER_OPERATING: 'other_operating_expenses'
+  OTHER_OPERATING: 'other_operating'
 } as const
 
 // Business expense category to accounting category mapping
@@ -86,7 +85,7 @@ const CATEGORY_MAPPING: Record<string, string> = {
   'other': ACCOUNTING_CATEGORIES.MISCELLANEOUS,
   'other_business': ACCOUNTING_CATEGORIES.MISCELLANEOUS,
   'miscellaneous': ACCOUNTING_CATEGORIES.MISCELLANEOUS,
-  'general': ACCOUNTING_CATEGORIES.ADMINISTRATIVE_EXPENSES
+  'general': ACCOUNTING_CATEGORIES.OTHER_OPERATING
 }
 
 export interface ExpenseCategoryInfo {
@@ -138,8 +137,8 @@ export function mapExpenseCategoryToAccounting(
     return ACCOUNTING_CATEGORIES.TRAINING_DEVELOPMENT
   }
 
-  // Default fallback to administrative expenses
-  return ACCOUNTING_CATEGORIES.ADMINISTRATIVE_EXPENSES
+  // Default fallback to other operating expenses
+  return ACCOUNTING_CATEGORIES.OTHER_OPERATING
 }
 
 /**

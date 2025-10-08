@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import ActionButton from '@/components/ui/action-button'
@@ -14,19 +15,35 @@ import { Plus } from 'lucide-react'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 export default function TransactionsClient() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null)
   const [selectedDocument, setSelectedDocument] = useState<any | null>(null)
-  
+  const [highlightProcessed, setHighlightProcessed] = useState(false)
+
   const {
     transactions,
     loading,
     refreshTransactions,
     createTransaction,
     updateTransaction,
-    deleteTransaction
+    deleteTransaction,
+    getTransactionById
   } = useTransactions()
+
+  // Handle highlight parameter to auto-open transaction modal
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight')
+    if (highlightId && transactions.length > 0 && !viewingTransaction && !highlightProcessed) {
+      const targetTransaction = getTransactionById(highlightId)
+      if (targetTransaction) {
+        setViewingTransaction(targetTransaction)
+        setHighlightProcessed(true)
+      }
+    }
+  }, [searchParams, transactions, getTransactionById, viewingTransaction, highlightProcessed])
 
   const handleCreateTransaction = async (data: any) => {
     try {
@@ -87,6 +104,20 @@ export default function TransactionsClient() {
     }
   }
 
+  // Custom close handler that removes highlight parameter from URL
+  const handleCloseTransactionModal = () => {
+    setViewingTransaction(null)
+    setHighlightProcessed(false) // Reset the flag
+
+    // Remove highlight parameter from URL if present
+    const highlightId = searchParams.get('highlight')
+    if (highlightId) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('highlight')
+      router.push(url.pathname + url.search, { scroll: false })
+    }
+  }
+
   return (
     <ClientProviders>
       <div className="flex h-screen bg-gray-900">
@@ -97,7 +128,7 @@ export default function TransactionsClient() {
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <HeaderWithUser
-            title="Transactions"
+            title="Accounting Records"
             subtitle="View and manage your financial transactions across multiple currencies"
           />
 
@@ -134,7 +165,7 @@ export default function TransactionsClient() {
         {viewingTransaction && (
           <TransactionDetailModal
             transaction={viewingTransaction}
-            onClose={() => setViewingTransaction(null)}
+            onClose={handleCloseTransactionModal}
             onEdit={handleEditFromDetail}
             onDelete={() => handleDeleteTransaction(viewingTransaction.id)}
             onViewDocument={handleViewDocument}

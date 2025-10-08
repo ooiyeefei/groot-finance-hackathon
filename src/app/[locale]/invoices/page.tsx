@@ -23,7 +23,7 @@ export default async function DocumentsPage() {
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <HeaderWithUser
-            title="Documents"
+            title="Invoices"
             subtitle=""
           />
 

@@ -72,7 +72,7 @@ export default function TransactionDetailModal({
 
   const calculateLineItemsTotal = () => {
     if (!transaction.line_items || transaction.line_items.length === 0) return 0
-    return transaction.line_items.reduce((sum, item) => sum + (item.total_amount || item.line_total || 0), 0)
+    return transaction.line_items.reduce((sum, item) => sum + (item.total_amount || 0), 0)
   }
 
   return (
@@ -300,7 +300,7 @@ export default function TransactionDetailModal({
                             <tr key={item.id || index} className="hover:bg-gray-800">
                               <td className="px-3 py-2 text-gray-400">{index + 1}</td>
                               <td className="px-3 py-2">
-                                <div className="text-white font-medium">{item.item_description || item.description}</div>
+                                <div className="text-white font-medium">{item.item_description}</div>
                                 {item.item_category && (
                                   <div className="text-xs text-gray-400 mt-1">
                                     {formatCategoryName(item.item_category)}
@@ -314,7 +314,7 @@ export default function TransactionDetailModal({
                                 {formatCurrency(item.unit_price, transaction.original_currency)}
                               </td>
                               <td className="px-3 py-2 text-right text-green-400 font-medium">
-                                {formatCurrency(item.total_amount || item.line_total || 0, transaction.original_currency)}
+                                {formatCurrency(item.total_amount || 0, transaction.original_currency)}
                               </td>
                             </tr>
                           ))}
@@ -386,13 +386,6 @@ export default function TransactionDetailModal({
               Transaction ID: {transaction.id}
             </div>
             <div className="flex items-center gap-3">
-              <button
-                onClick={onEdit}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-              >
-                <Edit className="w-4 h-4 mr-2 inline" />
-                Edit Transaction
-              </button>
               <button
                 onClick={onClose}
                 className="px-4 py-2 text-gray-400 hover:text-white transition-colors"

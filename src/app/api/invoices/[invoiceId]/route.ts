@@ -9,7 +9,7 @@ import { createServiceSupabaseClient } from '@/lib/supabase-server'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ documentId: string }> }
+  { params }: { params: Promise<{ invoiceId: string }> }
 ) {
   try {
     // Check authentication
@@ -22,7 +22,7 @@ export async function GET(
     }
 
     const resolvedParams = await params
-    const documentId = resolvedParams.documentId
+    const documentId = resolvedParams.invoiceId
     if (!documentId) {
       return NextResponse.json(
         { success: false, error: 'Document ID required' },
@@ -107,7 +107,7 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ documentId: string }> }
+  { params }: { params: Promise<{ invoiceId: string }> }
 ) {
   try {
     // Check authentication
@@ -120,7 +120,7 @@ export async function DELETE(
     }
 
     const resolvedParams = await params
-    const documentId = resolvedParams.documentId
+    const documentId = resolvedParams.invoiceId
     if (!documentId) {
       return NextResponse.json(
         { success: false, error: 'Document ID required' },
@@ -169,17 +169,13 @@ export async function DELETE(
 
     const deletedAt = new Date().toISOString()
 
-    // Soft delete document record from database first
-    // Also clear application association when deleting
-    // Use the document's actual user_id (could be either Supabase UUID or legacy Clerk ID)
+    // Soft delete document record from database
+    // Invoices are standalone documents, no application associations to clear
     const { error: deleteError } = await supabase
       .from('invoices')
       .update({
         deleted_at: deletedAt,
-        updated_at: deletedAt,
-        application_id: null,
-        document_slot: null,
-        slot_position: null
+        updated_at: deletedAt
       })
       .eq('id', documentId)
       .eq('user_id', document.user_id)

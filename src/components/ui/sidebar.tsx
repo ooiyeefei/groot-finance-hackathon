@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, ClipboardList } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, ClipboardList, Tag } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/components/ui/enhanced-business-display'
@@ -43,6 +43,7 @@ export default function Sidebar() {
   // Manager-specific navigation items
   const managerNavigation = [
     { name: t('approvals'), href: localizedHref('/manager/approvals'), icon: CheckCircle },
+    { name: t('categories'), href: localizedHref('/manager/categories'), icon: Tag },
     { name: t('team'), href: localizedHref('/manager/teams'), icon: Users },
   ]
 

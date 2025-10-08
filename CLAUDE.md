@@ -43,7 +43,7 @@ FinanSEAL is a multimodal financial co-pilot web application designed for Southe
 
 ### Key Relationships
 - Documents → Transactions (1:1 via `transactions.document_id`)
-- Transactions → Line Items (1:many via `line_items.transaction_id`)
+- Transactions → Line Items (1:many via `line_items.accounting_entry_id`)
 - Users → All entities via `user_id`
 
 ## External Services Integration

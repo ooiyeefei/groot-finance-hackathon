@@ -11,9 +11,9 @@ export type CreationMethod = 'manual' | 'document_extract'
 export type DocumentType = 'invoice' | 'receipt' | 'bill' | 'statement' | 'contract' | 'other'
 
 // Southeast Asian currencies (most common)
-export type SupportedCurrency = 
+export type SupportedCurrency =
   | 'THB' // Thai Baht
-  | 'IDR' // Indonesian Rupiah  
+  | 'IDR' // Indonesian Rupiah
   | 'MYR' // Malaysian Ringgit
   | 'SGD' // Singapore Dollar
   | 'USD' // US Dollar
@@ -21,6 +21,7 @@ export type SupportedCurrency =
   | 'CNY' // Chinese Yuan
   | 'VND' // Vietnamese Dong
   | 'PHP' // Philippine Peso
+  | 'INR' // Indian Rupee
 
 // P&L Chart of Accounts structure following accounting standards
 export interface TransactionCategories {
@@ -32,9 +33,10 @@ export interface TransactionCategories {
   }
   'Cost of Goods Sold': {
     cost_of_goods_sold: string[]
+    direct_cost: string[]
   }
   Expense: {
-    administrative_expenses: string[]
+    other_operating: string[]
     marketing_advertising: string[]
     travel_entertainment: string[]
     utilities_communications: string[]
@@ -43,7 +45,6 @@ export interface TransactionCategories {
     taxes_licenses: string[]
     depreciation: string[]
     interest_expense: string[]
-    other_operating: string[]
     software_subscriptions: string[]
     professional_services: string[]
   }
@@ -97,17 +98,15 @@ export interface Transaction {
 // Line Item interface for detailed transactions
 export interface LineItem {
   id: string
-  transaction_id: string
+  accounting_entry_id: string
   
-  // Item details - Database uses item_description and total_amount, not description and line_total
+  // Item details
   item_description: string  // Database field name
-  description?: string      // Legacy field (null in database)
   item_code?: string        // Product/stock/item code from invoice
   quantity: number
   unit_measurement?: string // Unit of measurement (kg, pkt, can, etc.)
   unit_price: number
-  total_amount: number      // Database field name  
-  line_total?: number       // Legacy field (null in database)
+  total_amount: number      // Database field name
   
   // Currency and metadata
   currency: string
@@ -254,10 +253,11 @@ export const TRANSACTION_CATEGORIES: TransactionCategories = {
     government_grants: ['business_grants', 'subsidies', 'tax_refunds', 'covid_relief']
   },
   'Cost of Goods Sold': {
-    cost_of_goods_sold: ['raw_materials', 'direct_labor', 'manufacturing_overhead', 'inventory_cost']
+    cost_of_goods_sold: ['raw_materials', 'direct_labor', 'manufacturing_overhead', 'inventory_cost'],
+    direct_cost: ['invoice_purchases', 'supplier_costs', 'vendor_payments', 'direct_materials']
   },
   Expense: {
-    administrative_expenses: ['office_supplies', 'software_subscriptions', 'professional_services', 'bank_fees'],
+    other_operating: ['office_supplies', 'software_subscriptions', 'professional_services', 'bank_fees'],
     marketing_advertising: ['digital_marketing', 'trade_shows', 'advertising', 'promotional_materials'],
     travel_entertainment: ['business_travel', 'meals_entertainment', 'accommodation', 'transport', 'travel_expenses'],
     utilities_communications: ['electricity', 'water', 'internet', 'phone', 'telecom_services'],
@@ -266,7 +266,6 @@ export const TRANSACTION_CATEGORIES: TransactionCategories = {
     taxes_licenses: ['income_tax', 'sales_tax', 'business_licenses', 'regulatory_fees'],
     depreciation: ['equipment_depreciation', 'building_depreciation', 'vehicle_depreciation', 'asset_depreciation'],
     interest_expense: ['loan_interest', 'credit_interest', 'finance_charges', 'bank_interest'],
-    other_operating: ['repairs_maintenance', 'security', 'cleaning', 'miscellaneous'],
     software_subscriptions: ['saas_tools', 'cloud_services', 'productivity_software', 'accounting_software'],
     professional_services: ['legal_fees', 'accounting_services', 'consulting', 'advisory_services']
   }
@@ -282,7 +281,8 @@ export const CURRENCY_SYMBOLS: Record<SupportedCurrency, string> = {
   EUR: '€',
   CNY: '¥',
   VND: '₫',
-  PHP: '₱'
+  PHP: '₱',
+  INR: '₹'
 }
 
 export const CURRENCY_NAMES: Record<SupportedCurrency, string> = {
@@ -294,5 +294,6 @@ export const CURRENCY_NAMES: Record<SupportedCurrency, string> = {
   EUR: 'Euro',
   CNY: 'Chinese Yuan',
   VND: 'Vietnamese Dong',
-  PHP: 'Philippine Peso'
+  PHP: 'Philippine Peso',
+  INR: 'Indian Rupee'
 }

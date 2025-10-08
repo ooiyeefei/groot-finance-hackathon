@@ -16,6 +16,73 @@ import {
   TRANSACTION_CATEGORIES
 } from '@/types/transaction'
 
+// Helper function to fetch dynamic categories from database
+async function fetchDynamicCategories(supabase: any, businessId: string, transactionType: 'Income' | 'Cost of Goods Sold' | 'Expense') {
+  try {
+    let validCategories: string[] = []
+    let validCategoryNames: string[] = []
+
+    if (transactionType === 'Cost of Goods Sold') {
+      // Fetch COGS categories
+      const { data: businessData, error } = await supabase
+        .from('businesses')
+        .select('custom_cogs_categories')
+        .eq('id', businessId)
+        .single()
+
+      if (!error && businessData?.custom_cogs_categories) {
+        const categories = businessData.custom_cogs_categories
+        const activeCategories = categories.filter((cat: any) => cat.is_active !== false)
+        validCategories = activeCategories.map((cat: any) => cat.category_code)
+        validCategoryNames = activeCategories.map((cat: any) => cat.category_name)
+      }
+    } else if (transactionType === 'Expense') {
+      // Fetch expense categories
+      const { data: businessData, error } = await supabase
+        .from('businesses')
+        .select('custom_expense_categories')
+        .eq('id', businessId)
+        .single()
+
+      if (!error && businessData?.custom_expense_categories) {
+        const categories = businessData.custom_expense_categories
+        const activeCategories = categories.filter((cat: any) => cat.is_active !== false)
+        validCategories = activeCategories.map((cat: any) => cat.category_code)
+        validCategoryNames = activeCategories.map((cat: any) => cat.category_name)
+      }
+    } else if (transactionType === 'Income') {
+      // For income, use hardcoded categories for now (can be made dynamic later)
+      validCategories = ['operating_revenue', 'other_income', 'investment_income', 'government_grants']
+      validCategoryNames = ['Operating Revenue', 'Other Income', 'Investment Income', 'Government Grants']
+    }
+
+    // Fallback to hardcoded categories if no dynamic categories found
+    if (validCategories.length === 0) {
+      const typeCategories = TRANSACTION_CATEGORIES[transactionType]
+      if (typeCategories) {
+        validCategories = Object.keys(typeCategories)
+        validCategoryNames = Object.keys(typeCategories).map(key =>
+          key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+        )
+      }
+    }
+
+    return { codes: validCategories, names: validCategoryNames }
+  } catch (error) {
+    console.error('Error fetching dynamic categories:', error)
+    // Fallback to hardcoded categories
+    const typeCategories = TRANSACTION_CATEGORIES[transactionType]
+    if (typeCategories) {
+      const codes = Object.keys(typeCategories)
+      const names = codes.map(key =>
+        key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      )
+      return { codes, names }
+    }
+    return { codes: [], names: [] }
+  }
+}
+
 // Create new accounting entry
 export async function POST(request: NextRequest) {
   try {
@@ -77,46 +144,59 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Flexible category validation - handles both top-level categories and subcategories
-    const typeCategories = TRANSACTION_CATEGORIES[transaction_type]
-    const validTopLevelCategories = Object.keys(typeCategories)
+    console.log(`[Accounting Entries API] Creating ${transaction_type} entry for user ${userId}`)
 
+    const userData = await getUserData(userId)
+    const supabase = await createAuthenticatedSupabaseClient(userId)
+
+    // Ensure user has a business_id for category validation
+    if (!userData.business_id) {
+      return NextResponse.json(
+        { success: false, error: 'User must be associated with a business to create accounting entries' },
+        { status: 400 }
+      )
+    }
+
+    // Fetch dynamic categories for validation
+    const categoryData = await fetchDynamicCategories(supabase, userData.business_id, transaction_type)
+    const validCategories = categoryData.codes
+    const validCategoryNames = categoryData.names
+
+    // Dynamic category validation
     let finalCategory = category
     let finalSubcategory = subcategory
 
-    // Check if it's a top-level category
-    if (validTopLevelCategories.includes(category)) {
-      // Valid top-level category, use as-is
-      finalCategory = category
-      finalSubcategory = subcategory
-    } else {
-      // Check if it's a subcategory and map to parent category
+    if (!validCategories.includes(category)) {
+      // Check if it's a subcategory in hardcoded system (fallback for legacy data)
+      const typeCategories = TRANSACTION_CATEGORIES[transaction_type]
       let foundParentCategory = null
-      for (const [parentCategory, subCategories] of Object.entries(typeCategories)) {
-        if (subCategories.includes(category)) {
-          foundParentCategory = parentCategory
-          break
+
+      if (typeCategories) {
+        for (const [parentCategory, subCategories] of Object.entries(typeCategories)) {
+          if (subCategories.includes(category)) {
+            foundParentCategory = parentCategory
+            break
+          }
         }
       }
 
-      if (foundParentCategory) {
+      if (foundParentCategory && validCategories.includes(foundParentCategory)) {
         // Map subcategory to parent category
         finalCategory = foundParentCategory
         finalSubcategory = category
         console.log(`[Accounting Entries API] Mapped subcategory '${category}' to parent category '${foundParentCategory}'`)
       } else {
-        // Invalid category/subcategory
+        // Invalid category
+        console.error(`[Accounting Entries API] Invalid category '${category}' for type '${transaction_type}'. Valid categories:`, validCategories)
         return NextResponse.json(
-          { success: false, error: `Invalid category '${category}' for accounting entry type '${transaction_type}'` },
+          {
+            success: false,
+            error: `Invalid category '${category}' for accounting entry type '${transaction_type}'. Valid categories: ${validCategoryNames.join(', ')}`
+          },
           { status: 400 }
         )
       }
     }
-
-    console.log(`[Accounting Entries API] Creating ${transaction_type} entry for user ${userId}`)
-
-    const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Use the submitted home currency from the form
     const homeCurrency: SupportedCurrency = home_currency
@@ -146,6 +226,7 @@ export async function POST(request: NextRequest) {
       .from('accounting_entries')
       .insert({
         user_id: userData.id,
+        business_id: userData.business_id, // Required for RLS policy compliance
         document_id: source_document_id || null, // Link to source document if provided
         transaction_type,
         category: finalCategory,
@@ -180,16 +261,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Create line items if provided
+    console.log(`[Accounting Entries API] Processing ${line_items.length} line items for entry ${accountingEntry.id}`)
+
     const createdLineItems = []
     if (line_items.length > 0) {
       for (let i = 0; i < line_items.length; i++) {
         const lineItem = line_items[i]
         const lineTotal = lineItem.quantity * lineItem.unit_price
 
+        // Validate line item data before insertion
+        if (!lineItem.description || !lineItem.quantity || !lineItem.unit_price) {
+          console.error('[Accounting Entries API] Invalid line item data:', {
+            index: i,
+            description: lineItem.description,
+            quantity: lineItem.quantity,
+            unit_price: lineItem.unit_price,
+            issue: !lineItem.description ? 'missing description' :
+                   !lineItem.quantity ? 'missing quantity' : 'missing unit_price'
+          })
+          continue // Skip invalid line items
+        }
+
+        console.log(`[Accounting Entries API] Creating line item ${i + 1}:`, {
+          description: lineItem.description,
+          item_code: lineItem.item_code,
+          quantity: lineItem.quantity,
+          unit_price: lineItem.unit_price,
+          total_amount: lineTotal
+        })
+
         const { data: createdLineItem, error: lineItemError } = await supabase
           .from('line_items')
           .insert({
-            transaction_id: accountingEntry.id,
+            accounting_entry_id: accountingEntry.id,
             item_description: lineItem.description,
             item_code: lineItem.item_code || null,
             quantity: lineItem.quantity,
@@ -197,8 +301,8 @@ export async function POST(request: NextRequest) {
             unit_price: lineItem.unit_price,
             total_amount: lineTotal,
             currency: original_currency,
-            tax_rate: lineItem.tax_rate,
-            tax_amount: lineItem.tax_rate ? lineTotal * lineItem.tax_rate : 0,
+            tax_rate: lineItem.tax_rate || 0,
+            tax_amount: lineItem.tax_rate ? lineTotal * (lineItem.tax_rate / 100) : 0,
             item_category: lineItem.item_category,
             line_order: i + 1
           })
@@ -208,20 +312,24 @@ export async function POST(request: NextRequest) {
         if (lineItemError) {
           console.error('[Accounting Entries API] Failed to create line item:', lineItemError)
           console.error('[Accounting Entries API] Line item data that failed:', {
-            transaction_id: accountingEntry.id,
+            accounting_entry_id: accountingEntry.id,
             item_description: lineItem.description,
             quantity: lineItem.quantity,
             unit_price: lineItem.unit_price,
             total_amount: lineTotal,
             currency: original_currency,
-            tax_rate: lineItem.tax_rate,
-            tax_amount: lineItem.tax_rate ? lineTotal * lineItem.tax_rate : 0,
+            tax_rate: lineItem.tax_rate || 0,
+            tax_amount: lineItem.tax_rate ? lineTotal * (lineItem.tax_rate / 100) : 0,
             item_category: lineItem.item_category,
             line_order: i + 1
           })
-          // Continue creating other line items
+          // Continue creating other line items rather than failing the entire transaction
         } else {
-          console.log('[Accounting Entries API] Successfully created line item:', createdLineItem)
+          console.log('[Accounting Entries API] ✅ Successfully created line item:', {
+            id: createdLineItem.id,
+            description: createdLineItem.item_description,
+            total_amount: createdLineItem.total_amount
+          })
           createdLineItems.push(createdLineItem)
         }
       }
@@ -242,7 +350,7 @@ export async function POST(request: NextRequest) {
           const complianceTool = new CrossBorderTaxComplianceTool()
 
           const analysisResult = await complianceTool.execute({
-            transaction_id: accountingEntry.id,
+            accounting_entry_id: accountingEntry.id,
             amount: original_amount,
             original_currency: original_currency,
             home_currency: homeCurrency,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { useRouter } from 'next/navigation'
+import { useLocale } from 'next-intl'
 import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus, Loader2 } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocumentPolling } from '@/hooks/use-document-polling'
@@ -12,6 +13,7 @@ import TransactionFormModal from '@/components/transactions/transaction-form-mod
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { mapDocumentToTransaction, canCreateTransactionFromDocument } from '@/lib/document-to-transaction-mapper'
 import { CreateTransactionRequest } from '@/types/transaction'
+import { useHomeCurrency } from '@/components/settings/currency-settings'
 import ExtractedInfoTags from './ExtractedInfoTags'
 
 interface DocumentsListProps {
@@ -24,14 +26,16 @@ interface DocumentsListRef {
 
 const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefresh }, ref) => {
   const router = useRouter()
-  const { 
-    documents, 
-    loading, 
-    refreshDocuments, 
-    processDocument, 
+  const locale = useLocale()
+  const userHomeCurrency = useHomeCurrency()
+  const {
+    documents,
+    loading,
+    refreshDocuments,
+    processDocument,
     deleteDocument,
     processingDocuments,
-    deletingDocuments 
+    deletingDocuments
   } = useDocumentPolling()
 
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
@@ -131,10 +135,10 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     setEditTransactionData({ documentId, transactionId })
   }
 
-  // Handle viewing linked transaction 
+  // Handle viewing linked transaction
   const openTransactionView = (transactionId: string) => {
-    // Navigate to transactions page with the specific transaction focused using Next.js router
-    router.push(`/transactions?highlight=${transactionId}`)
+    // Navigate to accounting page with the specific accounting entry focused using Next.js router
+    router.push(`/${locale}/accounting?highlight=${transactionId}`)
   }
 
   // Close transaction form modal
@@ -150,27 +154,44 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   // Handle transaction creation from document
   const handleCreateTransaction = async (data: CreateTransactionRequest) => {
     try {
-      console.log('[Documents List] Sending transaction data to API:', JSON.stringify(data, null, 2))
-      console.log('[Documents List] Home currency being sent:', data.home_currency)
-      console.log('[Documents List] Source document ID being sent:', data.source_document_id)
-      
-      const response = await fetch('/api/transactions', {
+      // Ensure home_currency is set if not provided
+      const transactionData = {
+        ...data,
+        home_currency: data.home_currency || userHomeCurrency || 'USD'
+      }
+
+      console.log('[Documents List] Sending transaction data to API:', JSON.stringify(transactionData, null, 2))
+      console.log('[Documents List] Home currency being sent:', transactionData.home_currency)
+      console.log('[Documents List] Source document ID being sent:', transactionData.source_document_id)
+
+      const response = await fetch('/api/accounting-entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(transactionData)
       })
 
       if (!response.ok) {
-        throw new Error('Failed to create transaction')
+        const errorData = await response.text()
+        console.error('[Documents List] API Error Response:', errorData)
+        console.error('[Documents List] Response Status:', response.status)
+        throw new Error(`Failed to create accounting entry: ${response.status} - ${errorData}`)
       }
 
-      console.log('Transaction created successfully from document')
+      const result = await response.json()
+      console.log('Transaction created successfully from document:', result)
+
+      if (result.success && result.data.transaction) {
+        const createdTransaction = result.data.transaction
+        const sourceDocumentId = transactionData.source_document_id
+        console.log(`[Documents List] Created transaction ${createdTransaction.id} for document ${sourceDocumentId}`)
+
+        // Refresh documents list to update the linked transaction status
+        await refreshDocuments()
+      }
+
       setTransactionFormDocument(null)
-      
-      // Refresh documents list to update the linked transaction status
-      await refreshDocuments()
-      
-      // Optional: Show success message or redirect to transactions page
+
+      // Optional: Show success message
       // You could add a toast notification here
     } catch (error) {
       console.error('Failed to create transaction:', error)
@@ -185,7 +206,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     try {
       console.log('[Documents List] Updating transaction with reprocessed data:', JSON.stringify(data, null, 2))
       
-      const response = await fetch(`/api/transactions/${editTransactionData.transactionId}`, {
+      const response = await fetch(`/api/accounting-entries/${editTransactionData.transactionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -237,7 +258,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
   const fetchTransactionDetails = async (transactionId: string) => {
     try {
-      const response = await fetch(`/api/transactions/${transactionId}`)
+      const response = await fetch(`/api/accounting-entries/${transactionId}`)
       if (response.ok) {
         const result = await response.json()
         if (result.success) {
@@ -338,7 +359,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   {/* Show transaction linked status */}
                   {document.linked_transaction && (
                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/20 text-green-400 border border-green-700">
-                      💰 Transaction Created
+                      💰 Record Created
                     </span>
                   )}
                   
@@ -395,7 +416,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                           title={`Update transaction with reprocessed data: ${document.linked_transaction.description}`}
                         >
                           <Plus className="w-4 h-4 mr-1.5" />
-                          Update Transaction
+                          Update Record
                         </button>
                       ) : (
                         // Show View Transaction for normal processed documents
@@ -405,7 +426,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                           title={`View transaction: ${document.linked_transaction.description}`}
                         >
                           <Eye className="w-4 h-4 mr-1.5" />
-                          View Transaction
+                          View Record
                         </button>
                       )
                     ) : (
@@ -415,7 +436,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                         title="Create transaction from extracted document data"
                       >
                         <Plus className="w-4 h-4 mr-1.5" />
-                        Add Transaction
+                        Create Record
                       </button>
                     )
                   )}

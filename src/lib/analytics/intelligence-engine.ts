@@ -515,7 +515,8 @@ function formatCurrency(amount: number, currency: SupportedCurrency): string {
     'IDR': 'Rp',
     'CNY': '¥',
     'VND': '₫',
-    'PHP': '₱'
+    'PHP': '₱',
+    'INR': '₹'
   };
 
   const symbol = symbols[currency] || currency;

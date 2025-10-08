@@ -45,7 +45,7 @@ export async function PATCH(
       
       // Expense categories
       'cost_of_goods_sold',
-      'administrative_expenses',
+      'other_operating',
       'marketing_advertising',
       'travel_entertainment',
       'utilities_communications',

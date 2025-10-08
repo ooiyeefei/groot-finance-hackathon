@@ -19,7 +19,7 @@ import type { convertPdfToImage } from '@/trigger/convert-pdf-to-image';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ documentId: string }> }
+  { params }: { params: Promise<{ invoiceId: string }> }
 ) {
   try {
     // Step 1: Perform authentication
@@ -46,7 +46,7 @@ export async function POST(
     }
 
     const resolvedParams = await params;
-    const documentId = resolvedParams.documentId;
+    const documentId = resolvedParams.invoiceId;
     if (!documentId) {
       return NextResponse.json(
         { success: false, error: 'Document ID is required' },
@@ -189,7 +189,7 @@ export async function POST(
     
     // Try to update document status to failed if we have the ID
     const resolvedParams = await params;
-    const documentId = resolvedParams.documentId;
+    const documentId = resolvedParams.invoiceId;
     if (documentId) {
       try {
         const { userId } = await auth();

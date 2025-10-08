@@ -30,8 +30,8 @@ const DOMAIN_TABLE_MAP = {
   'applications': 'application_documents'
 } as const;
 
-// Helper function to fetch enabled categories directly from database
-async function fetchEnabledCategoriesFromDB(businessId: string): Promise<DynamicExpenseCategory[]> {
+// Helper function to fetch enabled expense categories directly from database
+async function fetchEnabledExpenseCategoriesFromDB(businessId: string): Promise<DynamicExpenseCategory[]> {
   try {
     const { data: businessData, error } = await supabase
       .from('businesses')
@@ -40,7 +40,7 @@ async function fetchEnabledCategoriesFromDB(businessId: string): Promise<Dynamic
       .single();
 
     if (error) {
-      console.error('Error fetching categories from DB:', error);
+      console.error('Error fetching expense categories from DB:', error);
       return [];
     }
 
@@ -59,7 +59,44 @@ async function fetchEnabledCategoriesFromDB(businessId: string): Promise<Dynamic
 
     return enabledCategories;
   } catch (error) {
-    console.error('Failed to fetch categories from database:', error);
+    console.error('Failed to fetch expense categories from database:', error);
+    return [];
+  }
+}
+
+// Helper function to fetch enabled COGS categories directly from database
+async function fetchEnabledCOGSCategoriesFromDB(businessId: string): Promise<DynamicExpenseCategory[]> {
+  try {
+    const { data: businessData, error } = await supabase
+      .from('businesses')
+      .select('custom_cogs_categories')
+      .eq('id', businessId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching COGS categories from DB:', error);
+      return [];
+    }
+
+    // Extract categories from flattened JSONB structure (updated to match database migration)
+    const allCategories = businessData?.custom_cogs_categories || [];
+    const enabledCategories = allCategories
+      .filter((category: any) => category.is_active !== false)
+      .sort((a: any, b: any) => (a.sort_order || 99) - (b.sort_order || 99))
+      .map((category: any) => ({
+        id: category.id || category.category_code,
+        category_name: category.category_name,
+        category_code: category.category_code,
+        description: category.description,
+        gl_account: category.gl_account, // COGS-specific field
+        cost_type: category.cost_type, // COGS-specific field
+        vendor_patterns: category.vendor_patterns || [],
+        ai_keywords: category.ai_keywords || []
+      }));
+
+    return enabledCategories;
+  } catch (error) {
+    console.error('Failed to fetch COGS categories from database:', error);
     return [];
   }
 }
@@ -204,10 +241,10 @@ function categorizeWithIFRSAccountingCategories(
   ];
 
   let bestMatch = {
-    category_code: 'administrative_expenses',
-    category_name: 'Administrative Expenses',
+    category_code: 'other_operating',
+    category_name: 'Other Operating Expenses',
     confidence: 0.1,
-    reasoning: 'No clear pattern match - defaulted to administrative expenses'
+    reasoning: 'No clear pattern match - defaulted to other operating expenses'
   };
 
   // Check each IFRS pattern
@@ -249,13 +286,17 @@ export const processDocumentOCR = task({
     console.log(`📄 Document ID: ${payload.documentId}`);
     console.log(`📊 Table: ${tableName} (domain: ${payload.documentDomain})`);
     console.log(`🖼️ Image storage path: ${payload.imageStoragePath || 'Will fetch from document record'}`);
-    console.log(`🏷️ Expense category: ${payload.expenseCategory || 'Not provided'}`);
+
+    // Dynamic category logging based on document domain
+    const categoryType = payload.documentDomain === 'invoices' ? 'COGS category' : 'Expense category';
+    console.log(`🏷️ ${categoryType}: ${payload.expenseCategory || 'Will fetch from business categories'}`);
 
     // Declare variables at function scope for catch block access
     let processedImageBase64: string = '';
     let processedMimeType: string = '';
     let docRecord: any = null;
     let imageStoragePath: string;
+    let businessCategories: DynamicExpenseCategory[] = [];
 
     try {
       // Step 1: Fetch document record and determine image path
@@ -281,6 +322,46 @@ export const processDocumentOCR = task({
 
       console.log(`📄 Processing: ${docRecord.file_name} (${docRecord.file_type}, ${Math.round(docRecord.file_size / 1024)}KB)`);
       console.log(`🖼️ Using image storage path: ${imageStoragePath}`);
+
+      // Step 1.5: Fetch business categories based on document domain
+      if (docRecord.business_id) {
+        if (payload.documentDomain === 'invoices') {
+          console.log(`🏷️ Fetching business COGS categories for invoices - business_id: ${docRecord.business_id}`);
+          try {
+            businessCategories = await fetchEnabledCOGSCategoriesFromDB(docRecord.business_id);
+            console.log(`🏷️ Found ${businessCategories.length} enabled COGS categories for invoice categorization`);
+
+            if (businessCategories.length > 0) {
+              console.log(`🏷️ COGS Categories Overview:`, businessCategories.map(cat => `${cat.category_code}: ${cat.category_name}`).join(', '));
+
+              // Summary logging for AI processing
+              const totalKeywords = businessCategories.reduce((sum, cat) => sum + (cat.ai_keywords?.length || 0), 0);
+              const totalVendorPatterns = businessCategories.reduce((sum, cat) => sum + (cat.vendor_patterns?.length || 0), 0);
+              console.log(`🤖 AI Processing: ${businessCategories.length} COGS categories (${totalKeywords} keywords, ${totalVendorPatterns} vendor patterns) sent to DSPy AI`);
+            } else {
+              console.log(`⚠️ No COGS categories found, will fall back to IFRS categories`);
+            }
+          } catch (categoryError) {
+            console.error(`⚠️ Failed to fetch COGS categories for invoices: ${categoryError}`);
+            console.log(`⚠️ Will continue with IFRS categorization only`);
+            businessCategories = [];
+          }
+        } else if (payload.documentDomain === 'expense_claims') {
+          console.log(`🏷️ Fetching business expense categories for expense claims - business_id: ${docRecord.business_id}`);
+          try {
+            businessCategories = await fetchEnabledExpenseCategoriesFromDB(docRecord.business_id);
+            console.log(`🏷️ Found ${businessCategories.length} enabled expense categories for expense claim categorization`);
+          } catch (categoryError) {
+            console.error(`⚠️ Failed to fetch expense categories for expense claims: ${categoryError}`);
+            console.log(`⚠️ Will continue with IFRS categorization only`);
+            businessCategories = [];
+          }
+        } else {
+          console.log(`📝 Document domain '${payload.documentDomain}' - using IFRS categorization only`);
+        }
+      } else {
+        console.log(`⚠️ No business_id available - using IFRS categorization only`);
+      }
 
       // Step 2: GRACEFUL PATH HANDLING: Different approaches for images vs converted PDFs
       console.log(`[ProcessDocumentOCR] Document type: ${docRecord.file_type}, has converted path: ${!!docRecord.converted_image_path}`);
@@ -613,8 +694,34 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
 # Define IFRS categories for DSPy processing
 ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES_FOR_DSPY)}
 
+# Define business categories for DSPy processing (for invoices)
+business_categories = ${JSON.stringify(businessCategories)}
+document_domain = "${payload.documentDomain}"
+
 def main():
     print("🚀 Clean DSPy Processing with Common Services", file=sys.stderr)
+
+    # Enhanced logging for AI pipeline
+    print("📊 === PYTHON AI PIPELINE CATEGORY ANALYSIS ===", file=sys.stderr)
+    print(f"📋 Document Domain: {document_domain}", file=sys.stderr)
+    print(f"📋 Business Categories Count: {len(business_categories)}", file=sys.stderr)
+    print(f"📋 IFRS Categories Count: {len(ifrs_categories)}", file=sys.stderr)
+
+    if document_domain == "invoices" and business_categories and len(business_categories) > 0:
+        print("🎯 USING BUSINESS COGS CATEGORIES FOR AI SELECTION", file=sys.stderr)
+        print("📋 Business Categories Details:", file=sys.stderr)
+        for i, cat in enumerate(business_categories):
+            print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+            if cat.get('ai_keywords'):
+                print(f"      Keywords: {', '.join(cat['ai_keywords'])}", file=sys.stderr)
+            if cat.get('vendor_patterns'):
+                print(f"      Vendors: {', '.join(cat['vendor_patterns'])}", file=sys.stderr)
+        print("✅ AI will select from business-defined COGS categories", file=sys.stderr)
+    else:
+        print("⚠️ FALLING BACK TO IFRS CATEGORIES", file=sys.stderr)
+        print(f"   Reason: domain={document_domain}, business_cats_available={len(business_categories) > 0}", file=sys.stderr)
+        print("🔄 AI will select from standard IFRS categories", file=sys.stderr)
+    print("📊 === END PIPELINE CATEGORY ANALYSIS ===", file=sys.stderr)
 
     import traceback  # Import here for exception handling
 
@@ -654,12 +761,38 @@ def main():
             )
             print(f"✅ Gemini LM configured successfully", file=sys.stderr)
 
-            print(f"🤖 Calling process_document_with_ifrs_dspy for Gemini...", file=sys.stderr)
-            gemini_result = process_document_with_ifrs_dspy(
-                document_image=document_image,  # Use dspy.Image object instead of PIL
-                lm_client=gemini_lm,
-                ifrs_categories=ifrs_categories
-            )
+            # Choose appropriate categories based on document domain and availability
+            if document_domain == "invoices" and business_categories and len(business_categories) > 0:
+                print(f"🤖 Calling process_document_with_ifrs_dspy for Gemini with business COGS categories...", file=sys.stderr)
+                print(f"📊 === GEMINI AI CATEGORY INPUT ===", file=sys.stderr)
+                print(f"📋 Category Type: BUSINESS COGS CATEGORIES", file=sys.stderr)
+                print(f"📋 Total Categories Sent: {len(business_categories)}", file=sys.stderr)
+                for i, cat in enumerate(business_categories):
+                    print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+                    if cat.get('ai_keywords'):
+                        print(f"      🔍 AI Keywords: {', '.join(cat['ai_keywords'])}", file=sys.stderr)
+                    if cat.get('vendor_patterns'):
+                        print(f"      🏪 Vendor Patterns: {', '.join(cat['vendor_patterns'])}", file=sys.stderr)
+                print(f"📊 === END GEMINI CATEGORY INPUT ===", file=sys.stderr)
+                gemini_result = process_document_with_ifrs_dspy(
+                    document_image=document_image,  # Use dspy.Image object instead of PIL
+                    lm_client=gemini_lm,
+                    ifrs_categories=business_categories  # Use business categories for invoices
+                )
+            else:
+                print(f"🤖 Calling process_document_with_ifrs_dspy for Gemini with IFRS categories...", file=sys.stderr)
+                print(f"📊 === GEMINI AI CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
+                print(f"📋 Category Type: IFRS STANDARD CATEGORIES", file=sys.stderr)
+                print(f"📋 Total Categories Sent: {len(ifrs_categories)}", file=sys.stderr)
+                print(f"📋 Reason: No business COGS categories available or non-invoice document", file=sys.stderr)
+                for i, cat in enumerate(ifrs_categories):
+                    print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+                print(f"📊 === END GEMINI CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
+                gemini_result = process_document_with_ifrs_dspy(
+                    document_image=document_image,  # Use dspy.Image object instead of PIL
+                    lm_client=gemini_lm,
+                    ifrs_categories=ifrs_categories
+                )
             print(f"🔍 Gemini raw result type: {type(gemini_result)}", file=sys.stderr)
             print(f"🔍 Gemini raw result preview: {str(gemini_result)[:300]}...", file=sys.stderr)
 
@@ -736,12 +869,38 @@ def main():
                 )
                 print(f"✅ vLLM LM configured successfully", file=sys.stderr)
 
-                print(f"🤖 Calling process_document_with_ifrs_dspy for vLLM...", file=sys.stderr)
-                vllm_result = process_document_with_ifrs_dspy(
-                    document_image=document_image,  # Use dspy.Image object instead of PIL
-                    lm_client=skywork_lm,
-                    ifrs_categories=ifrs_categories
-                )
+                # Choose appropriate categories based on document domain and availability
+                if document_domain == "invoices" and business_categories and len(business_categories) > 0:
+                    print(f"🤖 Calling process_document_with_ifrs_dspy for vLLM with business COGS categories...", file=sys.stderr)
+                    print(f"📊 === VLLM AI CATEGORY INPUT ===", file=sys.stderr)
+                    print(f"📋 Category Type: BUSINESS COGS CATEGORIES", file=sys.stderr)
+                    print(f"📋 Total Categories Sent: {len(business_categories)}", file=sys.stderr)
+                    for i, cat in enumerate(business_categories):
+                        print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+                        if cat.get('ai_keywords'):
+                            print(f"      🔍 AI Keywords: {', '.join(cat['ai_keywords'])}", file=sys.stderr)
+                        if cat.get('vendor_patterns'):
+                            print(f"      🏪 Vendor Patterns: {', '.join(cat['vendor_patterns'])}", file=sys.stderr)
+                    print(f"📊 === END VLLM CATEGORY INPUT ===", file=sys.stderr)
+                    vllm_result = process_document_with_ifrs_dspy(
+                        document_image=document_image,  # Use dspy.Image object instead of PIL
+                        lm_client=skywork_lm,
+                        ifrs_categories=business_categories  # Use business categories for invoices
+                    )
+                else:
+                    print(f"🤖 Calling process_document_with_ifrs_dspy for vLLM with IFRS categories...", file=sys.stderr)
+                    print(f"📊 === VLLM AI CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
+                    print(f"📋 Category Type: IFRS STANDARD CATEGORIES", file=sys.stderr)
+                    print(f"📋 Total Categories Sent: {len(ifrs_categories)}", file=sys.stderr)
+                    print(f"📋 Reason: No business COGS categories available or non-invoice document", file=sys.stderr)
+                    for i, cat in enumerate(ifrs_categories):
+                        print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+                    print(f"📊 === END VLLM CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
+                    vllm_result = process_document_with_ifrs_dspy(
+                        document_image=document_image,  # Use dspy.Image object instead of PIL
+                        lm_client=skywork_lm,
+                        ifrs_categories=ifrs_categories
+                    )
                 print(f"🔍 vLLM raw result type: {type(vllm_result)}", file=sys.stderr)
                 print(f"🔍 vLLM raw result preview: {str(vllm_result)[:300]}...", file=sys.stderr)
 
@@ -968,16 +1127,31 @@ print(json.dumps(result))
       console.log(`🏪 Vendor: ${finalExtractionData.document_summary?.vendor_name || finalExtractionData.vendor_name}`);
       console.log(`💰 Amount: ${finalExtractionData.document_summary?.total_amount || finalExtractionData.total_amount}`);
 
-      // Step 5: IFRS categorization for transactions table (standardized categories only)
-      console.log(`📊 Performing IFRS categorization for transactions table...`);
+      // Step 5: Smart categorization - COGS categories for invoices, Expense categories for expense claims, IFRS for other domains
+      let selectedCategory: any;
 
-      // Use IFRS categories for DSPy-based categorization (NOT business categories)
-      const selectedCategory = categorizeWithIFRSAccountingCategories(finalExtractionData);
-      console.log(`📊 IFRS Category: ${selectedCategory.category_code} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
-      console.log(`📊 Reasoning: ${selectedCategory.reasoning}`);
+      if (payload.documentDomain === 'invoices' && businessCategories.length > 0) {
+        console.log(`📊 Performing COGS categorization for invoices using business-defined categories...`);
+        // Use COGS categories for invoice categorization
+        const businessCategoryResult = categorizeExpenseWithDynamicCategories(finalExtractionData, businessCategories);
+        selectedCategory = {
+          category_code: businessCategoryResult.category,
+          category_name: businessCategories.find(cat => cat.category_code === businessCategoryResult.category)?.category_name || businessCategoryResult.category,
+          confidence: businessCategoryResult.confidence,
+          reasoning: businessCategoryResult.reasoning
+        };
+        console.log(`📊 COGS Category: ${selectedCategory.category_code} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
+        console.log(`📊 COGS Reasoning: ${selectedCategory.reasoning}`);
+      } else {
+        console.log(`📊 Performing IFRS categorization for ${payload.documentDomain}...`);
+        // Use IFRS categories for non-invoice domains or when no business categories available
+        selectedCategory = categorizeWithIFRSAccountingCategories(finalExtractionData);
+        console.log(`📊 IFRS Category: ${selectedCategory.category_code} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
+        console.log(`📊 IFRS Reasoning: ${selectedCategory.reasoning}`);
+      }
 
-      // Step 6: Prepare final DSPy result with standard IFRS categorization only
-      console.log(`🔄 Preparing final DSPy result with standard IFRS categorization`);
+      // Step 6: Prepare final DSPy result with smart categorization (business or IFRS)
+      console.log(`🔄 Preparing final DSPy result with smart categorization`);
 
       // Calculate due date from transaction date + payment terms
       let calculatedDueDate = null;
@@ -1000,25 +1174,33 @@ print(json.dumps(result))
         }
       }
 
-      // Store raw DSPy output directly with standard IFRS categorization only
+      // Store raw DSPy output directly with smart categorization
       const finalDspyResult = {
         ...finalExtractionData, // All raw DSPy fields (vendor_name, total_amount, currency, etc.)
         // Add calculated due date
         due_date: calculatedDueDate,
-        // Add standard IFRS accounting categorization (Documents page - accounting purpose)
+        // Add smart categorization (business COGS or IFRS fallback)
         suggested_category: selectedCategory.category_code,
         accounting_category: selectedCategory.category_name,
         category_confidence: selectedCategory.confidence,
         category_reasoning: selectedCategory.reasoning,
-        processing_method: finalExtractionData.backend_used || 'dspy_processing'
+        processing_method: finalExtractionData.backend_used || 'dspy_processing',
+        // Store category selection metadata
+        category_selection: {
+          selected_category_type: payload.documentDomain === 'invoices' && businessCategories.length > 0 ? 'business_cogs' : 'ifrs',
+          category_code: selectedCategory.category_code,
+          category_name: selectedCategory.category_name,
+          confidence: selectedCategory.confidence,
+          reasoning: selectedCategory.reasoning
+        }
       };
 
-      // Step 7: Update database with raw DSPy structure
+      // Step 7: Update database with raw DSPy structure and selected category
       console.log(`💾 Updating database with extraction results...`);
-      const { error: updateError } = await supabase
-        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-        .update({
-          processing_status: 'completed',
+
+      // Prepare database update object
+      const updateData: any = {
+        processing_status: 'completed',
         extracted_data: finalDspyResult, // Store raw DSPy structure directly
         confidence_score: finalExtractionData.confidence_score,
         processed_at: new Date().toISOString(),
@@ -1027,15 +1209,21 @@ print(json.dumps(result))
           backend_used: finalExtractionData.backend_used,
           requires_validation: finalExtractionData.requires_validation,
           category_suggestion: {
-            ifrs_accounting: {
-              category: selectedCategory.category_code,
-              accounting_category: selectedCategory.category_name,
-              confidence: selectedCategory.confidence,
-              reasoning: selectedCategory.reasoning
-            }
+            selected_category_type: payload.documentDomain === 'invoices' && businessCategories.length > 0 ? 'business_cogs' : 'ifrs',
+            category: selectedCategory.category_code,
+            accounting_category: selectedCategory.category_name,
+            confidence: selectedCategory.confidence,
+            reasoning: selectedCategory.reasoning
           }
         }
-      }).eq('id', payload.documentId);
+      };
+
+      console.log(`📊 Storing selected category in extracted_data: ${selectedCategory.category_code} -> ${selectedCategory.category_name}`);
+
+      const { error: updateError } = await supabase
+        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
+        .update(updateData)
+        .eq('id', payload.documentId);
 
       if (updateError) {
         throw new Error(`Failed to update document: ${updateError.message}`);
@@ -1370,12 +1558,12 @@ print(json.dumps(result))
             processing_method: vllmExtractionData.backend_used || 'vllm_fallback'
           };
 
-          // Update database with vLLM raw DSPy structure
+          // Update database with vLLM raw DSPy structure and selected category
           console.log(`💾 Updating database with vLLM fallback results...`);
-          const { error: vllmUpdateError } = await supabase
-            .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-            .update({
-              processing_status: 'completed',
+
+          // Prepare vLLM database update object (note: vLLM fallback typically uses IFRS categories)
+          const vllmUpdateData: any = {
+            processing_status: 'completed',
             extracted_data: finalVllmDspyResult, // Store raw DSPy structure directly
             confidence_score: vllmExtractionData.confidence_score,
             processed_at: new Date().toISOString(),
@@ -1384,17 +1572,23 @@ print(json.dumps(result))
               backend_used: vllmExtractionData.backend_used,
               requires_validation: vllmExtractionData.requires_validation,
               category_suggestion: {
-                ifrs_accounting: {
-                  category: selectedCategory.category_code,
-                  accounting_category: selectedCategory.category_name,
-                  confidence: selectedCategory.confidence,
-                  reasoning: selectedCategory.reasoning
-                }
+                selected_category_type: 'ifrs', // vLLM fallback typically uses IFRS categories
+                category: selectedCategory.category_code,
+                accounting_category: selectedCategory.category_name,
+                confidence: selectedCategory.confidence,
+                reasoning: selectedCategory.reasoning
               },
               fallback_reason: 'Primary DSPy processing failed',
               primary_error: dspyError instanceof Error ? dspyError.message : 'Primary processing failed'
             }
-          }).eq('id', payload.documentId);
+          };
+
+          console.log(`📊 Storing vLLM fallback category in extracted_data: ${selectedCategory.category_code} -> ${selectedCategory.category_name}`);
+
+          const { error: vllmUpdateError } = await supabase
+            .from(tableName)  // ✅ PHASE 4C: Routed based on domain
+            .update(vllmUpdateData)
+            .eq('id', payload.documentId);
 
           if (vllmUpdateError) {
             throw new Error(`Failed to update document with vLLM results: ${vllmUpdateError.message}`);
