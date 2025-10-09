@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceSupabaseClient } from '@/lib/supabase-server'
 import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { tasks } from '@trigger.dev/sdk/v3'
-import type { dspyReceiptExtraction } from '@/trigger/dspy-receipt-extraction'
+import type { extractReceiptData } from '@/trigger/extract-receipt-data'
 
 export async function POST(
   request: NextRequest,
@@ -57,7 +57,7 @@ export async function POST(
       .from('expense_claims')
       .select('*')
       .eq('id', expenseClaimId)
-      .eq('employee_id', employeeProfile.id)
+      .eq('user_id', employeeProfile.user_id)  // CRITICAL: Use user UUID, not membership ID
       .single()
 
     if (fetchError || !expenseClaim) {
@@ -68,22 +68,12 @@ export async function POST(
       )
     }
 
-    // Step 2b: Fetch linked document if document_id exists
-    let linkedDocument = null
-    if (expenseClaim.document_id) {
-      console.log(`[Expense-Processor] Fetching linked document: ${expenseClaim.document_id}`)
-      const { data: documentData, error: documentError } = await supabase
-        .from('expense_claims')
-        .select('*')
-        .eq('id', expenseClaim.document_id)
-        .single()
-
-      if (!documentError && documentData) {
-        linkedDocument = documentData
-        console.log(`[Expense-Processor] Successfully fetched linked document`)
-      } else {
-        console.log(`[Expense-Processor] Could not fetch linked document: ${documentError?.message}`)
-      }
+    // Step 2b: Check storage_path for uploaded receipt (single-file pattern like invoices)
+    const hasReceipt = expenseClaim.storage_path
+    if (hasReceipt) {
+      console.log(`[Expense-Processor] Found receipt at storage_path: ${expenseClaim.storage_path}`)
+    } else {
+      console.log(`[Expense-Processor] No receipt file found in storage_path`)
     }
 
     // Check if already processing
@@ -115,7 +105,7 @@ export async function POST(
       .from('expense_claims')
       .update(updateData)
       .eq('id', expenseClaimId)
-      .eq('employee_id', employeeProfile.id)
+      .eq('user_id', employeeProfile.user_id)  // CRITICAL: Use user UUID, not membership ID
 
     if (updateError) {
       console.error('[Expense-Processor] Failed to update status:', updateError)
@@ -127,44 +117,15 @@ export async function POST(
 
     // Step 5: Trigger expense-specific processing via Trigger.dev
     console.log(`[Expense-Processor] Triggering expense processing for claim ${expenseClaimId}`)
-    console.log(`[Expense-Processor] DEBUG - linkedDocument:`, linkedDocument ? 'exists' : 'null')
-    console.log(`[Expense-Processor] DEBUG - business_purpose_details:`, JSON.stringify(expenseClaim.business_purpose_details, null, 2))
+    console.log(`[Expense-Processor] DEBUG - storage_path:`, expenseClaim.storage_path || 'null')
+    console.log(`[Expense-Processor] DEBUG - file_name:`, expenseClaim.file_name || 'null')
 
     try {
-      // Check if expense claim has a linked document (primary method for reprocessing)
-      if (linkedDocument && linkedDocument.storage_path) {
-        const document = linkedDocument
-        console.log(`[Expense-Processor] Found linked document: ${document.id}`)
-        console.log(`[Expense-Processor] Document storage path: ${document.storage_path}`)
-
-        // Determine the best image path for processing
-        let imagePath: string
-        let resolvedFileName: string
-
-        // Check if document has been converted to pages (multi-page PDF)
-        const pageMetadata = document.document_metadata?.pages
-        if (pageMetadata && Array.isArray(pageMetadata) && pageMetadata.length > 0) {
-          // Use the first page for processing (most receipts are single page)
-          imagePath = pageMetadata[0].path
-          resolvedFileName = `page_1.png`
-          console.log(`[Expense-Processor] Using first page of multi-page document: ${imagePath}`)
-        } else {
-          // For single files, storage_path now points to converted folder or raw file
-          // Check if storage_path is a folder (ends without file extension) or a file
-          if (document.storage_path.includes('.')) {
-            // Direct file path (legacy or single image)
-            imagePath = document.storage_path
-            resolvedFileName = document.file_name || 'receipt.jpg'
-          } else {
-            // Folder path (new documentId-based converted folder)
-            // Look for the first available image file in the folder
-            imagePath = `${document.storage_path}/page_1.png`  // Default to first page
-            resolvedFileName = 'page_1.png'
-            console.log(`[Expense-Processor] Converted folder detected, using: ${imagePath}`)
-          }
-        }
-
-        console.log(`[Expense-Processor] Using image path: ${imagePath}`)
+      // Check if expense claim has storage_path (single-file pattern like invoices)
+      if (expenseClaim.storage_path) {
+        // Determine which path to use: converted_image_path (for PDFs) or storage_path (for images)
+        const imagePath = expenseClaim.converted_image_path || expenseClaim.storage_path
+        console.log(`[Expense-Processor] Found receipt at: ${imagePath}`)
         console.log(`[Expense-Processor] Downloading and preparing image for DSPy extraction`)
 
         // Download the image from Supabase storage and convert to base64
@@ -183,23 +144,22 @@ export async function POST(
 
         const imageBuffer = await imageResponse.arrayBuffer()
         const base64Image = Buffer.from(imageBuffer).toString('base64')
-        const mimeType = document.file_type || 'image/jpeg'
-        const fileName = resolvedFileName
+        const mimeType = expenseClaim.file_type || 'image/jpeg'
+        const fileName = expenseClaim.file_name || 'receipt.jpg'
 
         console.log(`[Expense-Processor] Image prepared: ${Math.round(imageBuffer.byteLength / 1024)}KB, type: ${mimeType}`)
-        console.log(`[Expense-Processor] Triggering DSPy extraction for receipt reprocessing`)
+        console.log(`[Expense-Processor] Triggering DSPy extraction for receipt processing`)
 
         // Trigger DSPy extraction with properly formatted image data
-        await tasks.trigger<typeof dspyReceiptExtraction>("dspy-receipt-extraction", {
+        await tasks.trigger<typeof extractReceiptData>("extract-receipt-data", {
           receiptImageData: {
             base64: base64Image,
             mimeType: mimeType,
             filename: fileName
           },
-          documentId: document.id, // Include document ID for proper tracking
           expenseClaimId: expenseClaimId,
           userId: userId,
-          requestId: `expense-reprocess-${expenseClaimId}-${Date.now()}`
+          requestId: `expense-process-${expenseClaimId}-${Date.now()}`
         })
         console.log(`[Expense-Processor] Successfully triggered DSPy extraction for claim ${expenseClaimId}`)
 
@@ -232,7 +192,7 @@ export async function POST(
         console.log(`[Expense-Processor] Triggering DSPy extraction for receipt processing`)
 
         // Trigger DSPy extraction with properly formatted image data
-        await tasks.trigger<typeof dspyReceiptExtraction>("dspy-receipt-extraction", {
+        await tasks.trigger<typeof extractReceiptData>("extract-receipt-data", {
           receiptImageData: {
             base64: base64Image,
             mimeType: mimeType,
@@ -251,7 +211,7 @@ export async function POST(
 
         // Even for manual entries, don't immediately mark as completed when explicitly reprocessing
         // Instead, trigger a minimal processing job to validate the data
-        await tasks.trigger<typeof dspyReceiptExtraction>("dspy-receipt-extraction", {
+        await tasks.trigger<typeof extractReceiptData>("extract-receipt-data", {
           receiptText: expenseClaim.description || "Manual entry for review",
           expenseClaimId: expenseClaimId,
           userId: userId,
@@ -289,7 +249,7 @@ export async function POST(
         expenseClaimId: expenseClaimId,
         status: 'processing',
         message: 'Expense claim processing started successfully',
-        processingType: (expenseClaim.document?.storage_path || expenseClaim.business_purpose_details?.file_upload?.file_path) ? 'DSPy receipt extraction queued' : 'Manual entry processed',
+        processingType: (expenseClaim.storage_path || expenseClaim.business_purpose_details?.file_upload?.file_path) ? 'DSPy receipt extraction queued' : 'Manual entry processed',
         processingStarted: new Date().toISOString(),
         method: 'trigger.dev'
       }
@@ -316,7 +276,7 @@ export async function POST(
                 failed_at: new Date().toISOString()
               })
               .eq('id', expenseClaimId)
-              .eq('employee_id', employeeProfile.id)
+              .eq('user_id', employeeProfile.user_id)  // CRITICAL: Use user UUID, not membership ID
           }
         }
       }

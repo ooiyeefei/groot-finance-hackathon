@@ -21,6 +21,103 @@ The Expense Claims Processing Module is a comprehensive system for managing empl
 - Southeast Asian vendor pattern recognition
 - Multi-currency support
 
+## Accounting Flow (IFRS/GAAP Compliant)
+
+### Principle: Only Approved Expenses Hit the General Ledger
+
+The system follows proper accounting principles where expenses are recognized when approved (accrual basis), not when receipts are uploaded.
+
+### Complete Flow:
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │ 1. DSPy Extraction (Trigger.dev background job)            │
+  │    Location: src/trigger/dspy-receipt-extraction.ts        │
+  │                                                             │
+  │    ├─→ Stores extracted data in:                           │
+  │    │   expense_claims.processing_metadata (JSONB)          │
+  │    │   {                                                    │
+  │    │     extraction_method: 'dspy',                        │
+  │    │     financial_data: { vendor, amount, currency... },  │
+  │    │     line_items: [...],                                │
+  │    │     raw_extraction: {...}                             │
+  │    │   }                                                    │
+  │    │                                                        │
+  │    ├─→ Updates convenient fields for UI:                   │
+  │    │   vendor_name, total_amount, currency, etc.           │
+  │    │                                                        │
+  │    ├─→ Sets expense_claims.status = 'draft'                │
+  │    │                                                        │
+  │    └─→ NO accounting_entries created ✅                    │
+  │        expense_claims.accounting_entry_id = NULL           │
+  └─────────────────────────────────────────────────────────────┘
+                              ↓
+  ┌─────────────────────────────────────────────────────────────┐
+  │ 2. User edits pre-filled form                               │
+  │    Location: src/components/expense-claims/                 │
+  │              expense-submission-form.tsx                    │
+  │                                                             │
+  │    └─→ expense_claims.status remains 'draft'               │
+  │        User can modify AI-extracted data                    │
+  └─────────────────────────────────────────────────────────────┘
+                              ↓
+  ┌─────────────────────────────────────────────────────────────┐
+  │ 3. User submits for approval                                │
+  │                                                             │
+  │    └─→ expense_claims.status = 'submitted'                 │
+  │        submission_date = NOW()                              │
+  │        Still NO accounting_entries                          │
+  └─────────────────────────────────────────────────────────────┘
+                              ↓
+  ┌─────────────────────────────────────────────────────────────┐
+  │ 4. Manager APPROVES ← ✅ RPC RUNS HERE                     │
+  │    Location: src/app/api/expense-claims/[id]/status/       │
+  │              route.ts (lines 170-194)                       │
+  │                                                             │
+  │    ├─→ expense_claims.status = 'approved'                  │
+  │    │   approval_date = NOW()                                │
+  │    │                                                        │
+  │    └─→ RPC Function Executes:                              │
+  │        const { data: transactionId, error } = await        │
+  │          supabase.rpc(                                      │
+  │            'create_accounting_entry_from_approved_claim', { │
+  │              p_claim_id: claimId,                           │
+  │              p_approver_id: userProfile.user_id            │
+  │            }                                                │
+  │          )                                                  │
+  │                                                             │
+  │        RPC Function Steps:                                  │
+  │        ├─→ Reads processing_metadata from expense_claims   │
+  │        ├─→ Creates accounting_entries record               │
+  │        │   with status = 'awaiting_payment'                │
+  │        ├─→ Creates line_items if present in metadata       │
+  │        └─→ Updates expense_claims.accounting_entry_id      │
+  │                                                             │
+  │        Migration: supabase/migrations/                      │
+  │        20250106100000_create_accounting_entry_on_approval   │
+  └─────────────────────────────────────────────────────────────┘
+                              ↓
+  ┌─────────────────────────────────────────────────────────────┐
+  │ 5. Finance reimburses                                        │
+  │    Location: src/app/api/expense-claims/[id]/status/       │
+  │              route.ts (lines 280-286)                       │
+  │                                                             │
+  │    ├─→ expense_claims.status = 'reimbursed'                │
+  │    │   reimbursement_date = NOW()                           │
+  │    │                                                        │
+  │    └─→ Updates accounting_entries:                         │
+  │        status = 'paid'                                      │
+  │        payment_date = NOW()                                 │
+  └─────────────────────────────────────────────────────────────┘
+
+### Key Point:
+**RPC runs at APPROVAL time, NOT after DSPy extraction!**
+
+This ensures:
+- ✅ Only approved expenses appear in general ledger (accounting_entries)
+- ✅ IFRS/GAAP compliance (accrual basis accounting)
+- ✅ Clean separation: expense_claims (requests) vs accounting_entries (posted transactions)
+- ✅ User can edit draft before submission
+  
 ## Database Schema
 
 ### Core Tables

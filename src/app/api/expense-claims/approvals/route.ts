@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user has manager permissions
-    if (!userProfile.role_permissions.manager) {
+    if (userProfile.role !== 'manager' && userProfile.role !== 'admin') {
       return NextResponse.json(
         { success: false, error: 'Insufficient permissions. Manager access required.' },
         { status: 403 }
@@ -73,33 +73,84 @@ export async function GET(request: NextRequest) {
     // SECURITY: Use authenticated client with business context validation
     console.log('[Approvals API] Querying business claims for business_id:', userProfile.business_id)
 
-    // Query expense claims directly using business_id (no employee_profiles table)
+    // First, get all user_ids in this business using authenticated client
+    const { data: businessEmployees } = await supabase
+      .from('business_memberships')
+      .select('user_id')
+      .eq('business_id', userProfile.business_id)
+
+    const employeeIds = businessEmployees?.map(emp => emp.user_id) || []
+    console.log('[Approvals API] Found employee IDs (dashboard API approach):', employeeIds)
+    console.log('[Approvals API] Employee count:', businessEmployees?.length)
+
+    // Get submitted expense claims for these employees
+    console.log('[Approvals API] Querying claims for user_ids:', employeeIds)
+    console.log('[Approvals API] Employee IDs type and values:', employeeIds.map(id => ({ id, type: typeof id })))
+
+    // Debug: Check what claims exist in the database first
+    console.log('[Approvals API] DEBUG: Checking ALL claims in database...')
+    const { data: allClaims, error: allClaimsError } = await supabase
+      .from('expense_claims')
+      .select('id, user_id, status, deleted_at')
+      .is('deleted_at', null)
+
+    console.log('[Approvals API] DEBUG: All claims in database:', {
+      totalClaims: allClaims?.length || 0,
+      error: allClaimsError,
+      claimsByStatus: allClaims?.reduce((acc: any, claim: any) => {
+        acc[claim.status] = (acc[claim.status] || 0) + 1
+        return acc
+      }, {}),
+      sampleClaims: allClaims?.slice(0, 3).map(claim => ({
+        id: claim.id,
+        user_id: claim.user_id,
+        status: claim.status,
+        user_id_type: typeof claim.user_id
+      }))
+    })
+
+    // Debug: Check claims for our specific employee IDs
+    console.log('[Approvals API] DEBUG: Checking claims for our employee IDs...')
+    const { data: employeeSpecificClaims } = await supabase
+      .from('expense_claims')
+      .select('id, user_id, status, deleted_at')
+      .in('user_id', employeeIds)
+      .is('deleted_at', null)
+
+    console.log('[Approvals API] DEBUG: Claims for our employee IDs:', {
+      claimsCount: employeeSpecificClaims?.length || 0,
+      claims: employeeSpecificClaims?.map(claim => ({
+        id: claim.id,
+        user_id: claim.user_id,
+        status: claim.status
+      }))
+    })
+
+    // Use exact same approach as dashboard API - simple query first
+    console.log('[Approvals API] Dashboard API approach - Authenticated client query...')
+    const { data: simpleClaims, error: simpleError } = await supabase
+      .from('expense_claims')
+      .select('*')
+      .in('user_id', employeeIds)
+
+    console.log('[Approvals API] Authenticated client query result:', {
+      claimsCount: simpleClaims?.length || 0,
+      error: simpleError,
+      sampleClaim: simpleClaims?.[0]?.id || 'none'
+    })
+
+    // Now use the exact same query pattern as dashboard API that works
     const { data: claims, error: claimsError } = await supabase
       .from('expense_claims')
       .select(`
         *,
-        user:users!expense_claims_user_id_fkey(
-          id,
-          full_name,
-          email,
-          clerk_user_id
-        ),
-        transaction:accounting_entries!expense_claims_transaction_id_fkey(
-          id,
-          description,
-          original_amount,
-          original_currency,
-          home_currency_amount,
-          home_currency,
-          transaction_date,
-          vendor_name,
-          notes
-        )
+        transaction:accounting_entries!expense_claims_accounting_entry_id_fkey(*),
+        employee:users!inner(id,full_name,email)
       `)
-      .eq('business_id', userProfile.business_id)
-      .in('status', ['submitted', 'under_review', 'pending_approval'])
+      .in('user_id', employeeIds)
+      .in('status', ['submitted', 'under_review', 'pending_approval']) // Include all pending statuses
       .is('deleted_at', null)
-      .order('submitted_at', { ascending: true })
+      .order('submitted_at', { ascending: true }) // Oldest submissions first
 
     console.log('[Approvals API] Query result:', {
       claimsCount: claims?.length || 0,
@@ -111,6 +162,23 @@ export async function GET(request: NextRequest) {
       } : null
     })
 
+    // Debug: Check if filtering by status is the issue
+    console.log('[Approvals API] DEBUG: Testing query without status filter...')
+    const { data: claimsWithoutStatusFilter } = await supabase
+      .from('expense_claims')
+      .select('id, user_id, status, deleted_at')
+      .in('user_id', employeeIds)
+      .is('deleted_at', null)
+
+    console.log('[Approvals API] DEBUG: Claims without status filter:', {
+      claimsCount: claimsWithoutStatusFilter?.length || 0,
+      statusBreakdown: claimsWithoutStatusFilter?.reduce((acc: any, claim: any) => {
+        acc[claim.status] = (acc[claim.status] || 0) + 1
+        return acc
+      }, {}),
+      allStatuses: [...new Set(claimsWithoutStatusFilter?.map(claim => claim.status) || [])]
+    })
+
     if (claimsError) {
       console.error('[Approvals API] Error fetching claims:', claimsError)
       return NextResponse.json(
@@ -118,6 +186,8 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Employee details are already included in the query above via join
 
     // Get business categories from JSONB column
     const { data: businessData, error: businessError } = await supabase
@@ -132,16 +202,7 @@ export async function GET(request: NextRequest) {
 
     const businessCategories = businessData?.custom_expense_categories || []
 
-    // Get business memberships to map user departments/job titles
-    const { data: memberships } = await supabase
-      .from('business_memberships')
-      .select('user_id, role')
-      .eq('business_id', userProfile.business_id)
-      .eq('status', 'active')
-
-    const membershipMap = new Map(memberships?.map(m => [m.user_id, m]) || [])
-
-    // Enrich claims with user information and category data
+    // Enrich claims with employee information and category data
     const enrichedClaims = claims.map(claim => {
       // Find the matching category from business categories
       const category = businessCategories.find((cat: any) =>
@@ -155,14 +216,29 @@ export async function GET(request: NextRequest) {
       // Check if over policy limit
       const isOverLimit = category?.policy_limit && amount > category.policy_limit
 
-      const membership = membershipMap.get(claim.user_id)
+      // Extract document/receipt information from processing_metadata
+      const processingMetadata = claim.processing_metadata || {}
+      const hasReceipt = !!(claim.storage_path || processingMetadata.storage_path)
+
+      // Construct document object similar to expense-claim-details-modal
+      const document = hasReceipt ? {
+        id: processingMetadata.document_id || claim.id,
+        original_filename: processingMetadata.original_filename || 'Receipt',
+        file_type: processingMetadata.file_type || 'image/jpeg',
+        file_size: processingMetadata.file_size || 0,
+        processing_status: processingMetadata.processing_status || 'completed',
+        processing_progress: processingMetadata.processing_progress || 100,
+        annotated_image_url: processingMetadata.annotated_image_url || null,
+        storage_path: claim.storage_path || processingMetadata.storage_path,
+        extracted_data: processingMetadata.raw_extraction || processingMetadata.financial_data || null
+      } : null
 
       return {
         id: claim.id,
-        employee_name: claim.user?.full_name || claim.user?.email || `User ID: ${claim.user_id}`,
-        employee_id: claim.user_id,
-        employee_department: null, // No longer tracked in business_memberships
-        employee_job_title: membership?.role || 'employee',
+        employee_name: claim.employee?.full_name || claim.employee?.email || `User ID: ${claim.user_id}`,
+        user_id: claim.user_id,
+        employee_department: null, // Department info no longer available
+        employee_job_title: null, // Job title info no longer available
         description: claim.transaction?.description || 'Expense Claim',
         business_purpose: claim.business_purpose,
         original_amount: claim.transaction?.original_amount || 0,
@@ -175,14 +251,18 @@ export async function GET(request: NextRequest) {
         category_name: category?.category_name || claim.expense_category,
         status: claim.status,
         submission_date: claim.submitted_at || claim.created_at,
-        document_url: null,
-        receipt_confidence: null,
+        document_url: null, // Legacy field - use document.storage_path instead
+        receipt_confidence: processingMetadata.confidence_score || null,
         notes: claim.transaction?.notes,
         requires_receipt: category?.requires_receipt || false,
         policy_limit: category?.policy_limit,
         is_over_limit: !!isOverLimit,
-        transaction_id: claim.accounting_entry_id,
-        current_approver_id: claim.current_approver_id
+        accounting_entry_id: claim.accounting_entry_id,
+        current_approver_id: claim.current_approver_id,
+        // NEW: Add document/receipt data for approval workflow
+        document: document,
+        storage_path: claim.storage_path,
+        has_receipt: hasReceipt
       }
     })
 
@@ -228,7 +308,7 @@ export async function GET(request: NextRequest) {
       const { count: approvedToday } = await supabase
         .from('expense_claims')
         .select('*', { count: 'exact', head: true })
-        .eq('business_id', userProfile.business_id)
+        .in('user_id', employeeIds)
         .eq('status', 'approved')
         .gte('updated_at', today.toISOString())
 
@@ -322,7 +402,7 @@ export async function POST(request: NextRequest) {
 
     console.log('[Approvals API POST] Step 3: Checking manager permissions')
     // Check if user has manager permissions
-    if (!userProfile.role_permissions.manager) {
+    if (userProfile.role !== 'manager' && userProfile.role !== 'admin') {
       console.log('[Approvals API POST] Step 3 FAILED: No manager permissions')
       return NextResponse.json(
         { success: false, error: 'Insufficient permissions. Manager access required.' },
@@ -352,22 +432,49 @@ export async function POST(request: NextRequest) {
 
     console.log('[Approvals API POST] Step 7: Querying claim for verification')
     // Verify the claim exists and belongs to the manager's business
-    const { data: claim, error: claimError } = await supabase
+    const { data: claimData, error: claimError } = await supabase
       .from('expense_claims')
       .select(`
         id,
         status,
-        user_id,
-        business_id
+        user_id
       `)
       .eq('id', claim_id)
       .single()
 
+    console.log('[Approvals API POST] Step 7.1: Claim basic data result:', {
+      claimFound: !!claimData,
+      error: claimError?.message || 'none',
+      claimStatus: claimData?.status || 'N/A'
+    })
+
+    let claim = null
+    if (claimData && !claimError) {
+      // Separately get the business membership to check business_id
+      const { data: employeeData, error: employeeError } = await supabase
+        .from('business_memberships')
+        .select('business_id')
+        .eq('user_id', claimData.user_id)
+        .single()
+
+      console.log('[Approvals API POST] Step 7.2: Business membership result:', {
+        membershipFound: !!employeeData,
+        error: employeeError?.message || 'none',
+        businessId: employeeData?.business_id || 'N/A'
+      })
+
+      if (employeeData && !employeeError) {
+        claim = {
+          ...claimData,
+          business_membership: { business_id: employeeData.business_id }
+        }
+      }
+    }
+
     console.log('[Approvals API POST] Step 7 RESULT: Claim query completed:', {
       claimFound: !!claim,
       error: claimError?.message || 'none',
-      claimStatus: claim?.status || 'N/A',
-      claimBusinessId: claim?.business_id || 'N/A'
+      claimStatus: claim?.status || 'N/A'
     })
 
     if (claimError || !claim) {
@@ -380,7 +487,7 @@ export async function POST(request: NextRequest) {
     console.log('[Approvals API POST] Step 7 SUCCESS: Claim found')
 
     console.log('[Approvals API POST] Step 8: Validating business authorization')
-    if (claim.business_id !== userProfile.business_id) {
+    if ((claim.business_membership as any)?.business_id !== userProfile.business_id) {
       console.log('[Approvals API POST] Step 8 FAILED: Business ID mismatch')
       return NextResponse.json(
         { success: false, error: 'Unauthorized to approve this claim' },
@@ -410,14 +517,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'approve') {
-      updateData.approved_by = userProfile.id
+      updateData.approved_by = userProfile.user_id
       updateData.approved_at = new Date().toISOString()
       if (notes) {
         updateData.internal_notes = notes
       }
     } else {
       // For rejection
-      updateData.reviewed_by = userProfile.id
+      updateData.reviewed_by = userProfile.user_id
       updateData.rejected_at = new Date().toISOString()
       if (notes) {
         updateData.rejection_reason = notes
@@ -438,13 +545,60 @@ export async function POST(request: NextRequest) {
     }
     console.log('[Approvals API POST] Step 10 SUCCESS: Claim status updated to:', newStatus)
 
+    // Step 10.5: If approved, create accounting_entry from processing_metadata
+    if (action === 'approve') {
+      console.log('[Approvals API POST] Step 10.5: Creating accounting_entry from processing_metadata')
+
+      try {
+        const { data: accountingEntryId, error: rpcError } = await supabase
+          .rpc('create_accounting_entry_from_approved_claim', {
+            p_claim_id: claim_id,
+            p_approver_id: userProfile.user_id
+          })
+
+        if (rpcError) {
+          console.error('[Approvals API POST] Step 10.5 ERROR: Failed to create accounting_entry:', rpcError)
+          // Rollback the approval status since accounting entry creation failed
+          await supabase
+            .from('expense_claims')
+            .update({ status: 'submitted' })
+            .eq('id', claim_id)
+
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Approval succeeded but failed to create accounting entry: ${rpcError.message}. Please contact support.`
+            },
+            { status: 500 }
+          )
+        }
+
+        console.log('[Approvals API POST] Step 10.5 SUCCESS: Created accounting_entry:', accountingEntryId)
+      } catch (rpcException) {
+        console.error('[Approvals API POST] Step 10.5 EXCEPTION: Error calling RPC:', rpcException)
+        // Rollback the approval status
+        await supabase
+          .from('expense_claims')
+          .update({ status: 'submitted' })
+          .eq('id', claim_id)
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Failed to create accounting entry from approved claim. Approval rolled back.'
+          },
+          { status: 500 }
+        )
+      }
+    }
+
     console.log('[Approvals API POST] Step 11: Logging approval action to history')
     // Log the approval action
     await supabase
       .from('approval_history')
       .insert({
         expense_claim_id: claim_id,
-        approved_by: userProfile.id,
+        approved_by: userProfile.user_id,
         action: newStatus,
         notes: notes || null,
         created_at: new Date().toISOString()

@@ -73,7 +73,7 @@ export interface RiskAssessment {
 export interface EnhancedExpenseClaim {
   // All existing fields from ExpenseClaim
   id: string
-  transaction_id: string
+  accounting_entry_id: string | null  // Links to accounting_entries.id after approval (NULL until approved)
   employee_id: string
   status: ExpenseStatus
   expense_category: string

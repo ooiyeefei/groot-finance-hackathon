@@ -147,13 +147,12 @@ export default function DSPyProcessingStep({
 
         // Start actual DSPy processing with expense claims workflow
         const formData = new FormData()
-        formData.append('receipt', file)
-        formData.append('business_purpose', 'Processing receipt...')
-        formData.append('expense_category', 'auto') // Special flag for auto-categorization
+        formData.append('file', file) // Updated parameter name for unified API
+        formData.append('processing_mode', 'ai') // Use AI processing mode
 
         // Start both the DSPy API call and progress simulation in parallel
         const [response] = await Promise.all([
-          fetch('/api/expense-claims/upload-receipt', {
+          fetch('/api/expense-claims/upload', {
             method: 'POST',
             body: formData,
             signal // Pass AbortController signal to prevent duplicate requests
@@ -278,7 +277,7 @@ export default function DSPyProcessingStep({
 
         if (signal.aborted) return
 
-        const statusResponse = await fetch(`/api/expense-claims/upload-receipt?expense_claim_id=${expenseClaimId}`, { signal })
+        const statusResponse = await fetch(`/api/expense-claims/${expenseClaimId}`, { signal })
 
         if (!statusResponse.ok) {
           throw new Error('Failed to check expense claim status')
@@ -292,15 +291,19 @@ export default function DSPyProcessingStep({
 
         const claimData = statusResult.data
 
+        // Extract processing status from processing_metadata
+        const processingMetadata = claimData.processing_metadata || {}
+        const processingStatus = processingMetadata.processing_status
+
         // Update progress indication during polling
-        if (claimData.processing_status === 'processing') {
-          console.log(`[DSPy Processing] Expense claim ${expenseClaimId} still processing... (${attempts * 2}s elapsed)`)
+        if (processingStatus === 'processing' || processingStatus === 'pending') {
+          console.log(`[DSPy Processing] Expense claim ${expenseClaimId} still processing (${processingStatus})... (${attempts * 2}s elapsed)`)
           attempts++
           continue
         }
 
         // Processing completed successfully
-        if (claimData.processing_complete) {
+        if (processingStatus === 'completed') {
           console.log(`[DSPy Processing] Expense claim ${expenseClaimId} completed successfully!`)
 
           // Transform the result to match expected format
@@ -328,8 +331,9 @@ export default function DSPyProcessingStep({
         }
 
         // Processing failed
-        if (claimData.processing_status === 'failed') {
-          throw new Error(claimData.error_message || 'Receipt processing failed')
+        if (processingStatus === 'failed') {
+          const errorMessage = processingMetadata.error_message || 'Receipt processing failed'
+          throw new Error(errorMessage)
         }
 
         attempts++
@@ -474,14 +478,11 @@ export default function DSPyProcessingStep({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="text-center">
-        <Brain className="w-16 h-16 mx-auto text-purple-500 mb-4" />
-        <h3 className="text-lg font-semibold text-white mb-2">
-          Data Extraction
-        </h3>
-        <p className="text-gray-400">
-          Automatically extracting information from your receipt
-        </p>
+      <div className="flex justify-end mb-4">
+        <Badge className="bg-purple-600 text-white flex items-center gap-2">
+          <Brain className="w-4 h-4" />
+          AI Extraction
+        </Badge>
       </div>
 
       {/* Progress Bar */}
@@ -570,12 +571,12 @@ export default function DSPyProcessingStep({
                     <div className="flex items-center gap-2 mb-1">
                       <h4 className="text-white font-medium">{step.title}</h4>
                       {step.status === 'processing' && (
-                        <Badge variant="secondary" className="bg-purple-600 text-white">
+                        <Badge variant="secondary" className="bg-purple-900/20 text-purple-300 border border-purple-700/50">
                           Processing...
                         </Badge>
                       )}
                       {step.status === 'completed' && (
-                        <Badge variant="secondary" className="bg-green-600 text-white">
+                        <Badge variant="secondary" className="bg-green-900/20 text-green-300 border border-green-700/50">
                           Complete
                         </Badge>
                       )}
@@ -606,7 +607,7 @@ export default function DSPyProcessingStep({
           <CardHeader>
             <CardTitle className="text-green-400 flex items-center gap-2">
               <CheckCircle className="w-5 h-5" />
-              Data Extraction Complete
+              AI Extraction Complete
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">

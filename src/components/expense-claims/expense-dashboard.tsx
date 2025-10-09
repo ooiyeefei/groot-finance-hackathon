@@ -17,7 +17,7 @@ import ExpenseAnalytics from './expense-analytics'
 import MonthlyReportGenerator from './monthly-report-generator'
 import GoogleSheetsExport from './google-sheets-export'
 import CategoryManagement from './category-management'
-import ExpenseEditModal from './expense-edit-modal'
+import EditExpenseModalNew from './edit-expense-modal-new'
 
 interface ExpenseDashboardProps {
   userId: string
@@ -41,6 +41,7 @@ interface DashboardData {
 }
 
 export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
+
   const [activeTab, setActiveTab] = useState('overview')
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -317,7 +318,8 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
                 vendor_name: data.vendor_name,
                 reference_number: data.reference_number || undefined,
                 notes: data.notes || undefined,
-                // document_id removed - using business_purpose_details for file tracking
+                // Include storage_path for manual receipt uploads
+                storage_path: data.storage_path || undefined,
                 line_items: data.line_items || []
               }
               
@@ -355,14 +357,14 @@ export default function ExpenseDashboard({ userId }: ExpenseDashboardProps) {
       )}
 
       {/* Expense Edit Modal */}
-      {showEditModal && editingClaimId ? (
-        <ExpenseEditModal
+      {showEditModal && editingClaimId && (
+        <EditExpenseModalNew
           expenseClaimId={editingClaimId}
           isOpen={showEditModal}
           onClose={handleCloseEditModal}
           onSave={handleEditSave}
         />
-      ) : null}
+      )}
     </div>
   )
 }

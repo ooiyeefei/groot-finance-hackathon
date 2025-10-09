@@ -453,7 +453,7 @@ export default function CategoryFormModal({
                 variant="outline"
                 onClick={handleClose}
                 disabled={isLoading}
-                className="bg-gray-600 text-white hover:bg-gray-500 border-gray-600"
+                className="bg-gray-700 text-white hover:bg-gray-800 border-gray-700"
               >
                 Cancel
               </Button>

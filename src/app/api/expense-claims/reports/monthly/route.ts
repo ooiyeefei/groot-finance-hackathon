@@ -6,11 +6,11 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
-import { 
-  MonthlyExpenseReport, 
-  ExpenseCategory,
-  EXPENSE_CATEGORY_CONFIG 
+import {
+  MonthlyExpenseReport,
+  ExpenseCategory
 } from '@/types/expense-claims'
+import { getBusinessExpenseCategories } from '@/lib/expense-category-mapper'
 
 // Generate monthly expense report
 export async function GET(request: NextRequest) {
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const reportMonth = searchParams.get('month') // YYYY-MM format
-    const employeeId = searchParams.get('employee_id')
+    const employeeId = searchParams.get('user_id')
     const format = searchParams.get('format') || 'json' // json, pdf, csv
 
     if (!reportMonth || !/^\d{4}-\d{2}$/.test(reportMonth)) {
@@ -39,9 +39,9 @@ export async function GET(request: NextRequest) {
 
     // Get user's employee profile using Clerk user ID
     const { data: userProfile, error: profileError } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .select('*')
-      .eq('clerk_user_id', userId)
+      .eq('user_id', userId)
       .single()
 
     if (profileError || !userProfile) {
@@ -51,22 +51,28 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Fetch business expense categories for display labels
+    const businessCategories = await getBusinessExpenseCategories(userProfile.business_id)
+    const categoryMap = new Map(
+      businessCategories.map(cat => [cat.business_category_code, cat.business_category_name])
+    )
+
     // Determine target employee (for managers/finance viewing team reports)
-    let targetEmployeeId = userProfile.id
+    let targetEmployeeId = userProfile.user_id
     if (employeeId) {
       // Validate permission to view other employee's reports
-      if (userProfile.role_permissions.admin) {
+      if (userProfile.role === 'admin') {
         // Admin can view anyone's reports
         targetEmployeeId = employeeId
-      } else if (userProfile.role_permissions.manager) {
-        // Managers can view their team's reports
+      } else if (userProfile.role === 'manager') {
+        // Managers can view their team's reports (simplified check - just verify same business)
         const { data: targetEmployee } = await supabase
-          .from('employee_profiles')
-          .select('manager_id')
-          .eq('id', employeeId)
+          .from('business_memberships')
+          .select('business_id')
+          .eq('user_id', employeeId)
           .single()
-          
-        if (targetEmployee?.manager_id === userProfile.id) {
+
+        if (targetEmployee?.business_id === userProfile.business_id) {
           targetEmployeeId = employeeId
         } else {
           return NextResponse.json(
@@ -85,9 +91,9 @@ export async function GET(request: NextRequest) {
 
     // Get target employee details
     const { data: targetEmployee, error: targetError } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .select('*')
-      .eq('id', targetEmployeeId)
+      .eq('user_id', targetEmployeeId)
       .single()
 
     if (targetError || !targetEmployee) {
@@ -102,10 +108,10 @@ export async function GET(request: NextRequest) {
       .from('expense_claims')
       .select(`
         *,
-        transaction:transactions(*),
-        employee:employee_profiles!expense_claims_employee_id_fkey(*)
+        transaction:accounting_entries(*),
+        employee:users!inner(id,full_name,email)
       `)
-      .eq('employee_id', targetEmployeeId)
+      .eq('user_id', targetEmployeeId)
       .eq('claim_month', reportMonth)
       .order('created_at', { ascending: true })
 
@@ -192,23 +198,23 @@ export async function GET(request: NextRequest) {
 
     // Build monthly report object (Otto's compliance structure)
     const monthlyReport: MonthlyExpenseReport = {
-      employee_id: targetEmployee.id,
-      employee_name: targetEmployee.full_name,
+      user_id: targetEmployee.user_id,
+      employee_name: targetEmployee.user_id, // Just use user_id as we don't have full_name in business_memberships
       report_month: reportMonth,
-      home_currency: targetEmployee.home_currency,
+      home_currency: 'SGD', // Default currency since not stored in business_memberships
       summary,
       category_totals: categoryTotals,
       claims: expenseClaims || [],
       generated_at: new Date().toISOString(),
-      generated_by: userProfile.id
+      generated_by: userProfile.user_id
     }
 
     // Handle different export formats (Mel's export functionality)
     switch (format) {
       case 'pdf':
-        return await generatePDFReport(monthlyReport)
+        return await generatePDFReport(monthlyReport, categoryMap)
       case 'csv':
-        return await generateCSVReport(monthlyReport)
+        return await generateCSVReport(monthlyReport, categoryMap)
       case 'json':
       default:
         return NextResponse.json({
@@ -230,11 +236,11 @@ export async function GET(request: NextRequest) {
 }
 
 // Generate PDF report (Otto's compliance requirement)
-async function generatePDFReport(report: MonthlyExpenseReport): Promise<NextResponse> {
+async function generatePDFReport(report: MonthlyExpenseReport, categoryMap: Map<string, string>): Promise<NextResponse> {
   // TODO: Implement PDF generation using a library like Puppeteer or PDFKit
   // This would generate a professional monthly expense report PDF
-  
-  const htmlContent = generateReportHTML(report)
+
+  const htmlContent = generateReportHTML(report, categoryMap)
   
   // For now, return HTML that can be printed
   return new NextResponse(htmlContent, {
@@ -246,7 +252,7 @@ async function generatePDFReport(report: MonthlyExpenseReport): Promise<NextResp
 }
 
 // Generate CSV export (Mel's data export requirement)
-async function generateCSVReport(report: MonthlyExpenseReport): Promise<NextResponse> {
+async function generateCSVReport(report: MonthlyExpenseReport, categoryMap: Map<string, string>): Promise<NextResponse> {
   const headers = [
     'Claim ID',
     'Date',
@@ -265,7 +271,7 @@ async function generateCSVReport(report: MonthlyExpenseReport): Promise<NextResp
     claim.id,
     claim.transaction?.transaction_date || '',
     claim.transaction?.description || '',
-    EXPENSE_CATEGORY_CONFIG[claim.expense_category].label,
+    categoryMap.get(claim.expense_category) || claim.expense_category,
     claim.transaction?.vendor_name || '',
     claim.transaction?.original_amount || 0,
     claim.transaction?.original_currency || report.home_currency,
@@ -289,7 +295,7 @@ async function generateCSVReport(report: MonthlyExpenseReport): Promise<NextResp
 }
 
 // Generate HTML report for printing (Otto's compliance documentation)
-function generateReportHTML(report: MonthlyExpenseReport): string {
+function generateReportHTML(report: MonthlyExpenseReport, categoryMap: Map<string, string>): string {
   return `
 <!DOCTYPE html>
 <html>
@@ -332,7 +338,7 @@ function generateReportHTML(report: MonthlyExpenseReport): string {
     <div class="category-breakdown">
         <h3>Category Breakdown</h3>
         ${Object.entries(report.category_totals).map(([category, data]) => `
-            <p><strong>${EXPENSE_CATEGORY_CONFIG[category as ExpenseCategory].label}:</strong> 
+            <p><strong>${categoryMap.get(category) || category}:</strong>
                ${data.amount.toFixed(2)} ${report.home_currency} (${data.count} claims)</p>
         `).join('')}
     </div>
@@ -355,7 +361,7 @@ function generateReportHTML(report: MonthlyExpenseReport): string {
                 <tr>
                     <td>${claim.transaction?.transaction_date || 'N/A'}</td>
                     <td>${claim.transaction?.description || 'N/A'}</td>
-                    <td>${EXPENSE_CATEGORY_CONFIG[claim.expense_category].label}</td>
+                    <td>${categoryMap.get(claim.expense_category) || claim.expense_category}</td>
                     <td>${claim.transaction?.vendor_name || 'N/A'}</td>
                     <td>${(claim.transaction?.original_amount || 0).toFixed(2)} ${claim.transaction?.original_currency || report.home_currency}</td>
                     <td class="status-${claim.status}">${claim.status.replace('_', ' ').toUpperCase()}</td>

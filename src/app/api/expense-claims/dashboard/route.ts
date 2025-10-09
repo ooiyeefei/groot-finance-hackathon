@@ -13,6 +13,15 @@ import { auditLogger } from '@/lib/audit-logger'
 // Helper function to get user-friendly status display information
 function getStatusDisplayInfo(status: string, processingStatus?: string) {
   // If processing status is active, show processing info instead
+  if (processingStatus === 'upload_pending') {
+    return {
+      label: 'Uploading...',
+      color: 'blue',
+      description: 'Receipt file is being uploaded',
+      isProcessing: true
+    }
+  }
+
   if (processingStatus === 'processing') {
     return {
       label: 'Processing...',
@@ -92,8 +101,26 @@ function getWorkflowProgress(status: string): number {
     'rejected': 0,
     'pending_approval': 40 // Legacy status between submitted and approved
   }
-  
+
   return progressMap[status] || 0
+}
+
+// Helper function to format expense claims for display (uses expense_claims fields directly)
+function transformClaimForDisplay(claim: any) {
+  const statusDisplay = getStatusDisplayInfo(claim.status, claim.processing_status)
+
+  return {
+    ...claim,
+    status_display: statusDisplay,
+    workflow_progress: getWorkflowProgress(claim.status),
+    current_approver_name: null,
+    // Use expense_claims fields directly
+    display_amount: claim.total_amount,
+    display_currency: claim.currency,
+    display_vendor: claim.vendor_name,
+    display_date: claim.transaction_date,
+    line_items: claim.processing_metadata?.line_items || []
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -128,10 +155,27 @@ export async function GET(request: NextRequest) {
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
     // Get or create employee profile using the fixed utility function
-    const employeeProfile = await ensureUserProfile(userId)
+    let employeeProfile
+    try {
+      console.log('[Expense Dashboard API] Attempting to get employee profile for user:', userId)
+      employeeProfile = await ensureUserProfile(userId)
+      console.log('[Expense Dashboard API] Employee profile retrieved successfully:', {
+        id: employeeProfile?.id,
+        user_id: employeeProfile?.user_id,
+        business_id: employeeProfile?.business_id,
+        role: employeeProfile?.role
+      })
+    } catch (profileError) {
+      console.error('[Expense Dashboard API] ERROR in ensureUserProfile:', profileError)
+      console.error('[Expense Dashboard API] Profile error details:', {
+        message: profileError instanceof Error ? profileError.message : String(profileError),
+        stack: profileError instanceof Error ? profileError.stack : undefined
+      })
+      throw profileError // Re-throw to be caught by outer catch
+    }
 
     if (!employeeProfile) {
-      console.error('[Expense Dashboard API] Failed to create or retrieve employee profile')
+      console.error('[Expense Dashboard API] Failed to create or retrieve employee profile - null/undefined returned')
       return NextResponse.json(
         { success: false, error: 'Failed to create employee profile. Please contact administrator.' },
         { status: 500 }
@@ -170,8 +214,22 @@ export async function GET(request: NextRequest) {
         user_id_param: employeeProfile.user_id  // ✅ Pass Supabase UUID to RPC
       }
 
-      const { data: rpcSummary, error: rpcError } = await supabase
-        .rpc('get_company_expense_summary', adminRpcParameters)
+      console.log('[Expense Dashboard API] Admin RPC call - Parameters:', adminRpcParameters)
+
+      let rpcSummary, rpcError
+      try {
+        const result = await supabase.rpc('get_company_expense_summary', adminRpcParameters)
+        rpcSummary = result.data
+        rpcError = result.error
+        console.log('[Expense Dashboard API] Admin RPC call completed:', {
+          hasData: !!rpcSummary,
+          hasError: !!rpcError,
+          errorMessage: rpcError?.message
+        })
+      } catch (rpcException) {
+        console.error('[Expense Dashboard API] Exception during admin RPC call:', rpcException)
+        throw rpcException
+      }
 
       // AUDIT: Log RPC call completion for admin dashboard
       const adminExecutionTime = Date.now() - adminRpcStartTime
@@ -201,7 +259,7 @@ export async function GET(request: NextRequest) {
           .select(`
             *
           `)
-          .in('employee_id', employeeUserIds)
+          .in('user_id', employeeUserIds)
           .is('deleted_at', null)
 
         if (allBusinessClaims) {
@@ -216,7 +274,7 @@ export async function GET(request: NextRequest) {
               *,
               transaction:transactions(home_currency_amount, home_currency)
             `)
-            .in('employee_id', employeeUserIds)
+            .in('user_id', employeeUserIds)
             .eq('status', 'approved')
             .is('deleted_at', null)
 
@@ -235,26 +293,33 @@ export async function GET(request: NextRequest) {
         // Get recent claims with authenticated client fallback
         const { data: recentClaims } = await supabase
           .from('expense_claims')
-          .select(`
-            *,
-            transaction:transactions(*)
-          `)
-          .in('employee_id', employeeUserIds)
+          .select('*')
+          .in('user_id', employeeUserIds)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
 
-        dashboardData.recent_claims = recentClaims || []
+        dashboardData.recent_claims = (recentClaims || []).map(transformClaimForDisplay)
       } else {
         // Use optimized RPC results with proper type conversion
+        // CRITICAL FIX: RPC returns an array with one object, not the object directly
+        const summary = Array.isArray(rpcSummary) ? rpcSummary[0] : rpcSummary
         console.log('[Expense Dashboard API] RPC function completed successfully:', rpcSummary)
+        console.log('[Expense Dashboard API] Extracted summary object:', summary)
+        console.log('[Expense Dashboard API] Converting RPC summary to dashboard format:')
+        console.log('  - total_claims:', summary.total_claims, '→', Number(summary.total_claims))
+        console.log('  - pending_reimbursement:', summary.pending_reimbursement, '→', Number(summary.pending_reimbursement))
+        console.log('  - total_approved:', summary.total_approved, '→', Number(summary.total_approved))
+        console.log('  - total_rejected:', summary.total_rejected, '→', Number(summary.total_rejected))
 
         dashboardData.summary = {
-          total_claims: Number(rpcSummary.total_claims) || 0,
-          pending_approval: Number(rpcSummary.pending_reimbursement) || 0,
-          approved_amount: Number(rpcSummary.total_approved) || 0,
-          rejected_count: Number(rpcSummary.total_rejected) || 0
+          total_claims: Number(summary.total_claims) || 0,
+          pending_approval: Number(summary.pending_reimbursement) || 0,
+          approved_amount: Number(summary.total_approved) || 0,
+          rejected_count: Number(summary.total_rejected) || 0
         }
+
+        console.log('[Expense Dashboard API] Final dashboard summary:', dashboardData.summary)
 
         // Still need to get recent claims for the UI - use authenticated client
         const { data: businessEmployees } = await supabase
@@ -265,26 +330,20 @@ export async function GET(request: NextRequest) {
         const employeeUserIds = businessEmployees?.map(emp => emp.user_id) || []
         const { data: recentClaims } = await supabase
           .from('expense_claims')
-          .select(`
-            *,
-            transaction:transactions(*)
-          `)
-          .in('employee_id', employeeUserIds)
+          .select('*')
+          .in('user_id', employeeUserIds)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
 
-        dashboardData.recent_claims = recentClaims || []
+        dashboardData.recent_claims = (recentClaims || []).map(transformClaimForDisplay)
       }
 
       // Admin users also need to see their own personal expense claims (including drafts) - use authenticated client
       const { data: adminPersonalClaims } = await supabase
         .from('expense_claims')
-        .select(`
-          *,
-          transaction:transactions(*)
-        `)
-        .eq('employee_id', employeeProfile.user_id)
+        .select('*')
+        .eq('user_id', employeeProfile.user_id)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(10)
@@ -293,16 +352,10 @@ export async function GET(request: NextRequest) {
       if (adminPersonalClaims && adminPersonalClaims.length > 0) {
         console.log(`[Expense Dashboard API] Admin personal claims found: ${adminPersonalClaims.length}`)
 
-        const personalClaimsForDisplay = adminPersonalClaims.map(claim => {
-          const statusDisplay = getStatusDisplayInfo(claim.status, claim.processing_status)
-          return {
-            ...claim,
-            status_display: statusDisplay,
-            workflow_progress: getWorkflowProgress(claim.status),
-            current_approver_name: null,
-            _is_personal: true
-          }
-        })
+        const personalClaimsForDisplay = adminPersonalClaims.map(claim => ({
+          ...transformClaimForDisplay(claim),
+          _is_personal: true
+        }))
 
         // Combine with existing recent claims but put personal claims first
         const existingClaimIds = new Set((dashboardData.recent_claims || []).map((claim: any) => claim.id))
@@ -352,7 +405,7 @@ export async function GET(request: NextRequest) {
           .select(`
             *
           `)
-          .in('employee_id', employeeUserIds)
+          .in('user_id', employeeUserIds)
           .is('deleted_at', null)
 
         if (allBusinessClaims) {
@@ -365,7 +418,7 @@ export async function GET(request: NextRequest) {
               *,
               transaction:transactions(home_currency_amount, home_currency)
             `)
-            .in('employee_id', employeeUserIds)
+            .in('user_id', employeeUserIds)
             .eq('status', 'approved')
             .is('deleted_at', null)
 
@@ -384,26 +437,26 @@ export async function GET(request: NextRequest) {
         // Get team claims pending manager approval with fallback
         const { data: pendingClaims } = await supabase
           .from('expense_claims')
-          .select(`
-            *,
-            transaction:transactions(*)
-          `)
-          .in('employee_id', employeeUserIds)
+          .select('*')
+          .in('user_id', employeeUserIds)
           .eq('status', 'pending_approval')
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
 
-        dashboardData.recent_claims = pendingClaims || []
+        dashboardData.recent_claims = (pendingClaims || []).map(transformClaimForDisplay)
       } else {
         // Use optimized RPC results with proper type conversion
+        // CRITICAL FIX: RPC returns an array with one object, not the object directly
+        const teamSummary = Array.isArray(rpcTeamSummary) ? rpcTeamSummary[0] : rpcTeamSummary
         console.log('[Expense Dashboard API] Team RPC function completed successfully:', rpcTeamSummary)
+        console.log('[Expense Dashboard API] Extracted team summary object:', teamSummary)
 
         dashboardData.summary = {
-          total_claims: Number(rpcTeamSummary.total_claims) || 0,
-          pending_approval: Number(rpcTeamSummary.pending_count) || 0,
-          approved_amount: Number(rpcTeamSummary.approved_amount) || 0,
-          rejected_count: Number(rpcTeamSummary.rejected_count) || 0
+          total_claims: Number(teamSummary.total_claims) || 0,
+          pending_approval: Number(teamSummary.pending_count) || 0,
+          approved_amount: Number(teamSummary.approved_amount) || 0,
+          rejected_count: Number(teamSummary.rejected_count) || 0
         }
 
         // Still need to get recent claims for the UI - use authenticated client
@@ -415,30 +468,24 @@ export async function GET(request: NextRequest) {
         const employeeUserIds = businessEmployees?.map(emp => emp.user_id) || []
         const { data: pendingClaims } = await supabase
           .from('expense_claims')
-          .select(`
-            *,
-            transaction:transactions(*)
-          `)
-          .in('employee_id', employeeUserIds)
+          .select('*')
+          .in('user_id', employeeUserIds)
           .eq('status', 'pending_approval')
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
 
-        dashboardData.recent_claims = pendingClaims || []
+        dashboardData.recent_claims = (pendingClaims || []).map(transformClaimForDisplay)
       }
 
     } else {
       // Employees see only their own data with full workflow status
-      console.log(`[Expense Dashboard API] Querying expense claims for employee_id: ${employeeProfile.user_id}`)
+      console.log(`[Expense Dashboard API] Querying expense claims for user_id: ${employeeProfile.user_id}`)
 
       const { data: userClaims, error: claimsError } = await supabase
         .from('expense_claims')
-        .select(`
-          *,
-          transaction:transactions(*)
-        `)
-        .eq('employee_id', employeeProfile.user_id)
+        .select('*')
+        .eq('user_id', employeeProfile.user_id)
         .is('deleted_at', null)
       
       console.log(`[Expense Dashboard API] Query result - userClaims count: ${userClaims?.length || 0}`)
@@ -457,7 +504,7 @@ export async function GET(request: NextRequest) {
         ).length
         const approvedAmount = userClaims
           .filter(claim => ['approved', 'reimbursed', 'paid'].includes(claim.status))
-          .reduce((sum, claim) => sum + parseFloat(claim.transaction?.home_currency_amount || '0'), 0)
+          .reduce((sum, claim) => sum + parseFloat(claim.total_amount || '0'), 0)
         const rejectedCount = userClaims.filter(claim => claim.status === 'rejected').length
 
         dashboardData.summary = {
@@ -472,22 +519,20 @@ export async function GET(request: NextRequest) {
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
           .slice(0, 10)
           .map(claim => {
-            const statusDisplay = getStatusDisplayInfo(claim.status, claim.processing_status)
-            console.log(`[Dashboard API] Claim ${claim.id}: status=${claim.status}, processing_status=${claim.processing_status}, status_display=${JSON.stringify(statusDisplay)}`)
-            return {
-              ...claim,
-              // Add status display information
-              status_display: statusDisplay,
-              // Add workflow progress information
-              workflow_progress: getWorkflowProgress(claim.status),
-              // Add approver information
-              current_approver_name: null // Removed invalid foreign key relationship
-            }
+            console.log(`[Dashboard API] Claim ${claim.id}: status=${claim.status}, processing_status=${claim.processing_status}`)
+            return transformClaimForDisplay(claim)
           })
       }
     }
 
     console.log(`[Expense Dashboard API] Fetched dashboard data for user ${userId}, role: ${JSON.stringify(dashboardData.role)}`)
+    console.log('[Expense Dashboard API] Final response summary:', {
+      total_claims: dashboardData.summary.total_claims,
+      pending_approval: dashboardData.summary.pending_approval,
+      approved_amount: dashboardData.summary.approved_amount,
+      rejected_count: dashboardData.summary.rejected_count,
+      recent_claims_count: dashboardData.recent_claims?.length || 0
+    })
 
     return NextResponse.json({
       success: true,
@@ -497,11 +542,22 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[Expense Dashboard API] Unexpected error:', error)
+    // Enhanced error logging for debugging
+    console.error('[Expense Dashboard API] ========== UNEXPECTED ERROR ==========')
+    console.error('[Expense Dashboard API] Error type:', error instanceof Error ? error.constructor.name : typeof error)
+    console.error('[Expense Dashboard API] Error message:', error instanceof Error ? error.message : String(error))
+    console.error('[Expense Dashboard API] Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('[Expense Dashboard API] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
+    console.error('[Expense Dashboard API] ==========================================')
+
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch dashboard data'
+        error: 'Failed to fetch dashboard data',
+        debug: process.env.NODE_ENV === 'development' ? {
+          message: error instanceof Error ? error.message : String(error),
+          type: error instanceof Error ? error.constructor.name : typeof error
+        } : undefined
       },
       { status: 500 }
     )

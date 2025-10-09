@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { EXPENSE_CATEGORY_CONFIG } from '@/types/expense-claims'
+import { useToast } from '@/components/ui/toast'
 
 interface ExpenseSubmissionFormProps {
   onClose: () => void
@@ -71,6 +71,7 @@ interface CustomExpenseCategory {
 }
 
 export default function ExpenseSubmissionForm({ onClose, onSubmit }: ExpenseSubmissionFormProps) {
+  const { addToast } = useToast()
   const [step, setStep] = useState<'capture' | 'form' | 'review'>('capture')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -96,44 +97,41 @@ export default function ExpenseSubmissionForm({ onClose, onSubmit }: ExpenseSubm
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  // Fetch categories on component mount
+  // Fetch categories on component mount - NO FALLBACK
+  // Categories must be configured by business admin in /manager/categories
   useEffect(() => {
     const fetchCategories = async () => {
       setLoadingCategories(true)
-      
-      // Always prepare fallback categories first
-      const fallbackCategories = Object.entries(EXPENSE_CATEGORY_CONFIG).map(([code, config]) => ({
-        id: code,
-        category_name: config.label,
-        category_code: code,
-        description: config.description,
-        is_active: true,
-        tax_treatment: 'deductible' as const,
-        requires_receipt: (config.requires_receipt_over || 0) > 0,
-        receipt_threshold: config.requires_receipt_over,
-        policy_limit: config.policy_limit,
-        requires_manager_approval: true
-      }))
 
       try {
         const response = await fetch('/api/expense-categories')
-        
-        if (response.ok) {
-          const result = await response.json()
-          if (result.success && result.data.categories && result.data.categories.length > 0) {
-            setCategories(result.data.categories)
-            console.log('[Categories] Loaded from API:', result.data.categories.length)
-            return
-          }
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch categories: ${response.statusText}`)
         }
-        
-        // API failed or returned no categories, use fallback
-        console.warn('[Categories] API unavailable, using fallback categories')
-        setCategories(fallbackCategories)
-        
+
+        const result = await response.json()
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to fetch categories')
+        }
+
+        if (!result.data.categories || result.data.categories.length === 0) {
+          throw new Error('No expense categories configured. Please contact your business admin to set up categories.')
+        }
+
+        setCategories(result.data.categories)
+        console.log('[Categories] Loaded from API:', result.data.categories.length)
+
       } catch (error) {
-        console.error('[Categories] Error fetching, using fallback:', error)
-        setCategories(fallbackCategories)
+        console.error('[Categories] Error fetching categories:', error)
+        addToast({
+          type: 'error',
+          title: 'Categories Not Available',
+          description: error instanceof Error ? error.message : 'Failed to load expense categories. Please contact your admin.'
+        })
+        // Close the form since we can't proceed without categories
+        setTimeout(() => onClose(), 2000)
       } finally {
         setLoadingCategories(false)
       }

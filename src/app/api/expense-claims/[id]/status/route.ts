@@ -45,8 +45,8 @@ export async function PATCH(
       .from('expense_claims')
       .select(`
         *,
-        transaction:transactions(*),
-        employee:employee_profiles!expense_claims_employee_id_fkey(*)
+        transaction:accounting_entries(*),
+        employee:users!inner(id,full_name,email)
       `)
       .eq('id', claimId)
       .single()
@@ -61,7 +61,7 @@ export async function PATCH(
 
     // Get user's employee profile
     const { data: userProfile, error: profileError } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .select('*')
       .eq('user_id', userId)
       .single()
@@ -103,11 +103,11 @@ export async function PATCH(
         break
       case 'reject':
         targetStatus = 'rejected'
-        requiredRole = userProfile.role_permissions.admin ? 'admin' : 'manager'
+        requiredRole = userProfile.role === 'admin' ? 'admin' : 'manager'
         break
       case 'request_changes':
         targetStatus = 'rejected' // Will require employee to revise
-        requiredRole = userProfile.role_permissions.admin ? 'admin' : 'manager'
+        requiredRole = userProfile.role === 'admin' ? 'admin' : 'manager'
         break
       default:
         return NextResponse.json(
@@ -160,7 +160,7 @@ export async function PATCH(
     switch (targetStatus as ExpenseStatus) {
       case 'submitted':
         updateData.submission_date = now
-        updateData.current_approver_id = expenseClaim.employee.manager_id
+        updateData.current_approver_id = await getAdminTeamId(supabase) // Assign to admin since we don't have manager_id
         break
         
       case 'under_review':
@@ -169,20 +169,39 @@ export async function PATCH(
         
       case 'approved':
         updateData.approval_date = now
-        updateData.approved_by_ids = [...(expenseClaim.approved_by_ids || []), userProfile.id]
+        updateData.approved_by_ids = [...(expenseClaim.approved_by_ids || []), userProfile.user_id]
         // Set finance team as next approver for reimbursement
         updateData.current_approver_id = await getAdminTeamId(supabase)
+
+        // ✅ ACCOUNTING PRINCIPLE: Create accounting_entries ONLY when approved
+        // Call RPC function to atomically create accounting entry and line items from metadata
+        console.log(`📝 Creating accounting entry for approved expense claim: ${claimId}`)
+        const { data: transactionId, error: rpcError } = await supabase
+          .rpc('create_accounting_entry_from_approved_claim', {
+            p_claim_id: claimId,
+            p_approver_id: userProfile.user_id
+          })
+
+        if (rpcError) {
+          console.error('❌ Failed to create accounting entry:', rpcError)
+          return NextResponse.json(
+            { error: `Failed to create accounting entry: ${rpcError.message}` },
+            { status: 500 }
+          )
+        }
+
+        console.log(`✅ Accounting entry created successfully: ${transactionId}`)
         break
-        
+
       case 'rejected':
-        updateData.rejected_by_id = userProfile.id
+        updateData.rejected_by_id = userProfile.user_id
         updateData.rejection_reason = comment || 'No reason provided'
         updateData.current_approver_id = null
         break
         
       case 'reimbursed':
         updateData.reimbursement_date = now
-        updateData.approved_by_ids = [...(expenseClaim.approved_by_ids || []), userProfile.id]
+        updateData.approved_by_ids = [...(expenseClaim.approved_by_ids || []), userProfile.user_id]
         break
         
       case 'draft':
@@ -190,7 +209,7 @@ export async function PATCH(
         updateData.submission_date = null
         updateData.approval_date = null
         updateData.reimbursement_date = null
-        updateData.current_approver_id = expenseClaim.employee.manager_id
+        updateData.current_approver_id = null
         updateData.rejected_by_id = null
         updateData.rejection_reason = null
         break
@@ -203,8 +222,8 @@ export async function PATCH(
       .eq('id', claimId)
       .select(`
         *,
-        transaction:transactions(*),
-        employee:employee_profiles!expense_claims_employee_id_fkey(*)
+        transaction:accounting_entries(*),
+        employee:users!inner(id,full_name,email)
       `)
       .single()
 
@@ -224,7 +243,7 @@ export async function PATCH(
         .from('expense_approvals')
         .insert({
           expense_claim_id: claimId,
-          approver_id: userProfile.id,
+          approver_id: userProfile.user_id,
           action: auditAction,
           comment: comment || null,
           timestamp: now
@@ -258,12 +277,12 @@ export async function PATCH(
     // TODO: Send real-time notifications (Kevin's WebSocket system)
     // await notificationService.broadcastStatusUpdate(claimId, targetStatus)
 
-    // TODO: Update transaction status if needed
-    if (targetStatus === 'reimbursed') {
+    // Update accounting entry status when expense is reimbursed
+    if (targetStatus === 'reimbursed' && expenseClaim.accounting_entry_id) {
       await supabase
-        .from('transactions')
+        .from('accounting_entries')
         .update({ status: 'paid', payment_date: now })
-        .eq('id', expenseClaim.transaction_id)
+        .eq('id', expenseClaim.accounting_entry_id)
     }
 
     console.log(`[Expense Claims Status API] Updated claim ${claimId} from ${expenseClaim.status} to ${targetStatus}`)
@@ -274,7 +293,7 @@ export async function PATCH(
         expense_claim: updatedClaim,
         previous_status: expenseClaim.status,
         new_status: targetStatus,
-        action_by: userProfile.full_name
+        action_by: userProfile.user_id
       }
     })
 
@@ -301,17 +320,16 @@ async function validateUserPermission(
   switch (requiredRole) {
     case 'employee':
       // Employee can only act on their own claims
-      return expenseClaim.employee_id === userProfile.id
+      return expenseClaim.user_id === userProfile.user_id
       
     case 'manager':
-      // Manager can act on their team's claims or be the assigned approver
-      return userProfile.role_permissions.manager && 
-             (expenseClaim.current_approver_id === userProfile.id ||
-              expenseClaim.employee.manager_id === userProfile.id)
-      
+      // Manager can act on claims assigned to them
+      return userProfile.role === 'manager' &&
+             expenseClaim.current_approver_id === userProfile.user_id
+
     case 'admin':
       // Admin can act on approved claims
-      return userProfile.role_permissions.admin
+      return userProfile.role === 'admin'
       
     default:
       return false
@@ -321,12 +339,12 @@ async function validateUserPermission(
 // Get a finance team member ID for setting as approver
 async function getAdminTeamId(supabase: any): Promise<string | null> {
   const { data: financeUsers } = await supabase
-    .from('employee_profiles')
-    .select('id')
-    .eq('role_permissions->finance', true)
-    .eq('is_active', true)
+    .from('business_memberships')
+    .select('user_id')
+    .eq('role', 'admin')
+    .eq('status', 'active')
     .limit(1)
     .single()
-    
-  return financeUsers?.id || null
+
+  return financeUsers?.user_id || null
 }

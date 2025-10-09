@@ -41,9 +41,9 @@ export async function GET(request: NextRequest) {
         .from('expense_claims')
         .select(`
           *,
-          transaction:transactions(home_currency_amount, original_amount, home_currency, original_currency)
+          transaction:accounting_entries(home_currency_amount, original_amount, home_currency, original_currency)
         `)
-        .eq('employee_id', employeeProfile.id)
+        .eq('user_id', employeeProfile.user_id)  // CRITICAL: Use user UUID, not membership ID
         .is('deleted_at', null)
 
       if (personalError) {
@@ -82,9 +82,9 @@ export async function GET(request: NextRequest) {
         .from('expense_claims')
         .select(`
           *,
-          transaction:transactions(home_currency_amount, original_amount, home_currency, original_currency)
+          transaction:accounting_entries(home_currency_amount, original_amount, home_currency, original_currency)
         `)
-        .in('employee_id', employeeIds)
+        .in('user_id', employeeIds)
         .is('deleted_at', null)
 
       if (businessError) {

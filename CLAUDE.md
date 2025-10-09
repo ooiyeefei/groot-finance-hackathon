@@ -121,6 +121,224 @@ These are the fundamental rules that govern all development work in this reposit
 - Document-transaction linking to prevent duplicates
 - Conditional UI states based on document status
 
+### Expense Claims Module Architecture
+
+The expense claims module implements a proper accounting workflow that separates pending expense requests from posted general ledger transactions, ensuring IFRS/GAAP compliance.
+
+**Note on Naming**: The expense_claims table uses `accounting_entry_id` (not `transaction_id`) as the foreign key to the accounting_entries table. This naming convention reflects the accounting industry standard where the table is called `accounting_entries` (general ledger).
+
+#### Accounting Principles
+
+**Key Principle**: Only **approved** expense claims create accounting entries. Pending claims do NOT appear in the general ledger.
+
+```
+expense_claims table = "Pending Expense Requests" (workflow/approval system)
+accounting_entries table = "Posted Transactions" (general ledger)
+```
+
+**Why This Matters**:
+- **Accrual Basis Accounting**: Expenses recognized only when obligation is created (approval)
+- **IFRS/GAAP Compliance**: Only approved expenses hit the books
+- **Financial Reporting**: Prevents unapproved expenses from inflating financial statements
+- **Audit Trail**: Clear separation between requests and posted transactions
+
+#### Expense Claims Workflow
+
+```
+1. User uploads receipt
+   └─→ Stored in Supabase Storage
+
+2. DSPy extraction runs (Trigger.dev background job)
+   └─→ Extracts: vendor, amount, currency, date, line items
+   └─→ Stores in expense_claims.processing_metadata (JSONB)
+   └─→ Does NOT create accounting_entries
+   └─→ accounting_entry_id remains NULL
+
+3. Manager reviews and approves
+   └─→ Status changes to 'approved'
+   └─→ Triggers RPC: create_accounting_entry_from_approved_claim()
+
+4. RPC function atomically:
+   └─→ Creates accounting_entries record from metadata
+   └─→ Creates line_items if present
+   └─→ Links expense_claims.accounting_entry_id to new accounting entry
+
+5. Finance team processes reimbursement
+   └─→ Status changes to 'reimbursed'
+   └─→ Updates accounting_entries.status to 'paid'
+```
+
+#### DSPy Receipt Extraction Pipeline
+
+**Location**: `src/trigger/dspy-receipt-extraction.ts`
+
+**Key Components**:
+1. **Multi-stage Processing**: Gemini 2.5 Flash (primary) + vLLM Skywork (fallback)
+2. **Adaptive Complexity**: Simple/Medium/Complex routing based on receipt quality
+3. **Business Category Integration**: Uses company-specific expense categories for auto-categorization
+4. **Metadata Storage**: All extracted data stored in JSONB field
+
+**Processing Metadata Structure**:
+```typescript
+processing_metadata: {
+  extraction_method: 'dspy',
+  extraction_timestamp: ISO8601,
+  confidence_score: 0.0-1.0,
+  processing_time_ms: number,
+
+  financial_data: {
+    description: string,
+    vendor_name: string,
+    total_amount: number,
+    original_currency: string,
+    home_currency: string,
+    home_currency_amount: number,
+    exchange_rate: number,
+    transaction_date: date,
+    reference_number: string | null,
+    subtotal_amount: number | null,
+    tax_amount: number | null
+  },
+
+  line_items: [{
+    item_description: string,
+    quantity: number,
+    unit_price: number,
+    total_amount: number,
+    currency: string,
+    tax_amount: number,
+    tax_rate: number,
+    item_category: string | null,
+    line_order: number
+  }],
+
+  raw_extraction: DSPyExtractionResult
+}
+```
+
+**Important**: DSPy extraction does NOT create accounting_entries. It only stores metadata.
+
+#### Atomic RPC Functions
+
+**1. create_accounting_entry_from_approved_claim**
+
+**Location**: `supabase/migrations/20250106100000_create_accounting_entry_on_approval.sql`
+
+**Purpose**: Atomically creates accounting entries and line items when expense claim is approved
+
+**Parameters**:
+- `p_claim_id`: uuid - Expense claim ID
+- `p_approver_id`: uuid - User who approved
+
+**Returns**: `uuid` - New accounting_entries.id (transaction_id)
+
+**Operations** (atomic transaction):
+1. Reads expense_claims.processing_metadata
+2. Creates accounting_entries record from financial_data
+3. Creates line_items records if present
+4. Updates expense_claims.transaction_id with new accounting entry ID
+
+**Error Handling**: Raises exception if metadata missing or invalid
+
+#### Approval Routes
+
+**Primary Route**: `src/app/api/expense-claims/[id]/status/route.ts`
+
+**Key Status Transitions**:
+
+```typescript
+'submitted' → 'under_review' → 'approved' → 'reimbursed'
+                              ↓
+                         'rejected'
+```
+
+**Critical Code Path** (lines 170-194):
+```typescript
+case 'approved':
+  // Set approval metadata
+  updateData.approval_date = now
+  updateData.approved_by_ids = [...existing, userProfile.user_id]
+
+  // ✅ ACCOUNTING PRINCIPLE: Create accounting entry ONLY when approved
+  const { data: transactionId, error: rpcError } = await supabase
+    .rpc('create_accounting_entry_from_approved_claim', {
+      p_claim_id: claimId,
+      p_approver_id: userProfile.user_id
+    })
+
+  if (rpcError) {
+    return NextResponse.json({ error: rpcError.message }, { status: 500 })
+  }
+
+  console.log(`✅ Accounting entry created: ${transactionId}`)
+  break
+```
+
+**Reimbursement Handling** (lines 280-286):
+```typescript
+// Update accounting entry status when expense is reimbursed
+if (targetStatus === 'reimbursed' && expenseClaim.transaction_id) {
+  await supabase
+    .from('accounting_entries')
+    .update({ status: 'paid', payment_date: now })
+    .eq('id', expenseClaim.transaction_id)
+}
+```
+
+#### Database Schema
+
+**expense_claims table**:
+- `transaction_id`: uuid | NULL - Links to accounting_entries (NULL until approved)
+- `processing_metadata`: JSONB - Stores extracted financial data until approval
+- `vendor_name`, `total_amount`, `currency`: Duplicated for UI convenience
+- `status`: Workflow state (draft/submitted/under_review/approved/rejected/reimbursed)
+
+**accounting_entries table**:
+- `id`: uuid - Primary key (linked from expense_claims.transaction_id)
+- `status`: Transaction status (draft/paid/void)
+- `payment_date`: Date expense was reimbursed
+
+**Key Constraint**: `expense_claims.transaction_id` is nullable to allow pending claims without accounting entries
+
+#### State Machine
+
+```
+draft → submitted → under_review → approved → reimbursed
+                                  ↓
+                             rejected
+```
+
+**State Validation**:
+- Draft → Submitted: Requires receipt attachment
+- Submitted → Under Review: Manager starts review
+- Under Review → Approved: Creates accounting entry via RPC
+- Approved → Reimbursed: Updates accounting_entries.status to 'paid'
+- Any → Rejected: No accounting entry created
+
+#### Key Files
+
+**Backend**:
+- `src/trigger/dspy-receipt-extraction.ts`: DSPy extraction pipeline (lines 1695-1806 for metadata storage)
+- `src/app/api/expense-claims/[id]/status/route.ts`: Status transition API with RPC calls
+- `supabase/migrations/20250106100000_create_accounting_entry_on_approval.sql`: RPC function definition
+
+**Frontend**:
+- `src/components/expense-claims/category-form-modal.tsx`: Expense category management
+- `src/components/expense-claims/dspy-expense-submission-flow.tsx`: 3-step submission flow
+- `src/components/expense-claims/mobile-camera-capture.tsx`: PWA camera capture
+
+#### Testing & Validation
+
+**End-to-End Workflow Test**:
+1. Upload receipt → Verify DSPy extraction stores metadata
+2. Check expense_claims.transaction_id is NULL
+3. Check NO accounting_entries created
+4. Approve claim → Verify RPC creates accounting entry
+5. Check expense_claims.transaction_id now populated
+6. Verify accounting_entries record exists with correct financial data
+7. Verify line_items created if present in metadata
+8. Mark reimbursed → Verify accounting_entries.status = 'paid'
+
 ### AI Agent System Architecture
 
 #### LangGraph Financial Agent

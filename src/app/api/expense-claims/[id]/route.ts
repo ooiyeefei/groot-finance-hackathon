@@ -62,33 +62,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Fetch the expense claim with related transaction data and line items
-    // Note: business_purpose and expense_category are in expense_claims, not transactions
+    // Expense Claims module: Always read from expense_claims table only
     let claimQuery = supabase
       .from('expense_claims')
-      .select(`
-        *,
-        transaction:transactions(
-          id,
-          description,
-          original_amount,
-          original_currency,
-          home_currency_amount,
-          home_currency,
-          transaction_date,
-          vendor_name,
-          vendor_id,
-          reference_number,
-          notes,
-          processing_metadata,
-          line_items(
-            id,
-            item_description,
-            quantity,
-            unit_price,
-            total_amount
-          )
-        )
-      `)
+      .select('*')
       .eq('id', id)
 
     // For service client, we need to manually check access permissions
@@ -97,7 +74,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       claimQuery = claimQuery.eq('business_id', userProfile.business_id)
     } else {
       // Regular employees can only access their own claims
-      claimQuery = claimQuery.eq('employee_id', userProfile.id)
+      // CRITICAL: Use user UUID, not membership ID
+      claimQuery = claimQuery.eq('user_id', userProfile.user_id)
     }
 
     const { data: claim, error } = await claimQuery.single()
@@ -111,16 +89,35 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Transform the data to match the expected frontend structure
-    // business_purpose and expense_category are in expense_claims, but frontend expects them in transaction
+    // Expense Claims module: Always read from expense_claims table for all statuses
     const transformedClaim = {
       ...claim,
-      // Include extracted_data from transaction's processing_metadata if available
-      extracted_data: claim.transaction?.processing_metadata?.extracted_data || null,
-      transaction: claim.transaction ? {
-        ...claim.transaction,
-        business_purpose: claim.business_purpose,  // Move from expense_claims to transaction object
-        expense_category: claim.expense_category   // Move from expense_claims to transaction object
-      } : null
+      // Always use processing_metadata from expense_claims
+      extracted_data: claim.processing_metadata || null,
+      // Construct consistent transaction interface from expense_claims data
+      transaction: {
+        id: claim.accounting_entry_id, // Links to accounting_entries if approved
+        description: claim.description,
+        original_amount: claim.total_amount,
+        original_currency: claim.currency,
+        home_currency_amount: claim.home_currency_amount || claim.total_amount,
+        home_currency: claim.home_currency || claim.currency,
+        transaction_date: claim.transaction_date,
+        vendor_name: claim.vendor_name,
+        vendor_id: null,
+        reference_number: claim.processing_metadata?.financial_data?.reference_number || null,
+        notes: null,
+        processing_metadata: claim.processing_metadata,
+        business_purpose: claim.business_purpose,
+        expense_category: claim.expense_category,
+        line_items: claim.processing_metadata?.line_items?.map((item: any, index: number) => ({
+          id: `temp-${index}`,
+          item_description: item.description || item.item_description, // Fixed: use 'description' field from DSPy extraction
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_amount: item.total_amount
+        })) || []
+      }
     }
 
     return NextResponse.json({
@@ -184,28 +181,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     // First, check if the expense claim exists and is accessible by the user
     let existingClaimQuery = supabase
       .from('expense_claims')
-      .select(`
-        *,
-        transaction:transactions(
-          id,
-          description,
-          original_amount,
-          original_currency,
-          home_currency_amount,
-          home_currency,
-          transaction_date,
-          vendor_name,
-          reference_number,
-          notes,
-          line_items(
-            id,
-            description,
-            quantity,
-            unit_price,
-            total_amount
-          )
-        )
-      `)
+      .select('*')
       .eq('id', id)
 
     // Apply appropriate access control based on role
@@ -214,7 +190,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       existingClaimQuery = existingClaimQuery.eq('business_id', userProfile.business_id)
     } else {
       // Regular employees can only access their own claims
-      existingClaimQuery = existingClaimQuery.eq('employee_id', userProfile.id)
+      // CRITICAL: Use user UUID, not membership ID
+      existingClaimQuery = existingClaimQuery.eq('user_id', userProfile.user_id)
     }
 
     const { data: existingClaim, error: fetchError } = await existingClaimQuery.single()
@@ -234,158 +211,102 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Prepare transaction update data with currency conversion
-    const transactionUpdateData: any = {
-      description: body.description,
-      original_amount: body.original_amount,
-      original_currency: body.original_currency,
-      home_currency: body.home_currency,
-      transaction_date: body.transaction_date,
-      vendor_name: body.vendor_name,
-      vendor_id: body.vendor_id, // NEW: Support vendor_id updates
-      reference_number: body.reference_number,
-      notes: body.notes,
-      updated_at: new Date().toISOString()
-    }
+    // For Expense Claims module: Update expense_claims fields directly (no accounting_entries update)
 
-    // Calculate home currency amount if currencies are different
-    if (body.original_currency !== body.home_currency && body.original_amount > 0) {
-      console.log(`[Individual Claim API PUT] Converting ${body.original_amount} ${body.original_currency} to ${body.home_currency}`)
+    // Get user's home currency for conversion
+    const userHomeCurrency = body.home_currency || 'SGD'
 
+    // Convert to home currency if different
+    let homeAmount = body.original_amount
+    let exchangeRate = 1
+    let exchangeRateDate = new Date().toISOString().split('T')[0]
+
+    if (body.original_currency !== userHomeCurrency && body.original_amount > 0) {
       try {
-        // Use currency service directly instead of HTTP request
         const conversion = await currencyService.convertAmount(
           body.original_amount,
-          body.original_currency as SupportedCurrency,
-          body.home_currency as SupportedCurrency
+          body.original_currency,
+          userHomeCurrency as SupportedCurrency
         )
+        homeAmount = conversion.converted_amount
+        exchangeRate = conversion.exchange_rate
+        exchangeRateDate = conversion.rate_date
 
-        transactionUpdateData.home_currency_amount = conversion.converted_amount
-        transactionUpdateData.exchange_rate = conversion.exchange_rate
-        console.log(`[Individual Claim API PUT] Converted to ${conversion.converted_amount} ${body.home_currency} (rate: ${conversion.exchange_rate})`)
-      } catch (conversionError) {
-        console.log(`[Individual Claim API PUT] Currency conversion error: ${conversionError}, setting home currency amount same as original`)
-        transactionUpdateData.home_currency_amount = body.original_amount
-      }
-    } else {
-      // Same currency - just copy the amount
-      transactionUpdateData.home_currency_amount = body.original_amount
-      console.log(`[Individual Claim API PUT] Same currency (${body.original_currency}), no conversion needed`)
-    }
-
-    // Update the associated transaction (with currency conversion)
-    const { error: transactionError } = await supabase
-      .from('transactions')
-      .update(transactionUpdateData)
-      .eq('id', existingClaim.transaction_id)
-
-    if (transactionError) {
-      console.error('Error updating transaction:', transactionError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to update expense details' },
-        { status: 500 }
-      )
-    }
-
-    // Handle line items updates if provided
-    if (body.line_items && Array.isArray(body.line_items)) {
-      console.log(`[Individual Claim API PUT] Updating ${body.line_items.length} line items`)
-
-      // First, delete existing line items for this transaction to avoid duplicates
-      const { error: deleteLineItemsError } = await supabase
-        .from('line_items')
-        .delete()
-        .eq('transaction_id', existingClaim.transaction_id)
-
-      if (deleteLineItemsError) {
-        console.warn(`[Individual Claim API PUT] Warning: Could not delete existing line items: ${deleteLineItemsError.message}`)
-      }
-
-      // Insert updated line items (only if there are items to insert)
-      if (body.line_items.length > 0) {
-        const lineItemsData = body.line_items.map((item: any, index: number) => ({
-          transaction_id: existingClaim.transaction_id,
-          item_description: item.description || 'Item',
-          quantity: item.quantity || 1,
-          unit_price: item.unit_price || 0,
-          total_amount: item.total_amount || 0,
-          currency: body.original_currency, // Required field - inherit from transaction
-          tax_amount: 0,
-          tax_rate: 0,
-          item_category: null,
-          item_code: item.item_code || null,
-          unit_measurement: item.unit_measurement || null,
-          line_order: index + 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }))
-
-        const { error: lineItemsError } = await supabase
-          .from('line_items')
-          .insert(lineItemsData)
-
-        if (lineItemsError) {
-          console.error('Error inserting updated line items:', lineItemsError)
-          console.warn(`[Individual Claim API PUT] Line items could not be saved: ${lineItemsError.message}`)
-          // Don't fail the entire operation, just log the warning
-        } else {
-          console.log(`[Individual Claim API PUT] Successfully updated ${body.line_items.length} line items`)
-        }
+      } catch (error) {
+        console.error('[Individual Claim API PUT] Currency conversion failed:', error)
       }
     }
 
-    // Update the expense claim (business_purpose and expense_category are here)
+    // Prepare update data with all fields including currency conversion
     const updateData: any = {
+      description: body.description,
+      vendor_name: body.vendor_name,
+      total_amount: body.original_amount,
+      currency: body.original_currency,
+      transaction_date: body.transaction_date,
       business_purpose: body.business_purpose,
       expense_category: body.expense_category,
+
+      // Currency conversion fields
+      home_currency: userHomeCurrency,
+      home_currency_amount: homeAmount,
+      exchange_rate: exchangeRate,
+
       updated_at: new Date().toISOString()
     }
-    
+
     // Include enhanced fields if provided
     if (body.business_purpose_details) {
       updateData.business_purpose_details = body.business_purpose_details
     }
-    
-    const { error: expenseClaimError } = await supabase
+
+    // Handle line items updates in processing_metadata if provided
+    if (body.line_items && Array.isArray(body.line_items)) {
+      console.log(`[Individual Claim API PUT] Updating ${body.line_items.length} line items in processing_metadata`)
+
+      // Get existing processing_metadata to preserve other fields
+      const existingMetadata = existingClaim.processing_metadata || {}
+
+      // Update line items in metadata
+      const updatedLineItems = body.line_items.map((item: any, index: number) => ({
+        item_description: item.description || item.item_description || 'Item',
+        quantity: item.quantity || 1,
+        unit_price: item.unit_price || 0,
+        total_amount: item.total_amount || 0,
+        currency: body.original_currency,
+        tax_amount: item.tax_amount || 0,
+        tax_rate: item.tax_rate || 0,
+        item_category: item.item_category || null,
+        line_order: index + 1
+      }))
+
+      // Update processing_metadata with new line items
+      updateData.processing_metadata = {
+        ...existingMetadata,
+        line_items: updatedLineItems,
+        last_updated: new Date().toISOString(),
+        update_source: 'manual_edit'
+      }
+    }
+
+    // Single update to expense_claims table
+    const { error: claimUpdateError } = await supabase
       .from('expense_claims')
       .update(updateData)
       .eq('id', id)
 
-    if (expenseClaimError) {
-      console.error('Error updating expense claim:', expenseClaimError)
+    if (claimUpdateError) {
+      console.error('Error updating expense claim:', claimUpdateError)
       return NextResponse.json(
         { success: false, error: 'Failed to update expense claim' },
         { status: 500 }
       )
     }
 
-    // Fetch the updated claim to return (including line items)
+    // Fetch the updated claim to return
     const { data: updatedClaim, error: refetchError } = await supabase
       .from('expense_claims')
-      .select(`
-        *,
-        transaction:transactions(
-          id,
-          description,
-          original_amount,
-          original_currency,
-          home_currency_amount,
-          home_currency,
-          transaction_date,
-          vendor_name,
-          reference_number,
-          notes,
-          line_items(
-            id,
-            item_description,
-            quantity,
-            unit_price,
-            total_amount,
-            item_code,
-            unit_measurement
-          )
-        )
-      `)
+      .select('*')
       .eq('id', id)
       .single()
 
@@ -464,7 +385,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // First, check if the expense claim exists and is accessible
     let existingClaimQuery = supabase
       .from('expense_claims')
-      .select('id, status, transaction_id, employee_id, business_id')
+      .select('id, status, accounting_entry_id, user_id, business_id')
       .eq('id', id)
 
     // Apply appropriate access control based on role
@@ -473,7 +394,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       existingClaimQuery = existingClaimQuery.eq('business_id', userProfile.business_id)
     } else {
       // Regular employees can only access their own claims
-      existingClaimQuery = existingClaimQuery.eq('employee_id', userProfile.id)
+      // CRITICAL: Use user UUID, not membership ID
+      existingClaimQuery = existingClaimQuery.eq('user_id', userProfile.user_id)
     }
 
     const { data: existingClaim, error: fetchError } = await existingClaimQuery.single()
@@ -493,17 +415,17 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Delete the associated transaction first (if exists)
-    if (existingClaim.transaction_id) {
-      const { error: transactionDeleteError } = await supabase
-        .from('transactions')
+    // Delete the associated accounting entry first (if exists)
+    if (existingClaim.accounting_entry_id) {
+      const { error: accountingDeleteError } = await supabase
+        .from('accounting_entries')
         .delete()
-        .eq('id', existingClaim.transaction_id)
+        .eq('id', existingClaim.accounting_entry_id)
 
-      if (transactionDeleteError) {
-        console.error('Error deleting transaction:', transactionDeleteError)
+      if (accountingDeleteError) {
+        console.error('Error deleting accounting entry:', accountingDeleteError)
         return NextResponse.json(
-          { success: false, error: 'Failed to delete associated transaction' },
+          { success: false, error: 'Failed to delete associated accounting entry' },
           { status: 500 }
         )
       }
