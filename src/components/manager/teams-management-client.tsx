@@ -34,9 +34,9 @@ interface TeamMember {
   }
   created_at: string
   clerk_user?: any
-  manager_id?: string // For employee-manager association (employee_profiles.id)
+  manager_id?: string // For employee-manager association (now users.id)
   manager_name?: string // Display name of assigned manager
-  manager_user_id?: string // Manager's user_id for Select component
+  manager_user_id_field?: string // Manager's Clerk user_id for Select component
 }
 
 interface PendingInvitation {
@@ -193,6 +193,16 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     return teamMembers.filter(member =>
       member.role_permissions.manager || member.role_permissions.admin
     )
+  }
+
+  // Helper function to find the current manager's user_id for the dropdown value
+  const getCurrentManagerUserId = (member: TeamMember) => {
+    if (!member.manager_id) return 'none'
+
+    // manager_id is the manager's users.id, so we need to find which team member has that user_id
+    const manager = teamMembers.find(m => m.user_id === member.manager_id)
+    console.log(`[Manager Dropdown] Employee: ${member.full_name}, manager_id: ${member.manager_id}, found manager: ${manager?.full_name}`)
+    return manager ? manager.user_id : 'none'
   }
 
   const sendInvitation = async (data: InvitationFormData) => {
@@ -779,7 +789,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                 <div className="flex flex-col">
                                   <span className="text-xs text-gray-500 mb-1">Manager</span>
                                   <Select
-                                    value={member.manager_user_id || 'none'}
+                                    value={getCurrentManagerUserId(member)}
                                     onValueChange={(managerId: string) => assignManager(member.user_id, managerId)}
                                     disabled={isUpdating}
                                   >

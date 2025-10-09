@@ -83,8 +83,8 @@ export async function PUT(request: NextRequest) {
         }, { status: 400 })
       }
 
-      // Use the business_memberships.id for the foreign key constraint
-      managerMembershipId = manager.id
+      // Use the user_id for the foreign key constraint (manager_id should reference users.id)
+      managerMembershipId = manager.user_id
     }
 
     // Update the employee's manager assignment
