@@ -317,7 +317,7 @@ export async function canTransferOwnership(): Promise<boolean> {
  * Require specific permission (throws if not authorized)
  */
 export async function requirePermission(permission: keyof RolePermissions): Promise<UserContext> {
-  const context = await getCurrentUserContext()
+  const context = await getCurrentUserContextWithBusiness()
   
   if (!context) {
     throw new Error('User not authenticated')

@@ -145,9 +145,23 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       setError(null)
       setSuccess(null)
 
+      // Get CSRF token first
+      const csrfResponse = await fetch('/api/csrf')
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
+      const csrfData = await csrfResponse.json()
+
+      if (!csrfData.success) {
+        throw new Error(csrfData.error || 'Failed to get CSRF token')
+      }
+
       const response = await fetch('/api/user/assign-manager', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfData.csrfToken
+        },
         body: JSON.stringify({
           employee_id: employeeId,
           manager_id: managerId === 'none' ? null : managerId
@@ -187,9 +201,23 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       setError(null)
       setSuccess(null)
 
+      // Get CSRF token first
+      const csrfResponse = await fetch('/api/csrf')
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
+      const csrfData = await csrfResponse.json()
+
+      if (!csrfData.success) {
+        throw new Error(csrfData.error || 'Failed to get CSRF token')
+      }
+
       const response = await fetch('/api/invitations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfData.csrfToken
+        },
         body: JSON.stringify({
           email: data.email,
           role: data.role,
@@ -229,8 +257,22 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       setError(null)
       setSuccess(null)
 
+      // Get CSRF token first
+      const csrfResponse = await fetch('/api/csrf')
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
+      const csrfData = await csrfResponse.json()
+
+      if (!csrfData.success) {
+        throw new Error(csrfData.error || 'Failed to get CSRF token')
+      }
+
       const response = await fetch(`/api/invitations/${invitationId}/resend`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'X-CSRF-Token': csrfData.csrfToken
+        }
       })
 
       const result = await response.json()
@@ -252,8 +294,22 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       setError(null)
       setSuccess(null)
 
+      // Get CSRF token first
+      const csrfResponse = await fetch('/api/csrf')
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
+      const csrfData = await csrfResponse.json()
+
+      if (!csrfData.success) {
+        throw new Error(csrfData.error || 'Failed to get CSRF token')
+      }
+
       const response = await fetch(`/api/invitations/${invitationId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'X-CSRF-Token': csrfData.csrfToken
+        }
       })
 
       const result = await response.json()
@@ -294,9 +350,23 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       setError(null)
       setSuccess(null)
 
+      // Get CSRF token first
+      const csrfResponse = await fetch('/api/csrf')
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
+      const csrfData = await csrfResponse.json()
+
+      if (!csrfData.success) {
+        throw new Error(csrfData.error || 'Failed to get CSRF token')
+      }
+
       const response = await fetch(`/api/business/memberships/${membershipId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfData.csrfToken
+        },
         body: JSON.stringify(updates)
       })
 
@@ -341,9 +411,23 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       setError(null)
       setSuccess(null)
 
+      // Get CSRF token first
+      const csrfResponse = await fetch('/api/csrf')
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
+      const csrfData = await csrfResponse.json()
+
+      if (!csrfData.success) {
+        throw new Error(csrfData.error || 'Failed to get CSRF token')
+      }
+
       const response = await fetch('/api/user/update-name', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfData.csrfToken
+        },
         body: JSON.stringify({
           user_id: isCurrentUser ? undefined : memberId,
           full_name: editingNameValue.trim()

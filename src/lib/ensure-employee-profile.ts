@@ -38,13 +38,29 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
       // User exists, check for business membership
       console.log(`[User Profile] Found existing user UUID: ${existingUser.id} for Clerk ID: ${userId}`)
 
-      const { data: memberships, error: membershipError } = await supabase
+      // CRITICAL FIX: Try current business context first, fallback to most recent if needed
+      let { data: memberships, error: membershipError } = await supabase
         .from('business_memberships')
         .select('id, business_id, role, created_at')
         .eq('user_id', existingUser.id)
-        .eq('status', 'active')  // CRITICAL FIX: Only check active memberships
-        .order('created_at', { ascending: false }) // Get most recent first
+        .eq('business_id', existingUser.business_id)  // Use current business context
+        .eq('status', 'active')  // Only check active memberships
         .limit(1)
+
+      // FALLBACK: If no membership found for current business, get most recent active membership
+      if (!membershipError && (!memberships || memberships.length === 0)) {
+        console.log(`[User Profile] No membership found for current business ${existingUser.business_id}, falling back to most recent`)
+        const fallbackQuery = await supabase
+          .from('business_memberships')
+          .select('id, business_id, role, created_at')
+          .eq('user_id', existingUser.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        memberships = fallbackQuery.data
+        membershipError = fallbackQuery.error
+      }
 
       const membership = memberships?.[0] || null
 
