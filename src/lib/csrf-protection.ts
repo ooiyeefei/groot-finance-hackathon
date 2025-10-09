@@ -34,24 +34,40 @@ function generateCSRFToken(): string {
 
 /**
  * Get user key for CSRF token storage
+ * Falls back to a session-based key if user is not authenticated
  */
-async function getUserKey(): Promise<string | null> {
+async function getUserKey(request?: NextRequest): Promise<string | null> {
   try {
     const { userId } = await auth()
-    return userId
+    if (userId) return userId
+
+    // Fallback: Create a session-based key from IP and User-Agent for unauthenticated requests
+    if (request) {
+      const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+      const userAgent = request.headers.get('user-agent') || 'unknown'
+      return `session-${Buffer.from(`${ip}-${userAgent}`).toString('base64').slice(0, 16)}`
+    }
+
+    return null
   } catch {
+    // If auth fails, try to create session-based key
+    if (request) {
+      const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+      const userAgent = request.headers.get('user-agent') || 'unknown'
+      return `session-${Buffer.from(`${ip}-${userAgent}`).toString('base64').slice(0, 16)}`
+    }
     return null
   }
 }
 
 /**
- * Generate and store a new CSRF token for the authenticated user
+ * Generate and store a new CSRF token for the authenticated user or session
  */
-export async function generateCSRFTokenForUser(): Promise<{ token: string | null, error?: string }> {
+export async function generateCSRFTokenForUser(request?: NextRequest): Promise<{ token: string | null, error?: string }> {
   try {
-    const userKey = await getUserKey()
+    const userKey = await getUserKey(request)
     if (!userKey) {
-      return { token: null, error: 'User not authenticated' }
+      return { token: null, error: 'Unable to create session key' }
     }
 
     const token = generateCSRFToken()
@@ -67,18 +83,18 @@ export async function generateCSRFTokenForUser(): Promise<{ token: string | null
 }
 
 /**
- * Validate CSRF token for the authenticated user
+ * Validate CSRF token for the authenticated user or session
  */
-export async function validateCSRFToken(providedToken: string): Promise<{ valid: boolean, error?: string }> {
+export async function validateCSRFToken(providedToken: string, request?: NextRequest): Promise<{ valid: boolean, error?: string }> {
   try {
-    const userKey = await getUserKey()
+    const userKey = await getUserKey(request)
     if (!userKey) {
-      return { valid: false, error: 'User not authenticated' }
+      return { valid: false, error: 'Unable to create session key' }
     }
 
     const storedData = csrfTokenStore.get(userKey)
     if (!storedData) {
-      return { valid: false, error: 'No CSRF token found for user' }
+      return { valid: false, error: 'No CSRF token found for session' }
     }
 
     // Check if token has expired
@@ -132,7 +148,7 @@ export async function csrfProtection(request: NextRequest): Promise<NextResponse
     }
 
     // Validate the token
-    const validation = await validateCSRFToken(csrfToken)
+    const validation = await validateCSRFToken(csrfToken, request)
 
     if (!validation.valid) {
       return NextResponse.json({
@@ -153,8 +169,8 @@ export async function csrfProtection(request: NextRequest): Promise<NextResponse
 /**
  * API endpoint to get CSRF token
  */
-export async function handleCSRFTokenRequest(): Promise<NextResponse> {
-  const result = await generateCSRFTokenForUser()
+export async function handleCSRFTokenRequest(request?: NextRequest): Promise<NextResponse> {
+  const result = await generateCSRFTokenForUser(request)
 
   if (!result.token) {
     return NextResponse.json({

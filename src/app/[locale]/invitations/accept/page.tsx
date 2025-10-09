@@ -65,10 +65,11 @@ function AcceptInvitationContent() {
       }
 
       setSuccess(true)
-      
-      // Redirect to dashboard after successful acceptance
+
+      // Force full page reload to ensure Clerk middleware runs properly
+      // Use window.location.href instead of router.push to avoid auth timing issues
       setTimeout(() => {
-        router.push(`/${locale}`)
+        window.location.href = `/${locale}`
       }, 2000)
 
     } catch (err) {

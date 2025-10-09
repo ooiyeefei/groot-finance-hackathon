@@ -42,11 +42,26 @@ export async function GET(request: NextRequest) {
 
     // AUDIT: Log RPC call start for team management
     const teamRpcStartTime = Date.now()
-    // CRITICAL FIX: RPC function expects Clerk ID as single parameter, not object
+    // CRITICAL FIX: Use new two-parameter RPC function with explicit business isolation
     const clerkUserId = userContext.userId
+    const businessId = userContext.profile.business_id
+
+    console.log('[Team API] ===== DEBUG START =====')
+    console.log('[Team API] Calling RPC with parameters:')
+    console.log('[Team API]   - manager_user_id:', clerkUserId)
+    console.log('[Team API]   - business_id_param:', businessId)
 
     const { data: rpcTeamData, error: rpcError } = await supabase
-      .rpc('get_manager_team_employees', { manager_user_id: clerkUserId })
+      .rpc('get_manager_team_employees', {
+        manager_user_id: clerkUserId,
+        business_id_param: businessId
+      })
+
+    console.log('[Team API] RPC call completed')
+    console.log('[Team API]   - Error:', rpcError ? JSON.stringify(rpcError, null, 2) : 'null')
+    console.log('[Team API]   - Data length:', rpcTeamData?.length || 0)
+    console.log('[Team API]   - Raw data:', JSON.stringify(rpcTeamData, null, 2))
+    console.log('[Team API] ===== DEBUG END =====')
 
     // AUDIT: Log RPC call completion for team management
     const teamExecutionTime = Date.now() - teamRpcStartTime
@@ -54,7 +69,7 @@ export async function GET(request: NextRequest) {
       userContext.profile.user_id,  // ✅ Use Supabase UUID instead of Clerk ID
       userContext.profile.business_id,
       'get_manager_team_employees',
-      { manager_user_id: clerkUserId },
+      { manager_user_id: clerkUserId, business_id_param: businessId },
       !rpcError,
       request,
       teamExecutionTime,
@@ -132,24 +147,24 @@ export async function GET(request: NextRequest) {
 
       // RPC returns pre-joined data with optimized structure
       enrichedProfiles = (rpcTeamData || []).map((member: any) => ({
-        // CRITICAL FIX: Use membership_id as the profile id for role updates
-        id: member.membership_id, // Use membership_id for frontend role update API calls
-        user_id: member.id, // Use user_id (member.id) for user identification
+        // CRITICAL FIX: Use employee_id (membership ID) from RPC response
+        id: member.employee_id, // Use employee_id (membership ID) for frontend role updates
+        user_id: member.user_id, // Use user_id from RPC response
         business_id: userContext.profile.business_id, // From user context
         full_name: member.full_name,
         email: member.email,
         // Convert role to role_permissions structure
-        role_permissions: {
+        role_permissions: member.role_permissions || {
           employee: true,
-          manager: member.role === 'manager' || member.role === 'admin',
-          admin: member.role === 'admin'
+          manager: false,
+          admin: false
         },
         home_currency: member.home_currency || 'SGD', // Use from RPC or default
-        manager_id: member.manager_membership_id, // NEW: Manager membership ID from RPC
-        manager_name: member.manager_name, // NEW: Manager name from RPC
-        manager_user_id: member.manager_user_uuid, // NEW: Manager user ID from RPC
-        created_at: member.joined_at || member.created_at, // Use joined_at or created_at
-        updated_at: member.joined_at || member.updated_at, // Use joined_at or updated_at
+        manager_id: member.manager_id, // Manager membership ID from RPC
+        manager_name: member.manager_name, // Manager name from RPC
+        manager_user_id: member.manager_user_id_field, // Manager Clerk user ID from RPC
+        created_at: member.created_at, // Use created_at from RPC
+        updated_at: member.updated_at, // Use updated_at from RPC
         // Keep clerk_user as null for now since RPC doesn't include Clerk data
         clerk_user: null
       }))
@@ -164,8 +179,8 @@ export async function GET(request: NextRequest) {
       const profileClerkIdMap = new Map<string, any>()
 
       enrichedProfiles.forEach((profile) => {
-        const memberData = rpcTeamData ? rpcTeamData.find((member: any) => member.id === profile.user_id) : null
-        const clerkUserId = memberData?.clerk_user_id
+        const memberData = rpcTeamData ? rpcTeamData.find((member: any) => member.user_id === profile.user_id) : null
+        const clerkUserId = memberData?.manager_user_id_field || memberData?.clerk_user_id
 
         if (clerkUserId) {
           clerkUserIds.push(clerkUserId)
@@ -204,7 +219,7 @@ export async function GET(request: NextRequest) {
 
       // Efficiently enrich profiles with batch-fetched Clerk data
       const enrichedWithClerkData = enrichedProfiles.map((profile) => {
-        const memberData = rpcTeamData ? rpcTeamData.find((member: any) => member.id === profile.user_id) : null
+        const memberData = rpcTeamData ? rpcTeamData.find((member: any) => member.user_id === profile.user_id) : null
         const clerkUserId = memberData?.clerk_user_id
 
         if (clerkUserId && clerkUsersMap.has(clerkUserId)) {
