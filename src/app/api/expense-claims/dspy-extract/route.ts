@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     // Trigger the DSPy extraction task using Trigger.dev
     try {
-      const taskResult = await tasks.trigger('dspy-receipt-extraction', {
+      const taskResult = await tasks.trigger('extract-receipt-data', {
         receiptText,
         receiptImageUrl,
         documentId,

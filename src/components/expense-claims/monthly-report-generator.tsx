@@ -12,7 +12,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { EXPENSE_CATEGORY_CONFIG } from '@/types/expense-claims'
 
 interface ReportData {
   employee_name: string
@@ -44,6 +43,8 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
     { id: 'current', name: 'My Reports' }
   ])
   const [loadingEmployees, setLoadingEmployees] = useState(false)
+  const [categories, setCategories] = useState<Array<{business_category_code: string, business_category_name: string}>>([])
+  const [loadingCategories, setLoadingCategories] = useState(true)
 
   // Generate available months (last 12 months)
   const generateMonthOptions = () => {
@@ -64,6 +65,28 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
   }
 
   const monthOptions = generateMonthOptions()
+
+  // Fetch categories on component mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      setLoadingCategories(true)
+      try {
+        const response = await fetch('/api/expense-categories')
+        const result = await response.json()
+
+        if (result.success && result.data.categories) {
+          setCategories(result.data.categories)
+        }
+      } catch (error) {
+        console.error('[Monthly Report] Failed to fetch categories:', error)
+        // Don't block report generation if categories fail to load
+      } finally {
+        setLoadingCategories(false)
+      }
+    }
+
+    fetchCategories()
+  }, [])
 
   // Fetch employees from API (only if not personal mode)
   useEffect(() => {
@@ -311,15 +334,15 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
               <h4 className="text-white font-semibold">Category Breakdown</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.entries(reportData.category_totals).map(([category, data]) => {
-                  const categoryConfig = EXPENSE_CATEGORY_CONFIG[category as keyof typeof EXPENSE_CATEGORY_CONFIG]
-                  
+                  const categoryInfo = categories.find(c => c.business_category_code === category)
+
                   if (data.count === 0) return null
-                  
+
                   return (
                     <div key={category} className="bg-gray-700 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <Badge variant="secondary" className="bg-gray-600">
-                          {categoryConfig?.icon} {categoryConfig?.label}
+                        <Badge variant="secondary" className="bg-gray-900/20 text-gray-300 border border-gray-700/50">
+                          {categoryInfo?.business_category_name || category}
                         </Badge>
                         <span className="text-gray-400 text-sm">{data.count} claims</span>
                       </div>

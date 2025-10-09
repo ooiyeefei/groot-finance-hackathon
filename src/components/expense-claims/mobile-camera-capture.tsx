@@ -271,7 +271,7 @@ export default function MobileCameraCapture({
               <Button onClick={initializeCamera} className="w-full bg-blue-600 hover:bg-blue-700">
                 Try Again
               </Button>
-              <Button variant="outline" onClick={onClose} className="w-full border-gray-600">
+              <Button onClick={onClose} className="w-full bg-gray-700 text-white hover:bg-gray-800">
                 Cancel
               </Button>
             </div>

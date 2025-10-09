@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     
     try {
       // Fire-and-forget trigger (proper architecture for async processing)
-      const taskHandle = await tasks.trigger('dspy-receipt-extraction', {
+      const taskHandle = await tasks.trigger('extract-receipt-data', {
         receiptText: receiptText, // null - will be extracted from image
         receiptImageData: receiptImageData, // Pass actual image data
         receiptImageUrl: null,

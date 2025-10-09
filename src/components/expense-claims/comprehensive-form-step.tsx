@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, Trash2, AlertCircle, CheckCircle, Loader2, Eye, AlertTriangle, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,6 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { EXPENSE_CATEGORY_CONFIG } from '@/types/expense-claims'
 
 interface LineItem {
   id: string
@@ -92,6 +91,35 @@ export default function ComprehensiveFormStep({
 }: ComprehensiveFormStepProps) {
   const [activeTab, setActiveTab] = useState('basic')
   const [newAttendee, setNewAttendee] = useState('')
+  const [categories, setCategories] = useState<Array<{
+    business_category_code: string
+    business_category_name: string
+    requires_receipt: boolean
+    receipt_threshold?: number
+    policy_limit?: number
+  }>>([])
+  const [loadingCategories, setLoadingCategories] = useState(true)
+
+  // Fetch categories on component mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      setLoadingCategories(true)
+      try {
+        const response = await fetch('/api/expense-categories')
+        const result = await response.json()
+
+        if (result.success && result.data.categories) {
+          setCategories(result.data.categories)
+        }
+      } catch (error) {
+        console.error('[Comprehensive Form] Failed to fetch categories:', error)
+      } finally {
+        setLoadingCategories(false)
+      }
+    }
+
+    fetchCategories()
+  }, [])
 
   // Calculate totals from line items
   const lineItemsTotal = formData.line_items.reduce((sum, item) => sum + item.total_amount, 0)
@@ -122,12 +150,12 @@ export default function ComprehensiveFormStep({
     }))
   }
 
-  // Policy compliance check
-  const categoryConfig = EXPENSE_CATEGORY_CONFIG[formData.expense_category as keyof typeof EXPENSE_CATEGORY_CONFIG]
-  const exceedsLimit = categoryConfig?.policy_limit && formData.original_amount > categoryConfig.policy_limit
+  // Policy compliance check using database categories
+  const categoryInfo = categories.find(c => c.business_category_code === formData.expense_category)
+  const exceedsLimit = categoryInfo?.policy_limit && formData.original_amount > categoryInfo.policy_limit
   // Check for receipt via business_purpose_details instead of document_id
   const hasReceipt = formData.business_purpose_details?.file_upload?.file_path
-  const needsReceipt = categoryConfig?.requires_receipt_over && formData.original_amount > categoryConfig.requires_receipt_over && !hasReceipt
+  const needsReceipt = categoryInfo?.requires_receipt && categoryInfo?.receipt_threshold && formData.original_amount > categoryInfo.receipt_threshold && !hasReceipt
 
   return (
     <div className="space-y-6">
@@ -209,8 +237,8 @@ export default function ComprehensiveFormStep({
           <AlertDescription className="text-red-400">
             <div className="space-y-1">
               <div className="font-medium">Policy Compliance Required</div>
-              {exceedsLimit && <div>• Amount exceeds category limit of ${categoryConfig.policy_limit}</div>}
-              {needsReceipt && <div>• Receipt required for amounts over ${categoryConfig.requires_receipt_over}</div>}
+              {exceedsLimit && <div>• Amount exceeds category limit of ${categoryInfo?.policy_limit}</div>}
+              {needsReceipt && <div>• Receipt required for amounts over ${categoryInfo?.receipt_threshold}</div>}
               <div className="text-sm mt-2">This expense will require manager approval.</div>
             </div>
           </AlertDescription>
@@ -239,19 +267,25 @@ export default function ComprehensiveFormStep({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="expense_category" className="text-white">Expense Category *</Label>
-              <Select 
-                value={formData.expense_category} 
+              <Select
+                value={formData.expense_category}
                 onValueChange={(value) => setFormData({...formData, expense_category: value})}
+                disabled={loadingCategories}
               >
                 <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={loadingCategories ? "Loading categories..." : "Select category"} />
                 </SelectTrigger>
                 <SelectContent className="bg-gray-700 border-gray-600">
-                  {Object.entries(EXPENSE_CATEGORY_CONFIG).map(([key, config]) => (
-                    <SelectItem key={key} value={key} className="text-white">
-                      {config.icon} {config.label}
+                  {categories.map((category) => (
+                    <SelectItem key={category.business_category_code} value={category.business_category_code} className="text-white">
+                      {category.business_category_name}
                     </SelectItem>
                   ))}
+                  {categories.length === 0 && !loadingCategories && (
+                    <SelectItem value="no-categories" disabled className="text-gray-500">
+                      No categories available
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               {errors.expense_category && <p className="text-red-400 text-sm">{errors.expense_category}</p>}
@@ -524,25 +558,25 @@ export default function ComprehensiveFormStep({
             <h3 className="text-lg font-semibold text-white mb-4">Policy Compliance</h3>
             
             <div className="space-y-4">
-              {categoryConfig && (
+              {categoryInfo && (
                 <Card className="bg-gray-700 border-gray-600">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-white text-base">
-                      {categoryConfig.icon} {categoryConfig.label} Policy
+                      {categoryInfo.business_category_name} Policy
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-gray-400">Policy Limit:</span>
-                        <div className="text-white">${categoryConfig.policy_limit || 'No limit'}</div>
+                        <div className="text-white">${categoryInfo.policy_limit || 'No limit'}</div>
                       </div>
                       <div>
                         <span className="text-gray-400">Receipt Required Over:</span>
-                        <div className="text-white">${categoryConfig.requires_receipt_over || 0}</div>
+                        <div className="text-white">${categoryInfo.receipt_threshold || 0}</div>
                       </div>
                     </div>
-                    
+
                     {exceedsLimit && (
                       <Alert className="bg-red-900/20 border-red-700">
                         <AlertCircle className="w-4 h-4" />
@@ -551,7 +585,7 @@ export default function ComprehensiveFormStep({
                         </AlertDescription>
                       </Alert>
                     )}
-                    
+
                     {needsReceipt && (
                       <Alert className="bg-yellow-900/20 border-yellow-700">
                         <AlertTriangle className="w-4 h-4" />

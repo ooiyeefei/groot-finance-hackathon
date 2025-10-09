@@ -15,13 +15,11 @@ export type ExpenseStatus =
   | 'reimbursed'      // Admin processed
   | 'paid'            // Payment completed
 
-// Updated expense categories to match database constraint
-export type ExpenseCategory = 
-  | 'travel_accommodation'  // Travel & Accommodation
-  | 'petrol'               // Petrol & Transportation  
-  | 'toll'                 // Toll & Road charges
-  | 'entertainment'        // Entertainment & Meals
-  | 'other'                // Other Business Expenses
+// Dynamic expense categories - stored in businesses.custom_expense_categories (JSONB)
+// Each business can define their own categories with custom names, icons, and rules
+// Validation happens in the expense-category-mapper.ts, not in types
+// Legacy default categories: travel_accommodation, petrol, toll, entertainment, other
+export type ExpenseCategory = string
 
 // Kevin's workflow state machine
 export interface WorkflowTransition {
@@ -57,8 +55,8 @@ export interface EmployeeProfile {
 // Core expense claim interface
 export interface ExpenseClaim {
   id: string
-  transaction_id: string
-  employee_id: string
+  accounting_entry_id: string | null  // Links to accounting_entries.id after approval (NULL until approved)
+  user_id: string
   business_id: string
   
   // Otto's 7-stage workflow
@@ -75,16 +73,15 @@ export interface ExpenseClaim {
   rejection_reason?: string
   
   // Otto's compliance enhancements (NEW)
-  risk_score: number // 0-100 calculated risk score
-  business_purpose_details: Record<string, any> // Extended JSONB details
+  business_purpose_details: string | null // Additional business purpose details as text
   
   // Policy and compliance (Otto's requirements)
   policy_violations?: PolicyViolation[]
   compliance_flags?: ComplianceFlag[]
   business_purpose: string
-  
+
   // Expense-specific fields
-  expense_category: ExpenseCategory
+  expense_category: ExpenseCategory // Dynamic category code from businesses.custom_expense_categories
   claim_month: string // YYYY-MM format for monthly reporting
   
   // Related data
@@ -131,11 +128,12 @@ export interface CreateExpenseClaimRequest {
   transaction_date: string
   vendor_name?: string
   vendor_id?: string // NEW: Link to vendors table
-  
+
   // Optional fields
   reference_number?: string
   notes?: string
-  
+  storage_path?: string // NEW: Path for manually uploaded receipts
+
   // Line items for detailed expenses
   line_items?: ExpenseLineItemRequest[]
 }
@@ -173,7 +171,7 @@ export interface ExpenseClaimListParams {
   limit?: number
   status?: ExpenseStatus
   expense_category?: ExpenseCategory
-  employee_id?: string
+  user_id?: string
   date_from?: string
   date_to?: string
   claim_month?: string
@@ -223,7 +221,7 @@ export interface CategoryBreakdown {
 
 // Monthly report generation
 export interface MonthlyExpenseReport {
-  employee_id: string
+  user_id: string
   employee_name: string
   report_month: string // YYYY-MM
   home_currency: SupportedCurrency
@@ -269,50 +267,11 @@ export const EXPENSE_WORKFLOW_TRANSITIONS: WorkflowTransition[] = [
   { from: 'approved', to: 'rejected', requiredRole: 'admin' }
 ]
 
-// Mel's category display configuration (simplified to match database)
-export const EXPENSE_CATEGORY_CONFIG: Record<ExpenseCategory, {
-  label: string
-  icon: string
-  description: string
-  policy_limit?: number
-  requires_receipt_over?: number
-}> = {
-  travel_accommodation: {
-    label: 'Travel & Accommodation',
-    icon: '✈️',
-    description: 'Business travel, hotels, flights, accommodation',
-    policy_limit: 2000,
-    requires_receipt_over: 50
-  },
-  petrol: {
-    label: 'Petrol & Transportation',
-    icon: '⛽',
-    description: 'Fuel, automotive, parking, and transport costs',
-    policy_limit: 500,
-    requires_receipt_over: 25
-  },
-  toll: {
-    label: 'Toll & Road Charges',
-    icon: '🛣️',
-    description: 'Highway tolls, road charges, parking fees',
-    policy_limit: 200,
-    requires_receipt_over: 10
-  },
-  entertainment: {
-    label: 'Entertainment & Meals',
-    icon: '🍽️',
-    description: 'Client meals, business dining, and entertainment',
-    policy_limit: 1000,
-    requires_receipt_over: 25
-  },
-  other: {
-    label: 'Other Business Expenses',
-    icon: '📋',
-    description: 'Other legitimate business expenses',
-    policy_limit: 500,
-    requires_receipt_over: 25
-  }
-}
+// ============================================================================
+// NOTE: All category display and validation rules are now stored in database
+// Use getBusinessExpenseCategories() from expense-category-mapper.ts
+// Category data structure: businesses.custom_expense_categories (JSONB)
+// ============================================================================
 
 // Otto's compliance validation rules
 export interface ExpenseValidationRule {
@@ -342,31 +301,11 @@ export const EXPENSE_VALIDATION_RULES: ExpenseValidationRule[] = [
       return violations
     }
   },
-  {
-    id: 'receipt_requirement_check',
-    name: 'Receipt Requirement Validation',
-    validator: (claim) => {
-      const violations: PolicyViolation[] = []
-      if (!claim.transaction) return violations
-      
-      const categoryConfig = EXPENSE_CATEGORY_CONFIG[claim.expense_category]
-      const requiresReceipt = claim.transaction.original_amount > (categoryConfig.requires_receipt_over || 25)
-      
-      // Check for receipt via business_purpose_details.file_upload instead of document_id
-      const hasReceipt = claim.business_purpose_details?.file_upload?.file_path
-
-      if (requiresReceipt && !hasReceipt) {
-        violations.push({
-          type: 'missing_receipt',
-          severity: 'medium',
-          message: `Receipt required for ${claim.expense_category} expenses over ${categoryConfig.requires_receipt_over}`,
-          auto_resolvable: false
-        })
-      }
-      
-      return violations
-    }
-  }
+  // ⚠️ REMOVED: receipt_requirement_check
+  // Receipt requirements are now validated at the API level where we can fetch
+  // business-specific category settings from businesses.custom_expense_categories
+  // See: getBusinessExpenseCategory() in expense-category-mapper.ts
+  // API routes should validate receipt requirements using category.requires_receipt field
 ]
 
 // ============================================================================
@@ -418,14 +357,13 @@ export interface CreateAuditEventRequest {
 
 // Enhanced expense claim request types with new fields
 export interface CreateExpenseClaimRequestEnhanced extends CreateExpenseClaimRequest {
-  business_purpose_details?: Record<string, any>
+  business_purpose_details?: string | null
   current_approver_id?: string
 }
 
 export interface UpdateExpenseClaimRequestEnhanced extends UpdateExpenseClaimRequest {
-  business_purpose_details?: Record<string, any>
+  business_purpose_details?: string | null
   current_approver_id?: string
-  risk_score?: number // Usually calculated, but allow manual override
 }
 
 // Risk Assessment Types

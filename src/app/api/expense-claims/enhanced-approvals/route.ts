@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     // Get user profile with enhanced role checking
     const { data: userProfile, error: profileError } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .select('*')
       .eq('user_id', userId)
       .single()
@@ -60,20 +60,15 @@ export async function GET(request: NextRequest) {
       .from('expense_claims')
       .select(`
         *,
-        transaction:transactions(*),
-        employee:employee_profiles!expense_claims_employee_id_fkey(
-          id, department, job_title, user_id, business_id,
-          user:users!employee_profiles_user_id_fkey(full_name, email)
-        ),
+        transaction:accounting_entries(*),
+        employee:users!inner(id,full_name,email),
         vendor:vendors(*),
         policy_overrides(*)
       `)
       .eq('employee.business_id', userProfile.business_id)
       .in('status', ['submitted', 'under_review'])
       .is('deleted_at', null)
-      .gte('risk_score', riskThreshold)
-      .order('risk_score', { ascending: false }) // Highest risk first (Otto's priority)
-      .order('created_at', { ascending: true })   // Then oldest first
+      .order('created_at', { ascending: true })   // Oldest first
 
     if (claimsError) {
       console.error('[Enhanced Approvals API] Error fetching claims:', claimsError)
@@ -104,9 +99,8 @@ export async function GET(request: NextRequest) {
       
       const amount = claim.transaction?.home_currency_amount || 0
       
-      // Otto's risk indicators
+      // Risk indicators based on available data
       const riskIndicators = []
-      if (claim.risk_score > 70) riskIndicators.push('HIGH_RISK_SCORE')
       if (amount > 10000) riskIndicators.push('HIGH_VALUE')
       if (claim.vendor?.verification_status === 'unverified') riskIndicators.push('UNVERIFIED_VENDOR')
       if (claim.policy_overrides?.length > 0) riskIndicators.push('POLICY_OVERRIDE')
@@ -121,9 +115,9 @@ export async function GET(request: NextRequest) {
 
       return {
         id: claim.id,
-        employee_name: claim.employee?.user?.full_name || 'Unknown',
-        employee_id: claim.employee.id,
-        employee_department: claim.employee.department,
+        employee_name: claim.employee?.full_name || 'Unknown',
+        user_id: claim.user_id,
+        employee_department: null, // Department info no longer available from employee_profiles
         description: claim.transaction?.description || 'Expense Claim',
         business_purpose: claim.business_purpose,
         business_purpose_details: claim.business_purpose_details,
@@ -151,8 +145,7 @@ export async function GET(request: NextRequest) {
         current_approver_id: claim.current_approver_id,
         approval_chain: claim.approval_chain || [],
         
-        // Otto's enhanced fields
-        risk_score: claim.risk_score || 0,
+        // Enhanced fields
         risk_indicators: riskIndicators,
         compliance_status: complianceStatus,
         policy_overrides: claim.policy_overrides || [],
@@ -163,17 +156,17 @@ export async function GET(request: NextRequest) {
       }
     }) || []
 
-    // Calculate enhanced statistics (Otto's dashboard requirements)
+    // Calculate enhanced statistics
     const stats = {
       pending: enrichedClaims.length,
-      high_risk: enrichedClaims.filter(c => c.risk_score > 70).length,
+      high_value: enrichedClaims.filter(c => c.converted_amount > 10000).length,
       policy_violations: enrichedClaims.filter(c => c.policy_overrides.length > 0).length,
-      unverified_vendors: enrichedClaims.filter(c => 
+      unverified_vendors: enrichedClaims.filter(c =>
         c.vendor_info && c.vendor_info.verification_status === 'unverified'
       ).length,
       total_pending_amount: enrichedClaims.reduce((sum, c) => sum + c.converted_amount, 0),
-      avg_risk_score: enrichedClaims.length > 0 
-        ? Math.round(enrichedClaims.reduce((sum, c) => sum + c.risk_score, 0) / enrichedClaims.length)
+      avg_amount: enrichedClaims.length > 0
+        ? Math.round(enrichedClaims.reduce((sum, c) => sum + c.converted_amount, 0) / enrichedClaims.length)
         : 0,
       approved_today: 0 // Initialize for dashboard stats
     }
@@ -261,7 +254,7 @@ async function handleSingleApproval(
 
   // Get user profile
   const { data: userProfile, error: profileError } = await supabase
-    .from('employee_profiles')
+    .from('business_memberships')
     .select('*')
     .eq('user_id', userId)
     .single()
@@ -293,7 +286,6 @@ async function handleSingleApproval(
   console.log(`[Enhanced Approvals] ${action} executed by ${userProfile.full_name} for claim ${claim_id}`, {
     previousStatus: result.previousStatus,
     newStatus: result.newStatus,
-    riskScore: result.riskScore,
     policyOverrides: result.policyOverrides?.length || 0
   })
 
@@ -304,7 +296,6 @@ async function handleSingleApproval(
       action,
       previous_status: result.previousStatus,
       new_status: result.newStatus,
-      risk_score: result.riskScore,
       policy_overrides: result.policyOverrides,
       audit_event_id: result.auditEventId
     }
@@ -330,7 +321,7 @@ async function handleBulkApproval(userId: string, body: any, request: NextReques
 
   // Get user profile
   const { data: userProfile } = await supabase
-    .from('employee_profiles')
+    .from('business_memberships')
     .select('*')
     .eq('user_id', userId)
     .single()

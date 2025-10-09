@@ -22,7 +22,7 @@ interface ExportOptions {
 interface ExpenseReportRow {
   claim_id: string
   employee_name: string
-  employee_id: string
+  user_id: string
   department: string
   submission_date: string
   transaction_date: string
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     // Get user's employee profile to check permissions
     const { data: employeeProfile, error: profileError } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .select('*, business_id')
       .eq('user_id', userId)
       .single()
@@ -71,9 +71,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has manager or finance permissions for exports
-    const hasExportPermission = 
-      employeeProfile.role_permissions?.manager || 
-      employeeProfile.role_permissions?.admin
+    const hasExportPermission =
+      employeeProfile.role === 'manager' ||
+      employeeProfile.role === 'admin'
 
     if (!hasExportPermission) {
       return NextResponse.json(
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       .from('expense_claims')
       .select(`
         id,
-        employee_id,
+        user_id,
         business_purpose,
         expense_category,
         status,
@@ -96,12 +96,7 @@ export async function POST(request: NextRequest) {
         approved_by,
         claim_month,
         created_at,
-        employee_profiles!expense_claims_employee_id_fkey (
-          employee_id,
-          department,
-          job_title,
-          user_id
-        ),
+        employee:users!inner(id,full_name,email),
         transactions (
           id,
           vendor_name,
@@ -145,15 +140,15 @@ export async function POST(request: NextRequest) {
 
     // Transform data for export
     const reportData: ExpenseReportRow[] = expenses.map(expense => {
-      const employee = Array.isArray(expense.employee_profiles) ? expense.employee_profiles[0] : expense.employee_profiles
+      const employee = Array.isArray(expense.employee) ? expense.employee[0] : expense.employee
       const transaction = Array.isArray(expense.transactions) ? expense.transactions[0] : expense.transactions
       const lineItemsCount = 0 // TODO: Query line_items separately if needed
 
       return {
         claim_id: expense.id,
-        employee_name: employee?.user_id || 'Unknown', // We'll need to get full name from users table
-        employee_id: employee?.employee_id || 'Unknown',
-        department: employee?.department || 'Unknown',
+        employee_name: employee?.full_name || 'Unknown',
+        user_id: employee?.id || 'Unknown',
+        department: 'Unknown', // Department info no longer available from employee_profiles
         submission_date: expense.submitted_at || expense.created_at,
         transaction_date: transaction?.transaction_date || expense.claim_month,
         vendor_name: transaction?.vendor_name || 'Unknown',
@@ -195,7 +190,7 @@ export async function POST(request: NextRequest) {
           metadata: {
             generated_at: new Date().toISOString(),
             date_range: exportOptions.date_range,
-            generated_by: employeeProfile.users?.full_name || 'Unknown',
+            generated_by: employeeProfile.user_id || 'Unknown',
             business_id: employeeProfile.business_id
           }
         }
@@ -240,7 +235,7 @@ function generateCSV(data: ExpenseReportRow[], includeLineItems: boolean = false
     const csvRow = [
       `"${row.claim_id}"`,
       `"${row.employee_name}"`,
-      `"${row.employee_id}"`,
+      `"${row.user_id}"`,
       `"${row.department}"`,
       `"${row.submission_date}"`,
       `"${row.transaction_date}"`,
@@ -290,7 +285,7 @@ function generateGoogleSheetsData(data: ExpenseReportRow[], includeLineItems: bo
   const rows = data.map(row => [
     row.claim_id,
     row.employee_name,
-    row.employee_id,
+    row.user_id,
     row.department,
     row.submission_date,
     row.transaction_date,

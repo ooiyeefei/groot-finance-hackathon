@@ -7,15 +7,15 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw } from 'lucide-react'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import DSPyExpenseSubmissionFlow from './dspy-expense-submission-flow'
 import MonthlyReportGenerator from './monthly-report-generator'
-import ExpenseEditModal from './expense-edit-modal'
-import ExpenseClaimDetailsModal from './expense-claim-details-modal'
+import EditExpenseModalNew from './edit-expense-modal-new'
+import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 
 interface PersonalExpenseDashboardProps {
@@ -33,6 +33,7 @@ interface PersonalDashboardData {
 }
 
 export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDashboardProps) {
+
   const [activeTab, setActiveTab] = useState('overview')
   const [dashboardData, setDashboardData] = useState<PersonalDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -52,6 +53,8 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true)
+      console.log('[PersonalExpenseDashboard] Fetching dashboard data...')
+
       const response = await fetch('/api/expense-claims/dashboard', {
         method: 'GET',
         headers: {
@@ -59,23 +62,37 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         },
       })
 
+      console.log('[PersonalExpenseDashboard] Response status:', response.status)
+      console.log('[PersonalExpenseDashboard] Response ok:', response.ok)
+
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error('[PersonalExpenseDashboard] Error response:', errorText)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const result = await response.json()
-      
+      console.log('[PersonalExpenseDashboard] API result:', JSON.stringify(result, null, 2))
+
       if (result.success) {
+        console.log('[PersonalExpenseDashboard] Setting dashboard data:', {
+          summary: result.data.summary,
+          recent_claims_count: result.data.recent_claims?.length
+        })
+
         // Extract only personal data
         setDashboardData({
           summary: result.data.summary,
           recent_claims: result.data.recent_claims
         })
       } else {
+        console.error('[PersonalExpenseDashboard] API returned success: false, error:', result.error)
         throw new Error(result.error || 'Failed to fetch dashboard data')
       }
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error)
+      console.error('[PersonalExpenseDashboard] Failed to fetch dashboard data:', error)
+      console.error('[PersonalExpenseDashboard] Error details:', error instanceof Error ? error.message : 'Unknown error')
+
       // Set minimal fallback data
       setDashboardData({
         summary: {
@@ -147,9 +164,9 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   useEffect(() => {
     if (!dashboardData?.recent_claims) return
 
-    // Check if any claims are processing
+    // Check if any claims are processing or uploading
     const hasProcessingClaims = dashboardData.recent_claims.some(claim =>
-      claim.processing_status === 'processing'
+      claim.processing_status === 'processing' || claim.processing_status === 'upload_pending'
     )
 
     if (hasProcessingClaims) {
@@ -307,11 +324,13 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
                 expense_category: data.expense_category,
                 original_amount: data.original_amount,
                 original_currency: data.original_currency,
+                home_currency: data.home_currency, // Include home currency for conversion
                 transaction_date: data.transaction_date,
                 vendor_name: data.vendor_name,
                 reference_number: data.reference_number || undefined,
                 notes: data.notes || undefined,
-                // document_id removed - using business_purpose_details for file tracking
+                // Include storage_path for manual receipt uploads
+                storage_path: data.storage_path || undefined,
                 line_items: data.line_items || []
               }
               
@@ -350,7 +369,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 
       {/* Expense Edit Modal */}
       {showEditModal && editingClaimId && (
-        <ExpenseEditModal
+        <EditExpenseModalNew
           expenseClaimId={editingClaimId}
           isOpen={showEditModal}
           onClose={() => {
@@ -394,13 +413,14 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 
       {/* Expense Claim Details Modal */}
       {showDetailsModal && detailsClaimId && (
-        <ExpenseClaimDetailsModal
+        <UnifiedExpenseDetailsModal
           claimId={detailsClaimId}
           isOpen={showDetailsModal}
           onClose={() => {
             setShowDetailsModal(false)
             setDetailsClaimId(null)
           }}
+          viewMode="personal"
         />
       )}
 
@@ -516,7 +536,7 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
               {data.recent_claims.length > 5 && (
                 <Button 
                   variant="ghost" 
-                  className="w-full text-blue-400 hover:text-blue-300"
+                  className="w-full text-blue-400 hover:bg-gray-100 hover:text-blue-600"
                   onClick={() => setActiveTab('history')}
                 >
                   <FileText className="w-4 h-4 mr-2" />
@@ -560,13 +580,13 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
         </div>
         <div className="text-right">
           <p className="text-white font-semibold text-sm">
-            {claim.transaction?.original_currency || 'SGD'} {parseFloat(claim.transaction?.original_amount || '0').toFixed(2)}
+            {claim.display_currency || claim.currency || 'SGD'} {parseFloat(claim.display_amount || claim.total_amount || '0').toFixed(2)}
           </p>
-          {claim.transaction?.home_currency_amount &&
-           claim.transaction?.original_currency !== claim.transaction?.home_currency &&
-           parseFloat(claim.transaction.home_currency_amount) !== parseFloat(claim.transaction.original_amount || '0') && (
+          {claim.home_currency_amount &&
+           claim.display_currency !== claim.home_currency &&
+           parseFloat(claim.home_currency_amount) !== parseFloat(claim.display_amount || claim.total_amount || '0') && (
             <p className="text-gray-400 text-xs">
-              ≈ {claim.transaction.home_currency} {parseFloat(claim.transaction.home_currency_amount).toFixed(2)}
+              ≈ {claim.home_currency} {parseFloat(claim.home_currency_amount).toFixed(2)}
             </p>
           )}
         </div>
@@ -578,51 +598,31 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           {/* Primary Status Badge */}
           <div className="flex items-center gap-2">
             <Badge
-              className={`text-xs px-2 py-1 flex items-center gap-1 ${
-                // UNIFIED LOGIC: Priority API status_display > processing states > fallback
-                claim.status_display?.color === 'green' ? 'bg-green-600 text-white' :
-                claim.status_display?.color === 'blue' ? 'bg-blue-600 text-white' :
-                claim.status_display?.color === 'yellow' ? 'bg-yellow-600 text-white' :
-                claim.status_display?.color === 'red' ? 'bg-red-600 text-white' :
-                claim.status_display?.color === 'purple' ? 'bg-purple-600 text-white' :
-                (claim.processing_status === 'completed' && claim.status === 'draft') ? 'bg-blue-600 text-white' :
-                'bg-gray-600 text-white'
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                // UNIFIED LOGIC: Dark theme pattern matching invoices/applications
+                claim.status_display?.color === 'green' ? 'bg-green-900/20 text-green-300 border-green-700/50' :
+                claim.status_display?.color === 'blue' ? 'bg-blue-900/20 text-blue-300 border-blue-700/50' :
+                claim.status_display?.color === 'yellow' ? 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50' :
+                claim.status_display?.color === 'red' ? 'bg-red-900/20 text-red-300 border-red-700/50' :
+                claim.status_display?.color === 'purple' ? 'bg-purple-900/20 text-purple-300 border-purple-700/50' :
+                (claim.processing_status === 'completed' && claim.status === 'draft') ? 'bg-blue-900/20 text-blue-300 border-blue-700/50' :
+                'bg-gray-900/20 text-gray-300 border-gray-700/50'
               }`}
             >
-              {claim.status_display?.isProcessing && (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              )}
+              {/* Show appropriate processing icon based on status */}
+              {claim.processing_status === 'processing' ? (
+                <Brain className="w-3 h-3 mr-1 text-blue-400" />
+              ) : claim.status_display?.isProcessing ? (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              ) : null}
               {/* UNIFIED PRIORITY: API status_display > custom processing states > fallback */}
               {claim.status_display?.label ||
-                (claim.processing_status === 'completed' && claim.status === 'draft' ? 'Ready to Submit' :
+                (claim.processing_status === 'processing' ? 'AI Extracting...' :
+                 claim.processing_status === 'completed' && claim.status === 'draft' ? 'Ready to Submit' :
                  claim.status?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()))
               }
             </Badge>
 
-            {/* Secondary Processing Status Badge - Show BOTH workflow status AND processing status */}
-            {claim.processing_status && claim.processing_status !== 'pending' && (
-              claim.processing_status === 'failed' ||
-              claim.processing_status === 'processing' ||
-              (claim.processing_status === 'completed' && claim.status === 'draft')
-            ) && (
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${
-                  claim.processing_status === 'failed' ? 'bg-red-100 text-red-800 border border-red-200' :
-                  claim.processing_status === 'processing' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                  claim.processing_status === 'completed' ? 'bg-green-100 text-green-800 border border-green-200' :
-                  'bg-gray-100 text-gray-800 border border-gray-200'
-                }`}
-              >
-                {claim.processing_status === 'processing' && (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                )}
-                {claim.processing_status === 'failed' ? 'AI Processing Failed' :
-                 claim.processing_status === 'processing' ? 'AI Processing' :
-                 claim.processing_status === 'completed' ? 'AI Processing Complete' :
-                 `AI: ${claim.processing_status}`
-                }
-              </span>
-            )}
           </div>
 
           {claim.current_approver_name && ['submitted', 'under_review', 'pending_approval'].includes(claim.status) && (

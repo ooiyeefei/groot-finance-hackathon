@@ -189,7 +189,7 @@ async function checkMetadataDuplicates(
       .select(`
         *,
         claim:expense_claims!inner(id, status, created_at, business_purpose),
-        transaction:transactions(vendor_name, original_amount, transaction_date)
+        transaction:accounting_entries(vendor_name, original_amount, transaction_date)
       `)
       .eq('user_id', supabaseUserId)
       .gte('transaction.transaction_date', startDate.toISOString().split('T')[0])

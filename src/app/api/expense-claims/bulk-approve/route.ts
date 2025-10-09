@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Get user's employee profile
     const { data: userProfile, error: profileError } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .select('*')
       .eq('user_id', userId)
       .single()
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate user has manager or finance permissions
-    if (!userProfile.role_permissions.manager && !userProfile.role_permissions.admin) {
+    if (userProfile.role !== 'manager' && userProfile.role !== 'admin') {
       return NextResponse.json(
         { success: false, error: 'Insufficient permissions for bulk operations' },
         { status: 403 }
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       .from('expense_claims')
       .select(`
         *,
-        employee:employee_profiles!expense_claims_employee_id_fkey(*)
+        employee:users!inner(id,full_name,email)
       `)
       .in('id', claim_ids)
 
@@ -102,9 +102,9 @@ export async function POST(request: NextRequest) {
 
       // Check status is appropriate for action
       if (action === 'approve') {
-        if (userProfile.role_permissions.manager && claim.status === 'under_review') {
+        if (userProfile.role === 'manager' && claim.status === 'under_review') {
           isValid = true
-        } else if (userProfile.role_permissions.admin && claim.status === 'approved') {
+        } else if (userProfile.role === 'admin' && claim.status === 'approved') {
           isValid = true
         } else {
           reason = `Invalid status for approval: ${claim.status}`
@@ -118,9 +118,9 @@ export async function POST(request: NextRequest) {
       }
 
       // Check user has permission for this specific claim
-      if (isValid && userProfile.role_permissions.manager) {
-        // Managers can only bulk approve their team's claims or claims assigned to them
-        if (claim.current_approver_id !== userProfile.id && claim.employee.manager_id !== userProfile.id) {
+      if (isValid && userProfile.role === 'manager') {
+        // Managers can only bulk approve claims assigned to them
+        if (claim.current_approver_id !== userProfile.user_id) {
           isValid = false
           reason = 'Not authorized for this claim'
         }
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
             targetStatus = 'approved'
             updateData.status = 'approved'
             updateData.approval_date = now
-            updateData.approved_by_ids = [...(claim.approved_by_ids || []), userProfile.id]
+            updateData.approved_by_ids = [...(claim.approved_by_ids || []), userProfile.user_id]
             // Set admin as next approver
             const adminApprover = await getAdminTeamId(supabase)
             updateData.current_approver_id = adminApprover
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
             targetStatus = 'reimbursed'
             updateData.status = 'reimbursed'
             updateData.reimbursement_date = now
-            updateData.approved_by_ids = [...(claim.approved_by_ids || []), userProfile.id]
+            updateData.approved_by_ids = [...(claim.approved_by_ids || []), userProfile.user_id]
           } else {
             // This should not happen due to validation but handle it gracefully
             targetStatus = claim.status
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
         } else if (action === 'reject') {
           targetStatus = 'rejected'
           updateData.status = 'rejected'
-          updateData.rejected_by_id = userProfile.id
+          updateData.rejected_by_id = userProfile.user_id
           updateData.rejection_reason = comment || 'Bulk rejection'
           updateData.current_approver_id = null
         } else {
@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
           .from('expense_approvals')
           .insert({
             expense_claim_id: claim.id,
-            approver_id: userProfile.id,
+            approver_id: userProfile.user_id,
             action: action === 'approve' ? 'approved' : 'rejected',
             comment: comment || `Bulk ${action}`,
             timestamp: now
@@ -279,12 +279,12 @@ export async function POST(request: NextRequest) {
 // Helper function to get an admin team member
 async function getAdminTeamId(supabase: any): Promise<string | null> {
   const { data: adminUsers } = await supabase
-    .from('employee_profiles')
-    .select('id')
-    .eq('role_permissions->admin', true)
-    .eq('is_active', true)
+    .from('business_memberships')
+    .select('user_id')
+    .eq('role', 'admin')
+    .eq('status', 'active')
     .limit(1)
     .single()
-    
-  return adminUsers?.id || null
+
+  return adminUsers?.user_id || null
 }

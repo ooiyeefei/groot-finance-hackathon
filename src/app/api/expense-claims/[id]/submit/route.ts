@@ -61,13 +61,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Fetch expense claim with related data (use service client to bypass RLS issues)
     console.log(`[Expense Submission API] Looking for expense claim ${expenseClaimId}`)
-    
+
     const { data: expenseClaim, error: fetchError } = await serviceSupabase
       .from('expense_claims')
       .select(`
         *,
-        transaction:transactions(*),
-        employee:employee_profiles!expense_claims_employee_id_fkey(*)
+        accounting_entry:accounting_entries(*)
       `)
       .eq('id', expenseClaimId)
       .single()
@@ -86,10 +85,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Manual authorization check - ensure user owns this claim
-    if (expenseClaim.employee_id !== userProfile.id) {
-      console.error('[Expense Submission API] Access denied - claim belongs to different employee:', {
-        claimEmployeeId: expenseClaim.employee_id,
-        currentEmployeeId: userProfile.id,
+    if (expenseClaim.user_id !== userProfile.user_id) {
+      console.error('[Expense Submission API] Access denied - claim belongs to different user:', {
+        claimUserId: expenseClaim.user_id,
+        currentUserId: userProfile.user_id,
         userId
       })
       
@@ -165,7 +164,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .eq('id', expenseClaimId)
       .select(`
         *,
-        transaction:transactions(*)
+        accounting_entry:accounting_entries(*)
       `)
       .single()
 
@@ -232,7 +231,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .from('expense_claims')
       .select('*')
       .eq('id', expenseClaimId)
-      .eq('employee_id', userProfile.id)
+      .eq('user_id', userProfile.user_id)
       .single()
 
     if (fetchError || !expenseClaim) {

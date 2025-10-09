@@ -7,14 +7,14 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { X, ArrowLeft, ArrowRight } from 'lucide-react'
+import { X, ArrowLeft, ArrowRight, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DSPyExtractionResult } from '@/types/expense-extraction'
 import { useExpenseClaimProcessing } from '@/hooks/use-expense-claim-processing'
 import ReceiptUploadStep from './receipt-upload-step'
 import DSPyProcessingStep from './dspy-processing-step'
-import PreFilledExpenseForm from './pre-filled-expense-form'
+import CreateExpensePageNew from './create-expense-page-new'
 
 interface DSPyExpenseSubmissionFlowProps {
   onClose: (hasBackgroundProcessing?: boolean) => void
@@ -47,6 +47,7 @@ export default function DSPyExpenseSubmissionFlow({
     getProcessingClaim,
     hasActiveProcessing
   } = useExpenseClaimProcessing()
+
 
   const [flowState, setFlowState] = useState<FlowState>({
     currentStep: initialStep,
@@ -311,25 +312,51 @@ export default function DSPyExpenseSubmissionFlow({
   }
 
   return (
-    <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden">
+    <div
+      className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50 p-2"
+      onClick={(e) => {
+        // Only close if clicking on the backdrop (not the modal content)
+        if (e.target === e.currentTarget) {
+          onClose(hasActiveProcessing || flowState.isBackgroundProcessing)
+        }
+      }}
+    >
+      <div
+        className="bg-gray-800 rounded-lg w-full max-w-7xl max-h-[96vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
           <div>
             <h2 className="text-xl font-semibold text-white">Expense Submission</h2>
             <p className="text-gray-400 text-sm">
-              Intelligent receipt processing with Chain-of-Thought AI
+              {flowState.extractionResult?.extractedData.processingMethod === 'manual_entry'
+                ? 'Manually fill out expense details and attach a receipt'
+                : 'Intelligent receipt processing with Chain-of-Thought AI'
+              }
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Document icon and Draft status */}
+            {flowState.currentStep === 'form' && (
+              <>
+                <FileText className="w-5 h-5 text-blue-400" />
+                <Badge variant="secondary" className="bg-blue-900/20 text-blue-300 border border-blue-700/50">
+                  Draft
+                </Badge>
+              </>
+            )}
+
             {/* Show background processing indicator */}
             {hasActiveProcessing && (
-              <Badge variant="secondary" className="bg-purple-600 animate-pulse">
+              <Badge variant="secondary" className="bg-purple-900/20 text-purple-300 border border-purple-700/50 animate-pulse">
                 {processingClaims.length} processing...
               </Badge>
             )}
 
-            {flowState.extractionResult && (
+            {flowState.extractionResult &&
+             flowState.extractionResult.extractedData.processingMethod !== 'manual_entry' &&
+             flowState.currentStep !== 'form' && (
               <Badge
                 variant="secondary"
                 className={
@@ -346,20 +373,22 @@ export default function DSPyExpenseSubmissionFlow({
             <button
               onClick={() => onClose(hasActiveProcessing || flowState.isBackgroundProcessing)}
               disabled={flowState.isSubmitting}
-              className="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Step Indicator */}
-        <div className="p-6 pb-0">
-          <StepIndicator />
-        </div>
+        {/* Step Indicator - Hide for manual entry mode */}
+        {!(flowState.extractionResult?.extractedData.processingMethod === 'manual_entry') && (
+          <div className="p-6 pb-0">
+            <StepIndicator />
+          </div>
+        )}
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+        <div className="p-6 overflow-y-auto max-h-[calc(96vh-180px)]">
           {/* Step 1: Upload */}
           {flowState.currentStep === 'upload' && (
             <ReceiptUploadStep
@@ -385,16 +414,20 @@ export default function DSPyExpenseSubmissionFlow({
 
           {/* Step 3: Pre-filled Form */}
           {flowState.currentStep === 'form' && flowState.extractionResult && (
-            <PreFilledExpenseForm
+            <CreateExpensePageNew
               extractionResult={flowState.extractionResult}
               onSubmit={handleFormSubmit}
               onBack={handleBack}
               isSubmitting={flowState.isSubmitting}
+              showBackButton={true}
+              pageTitle="Create Expense Claim"
+              pageDescription="Review and submit your extracted expense details"
+              hideHeader={true}  // Hide redundant header since we're in DSPy flow
             />
           )}
         </div>
 
-        {/* Navigation Footer (only show for upload and processing steps) */}
+        {/* Navigation Footer */}
         {(flowState.currentStep === 'upload' || flowState.currentStep === 'processing') && (
           <div className="p-6 pt-0 border-t border-gray-700">
             <div className="flex justify-between items-center text-sm text-gray-400">
@@ -402,7 +435,7 @@ export default function DSPyExpenseSubmissionFlow({
                 {flowState.currentStep === 'processing' && (
                   <button
                     onClick={handleBack}
-                    className="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors"
+                    className="inline-flex items-center px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 text-white text-sm font-medium rounded-md transition-colors"
                   >
                     <ArrowLeft className="w-4 h-4 mr-1" />
                     Change File
@@ -415,6 +448,7 @@ export default function DSPyExpenseSubmissionFlow({
             </div>
           </div>
         )}
+
       </div>
     </div>
   )

@@ -7,7 +7,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar } from 'lucide-react'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,8 @@ import ExpenseAnalytics from '../expense-claims/expense-analytics'
 import MonthlyReportGenerator from '../expense-claims/monthly-report-generator'
 import GoogleSheetsExport from '../expense-claims/google-sheets-export'
 import CategoryManagement from '../expense-claims/category-management'
+import DocumentPreviewWithAnnotations from '../invoices/document-preview-with-annotations'
+import UnifiedExpenseDetailsModal from '../expense-claims/unified-expense-details-modal'
 
 interface EnhancedApprovalDashboardProps {
   userId: string
@@ -439,6 +441,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
   const [approvalNotes, setApprovalNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
 
+
   useEffect(() => {
     fetchPendingClaims()
   }, [])
@@ -590,7 +593,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     <span className="text-gray-300">{claim.vendor_name}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <Calendar className="w-4 h-4 text-white" />
                     <span className="text-gray-300">
                       {new Date(claim.transaction_date).toLocaleDateString()}
                     </span>
@@ -644,106 +647,31 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
         })}
       </div>
 
-      {/* Review Modal */}
+      {/* Unified Expense Details Modal - Manager View */}
       {selectedClaim && (
-        <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50 p-4">
-          <Card className="bg-gray-800 border-gray-700 w-full max-w-2xl max-h-[90vh] overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-white">Review Expense Claim</CardTitle>
-              <CardDescription className="text-gray-400">
-                Detailed review for {selectedClaim.employee_name}
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-6 overflow-y-auto max-h-[calc(90vh-200px)]">
-              {/* Claim Details */}
-              <div className="space-y-4">
-                <h4 className="text-white font-semibold">Claim Information</h4>
-
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-400">Employee:</span>
-                    <p className="text-white">{selectedClaim.employee_name}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Amount:</span>
-                    <p className="text-white">
-                      {selectedClaim.original_amount} {selectedClaim.original_currency}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Category:</span>
-                    <p className="text-white">{selectedClaim.category_name}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Date:</span>
-                    <p className="text-white">
-                      {new Date(selectedClaim.transaction_date).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-gray-400">Business Purpose:</span>
-                  <p className="text-white mt-1">{selectedClaim.business_purpose}</p>
-                </div>
-              </div>
-
-              {/* Approval Notes */}
-              <div className="space-y-2">
-                <Label htmlFor="approval_notes" className="text-white">
-                  Approval Notes (Optional)
-                </Label>
-                <Textarea
-                  id="approval_notes"
-                  value={approvalNotes}
-                  onChange={(e) => setApprovalNotes(e.target.value)}
-                  placeholder="Add notes about this approval decision..."
-                  className="bg-gray-700 border-gray-600 text-white"
-                  rows={3}
-                />
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t border-gray-700">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedClaim(null)
-                    setApprovalNotes('')
-                  }}
-                  className="border-gray-600 text-gray-300 hover:bg-gray-700"
-                >
-                  Cancel
-                </Button>
-
-                <Button
-                  onClick={() => handleApproval(selectedClaim.id, 'reject', approvalNotes)}
-                  disabled={processingClaims.has(selectedClaim.id)}
-                  variant="outline"
-                  className="border-red-600 text-red-400 hover:bg-red-600/20"
-                >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Reject
-                </Button>
-
-                <Button
-                  onClick={() => handleApproval(selectedClaim.id, 'approve', approvalNotes)}
-                  disabled={processingClaims.has(selectedClaim.id)}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  {processingClaims.has(selectedClaim.id) ? (
-                    <Clock className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                  )}
-                  Approve
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <UnifiedExpenseDetailsModal
+          claimId={selectedClaim.id}
+          isOpen={Boolean(selectedClaim)}
+          onClose={() => {
+            setSelectedClaim(null)
+            setApprovalNotes('')
+          }}
+          viewMode="manager"
+          onApprove={async (claimId: string, notes?: string) => {
+            await handleApproval(claimId, 'approve', notes)
+          }}
+          onReject={async (claimId: string, notes?: string) => {
+            await handleApproval(claimId, 'reject', notes)
+          }}
+          onRefreshNeeded={() => {
+            fetchPendingClaims()
+            if (onRefreshNeeded) {
+              onRefreshNeeded()
+            }
+          }}
+        />
       )}
+
     </>
   )
 }

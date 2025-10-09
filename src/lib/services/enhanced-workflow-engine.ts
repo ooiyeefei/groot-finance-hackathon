@@ -27,7 +27,6 @@ export interface WorkflowExecutionResult {
   claimId: string
   previousStatus: ExpenseStatus
   newStatus: ExpenseStatus
-  riskScore?: number
   policyOverrides?: PolicyOverride[]
   auditEventId?: string
   error?: string
@@ -214,16 +213,6 @@ export class EnhancedWorkflowEngine {
       })
     }
 
-    // Risk score threshold
-    const riskScore = claim.risk_score || 0
-    if (riskScore > 70 && transition.requiredRole !== 'admin') {
-      checks.push({
-        code: 'HIGH_RISK_SCORE',
-        message: `Risk score ${riskScore} requires admin approval`,
-        canOverride: true,
-        requiredRole: 'admin'
-      })
-    }
 
     const failed = checks.filter(c => c.requiredRole !== context.userProfile.highestRole)
     
@@ -259,8 +248,7 @@ export class EnhancedWorkflowEngine {
     // Prepare update data
     const updateData: any = {
       status: transition.to,
-      updated_at: now,
-      risk_score: await this.calculateRiskScore(currentClaim)
+      updated_at: now
     }
 
     // Handle status-specific updates
@@ -343,12 +331,10 @@ export class EnhancedWorkflowEngine {
       entity_id: currentClaim.id,
       event_type: 'status_change',
       before_state: {
-        status: currentClaim.status,
-        risk_score: currentClaim.risk_score
+        status: currentClaim.status
       },
       after_state: {
-        status: transition.to,
-        risk_score: updateData.risk_score
+        status: transition.to
       },
       comment: context.comment,
       risk_implications: policyOverrides.map(po => po.policy_violation_code)
@@ -368,56 +354,12 @@ export class EnhancedWorkflowEngine {
       claimId: currentClaim.id,
       previousStatus: currentClaim.status,
       newStatus: transition.to,
-      riskScore: updateData.risk_score,
       policyOverrides,
       auditEventId: auditEvent.id
     }
   }
 
-  /**
-   * Calculate risk score using Otto's algorithm
-   */
-  private async calculateRiskScore(claim: any): Promise<number> {
-    let score = 0
-    
-    const amount = claim.transaction?.home_currency_amount || 0
-    
-    // Amount-based risk
-    if (amount > 10000) score += 30
-    else if (amount > 5000) score += 20
-    else if (amount > 1000) score += 10
-    
-    // Vendor risk
-    if (claim.vendor?.verification_status === 'unverified') score += 25
-    if (claim.vendor?.risk_rating === 'high') score += 20
-    
-    // Historical velocity risk (simplified)
-    const velocityScore = await this.calculateVelocityRisk(claim.employee_id)
-    score += velocityScore
-    
-    return Math.min(score, 100)
-  }
 
-  /**
-   * Calculate employee expense velocity risk
-   */
-  private async calculateVelocityRisk(employeeId: string): Promise<number> {
-    const { data: recentClaims } = await this.supabase
-      .from('expense_claims')
-      .select('transaction:transactions(home_currency_amount)')
-      .eq('employee_id', employeeId)
-      .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      
-    if (!recentClaims || recentClaims.length < 5) return 0
-    
-    const totalAmount = recentClaims.reduce(
-      (sum: number, claim: any) => sum + (claim.transaction?.home_currency_amount || 0), 
-      0
-    )
-    
-    // High velocity if > $5000 in 30 days
-    return totalAmount > 5000 ? 15 : 0
-  }
 
   /**
    * Create policy overrides with Otto's audit requirements
@@ -543,8 +485,7 @@ export class EnhancedWorkflowEngine {
     const descriptions: Record<string, string> = {
       'HIGH_VALUE_NO_PROJECT': 'High-value expense without project code',
       'MISSING_RECEIPT': 'Required receipt documentation missing',
-      'UNVERIFIED_VENDOR': 'Expense with unverified vendor',
-      'HIGH_RISK_SCORE': 'Expense flagged with high risk score'
+      'UNVERIFIED_VENDOR': 'Expense with unverified vendor'
     }
     
     return descriptions[code] || 'Policy violation'

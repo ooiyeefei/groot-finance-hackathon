@@ -24,35 +24,6 @@ import {
   isValidExpenseCategory
 } from '@/lib/expense-category-mapper'
 
-// Otto's risk scoring algorithm
-function calculateRiskScore(amount: number, category: ExpenseCategory, employee: any): number {
-  let score = 0
-  
-  // Amount-based risk (0-40 points)
-  if (amount > 5000) score += 40
-  else if (amount > 2000) score += 30
-  else if (amount > 1000) score += 20
-  else if (amount > 500) score += 10
-  
-  // Category-based risk (0-30 points)
-  const categoryRisk = {
-    'entertainment': 30,
-    'travel_accommodation': 25,
-    'other': 20,
-    'petrol': 10,
-    'toll': 5
-  }
-  score += categoryRisk[category] || 0
-  
-  // Employee limit check (0-30 points)
-  if (employee.expense_limit && amount > employee.expense_limit) {
-    score += 30
-  } else if (employee.expense_limit && amount > employee.expense_limit * 0.8) {
-    score += 15
-  }
-  
-  return Math.min(score, 100) // Cap at 100
-}
 
 // Create new expense claim
 export async function POST(request: NextRequest) {
@@ -77,6 +48,7 @@ export async function POST(request: NextRequest) {
       vendor_id, // NEW: Support for vendor_id from vendors table
       reference_number,
       notes,
+      storage_path, // NEW: Support for manual receipt uploads
       line_items = []
     } = body
 
@@ -134,6 +106,8 @@ export async function POST(request: NextRequest) {
     let exchangeRate = 1
     let exchangeRateDate = new Date().toISOString().split('T')[0]
 
+    console.log(`[Expense Claims API] Currency conversion: ${original_amount} ${original_currency} → ${userHomeCurrency}`)
+
     if (original_currency !== userHomeCurrency) {
       try {
         const conversion = await currencyService.convertAmount(
@@ -144,160 +118,140 @@ export async function POST(request: NextRequest) {
         homeAmount = conversion.converted_amount
         exchangeRate = conversion.exchange_rate
         exchangeRateDate = conversion.rate_date
+
+        console.log(`[Expense Claims API] Conversion successful: ${original_amount} ${original_currency} = ${homeAmount} ${userHomeCurrency} (rate: ${exchangeRate})`)
       } catch (error) {
         console.error('[Expense Claims API] Currency conversion failed:', error)
         // Continue with original amount as fallback
+        console.log(`[Expense Claims API] Using fallback: no conversion applied`)
       }
+    } else {
+      console.log(`[Expense Claims API] No conversion needed: same currency`)
     }
 
-    // Server-side duplicate detection (final validation before creation)
+    // Server-side duplicate detection (check against existing expense claims)
     if (reference_number) {
       console.log(`[Expense Claims API] Performing server-side duplicate check for: ${reference_number}`)
-      
-      // Check for exact duplicates that would violate business rules
-      const { data: existingTransactions, error: duplicateError } = await supabase
-        .from('accounting_entries')
+
+      // Check for exact duplicates in expense claims (proper workflow)
+      const { data: existingClaims, error: duplicateError } = await supabase
+        .from('expense_claims')
         .select(`
           id,
-          reference_number,
-          transaction_date,
-          original_amount,
+          status,
           vendor_name,
-          description,
-          expense_claims!inner (
-            id,
-            status
-          )
+          total_amount,
+          currency,
+          transaction_date,
+          reference_number,
+          created_at
         `)
-        .eq('user_id', userData.id) // SECURITY FIX: Use Supabase UUID instead of Clerk ID
+        .eq('user_id', employeeProfile.user_id)
         .eq('reference_number', reference_number)
         .eq('transaction_date', transaction_date)
-        .eq('original_amount', original_amount)
+        .eq('total_amount', original_amount)
 
       if (duplicateError) {
         console.error('[Expense Claims API] Duplicate check error:', duplicateError)
         // Continue processing - don't block on duplicate check failure
-      } else if (existingTransactions && existingTransactions.length > 0) {
-        const existing = existingTransactions[0]
-        const existingClaim = existing.expense_claims[0]
-        
-        console.log(`[Expense Claims API] Duplicate detected: ${existing.id} (status: ${existingClaim.status})`)
+      } else if (existingClaims && existingClaims.length > 0) {
+        const existing = existingClaims[0]
+
+        console.log(`[Expense Claims API] Duplicate detected: ${existing.id} (status: ${existing.status})`)
         return NextResponse.json({
           success: false,
           error: 'duplicate_detected',
           duplicateData: {
-            claimId: existingClaim.id,
-            transactionId: existing.id,
+            claimId: existing.id,
             reference_number: existing.reference_number,
             transaction_date: existing.transaction_date,
-            amount: existing.original_amount,
+            amount: existing.total_amount,
             vendor_name: existing.vendor_name,
-            description: existing.description,
-            status: existingClaim.status
+            status: existing.status,
+            created_at: existing.created_at
           },
           message: `This expense has already been submitted (Reference: ${reference_number}, Date: ${transaction_date}, Amount: ${original_amount}). Please check your existing claims.`
         }, { status: 409 })
       }
     }
 
-    // Create accounting entry record (P&L structure: expense claims are Expense entries)
-    const { data: transaction, error: transactionError } = await supabase
-      .from('accounting_entries')
-      .insert({
-        user_id: userData.id, // SECURITY FIX: Use Supabase UUID instead of Clerk ID
-        transaction_type: 'Expense',
-        category: accountingCategory, // Use mapped IFRS accounting category
-        description,
-        reference_number,
-        document_type: null, // No document_id dependency
-        original_currency,
-        original_amount,
-        home_currency: userHomeCurrency,
-        home_currency_amount: homeAmount, // Use correct column name
-        exchange_rate: exchangeRate,
-        exchange_rate_date: exchangeRateDate,
-        transaction_date,
-        vendor_name,
-        vendor_id, // NEW: Link to vendors table
-        notes,
-        status: 'pending', // Start with pending status (will be synced by trigger)
-        created_by_method: 'manual', // Unified approach - use business_purpose_details for file tracking
-        processing_metadata: {
-          expense_category,
-          business_purpose,
-          employee_profile_id: employeeProfile.id, // Store in metadata instead
-          created_via: 'expense_claims_api',
-          category_mapping: {
-            business_category: expense_category,
-            accounting_category: accountingCategory,
-            category_name: categoryInfo?.business_category_name
-          }
-        }
-      })
-      .select()
-      .single()
-
-    if (transactionError) {
-      console.error('[Expense Claims API] Failed to create transaction:', transactionError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to create transaction record' },
-        { status: 500 }
-      )
-    }
-
-    // Create line items if provided
-    if (line_items.length > 0) {
-      for (let i = 0; i < line_items.length; i++) {
-        const lineItem = line_items[i]
-        const lineTotal = lineItem.quantity * lineItem.unit_price
-        
-        const { error: lineItemError } = await supabase
-          .from('line_items')
-          .insert({
-            transaction_id: transaction.id,
-            item_description: lineItem.description,
-            quantity: lineItem.quantity,
-            unit_price: lineItem.unit_price,
-            total_amount: lineTotal,
-            currency: original_currency,
-            tax_rate: lineItem.tax_rate,
-            tax_amount: lineItem.tax_rate ? lineTotal * lineItem.tax_rate : 0,
-            item_category: lineItem.item_category,
-            line_order: i + 1
-          })
-
-        if (lineItemError) {
-          console.error('[Expense Claims API] Failed to create line item:', lineItemError)
-        }
-      }
-    }
-
-    // Create expense claim workflow record (Otto's 7-stage workflow)
     // Convert to first day of the month for database date field
     const transactionDate = new Date(transaction_date)
     const claimMonth = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), 1).toISOString().split('T')[0] // YYYY-MM-01 format
 
-    // Otto's enhanced compliance fields
-    const riskScore = calculateRiskScore(original_amount, expense_category, employeeProfile)
-    
+
+    // Create expense claim record (follows proper workflow - no direct accounting_entries creation)
     const expenseClaimData = {
-      transaction_id: transaction.id,
-      employee_id: employeeProfile.id,
+      user_id: employeeProfile.user_id,
       business_id: employeeProfile.business_id,
       status: 'draft', // Start in draft status
       business_purpose,
-      business_purpose_details: {
-        category_reason: business_purpose,
-        original_submission: body,
-        risk_factors: {
-          amount_threshold: original_amount > 1000,
-          category_risk: ['travel_accommodation', 'entertainment'].includes(expense_category)
-        }
-      },
+      business_purpose_details: notes || null, // Store notes as additional business purpose details (text format)
       expense_category,
       claim_month: claimMonth,
-      risk_score: riskScore,
-      current_approver_id: null // Will be set when submitted
+      current_approver_id: null, // Will be set when submitted
+      storage_path: storage_path || null, // Include storage path for manual receipt uploads
+
+      // Store financial data in processing_metadata (like DSPy processing)
+      processing_metadata: {
+        processing_method: 'manual_entry',
+        processing_status: 'completed',
+        processing_timestamp: new Date().toISOString(),
+
+        // Store financial data for later accounting_entries creation
+        financial_data: {
+          description,
+          vendor_name,
+          vendor_id: vendor_id || null,
+          total_amount: original_amount,
+          original_currency,
+          home_currency: userHomeCurrency,
+          home_currency_amount: homeAmount,
+          exchange_rate: exchangeRate,
+          exchange_rate_date: exchangeRateDate,
+          transaction_date,
+          reference_number: reference_number || null,
+          notes: notes || null,
+          subtotal_amount: null,
+          tax_amount: null
+        },
+
+        // Store line items for later creation
+        line_items: line_items.map((item, index) => ({
+          item_description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_amount: item.quantity * item.unit_price,
+          currency: original_currency,
+          tax_amount: item.tax_rate ? (item.quantity * item.unit_price * item.tax_rate) : 0,
+          tax_rate: item.tax_rate || 0,
+          item_category: item.item_category || null,
+          line_order: index + 1
+        })),
+
+        // Store category mapping
+        category_mapping: {
+          business_category: expense_category,
+          accounting_category: accountingCategory,
+          category_name: categoryInfo?.business_category_name
+        },
+
+        // Store employee and business context
+        employee_profile_id: employeeProfile.id,
+        created_via: 'expense_claims_api'
+      },
+
+      // Store basic fields for UI convenience (duplicated from processing_metadata)
+      vendor_name: vendor_name,
+      total_amount: original_amount,
+      currency: original_currency,
+      transaction_date: transaction_date,
+      reference_number: reference_number || null,
+
+      // Store currency conversion for direct UI access
+      home_currency: userHomeCurrency,
+      home_currency_amount: homeAmount,
+      exchange_rate: exchangeRate
     }
 
     // SECURITY FIX: Use authenticated client with proper business context validation
@@ -328,21 +282,21 @@ export async function POST(request: NextRequest) {
           expense_category,
           original_amount,
           original_currency,
-          risk_score: riskScore,
           vendor_name,
           business_purpose_summary: business_purpose.substring(0, 100),
-          created_from: 'manual_entry' // Unified approach
+          processing_method: 'manual_entry',
+          accounting_entry_created: false, // Will be created on approval
+          line_items_count: line_items.length
         }
       })
 
-    console.log(`[Expense Claims API] Created expense claim ${expenseClaim.id} with risk score ${riskScore}`)
+    console.log(`[Expense Claims API] Created expense claim ${expenseClaim.id} for user ${userId}`)
 
     return NextResponse.json({
       success: true,
       data: {
         expense_claim: {
           ...expenseClaim,
-          transaction,
           employee: employeeProfile
         }
       }
@@ -379,7 +333,7 @@ export async function GET(request: NextRequest) {
       limit: Math.min(parseInt(searchParams.get('limit') || '20'), 100),
       status: searchParams.get('status') as ExpenseStatus,
       expense_category: searchParams.get('expense_category') as ExpenseCategory,
-      employee_id: searchParams.get('employee_id') || undefined,
+      user_id: searchParams.get('user_id') || undefined,
       date_from: searchParams.get('date_from') || undefined,
       date_to: searchParams.get('date_to') || undefined,
       claim_month: searchParams.get('claim_month') || undefined,
@@ -404,8 +358,8 @@ export async function GET(request: NextRequest) {
       .from('expense_claims')
       .select(`
         *,
-        transaction:transactions(*),
-        employee:employee_profiles!expense_claims_employee_id_fkey(*)
+        transaction:accounting_entries(*),
+        employee:users!inner(id,full_name,email)
       `)
 
     // Apply role-based filtering (Kevin's RLS approach)
@@ -414,10 +368,12 @@ export async function GET(request: NextRequest) {
       console.log('[Expense Claims API] Admin user - showing all claims')
     } else if (employeeProfile.role_permissions.manager) {
       // Managers can see their team's claims + their own claims
-      query = query.or(`employee_id.eq.${employeeProfile.id},current_approver_id.eq.${employeeProfile.id}`)
+      // CRITICAL: Use user UUID, not membership ID
+      query = query.or(`user_id.eq.${employeeProfile.user_id},current_approver_id.eq.${employeeProfile.user_id}`)
     } else {
       // Employees can only see their own claims
-      query = query.eq('employee_id', employeeProfile.id)
+      // CRITICAL: Use user UUID, not membership ID
+      query = query.eq('user_id', employeeProfile.user_id)
     }
 
     // Apply filters
@@ -429,8 +385,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('expense_category', params.expense_category)
     }
 
-    if (params.employee_id && employeeProfile.role_permissions.manager) {
-      query = query.eq('employee_id', params.employee_id)
+    if (params.user_id && employeeProfile.role_permissions.manager) {
+      query = query.eq('user_id', params.user_id)
     }
 
     if (params.date_from) {
@@ -487,9 +443,11 @@ export async function GET(request: NextRequest) {
     // Apply same role-based filtering for count
     if (!employeeProfile.role_permissions.admin) {
       if (employeeProfile.role_permissions.manager) {
-        countQuery = countQuery.or(`employee_id.eq.${employeeProfile.id},current_approver_id.eq.${employeeProfile.id}`)
+        // CRITICAL: Use user UUID, not membership ID
+        countQuery = countQuery.or(`user_id.eq.${employeeProfile.user_id},current_approver_id.eq.${employeeProfile.user_id}`)
       } else {
-        countQuery = countQuery.eq('employee_id', employeeProfile.id)
+        // CRITICAL: Use user UUID, not membership ID
+        countQuery = countQuery.eq('user_id', employeeProfile.user_id)
       }
     }
 
