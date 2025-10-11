@@ -16,7 +16,7 @@ The Expense Claims Processing Module is a comprehensive system for managing empl
 ### Key Features
 - Multimodal receipt processing with Gemini AI
 - Intelligent expense categorization
-- 7-stage approval workflow
+- Unified direct approval workflow
 - Real-time confidence indicators
 - Southeast Asian vendor pattern recognition
 - Multi-currency support
@@ -150,8 +150,8 @@ CREATE TABLE expense_claims (
   transaction_id UUID REFERENCES transactions(id),
   employee_id UUID REFERENCES employee_profiles(id) NOT NULL,
   
-  -- Otto's 7-stage workflow
-  status TEXT CHECK (status IN ('draft', 'submitted', 'under_review', 'approved', 'rejected', 'reimbursed', 'paid')) DEFAULT 'draft',
+  -- Unified workflow (direct: submitted → approved)
+  status TEXT CHECK (status IN ('draft', 'submitted', 'approved', 'rejected', 'reimbursed', 'paid')) DEFAULT 'draft',
   submission_date TIMESTAMPTZ,
   approval_date TIMESTAMPTZ,
   reimbursement_date TIMESTAMPTZ,
@@ -277,16 +277,15 @@ graph TD
     E --> F[Set Status to 'submitted']
 ```
 
-### 5. Approval Workflow (Otto's 7-Stage)
+### 5. Approval Workflow (Unified Direct Approval)
 ```mermaid
 graph TD
     A[Draft] --> B[Submitted]
-    B --> C[Under Review]
-    C --> D[Approved]
-    C --> E[Rejected]
-    D --> F[Reimbursed]
-    F --> G[Paid]
-    E --> A
+    B --> C[Approved]
+    B --> D[Rejected]
+    C --> E[Reimbursed]
+    E --> F[Paid]
+    D --> A
 ```
 
 ## Component Architecture

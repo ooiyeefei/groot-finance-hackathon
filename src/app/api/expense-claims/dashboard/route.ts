@@ -50,11 +50,6 @@ function getStatusDisplayInfo(status: string, processingStatus?: string) {
       color: 'blue',
       description: 'Submitted for manager review'
     },
-    'under_review': {
-      label: 'Under Review',
-      color: 'yellow',
-      description: 'Being reviewed by manager'
-    },
     'approved': {
       label: 'Approved',
       color: 'green',
@@ -94,7 +89,6 @@ function getWorkflowProgress(status: string): number {
   const progressMap: Record<string, number> = {
     'draft': 10,
     'submitted': 25,
-    'under_review': 50,
     'approved': 75,
     'reimbursed': 90,
     'paid': 100,

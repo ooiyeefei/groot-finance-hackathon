@@ -204,7 +204,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
           <CardDescription>Claims requiring immediate attention</CardDescription>
         </CardHeader>
         <CardContent>
-          {data.recent_claims.filter(claim => ['submitted', 'under_review', 'pending_approval'].includes(claim.status)).length === 0 ? (
+          {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               <CheckCircle className="w-12 h-12 mx-auto mb-4" />
               <p>No pending approvals</p>
@@ -212,7 +212,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
             </div>
           ) : (
             <div className="space-y-3">
-              {data.recent_claims.filter(claim => ['submitted', 'under_review', 'pending_approval'].includes(claim.status)).slice(0, 5).map((claim: any) => (
+              {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).slice(0, 5).map((claim: any) => (
                 <button
                   key={claim.id}
                   className="w-full flex items-center justify-between p-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -239,14 +239,14 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                   </div>
                 </button>
               ))}
-              {data.recent_claims.filter(claim => ['submitted', 'under_review', 'pending_approval'].includes(claim.status)).length > 5 && (
+              {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length > 5 && (
                 <Button
                   variant="ghost"
                   className="w-full text-green-400 hover:text-green-300"
                   onClick={() => setActiveTab('approvals')}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Review all {data.recent_claims.filter(claim => ['submitted', 'under_review', 'pending_approval'].includes(claim.status)).length} pending claims
+                  Review all {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length} pending claims
                 </Button>
               )}
             </div>

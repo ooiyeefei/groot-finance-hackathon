@@ -244,12 +244,12 @@ processing_metadata: {
 
 **Primary Route**: `src/app/api/expense-claims/[id]/status/route.ts`
 
-**Key Status Transitions**:
+**Key Status Transitions** (Unified Direct Approval):
 
 ```typescript
-'submitted' → 'under_review' → 'approved' → 'reimbursed'
-                              ↓
-                         'rejected'
+'submitted' → 'approved' → 'reimbursed'
+            ↓
+       'rejected'
 ```
 
 **Critical Code Path** (lines 170-194):
@@ -291,7 +291,7 @@ if (targetStatus === 'reimbursed' && expenseClaim.transaction_id) {
 - `transaction_id`: uuid | NULL - Links to accounting_entries (NULL until approved)
 - `processing_metadata`: JSONB - Stores extracted financial data until approval
 - `vendor_name`, `total_amount`, `currency`: Duplicated for UI convenience
-- `status`: Workflow state (draft/submitted/under_review/approved/rejected/reimbursed)
+- `status`: Workflow state (draft/submitted/approved/rejected/reimbursed)
 
 **accounting_entries table**:
 - `id`: uuid - Primary key (linked from expense_claims.transaction_id)
@@ -300,18 +300,17 @@ if (targetStatus === 'reimbursed' && expenseClaim.transaction_id) {
 
 **Key Constraint**: `expense_claims.transaction_id` is nullable to allow pending claims without accounting entries
 
-#### State Machine
+#### State Machine (Unified Direct Approval)
 
 ```
-draft → submitted → under_review → approved → reimbursed
-                                  ↓
-                             rejected
+draft → submitted → approved → reimbursed
+                  ↓
+             rejected
 ```
 
 **State Validation**:
 - Draft → Submitted: Requires receipt attachment
-- Submitted → Under Review: Manager starts review
-- Under Review → Approved: Creates accounting entry via RPC
+- Submitted → Approved: Manager approves, creates accounting entry via RPC
 - Approved → Reimbursed: Updates accounting_entries.status to 'paid'
 - Any → Rejected: No accounting entry created
 

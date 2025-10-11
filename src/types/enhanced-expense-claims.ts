@@ -253,7 +253,7 @@ export const ENHANCED_WORKFLOW_TRANSITIONS: EnhancedWorkflowTransition[] = [
   
   // Policy override transitions (Otto's exception handling) ✅ Unified workflow
   {
-    from: ['submitted'], // ✅ Remove 'under_review' - direct from submitted
+    from: ['submitted'], // ✅ Unified workflow - direct from submitted to approved
     to: 'approved',
     action: 'override_approve',
     requiredRole: 'admin',

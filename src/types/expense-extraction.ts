@@ -289,7 +289,6 @@ export type ReimbursementStatus =
 export type ExpenseClaimStatus =
   | 'draft'
   | 'submitted'
-  | 'under_review'
   | 'pending_manager_approval'
   | 'pending_finance_approval'
   | 'pending_compliance_review'
