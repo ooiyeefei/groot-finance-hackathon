@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 export async function PATCH(
   request: NextRequest,
@@ -35,7 +35,7 @@ export async function PATCH(
 
     // SECURITY: Get user data and create authenticated client
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Build update object with only provided fields
     const updateData: any = { updated_at: new Date().toISOString() }

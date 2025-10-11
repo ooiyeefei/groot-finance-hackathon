@@ -4,7 +4,7 @@
  */
 
 import { auth, clerkClient } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
 import { ensureUserProfile, UserProfile } from '@/lib/ensure-employee-profile'
 import { getCurrentBusinessContext, checkBusinessOwnership, type BusinessContext } from '@/lib/business-context'
 
@@ -60,28 +60,28 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
 }
 
 /**
- * Get current user context with multi-tenant business context (NEW)
+ * Get current user context with multi-tenant business context (HYBRID)
  */
 export async function getCurrentUserContextWithBusiness(): Promise<UserContext | null> {
   try {
     const { userId } = await auth()
     if (!userId) return null
 
-    // Get business context from JWT
+    // HYBRID: Get business context from database (not JWT)
     const businessContext = await getCurrentBusinessContext(userId)
     if (!businessContext) {
       console.warn('[RBAC] No active business context for user')
       return null
     }
 
-    // For backwards compatibility, also get employee profile
+    // Get employee profile
     const profile = await ensureUserProfile(userId)
     if (!profile) return null
 
     // Check if user is owner of the active business
     const isOwner = await checkBusinessOwnership(businessContext.businessId, userId)
 
-    // Use business context permissions instead of employee_profiles
+    // Use business context permissions from business_memberships
     const permissions: RolePermissions = {
       employee: true,
       manager: businessContext.role === 'manager' || businessContext.role === 'admin',
@@ -99,7 +99,7 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
       canManageCategories: permissions.manager || permissions.admin,
       canViewAllExpenses: permissions.manager || permissions.admin,
       canManageUsers: permissions.admin,
-      // NEW: Business context
+      // HYBRID: Business context from database
       businessContext,
       isBusinessOwner: isOwner
     }
@@ -147,10 +147,8 @@ export async function updateUserRole(
       return { success: false, error: 'Failed to create or access employee profile' }
     }
 
-    // Use service role for SaaS owner operations, regular user client otherwise
-    const supabase = updatedBy === 'saas_owner' 
-      ? await createAuthenticatedSupabaseClient(targetUserId) // Use target user's ID for SaaS operations
-      : await createAuthenticatedSupabaseClient(updatedBy)
+    // HYBRID: Use service client for role updates (bypasses RLS for administrative operations)
+    const supabase = createServiceSupabaseClient()
     
     // Update employee profile permissions using the correct UUID
     const permissions = roleToPermissions(role)
@@ -345,7 +343,8 @@ export async function getBusinessUsers(businessId: string): Promise<{
       return { success: false, error: 'Insufficient permissions' }
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(context.userId)
+    // HYBRID: Use service client for admin operations (bypasses RLS for cross-business queries)
+    const supabase = createServiceSupabaseClient()
     
     const { data: profiles, error } = await supabase
       .from('business_memberships')

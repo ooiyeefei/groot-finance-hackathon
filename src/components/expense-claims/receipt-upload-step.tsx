@@ -1,6 +1,6 @@
 /**
  * Receipt Upload Step - Single Responsibility Component
- * DSPy-Inspired Architecture: Handles only file upload and camera capture
+ * AI-Inspired Architecture: Handles only file upload and camera capture
  * Part of the upload → process → pre-filled form workflow
  */
 
@@ -31,7 +31,7 @@ export default function ReceiptUploadStep({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // DSPy Principle: Single responsibility - only handle file selection and validation
+  // AI Principle: Single responsibility - only handle file selection and validation
   const handleFileSelect = useCallback((file: File) => {
     if (!file) return
 
@@ -55,7 +55,7 @@ export default function ReceiptUploadStep({
       setPreviewUrl(url)
     }
 
-    // DSPy Flow: Pass validated file to parent orchestrator
+    // AI Flow: Pass validated file to parent orchestrator
     onFileSelected(file)
   }, [onFileSelected])
 
@@ -136,13 +136,13 @@ export default function ReceiptUploadStep({
     )
   }
 
-  // Main upload interface (DSPy-inspired clean UX)
+  // Main upload interface (AI-inspired clean UX)
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="text-center">
-        <Camera className="w-16 h-16 mx-auto text-blue-500 mb-4" />
-        <h3 className="text-lg font-semibold text-white mb-2">Upload Receipt</h3>
-        <p className="text-gray-400">
+        <Camera className="w-8 h-8 mx-auto text-blue-500 mb-3" />
+        <h3 className="text-lg font-semibold text-white mb-1">Upload Receipt</h3>
+        <p className="text-gray-400 text-sm">
           Capture or upload your receipt for automatic data extraction
         </p>
       </div>
@@ -158,41 +158,35 @@ export default function ReceiptUploadStep({
         </Alert>
       )}
 
-      {/* Upload Options - DSPy-inspired clean design */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Upload Options - Compact buttons with 37% width */}
+      <div className="flex justify-center gap-2">
         <button
           onClick={handleCameraCapture}
           disabled={isProcessing}
-          className="h-32 bg-blue-600 hover:bg-blue-700 text-white flex flex-col items-center justify-center space-y-3 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+          className="h-12 w-40 bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
         >
-          <Camera className="w-10 h-10" />
-          <div className="text-center">
-            <div className="font-medium">Use Camera</div>
-            <div className="text-xs opacity-80">Capture receipt photo</div>
-          </div>
+          <Camera className="w-5 h-5" />
+          <span>Camera</span>
         </button>
 
         <button
           onClick={handleFileUpload}
           disabled={isProcessing}
-          className="h-32 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 flex flex-col items-center justify-center space-y-3 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+          className="h-12 w-40 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 flex items-center justify-center gap-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
         >
-          <Upload className="w-10 h-10" />
-          <div className="text-center">
-            <div className="font-medium">Upload File</div>
-            <div className="text-xs opacity-80">Select from device</div>
-          </div>
+          <Upload className="w-5 h-5" />
+          <span>Upload</span>
         </button>
       </div>
 
-      {/* DSPy Flow: Allow manual entry option */}
-      <div className="text-center">
+      {/* AI Flow: Allow manual entry option */}
+      <div className="flex justify-center">
         <button
           onClick={onSkip}
           disabled={isProcessing}
-          className="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+          className="flex flex-col items-center justify-center px-4 py-2 h-10 w-30 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded-md transition-colors disabled:opacity-50 leading-tight"
         >
-          Skip receipt upload and enter details manually
+          <span>Enter Manually</span>
         </button>
       </div>
 

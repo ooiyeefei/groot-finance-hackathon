@@ -127,7 +127,7 @@ class DocumentClassifier:
 
             print(f"[Classify] Loaded {len(supported_types)} supported document types from environment", file=sys.stderr)
 
-            # Convert to JSON string for DSPy input
+            # Convert to JSON string for AI Processing input
             supported_types_json = json.dumps(supported_types, indent=2)
 
             # Process image

@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 export async function GET() {
   try {
@@ -15,7 +15,7 @@ export async function GET() {
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     console.log('[API] List invoices - User ID:', userData.id)
 

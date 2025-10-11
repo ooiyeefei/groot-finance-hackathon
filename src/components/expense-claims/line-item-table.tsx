@@ -32,6 +32,10 @@ export interface LineItemTableProps {
   showAddButton?: boolean
   disabled?: boolean
 
+  // Tax information
+  taxAmount?: number
+  subtotalAmount?: number
+
   // Styling options
   className?: string
   variant?: 'default' | 'compact'
@@ -46,6 +50,8 @@ export default function LineItemTable({
   currency = 'SGD',
   showAddButton = true,
   disabled = false,
+  taxAmount = 0,
+  subtotalAmount,
   className = '',
   variant = 'default'
 }: LineItemTableProps) {
@@ -170,21 +176,60 @@ export default function LineItemTable({
               </div>
             ))}
 
-            {/* Total Summary */}
-            <div className={`grid gap-5 items-center bg-blue-900/20 p-3 rounded-lg border border-blue-700 mt-4 ${
-              isCompact ? 'grid-cols-11' : 'grid-cols-12'
-            }`}>
-              <span className={`text-blue-300 font-medium text-right text-sm ${
-                isCompact ? 'col-span-8' : 'col-span-9'
+            {/* Financial Summary */}
+            <div className="mt-4 space-y-2">
+              {/* Subtotal Row */}
+              <div className={`grid gap-5 items-center bg-gray-800/50 p-2 rounded-lg border border-gray-600 ${
+                isCompact ? 'grid-cols-11' : 'grid-cols-12'
               }`}>
-                Total Amount
-              </span>
-              <span className={`text-blue-300 font-bold text-center text-sm ${
-                isCompact ? 'col-span-2' : 'col-span-2'
+                <span className={`text-gray-300 font-medium text-right text-sm ${
+                  isCompact ? 'col-span-8' : 'col-span-9'
+                }`}>
+                  Sub-total
+                </span>
+                <span className={`text-gray-300 font-medium text-center text-sm ${
+                  isCompact ? 'col-span-2' : 'col-span-2'
+                }`}>
+                  {currency} {(subtotalAmount !== undefined ? subtotalAmount : (totalAmount - taxAmount)).toFixed(2)}
+                </span>
+                <span className="col-span-1"></span>
+              </div>
+
+              {/* Tax Row */}
+              {taxAmount > 0 && (
+                <div className={`grid gap-5 items-center bg-gray-800/50 p-2 rounded-lg border border-gray-600 ${
+                  isCompact ? 'grid-cols-11' : 'grid-cols-12'
+                }`}>
+                  <span className={`text-gray-300 font-medium text-right text-sm ${
+                    isCompact ? 'col-span-8' : 'col-span-9'
+                  }`}>
+                    Tax
+                  </span>
+                  <span className={`text-gray-300 font-medium text-center text-sm ${
+                    isCompact ? 'col-span-2' : 'col-span-2'
+                  }`}>
+                    {currency} {taxAmount.toFixed(2)}
+                  </span>
+                  <span className="col-span-1"></span>
+                </div>
+              )}
+
+              {/* Total Row */}
+              <div className={`grid gap-5 items-center bg-blue-900/20 p-3 rounded-lg border border-blue-700 ${
+                isCompact ? 'grid-cols-11' : 'grid-cols-12'
               }`}>
-                {currency} {totalAmount.toFixed(2)}
-              </span>
-              <span className="col-span-1"></span>
+                <span className={`text-blue-300 font-bold text-right text-sm ${
+                  isCompact ? 'col-span-8' : 'col-span-9'
+                }`}>
+                  Total Amount
+                </span>
+                <span className={`text-blue-300 font-bold text-center text-sm ${
+                  isCompact ? 'col-span-2' : 'col-span-2'
+                }`}>
+                  {currency} {totalAmount.toFixed(2)}
+                </span>
+                <span className="col-span-1"></span>
+              </div>
             </div>
           </div>
         ) : (

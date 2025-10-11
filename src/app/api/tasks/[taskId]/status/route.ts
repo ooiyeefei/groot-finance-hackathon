@@ -4,7 +4,7 @@ import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 
 /**
  * Task Status API - Checks document processing status
- * Used by frontend to check DSPy extraction progress
+ * Used by frontend to check AI extraction progress
  * Uses document status from database rather than Trigger.dev API
  */
 export async function GET(
@@ -30,7 +30,7 @@ export async function GET(
 
     const supabase = await createAuthenticatedSupabaseClient(userId)
 
-    // Check if this is a document ID (for DSPy processing, we track by task ID in processing_metadata)
+    // Check if this is a document ID (for AI processing handled by triggers.dev, we track by task ID in processing_metadata)
     // Since Trigger.dev task IDs are not UUIDs, we only search by processing_metadata
     const { data: documents, error: searchError } = await supabase
       .from('documents')

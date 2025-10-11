@@ -9,6 +9,7 @@ import { Plus, ClipboardList, Clock, CheckCircle, AlertCircle, FileText, Trash2 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { useActiveBusiness } from '@/contexts/business-context'
 
 interface Application {
   id: string
@@ -37,6 +38,7 @@ interface Application {
 export default function ApplicationsContainer() {
   const locale = useLocale()
   const router = useRouter()
+  const { businessId } = useActiveBusiness()
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -47,6 +49,14 @@ export default function ApplicationsContainer() {
   useEffect(() => {
     fetchApplications()
   }, [])
+
+  // CRITICAL FIX: Re-fetch applications when active business context changes
+  useEffect(() => {
+    if (businessId) {
+      console.log('[ApplicationsContainer] Business context changed, refreshing applications:', businessId)
+      fetchApplications()
+    }
+  }, [businessId])
 
   const fetchApplications = async () => {
     try {

@@ -20,6 +20,8 @@ interface DocumentPreviewProps {
   boundingBoxes?: BoundingBox[]
   onBoxHover?: (box: BoundingBox | null) => void
   onBoxClick?: (box: BoundingBox) => void
+  extraToolbarActions?: React.ReactNode // New prop for extra toolbar actions
+  hideRegionsCount?: boolean // New prop to hide regions count
 }
 
 // Color mapping for different layout categories
@@ -44,7 +46,9 @@ export default function DocumentPreviewWithAnnotations({
   fileSize,
   boundingBoxes = [],
   onBoxHover,
-  onBoxClick
+  onBoxClick,
+  extraToolbarActions,
+  hideRegionsCount = false
 }: DocumentPreviewProps) {
   const [scale, setScale] = useState(1)
   const [rotation, setRotation] = useState(0)
@@ -164,8 +168,9 @@ export default function DocumentPreviewWithAnnotations({
   return (
     <div className="relative w-full h-full flex flex-col">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-4 p-2 bg-gray-700/30 rounded-lg">
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center mb-4 gap-3">
+        {/* Zoom Controls Section - Separate background */}
+        <div className="flex items-center space-x-2 bg-gray-700/30 rounded-lg p-2 flex-grow-[2]">
           <button
             onClick={handleZoomOut}
             className="p-1 text-gray-400 hover:text-white transition-colors"
@@ -192,10 +197,22 @@ export default function DocumentPreviewWithAnnotations({
             <RotateCcw className="w-4 h-4" />
           </button>
         </div>
-        
-        <div className="text-xs text-gray-400">
-          {boundingBoxes.length} regions detected
-        </div>
+
+        {/* AI Extract Button Section - Separate section with matching height */}
+        {extraToolbarActions && (
+          <div className="flex-grow-[1] flex justify-end">
+            <div className="h-10 flex items-center">
+              {extraToolbarActions}
+            </div>
+          </div>
+        )}
+
+        {/* Regions Count (when not hidden) */}
+        {!hideRegionsCount && !extraToolbarActions && (
+          <div className="text-xs text-gray-400 flex-grow-[1] text-right bg-gray-700/30 rounded-lg p-2 h-10 flex items-center justify-end">
+            {boundingBoxes.length} regions detected
+          </div>
+        )}
       </div>
 
       {/* Document Container */}

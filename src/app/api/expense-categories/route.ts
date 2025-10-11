@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 
 interface CustomExpenseCategory {
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     
     // Get or create employee profile
     const employeeProfile = await ensureUserProfile(userId)
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: CustomExpenseCategory = await request.json()
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     
     // Get or create employee profile and check permissions
     const employeeProfile = await ensureUserProfile(userId)
@@ -206,7 +206,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body: CustomExpenseCategory & { id: string } = await request.json()
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     
     if (!body.id) {
       return NextResponse.json(
@@ -312,7 +312,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const body: { id: string } = await request.json()
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     
     if (!body.id) {
       return NextResponse.json(

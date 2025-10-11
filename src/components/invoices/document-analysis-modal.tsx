@@ -20,7 +20,7 @@ interface Document {
   extracted_data?: {
     text?: string
 
-    // DSPy direct fields (new format)
+    // AI direct fields (new format)
     vendor_name?: string
     document_type?: string
     total_amount?: string | number
@@ -29,7 +29,7 @@ interface Document {
     transaction_date?: string
     document_number?: string
     line_items?: any[]
-    dspy_confidence?: number
+    ai_confidence?: number
     confidence_score?: number
 
     // Legacy support (for backward compatibility)
@@ -167,13 +167,13 @@ interface Document {
       confidence: number
       bbox?: number[]
     }>
-    // line_items moved to DSPy direct fields above for consistency
+    // line_items moved to AI direct fields above for consistency
     metadata: {
       pageCount?: number
       wordCount: number
       language?: string
       processingMethod?: 'ocr' | 'text_extraction'
-      dspy_confidence?: number
+      ai_confidence?: number
       layoutElements?: Array<{
         bbox?: number[]
         category?: string
@@ -370,34 +370,34 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
       // Prepare comprehensive text for translation including structured elements
       let textToTranslate = document.extracted_data.text || ''
 
-      // Handle DSPy structure - extract relevant text for translation
+      // Handle AI structure - extract relevant text for translation
       const extractedData = document.extracted_data
       if (!textToTranslate && extractedData) {
-        // Build text from direct DSPy fields
-        let dspyText = []
+        // Build text from direct AI fields
+        let aiText = []
 
-        if (extractedData.vendor_name) dspyText.push(`Vendor: ${extractedData.vendor_name}`)
-        if (extractedData.document_number) dspyText.push(`Document Number: ${extractedData.document_number}`)
+        if (extractedData.vendor_name) aiText.push(`Vendor: ${extractedData.vendor_name}`)
+        if (extractedData.document_number) aiText.push(`Document Number: ${extractedData.document_number}`)
         if (extractedData.total_amount) {
           const currency = extractedData.currency || 'SGD'
-          dspyText.push(`Amount: ${extractedData.total_amount} ${currency}`)
+          aiText.push(`Amount: ${extractedData.total_amount} ${currency}`)
         }
-        if (extractedData.transaction_date) dspyText.push(`Date: ${extractedData.transaction_date}`)
+        if (extractedData.transaction_date) aiText.push(`Date: ${extractedData.transaction_date}`)
 
         // Fallback: try legacy document_summary structure
-        if (dspyText.length === 0 && extractedData.document_summary) {
+        if (aiText.length === 0 && extractedData.document_summary) {
           const summary = extractedData.document_summary
-          if (summary.vendor_name?.value) dspyText.push(`Vendor: ${summary.vendor_name.value}`)
-          if (summary.document_number?.value) dspyText.push(`Document Number: ${summary.document_number.value}`)
+          if (summary.vendor_name?.value) aiText.push(`Vendor: ${summary.vendor_name.value}`)
+          if (summary.document_number?.value) aiText.push(`Document Number: ${summary.document_number.value}`)
           if (summary.total_amount?.value && summary.currency?.value) {
-            dspyText.push(`Amount: ${summary.total_amount.value} ${summary.currency.value}`)
+            aiText.push(`Amount: ${summary.total_amount.value} ${summary.currency.value}`)
           }
-          if (summary.transaction_date?.value) dspyText.push(`Date: ${summary.transaction_date.value}`)
+          if (summary.transaction_date?.value) aiText.push(`Date: ${summary.transaction_date.value}`)
         }
 
-        textToTranslate = dspyText.join('\n')
+        textToTranslate = aiText.join('\n')
 
-        console.log('[DocumentAnalysis] Translation text prepared from DSPy structure:', textToTranslate)
+        console.log('[DocumentAnalysis] Translation text prepared from AI structure:', textToTranslate)
       }
 
       // If we have structured financial data, format it properly for translation
@@ -801,13 +801,13 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
     return boundingBoxes
   }
 
-  // Helper function to safely get field values from DSPy structure
+  // Helper function to safely get field values from AI structure
   const getFieldValue = (fieldName: string, fallbackField?: string): string => {
     const extractedData = document.extracted_data as any;
 
     if (!extractedData) return '';
 
-    // DSPy stores values directly (e.g., vendor_name, total_amount, document_date)
+    // AI stores values directly (e.g., vendor_name, total_amount, document_date)
     if (extractedData[fieldName]) {
       return String(extractedData[fieldName]);
     }
@@ -1001,16 +1001,16 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   <span className="ml-2 text-white">
                     {(() => {
                       // Try multiple possible confidence score locations for robust access
-                      const aiConfidence = document.extracted_data?.dspy_confidence ||
+                      const aiConfidence = document.extracted_data?.ai_confidence ||
                                          document.extracted_data?.confidence_score ||
                                          document.confidence_score ||
                                          // Legacy fallback
-                                         document.extracted_data?.metadata?.dspy_confidence;
+                                         document.extracted_data?.metadata?.ai_confidence;
 
                       console.log('[DocumentAnalysis] AI Confidence debug:', {
                         aiConfidence,
                         extracted_data_keys: document.extracted_data ? Object.keys(document.extracted_data) : null,
-                        hasDirectDspyConfidence: !!(document.extracted_data?.dspy_confidence),
+                        hasDirectAiConfidence: !!(document.extracted_data?.ai_confidence),
                         hasConfidenceScore: !!(document.extracted_data?.confidence_score)
                       });
 
@@ -1035,7 +1035,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Document Summary - DSPy Structure */}
+                {/* Document Summary - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
@@ -1104,7 +1104,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Vendor Information - DSPy Structure */}
+                {/* Vendor Information - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
@@ -1155,7 +1155,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Customer Information - DSPy Structure */}
+                {/* Customer Information - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
@@ -1206,7 +1206,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Document Identifiers - DSPy Structure */}
+                {/* Document Identifiers - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
@@ -1244,7 +1244,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Payment Information - DSPy Structure */}
+                {/* Payment Information - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
@@ -1295,7 +1295,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   </div>
                 )}
 
-                {/* Tax Information - DSPy Structure */}
+                {/* Tax Information - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-white mb-4 flex items-center">
@@ -1524,7 +1524,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
-                                    // Handle both legacy nested structure and raw DSPy structure
+                                    // Handle both legacy nested structure and raw AI structure
                                     if (item.description?.value) return item.description.value;
                                     if (item.item_description?.value) return item.item_description.value;
                                     if (typeof item.description === 'string') return item.description;
@@ -1537,7 +1537,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
-                                    // Handle new DSPy flat structure first (item_code as direct string)
+                                    // Handle new AI flat structure first (item_code as direct string)
                                     if (typeof item.item_code === 'string') return item.item_code;
                                     // Legacy nested structure fallback
                                     if (item.item_code?.value) return item.item_code.value;
@@ -1550,7 +1550,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
-                                    // Handle new DSPy flat structure first (quantity as direct number/string)
+                                    // Handle new AI flat structure first (quantity as direct number/string)
                                     if (typeof (item as any).quantity === 'number') return (item as any).quantity.toString();
                                     if (typeof (item as any).quantity === 'string') return (item as any).quantity;
                                     // Legacy nested structure fallback
@@ -1564,7 +1564,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
-                                    // Handle new DSPy flat structure first (unit_measurement as direct string)
+                                    // Handle new AI flat structure first (unit_measurement as direct string)
                                     if (typeof item.unit_measurement === 'string') return item.unit_measurement;
                                     // Legacy nested structure fallback
                                     if (item.unit_measurement?.value) return item.unit_measurement.value;
@@ -1579,7 +1579,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
-                                    // Handle new DSPy flat structure first (unit_price as direct number/string)
+                                    // Handle new AI flat structure first (unit_price as direct number/string)
                                     if (typeof (item as any).unit_price === 'number') return (item as any).unit_price.toString();
                                     if (typeof (item as any).unit_price === 'string') return (item as any).unit_price;
                                     // Legacy nested structure fallback
@@ -1593,7 +1593,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
                                   {(() => {
-                                    // Handle new DSPy flat structure first (line_total as direct number/string)
+                                    // Handle new AI flat structure first (line_total as direct number/string)
                                     if (typeof (item as any).line_total === 'number') return (item as any).line_total.toString();
                                     if (typeof (item as any).line_total === 'string') return (item as any).line_total;
                                     // Alternative direct fields
@@ -1650,7 +1650,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             const parts = [];
                             const extractedData = document.extracted_data;
 
-                            // Direct DSPy fields
+                            // Direct AI fields
                             if (extractedData.document_type) parts.push(`Document Type: ${extractedData.document_type}`);
                             if (extractedData.vendor_name) parts.push(`Vendor: ${extractedData.vendor_name}`);
                             if (extractedData.transaction_date) parts.push(`Date: ${extractedData.transaction_date}`);

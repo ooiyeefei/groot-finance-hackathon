@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
 import { CrossBorderTaxComplianceTool } from '@/lib/tools'
 import { UpdateTransactionRequest, SupportedCurrency } from '@/types/transaction'
@@ -39,7 +39,7 @@ export async function GET(
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     const { data: accountingEntry, error } = await supabase
       .from('accounting_entries')
@@ -114,7 +114,7 @@ export async function PUT(
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // First, verify the entry exists and belongs to the user
     const { data: existingEntry, error: fetchError } = await supabase
@@ -429,7 +429,7 @@ export async function DELETE(
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // First verify the entry exists and belongs to the user (and is not already deleted)
     const { data: existingEntry, error: fetchError } = await supabase

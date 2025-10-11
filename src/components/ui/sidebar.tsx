@@ -25,6 +25,7 @@ export default function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false) // Track hydration completion
+  const [hasInitialLoad, setHasInitialLoad] = useState(false) // Track if initial role load completed
 
   // Initialize user role with default state to prevent hydration mismatch
   const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, admin: false })
@@ -106,6 +107,9 @@ export default function Sidebar() {
       // SECURITY: Always validate with API to ensure permissions are current
       // This will detect and clear stale caches automatically
       await fetchUserRole()
+
+      // Mark initial load as completed to prevent duplicate calls
+      setHasInitialLoad(true)
     }
 
     loadUserRole()
@@ -157,8 +161,14 @@ export default function Sidebar() {
     }
   }, [])
 
-  // CRITICAL FIX: Re-fetch user role when active business context changes
+  // CRITICAL FIX: Re-fetch user role when active business context changes (but not on initial load)
   useEffect(() => {
+    // Skip if this is the initial business context load (prevents duplicate API calls)
+    if (!hasInitialLoad) {
+      console.log('[Sidebar] Skipping business change effect - waiting for initial load completion')
+      return
+    }
+
     if (businessId) {
       console.log('[Sidebar] Active business changed, refreshing user role:', businessId)
 
@@ -168,7 +178,7 @@ export default function Sidebar() {
       // Fetch fresh permissions for new business context
       fetchUserRole()
     }
-  }, [businessId, fetchUserRole])
+  }, [businessId, fetchUserRole, hasInitialLoad])
 
   // Save state to localStorage
   const toggleSidebar = () => {

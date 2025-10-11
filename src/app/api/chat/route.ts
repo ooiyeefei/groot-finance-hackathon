@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { type Locale, isValidLocale } from '@/i18n'
 import { createFinancialAgent, createAgentState } from '@/lib/langgraph-agent'
 import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages'
@@ -331,7 +331,7 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     let currentConversationId = conversationId
 
@@ -341,6 +341,7 @@ export async function POST(request: NextRequest) {
         .from('conversations')
         .insert({
           user_id: userData.id,
+          business_id: userData.business_id,  // CRITICAL: Add business context for proper tenancy
           title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
           language: language
         })

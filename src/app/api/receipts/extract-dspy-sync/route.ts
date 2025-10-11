@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { tasks } from '@trigger.dev/sdk/v3'
 import { auth } from '@clerk/nextjs/server'
 
@@ -30,8 +30,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
-    
+    const supabase = await createBusinessContextSupabaseClient()
+
     // Convert uploaded file to base64 for processing
     const fileBuffer = await file.arrayBuffer()
     const fileBase64 = Buffer.from(fileBuffer).toString('base64')

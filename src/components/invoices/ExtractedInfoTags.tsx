@@ -12,9 +12,9 @@ const ExtractedInfoTags = ({ extractedData, className = '' }: ExtractedInfoTagsP
     return null
   }
 
-  // Unified data extraction function that handles both raw DSPy and legacy nested formats
+  // Unified data extraction function that handles both raw AI and legacy nested formats
   const getFieldValue = (field: string): string | null => {
-    // Check raw DSPy format first (new format)
+    // Check raw AI format first (new format)
     if (extractedData[field]) {
       if (typeof extractedData[field] === 'object' && extractedData[field]?.value) {
         return String(extractedData[field].value)

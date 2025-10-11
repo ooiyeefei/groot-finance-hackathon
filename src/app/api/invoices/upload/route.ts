@@ -1,6 +1,6 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { uploadRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter'
 import { StoragePathBuilder, generateUniqueFilename, type DocumentType } from '@/lib/storage-paths'
 
@@ -100,12 +100,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file type
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    // DEBUG: Log file type details to identify MIME type corruption
+    console.log(`[Upload API] File type debugging:`, {
+      fileName: file.name,
+      fileType: file.type,
+      fileTypeLength: file.type?.length,
+      fileTypeArray: file.type?.split(','),
+      allowedTypes: ALLOWED_TYPES
+    })
+
+    // WORKAROUND: Clean corrupted MIME type (handles "application/json, application/pdf" -> "application/pdf")
+    let cleanFileType = file.type
+    if (file.type && file.type.includes(',')) {
+      // If MIME type is corrupted with comma-separated values, extract the valid one
+      const typeArray = file.type.split(',').map(t => t.trim())
+      const validType = typeArray.find(t => ALLOWED_TYPES.includes(t))
+      if (validType) {
+        cleanFileType = validType
+        console.log(`[Upload API] FIXED: Corrupted MIME type "${file.type}" cleaned to "${cleanFileType}"`)
+      }
+    }
+
+    // Validate file type using cleaned type
+    if (!ALLOWED_TYPES.includes(cleanFileType)) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid file type. Only JPG, PNG, and PDF files are allowed.' 
+        {
+          success: false,
+          error: `Invalid file type: "${file.type}". Only JPG, PNG, and PDF files are allowed.`
         },
         { status: 400 }
       )
@@ -123,7 +144,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     if (!userData.business_id) {
       return NextResponse.json(
@@ -138,12 +159,11 @@ export async function POST(request: NextRequest) {
     const documentType = detectDocumentType(file.name, formData)
     console.log(`[Upload API] Detected document type: ${documentType} for file: ${file.name}`)
 
-    // Convert file to buffer for validation
+    // Convert file to buffer for validation only
     const fileBuffer = await file.arrayBuffer()
-    const buffer = new Uint8Array(fileBuffer)
 
-    // Validate file type using magic bytes to prevent file type spoofing
-    if (!validateFileMagicBytes(fileBuffer, file.type)) {
+    // Validate file type using magic bytes to prevent file type spoofing (use clean MIME type)
+    if (!validateFileMagicBytes(fileBuffer, cleanFileType)) {
       return NextResponse.json(
         {
           success: false,
@@ -160,7 +180,7 @@ export async function POST(request: NextRequest) {
         user_id: userData.id, // Use the actual users.id, not clerk_user_id
         business_id: businessId,
         file_name: file.name,
-        file_type: file.type,
+        file_type: cleanFileType, // Use cleaned MIME type for storage
         file_size: file.size,
         storage_path: 'temp_pending_upload', // Temporary placeholder
         processing_status: 'pending',
@@ -168,6 +188,8 @@ export async function POST(request: NextRequest) {
         document_metadata: {
           storage_version: '3.0', // Track new documentId-based storage format
           original_filename: file.name,
+          original_mime_type: file.type, // Store original (potentially corrupted) MIME type for debugging
+          cleaned_mime_type: cleanFileType, // Store cleaned MIME type
           detected_type: documentType,
           use_case: 'documents', // Context: documents/ page for invoices and general business documents
           upload_context: {
@@ -198,10 +220,11 @@ export async function POST(request: NextRequest) {
     console.log(`[Upload API] Generated storage path with documentId: ${storagePath}`)
 
     // Step 3: Upload to Supabase Storage with documentId-based path
+    // CRITICAL FIX: Pass raw File object instead of buffer to prevent MIME type concatenation
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('invoices')  // ✅ PHASE 4J: Route to invoices bucket
-      .upload(storagePath, buffer, {
-        contentType: file.type,
+      .upload(storagePath, file, {
+        contentType: cleanFileType, // Use cleaned MIME type for storage
         upsert: false
       })
 

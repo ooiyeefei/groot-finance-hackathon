@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import DSPyExpenseSubmissionFlow from './dspy-expense-submission-flow'
+import ExpenseSubmissionFlow from './expense-submission-flow'
 import MonthlyReportGenerator from './monthly-report-generator'
 import EditExpenseModalNew from './edit-expense-modal-new'
 import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
@@ -166,7 +166,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 
     // Check if any claims are processing or uploading
     const hasProcessingClaims = dashboardData.recent_claims.some(claim =>
-      claim.processing_status === 'processing' || claim.processing_status === 'upload_pending'
+      claim.status === 'analyzing' || claim.status === 'uploading'
     )
 
     if (hasProcessingClaims) {
@@ -291,9 +291,9 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         </TabsContent>
       </Tabs>
 
-      {/* DSPy Expense Submission Flow */}
+      {/* AI Expense Submission Flow */}
       {showSubmissionForm && (
-        <DSPyExpenseSubmissionFlow
+        <ExpenseSubmissionFlow
           initialStep={submissionMode === 'manual' ? 'form' : 'upload'}
           onClose={(hasBackgroundProcessing = false) => {
             setShowSubmissionForm(false)
@@ -485,7 +485,7 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
               className="bg-blue-600 hover:bg-blue-700 text-white justify-center"
             >
               <Camera className="w-4 h-4 mr-2" />
-              Capture Receipt with Camera
+              Capture or Upload
             </Button>
             <Button
               onClick={() => onNewClaim('manual')}
@@ -605,27 +605,27 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
                 claim.status_display?.color === 'yellow' ? 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50' :
                 claim.status_display?.color === 'red' ? 'bg-red-900/20 text-red-300 border-red-700/50' :
                 claim.status_display?.color === 'purple' ? 'bg-purple-900/20 text-purple-300 border-purple-700/50' :
-                (claim.processing_status === 'completed' && claim.status === 'draft') ? 'bg-blue-900/20 text-blue-300 border-blue-700/50' :
+                claim.status === 'draft' ? 'bg-blue-900/20 text-blue-300 border-blue-700/50' :
                 'bg-gray-900/20 text-gray-300 border-gray-700/50'
               }`}
             >
               {/* Show appropriate processing icon based on status */}
-              {claim.processing_status === 'processing' ? (
-                <Brain className="w-3 h-3 mr-1 text-blue-400" />
+              {claim.status === 'analyzing' ? (
+                <Brain className="w-3 h-3 mr-1 text-blue-400 animate-pulse" />
               ) : claim.status_display?.isProcessing ? (
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" />
               ) : null}
-              {/* UNIFIED PRIORITY: API status_display > custom processing states > fallback */}
+              {/* UNIFIED PRIORITY: API status_display > unified status > fallback */}
               {claim.status_display?.label ||
-                (claim.processing_status === 'processing' ? 'AI Extracting...' :
-                 claim.processing_status === 'completed' && claim.status === 'draft' ? 'Ready to Submit' :
+                (claim.status === 'analyzing' ? 'AI Analyzing...' :
+                 claim.status === 'draft' ? 'Ready to Submit' :
                  claim.status?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()))
               }
             </Badge>
 
           </div>
 
-          {claim.current_approver_name && ['submitted', 'under_review', 'pending_approval'].includes(claim.status) && (
+          {claim.current_approver_name && ['submitted'].includes(claim.status) && (
             <span className="text-xs text-gray-400">
               With: {claim.current_approver_name}
             </span>
@@ -643,10 +643,10 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
         </div>
 
         <p className="text-xs text-gray-400">
-          {/* UNIFIED PRIORITY: API status_display > custom processing states */}
+          {/* UNIFIED PRIORITY: API status_display > unified status */}
           {claim.status_display?.description ||
-            (claim.processing_status === 'completed' && claim.status === 'draft'
-              ? 'Manual entry completed - click Submit to enter approval workflow'
+            (claim.status === 'draft'
+              ? 'Ready for editing - click Edit to modify or Submit to proceed'
               : 'Status pending update')
           }
         </p>
@@ -706,9 +706,8 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
         )}
 
         {/* Reprocess button for failed claims and completed AI processing (exclude submitted and final workflow states) */}
-        {(claim.processing_status === 'failed' || claim.processing_status === 'completed') &&
-         claim.status !== 'pending' &&
-         !['submitted', 'under_review', 'pending_approval', 'approved', 'rejected'].includes(claim.status) && (
+        {(claim.status === 'failed' || claim.status === 'draft') &&
+         !['submitted', 'approved', 'rejected', 'reimbursed'].includes(claim.status) && (
           <button
             onClick={async () => {
               try {
@@ -725,7 +724,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
 
                 console.log('Expense claim reprocessing initiated')
                 setToastType('success')
-                setToastMessage(claim.processing_status === 'failed' ?
+                setToastMessage(claim.status === 'failed' ?
                   'Expense claim reprocessing initiated successfully' :
                   'AI re-extraction initiated successfully')
                 fetchDashboardData() // Refresh data to show updated status
@@ -737,18 +736,18 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
               }
             }}
             className={`inline-flex items-center px-3 py-1.5 text-white text-sm font-medium rounded-md transition-colors ${
-              claim.processing_status === 'failed'
+              claim.status === 'failed'
                 ? 'bg-orange-600 hover:bg-orange-700'
                 : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
             <RotateCcw className="w-4 h-4 mr-1.5" />
-            {claim.processing_status === 'failed' ? 'Reprocess' : 'Re-extract'}
+            {claim.status === 'failed' ? 'Reprocess' : 'Re-extract'}
           </button>
         )}
 
-        {/* View Details button for all non-draft claims */}
-        {claim.status !== 'draft' && (
+        {/* View Details button for all non-draft claims (except when processing) */}
+        {claim.status !== 'draft' && claim.status !== 'analyzing' && claim.status !== 'uploading' && (
           <button
             onClick={() => {
               setDetailsClaimId(claim.id)

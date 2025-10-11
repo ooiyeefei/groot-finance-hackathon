@@ -9,7 +9,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { StoragePathBuilder, generateUniqueFilename, type DocumentType } from '@/lib/storage-paths'
 import { tasks } from '@trigger.dev/sdk/v3'
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     let expenseClaim: any
     let documentId: string
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
       const expenseClaimData = {
         user_id: employeeProfile.user_id,
         business_id: employeeProfile.business_id,
-        status: 'draft' as const, // Use valid draft status
+        status: 'uploading' as const, // ✅ Unified status - file upload starting
         business_purpose: '', // Will be filled by user later
         expense_category: defaultExpenseCategory, // Use first active category from business
         claim_month: new Date().toISOString().slice(0, 7) + '-01', // YYYY-MM-01 format
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
           original_filename: file.name,
           file_size: file.size,
           file_type: file.type,
-          processing_status: 'upload_pending'
+          status: 'uploading'
         }
       }
 
@@ -238,9 +238,10 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('expense_claims')
         .update({
+          status: 'failed',
           processing_metadata: {
             ...expenseClaim.processing_metadata,
-            processing_status: 'upload_failed',
+            status: 'upload_failed',
             error_message: uploadError.message,
             error_timestamp: new Date().toISOString()
           }
@@ -258,13 +259,13 @@ export async function POST(request: NextRequest) {
     const { error: updateError } = await supabase
       .from('expense_claims')
       .update({
-        status: 'draft', // Ready for user to fill details
+        status: processingMode === 'ai' ? 'analyzing' : 'draft', // ✅ Unified status: analyzing for AI, draft for manual
         storage_path: standardizedFilePath,
         processing_metadata: {
           ...expenseClaim.processing_metadata,
           storage_path: standardizedFilePath,
           upload_timestamp: new Date().toISOString(),
-          processing_status: processingMode === 'ai' ? 'pending' : 'completed'
+          status: processingMode === 'ai' ? 'analyzing' : 'draft'
         }
       })
       .eq('id', expenseClaim.id)
@@ -281,11 +282,11 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Unified Upload] Successfully updated expense claim: ${expenseClaim.id}`)
 
-    // For AI mode, trigger DSPy processing
+    // For AI mode, trigger AI Extraction jobs / processing
     let triggerResult = null
     if (processingMode === 'ai') {
       try {
-        console.log(`[Unified Upload] Triggering DSPy processing for claim: ${expenseClaim.id}`)
+        console.log(`[Unified Upload] Triggering AI processing for claim: ${expenseClaim.id}`)
 
         // Create signed URL for secure access (following pattern from other extract tasks)
         const { data: urlData, error: urlError } = await supabase.storage
@@ -307,7 +308,7 @@ export async function POST(request: NextRequest) {
           }
         )
 
-        console.log('[Unified Upload] DSPy processing triggered:', triggerResult.id)
+        console.log('[Unified Upload] AI processing triggered:', triggerResult.id)
 
         // Update processing metadata with trigger ID
         await supabase
@@ -322,15 +323,16 @@ export async function POST(request: NextRequest) {
           .eq('id', expenseClaim.id)
 
       } catch (triggerError) {
-        console.error('[Unified Upload] Failed to trigger DSPy processing:', triggerError)
+        console.error('[Unified Upload] Failed to trigger AI processing:', triggerError)
 
         // Update status to failed but don't delete the record
         await supabase
           .from('expense_claims')
           .update({
+            status: 'failed',
             processing_metadata: {
               ...expenseClaim.processing_metadata,
-              processing_status: 'failed',
+              status: 'failed',
               error_message: 'Failed to trigger background processing',
               error_timestamp: new Date().toISOString()
             }
@@ -375,7 +377,7 @@ export async function POST(request: NextRequest) {
       task_id?: string
     } = {
       expense_claim: expenseClaim,
-      expense_claim_id: expenseClaim.id, // For compatibility with DSPy processing step
+      expense_claim_id: expenseClaim.id, // For compatibility with AI processing step
       document_id: documentId,
       storage_path: standardizedFilePath,
       processing_mode: processingMode,
@@ -387,7 +389,7 @@ export async function POST(request: NextRequest) {
         : 'Expense record created with uploaded receipt'
     }
 
-    // Add task_id if DSPy processing was triggered
+    // Add task_id if AI processing was triggered
     if (processingMode === 'ai' && triggerResult) {
       responseData.task_id = triggerResult.id
     }

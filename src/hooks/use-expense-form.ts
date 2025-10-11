@@ -9,7 +9,7 @@ import { useExpenseCategories } from './use-expense-categories'
 import { useHomeCurrency } from '@/components/settings/currency-settings'
 import { formatCurrency } from './use-transactions'
 import { SupportedCurrency } from '@/types/transaction'
-import { DSPyExtractionResult } from '@/types/expense-extraction'
+import { AIExtractionResult } from '@/types/expense-extraction'
 
 // Form data interface
 export interface ExpenseFormData {
@@ -24,6 +24,9 @@ export interface ExpenseFormData {
   reference_number?: string
   notes?: string
   storage_path?: string
+  // Tax information from extraction
+  tax_amount?: number
+  subtotal_amount?: number
   line_items?: Array<{
     description: string
     quantity: number
@@ -61,7 +64,7 @@ interface UseExpenseFormBaseProps {
 // Props specific to 'create' mode
 export interface UseExpenseFormCreateProps extends UseExpenseFormBaseProps {
   mode: 'create'
-  extractionResult: DSPyExtractionResult
+  extractionResult: AIExtractionResult
   onSubmit?: (formData: ExpenseFormData) => Promise<any>
   onBack?: () => void
   isSubmitting?: boolean
@@ -111,7 +114,7 @@ export interface UseExpenseFormReturn {
   processingStatus: string
 
   // Processing method detection
-  processingMethod: 'dspy' | 'manual_entry'
+  processingMethod: 'ai' | 'manual_entry'
   isManualEntry: boolean
 
   // Categories and currency
@@ -139,7 +142,7 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   const userHomeCurrency = useHomeCurrency()
 
   // Determine processing method based on mode
-  const [processingMethod, setProcessingMethod] = useState<'dspy' | 'manual_entry'>('dspy')
+  const [processingMethod, setProcessingMethod] = useState<'ai' | 'manual_entry'>('ai')
   const isManualEntry = processingMethod === 'manual_entry'
 
   // Form state
@@ -227,13 +230,13 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         throw new Error('Expense claim not found')
       }
 
-      // Set status information
-      setClaimStatus(claim.status || '')
-      setProcessingStatusState(claim.processing_status || '')
+      // Set status information ✅ Unified status system
+      setClaimStatus(claim.status || '') // Use unified status field
+      setProcessingStatusState(claim.status || '') // Same status for both (simplified)
 
       // Determine processing method
-      const detectedMethod = claim.processing_metadata?.processing_method || 'dspy'
-      setProcessingMethod(detectedMethod as 'dspy' | 'manual_entry')
+      const detectedMethod = claim.processing_metadata?.processing_method || 'ai'
+      setProcessingMethod(detectedMethod as 'ai' | 'manual_entry')
 
       // Extract line items from various sources
       let lineItems: Array<{ description: string; quantity: number; unit_price: number; total_amount: number }> = []
@@ -271,6 +274,13 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         storagePath: claim.storage_path || claim.processing_metadata?.storage_path
       })
 
+      // Extract tax information from processing metadata
+      const taxAmount = claim.processing_metadata?.financial_data?.tax_amount ||
+                       claim.processing_metadata?.raw_extraction?.tax_amount ||
+                       0
+      const subtotalAmount = claim.processing_metadata?.financial_data?.subtotal_amount ||
+                            claim.processing_metadata?.raw_extraction?.subtotal_amount
+
       // Set form data
       setFormData({
         description: claim.transaction?.description || claim.description || '',
@@ -284,6 +294,8 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         reference_number: claim.transaction?.reference_number || claim.reference_number || '',
         notes: claim.transaction?.notes || '',
         storage_path: claim.storage_path,
+        tax_amount: taxAmount,
+        subtotal_amount: subtotalAmount,
         line_items: lineItems
       })
 
@@ -299,7 +311,7 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   const initializeFormData = useCallback(async () => {
     if (mode === 'create' && extractionResult) {
       // Initialize from extraction result
-      setProcessingMethod(extractionResult.extractedData.processingMethod as 'dspy' | 'manual_entry')
+      setProcessingMethod(extractionResult.extractedData.processingMethod as 'ai' | 'manual_entry')
 
       // Set form data from extraction result
       setFormData({
@@ -314,6 +326,8 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         reference_number: extractionResult.extractedData.receiptNumber || extractionResult.extractedData.invoiceNumber || '',
         notes: '',
         storage_path: '', // Storage path comes from the processing pipeline, not extraction data
+        tax_amount: extractionResult.extractedData.taxAmount || 0,
+        subtotal_amount: extractionResult.extractedData.subtotalAmount,
         line_items: extractionResult.extractedData.lineItems?.map(item => ({
           description: item.description || 'Item',
           quantity: item.quantity || 1,
@@ -767,8 +781,8 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
 }
 
 // Helper function to infer expense category (from original form)
-function inferExpenseCategory(result: DSPyExtractionResult, availableCategories: any[]): string {
-  // DSPy extraction doesn't provide expense category directly
+function inferExpenseCategory(result: AIExtractionResult, availableCategories: any[]): string {
+  // AI extraction doesn't provide expense category directly
   // We'll use vendor name or line items to infer category in future iterations
   // For now, return the first available category or 'other' as fallback
   return availableCategories.length > 0 ? availableCategories[0].category_code : 'other'

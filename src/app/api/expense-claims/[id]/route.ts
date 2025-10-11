@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
 import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/currency-service'
 import { SupportedCurrency } from '@/types/transaction'
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     } else {
       // Regular employees use authenticated client with RLS
       console.log(`[Individual Claim API GET] Using authenticated client for employee user`)
-      supabase = await createAuthenticatedSupabaseClient(userId)
+      supabase = await createBusinessContextSupabaseClient()
     }
 
     // Fetch the expense claim with related transaction data and line items
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         expense_category: claim.expense_category,
         line_items: claim.processing_metadata?.line_items?.map((item: any, index: number) => ({
           id: `temp-${index}`,
-          item_description: item.description || item.item_description, // Fixed: use 'description' field from DSPy extraction
+          item_description: item.description || item.item_description, 
           quantity: item.quantity,
           unit_price: item.unit_price,
           total_amount: item.total_amount
@@ -175,7 +175,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     } else {
       // Regular employees use authenticated client with RLS
       console.log(`[Individual Claim API PUT] Using authenticated client for employee user`)
-      supabase = await createAuthenticatedSupabaseClient(userId)
+      supabase = await createBusinessContextSupabaseClient()
     }
 
     // First, check if the expense claim exists and is accessible by the user
@@ -204,7 +204,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Only allow editing if the claim is still in draft status
-    if (existingClaim.status !== 'draft') {
+    if (existingClaim.status !== 'draft') { // ✅ Unified status field
       return NextResponse.json(
         { success: false, error: 'Cannot edit expense claims that have been submitted' },
         { status: 400 }
@@ -379,13 +379,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     } else {
       // Regular employees use authenticated client with RLS
       console.log(`[Individual Claim API DELETE] Using authenticated client for employee user`)
-      supabase = await createAuthenticatedSupabaseClient(userId)
+      supabase = await createBusinessContextSupabaseClient()
     }
 
     // First, check if the expense claim exists and is accessible
     let existingClaimQuery = supabase
       .from('expense_claims')
-      .select('id, status, accounting_entry_id, user_id, business_id')
+      .select('id, status, accounting_entry_id, user_id, business_id') // ✅ Unified status field
       .eq('id', id)
 
     // Apply appropriate access control based on role
@@ -408,7 +408,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Only allow deleting draft claims
-    if (existingClaim.status !== 'draft') {
+    if (existingClaim.status !== 'draft') { // ✅ Unified status field
       return NextResponse.json(
         { success: false, error: 'Only draft expense claims can be deleted' },
         { status: 400 }

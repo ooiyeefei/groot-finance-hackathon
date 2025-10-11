@@ -67,7 +67,7 @@ export interface ExpenseFormFieldsProps {
   categoriesError: any
 
   // Processing method
-  processingMethod: 'dspy' | 'manual_entry'
+  processingMethod: 'ai' | 'manual_entry'
   isManualEntry: boolean
 
   // Actions

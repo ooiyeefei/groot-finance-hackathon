@@ -22,7 +22,8 @@ import {
   Receipt,
   Image as ImageIcon,
   Loader2,
-  Eye
+  Eye,
+  Copy
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,7 +45,7 @@ interface UnifiedExpenseDetailsModalProps {
 
 interface ClaimDetails {
   id: string
-  status: string
+  status: string // ✅ Unified status field
   status_display?: {
     label: string
     color: string
@@ -87,7 +88,7 @@ interface ClaimDetails {
     id: string
     original_filename: string
     file_type: string
-    processing_status: string
+    ocr_processing_status: string
     processing_progress?: number
     extracted_data?: any
     annotated_image_url?: string
@@ -218,8 +219,8 @@ export default function UnifiedExpenseDetailsModal({
         // Enrich with status display info if not present
         const enrichedData = {
           ...result.data,
-          status_display: result.data.status_display || getStatusDisplayInfo(result.data.status),
-          workflow_progress: result.data.workflow_progress || getWorkflowProgress(result.data.status)
+          status_display: result.data.status_display || getStatusDisplayInfo(result.data.status), // ✅ Unified status field
+          workflow_progress: result.data.workflow_progress || getWorkflowProgress(result.data.status) // ✅ Unified status field
         }
         setClaimDetails(enrichedData)
       } else {
@@ -233,30 +234,34 @@ export default function UnifiedExpenseDetailsModal({
     }
   }
 
-  // Helper function to get status display info
+  // Helper function to get status display info ✅ Unified status system
   const getStatusDisplayInfo = (status: string) => {
+    if (!status) return { label: 'Unknown', color: 'gray', description: 'Status not available' }
+
     const statusMap: Record<string, { label: string; color: string; description: string }> = {
-      'draft': { label: 'Draft', color: 'gray', description: 'Expense claim is being prepared' },
-      'submitted': { label: 'Submitted', color: 'blue', description: 'Submitted for manager review' },
-      'under_review': { label: 'Under Review', color: 'yellow', description: 'Being reviewed by manager' },
+      'draft': { label: 'Draft', color: 'gray', description: 'Ready for editing - click Edit to modify or Submit to proceed' },
+      'uploading': { label: 'Uploading...', color: 'blue', description: 'Receipt file is being uploaded' },
+      'analyzing': { label: 'Analyzing 🧠', color: 'blue', description: 'AI is analyzing the receipt' },
+      'submitted': { label: 'Submitted', color: 'blue', description: 'Submitted for manager approval' },
       'approved': { label: 'Approved', color: 'green', description: 'Approved - awaiting reimbursement' },
-      'reimbursed': { label: 'Reimbursed', color: 'purple', description: 'Payment processed' },
-      'paid': { label: 'Paid', color: 'green', description: 'Payment completed' },
       'rejected': { label: 'Rejected', color: 'red', description: 'Claim was rejected' },
+      'reimbursed': { label: 'Reimbursed', color: 'purple', description: 'Payment processed' },
+      'failed': { label: 'Failed', color: 'red', description: 'Processing failed - please try manual entry' },
     }
     return statusMap[status] || { label: status.replace('_', ' ').toUpperCase(), color: 'gray', description: 'Unknown status' }
   }
 
-  // Helper function to get workflow progress
+  // Helper function to get workflow progress ✅ Unified status system
   const getWorkflowProgress = (status: string): number => {
     const progressMap: Record<string, number> = {
       'draft': 10,
-      'submitted': 25,
-      'under_review': 50,
+      'uploading': 20,
+      'analyzing': 30,
+      'submitted': 50,
       'approved': 75,
-      'reimbursed': 90,
-      'paid': 100,
+      'reimbursed': 100,
       'rejected': 0,
+      'failed': 0,
     }
     return progressMap[status] || 0
   }
@@ -309,8 +314,8 @@ export default function UnifiedExpenseDetailsModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="bg-gray-800 border-gray-700 w-full max-w-7xl max-h-[95vh] overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <Card className="bg-gray-800 border-gray-700 w-full max-w-7xl max-h-[95vh] overflow-hidden relative">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 px-6 py-4">
           <CardTitle className="text-white flex items-center gap-2">
             <Receipt className="w-5 h-5" />
             Expense Claim Details
@@ -320,14 +325,12 @@ export default function UnifiedExpenseDetailsModal({
               </Badge>
             )}
           </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
             onClick={onClose}
-            className="text-gray-800 hover:text-gray-900 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+            className="inline-flex items-center px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 hover:text-gray-900 text-sm font-medium rounded-md transition-colors"
           >
             <X className="w-4 h-4" />
-          </Button>
+          </button>
         </CardHeader>
 
         <div className="overflow-hidden h-[calc(95vh-80px)]">
@@ -352,7 +355,7 @@ export default function UnifiedExpenseDetailsModal({
             ) : claimDetails ? (
               <div className="flex flex-col h-full">
                 {/* Top Banner - Summary (compact height) */}
-                <div className="bg-gray-700 p-4 border-b border-gray-600">
+                <div className="bg-gray-700 p-3 border-b border-gray-600">
                   <div className="flex items-center justify-between mb-3">
                     {/* Left side - Status and key info */}
                     <div className="flex items-center gap-4">
@@ -366,14 +369,14 @@ export default function UnifiedExpenseDetailsModal({
                           'bg-gray-600 text-white'
                         }`}
                       >
-                        {claimDetails.status_display?.label || claimDetails.status.toUpperCase()}
+                        {claimDetails.status_display?.label || claimDetails.status?.toWellFormed() || 'UNKNOWN'} {/* ✅ Unified status field */}
                       </Badge>
 
                       {/* Key expense summary info - Enhanced prominence */}
                       <div className="flex items-center gap-8 text-white">
                         <div className="flex items-center gap-3">
                           <DollarSign className="w-5 h-5 text-green-400" />
-                          <span className="font-bold text-2xl text-green-400">
+                          <span className="font-semibold text-lg text-green-400">
                             {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
                           </span>
                         </div>
@@ -395,7 +398,7 @@ export default function UnifiedExpenseDetailsModal({
                         <div className="w-16 bg-gray-600 rounded-full h-2">
                           <div
                             className={`h-2 rounded-full transition-all duration-300 ${
-                              claimDetails.status === 'rejected' ? 'bg-red-500' : 'bg-blue-500'
+                              claimDetails.status === 'rejected' ? 'bg-red-500' : 'bg-blue-500' // ✅ Unified status field
                             }`}
                             style={{ width: `${claimDetails.workflow_progress || 0}%` }}
                           />
@@ -405,18 +408,18 @@ export default function UnifiedExpenseDetailsModal({
                   </div>
 
                   {/* Current approver info only */}
-                  {claimDetails.current_approver_name && ['submitted', 'under_review', 'pending_approval'].includes(claimDetails.status) && (
+                  {claimDetails.current_approver_name && ['submitted'].includes(claimDetails.status) && ( /* ✅ Simplified: only 'submitted' shows approver */
                     <div className="text-sm text-gray-400">
                       Currently with: <span className="text-white">{claimDetails.current_approver_name}</span>
                     </div>
                   )}
                 </div>
 
-                {/* Bottom Section - 50/50 Split */}
+                {/* Bottom Section - 40/60 Split */}
                 <div className="flex flex-1 overflow-hidden">
-                  {/* Left Panel - Receipt Preview (50%) */}
-                  <div className="w-1/2 border-r border-gray-700 flex flex-col">
-                    <div className="flex-1 bg-gray-900">
+                  {/* Left Panel - Receipt Preview (40%) */}
+                  <div className="w-2/5 border-r border-gray-700 flex flex-col">
+                    <div className="flex-1 bg-gray-900 overflow-hidden">
                       {imageLoading ? (
                         <div className="flex items-center justify-center h-full">
                           <div className="text-center text-gray-400">
@@ -431,6 +434,7 @@ export default function UnifiedExpenseDetailsModal({
                           fileType={claimDetails.document?.file_type || 'image/jpeg'}
                           fileSize={0}
                           boundingBoxes={claimDetails.document?.extracted_data?.bounding_boxes || []}
+                          hideRegionsCount={true}
                         />
                       ) : claimDetails.storage_path ? (
                         <div className="flex items-center justify-center h-full">
@@ -451,8 +455,8 @@ export default function UnifiedExpenseDetailsModal({
                     </div>
                   </div>
 
-                  {/* Right Panel - Details and Line Items (50%) */}
-                  <div className="w-1/2 overflow-y-auto">
+                  {/* Right Panel - Details and Line Items (60%) */}
+                  <div className="w-3/5 overflow-y-auto">
                     <div className="p-6 space-y-6">
                       {/* Basic Information */}
                       <Card className="bg-gray-800 border-gray-600">
@@ -657,10 +661,10 @@ export default function UnifiedExpenseDetailsModal({
                             <div className="flex items-center justify-between">
                               <div>
                                 <p className="text-white font-medium">{claimDetails.document.original_filename}</p>
-                                <p className="text-gray-400 text-sm">{claimDetails.document.file_type.toUpperCase()} • {claimDetails.document.processing_status.replace('_', ' ').toUpperCase()}</p>
+                                <p className="text-gray-400 text-sm">{claimDetails.document.file_type.toUpperCase()} • {claimDetails.document.ocr_processing_status.replace('_', ' ').toUpperCase()}</p>
                               </div>
                               <div className="flex items-center gap-2">
-                                {getProcessingStatusIcon(claimDetails.document.processing_status)}
+                                {getProcessingStatusIcon(claimDetails.document.ocr_processing_status)}
                                 {claimDetails.document.annotated_image_url && (
                                   <Button
                                     size="sm"
@@ -692,6 +696,20 @@ export default function UnifiedExpenseDetailsModal({
                           </CardContent>
                         </Card>
                       )}
+
+                      {/* Receipt ID at bottom of content */}
+                      <div className="flex justify-end mt-6 pt-4 border-t border-gray-600">
+                        <div className="flex items-center gap-2 bg-gray-700/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
+                          <span className="text-gray-300 text-xs font-mono">Receipt ID: {claimId}</span>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(claimId)}
+                            className="text-gray-400 hover:text-gray-200 transition-colors"
+                            title="Copy Receipt ID"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -728,6 +746,7 @@ export default function UnifiedExpenseDetailsModal({
                 fileType={claimDetails.document.file_type || 'image/jpeg'}
                 fileSize={0}
                 boundingBoxes={claimDetails.document.extracted_data?.bounding_boxes || []}
+                hideRegionsCount={true}
               />
             </div>
           </div>

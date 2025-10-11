@@ -1,7 +1,7 @@
 /**
  * IFRS Accounting Categories Constants
  * Single source of truth for all IFRS accounting categories used across the application
- * Used by: CategorySelector UI, DSPy processing, expense categorization
+ * Used by: CategorySelector UI, AI processing, expense categorization
  */
 
 export interface IFRSCategory {
@@ -16,7 +16,7 @@ export interface CategoryOption {
   group: string
 }
 
-// Core IFRS accounting categories for DSPy processing and categorization
+// Core IFRS accounting categories for AI processing and categorization
 export const IFRS_CATEGORIES: IFRSCategory[] = [
   // Direct Expenses
   { category_code: "cost_of_goods_sold", category_name: "Cost of Goods Sold", group: "Direct Expenses" },
@@ -45,11 +45,6 @@ export const IFRS_CATEGORY_OPTIONS: CategoryOption[] = IFRS_CATEGORIES.map(categ
   group: category.group
 }))
 
-// For DSPy processing - simplified format
-export const IFRS_CATEGORIES_FOR_DSPY = IFRS_CATEGORIES.map(category => ({
-  category_code: category.category_code,
-  category_name: category.category_name
-}))
 
 // Income categories (kept separate as they're not IFRS expense categories)
 export const INCOME_CATEGORIES: CategoryOption[] = [

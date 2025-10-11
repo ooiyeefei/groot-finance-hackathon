@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
         summary.total_amount += amount
 
         // Categorize by status
-        switch (claim.status) {
+        switch (claim.status) { // ✅ Unified status field
           case 'approved':
           case 'reimbursed':
           case 'paid':
@@ -275,7 +275,7 @@ async function generateCSVReport(report: MonthlyExpenseReport, categoryMap: Map<
     claim.transaction?.vendor_name || '',
     claim.transaction?.original_amount || 0,
     claim.transaction?.original_currency || report.home_currency,
-    claim.status,
+    claim.status, // ✅ Unified status field
     claim.business_purpose,
     claim.submission_date || '',
     claim.approval_date || ''
@@ -364,7 +364,7 @@ function generateReportHTML(report: MonthlyExpenseReport, categoryMap: Map<strin
                     <td>${categoryMap.get(claim.expense_category) || claim.expense_category}</td>
                     <td>${claim.transaction?.vendor_name || 'N/A'}</td>
                     <td>${(claim.transaction?.original_amount || 0).toFixed(2)} ${claim.transaction?.original_currency || report.home_currency}</td>
-                    <td class="status-${claim.status}">${claim.status.replace('_', ' ').toUpperCase()}</td>
+                    <td class="status-${claim.status}">${claim.status.replace('_', ' ').toUpperCase()}</td> <!-- ✅ Unified status field -->
                     <td>${claim.business_purpose}</td>
                 </tr>
             `).join('')}

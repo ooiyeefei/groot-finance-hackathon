@@ -77,7 +77,7 @@ export async function POST(
     }
 
     // Check if already processing
-    if (expenseClaim.processing_status === 'processing') {
+    if (expenseClaim.status === 'analyzing') { // ✅ Unified status field
       return NextResponse.json(
         { success: false, error: 'Expense claim is already being processed' },
         { status: 409 }
@@ -85,16 +85,16 @@ export async function POST(
     }
 
     // Step 3: Auto-detect status and prepare update data (following document pattern)
-    console.log(`[Expense-Processor] Current status: ${expenseClaim.processing_status}`)
+    console.log(`[Expense-Processor] Current status: ${expenseClaim.status}`) // ✅ Unified status field
     const updateData: Record<string, unknown> = {
-      processing_status: 'processing',
+      status: 'analyzing', // ✅ Unified status field
       processing_started_at: new Date().toISOString(),
       error_message: null,
       failed_at: null
     }
 
     // If reprocessing completed/failed claims, clear previous results
-    if (['completed', 'failed'].includes(expenseClaim.processing_status)) {
+    if (['draft', 'failed'].includes(expenseClaim.status)) { // ✅ Simplified status: 'draft' after OCR completion
       updateData.confidence_score = null
       updateData.processed_at = null
       console.log('[Expense-Processor] Clearing previous results for reprocessing')
@@ -126,7 +126,7 @@ export async function POST(
         // Determine which path to use: converted_image_path (for PDFs) or storage_path (for images)
         const imagePath = expenseClaim.converted_image_path || expenseClaim.storage_path
         console.log(`[Expense-Processor] Found receipt at: ${imagePath}`)
-        console.log(`[Expense-Processor] Downloading and preparing image for DSPy extraction`)
+        console.log(`[Expense-Processor] Downloading and preparing image for extraction`)
 
         // Download the image from Supabase storage and convert to base64
         const { data: urlData, error: urlError } = await supabase.storage
@@ -148,9 +148,9 @@ export async function POST(
         const fileName = expenseClaim.file_name || 'receipt.jpg'
 
         console.log(`[Expense-Processor] Image prepared: ${Math.round(imageBuffer.byteLength / 1024)}KB, type: ${mimeType}`)
-        console.log(`[Expense-Processor] Triggering DSPy extraction for receipt processing`)
+        console.log(`[Expense-Processor] Triggering AI extraction for receipt processing`)
 
-        // Trigger DSPy extraction with properly formatted image data
+        // Trigger AI extraction with properly formatted image data
         await tasks.trigger<typeof extractReceiptData>("extract-receipt-data", {
           receiptImageData: {
             base64: base64Image,
@@ -161,13 +161,13 @@ export async function POST(
           userId: userId,
           requestId: `expense-process-${expenseClaimId}-${Date.now()}`
         })
-        console.log(`[Expense-Processor] Successfully triggered DSPy extraction for claim ${expenseClaimId}`)
+        console.log(`[Expense-Processor] Successfully triggered AI extraction for claim ${expenseClaimId}`)
 
       } else if (expenseClaim.business_purpose_details?.file_upload?.file_path) {
         // Fallback: Check if expense claim has file upload info in business_purpose_details
         const filePath = expenseClaim.business_purpose_details.file_upload.file_path
         console.log(`[Expense-Processor] Found file path in business_purpose_details: ${filePath}`)
-        console.log(`[Expense-Processor] Downloading and preparing image for DSPy extraction`)
+        console.log(`[Expense-Processor] Downloading and preparing image for AI extraction`)
 
         // Download the image from Supabase storage and convert to base64
         const { data: urlData, error: urlError } = await supabase.storage
@@ -189,9 +189,9 @@ export async function POST(
         const fileName = expenseClaim.business_purpose_details.file_upload.file_name || 'receipt.jpg'
 
         console.log(`[Expense-Processor] Image prepared: ${Math.round(imageBuffer.byteLength / 1024)}KB, type: ${mimeType}`)
-        console.log(`[Expense-Processor] Triggering DSPy extraction for receipt processing`)
+        console.log(`[Expense-Processor] Triggering AI extraction for receipt processing`)
 
-        // Trigger DSPy extraction with properly formatted image data
+        // Trigger AI extraction with properly formatted image data
         await tasks.trigger<typeof extractReceiptData>("extract-receipt-data", {
           receiptImageData: {
             base64: base64Image,
@@ -202,10 +202,10 @@ export async function POST(
           userId: userId,
           requestId: `expense-reprocess-${expenseClaimId}-${Date.now()}`
         })
-        console.log(`[Expense-Processor] Successfully triggered DSPy extraction for claim ${expenseClaimId}`)
+        console.log(`[Expense-Processor] Successfully triggered AI extraction for claim ${expenseClaimId}`)
 
       } else {
-        // Manual entry - mark as processed without DSPy extraction
+        // Manual entry - mark as processed without AI extraction
         console.log(`[Expense-Processor] Manual entry claim - no file to process`)
         console.log(`[Expense-Processor] True manual entry - triggering manual review processing`)
 
@@ -228,7 +228,7 @@ export async function POST(
       await supabase
         .from('expense_claims')
         .update({
-          processing_status: 'failed',
+          status: 'failed', // ✅ Unified status field
           error_message: 'Failed to start background processing',
           failed_at: new Date().toISOString()
         })
@@ -249,7 +249,7 @@ export async function POST(
         expenseClaimId: expenseClaimId,
         status: 'processing',
         message: 'Expense claim processing started successfully',
-        processingType: (expenseClaim.storage_path || expenseClaim.business_purpose_details?.file_upload?.file_path) ? 'DSPy receipt extraction queued' : 'Manual entry processed',
+        processingType: (expenseClaim.storage_path || expenseClaim.business_purpose_details?.file_upload?.file_path) ? 'AI receipt extraction queued' : 'Manual entry processed',
         processingStarted: new Date().toISOString(),
         method: 'trigger.dev'
       }
@@ -271,7 +271,7 @@ export async function POST(
             await supabase
               .from('expense_claims')
               .update({
-                processing_status: 'failed',
+                status: 'failed', // ✅ Unified status field
                 error_message: 'Unexpected processing error',
                 failed_at: new Date().toISOString()
               })

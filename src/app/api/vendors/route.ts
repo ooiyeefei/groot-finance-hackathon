@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { 
   Vendor, 
   CreateVendorRequest, 
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     const { searchParams } = new URL(request.url)
 
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Create vendor
     const { data: vendor, error: vendorError } = await supabase

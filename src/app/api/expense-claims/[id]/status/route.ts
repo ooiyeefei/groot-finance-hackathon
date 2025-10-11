@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { 
   ExpenseStatus,
   ExpenseClaimApprovalRequest,
@@ -38,7 +38,7 @@ export async function PATCH(
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Get current expense claim with related data
     const { data: expenseClaim, error: claimError } = await supabase
@@ -87,16 +87,16 @@ export async function PATCH(
         requiredRole = 'employee'
         break
       case 'approve':
-        // Manager approval moves to 'approved', Admin approval moves to 'reimbursed'
-        if (expenseClaim.status === 'under_review') {
+        // ✅ Unified status: Manager approval moves 'submitted' to 'approved', Admin approval moves 'approved' to 'reimbursed'
+        if (expenseClaim.status === 'submitted') { // ✅ Unified status field
           targetStatus = 'approved'
           requiredRole = 'manager'
-        } else if (expenseClaim.status === 'approved') {
+        } else if (expenseClaim.status === 'approved') { // ✅ Unified status field
           targetStatus = 'reimbursed'
           requiredRole = 'admin'
         } else {
           return NextResponse.json(
-            { success: false, error: `Cannot approve claim with status: ${expenseClaim.status}` },
+            { success: false, error: `Cannot approve claim with status: ${expenseClaim.status}` }, // ✅ Unified status field
             { status: 400 }
           )
         }
@@ -118,17 +118,17 @@ export async function PATCH(
 
     // Validate workflow transition (Kevin's state machine)
     const validTransition = EXPENSE_WORKFLOW_TRANSITIONS.find(
-      (transition: WorkflowTransition) => 
-        transition.from === expenseClaim.status && 
+      (transition: WorkflowTransition) =>
+        transition.from === expenseClaim.status && // ✅ Unified status field
         transition.to === targetStatus &&
         transition.requiredRole === requiredRole
     )
 
     if (!validTransition) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Invalid transition from ${expenseClaim.status} to ${targetStatus} for role ${requiredRole}` 
+        {
+          success: false,
+          error: `Invalid transition from ${expenseClaim.status} to ${targetStatus} for role ${requiredRole}` // ✅ Unified status field
         },
         { status: 400 }
       )
@@ -152,7 +152,7 @@ export async function PATCH(
     // Prepare update data
     const now = new Date().toISOString()
     const updateData: any = {
-      status: targetStatus,
+      status: targetStatus, // ✅ Unified status field
       updated_at: now
     }
 
@@ -161,10 +161,6 @@ export async function PATCH(
       case 'submitted':
         updateData.submission_date = now
         updateData.current_approver_id = await getAdminTeamId(supabase) // Assign to admin since we don't have manager_id
-        break
-        
-      case 'under_review':
-        // Manager has started reviewing
         break
         
       case 'approved':
@@ -264,7 +260,7 @@ export async function PATCH(
         target_entity_type: 'expense_claim',
         target_entity_id: claimId,
         details: {
-          previous_status: expenseClaim.status,
+          previous_status: expenseClaim.status, // ✅ Unified status field
           new_status: targetStatus,
           action_comment: comment,
           expense_amount: expenseClaim.transaction?.original_amount,
@@ -285,13 +281,13 @@ export async function PATCH(
         .eq('id', expenseClaim.accounting_entry_id)
     }
 
-    console.log(`[Expense Claims Status API] Updated claim ${claimId} from ${expenseClaim.status} to ${targetStatus}`)
+    console.log(`[Expense Claims Status API] Updated claim ${claimId} from ${expenseClaim.status} to ${targetStatus}`) // ✅ Unified status field
 
     return NextResponse.json({
       success: true,
       data: {
         expense_claim: updatedClaim,
-        previous_status: expenseClaim.status,
+        previous_status: expenseClaim.status, // ✅ Unified status field
         new_status: targetStatus,
         action_by: userProfile.user_id
       }

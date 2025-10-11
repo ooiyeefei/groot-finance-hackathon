@@ -1,6 +1,6 @@
 /**
- * DSPy Expense Submission Flow - Orchestrator Component
- * DSPy-Inspired Architecture: Single responsibility - orchestrates the 3-step flow
+ * AI Expense Submission Flow - Orchestrator Component
+ * AI-Inspired Architecture: Single responsibility - orchestrates the 3-step flow
  * Implements: Upload → Process → Pre-filled Form workflow
  */
 
@@ -10,13 +10,13 @@ import { useState, useCallback, useEffect } from 'react'
 import { X, ArrowLeft, ArrowRight, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { DSPyExtractionResult } from '@/types/expense-extraction'
+import { AIExtractionResult } from '@/types/expense-extraction'
 import { useExpenseClaimProcessing } from '@/hooks/use-expense-claim-processing'
 import ReceiptUploadStep from './receipt-upload-step'
-import DSPyProcessingStep from './dspy-processing-step'
+import ProcessingStep from './processing-step'
 import CreateExpensePageNew from './create-expense-page-new'
 
-interface DSPyExpenseSubmissionFlowProps {
+interface ExpenseSubmissionFlowProps {
   onClose: (hasBackgroundProcessing?: boolean) => void
   onSubmit: (formData: any) => void
   initialStep?: FlowStep // Allow starting from a specific step
@@ -27,18 +27,18 @@ type FlowStep = 'upload' | 'processing' | 'form'
 interface FlowState {
   currentStep: FlowStep
   uploadedFile: File | null
-  extractionResult: DSPyExtractionResult | null
+  extractionResult: AIExtractionResult | null
   error: string | null
   isSubmitting: boolean
   isBackgroundProcessing: boolean
   processingClaimId: string | null
 }
 
-export default function DSPyExpenseSubmissionFlow({
+export default function ExpenseSubmissionFlow({
   onClose,
   onSubmit,
   initialStep = 'upload'
-}: DSPyExpenseSubmissionFlowProps) {
+}: ExpenseSubmissionFlowProps) {
   const {
     processingClaims,
     addProcessingClaim,
@@ -62,7 +62,7 @@ export default function DSPyExpenseSubmissionFlow({
   // Initialize extraction result for manual entry (when starting with 'form' step)
   useEffect(() => {
     if (initialStep === 'form' && !flowState.extractionResult) {
-      const fallbackResult: DSPyExtractionResult = {
+      const fallbackResult: AIExtractionResult = {
         thinking: {
           step1_vendor_analysis: 'Manual entry - no automated analysis performed',
           step2_date_identification: 'Manual entry - user will provide date',
@@ -96,7 +96,7 @@ export default function DSPyExpenseSubmissionFlow({
     }
   }, [initialStep, flowState.extractionResult])
 
-  // DSPy Flow: Step 1 → Step 2 (Upload → Processing)
+  // AI Flow: Step 1 → Step 2 (Upload → Processing)
   const handleFileSelected = (file: File) => {
     // Handle validation errors from ReceiptUploadStep
     if (file.type.startsWith('error/')) {
@@ -121,8 +121,8 @@ export default function DSPyExpenseSubmissionFlow({
     }))
   }
 
-  // DSPy Flow: Step 2 → Step 3 (Processing → Pre-filled Form)
-  const handleExtractionComplete = (result: DSPyExtractionResult) => {
+  // AI Flow: Step 2 → Step 3 (Processing → Pre-filled Form)
+  const handleExtractionComplete = (result: AIExtractionResult) => {
     setFlowState(prev => ({
       ...prev,
       extractionResult: result,
@@ -130,7 +130,7 @@ export default function DSPyExpenseSubmissionFlow({
     }))
   }
 
-  // Track background processing state from DSPyProcessingStep
+  // Track background processing state from ProcessingStep
   const handleProcessingStateChange = useCallback((isProcessing: boolean) => {
     setFlowState(prev => ({
       ...prev,
@@ -146,7 +146,7 @@ export default function DSPyExpenseSubmissionFlow({
     if (!claim) return
 
     // Update background processing state
-    const isActivelyProcessing = ['uploading', 'processing', 'extracting'].includes(claim.status)
+    const isActivelyProcessing = ['uploading', 'processing', 'analyzing'].includes(claim.status)
     if (flowState.isBackgroundProcessing !== isActivelyProcessing) {
       setFlowState(prev => ({
         ...prev,
@@ -169,10 +169,10 @@ export default function DSPyExpenseSubmissionFlow({
     }
   }, [processingClaims, flowState.processingClaimId, flowState.isBackgroundProcessing, flowState.currentStep])
 
-  // DSPy Flow: Skip processing and go directly to manual form
+  // AI Flow: Skip processing and go directly to manual form
   const handleSkipToManualForm = () => {
     // Create a fallback extraction result for manual entry
-    const fallbackResult: DSPyExtractionResult = {
+    const fallbackResult: AIExtractionResult = {
       thinking: {
         step1_vendor_analysis: 'Manual entry - no automated analysis performed',
         step2_date_identification: 'Manual entry - user will provide date',
@@ -322,7 +322,11 @@ export default function DSPyExpenseSubmissionFlow({
       }}
     >
       <div
-        className="bg-gray-800 rounded-lg w-full max-w-7xl max-h-[96vh] overflow-hidden"
+        className={`bg-gray-800 rounded-lg w-full max-h-[96vh] overflow-hidden ${
+          flowState.currentStep === 'upload' ? 'max-w-2xl' :
+          flowState.currentStep === 'processing' ? 'max-w-4xl' :
+          'max-w-7xl'
+        }`}
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
       >
         {/* Header */}
@@ -400,7 +404,7 @@ export default function DSPyExpenseSubmissionFlow({
 
           {/* Step 2: Processing */}
           {flowState.currentStep === 'processing' && flowState.uploadedFile && (
-            <DSPyProcessingStep
+            <ProcessingStep
               file={flowState.uploadedFile}
               onExtractionComplete={handleExtractionComplete}
               onRetry={handleRetryProcessing}
@@ -422,7 +426,7 @@ export default function DSPyExpenseSubmissionFlow({
               showBackButton={true}
               pageTitle="Create Expense Claim"
               pageDescription="Review and submit your extracted expense details"
-              hideHeader={true}  // Hide redundant header since we're in DSPy flow
+              hideHeader={true}  // Hide redundant header since we're in AI flow
             />
           )}
         </div>

@@ -6,13 +6,13 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/currency-service'
 import {
   CreateExpenseClaimRequest,
   ExpenseClaimListParams,
-  ExpenseStatus,
+  ExpenseClaimStatus, // ✅ Unified status type
   ExpenseCategory,
   EXPENSE_WORKFLOW_TRANSITIONS,
   EXPENSE_VALIDATION_RULES
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Get or create employee profile
     const employeeProfile = await ensureUserProfile(userId)
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
           transaction_date,
           reference_number,
           created_at
-        `)
+        `) // ✅ Unified status field
         .eq('user_id', employeeProfile.user_id)
         .eq('reference_number', reference_number)
         .eq('transaction_date', transaction_date)
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
       } else if (existingClaims && existingClaims.length > 0) {
         const existing = existingClaims[0]
 
-        console.log(`[Expense Claims API] Duplicate detected: ${existing.id} (status: ${existing.status})`)
+        console.log(`[Expense Claims API] Duplicate detected: ${existing.id} (status: ${existing.status})`) // ✅ Unified status field
         return NextResponse.json({
           success: false,
           error: 'duplicate_detected',
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
             transaction_date: existing.transaction_date,
             amount: existing.total_amount,
             vendor_name: existing.vendor_name,
-            status: existing.status,
+            status: existing.status, // ✅ Unified status field
             created_at: existing.created_at
           },
           message: `This expense has already been submitted (Reference: ${reference_number}, Date: ${transaction_date}, Amount: ${original_amount}). Please check your existing claims.`
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
     const expenseClaimData = {
       user_id: employeeProfile.user_id,
       business_id: employeeProfile.business_id,
-      status: 'draft', // Start in draft status
+      status: 'draft', // ✅ Unified status: Start in draft status (manual entry completed)
       business_purpose,
       business_purpose_details: notes || null, // Store notes as additional business purpose details (text format)
       expense_category,
@@ -192,10 +192,10 @@ export async function POST(request: NextRequest) {
       current_approver_id: null, // Will be set when submitted
       storage_path: storage_path || null, // Include storage path for manual receipt uploads
 
-      // Store financial data in processing_metadata (like DSPy processing)
+      // Store financial data in processing_metadata
       processing_metadata: {
         processing_method: 'manual_entry',
-        processing_status: 'completed',
+        status: 'completed', // ✅ Unified status metadata
         processing_timestamp: new Date().toISOString(),
 
         // Store financial data for later accounting_entries creation
@@ -331,7 +331,7 @@ export async function GET(request: NextRequest) {
     const params: ExpenseClaimListParams = {
       page: parseInt(searchParams.get('page') || '1'),
       limit: Math.min(parseInt(searchParams.get('limit') || '20'), 100),
-      status: searchParams.get('status') as ExpenseStatus,
+      status: searchParams.get('status') as ExpenseClaimStatus, // ✅ Unified status parameter
       expense_category: searchParams.get('expense_category') as ExpenseCategory,
       user_id: searchParams.get('user_id') || undefined,
       date_from: searchParams.get('date_from') || undefined,
@@ -342,7 +342,7 @@ export async function GET(request: NextRequest) {
       sort_order: (searchParams.get('sort_order') as any) || 'desc'
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Get or create employee profile to determine role and permissions
     const employeeProfile = await ensureUserProfile(userId)
@@ -378,7 +378,7 @@ export async function GET(request: NextRequest) {
 
     // Apply filters
     if (params.status) {
-      query = query.eq('status', params.status)
+      query = query.eq('status', params.status) // ✅ Unified status filter
     }
 
     if (params.expense_category) {
@@ -409,12 +409,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Apply sorting
-    const validSortColumns = ['submission_date', 'created_at', 'status']
+    const validSortColumns = ['submission_date', 'created_at', 'status'] // ✅ Unified status column
     let sortColumn = 'created_at'
-    
+
     if (params.sort_by === 'submission_date') {
       sortColumn = 'submission_date'
-    } else if (params.sort_by === 'status') {
+    } else if (params.sort_by === 'status') { // ✅ Unified status sort
       sortColumn = 'status'
     }
     

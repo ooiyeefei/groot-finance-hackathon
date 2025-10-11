@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, createServiceSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient, createServiceSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 interface CreateApplicationRequest {
   title: string
@@ -43,11 +43,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[Applications API] Creating application for user ${userId}`)
+    console.log(`[Applications API] Creating application for Clerk user: ${userId}`)
 
-    // SECURITY FIX: Use authenticated client with RLS
+    // CRITICAL FIX: Use business context client for proper RLS setup
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient()
+    console.log(`[Applications API] Resolved to Supabase user: ${userData.id}, business_id: ${userData.business_id}`)
+
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Verify application type exists
     const { data: appType, error: appTypeError } = await supabase
@@ -136,12 +138,56 @@ export async function GET(request: NextRequest) {
       application_type: searchParams.get('application_type') || undefined
     }
 
-    console.log(`[Applications API] Fetching applications for user ${userId}`)
+    // Clean up empty string parameters that could cause UUID errors
+    if (params.status === '' as any) params.status = undefined
+    if (params.application_type === '') params.application_type = undefined
 
-    // SECURITY FIX: Use authenticated client with RLS + business_id filtering
-    const supabase = await createAuthenticatedSupabaseClient()
+    console.log(`[Applications API] Fetching applications for Clerk user: ${userId}`)
+    console.log(`[Applications API] Query params:`, { status: params.status, application_type: params.application_type, page: params.page, limit: params.limit })
 
-    // Build query - RLS handles business_id filtering automatically
+    // CRITICAL FIX: Use business context client for proper RLS setup
+    const userData = await getUserData(userId)
+    console.log(`[Applications API] Resolved to Supabase user: ${userData.id}, business_id: ${userData.business_id}`)
+
+    const supabase = await createBusinessContextSupabaseClient()
+
+    console.log(`[Applications API] Using direct filtering: user_id=${userData.id}, business_id=${userData.business_id}`)
+
+    // DEBUG: First let's test if we can fetch ANY applications at all
+    console.log(`[Applications API] DEBUG - About to run debug query with business context client`)
+    console.log(`[Applications API] DEBUG - Expected user_id: ${userData.id}`)
+    console.log(`[Applications API] DEBUG - Expected business_id: ${userData.business_id}`)
+
+    const { data: allApps, error: allAppsError } = await supabase
+      .from('applications')
+      .select('id, user_id, business_id, title')
+      .limit(5)
+
+    console.log(`[Applications API] DEBUG - Total applications in table (first 5):`, allApps?.length || 0)
+    if (allApps && allApps.length > 0) {
+      console.log(`[Applications API] DEBUG - Sample applications:`, JSON.stringify(allApps, null, 2))
+    }
+    if (allAppsError) {
+      console.error(`[Applications API] DEBUG - Error fetching all apps:`, allAppsError)
+    }
+
+    // SUPER DEBUG: Test with service client (bypasses RLS) to see if data exists at all
+    console.log(`[Applications API] SUPER DEBUG - Testing service client (bypasses RLS)`)
+    const serviceClient = createServiceSupabaseClient()
+    const { data: serviceApps, error: serviceError } = await serviceClient
+      .from('applications')
+      .select('id, user_id, business_id, title')
+      .limit(5)
+
+    console.log(`[Applications API] SUPER DEBUG - Service client found ${serviceApps?.length || 0} applications`)
+    if (serviceApps && serviceApps.length > 0) {
+      console.log(`[Applications API] SUPER DEBUG - Service client data:`, JSON.stringify(serviceApps, null, 2))
+    }
+    if (serviceError) {
+      console.error(`[Applications API] SUPER DEBUG - Service client error:`, serviceError)
+    }
+
+    // Build query with explicit user_id AND business_id filtering (much simpler!)
     let query = supabase
       .from('applications')
       .select(`
@@ -159,6 +205,8 @@ export async function GET(request: NextRequest) {
           created_at
         )
       `)
+      .eq('user_id', userData.id)  // Filter by Supabase user UUID
+      .eq('business_id', userData.business_id) // AND filter by business context
 
     // Apply filters
     if (params.status) {
@@ -174,7 +222,25 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range((params.page! - 1) * params.limit!, params.page! * params.limit! - 1)
 
+    console.log(`[Applications API] Executing query with user_id AND business_id filtering`)
+    console.log(`[Applications API] Query filters: user_id=${userData.id}, business_id=${userData.business_id}`)
+
     const { data: applications, error, count } = await query
+
+    if (error) {
+      console.error('[Applications API] Query error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      })
+    } else {
+      console.log(`[Applications API] Query successful, found ${applications?.length || 0} applications`)
+      console.log(`[Applications API] Raw applications data:`, JSON.stringify(applications, null, 2))
+      if (applications && applications.length > 0) {
+        console.log(`[Applications API] First application:`, applications[0])
+      }
+    }
 
     if (error) {
       console.error('[Applications API] Failed to fetch applications:', error)
@@ -184,10 +250,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get total count for pagination - RLS handles business filtering
+    // Get total count for pagination with explicit user_id AND business_id filtering
     const { count: totalCount } = await supabase
       .from('applications')
       .select('*', { count: 'exact', head: true })
+      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
 
     const hasMore = (params.page! - 1) * params.limit! + (applications?.length || 0) < (totalCount || 0)
 

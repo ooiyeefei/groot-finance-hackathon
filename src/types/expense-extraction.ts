@@ -1,5 +1,5 @@
 /**
- * DSPy-Inspired Expense Extraction Types
+ * AI-Powered Expense Extraction Types
  * Industry-standard data structure for automated receipt processing
  * Based on SOX, GAAP, IFRS compliance requirements
  */
@@ -8,11 +8,11 @@ import { SupportedCurrency } from './transaction'
 import { ExpenseCategory } from './expense-claims'
 
 // ============================================================================
-// DSPy SIGNATURE INTERFACES (TypeScript as Declarative Signatures)
+// AI SIGNATURE INTERFACES (TypeScript as Declarative Signatures)
 // ============================================================================
 
 /**
- * Core receipt data extracted via DSPy-inspired OCR
+ * Core receipt data extracted via AI-powered OCR
  * This interface serves as our "signature" - the contract between OCR and application
  */
 export interface ExtractedReceiptData {
@@ -46,13 +46,13 @@ export interface ExtractedReceiptData {
   paymentMethod?: 'cash' | 'card' | 'check' | 'digital' | 'other'
   cardLastFour?: string
   
-  // Quality Metrics (DSPy Confidence Scoring)
+  // Quality Metrics (AI Confidence Scoring)
   extractionQuality: 'high' | 'medium' | 'low'
   confidenceScore: number // 0.0 to 1.0
   missingFields: string[] // Fields that couldn't be extracted
   
   // Processing Metadata
-  processingMethod: 'gemini_ocr' | 'dspy' | 'manual_entry'
+  processingMethod: 'gemini_ocr' | 'ai' | 'manual_entry'
   modelUsed?: string // e.g., "gemini-2.5-flash"
   processingTimestamp: string // ISO 8601
   documentId?: string // Link to uploaded document
@@ -72,11 +72,11 @@ export interface ExtractedLineItem {
 }
 
 // ============================================================================
-// DSPy CHAIN-OF-THOUGHT INTERFACES
+// AI CHAIN-OF-THOUGHT INTERFACES
 // ============================================================================
 
 /**
- * Structured reasoning output from DSPy-inspired Chain-of-Thought
+ * Structured reasoning output from AI Chain-of-Thought processing
  */
 export interface ExtractionReasoning {
   step1_vendor_analysis: string
@@ -89,9 +89,9 @@ export interface ExtractionReasoning {
 }
 
 /**
- * Complete DSPy-style extraction result
+ * Complete AI extraction result with reasoning
  */
-export interface DSPyExtractionResult {
+export interface AIExtractionResult {
   thinking: ExtractionReasoning
   extractedData: ExtractedReceiptData
   processingComplete: boolean
@@ -117,7 +117,7 @@ export interface EnhancedExpenseClaim {
   submissionDate: string // ISO 8601
   businessPurpose: string
   
-  // Extracted Receipt Data (DSPy Output)
+  // Extracted Receipt Data (AI Output)
   receiptData: ExtractedReceiptData
   
   // Categorization & Coding
@@ -257,7 +257,7 @@ export interface ReceiptAttachment {
   ocrStatus: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'
   ocrAttempts: number
   ocrLastAttemptAt?: string
-  ocrResult?: DSPyExtractionResult
+  ocrResult?: AIExtractionResult
   ocrErrors?: string[]
   
   // Quality metrics
@@ -303,13 +303,13 @@ export type ExpenseClaimStatus =
   | 'archived'
 
 // ============================================================================
-// DSPy PROMPT CONFIGURATION
+// AI PROMPT CONFIGURATION
 // ============================================================================
 
 /**
- * Configuration for DSPy-inspired prompting
+ * Configuration for AI prompting and processing
  */
-export interface DSPyPromptConfig {
+export interface AIPromptConfig {
   modelName: string
   temperature: number
   maxTokens: number
@@ -322,9 +322,9 @@ export interface DSPyPromptConfig {
 }
 
 /**
- * Few-shot example for DSPy prompting
+ * Few-shot example for AI prompting
  */
-export interface DSPyFewShotExample {
+export interface AIFewShotExample {
   receiptText: string
   expectedReasoning: ExtractionReasoning
   expectedOutput: ExtractedReceiptData

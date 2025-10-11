@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createServiceSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 
 // Types for expense report generation
@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     const serviceSupabase = createServiceSupabaseClient()
 
     // Get current user's employee profile for permission checking
@@ -485,7 +485,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Get current user's employee profile for permission checking
     const currentUserProfile = await ensureUserProfile(userId)

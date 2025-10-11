@@ -48,7 +48,7 @@ interface DocumentData {
   id: string
   file_name: string
   extracted_data?: {
-    // DSPy direct fields (new format)
+    // AI direct fields (new format)
     text?: string
     vendor_name?: string
     document_type?: string
@@ -215,8 +215,8 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     }
   }
 
-  // Note: Category determination now handled by DSPy pipeline with business-defined categories
-  // Fallback function for when no DSPy category is available
+  // Note: Category determination now handled by AI pipeline with business-defined categories
+  // Fallback function for when no AI category is available
   const getDefaultCategoryForInvoice = (): string => {
     // Default to 'direct_cost' for invoices as it's most appropriate for supplier invoices
     return 'direct_cost'
@@ -226,7 +226,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
   const extractedData = document.extracted_data as any
 
   console.log(`[Transaction Mapper] Extracted data structure:`, {
-    isDSPyFormat: !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type),
+    isAIFormat: !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type),
     hasDocumentSummary: !!extractedData.document_summary,
     hasLegacyEntities: !!(extractedData.entities && Array.isArray(extractedData.entities)),
     vendorName: extractedData.vendor_name || 'none',
@@ -243,13 +243,13 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
   // Declare summary variable for use throughout function
   let summary: any = null
 
-  // Check if this is DSPy structure (new format) or legacy structure
-  // Priority: DSPy direct fields > document_summary > entities
-  const isDSPyFormat = !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type)
+  // Check if this is AI structure (new format) or legacy structure
+  // Priority: AI direct fields > document_summary > entities
+  const isAIFormat = !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type)
 
-  if (isDSPyFormat) {
-    // Handle DSPy structure directly (new format)
-    console.log(`[Transaction Mapper] Processing DSPy structure`);
+  if (isAIFormat) {
+    // Handle AI structure directly (new format)
+    console.log(`[Transaction Mapper] Processing AI structure`);
 
     // Extract document type
     if (extractedData.document_type) {
@@ -295,7 +295,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     if (extractedData.total_amount) {
       mappedData.original_amount = parseAmount(extractedData.total_amount)
 
-      // Use currency from DSPy extraction
+      // Use currency from AI extraction
       if (extractedData.currency) {
         mappedData.original_currency = extractedData.currency as SupportedCurrency
       } else {
@@ -306,7 +306,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
       console.log(`[Transaction Mapper] Mapped amount: ${mappedData.original_amount} ${mappedData.original_currency}`);
     }
 
-    // Extract transaction date (DSPy uses document_date, not transaction_date)
+    // Extract transaction date (AI uses document_date, not transaction_date)
     if (extractedData.document_date) {
       mappedData.transaction_date = parseDate(extractedData.document_date)
       console.log(`[Transaction Mapper] Mapped date: ${mappedData.transaction_date}`);
@@ -412,11 +412,11 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     }
   }
   
-  // Extract reference number - use standardized document_number field from DSPy
-  // First, try raw DSPy structure (new format)
+  // Extract reference number - use standardized document_number field from AI
+  // First, try raw AI structure (new format)
   if (extractedData.document_number) {
     mappedData.reference_number = extractedData.document_number
-    console.log(`[Transaction Mapper] Mapped reference number from DSPy: ${mappedData.reference_number}`);
+    console.log(`[Transaction Mapper] Mapped reference number from AI: ${mappedData.reference_number}`);
   } else if (summary && (summary as any).document_number?.value) {
     // Fallback to nested document_summary structure
     mappedData.reference_number = (summary as any).document_number.value
@@ -438,26 +438,26 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
   const vendorName = mappedData.vendor_name || 'Unknown Vendor'
   mappedData.description = `${vendorName} - ${document.file_name.replace(/\.[^/.]+$/, "")}`
 
-  // Category assignment - prioritize DSPy-selected category from business definitions
+  // Category assignment - prioritize AI-selected category from business definitions
   // AI should return valid business COGS category codes (MATERIALS, LABOR, SUBCONTRACT, etc.)
   if (extractedData.suggested_category) {
-    // Use DSPy-selected category from business categories (set by process-document-ocr.ts)
+    // Use AI-selected category from business categories (set by process-document-ocr.ts)
     mappedData.category = extractedData.suggested_category
     console.log(`[Transaction Mapper] Using business COGS category from AI: ${mappedData.category}`);
   } else if (extractedData.selected_category) {
-    // Fallback to raw DSPy category selection (direct from LLM)
+    // Fallback to raw AI category selection (direct from LLM)
     mappedData.category = extractedData.selected_category
-    console.log(`[Transaction Mapper] Using raw DSPy category: ${mappedData.category}`);
+    console.log(`[Transaction Mapper] Using raw AI category: ${mappedData.category}`);
   } else {
     // Ultimate fallback to default category for invoices
     mappedData.category = getDefaultCategoryForInvoice()
-    console.log(`[Transaction Mapper] No DSPy category found, using default: ${mappedData.category}`);
+    console.log(`[Transaction Mapper] No AI category found, using default: ${mappedData.category}`);
   }
 
   // Note: vendor_details is not part of CreateTransactionRequest
 
   // Extract structured line items from OCR data
-  // For raw DSPy structure, line items are directly available
+  // For raw AI structure, line items are directly available
   // For legacy structure, try different locations
   let lineItemsSource = null;
 
@@ -468,7 +468,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
     metadataLineItems: document.extracted_data.metadata?.layoutElements?.line_items ? document.extracted_data.metadata?.layoutElements?.line_items.length : 'none'
   });
 
-  // Priority order for raw DSPy: direct line_items first, then nested paths
+  // Priority order for raw AI: direct line_items first, then nested paths
   if (extractedData.line_items && Array.isArray(extractedData.line_items) && extractedData.line_items.length > 0) {
     lineItemsSource = extractedData.line_items;
     console.log(`[Transaction Mapper] Using direct extractedData.line_items (${lineItemsSource.length} items)`);
@@ -499,7 +499,7 @@ export function mapDocumentToTransaction(document: DocumentData): Partial<Create
         unit_price_raw: structuredItem.unit_price,
         line_total_raw: structuredItem.line_total
       });
-      // Handle both raw DSPy format (direct values) and legacy format (nested .value)
+      // Handle both raw AI format (direct values) and legacy format (nested .value)
       const description = structuredItem.description?.value || structuredItem.description || `Item ${index + 1}`
       const itemCode = structuredItem.item_code?.value || structuredItem.item_code || undefined
       const quantity = parseFloat(structuredItem.quantity?.value || structuredItem.quantity || '1') || 1
@@ -574,12 +574,12 @@ export function canCreateTransactionFromDocument(document: DocumentData): boolea
 
   const extractedData = document.extracted_data as any
 
-  // Check DSPy structure first (new format) - priority check
-  const hasAmountDSPy = extractedData.total_amount
-  const hasVendorDSPy = extractedData.vendor_name
+  // Check AI structure first (new format) - priority check
+  const hasAmountAI = extractedData.total_amount
+  const hasVendorAI = extractedData.vendor_name
 
-  if (hasAmountDSPy || hasVendorDSPy) {
-    console.log('[Transaction Mapper] Document can create transaction - DSPy format detected');
+  if (hasAmountAI || hasVendorAI) {
+    console.log('[Transaction Mapper] Document can create transaction - AI format detected');
     return true
   }
 

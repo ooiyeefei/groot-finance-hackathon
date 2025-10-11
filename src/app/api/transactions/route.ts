@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
 import { CrossBorderTaxComplianceTool } from '@/lib/tools'
 import { 
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     console.log(`[Transactions API] Creating ${transaction_type} transaction for user ${userId}`)
 
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Use the submitted home currency from the form
     const homeCurrency: SupportedCurrency = home_currency
@@ -317,7 +317,7 @@ export async function GET(request: NextRequest) {
     console.log(`[Transactions API] Listing transactions for user ${userId}:`, params)
 
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     let query = supabase
       .from('accounting_entries')

@@ -1,8 +1,8 @@
 /**
  * Trigger.dev Task: Extract Receipt Data
  *
- * Advanced receipt processing using DSPy framework with Gemini 2.5 Flash
- * Follows extract tasks architecture pattern: Node.js creates signed URLs, Python script handles downloads
+ * AI receipt processing with Gemini 2.5 Flash
+ * Node.js handles URLs, Python processes extraction
  */
 
 import { task } from "@trigger.dev/sdk/v3";
@@ -67,12 +67,7 @@ export const extractReceiptData = task({
     requestId?: string;
     documentDomain?: 'invoices' | 'expense_claims';
   }) => {
-    console.log(`🚀 Starting DSPy receipt extraction`);
-    console.log(`📝 Receipt text length: ${payload.receiptText?.length || 0} chars`);
-    console.log(`🖼️ Image URL provided: ${!!payload.receiptImageUrl}`);
-    console.log(`📄 Document ID: ${payload.documentId}`);
-    console.log(`💰 Expense Claim ID: ${payload.expenseClaimId}`);
-    console.log(`🔍 Request ID: ${payload.requestId}`);
+    console.log(`🚀 Starting AI receipt extraction - Claim: ${payload.expenseClaimId}`);
 
     // Route to correct table based on domain (fallback to 'invoices' for backward compatibility)
     const documentDomain = payload.documentDomain || 'invoices';
@@ -85,7 +80,7 @@ export const extractReceiptData = task({
       let expenseClaim: any = null;
 
       if (payload.expenseClaimId) {
-        console.log(`🏢 Fetching business expense categories for enhanced DSPy categorization`);
+        console.log(`🏢 Fetching business categories for AI categorization`);
 
         // Get the expense claim and its business_id
         const { data: fetchedExpenseClaim, error: fetchError } = await supabase
@@ -110,20 +105,14 @@ export const extractReceiptData = task({
             businessCategories = business.custom_expense_categories.filter((cat: any) =>
               cat && cat.category_name && cat.is_active === true
             );
-            console.log(`🏷️ Found ${businessCategories.length} enabled expense categories for categorization`);
+            console.log(`🏷️ Found ${businessCategories.length} active categories`);
 
-            // Log categories overview like invoice processing
+            // Log categories fed to AI for debugging
             if (businessCategories.length > 0) {
               const categoriesOverview = businessCategories
                 .map(cat => `${cat.category_code.toUpperCase()}: ${cat.category_name}`)
                 .join(', ');
-              console.log(`🏷️ Expense Categories Overview: ${categoriesOverview}`);
-
-              const totalKeywords = businessCategories.reduce((sum: number, cat: any) =>
-                sum + (cat.ai_keywords?.length || 0), 0);
-              const totalVendorPatterns = businessCategories.reduce((sum: number, cat: any) =>
-                sum + (cat.vendor_patterns?.length || 0), 0);
-              console.log(`🤖 AI Processing: ${businessCategories.length} expense categories (${totalKeywords} keywords, ${totalVendorPatterns} vendor patterns) sent to DSPy AI`);
+              console.log(`🏷️ Categories sent to AI: ${categoriesOverview}`);
             }
           } else {
             console.log(`⚠️ No custom expense categories found for business ${expenseClaim.business_id}`);
@@ -135,10 +124,8 @@ export const extractReceiptData = task({
       let imageUrl = payload.receiptImageUrl;
 
       if (!imageUrl && expenseClaim?.storage_path) {
-        // Determine which path to use: converted_image_path (for PDFs) or storage_path (for images)
+        // Use converted image path for PDFs or original storage path for images
         const imagePath = expenseClaim.converted_image_path || expenseClaim.storage_path;
-        console.log(`🖼️ Using image storage path: ${imagePath}`);
-        console.log(`📄 Document type: ${expenseClaim.file_name?.includes('.pdf') ? 'application/pdf' : 'image'}, has converted path: ${!!expenseClaim.converted_image_path}`);
 
         const { data: urlData, error: urlError } = await supabase.storage
           .from('expense_claims')
@@ -149,15 +136,14 @@ export const extractReceiptData = task({
         }
 
         imageUrl = urlData.signedUrl;
-        console.log(`🔗 Created signed URL for expense receipt processing`);
       }
 
       if (!imageUrl && !payload.receiptImageData) {
-        throw new Error('No image URL or image data available for DSPy processing');
+        throw new Error('No image URL or image data available for processing');
       }
 
-      // Step 3: Run DSPy extraction using Python script (following extract tasks pattern)
-      console.log("🐍 Running DSPy extraction with Python script...");
+      // Step 3: Run AI extraction using Python script
+      console.log("🐍 Running AI extraction...");
 
       const result = await python.runScript(
         "./src/python/extract_receipt_data.py",
@@ -174,27 +160,20 @@ export const extractReceiptData = task({
         }
       );
 
-      // Step 4: Parse the result from Python script output (following extract tasks pattern)
-      console.log("🐍 DSPy extraction completed");
-      console.log("🔍 Raw Python result type:", typeof result);
-      console.log("🔍 Raw Python result length:", result ? JSON.stringify(result).length : 0);
-
-      // Log raw Python result like invoice processing
+      // Step 4: Parse Python script result
       console.log("🔍 Raw Python result:", JSON.stringify(result, null, 2));
 
       let pythonResult: any;
       if (result && typeof result === 'object' && 'stdout' in result) {
         try {
-          // Parse stdout directly as JSON since our Python script outputs clean JSON
+          // Parse JSON output from Python script
           const stdout = (result as any).stdout.trim();
           pythonResult = JSON.parse(stdout);
-          console.log(`✅ Successfully parsed Python JSON output`);
-          console.log("🔍 Debug - finalExtractionData value:", pythonResult);
         } catch (parseError) {
           console.error(`❌ Failed to parse Python JSON output:`, parseError);
           console.log(`📄 Raw stdout for debugging:`, (result as any).stdout);
 
-          throw new Error('DSPy processing encountered an unexpected format error. Please try uploading the receipt again.');
+          throw new Error('AI processing encountered an unexpected format error. Please try uploading the receipt again.');
         }
       } else {
         pythonResult = result;
@@ -221,21 +200,19 @@ export const extractReceiptData = task({
       // Extract the result data
       const extractionResult = pythonResult.data;
       if (!extractionResult) {
-        throw new Error('No extraction data returned from DSPy processing');
+        throw new Error('No extraction data returned from AI processing');
       }
 
-      console.log(`✅ DSPy extraction successful: ${extractionResult.vendor_name}, ${extractionResult.total_amount} ${extractionResult.currency}`);
+      console.log(`✅ AI extraction successful: ${extractionResult.vendor_name}, ${extractionResult.total_amount} ${extractionResult.currency}`);
 
-      // Log full extracted data like invoice processing
-      console.log("📊 Full DSPy Extraction Results:");
+      // Log full extracted data for debugging
+      console.log("📊 Full Extraction Results:");
       console.log(`🏪 Vendor: ${extractionResult.vendor_name}`);
       console.log(`💰 Amount: ${extractionResult.total_amount} ${extractionResult.currency}`);
       console.log(`🗓️ Date: ${extractionResult.transaction_date}`);
       console.log(`📄 Receipt #: ${extractionResult.receipt_number || 'N/A'}`);
       console.log(`🎯 Confidence: ${(extractionResult.confidence_score * 100).toFixed(1)}%`);
       console.log(`⚡ Processing time: ${pythonResult.processing_time_ms}ms`);
-      console.log(`🧠 Model used: ${extractionResult.model_used || 'gemini-2.0-flash-exp'}`);
-      console.log(`🔧 Backend: ${extractionResult.backend_used || 'gemini_dspy'}`);
       if (extractionResult.line_items?.length > 0) {
         console.log(`📋 Line items: ${extractionResult.line_items.length} items`);
         extractionResult.line_items.slice(0, 3).forEach((item: any, idx: number) => {
@@ -248,45 +225,44 @@ export const extractReceiptData = task({
 
       // Step 5: Update expense claim with extracted metadata (NO accounting_entries creation)
       if (payload.expenseClaimId) {
-        // Ensure processing status is set to 'processing' at start
-        console.log(`🔄 Ensuring processing status is set to 'processing' for claim ${payload.expenseClaimId}`);
+        // Ensure processing status is set to 'analyzing' at start ✅ Unified status
+        console.log(`🔄 Ensuring unified status is set to 'analyzing' for claim ${payload.expenseClaimId}`);
         await supabase
           .from('expense_claims')
           .update({
-            processing_status: 'processing',
+            status: 'analyzing', // ✅ Unified status field
             processing_started_at: new Date().toISOString()
           })
           .eq('id', payload.expenseClaimId);
 
-        console.log(`💰 Updating expense claim ${payload.expenseClaimId} with DSPy extraction metadata`);
+        console.log(`💰 Updating expense claim ${payload.expenseClaimId} with extraction metadata`);
 
         if (!expenseClaim) {
           throw new Error(`Expense claim not found - was not fetched in Step 1: ${payload.expenseClaimId}`);
         }
 
-        // Auto-categorize based on DSPy suggestion first, then vendor patterns
+        // Auto-categorize based on AI suggestion, then vendor patterns
         let autoCategory = null;
         console.log(`🎯 Starting auto-categorization for vendor: ${extractionResult.vendor_name}`);
 
         if (businessCategories.length > 0) {
-          // PRIORITY 1: Use DSPy's AI suggestion if available
+          // PRIORITY 1: Use AI suggested category if available
           if (extractionResult.suggested_category) {
-            console.log(`🤖 DSPy suggested category: "${extractionResult.suggested_category}"`);
+            console.log(`🤖 AI suggested category: "${extractionResult.suggested_category}"`);
 
-            // Find matching business category by name (case-insensitive)
             const matchedByName = businessCategories.find(cat =>
               cat.category_name?.toLowerCase() === extractionResult.suggested_category.toLowerCase()
             );
 
             if (matchedByName) {
               autoCategory = matchedByName.category_code;
-              console.log(`✅ Matched DSPy suggestion "${extractionResult.suggested_category}" to category: ${matchedByName.category_name} (${matchedByName.category_code})`);
+              console.log(`✅ Matched AI suggestion "${extractionResult.suggested_category}" to category: ${matchedByName.category_name} (${matchedByName.category_code})`);
             } else {
-              console.log(`⚠️ DSPy suggestion "${extractionResult.suggested_category}" not found in business categories`);
+              console.log(`⚠️ AI suggestion "${extractionResult.suggested_category}" not found in business categories`);
             }
           }
 
-          // PRIORITY 2: Fallback to vendor/keyword matching if no DSPy match
+          // PRIORITY 2: Fallback to vendor/keyword matching
           if (!autoCategory) {
             const vendor_lower = extractionResult.vendor_name.toLowerCase();
             console.log(`🔍 Checking vendor "${vendor_lower}" against ${businessCategories.length} active categories`);
@@ -299,14 +275,14 @@ export const extractReceiptData = task({
               // Check vendor patterns first
               if (vendorPatterns.some((pattern: string) => vendor_lower.includes(pattern.toLowerCase()))) {
                 autoCategory = category.category_code;
-                console.log(`✅ Matched vendor pattern "${vendorPatterns.find((p: string) => vendor_lower.includes(p.toLowerCase()))}" to category: ${category.category_name} (${category.category_code})`);
+                console.log(`✅ Matched vendor pattern to category: ${category.category_name} (${category.category_code})`);
                 break;
               }
 
               // Check AI keywords
               if (aiKeywords.some((keyword: string) => vendor_lower.includes(keyword.toLowerCase()))) {
                 autoCategory = category.category_code;
-                console.log(`✅ Matched AI keyword "${aiKeywords.find((k: string) => vendor_lower.includes(k.toLowerCase()))}" to category: ${category.category_name} (${category.category_code})`);
+                console.log(`✅ Matched AI keyword to category: ${category.category_name} (${category.category_code})`);
                 break;
               }
             }
@@ -321,7 +297,7 @@ export const extractReceiptData = task({
 
         // Create extraction metadata for storage
         const extractionMetadata = {
-          extraction_method: 'dspy',
+          extraction_method: 'ai',
           extraction_timestamp: new Date().toISOString(),
           confidence_score: extractionResult.confidence_score,
           processing_time_ms: pythonResult.processing_time_ms,
@@ -351,15 +327,8 @@ export const extractReceiptData = task({
         };
 
         // Update expense claim with extracted metadata
-        console.log(`💾 Updating expense claim with extracted data:`);
-        console.log(`   🏪 vendor_name: ${extractionResult.vendor_name}`);
-        console.log(`   💰 total_amount: ${extractionResult.total_amount} ${extractionResult.currency}`);
-        console.log(`   📅 transaction_date: ${extractionResult.transaction_date}`);
-        console.log(`   🎯 expense_category: ${autoCategory || businessCategories[0]?.category_code || 'other_business'}`);
-        console.log(`   📝 business_purpose: ${extractionResult.business_purpose || 'Business expense'}`);
-        console.log(`   📄 description: ${extractionResult.description || extractionResult.vendor_name}`);
-        console.log(`   🧾 reference_number: ${extractionResult.receipt_number || 'null'}`);
-        console.log(`   🎯 confidence_score: ${extractionResult.confidence_score || 'null'}`);
+        console.log(`💾 Final category determined: ${autoCategory || businessCategories[0]?.category_code || 'other_business'}`);
+        console.log(`💾 Updating expense claim ${payload.expenseClaimId} with extraction data`);
 
         const { error: updateError } = await supabase
           .from('expense_claims')
@@ -383,8 +352,8 @@ export const extractReceiptData = task({
             // Store all metadata in processing_metadata JSONB field
             processing_metadata: extractionMetadata,
 
-            // Update processing status
-            processing_status: 'completed',
+            // ✅ Key change: OCR completion goes to 'draft' for user review
+            status: 'draft', // User can now edit and submit when ready
             processed_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
@@ -407,7 +376,7 @@ export const extractReceiptData = task({
             target_entity_type: 'expense_claim',
             target_entity_id: payload.expenseClaimId,
             details: {
-              extraction_method: 'dspy',
+              extraction_method: 'ai',
               vendor: extractionResult.vendor_name,
               amount: extractionResult.total_amount,
               currency: extractionResult.currency,
@@ -422,7 +391,7 @@ export const extractReceiptData = task({
       return {
         success: true,
         data: extractionResult,
-        processing_method: 'dspy',
+        processing_method: 'ai',
         confidence_score: extractionResult.confidence_score,
         requires_validation: extractionResult.confidence_score < 0.8 || extractionResult.extraction_quality === 'low',
         document_id: payload.documentId,
@@ -430,15 +399,15 @@ export const extractReceiptData = task({
       };
 
     } catch (error) {
-      console.error("❌ DSPy extraction task failed:", error);
+      console.error("❌ AI extraction task failed:", error);
 
-      // Update expense claim status to failed if expenseClaimId provided
+      // Update expense claim status to failed if expenseClaimId provided ✅ Unified status
       if (payload.expenseClaimId) {
         await supabase
           .from('expense_claims')
           .update({
-            processing_status: 'failed',
-            error_message: error instanceof Error ? error.message : 'DSPy processing failed',
+            status: 'failed', // ✅ Unified status field
+            error_message: error instanceof Error ? error.message : 'AI processing failed',
             failed_at: new Date().toISOString()
           })
           .eq('id', payload.expenseClaimId);

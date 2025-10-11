@@ -175,9 +175,9 @@ export const classifyDocument = task({
     console.log(`[Classify] Updating database with classification: ${classificationResult.document_type}`);
     await updateDocumentClassification(documentId, classificationResult, taskId, tableName);  // ✅ PHASE 4B-3: Pass tableName
 
-    // Check for slot validation failures in DSPy result
+    // Check for slot validation failures in AI Processing result
     if (expectedDocumentType && applicationId && documentSlot) {
-      console.log(`[Classify] Checking DSPy slot validation result. Expected: ${expectedDocumentType}, Detected: ${classificationResult.document_type}`);
+      console.log(`[Classify] Checking AI Processor slot validation result. Expected: ${expectedDocumentType}, Detected: ${classificationResult.document_type}`);
 
       // Map document types for comparison (handle 'identity_card' vs 'ic')
       const normalizeDocType = (docType: string): string => {

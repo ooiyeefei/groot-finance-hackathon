@@ -16,10 +16,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[Receipt Extraction API] Redirecting to DSPy extraction endpoint')
+    console.log('[Receipt Extraction API] Redirecting to AI extraction endpoint')
 
-    // Redirect to the new DSPy extraction API
-    const dspyResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/expense-claims/dspy-extract`, {
+    // Redirect to the AI extraction API
+    const aiResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/expense-claims/ai-extract`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -34,12 +34,12 @@ export async function POST(request: NextRequest) {
       })
     })
 
-    if (!dspyResponse.ok) {
-      const errorData = await dspyResponse.json()
-      throw new Error(errorData.error || 'DSPy extraction failed')
+    if (!aiResponse.ok) {
+      const errorData = await aiResponse.json()
+      throw new Error(errorData.error || 'AI extraction failed')
     }
 
-    const result = await dspyResponse.json()
+    const result = await aiResponse.json()
     
     return NextResponse.json(result)
 

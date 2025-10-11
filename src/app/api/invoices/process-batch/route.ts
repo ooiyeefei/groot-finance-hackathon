@@ -11,7 +11,7 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server';
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server';
 import { processRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter';
 import { tasks } from "@trigger.dev/sdk/v3";
 import type { processDocumentOCR } from '@/trigger/process-document-ocr';
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[Batch-Processor] Starting batch processing for ${documentIds.length} documents`);
-    const supabase = await createAuthenticatedSupabaseClient(userId);
+    const supabase = await createBusinessContextSupabaseClient();
 
     // Step 3: Find and validate all documents (including file_type and storage_path)
     const { data: documents, error: fetchError } = await supabase

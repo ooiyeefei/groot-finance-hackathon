@@ -1,5 +1,5 @@
 /**
- * Clean DSPy Document OCR Processing Task
+ * Document OCR Processing Task
  * 
  * Simplified architecture using common services for standardized processing
  * Supports both Gemini (primary) and vLLM Skywork (fallback) backends
@@ -13,9 +13,9 @@ import {
   mapExpenseCategoryToAccounting,
   ACCOUNTING_CATEGORIES
 } from '@/lib/expense-category-mapper';
-import { IFRS_CATEGORIES_FOR_DSPY, IFRS_CATEGORIES } from '@/lib/constants/ifrs-categories';
+import { IFRS_CATEGORIES } from '@/lib/constants/ifrs-categories';
 
-// Note: DSPy processing function defined directly in Python inline code below
+// Note: AI processing function defined directly in Python inline code below
 
 // Initialize Supabase client with service role key for background processing
 const supabase = createClient(
@@ -282,7 +282,7 @@ export const processDocumentOCR = task({
     // ✅ PHASE 4C: Route to correct table based on domain
     const tableName = DOMAIN_TABLE_MAP[payload.documentDomain];
 
-    console.log(`🚀 Starting DSPy Document OCR extraction`);
+    console.log(`🚀 Starting Document OCR extraction`);
     console.log(`📄 Document ID: ${payload.documentId}`);
     console.log(`📊 Table: ${tableName} (domain: ${payload.documentDomain})`);
     console.log(`🖼️ Image storage path: ${payload.imageStoragePath || 'Will fetch from document record'}`);
@@ -337,7 +337,7 @@ export const processDocumentOCR = task({
               // Summary logging for AI processing
               const totalKeywords = businessCategories.reduce((sum, cat) => sum + (cat.ai_keywords?.length || 0), 0);
               const totalVendorPatterns = businessCategories.reduce((sum, cat) => sum + (cat.vendor_patterns?.length || 0), 0);
-              console.log(`🤖 AI Processing: ${businessCategories.length} COGS categories (${totalKeywords} keywords, ${totalVendorPatterns} vendor patterns) sent to DSPy AI`);
+              console.log(`🤖 AI Processing: ${businessCategories.length} COGS categories (${totalKeywords} keywords, ${totalVendorPatterns} vendor patterns) sent to AI`);
             } else {
               console.log(`⚠️ No COGS categories found, will fall back to IFRS categories`);
             }
@@ -453,11 +453,11 @@ export const processDocumentOCR = task({
 
       console.log(`🖼️ Image prepared: ${Math.round(imageBuffer.byteLength / 1024)}KB`);
 
-      // Step 3: Process with DSPy Common Services
-      console.log(`🐍 Starting DSPy processing with Python runtime...`);
-      const dspyResult = await python.runInline(`
+      // Step 3: Process with AI Common Services
+      console.log(`🐍 Starting AI processing with Python runtime...`);
+      const aiResult = await python.runInline(`
 # =============================================================================
-# DSPy PROCESSING WITH AI-POWERED IFRS CATEGORIZATION
+# AI PROCESSING WITH AI-POWERED IFRS CATEGORIZATION
 # =============================================================================
 
 import dspy
@@ -498,7 +498,7 @@ class DocumentProcessingWithIFRSSignature(dspy.Signature):
     extraction_confidence: float = dspy.OutputField(desc="Overall extraction confidence (0.0-1.0)")
     requires_validation: bool = dspy.OutputField(desc="Whether manual validation is needed")
 
-# DSPy Processor with AI-powered IFRS Categorization
+# AI Processor with AI-powered IFRS Categorization
 class AIIFRSDocumentProcessor(dspy.Module):
     def __init__(self):
         super().__init__()
@@ -559,9 +559,9 @@ def process_document_with_ai_ifrs(document_image, lm_client, ifrs_categories):
     processor = AIIFRSDocumentProcessor()
     return processor.forward(document_image, ifrs_json)
 
-# Define the missing DSPy processing function for IFRS categorization
-def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
-    \"\"\"Document processing with proper DSPy signature matching receipt extraction pattern\"\"\"
+# Define the missing AI processing function for IFRS categorization
+def process_document_with_ifrs_ai(document_image, lm_client, ifrs_categories):
+    \"\"\"Document processing with proper AI signature matching receipt extraction pattern\"\"\"
     try:
         # Configure DSPy with the provided LM
         dspy.settings.configure(lm=lm_client, adapter=dspy.JSONAdapter())
@@ -624,7 +624,7 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
         # Use ChainOfThought processor (same as receipt extraction)
         processor = dspy.ChainOfThought(DocumentExtractionSignature)
 
-        print(f"🔧 Processing document with DSPy using {type(lm_client).__name__}", file=sys.stderr)
+        print(f"🔧 Processing document with AI using {type(lm_client).__name__}", file=sys.stderr)
 
         # Process the document
         prediction = processor(document_image=document_image)
@@ -635,7 +635,7 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
         # Build result using direct DSPy output (like receipt extraction)
         result = {
             "success": True,
-            # Direct DSPy output - primary structure
+            # Direct AI output - primary structure
             "vendor_name": extracted.vendor_name,
             "total_amount": extracted.total_amount,
             "currency": extracted.currency,
@@ -643,9 +643,9 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
             "document_number": extracted.document_number or "",
             "confidence_score": extracted.extraction_confidence,
             "requires_validation": extracted.extraction_confidence < 0.8,
-            "backend_used": "structured_dspy",
+            "backend_used": "structured_ai",
 
-            # Comprehensive fields from DSPy - direct output
+            # Comprehensive fields from AI - direct output
             "vendor_address": extracted.vendor_address or "",
             "vendor_contact": extracted.vendor_contact or "",
             "vendor_tax_id": extracted.vendor_tax_id or "",
@@ -659,7 +659,7 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
             "payment_method": extracted.payment_method or "",
             "bank_details": extracted.bank_details or "",
 
-            # Line items - direct DSPy output
+            # Line items - direct AI output
             "line_items": [
                 {
                     "description": item.description,
@@ -676,30 +676,30 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
             "missing_fields": extracted.missing_fields
         }
 
-        print(f"✅ Structured DSPy processing completed: {result['vendor_name']}, {result['total_amount']} {result['currency']}", file=sys.stderr)
+        print(f"✅ Structured AI processing completed: {result['vendor_name']}, {result['total_amount']} {result['currency']}", file=sys.stderr)
         return result
 
     except Exception as e:
         import traceback
         error_traceback = traceback.format_exc()
-        print(f"❌ Structured DSPy processing failed: {str(e)}", file=sys.stderr)
+        print(f"❌ Structured AI processing failed: {str(e)}", file=sys.stderr)
         print(f"❌ Full traceback: {error_traceback}", file=sys.stderr)
         return {
             "success": False,
             "error": str(e),
-            "backend_used": "structured_dspy_failed",
+            "backend_used": "structured_ai_failed",
             "traceback": error_traceback
         }
 
-# Define IFRS categories for DSPy processing
-ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES_FOR_DSPY)}
+# Define IFRS categories for AI processing
+ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES)}
 
-# Define business categories for DSPy processing (for invoices)
+# Define business categories for AI processing (for invoices)
 business_categories = ${JSON.stringify(businessCategories)}
 document_domain = "${payload.documentDomain}"
 
 def main():
-    print("🚀 Clean DSPy Processing with Common Services", file=sys.stderr)
+    print("🚀 Clean AI Processing with Common Services", file=sys.stderr)
 
     # Enhanced logging for AI pipeline
     print("📊 === PYTHON AI PIPELINE CATEGORY ANALYSIS ===", file=sys.stderr)
@@ -738,7 +738,7 @@ def main():
         document_image_pil = Image.open(io.BytesIO(image_bytes))
         document_image = dspy.Image.from_PIL(document_image_pil)  # CRITICAL: Convert to dspy.Image
 
-        print(f"🖼️ Image ready: {document_image_pil.size}, converted to dspy.Image", file=sys.stderr)
+        print(f"🖼️ Image ready: {document_image_pil.size}, converted to AI image format", file=sys.stderr)
         # Run both Gemini and vLLM for comparison
         gemini_result = None
         vllm_result = None
@@ -763,7 +763,7 @@ def main():
 
             # Choose appropriate categories based on document domain and availability
             if document_domain == "invoices" and business_categories and len(business_categories) > 0:
-                print(f"🤖 Calling process_document_with_ifrs_dspy for Gemini with business COGS categories...", file=sys.stderr)
+                print(f"🤖 Calling process_document_with_ifrs_ai for Gemini with business COGS categories...", file=sys.stderr)
                 print(f"📊 === GEMINI AI CATEGORY INPUT ===", file=sys.stderr)
                 print(f"📋 Category Type: BUSINESS COGS CATEGORIES", file=sys.stderr)
                 print(f"📋 Total Categories Sent: {len(business_categories)}", file=sys.stderr)
@@ -774,13 +774,13 @@ def main():
                     if cat.get('vendor_patterns'):
                         print(f"      🏪 Vendor Patterns: {', '.join(cat['vendor_patterns'])}", file=sys.stderr)
                 print(f"📊 === END GEMINI CATEGORY INPUT ===", file=sys.stderr)
-                gemini_result = process_document_with_ifrs_dspy(
+                gemini_result = process_document_with_ifrs_ai(
                     document_image=document_image,  # Use dspy.Image object instead of PIL
                     lm_client=gemini_lm,
                     ifrs_categories=business_categories  # Use business categories for invoices
                 )
             else:
-                print(f"🤖 Calling process_document_with_ifrs_dspy for Gemini with IFRS categories...", file=sys.stderr)
+                print(f"🤖 Calling process_document_with_ifrs_ai for Gemini with IFRS categories...", file=sys.stderr)
                 print(f"📊 === GEMINI AI CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
                 print(f"📋 Category Type: IFRS STANDARD CATEGORIES", file=sys.stderr)
                 print(f"📋 Total Categories Sent: {len(ifrs_categories)}", file=sys.stderr)
@@ -788,7 +788,7 @@ def main():
                 for i, cat in enumerate(ifrs_categories):
                     print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
                 print(f"📊 === END GEMINI CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
-                gemini_result = process_document_with_ifrs_dspy(
+                gemini_result = process_document_with_ifrs_ai(
                     document_image=document_image,  # Use dspy.Image object instead of PIL
                     lm_client=gemini_lm,
                     ifrs_categories=ifrs_categories
@@ -836,12 +836,12 @@ def main():
                 "full_traceback": error_traceback
             }
 
-            # Try to capture DSPy context
+            # Try to capture AI context
             try:
                 if hasattr(dspy.settings, 'lm') and hasattr(dspy.settings.lm, '_history'):
                     if dspy.settings.lm._history:
                         last_call = dspy.settings.lm._history[-1]
-                        gemini_error_details["dspy_last_call"] = str(last_call)[:1000]
+                        gemini_error_details["ai_last_call"] = str(last_call)[:1000]
             except:
                 pass
 
@@ -871,7 +871,7 @@ def main():
 
                 # Choose appropriate categories based on document domain and availability
                 if document_domain == "invoices" and business_categories and len(business_categories) > 0:
-                    print(f"🤖 Calling process_document_with_ifrs_dspy for vLLM with business COGS categories...", file=sys.stderr)
+                    print(f"🤖 Calling process_document_with_ifrs_ai for vLLM with business COGS categories...", file=sys.stderr)
                     print(f"📊 === VLLM AI CATEGORY INPUT ===", file=sys.stderr)
                     print(f"📋 Category Type: BUSINESS COGS CATEGORIES", file=sys.stderr)
                     print(f"📋 Total Categories Sent: {len(business_categories)}", file=sys.stderr)
@@ -882,13 +882,13 @@ def main():
                         if cat.get('vendor_patterns'):
                             print(f"      🏪 Vendor Patterns: {', '.join(cat['vendor_patterns'])}", file=sys.stderr)
                     print(f"📊 === END VLLM CATEGORY INPUT ===", file=sys.stderr)
-                    vllm_result = process_document_with_ifrs_dspy(
+                    vllm_result = process_document_with_ifrs_ai(
                         document_image=document_image,  # Use dspy.Image object instead of PIL
                         lm_client=skywork_lm,
                         ifrs_categories=business_categories  # Use business categories for invoices
                     )
                 else:
-                    print(f"🤖 Calling process_document_with_ifrs_dspy for vLLM with IFRS categories...", file=sys.stderr)
+                    print(f"🤖 Calling process_document_with_ifrs_ai for vLLM with IFRS categories...", file=sys.stderr)
                     print(f"📊 === VLLM AI CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
                     print(f"📋 Category Type: IFRS STANDARD CATEGORIES", file=sys.stderr)
                     print(f"📋 Total Categories Sent: {len(ifrs_categories)}", file=sys.stderr)
@@ -896,7 +896,7 @@ def main():
                     for i, cat in enumerate(ifrs_categories):
                         print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
                     print(f"📊 === END VLLM CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
-                    vllm_result = process_document_with_ifrs_dspy(
+                    vllm_result = process_document_with_ifrs_ai(
                         document_image=document_image,  # Use dspy.Image object instead of PIL
                         lm_client=skywork_lm,
                         ifrs_categories=ifrs_categories
@@ -944,12 +944,12 @@ def main():
                     "full_traceback": error_traceback
                 }
 
-                # Try to capture DSPy context
+                # Try to capture AI context
                 try:
                     if hasattr(dspy.settings, 'lm') and hasattr(dspy.settings.lm, '_history'):
                         if dspy.settings.lm._history:
                             last_call = dspy.settings.lm._history[-1]
-                            vllm_error_details["dspy_last_call"] = str(last_call)[:1000]
+                            vllm_error_details["ai_last_call"] = str(last_call)[:1000]
                 except:
                     pass
 
@@ -1017,18 +1017,18 @@ def main():
         if not vllm_result:
             error_details['vllm_error'] = vllm_error_details if vllm_error_details else "vLLM processing failed - check stderr for details"
 
-        # NEW: DSPy confidence-based fallback logic
-        gemini_dspy_confidence = gemini_result.get('dspy_confidence') if gemini_result else None
-        vllm_dspy_confidence = vllm_result.get('dspy_confidence') if vllm_result else None
+        # NEW: AI confidence-based fallback logic
+        gemini_ai_confidence = gemini_result.get('ai_confidence') if gemini_result else None
+        vllm_ai_confidence = vllm_result.get('ai_confidence') if vllm_result else None
 
-        print(f"🎯 Gemini DSPy confidence: {gemini_dspy_confidence}", file=sys.stderr)
-        print(f"🎯 vLLM DSPy confidence: {vllm_dspy_confidence or 'N/A'}", file=sys.stderr)
+        print(f"🎯 Gemini AI confidence: {gemini_ai_confidence}", file=sys.stderr)
+        print(f"🎯 vLLM AI confidence: {vllm_ai_confidence or 'N/A'}", file=sys.stderr)
 
-        # If Gemini DSPy confidence < 0.75, prefer vLLM even if quality scores are similar
-        if gemini_dspy_confidence is not None and gemini_dspy_confidence < 0.75:
-            print(f"⚠️ Gemini DSPy confidence {gemini_dspy_confidence:.3f} < 0.75 threshold - preferring vLLM", file=sys.stderr)
+        # If Gemini AI confidence < 0.75, prefer vLLM even if quality scores are similar
+        if gemini_ai_confidence is not None and gemini_ai_confidence < 0.75:
+            print(f"⚠️ Gemini AI confidence {gemini_ai_confidence:.3f} < 0.75 threshold - preferring vLLM", file=sys.stderr)
             if vllm_result and vllm_result.get('success'):
-                print(f"✅ Using vLLM result (Gemini DSPy confidence too low)", file=sys.stderr)
+                print(f"✅ Using vLLM result (Gemini AI confidence too low)", file=sys.stderr)
                 return vllm_result
 
         # Standard quality-based selection
@@ -1067,21 +1067,21 @@ result = main()
 print(json.dumps(result))
 `);
 
-      console.log("🐍 DSPy processing completed");
+      console.log("🐍 AI processing completed");
       
       // Step 4: Parse and validate result
       let finalExtractionData;
       try {
-        console.log(`🔍 Debug - dspyResult type: ${typeof dspyResult}`);
-        console.log(`🔍 Debug - dspyResult preview:`, JSON.stringify(dspyResult).substring(0, 200));
+        console.log(`🔍 Debug - aiResult type: ${typeof aiResult}`);
+        console.log(`🔍 Debug - aiResult preview:`, JSON.stringify(aiResult).substring(0, 200));
         
         let jsonString: string;
-        if (typeof dspyResult === 'string') {
-          jsonString = dspyResult;
-        } else if (dspyResult && typeof dspyResult === 'object' && 'stdout' in dspyResult) {
-          jsonString = (dspyResult as any).stdout;
+        if (typeof aiResult === 'string') {
+          jsonString = aiResult;
+        } else if (aiResult && typeof aiResult === 'object' && 'stdout' in aiResult) {
+          jsonString = (aiResult as any).stdout;
         } else {
-          jsonString = JSON.stringify(dspyResult);
+          jsonString = JSON.stringify(aiResult);
         }
         
         console.log(`🔍 Debug - jsonString preview:`, jsonString.substring(0, 200));
@@ -1095,9 +1095,9 @@ print(json.dumps(result))
           throw new Error("No valid JSON object found in processing output");
         }
       } catch (parseError) {
-        console.error("❌ Failed to parse DSPy output:", parseError);
-        console.error("❌ Raw dspyResult was:", dspyResult);
-        throw new Error(`DSPy processing failed: ${parseError instanceof Error ? parseError.message : 'Parse error'}`);
+        console.error("❌ Failed to parse AI output:", parseError);
+        console.error("❌ Raw aiResult was:", aiResult);
+        throw new Error(`AI processing failed: ${parseError instanceof Error ? parseError.message : 'Parse error'}`);
       }
       
       // Add type safety check before accessing properties
@@ -1110,17 +1110,17 @@ print(json.dumps(result))
           finalExtractionData = JSON.parse(finalExtractionData);
         } catch (secondParseError) {
           console.error("❌ Second parse attempt failed:", secondParseError);
-          throw new Error(`DSPy returned unparseable result: ${finalExtractionData.substring(0, 200)}`);
+          throw new Error(`AI returned unparseable result: ${finalExtractionData.substring(0, 200)}`);
         }
       }
       
       if (!finalExtractionData || typeof finalExtractionData !== 'object') {
-        throw new Error(`DSPy processing failed: Invalid result type ${typeof finalExtractionData}`);
+        throw new Error(`AI processing failed: Invalid result type ${typeof finalExtractionData}`);
       }
       
       if (!finalExtractionData.success) {
         const errorMessage = finalExtractionData.error || 'Unknown processing error';
-        throw new Error(`DSPy processing failed: ${errorMessage}`);
+        throw new Error(`AI processing failed: ${errorMessage}`);
       }
 
       console.log(`✅ Processing successful with ${finalExtractionData.backend_used}`);
@@ -1150,8 +1150,8 @@ print(json.dumps(result))
         console.log(`📊 IFRS Reasoning: ${selectedCategory.reasoning}`);
       }
 
-      // Step 6: Prepare final DSPy result with smart categorization (business or IFRS)
-      console.log(`🔄 Preparing final DSPy result with smart categorization`);
+      // Step 6: Prepare final AI result with smart categorization (business or IFRS)
+      console.log(`🔄 Preparing final AI result with smart categorization`);
 
       // Calculate due date from transaction date + payment terms
       let calculatedDueDate = null;
@@ -1174,9 +1174,9 @@ print(json.dumps(result))
         }
       }
 
-      // Store raw DSPy output directly with smart categorization
-      const finalDspyResult = {
-        ...finalExtractionData, // All raw DSPy fields (vendor_name, total_amount, currency, etc.)
+      // Store raw AI output directly with smart categorization
+      const finalAIResult = {
+        ...finalExtractionData, // All raw AI fields (vendor_name, total_amount, currency, etc.)
         // Add calculated due date
         due_date: calculatedDueDate,
         // Add smart categorization (business COGS or IFRS fallback)
@@ -1184,7 +1184,7 @@ print(json.dumps(result))
         accounting_category: selectedCategory.category_name,
         category_confidence: selectedCategory.confidence,
         category_reasoning: selectedCategory.reasoning,
-        processing_method: finalExtractionData.backend_used || 'dspy_processing',
+        processing_method: finalExtractionData.backend_used || 'ai_processing',
         // Store category selection metadata
         category_selection: {
           selected_category_type: payload.documentDomain === 'invoices' && businessCategories.length > 0 ? 'business_cogs' : 'ifrs',
@@ -1195,13 +1195,13 @@ print(json.dumps(result))
         }
       };
 
-      // Step 7: Update database with raw DSPy structure and selected category
+      // Step 7: Update database with raw AI structure and selected category
       console.log(`💾 Updating database with extraction results...`);
 
       // Prepare database update object
       const updateData: any = {
         processing_status: 'completed',
-        extracted_data: finalDspyResult, // Store raw DSPy structure directly
+        extracted_data: finalAIResult, // Store raw AI structure directly
         confidence_score: finalExtractionData.confidence_score,
         processed_at: new Date().toISOString(),
         error_message: null,
@@ -1242,8 +1242,8 @@ print(json.dumps(result))
         processing_type: 'ifrs_categorization'
       };
 
-    } catch (dspyError) {
-      console.error("❌ DSPy processing failed:", dspyError);
+    } catch (aiError) {
+      console.error("❌ AI processing failed:", aiError);
       console.log("🔄 Attempting vLLM fallback processing...");
       
       // vLLM fallback processing
@@ -1257,9 +1257,9 @@ print(json.dumps(result))
             filename: docRecord.file_name
           };
 
-          const dspyVllmResult = await python.runInline(`
+          const aiVllmResult = await python.runInline(`
 # =============================================================================
-# VLLM FALLBACK DSPy PROCESSING
+# VLLM FALLBACK AI PROCESSING
 # =============================================================================
 
 import dspy
@@ -1272,9 +1272,9 @@ import io
 import base64
 import traceback
 
-# Define the missing DSPy processing function for IFRS categorization
-def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
-    \"\"\"Document processing with proper DSPy signature matching receipt extraction pattern\"\"\"
+# Define the missing AI processing function for IFRS categorization
+def process_document_with_ifrs_ai(document_image, lm_client, ifrs_categories):
+    \"\"\"Document processing with proper AI signature matching receipt extraction pattern\"\"\"
     try:
         # Configure DSPy with the provided LM
         dspy.settings.configure(lm=lm_client, adapter=dspy.JSONAdapter())
@@ -1337,7 +1337,7 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
         # Use ChainOfThought processor (same as receipt extraction)
         processor = dspy.ChainOfThought(DocumentExtractionSignature)
 
-        print(f"🔧 Processing document with DSPy using {type(lm_client).__name__}", file=sys.stderr)
+        print(f"🔧 Processing document with AI using {type(lm_client).__name__}", file=sys.stderr)
 
         # Process the document
         prediction = processor(document_image=document_image)
@@ -1348,7 +1348,7 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
         # Build result using direct DSPy output (like receipt extraction)
         result = {
             "success": True,
-            # Direct DSPy output - primary structure
+            # Direct AI output - primary structure
             "vendor_name": extracted.vendor_name,
             "total_amount": extracted.total_amount,
             "currency": extracted.currency,
@@ -1356,9 +1356,9 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
             "document_number": extracted.document_number or "",
             "confidence_score": extracted.extraction_confidence,
             "requires_validation": extracted.extraction_confidence < 0.8,
-            "backend_used": "structured_dspy",
+            "backend_used": "structured_ai",
 
-            # Comprehensive fields from DSPy - direct output
+            # Comprehensive fields from AI - direct output
             "vendor_address": extracted.vendor_address or "",
             "vendor_contact": extracted.vendor_contact or "",
             "vendor_tax_id": extracted.vendor_tax_id or "",
@@ -1372,7 +1372,7 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
             "payment_method": extracted.payment_method or "",
             "bank_details": extracted.bank_details or "",
 
-            # Line items - direct DSPy output
+            # Line items - direct AI output
             "line_items": [
                 {
                     "description": item.description,
@@ -1389,26 +1389,26 @@ def process_document_with_ifrs_dspy(document_image, lm_client, ifrs_categories):
             "missing_fields": extracted.missing_fields
         }
 
-        print(f"✅ Structured DSPy processing completed: {result['vendor_name']}, {result['total_amount']} {result['currency']}", file=sys.stderr)
+        print(f"✅ Structured AI processing completed: {result['vendor_name']}, {result['total_amount']} {result['currency']}", file=sys.stderr)
         return result
 
     except Exception as e:
         import traceback
         error_traceback = traceback.format_exc()
-        print(f"❌ Structured DSPy processing failed: {str(e)}", file=sys.stderr)
+        print(f"❌ Structured AI processing failed: {str(e)}", file=sys.stderr)
         print(f"❌ Full traceback: {error_traceback}", file=sys.stderr)
         return {
             "success": False,
             "error": str(e),
-            "backend_used": "structured_dspy_failed",
+            "backend_used": "structured_ai_failed",
             "traceback": error_traceback
         }
 
-# Define IFRS categories for DSPy processing
-ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES_FOR_DSPY)}
+# Define IFRS categories for AI processing
+ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES)}
 
 def main():
-    print("🚀 vLLM Fallback DSPy Processing with AI IFRS Categorization", file=sys.stderr)
+    print("🚀 vLLM Fallback AI Processing with AI IFRS Categorization", file=sys.stderr)
     
     try:
         # Prepare image data
@@ -1419,10 +1419,10 @@ def main():
         document_image_pil = Image.open(io.BytesIO(image_bytes))
         document_image = dspy.Image.from_PIL(document_image_pil)  # CRITICAL: Convert to dspy.Image
 
-        print(f"🖼️ vLLM Image ready: {document_image_pil.size}, converted to dspy.Image", file=sys.stderr)
+        print(f"🖼️ vLLM Image ready: {document_image_pil.size}, converted to AI image format", file=sys.stderr)
 
         # IFRS categories for AI-powered processing
-        ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES_FOR_DSPY)}
+        ifrs_categories = ${JSON.stringify(IFRS_CATEGORIES)}
         print(f"📋 vLLM using {len(ifrs_categories)} IFRS categories for AI categorization", file=sys.stderr)
 
         # Configure vLLM backend
@@ -1441,7 +1441,7 @@ def main():
             max_tokens=16384
         )
         
-        result = process_document_with_ifrs_dspy(
+        result = process_document_with_ifrs_ai(
             document_image=document_image,  # Use dspy.Image object instead of PIL
             lm_client=skywork_lm,
             ifrs_categories=ifrs_categories
@@ -1486,12 +1486,12 @@ print(json.dumps(result))
           let vllmExtractionData;
           try {
             let jsonString: string;
-            if (typeof dspyVllmResult === 'string') {
-              jsonString = dspyVllmResult;
-            } else if (dspyVllmResult && typeof dspyVllmResult === 'object' && 'stdout' in dspyVllmResult) {
-              jsonString = (dspyVllmResult as any).stdout;
+            if (typeof aiVllmResult === 'string') {
+              jsonString = aiVllmResult;
+            } else if (aiVllmResult && typeof aiVllmResult === 'object' && 'stdout' in aiVllmResult) {
+              jsonString = (aiVllmResult as any).stdout;
             } else {
-              jsonString = JSON.stringify(dspyVllmResult);
+              jsonString = JSON.stringify(aiVllmResult);
             }
             
             const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
@@ -1501,7 +1501,7 @@ print(json.dumps(result))
               throw new Error("No valid JSON object found in vLLM output");
             }
           } catch (parseError) {
-            console.error("❌ Failed to parse vLLM output:", parseError);
+            console.error("❌ Failed to parse AI vLLM output:", parseError);
             throw new Error(`vLLM processing failed: ${parseError instanceof Error ? parseError.message : 'Parse error'}`);
           }
           
@@ -1521,8 +1521,8 @@ print(json.dumps(result))
           console.log(`📊 vLLM IFRS Accounting Category: ${selectedCategory.category_code} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
           console.log(`📊 vLLM Reasoning: ${selectedCategory.reasoning}`);
 
-          // Prepare final vLLM DSPy result with standard IFRS categorization only
-          console.log(`🔄 Preparing final vLLM DSPy result with standard IFRS categorization`);
+          // Prepare final vLLM AI result with standard IFRS categorization only
+          console.log(`🔄 Preparing final vLLM AI result with standard IFRS categorization`);
 
           // Calculate due date from transaction date + payment terms (vLLM fallback)
           let vllmCalculatedDueDate = null;
@@ -1545,9 +1545,9 @@ print(json.dumps(result))
             }
           }
 
-          // Store raw vLLM DSPy output directly with standard IFRS categorization only
-          const finalVllmDspyResult = {
-            ...vllmExtractionData, // All raw DSPy fields (vendor_name, total_amount, currency, etc.)
+          // Store raw vLLM AI output directly with standard IFRS categorization only
+          const finalVllmAiResult = {
+            ...vllmExtractionData, // All raw AI fields (vendor_name, total_amount, currency, etc.)
             // Add calculated due date
             due_date: vllmCalculatedDueDate,
             // Add standard IFRS accounting categorization (Documents page - accounting purpose)
@@ -1558,13 +1558,13 @@ print(json.dumps(result))
             processing_method: vllmExtractionData.backend_used || 'vllm_fallback'
           };
 
-          // Update database with vLLM raw DSPy structure and selected category
+          // Update database with vLLM raw AI structure and selected category
           console.log(`💾 Updating database with vLLM fallback results...`);
 
           // Prepare vLLM database update object (note: vLLM fallback typically uses IFRS categories)
           const vllmUpdateData: any = {
             processing_status: 'completed',
-            extracted_data: finalVllmDspyResult, // Store raw DSPy structure directly
+            extracted_data: finalVllmAiResult, // Store raw AI structure directly
             confidence_score: vllmExtractionData.confidence_score,
             processed_at: new Date().toISOString(),
             error_message: null,
@@ -1578,8 +1578,8 @@ print(json.dumps(result))
                 confidence: selectedCategory.confidence,
                 reasoning: selectedCategory.reasoning
               },
-              fallback_reason: 'Primary DSPy processing failed',
-              primary_error: dspyError instanceof Error ? dspyError.message : 'Primary processing failed'
+              fallback_reason: 'Primary AI processing failed',
+              primary_error: aiError instanceof Error ? aiError.message : 'Primary processing failed'
             }
           };
 
@@ -1615,12 +1615,12 @@ print(json.dumps(result))
             .from(tableName)  // ✅ PHASE 4C: Routed based on domain
             .update({
               processing_status: 'failed',
-            error_message: `Primary DSPy processing failed: ${dspyError instanceof Error ? dspyError.message : 'Unknown error'}. vLLM fallback failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`,
+            error_message: `Primary AI processing failed: ${aiError instanceof Error ? aiError.message : 'Unknown error'}. vLLM fallback failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`,
             processed_at: new Date().toISOString(),
             processing_method: 'both_methods_failed'
           }).eq('id', payload.documentId);
           
-          throw new Error(`Both primary and vLLM processing failed. Primary: ${dspyError}. vLLM: ${fallbackError}`);
+          throw new Error(`Both primary and vLLM processing failed. Primary: ${aiError}. vLLM: ${fallbackError}`);
         }
       } else {
         console.warn("⚠️ No OCR_ENDPOINT_URL configured for vLLM fallback");
@@ -1630,12 +1630,12 @@ print(json.dumps(result))
           .from(tableName)  // ✅ PHASE 4C: Routed based on domain
           .update({
             processing_status: 'failed',
-          error_message: `DSPy processing failed: ${dspyError instanceof Error ? dspyError.message : 'Processing failed'}. No vLLM fallback configured.`,
+          error_message: `AI processing failed: ${aiError instanceof Error ? aiError.message : 'Processing failed'}. No vLLM fallback configured.`,
           processed_at: new Date().toISOString(),
-          processing_method: 'dspy_only_failed'
+          processing_method: 'ai_only_failed'
         }).eq('id', payload.documentId);
         
-        throw dspyError;
+        throw aiError;
       }
     }
   },

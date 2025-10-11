@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase-server'
 import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { 
   EXPENSE_WORKFLOW_TRANSITIONS,
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     console.log(`[Expense Submission API] Submitting expense claim ${expenseClaimId} by user ${userId}`)
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     const serviceSupabase = createServiceSupabaseClient()
 
     // Get employee profile to validate permissions
@@ -102,25 +102,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Validate workflow transition using Kevin's state machine
     const validTransition = EXPENSE_WORKFLOW_TRANSITIONS.find(
-      t => t.from === expenseClaim.status && t.to === 'submitted' && t.requiredRole === 'employee'
+      t => t.from === expenseClaim.status && t.to === 'submitted' && t.requiredRole === 'employee' // ✅ Unified status field
     )
 
     if (!validTransition) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Cannot submit expense claim from ${expenseClaim.status} status. Only draft claims can be submitted.` 
+        {
+          success: false,
+          error: `Cannot submit expense claim from ${expenseClaim.status} status. Only draft claims can be submitted.` // ✅ Unified status field
         },
         { status: 400 }
       )
     }
 
     // Basic validation - ensure status allows submission
-    if (expenseClaim.status !== 'draft') {
+    if (expenseClaim.status !== 'draft') { // ✅ Unified status field
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Cannot submit expense claim from ${expenseClaim.status} status. Only draft claims can be submitted.` 
+        {
+          success: false,
+          error: `Cannot submit expense claim from ${expenseClaim.status} status. Only draft claims can be submitted.` // ✅ Unified status field
         },
         { status: 400 }
       )
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Update expense claim status to submitted
     const updateData: any = {
-      status: 'submitted',
+      status: 'submitted', // ✅ Unified status field
       submitted_at: new Date().toISOString(),
       reviewed_by: reviewerId,
       updated_at: new Date().toISOString()
@@ -214,7 +214,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     console.log(`[Expense Submission API] Recalling expense claim ${expenseClaimId} by user ${userId}`)
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     const serviceSupabase = createServiceSupabaseClient()
 
     // Get employee profile
@@ -243,14 +243,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     // Validate workflow transition
     const validTransition = EXPENSE_WORKFLOW_TRANSITIONS.find(
-      t => t.from === expenseClaim.status && t.to === 'draft' && t.requiredRole === 'employee'
+      t => t.from === expenseClaim.status && t.to === 'draft' && t.requiredRole === 'employee' // ✅ Unified status field
     )
 
     if (!validTransition) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Cannot recall expense claim from ${expenseClaim.status} status. Only submitted claims can be recalled.` 
+        {
+          success: false,
+          error: `Cannot recall expense claim from ${expenseClaim.status} status. Only submitted claims can be recalled.` // ✅ Unified status field
         },
         { status: 400 }
       )
@@ -260,7 +260,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { data: updatedClaim, error: updateError } = await serviceSupabase
       .from('expense_claims')
       .update({
-        status: 'draft',
+        status: 'draft', // ✅ Unified status field
         submission_date: null,
         current_approver_id: null,
         updated_at: new Date().toISOString()

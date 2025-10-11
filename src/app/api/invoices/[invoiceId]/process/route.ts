@@ -11,7 +11,7 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server';
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server';
 import { processRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter';
 import { tasks } from '@trigger.dev/sdk/v3';
 import type { classifyDocument } from '@/trigger/classify-document';
@@ -55,7 +55,7 @@ export async function POST(
     }
 
     console.log(`[Document-Processor] Starting two-stage processing for document ${documentId}`);
-    const supabase = await createAuthenticatedSupabaseClient(userId);
+    const supabase = await createBusinessContextSupabaseClient();
 
     // First get the user's actual ID from users table
     const { data: userData } = await supabase
@@ -194,7 +194,7 @@ export async function POST(
       try {
         const { userId } = await auth();
         if (userId) {
-          const supabase = await createAuthenticatedSupabaseClient(userId);
+          const supabase = await createBusinessContextSupabaseClient();
           await supabase
             .from('invoices')
             .update({

@@ -1,6 +1,6 @@
 /**
  * IC (Identity Card) Data Extraction Task
- * Extracts Malaysian IC data using DSPy and Pydantic models
+ * Extracts Malaysian IC data using AI Processing Pipeline and Pydantic models
  */
 
 import { task } from "@trigger.dev/sdk/v3";
@@ -18,7 +18,7 @@ const DOMAIN_TABLE_MAP = {
 interface ExtractIcDataPayload {
   documentId: string;
   imageStoragePath: string;
-  documentDomain: 'invoices' | 'expense_claims' | 'applications';  // ✅ PHASE 4C: Domain routing parameter
+  documentDomain: 'invoices' | 'expense_claims' | 'applications';
 }
 
 
@@ -35,13 +35,13 @@ export const extractIcData = task({
 
   try {
     // Step 1: Update status to pending_extraction (consistent with payslip flow)
-    await updateDocumentStatus(documentId, 'pending_extraction', undefined, tableName);  // ✅ PHASE 4C: Pass tableName
+    await updateDocumentStatus(documentId, 'pending_extraction', undefined, tableName);
 
     // Brief delay to allow UI to show the status update
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Step 2: Update status to extracting
-    await updateDocumentStatus(documentId, 'extracting', undefined, tableName);  // ✅ PHASE 4C: Pass tableName
+    await updateDocumentStatus(documentId, 'extracting', undefined, tableName);
 
     // Fetch document metadata to determine path handling approach
     const { data: document, error: fetchError } = await supabase
@@ -117,7 +117,7 @@ export const extractIcData = task({
     console.log(`[ExtractIC] Created ${pageUrls.length} signed URLs for unified processing`);
 
     // Single call to Python script with JSON array (unified approach)
-    console.log(`[ExtractIC] Running unified DSPy IC extraction`);
+    console.log(`[ExtractIC] Running unified IC extraction`);
     const rawResult = await python.runScript(
       "./src/python/extract_document.py",
       ["ic", JSON.stringify(pageUrls)],

@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import InvitationDialog, { InvitationFormData } from '@/components/ui/invitation-dialog'
 import { clearUserRoleCache } from '@/lib/cache-utils'
+import { useActiveBusiness } from '@/contexts/business-context'
 
 interface TeamMember {
   id: string
@@ -69,6 +70,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   const [businessOwner, setBusinessOwner] = useState<string | null>(null)
   const router = useRouter()
 
+  // CRITICAL FIX: Listen to business context changes
+  const { businessId } = useActiveBusiness()
+
 
   useEffect(() => {
     const initializePage = async () => {
@@ -79,6 +83,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
     initializePage()
   }, [])
+
+  // CRITICAL FIX: Re-check permissions when business context changes
+  useEffect(() => {
+    if (businessId) {
+      console.log('[Teams Management] Business context changed, re-checking permissions:', businessId)
+      checkPermissions()
+    }
+  }, [businessId])
 
   const checkPermissions = async () => {
     try {

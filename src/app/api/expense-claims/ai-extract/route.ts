@@ -33,12 +33,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[DSPy Extraction API] Starting DSPy extraction process via Trigger.dev')
-    console.log('[DSPy Extraction API] Receipt text length:', receiptText?.length || 0)
-    console.log('[DSPy Extraction API] Image URL provided:', !!receiptImageUrl)
-    console.log('[DSPy Extraction API] Document ID:', documentId)
+    console.log('[AI Extraction API] Starting AI extraction process via Trigger.dev')
+    console.log('[AI Extraction API] Receipt text length:', receiptText?.length || 0)
+    console.log('[AI Extraction API] Image URL provided:', !!receiptImageUrl)
+    console.log('[AI Extraction API] Document ID:', documentId)
 
-    // Trigger the DSPy extraction task using Trigger.dev
+    // Trigger the AI extraction task using Trigger.dev
     try {
       const taskResult = await tasks.trigger('extract-receipt-data', {
         receiptText,
@@ -50,13 +50,13 @@ export async function POST(request: NextRequest) {
         requestId: requestId || `${userId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       })
 
-      console.log('[DSPy Extraction API] Trigger.dev task started:', taskResult.id)
+      console.log('[AI Extraction API] Trigger.dev task started:', taskResult.id)
 
       // If we have a document ID, return immediately with task info
       if (documentId) {
         return NextResponse.json({
           success: true,
-          message: 'DSPy extraction started. Processing in background.',
+          message: 'AI extraction started. Processing in background.',
           taskId: taskResult.id,
           documentId,
           processingStatus: 'processing'
@@ -65,29 +65,29 @@ export async function POST(request: NextRequest) {
 
       // For direct text processing without document, return task info
       // The extraction will be processed asynchronously in the background
-      console.log('[DSPy Extraction API] DSPy extraction task started successfully')
+      console.log('[AI Extraction API] AI extraction task started successfully')
 
       return NextResponse.json({
         success: true,
-        message: 'DSPy extraction started. Processing in background.',
+        message: 'AI extraction started. Processing in background.',
         taskId: taskResult.id,
         processingStatus: 'processing'
       })
 
     } catch (triggerError) {
-      console.error('[DSPy Extraction API] Trigger.dev task failed:', triggerError)
+      console.error('[AI Extraction API] Trigger.dev task failed:', triggerError)
       
       return NextResponse.json(
         { 
           success: false,
-          error: `DSPy task execution failed: ${triggerError instanceof Error ? triggerError.message : 'Unknown error'}`
+          error: `AI task execution failed: ${triggerError instanceof Error ? triggerError.message : 'Unknown error'}`
         },
         { status: 500 }
       )
     }
 
   } catch (error) {
-    console.error('[DSPy Extraction API] Extraction failed:', error)
+    console.error('[AI Extraction API] Extraction failed:', error)
     
     // Check if it's an authentication error
     if (error instanceof Error && error.message.includes('Authentication required')) {
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         success: false,
-        error: error instanceof Error ? error.message : 'DSPy extraction failed'
+        error: error instanceof Error ? error.message : 'AI extraction failed'
       },
       { status: 500 }
     )

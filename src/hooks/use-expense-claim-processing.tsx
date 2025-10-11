@@ -7,7 +7,7 @@ interface ProcessingExpenseClaim {
   documentId?: string
   fileName: string
   fileType: string
-  status: 'uploading' | 'processing' | 'extracting' | 'completed' | 'failed'
+  status: 'uploading' | 'processing' | 'analyzing' | 'completed' | 'failed'
   progress: number
   startTime: Date
   expectedDuration: number // in seconds
@@ -40,7 +40,7 @@ export function useExpenseClaimProcessing(): UseExpenseClaimProcessingReturn {
       status: 'uploading',
       progress: 0,
       startTime: new Date(),
-      expectedDuration: 15, // DSPy typically takes 12-15 seconds
+      expectedDuration: 15,
       taskId,
     }
 
@@ -73,7 +73,7 @@ export function useExpenseClaimProcessing(): UseExpenseClaimProcessingReturn {
 
   // Check if there are any active processing claims
   const hasActiveProcessing = processingClaims.some(claim =>
-    claim.status === 'uploading' || claim.status === 'processing' || claim.status === 'extracting'
+    claim.status === 'uploading' || claim.status === 'processing' || claim.status === 'analyzing'
   )
 
   // Simulate realistic progress for expense claim processing
@@ -90,7 +90,7 @@ export function useExpenseClaimProcessing(): UseExpenseClaimProcessingReturn {
         if (currentProgress >= 20 && claim.status === 'uploading') {
           newStatus = 'processing'
         } else if (currentProgress >= 60 && claim.status === 'processing') {
-          newStatus = 'extracting'
+          newStatus = 'analyzing'
         }
 
         return {
@@ -115,7 +115,7 @@ export function useExpenseClaimProcessing(): UseExpenseClaimProcessingReturn {
   // Poll for task completion if we have taskIds
   const pollTaskCompletion = useCallback(async () => {
     const claimsWithTasks = processingClaims.filter(claim =>
-      claim.taskId && (claim.status === 'processing' || claim.status === 'extracting')
+      claim.taskId && (claim.status === 'processing' || claim.status === 'analyzing')
     )
 
     if (claimsWithTasks.length === 0) return

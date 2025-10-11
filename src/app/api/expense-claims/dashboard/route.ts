@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { dashboardRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter'
 import { auditLogger } from '@/lib/audit-logger'
@@ -22,9 +22,9 @@ function getStatusDisplayInfo(status: string, processingStatus?: string) {
     }
   }
 
-  if (processingStatus === 'processing') {
+  if (processingStatus === 'analyzing') {
     return {
-      label: 'Processing...',
+      label: 'Analyzing 🧠',
       color: 'blue',
       description: 'Receipt is being analyzed by AI',
       isProcessing: true
@@ -107,12 +107,12 @@ function getWorkflowProgress(status: string): number {
 
 // Helper function to format expense claims for display (uses expense_claims fields directly)
 function transformClaimForDisplay(claim: any) {
-  const statusDisplay = getStatusDisplayInfo(claim.status, claim.processing_status)
+  const statusDisplay = getStatusDisplayInfo(claim.status, undefined) // ✅ Unified status field
 
   return {
     ...claim,
     status_display: statusDisplay,
-    workflow_progress: getWorkflowProgress(claim.status),
+    workflow_progress: getWorkflowProgress(claim.status), // ✅ Unified status field
     current_approver_name: null,
     // Use expense_claims fields directly
     display_amount: claim.total_amount,
@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Get or create employee profile using the fixed utility function
     let employeeProfile
@@ -265,7 +265,7 @@ export async function GET(request: NextRequest) {
         if (allBusinessClaims) {
           const totalClaims = allBusinessClaims.length
           const pendingReimbursement = allBusinessClaims.filter(claim =>
-            ['submitted', 'under_review', 'pending_approval'].includes(claim.status)
+            ['submitted'].includes(claim.status) // ✅ Unified status: only 'submitted' is pending
           ).length
 
           const { data: approvedClaimsWithTransactions } = await supabase
@@ -275,12 +275,12 @@ export async function GET(request: NextRequest) {
               transaction:transactions(home_currency_amount, home_currency)
             `)
             .in('user_id', employeeUserIds)
-            .eq('status', 'approved')
+            .eq('status', 'approved') // ✅ Unified status field
             .is('deleted_at', null)
 
           const approvedAmount = (approvedClaimsWithTransactions || [])
             .reduce((sum, claim) => sum + parseFloat(claim.transaction?.home_currency_amount || '0'), 0)
-          const rejectedCount = allBusinessClaims.filter(claim => claim.status === 'rejected').length
+          const rejectedCount = allBusinessClaims.filter(claim => claim.status === 'rejected').length // ✅ Unified status field
 
           dashboardData.summary = {
             total_claims: totalClaims,
@@ -410,7 +410,7 @@ export async function GET(request: NextRequest) {
 
         if (allBusinessClaims) {
           const totalClaims = allBusinessClaims.length
-          const pendingApproval = allBusinessClaims.filter(claim => claim.status === 'pending_approval').length
+          const pendingApproval = allBusinessClaims.filter(claim => claim.status === 'submitted').length // ✅ Unified status: 'submitted' is pending approval
 
           const { data: managerApprovedClaims } = await supabase
             .from('expense_claims')
@@ -419,12 +419,12 @@ export async function GET(request: NextRequest) {
               transaction:transactions(home_currency_amount, home_currency)
             `)
             .in('user_id', employeeUserIds)
-            .eq('status', 'approved')
+            .eq('status', 'approved') // ✅ Unified status field
             .is('deleted_at', null)
 
           const approvedAmount = (managerApprovedClaims || [])
             .reduce((sum, claim) => sum + parseFloat(claim.transaction?.home_currency_amount || '0'), 0)
-          const rejectedCount = allBusinessClaims.filter(claim => claim.status === 'rejected').length
+          const rejectedCount = allBusinessClaims.filter(claim => claim.status === 'rejected').length // ✅ Unified status field
 
           dashboardData.summary = {
             total_claims: totalClaims,
@@ -439,7 +439,7 @@ export async function GET(request: NextRequest) {
           .from('expense_claims')
           .select('*')
           .in('user_id', employeeUserIds)
-          .eq('status', 'pending_approval')
+          .eq('status', 'submitted') // ✅ Unified status: 'submitted' is pending approval
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
@@ -470,7 +470,7 @@ export async function GET(request: NextRequest) {
           .from('expense_claims')
           .select('*')
           .in('user_id', employeeUserIds)
-          .eq('status', 'pending_approval')
+          .eq('status', 'submitted') // ✅ Unified status: 'submitted' is pending approval
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
@@ -498,14 +498,14 @@ export async function GET(request: NextRequest) {
 
       if (!claimsError && userClaims) {
         const totalClaims = userClaims.length
-        // Count pending as submitted, under_review, and pending_approval (legacy)
-        const pendingApproval = userClaims.filter(claim => 
-          ['submitted', 'under_review', 'pending_approval'].includes(claim.status)
+        // Count pending as submitted (unified status)
+        const pendingApproval = userClaims.filter(claim =>
+          ['submitted'].includes(claim.status) // ✅ Unified status: only 'submitted' is pending
         ).length
         const approvedAmount = userClaims
-          .filter(claim => ['approved', 'reimbursed', 'paid'].includes(claim.status))
+          .filter(claim => ['approved', 'reimbursed'].includes(claim.status)) // ✅ Unified status field
           .reduce((sum, claim) => sum + parseFloat(claim.total_amount || '0'), 0)
-        const rejectedCount = userClaims.filter(claim => claim.status === 'rejected').length
+        const rejectedCount = userClaims.filter(claim => claim.status === 'rejected').length // ✅ Unified status field
 
         dashboardData.summary = {
           total_claims: totalClaims,
@@ -519,7 +519,7 @@ export async function GET(request: NextRequest) {
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
           .slice(0, 10)
           .map(claim => {
-            console.log(`[Dashboard API] Claim ${claim.id}: status=${claim.status}, processing_status=${claim.processing_status}`)
+            console.log(`[Dashboard API] Claim ${claim.id}: status=${claim.status}`) // ✅ Unified status field
             return transformClaimForDisplay(claim)
           })
       }

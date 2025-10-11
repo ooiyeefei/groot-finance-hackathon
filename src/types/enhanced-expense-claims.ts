@@ -5,13 +5,13 @@
  */
 
 import { SupportedCurrency, Transaction } from './transaction'
-import { ExpenseStatus, ComplianceFlag } from './expense-claims'
+import { ExpenseClaimStatus, ComplianceFlag } from './expense-claims' // ✅ Use unified status type
 import { SupabaseClient } from '@supabase/supabase-js'
 
 // Enhanced workflow transition with hooks and business logic
 export interface EnhancedWorkflowTransition {
-  from: ExpenseStatus | ExpenseStatus[]
-  to: ExpenseStatus
+  from: ExpenseClaimStatus | ExpenseClaimStatus[] // ✅ Use unified status type
+  to: ExpenseClaimStatus // ✅ Use unified status type
   action: 'submit' | 'recall' | 'approve' | 'reject' | 'request_changes' | 'override_approve'
   requiredRole: 'employee' | 'manager' | 'admin' | 'super_admin'
   
@@ -75,7 +75,7 @@ export interface EnhancedExpenseClaim {
   id: string
   accounting_entry_id: string | null  // Links to accounting_entries.id after approval (NULL until approved)
   employee_id: string
-  status: ExpenseStatus
+  status: ExpenseClaimStatus // ✅ Use unified status type
   expense_category: string
   claim_month: string
   business_purpose: string
@@ -216,24 +216,9 @@ export const ENHANCED_WORKFLOW_TRANSITIONS: EnhancedWorkflowTransition[] = [
     }
   },
   
-  // Manager transitions with risk assessment
+  // Manager approval - direct transition from submitted to approved ✅ Unified workflow
   {
     from: 'submitted',
-    to: 'under_review',
-    action: 'approve',
-    requiredRole: 'manager',
-    getNextApprover: async (claim, userProfile, supabase) => {
-      // Determine next approver based on amount, risk, and policy
-      if (claim.transaction?.home_currency_amount > 10000) {
-        return await getAdminApprover(supabase, claim.employee.business_id)
-      }
-      return userProfile.id
-    }
-  },
-  
-  // High-value or high-risk approval flow
-  {
-    from: 'under_review',
     to: 'approved',
     action: 'approve',
     requiredRole: 'manager',
@@ -242,7 +227,15 @@ export const ENHANCED_WORKFLOW_TRANSITIONS: EnhancedWorkflowTransition[] = [
     },
     postTransitionActions: {
       triggerVendorVerification: true,
-      schedulePeriodicReview: true
+      schedulePeriodicReview: true,
+      updateRiskScore: true
+    },
+    getNextApprover: async (claim, userProfile, supabase) => {
+      // For high-value claims, require admin approval after manager
+      if (claim.transaction?.home_currency_amount > 10000) {
+        return await getAdminApprover(supabase, claim.employee.business_id)
+      }
+      return null // No further approval needed
     }
   },
   
@@ -258,9 +251,9 @@ export const ENHANCED_WORKFLOW_TRANSITIONS: EnhancedWorkflowTransition[] = [
     }
   },
   
-  // Policy override transitions (Otto's exception handling)
+  // Policy override transitions (Otto's exception handling) ✅ Unified workflow
   {
-    from: ['submitted', 'under_review'],
+    from: ['submitted'], // ✅ Remove 'under_review' - direct from submitted
     to: 'approved',
     action: 'override_approve',
     requiredRole: 'admin',

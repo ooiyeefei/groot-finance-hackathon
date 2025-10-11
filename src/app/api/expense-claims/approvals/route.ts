@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { ensureUserProfile } from '@/lib/ensure-employee-profile'
 import { dashboardRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/rate-limiter'
 import { auditLogger } from '@/lib/audit-logger'
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Get employee profile for permission validation
     const userProfile = await ensureUserProfile(userId)
@@ -91,20 +91,20 @@ export async function GET(request: NextRequest) {
     console.log('[Approvals API] DEBUG: Checking ALL claims in database...')
     const { data: allClaims, error: allClaimsError } = await supabase
       .from('expense_claims')
-      .select('id, user_id, status, deleted_at')
+      .select('id, user_id, status, deleted_at') // ✅ Unified status field
       .is('deleted_at', null)
 
     console.log('[Approvals API] DEBUG: All claims in database:', {
       totalClaims: allClaims?.length || 0,
       error: allClaimsError,
       claimsByStatus: allClaims?.reduce((acc: any, claim: any) => {
-        acc[claim.status] = (acc[claim.status] || 0) + 1
+        acc[claim.status] = (acc[claim.status] || 0) + 1 // ✅ Unified status field
         return acc
       }, {}),
       sampleClaims: allClaims?.slice(0, 3).map(claim => ({
         id: claim.id,
         user_id: claim.user_id,
-        status: claim.status,
+        status: claim.status, // ✅ Unified status field
         user_id_type: typeof claim.user_id
       }))
     })
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
     console.log('[Approvals API] DEBUG: Checking claims for our employee IDs...')
     const { data: employeeSpecificClaims } = await supabase
       .from('expense_claims')
-      .select('id, user_id, status, deleted_at')
+      .select('id, user_id, status, deleted_at') // ✅ Unified status field
       .in('user_id', employeeIds)
       .is('deleted_at', null)
 
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
       claims: employeeSpecificClaims?.map(claim => ({
         id: claim.id,
         user_id: claim.user_id,
-        status: claim.status
+        status: claim.status // ✅ Unified status field
       }))
     })
 
@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
         employee:users!inner(id,full_name,email)
       `)
       .in('user_id', employeeIds)
-      .in('status', ['submitted', 'under_review', 'pending_approval']) // Include all pending statuses
+      .eq('status', 'submitted') // ✅ Unified status: only 'submitted' is pending approval
       .is('deleted_at', null)
       .order('submitted_at', { ascending: true }) // Oldest submissions first
 
@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
       error: claimsError,
       firstClaim: claims?.[0] ? {
         id: claims[0].id,
-        status: claims[0].status,
+        status: claims[0].status, // ✅ Unified status field
         user_id: claims[0].user_id
       } : null
     })
@@ -166,17 +166,17 @@ export async function GET(request: NextRequest) {
     console.log('[Approvals API] DEBUG: Testing query without status filter...')
     const { data: claimsWithoutStatusFilter } = await supabase
       .from('expense_claims')
-      .select('id, user_id, status, deleted_at')
+      .select('id, user_id, status, deleted_at') // ✅ Unified status field
       .in('user_id', employeeIds)
       .is('deleted_at', null)
 
     console.log('[Approvals API] DEBUG: Claims without status filter:', {
       claimsCount: claimsWithoutStatusFilter?.length || 0,
       statusBreakdown: claimsWithoutStatusFilter?.reduce((acc: any, claim: any) => {
-        acc[claim.status] = (acc[claim.status] || 0) + 1
+        acc[claim.status] = (acc[claim.status] || 0) + 1 // ✅ Unified status field
         return acc
       }, {}),
-      allStatuses: [...new Set(claimsWithoutStatusFilter?.map(claim => claim.status) || [])]
+      allStatuses: [...new Set(claimsWithoutStatusFilter?.map(claim => claim.status) || [])] // ✅ Unified status field
     })
 
     if (claimsError) {
@@ -226,7 +226,7 @@ export async function GET(request: NextRequest) {
         original_filename: processingMetadata.original_filename || 'Receipt',
         file_type: processingMetadata.file_type || 'image/jpeg',
         file_size: processingMetadata.file_size || 0,
-        processing_status: processingMetadata.processing_status || 'completed',
+        processing_status: processingMetadata.status || 'completed', // ✅ Unified status metadata
         processing_progress: processingMetadata.processing_progress || 100,
         annotated_image_url: processingMetadata.annotated_image_url || null,
         storage_path: claim.storage_path || processingMetadata.storage_path,
@@ -249,7 +249,7 @@ export async function GET(request: NextRequest) {
         vendor_name: claim.transaction?.vendor_name,
         expense_category: claim.expense_category,
         category_name: category?.category_name || claim.expense_category,
-        status: claim.status,
+        status: claim.status, // ✅ Unified status field
         submission_date: claim.submitted_at || claim.created_at,
         document_url: null, // Legacy field - use document.storage_path instead
         receipt_confidence: processingMetadata.confidence_score || null,
@@ -309,7 +309,7 @@ export async function GET(request: NextRequest) {
         .from('expense_claims')
         .select('*', { count: 'exact', head: true })
         .in('user_id', employeeIds)
-        .eq('status', 'approved')
+        .eq('status', 'approved') // ✅ Unified status field
         .gte('updated_at', today.toISOString())
 
       stats.approved_today = approvedToday || 0
@@ -412,7 +412,7 @@ export async function POST(request: NextRequest) {
     console.log('[Approvals API POST] Step 3 SUCCESS: Manager permissions confirmed')
 
     console.log('[Approvals API POST] Step 4: Creating authenticated Supabase client')
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     console.log('[Approvals API POST] Step 4 SUCCESS: Authenticated client created with business context')
 
     console.log('[Approvals API POST] Step 5: Parsing request body')
@@ -438,14 +438,14 @@ export async function POST(request: NextRequest) {
         id,
         status,
         user_id
-      `)
+      `) // ✅ Unified status field
       .eq('id', claim_id)
       .single()
 
     console.log('[Approvals API POST] Step 7.1: Claim basic data result:', {
       claimFound: !!claimData,
       error: claimError?.message || 'none',
-      claimStatus: claimData?.status || 'N/A'
+      claimStatus: claimData?.status || 'N/A' // ✅ Unified status field
     })
 
     let claim = null
@@ -474,7 +474,7 @@ export async function POST(request: NextRequest) {
     console.log('[Approvals API POST] Step 7 RESULT: Claim query completed:', {
       claimFound: !!claim,
       error: claimError?.message || 'none',
-      claimStatus: claim?.status || 'N/A'
+      claimStatus: claim?.status || 'N/A' // ✅ Unified status field
     })
 
     if (claimError || !claim) {
@@ -497,8 +497,8 @@ export async function POST(request: NextRequest) {
     console.log('[Approvals API POST] Step 8 SUCCESS: Business authorization validated')
 
     console.log('[Approvals API POST] Step 9: Validating claim status')
-    if (!['submitted', 'under_review', 'pending_approval'].includes(claim.status)) {
-      console.log('[Approvals API POST] Step 9 FAILED: Invalid claim status:', claim.status)
+    if (claim.status !== 'submitted') { // ✅ Unified status: only 'submitted' can be approved/rejected
+      console.log('[Approvals API POST] Step 9 FAILED: Invalid claim status:', claim.status) // ✅ Unified status field
       return NextResponse.json(
         { success: false, error: 'Claim is not in a state that can be approved or rejected' },
         { status: 400 }
@@ -512,7 +512,7 @@ export async function POST(request: NextRequest) {
 
     // Prepare update data based on action
     const updateData: any = {
-      status: newStatus,
+      status: newStatus, // ✅ Unified status field
       updated_at: new Date().toISOString()
     }
 
@@ -561,7 +561,7 @@ export async function POST(request: NextRequest) {
           // Rollback the approval status since accounting entry creation failed
           await supabase
             .from('expense_claims')
-            .update({ status: 'submitted' })
+            .update({ status: 'submitted' }) // ✅ Unified status field
             .eq('id', claim_id)
 
           return NextResponse.json(
@@ -579,7 +579,7 @@ export async function POST(request: NextRequest) {
         // Rollback the approval status
         await supabase
           .from('expense_claims')
-          .update({ status: 'submitted' })
+          .update({ status: 'submitted' }) // ✅ Unified status field
           .eq('id', claim_id)
 
         return NextResponse.json(

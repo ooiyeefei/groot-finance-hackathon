@@ -7,7 +7,7 @@
 'use client'
 
 import React from 'react'
-import { X, Save, Send, ArrowLeft, Trash2, Loader2, AlertCircle, Receipt, FileText, Brain, DollarSign } from 'lucide-react'
+import { X, Save, Send, ArrowLeft, Trash2, Loader2, AlertCircle, Receipt, FileText, Brain, DollarSign, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -76,7 +76,6 @@ export default function EditExpenseModalNew({
 
     // Status info
     claimStatus,
-    processingStatus,
 
     // Processing method detection
     processingMethod,
@@ -86,10 +85,8 @@ export default function EditExpenseModalNew({
     categories,
     categoriesLoading,
     categoriesError,
-    userHomeCurrency,
 
     // Form actions
-    validateForm,
     handleSave,
     handleDelete,
     handleReprocessClick,
@@ -252,9 +249,9 @@ export default function EditExpenseModalNew({
 
   return (
     <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg w-full max-w-7xl max-h-[96vh] overflow-hidden">
+      <div className="bg-gray-800 rounded-lg w-full max-w-7xl h-[90vh] overflow-hidden relative">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-700">
           <div>
             <h2 className="text-xl font-semibold text-white">Edit Expense Claim</h2>
             <p className="text-gray-400 text-sm">
@@ -264,14 +261,6 @@ export default function EditExpenseModalNew({
 
           {/* Action Buttons in Header */}
           <div className="flex items-center space-x-2">
-            <button
-              onClick={onClose}
-              disabled={saving || submitting}
-              className="inline-flex items-center px-3 py-1.5 bg-gray-700 text-white hover:bg-gray-800 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
-            >
-              <ArrowLeft className="w-4 h-4 mr-1.5" />
-              Cancel
-            </button>
             {onDelete && (
               <button
                 onClick={handleDeleteClick}
@@ -317,18 +306,17 @@ export default function EditExpenseModalNew({
               )}
             </button>
 
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
               onClick={onClose}
-              className="text-gray-800 hover:text-gray-900 bg-gray-200 hover:bg-gray-300 rounded transition-colors ml-2"
+              disabled={saving || submitting}
+              className="inline-flex items-center px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 hover:text-gray-900 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               <X className="w-4 h-4" />
-            </Button>
+            </button>
           </div>
         </div>
 
-        <div className="overflow-hidden h-[calc(95vh-80px)]">
+        <div className="overflow-hidden h-[calc(90vh-120px)]">
           <div className="p-0 h-full">
             {loading ? (
               <div className="text-center py-12">
@@ -350,20 +338,20 @@ export default function EditExpenseModalNew({
             ) : (
               <div className="flex flex-col h-full">
                 {/* Top Banner - Expense Summary (compact height) */}
-                <div className="bg-gray-700 p-4 border-b border-gray-600">
+                <div className="bg-gray-700 p-3 border-b border-gray-600">
                   <div className="flex items-center justify-between mb-3">
                     {/* Left side - Status and key info */}
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
                         <span className="bg-blue-900/20 text-blue-300 border border-blue-700/50 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
-                          {claimStatus || 'Draft'}
+                          {claimStatus.toWellFormed() || 'Draft'}
                         </span>
                       </div>
 
                       {/* Key expense summary info - Enhanced prominence */}
                       <div className="flex items-center gap-8 text-white">
                         <div className="flex items-center gap-3">
-                          <span className="font-bold text-2xl text-green-400">
+                          <span className="font-semibold text-lg text-green-400">
                             {formData.original_currency} {formData.original_amount.toFixed(2)}
                           </span>
                         </div>
@@ -390,47 +378,14 @@ export default function EditExpenseModalNew({
                   </div>
                 </div>
 
-                {/* Bottom Section - 50/50 Split */}
+                {/* Bottom Section - 40/60 Split */}
                 <div className="flex flex-1 overflow-hidden">
-                  {/* Left Panel - Receipt Preview (50%) */}
-                  <div className="w-1/2 border-r border-gray-700 flex flex-col">
-                    <div className="flex-1 bg-gray-900 p-4">
+                  {/* Left Panel - Receipt Preview (40%) */}
+                  <div className="w-2/5 border-r border-gray-700 flex flex-col">
+                    <div className="flex-1 bg-gray-900 p-4 overflow-hidden">
                       {receiptInfo.hasReceipt ? (
                         <div className="h-full flex flex-col">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <FileText className="w-5 h-5 text-green-400" />
-                              <div>
-                                <p className="text-white font-medium text-sm">{receiptInfo.filename}</p>
-                                <p className="text-gray-400 text-xs">
-                                  {receiptInfo.fileType?.toUpperCase()} • {receiptInfo.processingStatus?.replace('_', ' ').toUpperCase()}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              {handleReprocessWrapper && (
-                                <Button
-                                  size="sm"
-                                  onClick={handleReprocessWrapper}
-                                  disabled={isReprocessing}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
-                                >
-                                  {isReprocessing ? (
-                                    <>
-                                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                      Processing...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Brain className="w-4 h-4 mr-1" />
-                                      AI Extract
-                                    </>
-                                  )}
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex-1 bg-gray-900">
+                          <div className="flex-1 bg-gray-900 overflow-hidden">
                             {imageLoading ? (
                               <div className="flex items-center justify-center h-full">
                                 <div className="text-center text-gray-400">
@@ -445,6 +400,27 @@ export default function EditExpenseModalNew({
                                 fileType={receiptInfo.fileType || 'image/jpeg'}
                                 fileSize={0}
                                 boundingBoxes={[]}
+                                extraToolbarActions={
+                                  <button
+                                    onClick={handleReprocessWrapper}
+                                    disabled={saving || submitting || isReprocessing}
+                                    className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50 justify-center"
+                                    style={{ height: '40px', minWidth: '120px' }}
+                                  >
+                                    {isReprocessing ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Processing...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Brain className="w-4 h-4 mr-2" />
+                                        AI Extract
+                                      </>
+                                    )}
+                                  </button>
+                                }
+                                hideRegionsCount={true}
                               />
                             ) : receiptInfo.storagePath ? (
                               <div className="flex items-center justify-center h-full">
@@ -475,8 +451,8 @@ export default function EditExpenseModalNew({
                     </div>
                   </div>
 
-                  {/* Right Panel - Editable Details (50%) */}
-                  <div className="w-1/2 overflow-y-auto">
+                  {/* Right Panel - Editable Details (60%) */}
+                  <div className="w-3/5 overflow-y-auto">
                     <div className="p-6 space-y-6">
                       {/* Save Error Alert */}
                       {saveError && (
@@ -543,9 +519,25 @@ export default function EditExpenseModalNew({
                             showAddButton={true}
                             disabled={saving || submitting || isReprocessing}
                             variant="compact"
+                            taxAmount={formData.tax_amount || 0}
+                            subtotalAmount={formData.subtotal_amount}
                           />
                         </CardContent>
                       </Card>
+
+                      {/* Receipt ID at bottom of content */}
+                      <div className="flex justify-end mt-6 pt-4 border-t border-gray-600">
+                        <div className="flex items-center gap-2 bg-gray-700/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
+                          <span className="text-gray-300 text-xs font-mono">Receipt ID: {expenseClaimId}</span>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(expenseClaimId)}
+                            className="text-gray-400 hover:text-gray-200 transition-colors"
+                            title="Copy Receipt ID"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

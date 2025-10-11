@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { tasks } from '@trigger.dev/sdk/v3'
 import { GoogleGenAI } from '@google/genai'
 
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     let imageData: string
     let document: any
@@ -439,7 +439,7 @@ async function fallbackToColNomic(request: NextRequest, userId: string) {
     
     if (result.success) {
       // Update the processing tier to indicate fallback
-      const supabase = await createAuthenticatedSupabaseClient(userId)
+      const supabase = await createBusinessContextSupabaseClient()
       await supabase
         .from('documents')
         .update({ processing_tier: 2 })

@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { validateDebugAccess, logDebugAccess, createDebugErrorResponse } from '@/lib/debug-auth'
 
 export async function GET(request: NextRequest) {
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     // Step 2: Try to create Supabase client
     console.log('[Team Auth Debug] Step 2 - Creating Supabase client...')
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     console.log('[Team Auth Debug] Step 2 - Supabase client created successfully')
 
     // Step 3: Test simple query

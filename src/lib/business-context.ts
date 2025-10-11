@@ -229,10 +229,11 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
       return { success: false, error: 'Access denied to business' }
     }
 
-    // Update user's business_id in database (simpler approach)
+    // HYBRID APPROACH: Update database only (single source of truth)
     const userData = await getUserData(clerkUserId)
     const supabase = createServiceSupabaseClient()
 
+    // Update user's active business in database
     await supabase
       .from('users')
       .update({
@@ -242,7 +243,6 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
       .eq('id', userData.id)
 
     // Update last accessed time in business_memberships
-
     await supabase
       .from('business_memberships')
       .update({
@@ -251,6 +251,13 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
       })
       .eq('user_id', userData.id)
       .eq('business_id', businessId)
+
+    console.log(`[BusinessContext] Database updated: activeBusinessId = ${businessId}`)
+    // Note: No JWT metadata update needed - database is authoritative source
+
+    // HYBRID: Invalidate cache when business context changes
+    const { invalidateUserCache } = await import('./business-context-cache')
+    invalidateUserCache(clerkUserId)
 
     // Return the new context
     const context = await getCurrentBusinessContext(clerkUserId)
@@ -350,6 +357,10 @@ export async function createUserFirstBusiness(
         updated_at: new Date().toISOString()
       })
       .eq('id', user.id)
+
+    // 5. HYBRID: Database is single source of truth - no JWT metadata needed
+    console.log(`[BusinessContext] Business context stored in database: activeBusinessId = ${business.id}`)
+    // Note: Database business_id is authoritative source, no JWT metadata required
 
     console.log(`[BusinessContext] First business created: ${clerkUserId} → ${business.id}`)
     return { businessId: business.id, userId: user.id }

@@ -5,7 +5,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { BulkApprovalRequest } from '@/types/expense-claims'
 
 // Bulk approve/reject multiple expense claims (Mel's efficiency feature)
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Get user's employee profile
     const { data: userProfile, error: profileError } = await supabase
@@ -102,18 +102,18 @@ export async function POST(request: NextRequest) {
 
       // Check status is appropriate for action
       if (action === 'approve') {
-        if (userProfile.role === 'manager' && claim.status === 'under_review') {
+        if (userProfile.role === 'manager' && claim.status === 'submitted') { // ✅ Unified status: 'submitted' instead of 'under_review'
           isValid = true
-        } else if (userProfile.role === 'admin' && claim.status === 'approved') {
+        } else if (userProfile.role === 'admin' && claim.status === 'approved') { // ✅ Unified status field
           isValid = true
         } else {
-          reason = `Invalid status for approval: ${claim.status}`
+          reason = `Invalid status for approval: ${claim.status}` // ✅ Unified status field
         }
       } else if (action === 'reject') {
-        if (['under_review', 'approved'].includes(claim.status)) {
+        if (['submitted', 'approved'].includes(claim.status)) { // ✅ Unified status: 'submitted' instead of 'under_review'
           isValid = true
         } else {
-          reason = `Invalid status for rejection: ${claim.status}`
+          reason = `Invalid status for rejection: ${claim.status}` // ✅ Unified status field
         }
       }
 
@@ -164,35 +164,35 @@ export async function POST(request: NextRequest) {
         }
 
         if (action === 'approve') {
-          if (claim.status === 'under_review') {
+          if (claim.status === 'submitted') { // ✅ Unified status: 'submitted' instead of 'under_review'
             // Manager approval
             targetStatus = 'approved'
-            updateData.status = 'approved'
+            updateData.status = 'approved' // ✅ Unified status field
             updateData.approval_date = now
             updateData.approved_by_ids = [...(claim.approved_by_ids || []), userProfile.user_id]
             // Set admin as next approver
             const adminApprover = await getAdminTeamId(supabase)
             updateData.current_approver_id = adminApprover
-          } else if (claim.status === 'approved') {
+          } else if (claim.status === 'approved') { // ✅ Unified status field
             // Admin approval
             targetStatus = 'reimbursed'
-            updateData.status = 'reimbursed'
+            updateData.status = 'reimbursed' // ✅ Unified status field
             updateData.reimbursement_date = now
             updateData.approved_by_ids = [...(claim.approved_by_ids || []), userProfile.user_id]
           } else {
             // This should not happen due to validation but handle it gracefully
-            targetStatus = claim.status
+            targetStatus = claim.status // ✅ Unified status field
             continue
           }
         } else if (action === 'reject') {
           targetStatus = 'rejected'
-          updateData.status = 'rejected'
+          updateData.status = 'rejected' // ✅ Unified status field
           updateData.rejected_by_id = userProfile.user_id
           updateData.rejection_reason = comment || 'Bulk rejection'
           updateData.current_approver_id = null
         } else {
-          // Invalid action - this should not happen due to validation but handle it gracefully  
-          targetStatus = claim.status
+          // Invalid action - this should not happen due to validation but handle it gracefully
+          targetStatus = claim.status // ✅ Unified status field
           continue
         }
 
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
 
         results.successful.push({
           claim_id: claim.id,
-          previous_status: claim.status,
+          previous_status: claim.status, // ✅ Unified status field
           new_status: targetStatus
         })
 

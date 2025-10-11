@@ -1,6 +1,6 @@
 /**
  * Application Form Data Extraction Task
- * Extracts application form data using DSPy and Pydantic models
+ * Extracts application form data using AI Processing and Pydantic models
  */
 
 import { task } from "@trigger.dev/sdk/v3";
@@ -18,7 +18,7 @@ const DOMAIN_TABLE_MAP = {
 interface ExtractApplicationFormDataPayload {
   documentId: string;
   imageStoragePath: string; // This is now storage_path - can be single file or folder
-  documentDomain: 'invoices' | 'expense_claims' | 'applications';  // ✅ PHASE 4C: Domain routing parameter
+  documentDomain: 'invoices' | 'expense_claims' | 'applications'; 
 }
 
 
@@ -104,7 +104,7 @@ export const extractApplicationFormData = task({
       console.log(`[ExtractApplication] Creating signed URL for single image: ${imageStoragePath}`);
 
       const { data: urlData, error: urlError } = await supabase.storage
-        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
+        .from(tableName)
         .createSignedUrl(imageStoragePath, 600);
 
       if (urlError || !urlData) {
@@ -117,7 +117,7 @@ export const extractApplicationFormData = task({
     console.log(`[ExtractApplication] Created ${pageUrls.length} signed URLs for unified processing`);
 
     // Single call to Python script with JSON array (unified approach)
-    console.log(`[ExtractApplication] Running unified DSPy application form extraction`);
+    console.log(`[ExtractApplication] Running unified AI application form extraction`);
     const rawResult = await python.runScript(
       "./src/python/extract_document.py",
       ["application_form", JSON.stringify(pageUrls)],
@@ -126,7 +126,7 @@ export const extractApplicationFormData = task({
       }
     );
 
-    // Debug: Log what Python script returned (detailed like process-document-ocr)
+    // Debug: Log what Python script returned
     console.log(`[ExtractApplication] Python script result type: ${typeof rawResult}`);
     console.log(`[ExtractApplication] Python script result preview:`, JSON.stringify(rawResult).substring(0, 300));
 

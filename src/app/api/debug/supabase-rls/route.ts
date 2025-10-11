@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { validateDebugAccess, logDebugAccess, createDebugErrorResponse } from '@/lib/debug-auth'
 
 /**
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     // Create authenticated Supabase client
     let supabase: any
     try {
-      supabase = await createAuthenticatedSupabaseClient(userId)
+      supabase = await createBusinessContextSupabaseClient()
       console.log('[DEBUG RLS] Created authenticated Supabase client')
     } catch (clientError) {
       console.error('[DEBUG RLS] Error creating Supabase client:', clientError)

@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 import { currencyService } from '@/lib/currency-service'
 import { CrossBorderTaxComplianceTool } from '@/lib/tools'
 import {
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
     console.log(`[Accounting Entries API] Creating ${transaction_type} entry for user ${userId}`)
 
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Ensure user has a business_id for category validation
     if (!userData.business_id) {
@@ -426,7 +426,7 @@ export async function GET(request: NextRequest) {
     console.log(`[Accounting Entries API] Listing entries for user ${userId}:`, params)
 
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     let query = supabase
       .from('accounting_entries')

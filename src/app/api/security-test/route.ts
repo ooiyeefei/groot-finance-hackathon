@@ -3,7 +3,7 @@
  * This endpoint tests various security scenarios for validation
  */
 
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server';
+import { createBusinessContextSupabaseClient } from '@/lib/supabase-server';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { test_type, target_business_id } = body;
 
-    const supabase = await createAuthenticatedSupabaseClient(userId);
+    const supabase = await createBusinessContextSupabaseClient();
 
     const results: any = {
       test_type,

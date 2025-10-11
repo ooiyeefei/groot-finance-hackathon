@@ -217,20 +217,9 @@ async function createMissingUserRecords(
         console.log(`[User Recovery] ✅ Clerk sync successful for invitation`)
       }
 
-      // Set active business in Clerk metadata
-      try {
-        const { clerkClient } = await import('@clerk/nextjs/server')
-        const clerkUser = await (await clerkClient()).users.getUser(clerkUserId)
-
-        await (await clerkClient()).users.updateUser(clerkUserId, {
-          publicMetadata: {
-            ...(clerkUser.publicMetadata || {}),
-            activeBusinessId: latestInvitation.business_id
-          }
-        })
-      } catch (clerkError) {
-        console.error('[User Recovery] Warning: Failed to set active business:', clerkError)
-      }
+      // HYBRID: Database is single source of truth - no JWT metadata needed
+      console.log(`[User Recovery] Business context stored in database: activeBusinessId = ${latestInvitation.business_id}`)
+      // Note: Database business_id is authoritative source, no JWT metadata required
 
       console.log(`[User Recovery] 🎉 Successfully processed invitation: ${email} → User: ${userData.id} → Business: ${latestInvitation.business_id}`)
 
@@ -476,7 +465,28 @@ async function createMissingUserRecords(
 
     console.log(`[User Recovery] ✅ Employee profile created successfully`)
 
-    // 🛡️ STEP 5: Sync role permissions to Clerk metadata (critical for middleware access)
+    // 🛡️ STEP 5: Create business membership record (CRITICAL - was missing!)
+    console.log(`[User Recovery] 🏢 Creating business membership for user ${newUser.id}`)
+
+    const { error: membershipError } = await supabase
+      .from('business_memberships')
+      .insert({
+        user_id: newUser.id,
+        business_id: newBusiness.id,
+        role: 'admin', // Owner is admin of their own business
+        status: 'active',
+        joined_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
+      })
+
+    if (membershipError) {
+      console.error('[User Recovery] ❌ Error creating business membership:', membershipError)
+      return null
+    }
+
+    console.log(`[User Recovery] ✅ Business membership created successfully`)
+
+    // 🛡️ STEP 6: Sync role permissions to Clerk metadata (critical for middleware access)
     console.log(`[User Recovery] 🔄 Syncing role permissions to Clerk metadata`)
     await new Promise(resolve => setTimeout(resolve, 500)) // 500ms delay to ensure Clerk user is fully available
     const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
@@ -725,8 +735,7 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
       },
       global: {
         headers: {
-          Authorization: `Bearer ${jwtToken}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${jwtToken}`
         },
         fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
           return fetch(url, {
@@ -749,7 +758,7 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
   return supabase
 }
 
-// NEW: Multi-tenant Supabase client with business context from JWT
+// HYBRID: Multi-tenant Supabase client with database-first business context + caching
 export async function createBusinessContextSupabaseClient(clerkUserId?: string) {
   const authenticatedClerkUserId = clerkUserId || (await auth()).userId
 
@@ -757,26 +766,78 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
     throw new Error('Authentication required')
   }
 
-  // Get active business from Clerk JWT
-  const user = await (await clerkClient()).users.getUser(authenticatedClerkUserId)
-  const activeBusinessId = user.publicMetadata?.activeBusinessId as string
+  // HYBRID APPROACH: Database is single source of truth with application layer caching
+  console.log(`[BusinessContext] Getting business context for user: ${authenticatedClerkUserId}`)
 
-  if (!activeBusinessId) {
-    throw new Error('No active business context in JWT - user must switch business first')
+  try {
+    // Get user's current business from cache or database (performance optimized)
+    const { getCachedUserData } = await import('./business-context-cache')
+    const userData = await getCachedUserData(authenticatedClerkUserId)
+    const activeBusinessId = userData.business_id
+
+    if (!activeBusinessId) {
+      console.log(`[BusinessContext] No business_id found - user needs to create/join a business`)
+      throw new Error('No active business found - user must create or join a business first')
+    }
+
+    console.log(`[BusinessContext] ✅ Using business context: ${activeBusinessId}`)
+
+    // HYBRID: Use Clerk JWT authentication for RPC functions
+    let jwtToken: string | null = null
+    try {
+      const { getToken } = await auth()
+      jwtToken = await getToken({ template: 'supabase' })
+    } catch (error) {
+      console.error('[BusinessContext] Failed to get Clerk JWT token:', error)
+      throw new Error('Failed to authenticate with Clerk')
+    }
+
+    if (!jwtToken) {
+      throw new Error('No JWT token available')
+    }
+
+    // Create authenticated Supabase client with Clerk JWT
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false
+        },
+        global: {
+          headers: {
+            Authorization: `Bearer ${jwtToken}`
+          }
+        }
+      }
+    )
+
+    // Set the session with JWT token for RPC functions to access claims
+    await supabase.auth.setSession({
+      access_token: jwtToken,
+      refresh_token: ''
+    })
+
+    // Validate business membership (no session variables needed with direct filtering)
+    console.log(`[BusinessContext] Validating business membership for: ${activeBusinessId}`)
+
+    const { error: rpcError } = await supabase.rpc('set_tenant_context', { p_business_id: activeBusinessId })
+
+    if (rpcError) {
+      console.error(`[BusinessContext] Business membership validation failed for ${activeBusinessId}:`, rpcError)
+      throw new Error(`Failed to validate business membership: ${rpcError.message}`)
+    }
+
+    console.log(`[BusinessContext] ✅ Business membership validated for: ${activeBusinessId}`)
+
+    // Business context validated (database + cache + JWT)
+
+    return supabase
+
+  } catch (error) {
+    console.error('[BusinessContext] Failed to get business context:', error)
+    throw new Error('Failed to establish business context - please try again')
   }
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
-  // Set both user and business context for RLS
-  const supabaseUserUuid = await getSupabaseUserUuid(authenticatedClerkUserId)
-
-  await supabase.rpc('set_user_context', { user_id: supabaseUserUuid })
-  await supabase.rpc('set_tenant_context', { business_id: activeBusinessId })
-
-  // Multi-tenant RLS context configured
-
-  return supabase
 }

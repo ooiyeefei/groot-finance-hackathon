@@ -1,197 +1,142 @@
-# Business Switcher Component Redesign Plan
+# Multi-Tenant Security Vulnerability Fix Plan
 
 ## Overview
-Redesigning the `enhanced-business-display.tsx` component to be more minimalist, cleaner, and better aligned with our dark theme financial application aesthetic.
+Systematically fix critical multi-tenant security vulnerability across 46 API files. The issue: APIs using `createAuthenticatedSupabaseClient(userId)` instead of `createBusinessContextSupabaseClient()`, which allows cross-business data leakage.
 
-## Current Issues Identified
-1. ✗ Redundant dropdown arrow - Radix Select adds its own ChevronDown, creating duplicate arrows
-2. ✗ Selection highlight lacks contrast - need better visual feedback for selected items
-3. ✗ Missing clear selection indicator - no checkmark or highlight for active business
-4. ✗ Menu collapse icon unclear - ChevronUp rotated 90° is confusing
-5. ✗ Business logo too small - needs prominence with better spacing (currently 48px/43px)
+## Security Issue Explained
+- **Problem**: `createAuthenticatedSupabaseClient(userId)` sets only user context, allowing access to ALL businesses the user belongs to
+- **Solution**: `createBusinessContextSupabaseClient()` sets both user AND business context from Clerk JWT's activeBusinessId
+- **Impact**: Without business context, users can see/modify data from other businesses they have access to
 
-## Design Approach
+## Implementation Strategy
 
-### Color Palette (Dark Theme + Blue Accents)
-- **Background**: gray-800/gray-900 (#1f2937, #111827)
-- **Surface**: gray-800 with subtle gray-700/50 hover states
-- **Primary Accent**: blue-500 (#3b82f6) for interactive elements
-- **Selected State**: blue-500/10 background with blue-500 border-left accent
-- **Text Primary**: white (#ffffff)
-- **Text Secondary**: gray-400 (#9ca3af)
-- **Text Muted**: gray-500 (#6b7280)
+### Phase 1: Critical Business Logic APIs (Priority 1)
+These handle financial data and MUST be fixed first:
 
-### Component Structure Improvements
+#### Expense Claims APIs (10 files)
+- [x] `/src/app/api/expense-claims/[id]/route.ts` - Get/update/delete expense claims
+- [x] `/src/app/api/expense-claims/[id]/status/route.ts` - Status transitions (approval/rejection)
+- [ ] `/src/app/api/expense-claims/[id]/submit/route.ts` - Expense claim submission
+- [x] `/src/app/api/expense-claims/approvals/route.ts` - List pending approvals
+- [ ] `/src/app/api/expense-claims/enhanced-approvals/route.ts` - Enhanced approval logic
+- [ ] `/src/app/api/expense-claims/bulk-approve/route.ts` - Bulk approval operations
+- [ ] `/src/app/api/expense-claims/analytics/route.ts` - Analytics data
+- [ ] `/src/app/api/expense-claims/dashboard/route.ts` - Dashboard metrics
+- [x] `/src/app/api/expense-claims/reports/monthly/route.ts` - Monthly reports
+- [x] `/src/app/api/expense-claims/duplicate-check/route.ts` - Duplicate detection
 
-#### 1. Business Logo Enhancement
-- **Current**: 48px (expanded) / 43px (collapsed)
-- **New**: 56px (expanded) / 48px (collapsed)
-- **Padding**: Reduce internal padding from p-6/p-4 to p-4/p-3
-- **Visual Impact**: Larger logo creates better hierarchy
+#### Accounting Entries APIs (3 files)
+- [x] `/src/app/api/accounting-entries/[entryId]/route.ts` - Get/update/delete entries
+- [x] `/src/app/api/accounting-entries/[entryId]/category/route.ts` - Category updates
+- [x] `/src/app/api/accounting-entries/[entryId]/status/route.ts` - Status updates
 
-#### 2. Dropdown Arrow Fix
-- **Issue**: SelectTrigger adds its own ChevronDown icon via Radix
-- **Solution**: Hide Radix's default icon with `[&>svg]:hidden` class
-- **Implementation**: Keep single ChevronDown in our custom layout
-- **Position**: Right side of business name, inline with text
+#### Transaction APIs (1 file)
+- [x] `/src/app/api/transactions/[transactionId]/route.ts` - Transaction operations
 
-#### 3. Selection Indicator (Checkmark)
-- **Icon**: lucide-react `Check` icon (already imported in select.tsx)
-- **Position**: Right side of each SelectItem
-- **Color**: blue-500 for selected state
-- **Size**: w-4 h-4 for visibility
-- **Behavior**: Only visible on selected business
+### Phase 2: Document & Upload APIs (Priority 2)
+These handle document processing:
 
-#### 4. Selection Highlight Enhancement
-- **Default State**: transparent background
-- **Hover State**: bg-gray-700/50
-- **Selected State**:
-  - bg-blue-500/10 (subtle blue tint)
-  - border-l-2 border-l-blue-500 (left accent bar)
-  - text-white font-medium
-- **Transition**: smooth 150ms ease
+#### Expense Claims Upload/Extract (3 files)
+- [x] `/src/app/api/expense-claims/upload/route.ts` - Receipt uploads
+- [x] `/src/app/api/expense-claims/dspy-extract/route.ts` - DSPy extraction
+- [x] `/src/app/api/expense-claims/check-duplicate/route.ts` - Duplicate checking
 
-#### 5. Menu Collapse Icon Replacement
-- **Current**: ChevronUp rotated 90° (confusing)
-- **New Options**:
-  - **PanelLeftClose** / **PanelLeftOpen** - most semantic for sidebar collapse
-  - **ChevronsLeft** / **ChevronsRight** - clear directional intent
-  - **Menu** - minimal hamburger icon
-- **Recommendation**: PanelLeftClose/PanelLeftOpen for best UX clarity
+#### Invoice APIs (4 files)
+- [x] `/src/app/api/invoices/list/route.ts` - List invoices
+- [x] `/src/app/api/invoices/upload/route.ts` - Invoice uploads
+- [x] `/src/app/api/invoices/[invoiceId]/process/route.ts` - Invoice processing
+- [x] `/src/app/api/invoices/process-batch/route.ts` - Batch processing
 
-#### 6. Owner Badge Refinement
-- **Current**: Yellow with Crown icon
-- **Enhancement**:
-  - Darker background: bg-yellow-900/30 border-yellow-600/50
-  - Text: text-yellow-400
-  - Icon: text-yellow-500
-  - Better contrast on dark background
+#### Receipt APIs (2 files)
+- [x] `/src/app/api/receipts/extract/route.ts` - Receipt extraction
+- [ ] `/src/app/api/receipts/extract-dspy-sync/route.ts` - Synchronous DSPy extraction
 
-### Accessibility Improvements
-- Maintain ARIA labels on all interactive elements
-- Ensure 4.5:1 contrast ratio for all text
-- Keyboard navigation support (already handled by Radix)
-- Focus ring visible on all interactive elements
+### Phase 3: Category & Configuration APIs (Priority 3)
+These handle business-specific configurations:
 
-## Implementation Tasks
+#### Expense Categories (2 files)
+- [x] `/src/app/api/expense-categories/route.ts` - CRUD operations
+- [x] `/src/app/api/expense-categories/enabled/route.ts` - Get enabled categories
 
-### Phase 1: Core Component Refactoring
-- [ ] Increase logo size to 56px/48px with adjusted container padding
-- [ ] Hide Radix's default ChevronDown icon with CSS
-- [ ] Reposition custom ChevronDown for single arrow appearance
-- [ ] Replace collapse icon with PanelLeftClose/PanelLeftOpen
+#### COGS Categories (2 files)
+- [x] `/src/app/api/cogs-categories/route.ts` - CRUD operations
+- [x] `/src/app/api/cogs-categories/enabled/route.ts` - Get enabled categories
 
-### Phase 2: Selection Styling Enhancement
-- [ ] Add custom SelectItem styling with selected state
-- [ ] Implement blue-500/10 background for selected items
-- [ ] Add left border accent bar (border-l-2 border-l-blue-500)
-- [ ] Add Check icon indicator for selected business
-- [ ] Improve hover states with gray-700/50
+### Phase 4: Export & Reporting APIs (Priority 4)
+- [x] `/src/app/api/expense-claims/export/google-sheets/route.ts` - Google Sheets export
+- [ ] `/src/app/api/expense-reports/generate/route.ts` - Report generation
 
-### Phase 3: Badge & Typography Refinement
-- [ ] Update Owner badge colors for dark theme
-- [ ] Adjust role badge colors for better contrast
-- [ ] Fine-tune typography hierarchy
-- [ ] Optimize spacing and padding throughout
+### Phase 5: User & Business Profile APIs (Priority 5)
+- [x] `/src/app/api/user/profile/route.ts` - User profile
+- [x] `/src/app/api/business-profile/route.ts` - Business profile
 
-### Phase 4: Testing & Polish
-- [ ] Test expanded/collapsed states
-- [ ] Verify single business case (no dropdown)
-- [ ] Verify multiple business case (with dropdown)
-- [ ] Test keyboard navigation
-- [ ] Verify loading and error states
-- [ ] Run `npm run build` to validate
+### Phase 6: Chat & Conversation APIs (Priority 6)
+- [x] `/src/app/api/chat/route.ts` - LangGraph agent chat
+- [x] `/src/app/api/conversations/route.ts` - List conversations
+- [x] `/src/app/api/conversations/[id]/route.ts` - Get/update conversations
+- [x] `/src/app/api/messages/[messageId]/route.ts` - Message operations
 
-## Technical Implementation Details
+### Phase 7: Audit & Vendor APIs (Priority 7)
+- [x] `/src/app/api/audit-events/route.ts` - Audit log
+- [x] `/src/app/api/vendors/route.ts` - Vendor management
+- [x] `/src/app/api/tasks/[taskId]/status/route.ts` - Task status
 
-### Key Component Files to Modify
-1. `/src/components/ui/enhanced-business-display.tsx` - Main component
-2. `/src/components/ui/select.tsx` - May need minor adjustments for dark theme
+### Phase 8: Security Testing API (Priority 8)
+- [x] `/src/app/api/security-test/route.ts` - Security validation endpoint
 
-### Specific Code Changes
+### Phase 9: Debug APIs (NEW - Multi-Tenant Security Fix)
+These debug endpoints SHOULD also use business context for proper multi-tenant isolation:
+- [ ] `/src/app/api/debug/team-auth/route.ts` - Team auth debug
+- [ ] `/src/app/api/debug/supabase-rls/route.ts` - RLS function testing
+- [ ] `/src/app/api/debug/test-rls-fix/route.ts` - RLS fix validation
+- [ ] `/src/app/api/debug/user-permissions/route.ts` - Permission debugging
+- [ ] `/src/app/api/security-test/route.ts` - Security validation (moved to Phase 9)
 
-#### Logo Size Adjustment
+## Implementation Pattern
+
+For each file, apply these changes:
+
+### 1. Update Import Statement
+**Before:**
 ```typescript
-// BusinessLogo component - getSizes function
-if (size === 'lg') return { width: 56, height: 56, className: 'w-14 h-14' }
-return {
-  width: isExpanded ? 56 : 48,
-  height: isExpanded ? 56 : 48,
-  className: isExpanded ? 'w-14 h-14' : 'w-12 h-12'
-}
+import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
 ```
 
-#### Container Padding Reduction
+**After:**
 ```typescript
-// Main container
-className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 ```
 
-#### Hide Radix Default Icon
+### 2. Replace Function Calls
+**Before:**
 ```typescript
-// SelectTrigger
-className="... [&>svg]:hidden focus:ring-blue-500/50"
+const supabase = await createAuthenticatedSupabaseClient(userId)
+// or
+const supabase = await createAuthenticatedSupabaseClient()
 ```
 
-#### Custom SelectItem with Indicator
+**After:**
 ```typescript
-<SelectItem
-  className={cn(
-    "relative flex items-center gap-3 py-2.5 px-3",
-    "hover:bg-gray-700/50 transition-colors",
-    "data-[state=checked]:bg-blue-500/10",
-    "data-[state=checked]:border-l-2 data-[state=checked]:border-l-blue-500"
-  )}
->
-  {/* Content */}
-  {membership.id === business?.businessId && (
-    <Check className="w-4 h-4 text-blue-500 ml-auto" />
-  )}
-</SelectItem>
+const supabase = await createBusinessContextSupabaseClient()
 ```
 
-#### Collapse Icon Replacement
-```typescript
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+### 3. Remove userId Parameter
+Since `createBusinessContextSupabaseClient()` doesn't need userId parameter, remove any userId resolution logic that was only used for the old function.
 
-// In component
-{onToggleExpand && (
-  <button
-    onClick={onToggleExpand}
-    className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-    aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
-  >
-    {isExpanded ? (
-      <PanelLeftClose className="w-5 h-5" />
-    ) : (
-      <PanelLeftOpen className="w-5 h-5" />
-    )}
-  </button>
-)}
-```
+## Testing Checklist
+After all fixes:
+- [ ] Run `npm run build` to verify no TypeScript errors
+- [ ] Test expense claim creation in Business A
+- [ ] Switch to Business B and verify Business A's claims are NOT visible
+- [ ] Test approval flow across business boundaries
+- [ ] Test category management isolation
+- [ ] Test document upload/processing isolation
 
-#### Owner Badge Dark Theme
-```typescript
-const getRoleColors = (role: string, isOwner: boolean) => {
-  if (isOwner) return 'bg-yellow-900/30 text-yellow-400 border-yellow-600/50'
-  switch (role) {
-    case 'admin': return 'bg-purple-900/30 text-purple-400 border-purple-600/50'
-    case 'manager': return 'bg-blue-900/30 text-blue-400 border-blue-600/50'
-    default: return 'bg-gray-700/50 text-gray-300 border-gray-600/50'
-  }
-}
-```
-
-## Expected Outcomes
-- ✓ Single, clear dropdown arrow on business switcher
-- ✓ Prominent business logo with better visual hierarchy
-- ✓ Clear selection indicator with checkmark and accent bar
-- ✓ Improved color contrast on all interactive elements
-- ✓ Intuitive collapse/expand icon with clear directionality
-- ✓ Elegant, minimalist design matching financial application standards
-- ✓ Maintained accessibility standards (WCAG 2.1 AA)
-- ✓ Smooth transitions and professional polish
+## Notes
+- Skip ALL debug API files (anything with `/debug/` in path)
+- Be careful with complex logic - only straightforward replacements
+- Focus on most critical files first (expense-claims, accounting-entries, transactions)
+- This is a CRITICAL security vulnerability fix for multi-tenant data isolation
 
 ## Review Section
 [To be completed after implementation]
->>>>>>> 2f2f215 (fix(security): Comprehensive security enhancements and sidebar reactivity fixes)

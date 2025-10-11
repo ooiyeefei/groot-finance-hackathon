@@ -15,6 +15,7 @@ import { mapDocumentToTransaction, canCreateTransactionFromDocument } from '@/li
 import { CreateTransactionRequest } from '@/types/transaction'
 import { useHomeCurrency } from '@/components/settings/currency-settings'
 import ExtractedInfoTags from './ExtractedInfoTags'
+import { useActiveBusiness } from '@/contexts/business-context'
 
 interface DocumentsListProps {
   onRefresh?: () => void
@@ -28,6 +29,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   const router = useRouter()
   const locale = useLocale()
   const userHomeCurrency = useHomeCurrency()
+  const { businessId } = useActiveBusiness()
   const {
     documents,
     loading,
@@ -58,6 +60,14 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
       await refreshDocuments()
     }
   }), [refreshDocuments])
+
+  // CRITICAL FIX: Re-fetch documents when active business context changes
+  useEffect(() => {
+    if (businessId) {
+      console.log('[DocumentsList] Business context changed, refreshing documents:', businessId)
+      refreshDocuments()
+    }
+  }, [businessId, refreshDocuments])
 
   // Handle refresh from parent component
   const handleRefresh = async () => {

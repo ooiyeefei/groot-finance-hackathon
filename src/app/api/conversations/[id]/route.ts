@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 // GET - Fetch specific conversation
 export async function GET(
@@ -18,7 +18,7 @@ export async function GET(
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Get specific conversation with all messages
     // SECURITY FIX: Use Supabase UUID instead of Clerk ID
@@ -102,7 +102,7 @@ export async function DELETE(
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Soft delete the conversation (updates deleted_at timestamp)
     // SECURITY FIX: Use Supabase UUID instead of Clerk ID

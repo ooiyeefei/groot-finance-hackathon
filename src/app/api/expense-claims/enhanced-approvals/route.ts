@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase-server'
+import { createAuthenticatedSupabaseClient, createBusinessContextSupabaseClient } from '@/lib/supabase-server'
 import { workflowEngine } from '@/lib/services/enhanced-workflow-engine'
 import { z } from 'zod'
 
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
     const { searchParams } = new URL(request.url)
     const includeRiskAnalysis = searchParams.get('include_risk') === 'true'
     const riskThreshold = parseInt(searchParams.get('risk_threshold') || '0')
@@ -250,7 +250,7 @@ async function handleSingleApproval(
   }
 
   const { claim_id, action, comment, override_justification, risk_acknowledgment } = validatedBody.data
-  const supabase = await createAuthenticatedSupabaseClient(userId)
+  const supabase = await createBusinessContextSupabaseClient()
 
   // Get user profile
   const { data: userProfile, error: profileError } = await supabase
@@ -317,7 +317,7 @@ async function handleBulkApproval(userId: string, body: any, request: NextReques
   }
 
   const { claim_ids, action, comment } = validatedBody.data
-  const supabase = await createAuthenticatedSupabaseClient(userId)
+  const supabase = await createBusinessContextSupabaseClient()
 
   // Get user profile
   const { data: userProfile } = await supabase

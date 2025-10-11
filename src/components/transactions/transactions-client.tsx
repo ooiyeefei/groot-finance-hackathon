@@ -13,10 +13,12 @@ import { useTransactions } from '@/hooks/use-transactions'
 import { Transaction } from '@/types/transaction'
 import { Plus } from 'lucide-react'
 import { ClientProviders } from '@/components/providers/client-providers'
+import { useActiveBusiness } from '@/contexts/business-context'
 
 export default function TransactionsClient() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { businessId } = useActiveBusiness()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null)
@@ -44,6 +46,14 @@ export default function TransactionsClient() {
       }
     }
   }, [searchParams, transactions, getTransactionById, viewingTransaction, highlightProcessed])
+
+  // CRITICAL FIX: Re-fetch transactions when active business context changes
+  useEffect(() => {
+    if (businessId) {
+      console.log('[TransactionsClient] Business context changed, refreshing transactions:', businessId)
+      refreshTransactions()
+    }
+  }, [businessId, refreshTransactions])
 
   const handleCreateTransaction = async (data: any) => {
     try {

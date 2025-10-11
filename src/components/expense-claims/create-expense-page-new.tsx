@@ -15,11 +15,11 @@ import { useExpenseForm } from '@/hooks/use-expense-form'
 import { useLineItems } from '@/hooks/use-line-items'
 import ExpenseFormFields, { ReceiptUploadSection, ExpenseSummaryCompact } from './expense-form-fields'
 import LineItemTable from './line-item-table'
-import { DSPyExtractionResult } from '@/types/expense-extraction'
+import { AIExtractionResult } from '@/types/expense-extraction'
 
 interface CreateExpensePageNewProps {
-  // DSPy extraction result (required for create mode)
-  extractionResult: DSPyExtractionResult
+  // AI extraction result (required for create mode)
+  extractionResult: AIExtractionResult
 
   // Navigation handlers
   onSubmit?: (formData: any) => Promise<any>
@@ -34,7 +34,7 @@ interface CreateExpensePageNewProps {
   pageDescription?: string
 
   // UI control
-  hideHeader?: boolean  // Hide redundant headers when used in DSPy flow
+  hideHeader?: boolean  // Hide redundant headers when used in AI flow
 }
 
 export default function CreateExpensePageNew({
@@ -128,6 +128,68 @@ export default function CreateExpensePageNew({
     currency: formData.original_currency
   })
 
+  // Handle receipt upload with proper API integration
+  const handleReceiptUpload = React.useCallback(async (file: File) => {
+    console.log('Receipt upload started:', file.name)
+
+    // File validation (matching existing patterns)
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    if (!allowedTypes.includes(file.type)) {
+      alert('Please select a valid image (JPEG, PNG, WebP) or PDF file')
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size must be less than 10MB')
+      return
+    }
+
+    try {
+      // Create FormData following existing upload patterns
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('processing_mode', 'ai') // Use AI processing for uploaded receipts
+
+      console.log('Uploading file to expense claims API...')
+
+      // Call the unified expense claims upload API
+      const response = await fetch('/api/expense-claims/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        const { expense_claim, processing_mode, message, task_id } = result.data
+        console.log('Upload successful:', expense_claim.id)
+
+        // Update form data with the uploaded expense claim info
+        setFormData(prev => ({
+          ...prev,
+          vendor_name: expense_claim.vendor_name || '',
+          original_amount: expense_claim.total_amount || 0,
+          original_currency: expense_claim.currency || 'SGD',
+          transaction_date: expense_claim.transaction_date || new Date().toISOString().split('T')[0],
+          expense_category: expense_claim.expense_category || 'other_business',
+          business_purpose: expense_claim.business_purpose || '',
+          reference_number: expense_claim.reference_number || ''
+        }))
+
+        if (processing_mode === 'ai' && task_id) {
+          alert(`Receipt uploaded successfully! AI processing started. Task ID: ${task_id}`)
+        } else {
+          alert(`Receipt uploaded successfully: ${message}`)
+        }
+      } else {
+        throw new Error(result.error || 'Upload failed')
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }, [setFormData])
+
   // Handle form submission with proper validation
   const handleFormSubmit = async (action: 'draft' | 'submit' = 'draft') => {
     try {
@@ -190,7 +252,7 @@ export default function CreateExpensePageNew({
 
   return (
     <div className={hideHeader ? "" : "container mx-auto p-6"}>
-      {/* Header - Hidden when used in DSPy flow */}
+      {/* Header - Hidden when used in AI flow */}
       {!hideHeader && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
@@ -253,7 +315,7 @@ export default function CreateExpensePageNew({
                     receiptInfo={receiptInfo}
                     onReprocessClick={undefined} // Not needed for create mode
                     isReprocessing={false}
-                    onReceiptUpload={undefined} // Will be implemented if needed
+                    onReceiptUpload={handleReceiptUpload}
                   />
                 </div>
 
@@ -309,7 +371,7 @@ export default function CreateExpensePageNew({
                   // Mode-specific props
                   mode="create"
                   showReceiptUpload={isManualEntry}
-                  onReceiptUpload={undefined} // Will be implemented if needed
+                  onReceiptUpload={handleReceiptUpload}
 
                   // Loading states
                   loading={false}
@@ -328,6 +390,8 @@ export default function CreateExpensePageNew({
                   showAddButton={true}
                   disabled={saving || submitting}
                   variant="compact"
+                  taxAmount={extractionResult?.extractedData.taxAmount || 0}
+                  subtotalAmount={extractionResult?.extractedData.subtotalAmount}
                 />
               </div>
             </div>
@@ -375,7 +439,7 @@ export default function CreateExpensePageNew({
               // Mode-specific props
               mode="create"
               showReceiptUpload={isManualEntry}
-              onReceiptUpload={undefined} // Will be implemented if needed
+              onReceiptUpload={handleReceiptUpload}
 
               // Loading states
               loading={false}
@@ -392,6 +456,8 @@ export default function CreateExpensePageNew({
               showAddButton={true}
               disabled={saving || submitting}
               variant="default"
+              taxAmount={extractionResult?.extractedData.taxAmount || 0}
+              subtotalAmount={extractionResult?.extractedData.subtotalAmount}
             />
           </div>
         )}

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/supabase-server'
+import { createBusinessContextSupabaseClient, getUserData } from '@/lib/supabase-server'
 
 export async function GET() {
   try {
@@ -12,7 +12,7 @@ export async function GET() {
 
     // SECURITY: Get user data with business context for proper tenant isolation
     const userData = await getUserData(userId)
-    const supabase = await createAuthenticatedSupabaseClient(userId)
+    const supabase = await createBusinessContextSupabaseClient()
 
     console.log(`[Conversations API] Fetching conversations for user:`, {
       clerkUserId: userId,
@@ -21,7 +21,7 @@ export async function GET() {
     })
 
     // Get user's conversations ordered by most recent (excluding deleted ones)
-    // SECURITY FIX: Use Supabase UUID instead of Clerk ID
+    // BUSINESS TENANCY FIX: Filter by both user_id AND business_id for proper tenant isolation
     const { data: conversations, error } = await supabase
       .from('conversations')
       .select(`
@@ -41,6 +41,7 @@ export async function GET() {
         )
       `)
       .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)  // CRITICAL: Filter by business context
       .is('deleted_at', null)
       .order('updated_at', { ascending: false })
       .limit(50)

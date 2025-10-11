@@ -1,6 +1,6 @@
 /**
  * Payslip Data Extraction Task
- * Extracts payslip data using DSPy and Pydantic models
+ * Extracts payslip data using AI Processing and Pydantic models
  */
 
 import { task, tasks } from "@trigger.dev/sdk/v3";
@@ -21,7 +21,7 @@ const DOMAIN_TABLE_MAP = {
 interface ExtractPayslipDataPayload {
   documentId: string;
   imageStoragePath: string;
-  documentDomain: 'invoices' | 'expense_claims' | 'applications';  // ✅ PHASE 4C: Domain routing parameter
+  documentDomain: 'invoices' | 'expense_claims' | 'applications';
 }
 
 /**

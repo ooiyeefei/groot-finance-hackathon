@@ -5,15 +5,21 @@
 
 import { SupportedCurrency, Transaction } from './transaction'
 
-// Otto's 7-stage workflow
-export type ExpenseStatus = 
-  | 'draft'           // Employee editing
-  | 'submitted'       // Awaiting manager review
-  | 'under_review'    // Manager reviewing
-  | 'approved'        // Manager approved, awaiting finance
-  | 'rejected'        // Manager/Admin rejected
-  | 'reimbursed'      // Admin processed
-  | 'paid'            // Payment completed
+// ✅ Simplified linear workflow status
+export type ExpenseClaimStatus =
+  | 'draft'                    // Ready for editing (OCR completed or manual entry)
+  | 'uploading'               // File uploading
+  | 'analyzing'               // 🧠 AI processing receipt
+  | 'submitted'               // Submitted for approval
+  | 'approved'                // Manager approved
+  | 'rejected'                // Manager rejected
+  | 'reimbursed'              // Payment processed
+  | 'failed'                  // Processing failed
+
+// Legacy aliases for backward compatibility during migration
+export type ClaimsApprovalStatus = ExpenseClaimStatus
+export type OcrProcessingStatus = ExpenseClaimStatus
+export type ExpenseStatus = ExpenseClaimStatus
 
 // Dynamic expense categories - stored in businesses.custom_expense_categories (JSONB)
 // Each business can define their own categories with custom names, icons, and rules
@@ -21,10 +27,10 @@ export type ExpenseStatus =
 // Legacy default categories: travel_accommodation, petrol, toll, entertainment, other
 export type ExpenseCategory = string
 
-// Kevin's workflow state machine
+// Kevin's workflow state machine (updated for unified status)
 export interface WorkflowTransition {
-  from: ExpenseStatus
-  to: ExpenseStatus
+  from: ExpenseClaimStatus
+  to: ExpenseClaimStatus
   requiredRole: 'employee' | 'manager' | 'admin'
   validator?: (claim: ExpenseClaim) => boolean
 }
@@ -58,9 +64,9 @@ export interface ExpenseClaim {
   accounting_entry_id: string | null  // Links to accounting_entries.id after approval (NULL until approved)
   user_id: string
   business_id: string
-  
-  // Otto's 7-stage workflow
-  status: ExpenseStatus
+
+  // ✅ Otto's workflow with unified status (consolidates previous dual status system)
+  status: ExpenseClaimStatus          // Unified linear workflow status
   submission_date?: string
   approval_date?: string
   reimbursement_date?: string
@@ -169,7 +175,7 @@ export interface BulkApprovalRequest {
 export interface ExpenseClaimListParams {
   page?: number
   limit?: number
-  status?: ExpenseStatus
+  status?: ExpenseClaimStatus               // ✅ Unified status filter
   expense_category?: ExpenseCategory
   user_id?: string
   date_from?: string
@@ -247,22 +253,27 @@ export interface MonthlyExpenseReport {
   generated_by: string
 }
 
-// Kevin's state machine configuration
+// Kevin's state machine configuration ✅ Simplified workflow
 export const EXPENSE_WORKFLOW_TRANSITIONS: WorkflowTransition[] = [
-  // Employee transitions
+  // File upload transitions (System/Employee)
+  { from: 'draft', to: 'uploading', requiredRole: 'employee' },
+  { from: 'uploading', to: 'analyzing', requiredRole: 'employee' },
+  { from: 'analyzing', to: 'draft', requiredRole: 'employee' }, // ✅ OCR success goes to draft
+  { from: 'analyzing', to: 'failed', requiredRole: 'employee' }, // OCR failure
+  { from: 'failed', to: 'draft', requiredRole: 'employee' }, // Manual entry after failure
+
+  // Employee approval workflow transitions
   { from: 'draft', to: 'submitted', requiredRole: 'employee' },
   { from: 'submitted', to: 'draft', requiredRole: 'employee' }, // Recall submission
   { from: 'rejected', to: 'draft', requiredRole: 'employee' }, // Revise and resubmit
-  
-  // Manager transitions
-  { from: 'submitted', to: 'under_review', requiredRole: 'manager' },
-  { from: 'under_review', to: 'approved', requiredRole: 'manager' },
-  { from: 'under_review', to: 'rejected', requiredRole: 'manager' },
-  
+
+  // Manager transitions (direct approve/reject from submitted)
+  { from: 'submitted', to: 'approved', requiredRole: 'manager' },
+  { from: 'submitted', to: 'rejected', requiredRole: 'manager' },
+
   // Admin transitions
   { from: 'approved', to: 'reimbursed', requiredRole: 'admin' },
-  { from: 'reimbursed', to: 'paid', requiredRole: 'admin' },
-  
+
   // Admin can also reject approved claims if compliance issues found
   { from: 'approved', to: 'rejected', requiredRole: 'admin' }
 ]

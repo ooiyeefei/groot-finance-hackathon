@@ -1,7 +1,6 @@
 /**
- * DSPy Processing Step - Single Responsibility Component
- * DSPy-Inspired Architecture: Handles only receipt extraction with Chain-of-Thought display
- * Shows the 6-step DSPy reasoning process to the user
+ * AI Processing Step - Chain-of-Thought Display
+ * Handles receipt extraction with 6-step reasoning process
  */
 
 'use client'
@@ -27,11 +26,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 // Removed direct import - now using server-side API
-import { DSPyExtractionResult, ExtractionReasoning } from '@/types/expense-extraction'
+import { AIExtractionResult, ExtractionReasoning } from '@/types/expense-extraction'
 
-interface DSPyProcessingStepProps {
+interface ProcessingStepProps {
   file: File
-  onExtractionComplete: (result: DSPyExtractionResult) => void
+  onExtractionComplete: (result: AIExtractionResult) => void
   onRetry: () => void
   onSkip: () => void
   onProcessingStateChange?: (isProcessing: boolean) => void
@@ -49,7 +48,7 @@ interface ProcessingStep {
   reasoning?: string
 }
 
-export default function DSPyProcessingStep({
+export default function ProcessingStep({
   file,
   onExtractionComplete,
   onRetry,
@@ -58,12 +57,12 @@ export default function DSPyProcessingStep({
   processingClaimId,
   processingClaim,
   updateClaimStatus
-}: DSPyProcessingStepProps) {
+}: ProcessingStepProps) {
   const [isProcessing, setIsProcessing] = useState(false)
-  const [extractionResult, setExtractionResult] = useState<DSPyExtractionResult | null>(null)
+  const [extractionResult, setExtractionResult] = useState<AIExtractionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [currentStep, setCurrentStep] = useState(0)
-  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState(13) // 13 seconds total for DSPy
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState(13) // 13 seconds total for AI processing
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([
     {
       id: 'step1_vendor_analysis',
@@ -114,7 +113,7 @@ export default function DSPyProcessingStep({
     onProcessingStateChange?.(isProcessing)
   }, [isProcessing])
 
-  // Start DSPy extraction when component mounts - with proper cleanup to prevent double-firing
+  // Start AI extraction when component mounts
   useEffect(() => {
     if (!file || isProcessing) return
 
@@ -145,19 +144,19 @@ export default function DSPyProcessingStep({
           })
         }
 
-        // Start actual DSPy processing with expense claims workflow
+        // Start AI processing with expense claims workflow
         const formData = new FormData()
         formData.append('file', file) // Updated parameter name for unified API
         formData.append('processing_mode', 'ai') // Use AI processing mode
 
-        // Start both the DSPy API call and progress simulation in parallel
+        // Start both the AI API call and progress simulation in parallel
         const [response] = await Promise.all([
           fetch('/api/expense-claims/upload', {
             method: 'POST',
             body: formData,
             signal // Pass AbortController signal to prevent duplicate requests
           }),
-          // Show realistic progress during actual DSPy processing time (longer than Gemini)
+          // Show realistic progress during AI processing time
           simulateRealisticProgress()
         ])
 
@@ -182,13 +181,13 @@ export default function DSPyProcessingStep({
         if (!result.data.processing_complete) {
           const expenseClaimId = result.data.expense_claim_id
           const taskId = result.data.task_id
-          console.log(`[DSPy Processing] Expense claim created: ${expenseClaimId}, task_id: ${taskId}`)
-          console.log(`[DSPy Processing] Starting polling for expense claim completion...`)
+          console.log(`[AI Processing] Expense claim created: ${expenseClaimId}, task_id: ${taskId}`)
+          console.log(`[AI Processing] Starting polling for expense claim completion...`)
 
           // Update processing claim with task ID for tracking
           if (processingClaimId && updateClaimStatus) {
             updateClaimStatus(processingClaimId, {
-              status: 'extracting',
+              status: 'analyzing',
               progress: 60,
               taskId: taskId,
               expenseClaimId: expenseClaimId
@@ -202,7 +201,7 @@ export default function DSPyProcessingStep({
 
         // Processing completed immediately - unusual but handle gracefully
         if (result.data.processing_complete) {
-          console.log(`[DSPy Processing] Expense claim completed immediately!`)
+          console.log(`[AI Processing] Expense claim completed immediately!`)
 
           // Transform the result using the expense claim function
           const extractionResult = transformClaimDataToExtractionResult(result.data)
@@ -296,15 +295,15 @@ export default function DSPyProcessingStep({
         const processingStatus = processingMetadata.processing_status
 
         // Update progress indication during polling
-        if (processingStatus === 'processing' || processingStatus === 'pending') {
-          console.log(`[DSPy Processing] Expense claim ${expenseClaimId} still processing (${processingStatus})... (${attempts * 2}s elapsed)`)
+        if (processingStatus === 'analyzing' || processingStatus === 'upload_pending') {
+          console.log(`[AI Processing] Expense claim ${expenseClaimId} still processing (${processingStatus})... (${attempts * 2}s elapsed)`)
           attempts++
           continue
         }
 
         // Processing completed successfully
         if (processingStatus === 'completed') {
-          console.log(`[DSPy Processing] Expense claim ${expenseClaimId} completed successfully!`)
+          console.log(`[AI Processing] Expense claim ${expenseClaimId} completed successfully!`)
 
           // Transform the result to match expected format
           const extractionResult = transformClaimDataToExtractionResult(claimData)
@@ -340,7 +339,7 @@ export default function DSPyProcessingStep({
       } catch (pollError) {
         if (signal.aborted) return
 
-        console.error('[DSPy Processing] Polling error:', pollError)
+        console.error('[AI Processing] Polling error:', pollError)
         attempts++
 
         // If we've tried many times, give up
@@ -357,7 +356,7 @@ export default function DSPyProcessingStep({
   }
 
 
-  // Transform expense claim data to DSPy extraction result format
+  // Transform expense claim data to extraction result format
   const transformClaimDataToExtractionResult = (claimData: any) => {
     return {
       thinking: {
@@ -380,7 +379,7 @@ export default function DSPyProcessingStep({
         confidenceScore: claimData.extraction_quality === 'high' ? 0.9 : claimData.extraction_quality === 'medium' ? 0.7 : 0.5,
         extractionQuality: claimData.extraction_quality || 'medium' as 'high' | 'medium' | 'low',
         missingFields: claimData.missing_fields || [],
-        processingMethod: claimData.processing_method || 'dspy' as const,
+        processingMethod: claimData.processing_method || 'ai' as const,
         processingTimestamp: claimData.processed_at || new Date().toISOString(),
         documentId: claimData.expense_claim_id
       },
@@ -391,7 +390,7 @@ export default function DSPyProcessingStep({
   }
 
   // Retry function for manual retry attempts
-  const performDSPyExtraction = async () => {
+  const performAIExtraction = async () => {
     // Reset states and trigger a new extraction by updating a retry counter
     setError(null)
     setExtractionResult(null)
@@ -414,15 +413,15 @@ export default function DSPyProcessingStep({
     window.location.reload() // Simple but effective retry mechanism
   }
 
-  // Show realistic progress that aligns with actual DSPy processing time (12-15 seconds)
+  // Show realistic progress that aligns with actual AI processing time (12-15 seconds)
   const simulateRealisticProgress = async () => {
-    // Realistic time allocations for each DSPy Chain-of-Thought stage (total: ~13 seconds)
+    // Realistic time allocations for each AI Chain-of-Thought stage (total: ~13 seconds)
     const stageTimings = [
       2000, // Vendor Analysis - 2.0s (includes hybrid classification)
       1800, // Date Identification - 1.8s  
       2500, // Amount Parsing - 2.5s (complex reasoning)
       2200, // Tax Calculation - 2.2s (chain-of-thought)
-      3000, // Line Items Extraction - 3.0s (most complex with Pydantic validation)
+      3000, // Line Items Extraction - 3.0s (most complex with validation)
       1500  // Validation Checks - 1.5s (final reasoning)
     ]
     
@@ -466,7 +465,7 @@ export default function DSPyProcessingStep({
     setExtractionResult(null)
     setCurrentStep(0)
     setEstimatedTimeRemaining(13)
-    performDSPyExtraction()
+    performAIExtraction()
   }
 
   const getProgressPercentage = () => {
@@ -480,8 +479,8 @@ export default function DSPyProcessingStep({
       {/* Header */}
       <div className="flex justify-end mb-4">
         <Badge className="bg-purple-600 text-white flex items-center gap-2">
-          <Brain className="w-4 h-4" />
-          AI Extraction
+          <Brain className={`w-4 h-4 ${isProcessing ? 'animate-pulse' : ''}`} />
+          AI {isProcessing ? 'Analyzing' : 'Extraction'}
         </Badge>
       </div>
 
@@ -512,18 +511,16 @@ export default function DSPyProcessingStep({
               <div className="flex gap-2">
                 <Button
                   onClick={handleRetry}
-                  variant="outline"
                   size="sm"
-                  className="border-red-600 text-red-400 hover:bg-red-900/20"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <RefreshCw className="w-3 h-3 mr-1" />
                   Retry Processing
                 </Button>
                 <Button
                   onClick={onSkip}
-                  variant="outline"
                   size="sm"
-                  className="border-gray-600 text-gray-300"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   Enter Manually
                 </Button>
