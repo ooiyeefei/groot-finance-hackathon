@@ -17,7 +17,6 @@ import { Textarea } from '@/components/ui/textarea'
 import ExpenseAnalytics from './expense-analytics'
 import MonthlyReportGenerator from './monthly-report-generator'
 import GoogleSheetsExport from './google-sheets-export'
-import CategoryManagement from './category-management'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
 
@@ -173,7 +172,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           fetchDashboardData()
         }
       }} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 bg-gray-800 border border-gray-700">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-gray-800 border border-gray-700">
           <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
             Overview
           </TabsTrigger>
@@ -185,9 +184,6 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
               Reimbursements
             </TabsTrigger>
           )}
-          <TabsTrigger value="categories" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">
-            Categories
-          </TabsTrigger>
           <TabsTrigger value="reports" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
             Reports
           </TabsTrigger>
@@ -206,10 +202,6 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
             <ReimbursementQueueContent data={dashboardData} />
           </TabsContent>
         )}
-
-        <TabsContent value="categories" className="space-y-4">
-          <CategoryManagement userRole={dashboardData.role} />
-        </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
           <ManagementReportsContent userRole={dashboardData.role} />
