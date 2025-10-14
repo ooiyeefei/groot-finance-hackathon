@@ -1,0 +1,598 @@
+.
+├── architecture-diagrams.md
+├── CLAUDE.md
+├── codebase_tree.txt
+├── doc
+│   ├── 1-report.md
+│   ├── 2-prd.md
+│   ├── 3-requirements.md
+│   ├── 4-design.md
+│   ├── action-center
+│   │   └── initial_plan.md
+│   ├── api
+│   │   ├── API_REFERENCE.md
+│   │   └── V1_MIGRATION_COMPLETE.md
+│   ├── ARCHITECTURE.md
+│   ├── chat-agent
+│   │   ├── 01-architecture-overview.md
+│   │   ├── 02-agent-flow.md
+│   │   ├── 03-security-model.md
+│   │   ├── 04-tool-system.md
+│   │   ├── 05-router-logic.md
+│   │   ├── 06-performance-optimizations.md
+│   │   ├── 07-api-integration.md
+│   │   ├── 08-troubleshooting.md
+│   │   ├── chat-agent-guardrail.md
+│   │   ├── README.md
+│   │   └── regulatory_rag_implementation.md
+│   ├── claims_processing_module.md
+│   ├── design-recommendations-content.md
+│   ├── language
+│   │   ├── PERFORMANCE.md
+│   │   ├── README.md
+│   │   └── TECHNICAL.md
+│   ├── MVP-Implementation-Plan.md
+│   ├── rbac.md
+│   └── tenancy.md
+├── eslint.config.mjs
+├── finanseal-langgraph-export.json
+├── langgraph-agent.md
+├── langgraph.json
+├── next-env.d.ts
+├── next.config.ts
+├── output
+│   └── ingestion.log
+├── package-lock.json
+├── package.json
+├── playwright.config.ts
+├── postcss.config.mjs
+├── requirements.txt
+├── scripts
+│   ├── knowledge_base
+│   │   ├── checksums.json
+│   │   ├── CLAUDE.md
+│   │   ├── ingest.py
+│   │   ├── process.py
+│   │   ├── requirements.txt
+│   │   └── sources.yaml
+│   └── translations
+│       ├── CLAUDE.md
+│       ├── generate-missing-translations.js
+│       └── validate-translations.js
+├── src
+│   ├── app
+│   │   ├── [locale]
+│   │   │   ├── accounting
+│   │   │   │   └── page.tsx
+│   │   │   ├── admin
+│   │   │   │   └── setup
+│   │   │   │       └── page.tsx
+│   │   │   ├── ai-assistant
+│   │   │   │   └── page.tsx
+│   │   │   ├── applications
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── page.tsx
+│   │   │   │   │   └── summary
+│   │   │   │   │       └── page.tsx
+│   │   │   │   ├── new
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── chat
+│   │   │   │   └── page.tsx
+│   │   │   ├── expense-claims
+│   │   │   │   └── page.tsx
+│   │   │   ├── invitations
+│   │   │   │   └── accept
+│   │   │   │       └── page.tsx
+│   │   │   ├── invoices
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── manager
+│   │   │   │   ├── approvals
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── categories
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── teams
+│   │   │   │       └── page.tsx
+│   │   │   ├── onboarding
+│   │   │   │   └── business
+│   │   │   │       └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── settings
+│   │   │   │   └── page.tsx
+│   │   │   ├── sign-in
+│   │   │   │   └── [[...sign-in]]
+│   │   │   │       └── page.tsx
+│   │   │   └── sign-up
+│   │   │       └── [[...sign-up]]
+│   │   │           └── page.tsx
+│   │   ├── api
+│   │   │   ├── trigger
+│   │   │   │   └── route.ts
+│   │   │   └── v1
+│   │   │       ├── account-management
+│   │   │       │   ├── businesses
+│   │   │       │   │   ├── context
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   ├── profile
+│   │   │       │   │   │   ├── route.ts
+│   │   │       │   │   │   └── upload-logo
+│   │   │       │   │   │       └── route.ts
+│   │   │       │   │   ├── route.ts
+│   │   │       │   │   └── switch
+│   │   │       │   │       └── route.ts
+│   │   │       │   ├── cogs-categories
+│   │   │       │   │   ├── enabled
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   └── route.ts
+│   │   │       │   ├── invitations
+│   │   │       │   │   ├── [invitationId]
+│   │   │       │   │   │   ├── resend
+│   │   │       │   │   │   │   └── route.ts
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   ├── accept
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   └── route.ts
+│   │   │       │   └── memberships
+│   │   │       │       └── [membershipId]
+│   │   │       │           └── route.ts
+│   │   │       ├── accounting-entries
+│   │   │       │   ├── [entryId]
+│   │   │       │   │   ├── category
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   ├── route.ts
+│   │   │       │   │   └── status
+│   │   │       │   │       └── route.ts
+│   │   │       │   └── route.ts
+│   │   │       ├── analytics
+│   │   │       │   ├── dashboards
+│   │   │       │   │   └── route.ts
+│   │   │       │   ├── monitoring
+│   │   │       │   │   └── cash-flow
+│   │   │       │   │       └── route.ts
+│   │   │       │   └── realtime
+│   │   │       │       └── route.ts
+│   │   │       ├── applications
+│   │   │       │   ├── [id]
+│   │   │       │   │   ├── documents
+│   │   │       │   │   │   ├── [documentId]
+│   │   │       │   │   │   │   ├── process
+│   │   │       │   │   │   │   │   └── route.ts
+│   │   │       │   │   │   │   └── route.ts
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   ├── route.ts
+│   │   │       │   │   └── summary
+│   │   │       │   │       └── route.ts
+│   │   │       │   └── route.ts
+│   │   │       ├── chat
+│   │   │       │   ├── citation-preview
+│   │   │       │   │   └── route.ts
+│   │   │       │   ├── conversations
+│   │   │       │   │   ├── [conversationId]
+│   │   │       │   │   │   ├── messages
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   └── route.ts
+│   │   │       │   ├── messages
+│   │   │       │   │   └── [messageId]
+│   │   │       │   │       └── route.ts
+│   │   │       │   └── route.ts
+│   │   │       ├── CLAUDE.md
+│   │   │       ├── expense-claims
+│   │   │       │   ├── [id]
+│   │   │       │   │   ├── image-url
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   ├── reprocess
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   └── route.ts
+│   │   │       │   ├── ai-extract
+│   │   │       │   ├── analytics
+│   │   │       │   │   └── route.ts
+│   │   │       │   ├── categories
+│   │   │       │   │   ├── enabled
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   └── route.ts
+│   │   │       │   └── route.ts
+│   │   │       ├── invoices
+│   │   │       │   ├── [invoiceId]
+│   │   │       │   │   ├── image-url
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   ├── process
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   └── route.ts
+│   │   │       │   └── route.ts
+│   │   │       ├── shared
+│   │   │       │   └── schemas
+│   │   │       │       └── [documentType]
+│   │   │       │           └── route.ts
+│   │   │       ├── system
+│   │   │       │   ├── audit-events
+│   │   │       │   │   └── route.ts
+│   │   │       │   ├── knowledge-base
+│   │   │       │   │   ├── chunks
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   ├── regulatory-documents
+│   │   │       │   │   │   └── route.ts
+│   │   │       │   │   └── search
+│   │   │       │   │       └── route.ts
+│   │   │       │   └── webhooks
+│   │   │       │       └── clerk
+│   │   │       │           └── route.ts
+│   │   │       ├── tasks
+│   │   │       │   └── [id]
+│   │   │       │       └── status
+│   │   │       │           └── route.ts
+│   │   │       ├── users
+│   │   │       │   ├── [id]
+│   │   │       │   │   └── roles
+│   │   │       │   │       └── route.ts
+│   │   │       │   ├── profile
+│   │   │       │   │   └── route.ts
+│   │   │       │   ├── role
+│   │   │       │   │   └── route.ts
+│   │   │       │   └── team
+│   │   │       │       └── route.ts
+│   │   │       └── utils
+│   │   │           ├── currency
+│   │   │           │   ├── convert
+│   │   │           │   │   └── route.ts
+│   │   │           │   └── list
+│   │   │           │       └── route.ts
+│   │   │           ├── security
+│   │   │           │   └── csrf-token
+│   │   │           │       └── route.ts
+│   │   │           └── translate
+│   │   │               └── route.ts
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── manager
+│   │   │   └── team
+│   │   │       └── page.tsx
+│   │   ├── page.tsx
+│   │   ├── sign-in
+│   │   │   └── page.tsx
+│   │   └── sign-up
+│   │       └── page.tsx
+│   ├── components
+│   │   ├── error-boundary.tsx
+│   │   ├── i18n-error-boundary.tsx
+│   │   ├── language-switcher.tsx
+│   │   ├── providers
+│   │   │   ├── client-providers.tsx
+│   │   │   └── QueryProvider.tsx
+│   │   └── ui
+│   │       ├── action-button.tsx
+│   │       ├── alert.tsx
+│   │       ├── badge.tsx
+│   │       ├── business-switcher.tsx
+│   │       ├── button.tsx
+│   │       ├── card.tsx
+│   │       ├── checkbox.tsx
+│   │       ├── confirmation-dialog.tsx
+│   │       ├── enhanced-business-display.tsx
+│   │       ├── financial-disclaimer.tsx
+│   │       ├── header-with-user.tsx
+│   │       ├── input.tsx
+│   │       ├── invitation-dialog.tsx
+│   │       ├── label.tsx
+│   │       ├── language-selector.tsx
+│   │       ├── no-business-fallback.tsx
+│   │       ├── progress.tsx
+│   │       ├── select.tsx
+│   │       ├── sidebar.tsx
+│   │       ├── skeleton-loader.tsx
+│   │       ├── tabs.tsx
+│   │       ├── textarea.tsx
+│   │       ├── toast.tsx
+│   │       └── tooltip.tsx
+│   ├── contexts
+│   │   └── business-context.tsx
+│   ├── domains
+│   │   ├── account-management
+│   │   │   ├── components
+│   │   │   │   └── business-profile-settings.tsx
+│   │   │   └── lib
+│   │   │       ├── account-management.service.ts
+│   │   │       └── invitation.service.ts
+│   │   ├── accounting-entries
+│   │   │   ├── components
+│   │   │   │   ├── accounting-entries-client.tsx
+│   │   │   │   ├── accounting-entries-list.tsx
+│   │   │   │   ├── accounting-entry-detail-modal.tsx
+│   │   │   │   ├── accounting-entry-form-modal.tsx
+│   │   │   │   ├── accounting-entry-status-badge.tsx
+│   │   │   │   ├── CategorySelector.tsx
+│   │   │   │   ├── status-update-button.tsx
+│   │   │   │   └── StatusSelector.tsx
+│   │   │   ├── hooks
+│   │   │   │   ├── use-accounting-entries.tsx
+│   │   │   │   ├── use-line-items.ts
+│   │   │   │   └── use-transaction-summary.tsx
+│   │   │   ├── lib
+│   │   │   │   └── data-access.ts
+│   │   │   └── types
+│   │   │       └── index.ts
+│   │   ├── analytics
+│   │   │   ├── components
+│   │   │   │   ├── AgedPayablesWidget.tsx
+│   │   │   │   ├── AgedReceivablesWidget.tsx
+│   │   │   │   ├── complete-dashboard.tsx
+│   │   │   │   ├── financial-analytics
+│   │   │   │   │   ├── ActionCenter.tsx
+│   │   │   │   │   ├── CategoryAnalysis.tsx
+│   │   │   │   │   ├── CurrencyBreakdown.tsx
+│   │   │   │   │   ├── DashboardWrapper.tsx
+│   │   │   │   │   ├── FinancialDashboard.tsx
+│   │   │   │   │   ├── MetricsOverview.tsx
+│   │   │   │   │   └── PeriodSelector.tsx
+│   │   │   │   ├── transaction-summary-cards.tsx
+│   │   │   │   └── unified-financial-dashboard.tsx
+│   │   │   ├── hooks
+│   │   │   │   └── use-financial-analytics.tsx
+│   │   │   ├── lib
+│   │   │   │   ├── analytics.service.ts
+│   │   │   │   ├── engine.ts
+│   │   │   │   ├── intelligence-engine.ts
+│   │   │   │   └── risk-scoring.ts
+│   │   │   └── types
+│   │   │       └── analytics.ts
+│   │   ├── applications
+│   │   │   ├── components
+│   │   │   │   ├── application-create-form.tsx
+│   │   │   │   ├── application-detail-container.tsx
+│   │   │   │   ├── application-summary-container.tsx
+│   │   │   │   ├── applications-container.tsx
+│   │   │   │   └── smart-payslip-uploader.tsx
+│   │   │   ├── hooks
+│   │   │   │   └── use-applications.ts
+│   │   │   ├── lib
+│   │   │   │   ├── application-document.service.ts
+│   │   │   │   ├── application-documents.service.ts
+│   │   │   │   ├── application-summary.service.ts
+│   │   │   │   ├── application.service.ts
+│   │   │   │   └── error-message-transformer.ts
+│   │   │   ├── types
+│   │   │   │   └── application.types.ts
+│   │   │   ├── utils
+│   │   │   │   ├── progress-calculator.ts
+│   │   │   │   └── slot-calculator.ts
+│   │   │   └── validation
+│   │   │       └── application.schema.ts
+│   │   ├── audit
+│   │   │   └── lib
+│   │   │       └── audit.service.ts
+│   │   ├── chat
+│   │   │   ├── components
+│   │   │   │   ├── chat-interface.tsx
+│   │   │   │   ├── citation-overlay.tsx
+│   │   │   │   └── conversation-sidebar.tsx
+│   │   │   └── lib
+│   │   │       └── chat.service.ts
+│   │   ├── expense-claims
+│   │   │   ├── components
+│   │   │   │   ├── categories-management-client.tsx
+│   │   │   │   ├── category-form-modal.tsx
+│   │   │   │   ├── category-management.tsx
+│   │   │   │   ├── comprehensive-form-step.tsx
+│   │   │   │   ├── create-expense-page-new.tsx
+│   │   │   │   ├── edit-expense-modal-new.tsx
+│   │   │   │   ├── expense-analytics.tsx
+│   │   │   │   ├── expense-approval-dashboard.tsx
+│   │   │   │   ├── expense-form-fields.tsx
+│   │   │   │   ├── expense-submission-flow.tsx
+│   │   │   │   ├── expense-submission-form.tsx
+│   │   │   │   ├── field-suggestion.tsx
+│   │   │   │   ├── google-sheets-export.tsx
+│   │   │   │   ├── line-item-table.tsx
+│   │   │   │   ├── mobile-camera-capture.tsx
+│   │   │   │   ├── monthly-report-generator.tsx
+│   │   │   │   ├── personal-expense-dashboard.tsx
+│   │   │   │   ├── processing-step.tsx
+│   │   │   │   ├── receipt-upload-step.tsx
+│   │   │   │   └── unified-expense-details-modal.tsx
+│   │   │   ├── hooks
+│   │   │   │   ├── use-expense-categories.ts
+│   │   │   │   ├── use-expense-claim-processing.tsx
+│   │   │   │   ├── use-expense-claims.tsx
+│   │   │   │   └── use-expense-form.ts
+│   │   │   ├── lib
+│   │   │   │   ├── data-access.ts
+│   │   │   │   ├── default-expense-categories.ts
+│   │   │   │   ├── dynamic-expense-categorizer.ts
+│   │   │   │   ├── expense-categorizer.ts
+│   │   │   │   ├── expense-category-mapper.ts
+│   │   │   │   └── expense-category.service.ts
+│   │   │   └── types
+│   │   │       └── index.ts
+│   │   ├── invoices
+│   │   │   ├── components
+│   │   │   │   ├── application-form-data-display.tsx
+│   │   │   │   ├── cogs-category-form-modal.tsx
+│   │   │   │   ├── cogs-category-management.tsx
+│   │   │   │   ├── confidence-score-meter.tsx
+│   │   │   │   ├── document-analysis-modal.tsx
+│   │   │   │   ├── document-preview-with-annotations.tsx
+│   │   │   │   ├── document-status-badge.tsx
+│   │   │   │   ├── documents-container.tsx
+│   │   │   │   ├── documents-list.tsx
+│   │   │   │   ├── dynamic-field-renderer.tsx
+│   │   │   │   ├── expandable-section.tsx
+│   │   │   │   ├── ExtractedInfoTags.tsx
+│   │   │   │   ├── field-component.tsx
+│   │   │   │   ├── file-upload-zone.tsx
+│   │   │   │   ├── html-content-renderer.tsx
+│   │   │   │   ├── ic-data-display.tsx
+│   │   │   │   ├── line-items-table.tsx
+│   │   │   │   ├── ocr-text-display
+│   │   │   │   │   ├── OCRTextDisplay.tsx
+│   │   │   │   │   ├── types.ts
+│   │   │   │   │   └── utils
+│   │   │   │   │       └── textParser.ts
+│   │   │   │   └── payslip-data-display.tsx
+│   │   │   ├── hooks
+│   │   │   │   ├── use-document-polling.tsx
+│   │   │   │   ├── use-documents.tsx
+│   │   │   │   ├── useDocumentPolling.tsx
+│   │   │   │   └── useDocumentSchema.ts
+│   │   │   ├── lib
+│   │   │   │   ├── data-access.ts
+│   │   │   │   ├── default-cogs-categories.ts
+│   │   │   │   └── document-to-accounting-entry-mapper.ts
+│   │   │   ├── tests
+│   │   │   └── types
+│   │   │       ├── enhanced-document-types.ts
+│   │   │       └── gemini-ocr.ts
+│   │   ├── system
+│   │   │   └── lib
+│   │   │       ├── health.service.ts
+│   │   │       ├── knowledge-base.service.ts
+│   │   │       └── webhook.service.ts
+│   │   ├── tasks
+│   │   │   └── lib
+│   │   │       └── task.service.ts
+│   │   ├── users
+│   │   │   ├── components
+│   │   │   │   ├── currency-settings.tsx
+│   │   │   │   ├── team-management-client.tsx
+│   │   │   │   └── teams-management-client.tsx
+│   │   │   └── lib
+│   │   │       └── user.service.ts
+│   │   └── utilities
+│   │       ├── components
+│   │       │   └── currency-converter.tsx
+│   │       └── lib
+│   │           ├── translation.service.ts
+│   │           └── utilities.service.ts
+│   ├── i18n.ts
+│   ├── lib
+│   │   ├── ai
+│   │   │   ├── agent
+│   │   │   │   ├── agent-factory.ts
+│   │   │   │   ├── config
+│   │   │   │   │   ├── model-config.ts
+│   │   │   │   │   └── prompts.ts
+│   │   │   │   ├── nodes
+│   │   │   │   │   ├── clarification-node.ts
+│   │   │   │   │   ├── guardrail-nodes.ts
+│   │   │   │   │   ├── intent-node.ts
+│   │   │   │   │   ├── model-node.ts
+│   │   │   │   │   ├── tool-nodes.ts
+│   │   │   │   │   └── validation-node.ts
+│   │   │   │   ├── router.ts
+│   │   │   │   └── types.ts
+│   │   │   ├── ai-services
+│   │   │   │   ├── ai-service-factory.ts
+│   │   │   │   ├── embedding-service.ts
+│   │   │   │   ├── gemini-service.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── interfaces.ts
+│   │   │   │   ├── text-analysis-service.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   └── vector-storage-service.ts
+│   │   │   ├── config
+│   │   │   │   └── ai-config.ts
+│   │   │   ├── langgraph-agent.ts
+│   │   │   └── tools
+│   │   │       ├── base-tool.ts
+│   │   │       ├── cross-border-tax-compliance-tool.ts
+│   │   │       ├── document-search-tool.ts
+│   │   │       ├── get-vendors-tool.ts
+│   │   │       ├── index.ts
+│   │   │       ├── regulatory-knowledge-tool.ts
+│   │   │       ├── tool-factory.ts
+│   │   │       └── transaction-lookup-tool.ts
+│   │   ├── api
+│   │   │   ├── api-middleware.ts
+│   │   │   ├── audit-logger.ts
+│   │   │   └── rate-limit.ts
+│   │   ├── api-client.ts
+│   │   ├── auth
+│   │   │   ├── csrf-protection.ts
+│   │   │   ├── ensure-employee-profile.ts
+│   │   │   ├── invitation-tokens.ts
+│   │   │   ├── rbac-client.ts
+│   │   │   └── rbac.ts
+│   │   ├── cache-utils.ts
+│   │   ├── constants
+│   │   │   └── ifrs-categories.ts
+│   │   ├── db
+│   │   │   ├── business-context-cache.ts
+│   │   │   ├── business-context.ts
+│   │   │   └── supabase-server.ts
+│   │   ├── hooks
+│   │   │   └── accounting
+│   │   │       └── use-cogs-categories.ts
+│   │   ├── services
+│   │   │   ├── currency-service.ts
+│   │   │   ├── email-service.ts
+│   │   │   ├── enhanced-workflow-engine.ts
+│   │   │   └── gemini-ocr-service.ts
+│   │   ├── storage-paths.ts
+│   │   └── utils.ts
+│   ├── messages
+│   │   ├── en.json
+│   │   ├── id.json
+│   │   ├── th.json
+│   │   └── zh.json
+│   ├── middleware.ts
+│   ├── python
+│   │   ├── annotate_image.py
+│   │   ├── classify_document.py
+│   │   ├── convert_pdf_to_images.py
+│   │   ├── extract_document.py
+│   │   ├── extract_receipt_data.py
+│   │   ├── models
+│   │   │   └── document_models.py
+│   │   ├── payslip_grouper.py
+│   │   ├── signatures
+│   │   │   ├── __pycache__
+│   │   │   │   └── classify_signature.cpython-313.pyc
+│   │   │   ├── classify_signature.py
+│   │   │   └── document_signatures.py
+│   │   ├── split_pdf_to_images.py
+│   │   └── validate_payslip_dates.py
+│   ├── trigger
+│   │   ├── annotate-document-image.ts
+│   │   ├── classify-document.ts
+│   │   ├── common
+│   │   │   └── python
+│   │   │       └── unified-ai-processing.py.ts
+│   │   ├── convert-pdf-to-image.ts
+│   │   ├── extract-application-form-data.ts
+│   │   ├── extract-ic-data.ts
+│   │   ├── extract-payslip-data.ts
+│   │   ├── extract-receipt-data.ts
+│   │   ├── process-document-ocr.ts
+│   │   ├── utils
+│   │   │   ├── db-helpers.ts
+│   │   │   ├── reset-stuck-documents.ts
+│   │   │   └── schemas.ts
+│   │   └── validate-payslip-dates.ts
+│   └── types
+│       ├── api-contracts.ts
+│       ├── enhanced-expense-claims.ts
+│       ├── expense-claims.ts
+│       ├── expense-extraction.ts
+│       └── invitations.ts
+├── tailwind.config.js
+├── tasks
+│   ├── api-migration-analysis.md
+│   └── todo.md
+├── tests
+│   ├── api
+│   │   ├── expense-claims.spec.ts
+│   │   └── v1
+│   │       └── applications.spec.ts
+│   ├── expense-claims-ui.spec.ts
+│   ├── refactoring-validation.test.ts
+│   └── ui
+│       └── applications-list.spec.ts
+├── tmp
+│   ├── accounting-status-patch-fix.md
+│   ├── business-switcher-csrf-fix-summary.md
+│   └── soft-delete-fix-summary.md
+├── trigger.config.ts
+├── tsconfig.json
+├── tsconfig.tsbuildinfo
+└── vitest.config.ts
+
+204 directories, 392 files

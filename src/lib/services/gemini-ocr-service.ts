@@ -12,15 +12,15 @@ import {
   GeminiProcessingResult,
   GeminiOCRConfig,
   ExpensePromptConfig
-} from '@/types/gemini-ocr'
-import { ExpenseCategory } from '@/types/expense-claims'
+} from '@/domains/invoices/types/gemini-ocr'
+import { ExpenseCategory } from '@/domains/expense-claims/types'
 import { 
   DocumentType, 
   IndustryContext, 
   DOCUMENT_SCHEMAS, 
   KNOWN_VENDOR_PATTERNS,
   EnhancedExtractionResponse 
-} from '@/types/enhanced-document-types'
+} from '@/domains/invoices/types/enhanced-document-types'
 
 export class GeminiOCRService {
   private genAI: GoogleGenAI

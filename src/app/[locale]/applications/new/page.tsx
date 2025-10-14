@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import ApplicationCreateForm from '@/components/applications/application-create-form'
+import ApplicationCreateForm from '@/domains/applications/components/application-create-form'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 

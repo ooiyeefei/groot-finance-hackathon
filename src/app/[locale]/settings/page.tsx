@@ -2,8 +2,8 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import CurrencySettings from '@/components/settings/currency-settings'
-import BusinessProfileSettings from '@/components/settings/business-profile-settings'
+import CurrencySettings from '@/domains/users/components/currency-settings'
+import BusinessProfileSettings from '@/domains/account-management/components/business-profile-settings'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 export default async function SettingsPage() {

@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl'
 import { getTranslations } from 'next-intl/server'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import CompleteDashboard from '@/components/dashboard/complete-dashboard'
+import CompleteDashboard from '@/domains/analytics/components/complete-dashboard'
 import { GeneralDisclaimer } from '@/components/ui/financial-disclaimer'
 import { ClientProviders } from '@/components/providers/client-providers'
 

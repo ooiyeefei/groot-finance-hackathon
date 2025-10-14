@@ -48,6 +48,10 @@ const nextConfig = {
   // Exclude from static analysis
   experimental: {
     typedRoutes: false,
+    // Increase Server Actions body size limit for file uploads (5MB to match business profile validation)
+    serverActions: {
+      bodySizeLimit: 5 * 1024 * 1024, // 5MB in bytes to match business profile component limit
+    },
   },
 
   // Enable React StrictMode to catch potential issues early

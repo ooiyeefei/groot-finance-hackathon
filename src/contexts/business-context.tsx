@@ -27,26 +27,38 @@ import {
 // Context Types
 // ============================================================================
 
+interface BusinessProfile {
+  id: string
+  name: string
+  logo_url?: string
+  logo_fallback_color?: string
+}
+
 interface BusinessContextState {
   // Data
   memberships: TBusinessWithMembership[]
   activeContext: TBusinessContext | null
+  profile: BusinessProfile | null
 
   // Loading states
   isLoadingMemberships: boolean
   isLoadingContext: boolean
   isSwitching: boolean
+  isLoadingProfile: boolean
 
   // Error states
   membershipsError: string | null
   contextError: string | null
   switchError: string | null
+  profileError: string | null
 
   // Actions
   refreshMemberships: () => Promise<void>
   refreshContext: () => Promise<void>
   switchActiveBusiness: (businessId: string) => Promise<boolean>
   clearErrors: () => void
+  refreshProfile: () => Promise<void>
+  updateProfile: (updatedProfile: BusinessProfile) => void
 }
 
 const BusinessContext = createContext<BusinessContextState | null>(null)
@@ -63,19 +75,36 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   // Clerk authentication
   const { isLoaded: isAuthLoaded, isSignedIn, userId } = useAuth()
 
+  // Helper to get initial profile from localStorage
+  const getInitialProfile = (): BusinessProfile | null => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('business-profile')
+        return cached ? JSON.parse(cached) : null
+      } catch (error) {
+        console.warn('[BusinessContext] Failed to parse cached business profile:', error)
+        return null
+      }
+    }
+    return null
+  }
+
   // State management
   const [memberships, setMemberships] = useState<TBusinessWithMembership[]>([])
   const [activeContext, setActiveContext] = useState<TBusinessContext | null>(null)
+  const [profile, setProfile] = useState<BusinessProfile | null>(getInitialProfile())
 
   // Loading states
   const [isLoadingMemberships, setIsLoadingMemberships] = useState(false)
   const [isLoadingContext, setIsLoadingContext] = useState(false)
   const [isSwitching, setIsSwitching] = useState(false)
+  const [isLoadingProfile, setIsLoadingProfile] = useState(!profile) // Only loading if no cached data
 
   // Error states
   const [membershipsError, setMembershipsError] = useState<string | null>(null)
   const [contextError, setContextError] = useState<string | null>(null)
   const [switchError, setSwitchError] = useState<string | null>(null)
+  const [profileError, setProfileError] = useState<string | null>(null)
 
   // Removed: hasAttemptedSessionReload state (no longer needed without page reload logic)
 
@@ -152,6 +181,39 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     }
   }, [])
 
+  const refreshProfile = useCallback(async () => {
+    setIsLoadingProfile(true)
+    setProfileError(null)
+
+    try {
+      const response = await fetch('/api/v1/account-management/businesses/profile')
+      const result = await response.json()
+
+      if (result.success) {
+        setProfile(result.data)
+        // Cache the result for instant loading on future visits
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('business-profile', JSON.stringify(result.data))
+          } catch (error) {
+            console.warn('[BusinessContext] Failed to cache business profile:', error)
+          }
+        }
+        console.log('[BusinessContext] Loaded profile:', result.data.name)
+      } else {
+        const errorMsg = result.error || 'Failed to fetch business profile'
+        setProfileError(errorMsg)
+        console.error('[BusinessContext] Error loading profile:', errorMsg)
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error loading profile'
+      setProfileError(errorMsg)
+      console.error('[BusinessContext] Exception loading profile:', error)
+    } finally {
+      setIsLoadingProfile(false)
+    }
+  }, [])
+
   const switchActiveBusiness = useCallback(async (businessId: string): Promise<boolean> => {
     setIsSwitching(true)
     setSwitchError(null)
@@ -168,6 +230,9 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
 
         // Refresh memberships to update last_accessed_at
         await refreshMemberships()
+
+        // Refresh profile for new business
+        await refreshProfile()
 
         console.log('[BusinessContext] Successfully switched to:', response.data.context.businessName)
         return true
@@ -186,7 +251,19 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     } finally {
       setIsSwitching(false)
     }
-  }, [refreshMemberships])
+  }, [refreshMemberships, refreshProfile])
+
+  const updateProfile = useCallback((updatedProfile: BusinessProfile) => {
+    setProfile(updatedProfile)
+    // Update cache when profile is updated
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('business-profile', JSON.stringify(updatedProfile))
+      } catch (error) {
+        console.warn('[BusinessContext] Failed to update cached business profile:', error)
+      }
+    }
+  }, [])
 
   // ============================================================================
   // Utility Functions
@@ -196,6 +273,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     setMembershipsError(null)
     setContextError(null)
     setSwitchError(null)
+    setProfileError(null)
   }, [])
 
   // ============================================================================
@@ -218,6 +296,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         // Load memberships first, then context to avoid duplicate user creation attempts
         await refreshMemberships()
         await refreshContext()
+        await refreshProfile() // Load profile data
 
         console.log('[BusinessContext] ✅ Initial data load complete')
         setHasCompletedInitialLoad(true)
@@ -227,7 +306,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     }
 
     loadData()
-  }, [isAuthLoaded, isSignedIn, userId, refreshMemberships, refreshContext])
+  }, [isAuthLoaded, isSignedIn, userId, refreshMemberships, refreshContext, refreshProfile])
 
   // Auto-switch and redirect logic
   useEffect(() => {
@@ -341,22 +420,27 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     // Data
     memberships,
     activeContext,
+    profile,
 
     // Loading states
     isLoadingMemberships,
     isLoadingContext,
     isSwitching,
+    isLoadingProfile,
 
     // Error states
     membershipsError,
     contextError,
     switchError,
+    profileError,
 
     // Actions
     refreshMemberships,
     refreshContext,
     switchActiveBusiness,
-    clearErrors
+    clearErrors,
+    refreshProfile,
+    updateProfile
   }
 
   return (
@@ -518,5 +602,20 @@ export function useBusinessState() {
            needsOnboarding ? 'needs_onboarding' :
            hasInactiveMemberships ? 'inactive_memberships' :
            hasActiveContext ? 'ready' : 'unknown'
+  }
+}
+
+/**
+ * Business profile functionality (consolidated from business-profile-context)
+ */
+export function useBusinessProfile() {
+  const { profile, isLoadingProfile, profileError, refreshProfile, updateProfile } = useBusinessContext()
+
+  return {
+    profile,
+    isLoading: isLoadingProfile,
+    error: profileError,
+    refetch: refreshProfile,
+    updateProfile
   }
 }

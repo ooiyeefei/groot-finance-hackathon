@@ -6,10 +6,10 @@
 
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { requirePermission } from '@/lib/rbac'
+import { requirePermission } from '@/lib/auth/rbac'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import TeamsManagementClient from '@/components/manager/teams-management-client'
+import TeamsManagementClient from '@/domains/users/components/teams-management-client'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 export default async function TeamsManagementPage() {

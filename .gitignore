@@ -84,3 +84,6 @@ src/scripts/knowledge_base/venv/
 src/scripts/knowledge_base/output/
 src/scripts/knowledge_base/__pycache__/
 src/scripts/knowledge_base/*.log
+
+# clerk configuration (can include secrets)
+/.clerk/

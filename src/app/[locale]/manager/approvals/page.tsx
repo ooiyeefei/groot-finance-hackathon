@@ -6,10 +6,10 @@
 
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { requirePermission } from '@/lib/rbac'
+import { requirePermission } from '@/lib/auth/rbac'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import EnhancedApprovalDashboard from '@/components/manager/enhanced-approval-dashboard'
+import ExpenseApprovalDashboard from '@/domains/expense-claims/components/expense-approval-dashboard'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 export default async function ApprovalsPage() {
@@ -47,8 +47,8 @@ export default async function ApprovalsPage() {
           {/* Main Content Area */}
           <main className="flex-1 overflow-auto p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
-              {/* Enhanced Approval Dashboard */}
-              <EnhancedApprovalDashboard userId={userId} />
+              {/* Expense Approval Dashboard */}
+              <ExpenseApprovalDashboard userId={userId} />
             </div>
           </main>
         </div>

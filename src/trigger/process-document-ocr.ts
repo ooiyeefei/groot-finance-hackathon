@@ -8,11 +8,11 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
 import { createClient } from '@supabase/supabase-js';
-import { DynamicExpenseCategory } from '@/hooks/use-expense-categories';
+import { DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories';
 import {
   mapExpenseCategoryToAccounting,
   ACCOUNTING_CATEGORIES
-} from '@/lib/expense-category-mapper';
+} from '@/domains/expense-claims/lib/expense-category-mapper';
 import { IFRS_CATEGORIES } from '@/lib/constants/ifrs-categories';
 
 // Note: AI processing function defined directly in Python inline code below
@@ -88,7 +88,6 @@ async function fetchEnabledCOGSCategoriesFromDB(businessId: string): Promise<Dyn
         category_name: category.category_name,
         category_code: category.category_code,
         description: category.description,
-        gl_account: category.gl_account, // COGS-specific field
         cost_type: category.cost_type, // COGS-specific field
         vendor_patterns: category.vendor_patterns || [],
         ai_keywords: category.ai_keywords || []

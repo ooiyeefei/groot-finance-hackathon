@@ -7,7 +7,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import PersonalExpenseDashboard from '@/components/expense-claims/personal-expense-dashboard'
+import PersonalExpenseDashboard from '@/domains/expense-claims/components/personal-expense-dashboard'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 

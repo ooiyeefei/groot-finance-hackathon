@@ -6,8 +6,8 @@ import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import ActionButton from '@/components/ui/action-button'
-import ChatInterface from '@/components/chat/chat-interface'
-import ConversationSidebar from '@/components/chat/conversation-sidebar'
+import ChatInterface from '@/domains/chat/components/chat-interface'
+import ConversationSidebar from '@/domains/chat/components/conversation-sidebar'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { Menu } from 'lucide-react'
 import { ClientProviders } from '@/components/providers/client-providers'
@@ -94,7 +94,7 @@ export default function AIAssistantPage() {
 
       setLoading(true)
       try {
-        const response = await fetch('/api/conversations')
+        const response = await fetch('/api/v1/chat/conversations')
         if (response.ok) {
           const data = await response.json()
           const conversations = data.conversations
@@ -120,7 +120,7 @@ export default function AIAssistantPage() {
   const loadConversation = async (conversationId: string) => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/conversations/${conversationId}`)
+      const response = await fetch(`/api/v1/chat/conversations/${conversationId}`)
       if (response.ok) {
         const data = await response.json()
         const conversation: ConversationData = data.conversation

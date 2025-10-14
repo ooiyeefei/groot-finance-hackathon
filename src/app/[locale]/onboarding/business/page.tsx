@@ -120,7 +120,7 @@ export default function BusinessOnboarding() {
       console.log('[BusinessOnboarding] Creating business:', formData.name)
 
       // Call the business creation API
-      const response = await fetch('/api/business/create', {
+      const response = await fetch('/api/v1/account-management/businesses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -23,7 +23,7 @@ import {
   useBusinessMemberships,
   useBusinessSwitcher
 } from '@/contexts/business-context'
-import { useBusinessProfile } from '@/contexts/business-profile-context'
+import { useBusinessProfile } from '@/contexts/business-context'
 import {
   Select,
   SelectContent,

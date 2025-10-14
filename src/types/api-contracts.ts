@@ -107,11 +107,11 @@ export interface TApiErrorResponse {
 export type TApiResponse<T = any> = TApiSuccessResponse<T> | TApiErrorResponse
 
 // ============================================================================
-// 1. GET /api/business/memberships
+// 1. GET /api/v1/account-management/businesses/memberships
 // ============================================================================
 
 /**
- * GET /api/business/memberships
+ * GET /api/v1/account-management/businesses/memberships
  *
  * Purpose: Retrieve all businesses the authenticated user is a member of
  * Use Case: Business switcher dropdown, user dashboard
@@ -128,11 +128,11 @@ export interface TGetBusinessMembershipsResponse extends TApiSuccessResponse<{
 // Error response uses TApiErrorResponse
 
 // ============================================================================
-// 2. GET /api/business/context
+// 2. GET /api/v1/account-management/businesses/context
 // ============================================================================
 
 /**
- * GET /api/business/context
+ * GET /api/v1/account-management/businesses/context
  *
  * Purpose: Get current user's active business context with permissions
  * Use Case: Role-based UI rendering, permission checks, navigation customization
@@ -149,11 +149,11 @@ export interface TGetBusinessContextResponse extends TApiSuccessResponse<{
 // Error response uses TApiErrorResponse
 
 // ============================================================================
-// 3. POST /api/business/switch
+// 3. POST /api/v1/account-management/businesses/switch
 // ============================================================================
 
 /**
- * POST /api/business/switch - Request Body
+ * POST /api/v1/account-management/businesses/switch - Request Body
  *
  * Purpose: Switch user's active business context
  */
@@ -162,7 +162,7 @@ export interface TSwitchBusinessRequest {
 }
 
 /**
- * POST /api/business/switch - Response Body
+ * POST /api/v1/account-management/businesses/switch - Response Body
  *
  * Purpose: Confirm successful business switch with new context
  */

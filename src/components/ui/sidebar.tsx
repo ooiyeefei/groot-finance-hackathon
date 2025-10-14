@@ -126,7 +126,7 @@ export default function Sidebar() {
       console.log('[Sidebar] Fetching user role from API...')
 
       // Get user role from employee profile
-      const roleResponse = await fetch('/api/user/role')
+      const roleResponse = await fetch('/api/v1/users/role')
       if (roleResponse.ok) {
         const roleResult = await roleResponse.json()
         if (roleResult.success) {

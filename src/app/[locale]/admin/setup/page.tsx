@@ -22,11 +22,11 @@ export default function AdminSetupPage() {
     setResult(null)
 
     try {
-      const response = await fetch('/api/user/assign-admin', {
+      const response = await fetch(`/api/v1/users/${user.id}/roles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: user.id,
+          role: 'admin',
           admin_key: adminKey
         })
       })

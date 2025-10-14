@@ -6,10 +6,10 @@
 
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { requirePermission } from '@/lib/rbac'
+import { requirePermission } from '@/lib/auth/rbac'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import CategoriesManagementClient from '@/components/manager/categories-management-client'
+import CategoriesManagementClient from '@/domains/expense-claims/components/categories-management-client'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 export default async function CategoriesManagementPage() {

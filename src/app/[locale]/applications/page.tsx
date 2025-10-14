@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import ApplicationsContainer from '@/components/applications/applications-container'
+import ApplicationsContainer from '@/domains/applications/components/applications-container'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 export default async function ApplicationsPage({ params }: { params: Promise<{ locale: string }> }) {

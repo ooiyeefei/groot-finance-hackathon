@@ -45,10 +45,9 @@ const needsBusinessContext = createRouteMatcher([
   '/', // Root dashboard
   '/api/applications(.*)', // Application APIs
   '/api/invoices(.*)', // Invoice APIs
-  '/api/expense-claims(.*)', // Expense claim APIs
-  '/api/transactions(.*)', // Transaction APIs
+  '/api/v1/expense-claims(.*)', // V1 expense claim APIs
   '/api/business/((?!create).*)', // Business APIs except creation
-  '/api/accounting-entries(.*)', // Accounting APIs
+  '/api/v1/accounting-entries(.*)', // V1 Accounting APIs
 ])
 
 // Special routes that need authentication but bypass role checks
@@ -59,7 +58,8 @@ const isSpecialAuthRoute = createRouteMatcher([
 // Define role-based route matchers following Clerk patterns (with locale support)
 const isManagerRoute = createRouteMatcher([
   '/(en|th|id|zh)?/manager(.*)',
-  '/(en|th|id|zh)?/api/expense-claims/approvals(.*)'
+  '/(en|th|id|zh)?/api/expense-claims/approvals(.*)',
+  '/(en|th|id|zh)?/api/v1/expense-claims(.*)'
 ])
 
 // Admin setup should be accessible to authenticated users (for master key assignment)

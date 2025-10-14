@@ -49,7 +49,7 @@ function AcceptInvitationContent() {
     setNameError(null)
 
     try {
-      const response = await fetch('/api/invitations/accept', {
+      const response = await fetch('/api/v1/account-management/invitations/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -90,7 +90,7 @@ function AcceptInvitationContent() {
 
     const validateInvitation = async () => {
       try {
-        const response = await fetch(`/api/invitations/accept?token=${token}`)
+        const response = await fetch(`/api/v1/account-management/invitations/accept?token=${token}`)
         const result = await response.json()
 
         if (!response.ok || !result.success) {

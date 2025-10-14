@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import ApplicationDetailContainer from '@/components/applications/application-detail-container'
+import ApplicationDetailContainer from '@/domains/applications/components/application-detail-container'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 

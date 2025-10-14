@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import ApplicationSummaryContainer from '@/components/applications/application-summary-container'
+import ApplicationSummaryContainer from '@/domains/applications/components/application-summary-container'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 interface ApplicationSummaryPageProps {

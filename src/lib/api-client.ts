@@ -26,19 +26,101 @@ const DEFAULT_CONFIG = {
   retryAttempts: 3
 }
 
+// CSRF token cache
+let csrfToken: string | null = null
+let csrfTokenExpires: number = 0
+
 /**
- * Base fetch wrapper with error handling
+ * Fetch CSRF token from the server
+ */
+async function fetchCSRFToken(): Promise<string | null> {
+  try {
+    const response = await fetch('/api/v1/utils/security/csrf-token', {
+      method: 'GET',
+      credentials: 'same-origin'
+    })
+
+    if (!response.ok) {
+      console.error('[API Client] Failed to fetch CSRF token:', response.status)
+      return null
+    }
+
+    const data = await response.json()
+    if (data.success && data.data && data.data.token) {
+      csrfToken = data.data.token
+      csrfTokenExpires = Date.now() + (60 * 60 * 1000) - 60000 // 1 hour minus 1 min buffer
+      console.log('[API Client] CSRF token obtained successfully')
+      return data.data.token
+    }
+
+    console.error('[API Client] Invalid CSRF token response:', data)
+    return null
+  } catch (error) {
+    console.error('[API Client] Error fetching CSRF token:', error)
+    return null
+  }
+}
+
+/**
+ * Get valid CSRF token (fetch new if expired)
+ */
+async function getCSRFToken(): Promise<string | null> {
+  // Return cached token if still valid
+  if (csrfToken && Date.now() < csrfTokenExpires) {
+    return csrfToken
+  }
+
+  // Fetch new token
+  return await fetchCSRFToken()
+}
+
+/**
+ * Base fetch wrapper with CSRF protection and error handling
  */
 async function apiFetch<T>(
   url: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  }
+
+  // Safely merge existing headers
+  if (options.headers) {
+    if (options.headers instanceof Headers) {
+      options.headers.forEach((value, key) => {
+        headers[key] = value
+      })
+    } else if (Array.isArray(options.headers)) {
+      // Handle array format [['key', 'value'], ...]
+      options.headers.forEach(([key, value]) => {
+        headers[key] = value
+      })
+    } else {
+      // Handle object format { 'key': 'value' }
+      Object.entries(options.headers).forEach(([key, value]) => {
+        if (typeof value === 'string') {
+          headers[key] = value
+        }
+      })
+    }
+  }
+
+  // Add CSRF token for state-changing methods
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method || 'GET')) {
+    const token = await getCSRFToken()
+    if (token) {
+      headers['X-CSRF-Token'] = token
+      console.log('[API Client] Adding CSRF token to request')
+    } else {
+      console.warn('[API Client] Could not obtain CSRF token for request')
+    }
+  }
+
   const response = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers
-    }
+    headers,
+    credentials: 'same-origin' // Include cookies for authentication
   })
 
   if (!response.ok) {
@@ -50,7 +132,7 @@ async function apiFetch<T>(
 }
 
 // ============================================================================
-// 1. GET /api/business/memberships
+// 1. GET /api/v1/businesses/memberships
 // ============================================================================
 
 /**
@@ -73,13 +155,13 @@ async function apiFetch<T>(
  * ```
  */
 export async function getBusinessMemberships(): Promise<TGetBusinessMembershipsResponse> {
-  return apiFetch<TGetBusinessMembershipsResponse>('/api/business/memberships', {
+  return apiFetch<TGetBusinessMembershipsResponse>('/api/v1/account-management/businesses', {
     method: 'GET'
   })
 }
 
 // ============================================================================
-// 2. GET /api/business/context
+// 2. GET /api/v1/businesses/context
 // ============================================================================
 
 /**
@@ -113,13 +195,13 @@ export async function getBusinessMemberships(): Promise<TGetBusinessMembershipsR
  * ```
  */
 export async function getBusinessContext(): Promise<TGetBusinessContextResponse> {
-  return apiFetch<TGetBusinessContextResponse>('/api/business/context', {
+  return apiFetch<TGetBusinessContextResponse>('/api/v1/account-management/businesses/context', {
     method: 'GET'
   })
 }
 
 // ============================================================================
-// 3. POST /api/business/switch
+// 3. POST /api/v1/businesses/switch
 // ============================================================================
 
 /**
@@ -154,7 +236,7 @@ export async function getBusinessContext(): Promise<TGetBusinessContextResponse>
 export async function switchBusiness(
   request: TSwitchBusinessRequest
 ): Promise<TSwitchBusinessResponse> {
-  return apiFetch<TSwitchBusinessResponse>('/api/business/switch', {
+  return apiFetch<TSwitchBusinessResponse>('/api/v1/account-management/businesses/switch', {
     method: 'POST',
     body: JSON.stringify(request)
   })

@@ -1,0 +1,189 @@
+/**
+ * North Star Expense Claims API v1 - Main Collection Routes
+ * GET /api/v1/expense-claims - List expense claims
+ * POST /api/v1/expense-claims - Create new expense claim (unified creation + upload)
+ */
+
+import { auth } from '@clerk/nextjs/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createExpenseClaim, listExpenseClaims } from '@/domains/expense-claims/lib/data-access'
+import { CreateExpenseClaimRequest, ExpenseClaimListParams } from '@/domains/expense-claims/types'
+import { getBusinessExpenseCategories } from '@/domains/expense-claims/lib/expense-category-mapper'
+import { getUserData } from '@/lib/db/supabase-server'
+
+/**
+ * GET /api/v1/expense-claims
+ * List expense claims with role-based filtering and pagination
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const { searchParams } = new URL(request.url)
+
+    // Parse query parameters
+    const params: ExpenseClaimListParams = {
+      page: parseInt(searchParams.get('page') || '1'),
+      limit: Math.min(parseInt(searchParams.get('limit') || '20'), 100),
+      status: searchParams.get('status') as any,
+      expense_category: searchParams.get('expense_category') || undefined,
+      user_id: searchParams.get('user_id') || undefined,
+      date_from: searchParams.get('date_from') || undefined,
+      date_to: searchParams.get('date_to') || undefined,
+      claim_month: searchParams.get('claim_month') || undefined,
+      search: searchParams.get('search') || undefined,
+      sort_by: (searchParams.get('sort_by') as any) || 'created_at',
+      sort_order: (searchParams.get('sort_order') as any) || 'desc',
+      check_duplicate: searchParams.get('check_duplicate') === 'true',
+      approver: searchParams.get('approver') as any
+    }
+
+    const result = await listExpenseClaims(userId, params)
+
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, error: result.error },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: result.data
+    })
+
+  } catch (error) {
+    console.error('[North Star API v1] GET expense-claims error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch expense claims' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * POST /api/v1/expense-claims
+ * Unified creation endpoint - handles both manual entry and file upload
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    let createRequest: CreateExpenseClaimRequest
+
+    // Handle multipart/form-data (file upload) or application/json
+    const contentType = request.headers.get('content-type')
+
+    if (contentType?.includes('multipart/form-data')) {
+      // File upload mode
+      const formData = await request.formData()
+      const file = formData.get('file') as File
+      const processingMode = formData.get('processing_mode') as string
+
+      if (!file) {
+        return NextResponse.json(
+          { success: false, error: 'No file provided' },
+          { status: 400 }
+        )
+      }
+
+      if (!processingMode || !['ai', 'manual'].includes(processingMode)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid processing_mode. Must be "ai" or "manual"' },
+          { status: 400 }
+        )
+      }
+
+      // For AI processing, leave expense_category null - trigger.dev job will determine it
+      let expenseCategory = formData.get('expense_category') as string || null
+
+      console.log(`[AI Processing] Creating expense claim without category - trigger.dev job will determine it`)
+
+      // Extract other form fields
+      createRequest = {
+        description: formData.get('description') as string || 'Receipt Upload',
+        business_purpose: formData.get('business_purpose') as string || 'Business Expense',
+        expense_category: expenseCategory || 'GENERAL_EXPENSE',
+        original_amount: parseFloat(formData.get('original_amount') as string) || 0,
+        original_currency: (formData.get('original_currency') as string || 'SGD') as any,
+        transaction_date: formData.get('transaction_date') as string || new Date().toISOString().split('T')[0],
+        vendor_name: formData.get('vendor_name') as string || '',
+        vendor_id: formData.get('vendor_id') as string || undefined,
+        reference_number: formData.get('reference_number') as string || undefined,
+        notes: formData.get('notes') as string || undefined,
+        storage_path: formData.get('storage_path') as string || undefined,
+        line_items: [],
+        file: file,
+        processing_mode: processingMode as 'ai' | 'manual'
+      }
+    } else {
+      // JSON mode - manual entry
+      createRequest = await request.json()
+    }
+
+    // Validate required fields (expense_category is optional - trigger.dev job will determine it)
+    if (!createRequest.description || !createRequest.business_purpose ||
+        !createRequest.original_amount ||
+        !createRequest.original_currency || !createRequest.transaction_date) {
+      return NextResponse.json(
+        { success: false, error: 'Missing required fields: description, business_purpose, original_amount, original_currency, transaction_date' },
+        { status: 400 }
+      )
+    }
+
+    const result = await createExpenseClaim(userId, createRequest)
+
+    if (!result.success) {
+      if (result.error === 'duplicate_detected') {
+        return NextResponse.json({
+          success: false,
+          error: 'duplicate_detected',
+          duplicateData: result.data,
+          message: 'This expense has already been submitted. Please check your existing claims.'
+        }, { status: 409 })
+      }
+
+      return NextResponse.json(
+        { success: false, error: result.error },
+        { status: 500 }
+      )
+    }
+
+    const responseData: any = {
+      expense_claim: result.data,
+      expense_claim_id: result.data?.id,
+      processing_complete: !createRequest.file || createRequest.processing_mode === 'manual',
+      message: createRequest.file
+        ? `Receipt ${createRequest.processing_mode === 'ai' ? 'uploaded and AI processing initiated' : 'uploaded successfully'}`
+        : 'Expense record created successfully'
+    }
+
+    if (result.task_id) {
+      responseData.task_id = result.task_id
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: responseData
+    })
+
+  } catch (error) {
+    console.error('[North Star API v1] POST expense-claims error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to create expense claim' },
+      { status: 500 }
+    )
+  }
+}

@@ -1,6 +1,19 @@
 /**
  * Trigger.dev v3 API Handler
- * This endpoint is required by the Trigger.dev CLI for development server integration
+ *
+ * ⚠️ IMPORTANT: This endpoint MUST stay at /api/trigger (root level)
+ *
+ * REASON: Trigger.dev framework requires webhook at /api/trigger - this is a
+ * framework constraint, not a design choice. The Trigger.dev CLI and runtime
+ * expect this exact path and cannot be configured to use a different location.
+ *
+ * DO NOT MOVE THIS TO /api/v1/system/trigger or any other location.
+ *
+ * This endpoint is required by the Trigger.dev CLI for:
+ * - Development server integration
+ * - Background job triggering
+ * - Task execution callbacks
+ * - Runtime configuration
  */
 
 import { NextRequest, NextResponse } from 'next/server'
