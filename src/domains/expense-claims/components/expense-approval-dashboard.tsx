@@ -179,7 +179,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <TabsTrigger value="approvals" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
             Approvals
           </TabsTrigger>
-          {dashboardData.role.admin && (
+          {(dashboardData.role.manager || dashboardData.role.admin) && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
               Reimbursements
             </TabsTrigger>
@@ -197,7 +197,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <ApprovalTabContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
         </TabsContent>
 
-        {dashboardData.role.admin && (
+        {(dashboardData.role.manager || dashboardData.role.admin) && (
           <TabsContent value="reimbursements" className="space-y-4">
             <ReimbursementQueueContent data={dashboardData} />
           </TabsContent>
