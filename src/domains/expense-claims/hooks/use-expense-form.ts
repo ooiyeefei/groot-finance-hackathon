@@ -231,9 +231,25 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         throw new Error('Expense claim not found')
       }
 
-      // Set status information ✅ Unified status system
-      setClaimStatus(claim.status || '') // Use unified status field
-      setProcessingStatusState(claim.status || '') // Same status for both (simplified)
+      // Set status information - separate workflow and AI processing status
+      setClaimStatus(claim.status || '') // Workflow status (draft, submitted, approved, etc.)
+
+      // Extract AI processing status from processing_metadata
+      let aiProcessingStatus = 'idle' // Default status
+      if (claim.processing_metadata) {
+        if (claim.processing_metadata.ai_processing_status) {
+          // Direct AI processing status from metadata (e.g., 'failed')
+          aiProcessingStatus = claim.processing_metadata.ai_processing_status
+        } else if (claim.processing_metadata.extraction_method === 'ai' && claim.processing_metadata.extraction_timestamp) {
+          // AI extraction completed successfully
+          aiProcessingStatus = 'completed'
+        } else if (claim.status === 'analyzing') {
+          // Currently processing
+          aiProcessingStatus = 'processing'
+        }
+      }
+
+      setProcessingStatusState(aiProcessingStatus)
 
       // Determine processing method
       const detectedMethod = claim.processing_metadata?.processing_method || 'ai'

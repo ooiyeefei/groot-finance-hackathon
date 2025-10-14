@@ -302,10 +302,6 @@ export async function createExpenseClaim(
       }
     }
 
-    // Convert transaction date to claim month
-    const transactionDate = new Date(transaction_date)
-    const claimMonth = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), 1).toISOString().split('T')[0]
-
     // Create expense claim data
     const expenseClaimData = {
       user_id: employeeProfile.user_id,
@@ -313,7 +309,6 @@ export async function createExpenseClaim(
       status: request.file ? 'uploading' : 'draft',
       business_purpose,
       expense_category,
-      claim_month: claimMonth,
       storage_path: storage_path || null,
 
       // File metadata (if file upload)
@@ -608,9 +603,6 @@ export async function listExpenseClaims(
       query = query.lte('submitted_at', params.date_to)
     }
 
-    if (params.claim_month) {
-      query = query.eq('claim_month', params.claim_month)
-    }
 
     if (params.search) {
       const sanitizedSearch = params.search.replace(/[%_]/g, '\\$&').replace(/[^\w\s-]/g, '')
@@ -1116,13 +1108,17 @@ export async function updateExpenseClaim(
     let exchangeRate = 1
     let exchangeRateDate = new Date().toISOString().split('T')[0]
 
-    if (request.original_currency && request.original_amount &&
-        request.original_currency !== userHomeCurrency) {
+    // Determine the target home currency (could be user's default or the form selection)
+    const targetHomeCurrency = request.home_currency || userHomeCurrency
+    const sourceAmount = request.original_amount || existingClaim.total_amount
+    const sourceCurrency = request.original_currency || existingClaim.currency
+
+    if (sourceCurrency && sourceAmount && sourceCurrency !== targetHomeCurrency) {
       try {
         const conversion = await currencyService.convertAmount(
-          request.original_amount,
-          request.original_currency,
-          userHomeCurrency as any
+          sourceAmount,
+          sourceCurrency,
+          targetHomeCurrency as any
         )
         homeAmount = conversion.converted_amount
         exchangeRate = conversion.exchange_rate
@@ -1130,6 +1126,10 @@ export async function updateExpenseClaim(
       } catch (error) {
         console.error('Currency conversion failed:', error)
       }
+    } else if (sourceCurrency === targetHomeCurrency) {
+      // Same currency, no conversion needed
+      homeAmount = sourceAmount
+      exchangeRate = 1
     }
 
     // Prepare update data
@@ -1148,8 +1148,8 @@ export async function updateExpenseClaim(
     if (request.reference_number !== undefined) updateData.reference_number = request.reference_number
 
     // Update currency fields
-    if (request.original_currency || request.original_amount) {
-      updateData.home_currency = userHomeCurrency
+    if (request.original_currency || request.original_amount || request.home_currency) {
+      updateData.home_currency = request.home_currency || userHomeCurrency
       updateData.home_currency_amount = homeAmount
       updateData.exchange_rate = exchangeRate
     }
@@ -1297,7 +1297,7 @@ export async function getExpenseAnalytics(
     // Build base query for analytics
     let analyticsQuery = supabase
       .from('expense_claims')
-      .select('status, total_amount, home_currency_amount, expense_category, claim_month, created_at, submitted_at')
+      .select('status, total_amount, home_currency_amount, expense_category, created_at, submitted_at')
       .eq('business_id', employeeProfile.business_id)
 
     // Apply scope filtering
@@ -1338,7 +1338,7 @@ export async function getExpenseAnalytics(
 
     // Calculate monthly trends
     const monthlyTrends = claims.reduce((acc: any, claim: any) => {
-      const month = claim.claim_month || new Date(claim.created_at).toISOString().slice(0, 7) + '-01'
+      const month = new Date(claim.created_at).toISOString().slice(0, 7) + '-01'
       if (!acc[month]) {
         acc[month] = {
           month,

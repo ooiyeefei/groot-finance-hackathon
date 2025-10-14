@@ -169,6 +169,8 @@ interface BulkSuggestionsProps {
   onFieldAccept: (fieldName: string, value: string | number) => void
   onFieldReject: (fieldName: string) => void
   dismissedFields?: Set<string>
+  isProcessing?: boolean // NEW: Track if AI processing is currently in progress
+  processingStatus?: 'idle' | 'processing' | 'completed' | 'failed' // NEW: Processing status
 }
 
 export function BulkSuggestions({
@@ -177,21 +179,36 @@ export function BulkSuggestions({
   onRejectAll,
   onFieldAccept,
   onFieldReject,
-  dismissedFields = new Set()
+  dismissedFields = new Set(),
+  isProcessing = false,
+  processingStatus = 'idle'
 }: BulkSuggestionsProps) {
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [isLocalProcessing, setIsLocalProcessing] = useState(false)
 
   // Filter out dismissed and identical suggestions
   const activeSuggestions = suggestions.filter(
     s => !dismissedFields.has(s.fieldName) && s.currentValue !== s.suggestedValue
   )
 
-  if (activeSuggestions.length === 0) {
+  // Don't show suggestions if currently processing or if no active suggestions (unless we want to show status)
+  if (isProcessing) {
+    return null
+  }
+
+  // Handle different processing states
+  const shouldShowComponent = (
+    processingStatus === 'processing' ||
+    processingStatus === 'failed' ||
+    (processingStatus === 'completed' && activeSuggestions.length > 0) ||
+    activeSuggestions.length > 0
+  )
+
+  if (!shouldShowComponent) {
     return null
   }
 
   const handleAcceptAll = async () => {
-    setIsProcessing(true)
+    setIsLocalProcessing(true)
     try {
       const acceptedSuggestions: Record<string, string | number> = {}
       activeSuggestions.forEach(s => {
@@ -199,22 +216,53 @@ export function BulkSuggestions({
       })
       await onAcceptAll(acceptedSuggestions)
     } finally {
-      setIsProcessing(false)
+      setIsLocalProcessing(false)
     }
   }
 
   const averageConfidence = activeSuggestions.reduce((sum, s) => sum + (s.confidence || 0), 0) / activeSuggestions.length
 
+  // Helper functions for status display
+  function getStatusTitle(status: 'idle' | 'processing' | 'completed' | 'failed'): string {
+    switch (status) {
+      case 'processing':
+        return 'AI Analyzing...'
+      case 'failed':
+        return 'AI Processing Failed'
+      case 'completed':
+        return 'AI Processing Complete'
+      case 'idle':
+      default:
+        return 'AI Processing Complete'
+    }
+  }
+
+  function getStatusDescription(status: 'idle' | 'processing' | 'completed' | 'failed', suggestionsCount: number): string {
+    switch (status) {
+      case 'processing':
+        return 'Analyzing document and extracting data...'
+      case 'failed':
+        return 'AI extraction failed. You can continue editing with existing data or try re-extracting again.'
+      case 'completed':
+        return `Found ${suggestionsCount} suggested improvements`
+      case 'idle':
+      default:
+        return `Found ${suggestionsCount} suggested improvements`
+    }
+  }
+
   return (
     <Card className="bg-blue-900/20 border-blue-700 mb-6">
       <CardContent className="p-6">
         <div className="flex items-center gap-3 mb-4">
-          <Brain className="w-6 h-6 text-blue-400" />
+          <Brain className={`w-6 h-6 text-blue-400 ${processingStatus === 'processing' ? 'animate-spin' : ''}`} />
           <div>
-            <h3 className="text-blue-300 font-semibold">AI Processing Complete</h3>
+            <h3 className="text-blue-300 font-semibold">
+              {getStatusTitle(processingStatus)}
+            </h3>
             <p className="text-blue-200 text-sm">
-              Found {activeSuggestions.length} suggested improvements
-              {averageConfidence > 0 && (
+              {getStatusDescription(processingStatus, activeSuggestions.length)}
+              {processingStatus === 'completed' && averageConfidence > 0 && (
                 <span className="ml-2 text-xs">
                   Avg confidence: {Math.round(averageConfidence)}%
                 </span>
@@ -224,52 +272,86 @@ export function BulkSuggestions({
         </div>
 
         {/* Bulk Actions */}
-        <div className="flex gap-3 mb-4">
-          <Button
-            onClick={handleAcceptAll}
-            disabled={isProcessing}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
-            {isProcessing ? (
-              <>
-                <CheckCircle className="w-4 h-4 mr-2 animate-spin" />
-                Applying All...
-              </>
-            ) : (
-              <>
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Accept All ({activeSuggestions.length})
-              </>
-            )}
-          </Button>
+        {processingStatus === 'completed' && (
+          <div className="flex gap-3 mb-4">
+            <Button
+              onClick={handleAcceptAll}
+              disabled={isLocalProcessing || isProcessing}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {isLocalProcessing ? (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2 animate-spin" />
+                  Applying All...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Accept All ({activeSuggestions.length})
+                </>
+              )}
+            </Button>
 
-          <Button
-            variant="outline"
-            onClick={onRejectAll}
-            disabled={isProcessing}
-            className="border-gray-600 text-gray-300 hover:bg-gray-700"
-          >
-            <X className="w-4 h-4 mr-2" />
-            Keep All Current
-          </Button>
-        </div>
+            <Button
+              variant="outline"
+              onClick={onRejectAll}
+              disabled={isLocalProcessing || isProcessing}
+              className="border-gray-600 text-gray-300 hover:bg-gray-700"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Keep All Current
+            </Button>
+          </div>
+        )}
+
+        {/* Failed Status Action */}
+        {processingStatus === 'failed' && (
+          <div className="flex gap-3 mb-4">
+            <Button
+              onClick={() => {
+                // This will be connected to reprocess functionality
+                console.log('User wants to retry AI extraction after failure')
+                // The parent component should handle this
+              }}
+              disabled={isProcessing}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              <Brain className="w-4 h-4 mr-2" />
+              Try AI Extract Again
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                // Continue with current data - dismiss the failed status
+                onRejectAll()
+              }}
+              disabled={isProcessing}
+              className="border-gray-600 text-gray-300 hover:bg-gray-700"
+            >
+              Continue with Current Data
+            </Button>
+          </div>
+        )}
 
         {/* Individual Suggestions */}
-        <div className="space-y-3">
-          {activeSuggestions.map((suggestion) => (
-            <FieldSuggestion
-              key={suggestion.fieldName}
-              fieldName={suggestion.fieldName}
-              currentValue={suggestion.currentValue}
-              suggestedValue={suggestion.suggestedValue}
-              fieldLabel={suggestion.fieldLabel}
-              confidence={suggestion.confidence}
-              onAccept={(value) => onFieldAccept(suggestion.fieldName, value)}
-              onReject={() => onFieldReject(suggestion.fieldName)}
-              suggestionReason={suggestion.suggestionReason}
-            />
-          ))}
-        </div>
+        {processingStatus === 'completed' && (
+          <div className="space-y-3">
+            {activeSuggestions.map((suggestion) => (
+              <FieldSuggestion
+                key={suggestion.fieldName}
+                fieldName={suggestion.fieldName}
+                currentValue={suggestion.currentValue}
+                suggestedValue={suggestion.suggestedValue}
+                fieldLabel={suggestion.fieldLabel}
+                confidence={suggestion.confidence}
+                onAccept={(value) => onFieldAccept(suggestion.fieldName, value)}
+                onReject={() => onFieldReject(suggestion.fieldName)}
+                suggestionReason={suggestion.suggestionReason}
+              />
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

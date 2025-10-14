@@ -17,7 +17,6 @@ import { Textarea } from '@/components/ui/textarea'
 import ExpenseAnalytics from './expense-analytics'
 import MonthlyReportGenerator from './monthly-report-generator'
 import GoogleSheetsExport from './google-sheets-export'
-import CategoryManagement from './category-management'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
 
@@ -51,7 +50,10 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/v1/expense-claims/analytics', {
+      console.log('[EnhancedApprovalDashboard] Fetching dashboard data...')
+
+      // Use the regular expense claims endpoint with approver=me to get role info and summary data
+      const response = await fetch('/api/v1/expense-claims?limit=50&sort_order=desc&approver=me', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -59,18 +61,49 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
       })
 
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error('[EnhancedApprovalDashboard] Error response:', errorText)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const result = await response.json()
-      
+      console.log('[EnhancedApprovalDashboard] API result:', JSON.stringify(result, null, 2))
+
       if (result.success) {
-        setDashboardData(result.data)
+        // Transform v1 API response to management dashboard format
+        const claims = result.data?.claims || []
+        const pagination = result.data?.pagination || {}
+        const role = result.data?.role || { employee: true, manager: false, admin: false }
+
+        const summary = {
+          total_claims: pagination.total || 0,
+          pending_approval: claims.filter((claim: any) => claim.status === 'submitted').length,
+          approved_amount: claims
+            .filter((claim: any) => claim.status === 'approved' || claim.status === 'reimbursed')
+            .reduce((sum: number, claim: any) => sum + (claim.home_currency_amount || claim.total_amount || 0), 0),
+          rejected_count: claims.filter((claim: any) => claim.status === 'rejected').length,
+        }
+
+        console.log('[EnhancedApprovalDashboard] Setting dashboard data:', {
+          role,
+          summary,
+          recent_claims_count: claims.length
+        })
+        console.log('[EnhancedApprovalDashboard] Role check - admin:', role.admin, 'manager:', role.manager)
+
+        setDashboardData({
+          role,
+          summary,
+          recent_claims: claims
+        })
       } else {
+        console.error('[EnhancedApprovalDashboard] API returned success: false, error:', result.error)
         throw new Error(result.error || 'Failed to fetch management dashboard data')
       }
     } catch (error) {
-      console.error('Failed to fetch management dashboard data:', error)
+      console.error('[EnhancedApprovalDashboard] Failed to fetch dashboard data:', error)
+      console.error('[EnhancedApprovalDashboard] Error details:', error instanceof Error ? error.message : 'Unknown error')
+
       // Set minimal fallback data
       setDashboardData({
         role: { employee: true, manager: true, admin: false },
@@ -108,25 +141,25 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <ManagementSummaryCard
           title="Pending Approvals"
-          value={dashboardData.summary.pending_approval.toString()}
+          value={(dashboardData.summary?.pending_approval ?? 0).toString()}
           icon={<Clock className="w-5 h-5" />}
           variant="warning"
         />
         <ManagementSummaryCard
           title="Approved Amount"
-          value={`$${dashboardData.summary.approved_amount.toFixed(2)}`}
+          value={`$${(dashboardData.summary?.approved_amount ?? 0).toFixed(2)}`}
           icon={<CheckCircle className="w-5 h-5" />}
           variant="success"
         />
         <ManagementSummaryCard
           title="Total Claims"
-          value={dashboardData.summary.total_claims.toString()}
+          value={(dashboardData.summary?.total_claims ?? 0).toString()}
           icon={<User className="w-5 h-5" />}
           variant="default"
         />
         <ManagementSummaryCard
           title="Rejected Claims"
-          value={dashboardData.summary.rejected_count.toString()}
+          value={(dashboardData.summary?.rejected_count ?? 0).toString()}
           icon={<XCircle className="w-5 h-5" />}
           variant="error"
         />
@@ -140,21 +173,18 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           fetchDashboardData()
         }
       }} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 bg-gray-800 border border-gray-700">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-gray-800 border border-gray-700">
           <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
             Overview
           </TabsTrigger>
           <TabsTrigger value="approvals" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
             Approvals
           </TabsTrigger>
-          {dashboardData.role.admin && (
+          {(dashboardData.role.manager || dashboardData.role.admin) && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
               Reimbursements
             </TabsTrigger>
           )}
-          <TabsTrigger value="categories" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">
-            Categories
-          </TabsTrigger>
           <TabsTrigger value="reports" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
             Reports
           </TabsTrigger>
@@ -168,15 +198,11 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <ApprovalTabContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
         </TabsContent>
 
-        {dashboardData.role.admin && (
+        {(dashboardData.role.manager || dashboardData.role.admin) && (
           <TabsContent value="reimbursements" className="space-y-4">
             <ReimbursementQueueContent data={dashboardData} />
           </TabsContent>
         )}
-
-        <TabsContent value="categories" className="space-y-4">
-          <CategoryManagement userRole={dashboardData.role} />
-        </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
           <ManagementReportsContent userRole={dashboardData.role} />
@@ -203,7 +229,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
           <CardDescription>Claims requiring immediate attention</CardDescription>
         </CardHeader>
         <CardContent>
-          {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length === 0 ? (
+          {(data.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               <CheckCircle className="w-12 h-12 mx-auto mb-4" />
               <p>No pending approvals</p>
@@ -211,7 +237,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
             </div>
           ) : (
             <div className="space-y-3">
-              {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).slice(0, 5).map((claim: any) => (
+              {(data.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).slice(0, 5).map((claim: any) => (
                 <button
                   key={claim.id}
                   className="w-full flex items-center justify-between p-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -238,14 +264,14 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                   </div>
                 </button>
               ))}
-              {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length > 5 && (
+              {(data.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length > 5 && (
                 <Button
                   variant="ghost"
                   className="w-full text-green-400 hover:text-green-300"
                   onClick={() => setActiveTab('approvals')}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Review all {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length} pending claims
+                  Review all {(data.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length} pending claims
                 </Button>
               )}
             </div>
@@ -283,7 +309,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
         <CardDescription>Approved claims ready for payment processing</CardDescription>
       </CardHeader>
       <CardContent>
-        {data.recent_claims.filter(claim => claim.status === 'approved').length === 0 ? (
+        {(data.recent_claims || []).filter(claim => claim.status === 'approved').length === 0 ? (
           <div className="text-center text-gray-400 py-12">
             <CheckCircle className="w-12 h-12 mx-auto mb-4" />
             <p>No pending reimbursements</p>
@@ -295,7 +321,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
             <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
               <div className="flex items-center gap-4">
                 <input type="checkbox" className="rounded border-gray-600" />
-                <span className="text-white font-medium">Select All ({data.recent_claims.filter(claim => claim.status === 'approved').length} claims)</span>
+                <span className="text-white font-medium">Select All ({(data.recent_claims || []).filter(claim => claim.status === 'approved').length} claims)</span>
               </div>
               <div className="flex gap-2">
                 <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white">
@@ -310,7 +336,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
 
             {/* Reimbursement Items */}
             <div className="space-y-2">
-              {data.recent_claims.filter(claim => claim.status === 'approved').map((claim: any) => (
+              {(data.recent_claims || []).filter(claim => claim.status === 'approved').map((claim: any) => (
                 <div key={claim.id} className="flex items-center gap-4 p-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors">
                   <input type="checkbox" className="rounded border-gray-600" />
                   <div className="flex-1">
@@ -573,9 +599,9 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     <span className="text-white font-semibold">
                       {claim.original_amount} {claim.original_currency}
                     </span>
-                    {claim.original_currency !== claim.home_currency && (
+                    {claim.original_currency !== claim.home_currency && claim.converted_amount && (
                       <span className="text-gray-400 text-sm">
-                        (${claim.converted_amount.toFixed(2)})
+                        (${parseFloat(claim.converted_amount).toFixed(2)})
                       </span>
                     )}
                   </div>

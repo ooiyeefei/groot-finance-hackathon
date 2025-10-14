@@ -131,6 +131,7 @@ export interface CreateExpenseClaimRequest {
   expense_category: ExpenseCategory
   original_amount: number
   original_currency: SupportedCurrency
+  home_currency?: SupportedCurrency // NEW: Allow users to specify home currency
   transaction_date: string
   vendor_name?: string
   vendor_id?: string // NEW: Link to vendors table
@@ -154,6 +155,9 @@ export interface ExpenseLineItemRequest {
 
 export interface UpdateExpenseClaimRequest extends Partial<CreateExpenseClaimRequest> {
   id?: never // Prevent ID updates
+  status?: ExpenseClaimStatus // Allow status updates
+  comment?: string // For approval/rejection comments
+  rejection_reason?: string // For rejection reason
 }
 
 export interface ExpenseClaimApprovalRequest {
