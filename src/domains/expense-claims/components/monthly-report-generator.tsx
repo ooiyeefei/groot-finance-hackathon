@@ -14,19 +14,36 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface ReportData {
-  employee_name: string
-  report_month: string
-  home_currency: string
+  month: string
+  employeeName: string
+  totalAmount: number
+  currency: string
+  groupedClaims: Record<string, {
+    categoryCode: string
+    categoryName: string
+    accountingCategory: string
+    totalAmount: number
+    claimsCount: number
+    claims: any[]
+  }>
   summary: {
-    total_amount: number
-    claim_count: number
-    approved_amount: number
-    pending_amount: number
-    rejected_amount: number
+    totalClaims: number
+    totalAmount: number
+    byStatus: {
+      draft: number
+      submitted: number
+      approved: number
+      rejected: number
+      reimbursed: number
+    }
   }
-  category_totals: Record<string, { amount: number; count: number }>
-  claims: any[]
-  generated_at: string
+  metadata: {
+    generatedAt: string
+    generatedBy: string
+    businessId: string
+    requestedByRole: string
+    scope: string
+  }
 }
 
 interface MonthlyReportGeneratorProps {
@@ -50,17 +67,22 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
   const generateMonthOptions = () => {
     const months = []
     const now = new Date()
-    
+
     for (let i = 0; i < 12; i++) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const monthValue = date.toISOString().slice(0, 7) // YYYY-MM
-      const monthLabel = date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long' 
+
+      // Use consistent date formatting to avoid timezone issues
+      const year = date.getFullYear()
+      const month = (date.getMonth() + 1).toString().padStart(2, '0')
+      const monthValue = `${year}-${month}` // YYYY-MM
+
+      const monthLabel = date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long'
       })
       months.push({ value: monthValue, label: monthLabel })
     }
-    
+
     return months
   }
 
@@ -90,8 +112,11 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
   // Fetch employees from API (only if not personal mode)
   useEffect(() => {
+    console.log('[Monthly Report] 🚀 useEffect triggered - personalOnly:', personalOnly)
+
     if (personalOnly) {
       // In personal mode, only show current user
+      console.log('[Monthly Report] 📝 Personal mode - setting default employees')
       setEmployees([{ id: 'current', name: 'My Reports' }])
       setSelectedEmployee('current')
       return
@@ -99,25 +124,46 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
     const fetchEmployees = async () => {
       try {
+        console.log('[Monthly Report] 🌐 Fetching team members from /api/v1/users/team')
         setLoadingEmployees(true)
         const response = await fetch('/api/v1/users/team')
+
+        console.log('[Monthly Report] 📡 Response status:', response.status, response.statusText)
+
         const result = await response.json()
-        
-        if (result.success && result.data.length > 0) {
-          const teamMembers = result.data.map((member: any) => ({
-            id: member.id || member.user_id,
-            name: member.full_name || member.email || `Employee ID: ${member.id || member.user_id}`
+        console.log('[Monthly Report] 📊 Team API response:', result)
+
+        if (result.success && result.data && result.data.users && result.data.users.length > 0) {
+          console.log('[Monthly Report] ✅ Processing team data - found', result.data.users.length, 'users')
+
+          const teamMembers = result.data.users.map((member: any) => ({
+            id: member.user_id, // Use user_id for the reports API employeeId parameter
+            name: member.full_name || member.email || `Employee ID: ${member.user_id}`
           }))
-          
-          setEmployees([
+
+          console.log('[Monthly Report] 👥 Team members processed:', teamMembers)
+
+          const finalEmployees = [
             { id: 'current', name: 'My Reports' },
             ...teamMembers
-          ])
+          ]
+
+          console.log('[Monthly Report] 📋 Final employees list:', finalEmployees)
+          setEmployees(finalEmployees)
+        } else {
+          console.log('[Monthly Report] ❌ No team data found or API failed:', {
+            success: result.success,
+            hasData: !!result.data,
+            hasUsers: !!result.data?.users,
+            userCount: result.data?.users?.length || 0,
+            error: result.error
+          })
         }
       } catch (error) {
-        console.error('Failed to fetch employees:', error)
+        console.error('[Monthly Report] 💥 Failed to fetch employees:', error)
         // Keep default "My Reports" only if API fails
       } finally {
+        console.log('[Monthly Report] 🏁 Fetch employees completed')
         setLoadingEmployees(false)
       }
     }
@@ -125,7 +171,20 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
     fetchEmployees()
   }, [personalOnly])
 
-  const generateReport = async (format: 'json' | 'pdf' | 'csv' = 'json') => {
+  // Generate CSV export URL for server-side download
+  const generateCSVExportURL = (): string => {
+    if (!selectedMonth) return ''
+
+    const params = new URLSearchParams({ month: selectedMonth })
+
+    if (selectedEmployee && selectedEmployee !== 'current') {
+      params.append('employeeId', selectedEmployee)
+    }
+
+    return `/api/v1/expense-claims/reports/export?${params.toString()}`
+  }
+
+  const generateReport = async () => {
     if (!selectedMonth) {
       setError('Please select a month')
       return
@@ -136,44 +195,21 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
     try {
       const params = new URLSearchParams({
-        month: selectedMonth,
-        format: format
+        month: selectedMonth
       })
 
       if (selectedEmployee && selectedEmployee !== 'current') {
-        params.append('employee_id', selectedEmployee)
+        params.append('employeeId', selectedEmployee)
       }
 
-      const response = await fetch(`/api/v1/expense-claims/reports/monthly?${params}`)
+      // Use the comprehensive reports API endpoint for JSON preview
+      const response = await fetch(`/api/v1/expense-claims/reports?${params}`)
+      const result = await response.json()
 
-      if (format === 'json') {
-        const result = await response.json()
-        if (result.success) {
-          setReportData(result.data)
-        } else {
-          setError(result.error || 'Failed to generate report')
-        }
+      if (result.success) {
+        setReportData(result.data)
       } else {
-        // Handle file downloads for PDF/CSV
-        if (response.ok) {
-          const blob = await response.blob()
-          const url = window.URL.createObjectURL(blob)
-          const link = document.createElement('a')
-          link.href = url
-          
-          const employee = selectedEmployee && selectedEmployee !== 'current' 
-            ? employees.find(e => e.id === selectedEmployee)?.name.replace(/\s+/g, '-') || 'employee'
-            : 'my'
-          
-          link.download = `expense-report-${employee}-${selectedMonth}.${format}`
-          document.body.appendChild(link)
-          link.click()
-          document.body.removeChild(link)
-          window.URL.revokeObjectURL(url)
-        } else {
-          const result = await response.json()
-          setError(result.error || 'Failed to download report')
-        }
+        setError(result.error || 'Failed to generate report')
       }
     } catch (error) {
       console.error('Report generation failed:', error)
@@ -245,31 +281,38 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
           {/* Generate Buttons */}
           <div className="flex flex-wrap gap-3">
             <Button
-              onClick={() => generateReport('json')}
+              onClick={generateReport}
               disabled={generating}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <FileText className="w-4 h-4 mr-2" />
               Preview Report
             </Button>
-            
-            <Button
-              onClick={() => generateReport('pdf')}
-              disabled={generating}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Download PDF
-            </Button>
 
-            <Button
-              onClick={() => generateReport('csv')}
-              disabled={generating}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
-            </Button>
+            {/* CSV Export as direct download link */}
+            {selectedMonth ? (
+              <Button
+                asChild
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                <a
+                  href={generateCSVExportURL()}
+                  download
+                  className="inline-flex items-center"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Export CSV
+                </a>
+              </Button>
+            ) : (
+              <Button
+                disabled
+                className="bg-gray-600 text-gray-400 cursor-not-allowed"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -282,21 +325,12 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
               <div>
                 <CardTitle className="text-white">Monthly Expense Report</CardTitle>
                 <CardDescription>
-                  {reportData.employee_name} - {new Date(reportData.report_month + '-01').toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long' 
+                  {reportData.employeeName} - {new Date(reportData.month + '-01').toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long'
                   })}
                 </CardDescription>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.print()}
-                className="border-gray-600 text-gray-300"
-              >
-                <Printer className="w-4 h-4 mr-2" />
-                Print
-              </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -304,27 +338,27 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <ReportSummaryCard
                 title="Total Claims"
-                value={reportData.summary.claim_count.toString()}
+                value={reportData.summary.totalClaims.toString()}
                 variant="default"
               />
               <ReportSummaryCard
                 title="Total Amount"
-                value={`${reportData.summary.total_amount.toFixed(2)} ${reportData.home_currency}`}
+                value={`${reportData.summary.totalAmount.toFixed(2)} ${reportData.currency}`}
                 variant="default"
               />
               <ReportSummaryCard
                 title="Approved"
-                value={`${reportData.summary.approved_amount.toFixed(2)} ${reportData.home_currency}`}
+                value={`${(reportData.summary.byStatus.approved + reportData.summary.byStatus.reimbursed).toString()} claims`}
                 variant="success"
               />
               <ReportSummaryCard
-                title="Pending"
-                value={`${reportData.summary.pending_amount.toFixed(2)} ${reportData.home_currency}`}
+                title="Submitted"
+                value={`${reportData.summary.byStatus.submitted.toString()} claims`}
                 variant="warning"
               />
               <ReportSummaryCard
                 title="Rejected"
-                value={`${reportData.summary.rejected_amount.toFixed(2)} ${reportData.home_currency}`}
+                value={`${reportData.summary.byStatus.rejected.toString()} claims`}
                 variant="error"
               />
             </div>
@@ -333,21 +367,25 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             <div className="space-y-4">
               <h4 className="text-white font-semibold">Category Breakdown</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Object.entries(reportData.category_totals).map(([category, data]) => {
-                  const categoryInfo = categories.find(c => c.business_category_code === category)
-
-                  if (data.count === 0) return null
+                {Object.entries(reportData.groupedClaims).map(([categoryCode, categoryData]) => {
+                  if (categoryData.claimsCount === 0) return null
 
                   return (
-                    <div key={category} className="bg-gray-700 rounded-lg p-4">
+                    <div key={categoryCode} className="bg-gray-700 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <Badge variant="secondary" className="bg-gray-900/20 text-gray-300 border border-gray-700/50">
-                          {categoryInfo?.business_category_name || category}
+                        <Badge
+                          variant="secondary"
+                          className="bg-gray-900/20 text-gray-300 border border-gray-700/50 hover:bg-gray-200/90 hover:text-gray-900 transition-colors cursor-default"
+                        >
+                          {categoryData.categoryName}
                         </Badge>
-                        <span className="text-gray-400 text-sm">{data.count} claims</span>
+                        <span className="text-gray-400 text-sm">{categoryData.claimsCount} claims</span>
                       </div>
                       <div className="text-white font-semibold">
-                        {data.amount.toFixed(2)} {reportData.home_currency}
+                        {categoryData.totalAmount.toFixed(2)} {reportData.currency}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {categoryData.accountingCategory}
                       </div>
                     </div>
                   )
@@ -357,7 +395,9 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
             {/* Report Metadata */}
             <div className="border-t border-gray-700 pt-4 text-gray-400 text-sm">
-              <p>Report generated on: {new Date(reportData.generated_at).toLocaleString()}</p>
+              <p>Report generated on: {new Date(reportData.metadata.generatedAt).toLocaleString()}</p>
+              <p>Report scope: {reportData.metadata.scope.replace(/_/g, ' ')}</p>
+              <p>Generated by: {reportData.metadata.requestedByRole}</p>
               <p>Data as of: {new Date().toLocaleDateString()}</p>
             </div>
           </CardContent>

@@ -77,7 +77,6 @@ export interface EnhancedExpenseClaim {
   employee_id: string
   status: ExpenseClaimStatus // ✅ Use unified status type
   expense_category: string
-  claim_month: string
   business_purpose: string
   
   // Enhanced Otto fields

@@ -59,9 +59,9 @@ npm run build -- --analyze  # If configured for bundle analysis
    ```
 
 2. **End-to-End Workflow Testing**:
-   - Expense submission í DSPy extraction í Manager approval í Accounting entry creation
-   - Invoice upload í OCR processing í Transaction creation
-   - Application workflow í Document processing í Status updates
+   - Expense submission ÔøΩ DSPy extraction ÔøΩ Manager approval ÔøΩ Accounting entry creation
+   - Invoice upload ÔøΩ OCR processing ÔøΩ Transaction creation
+   - Application workflow ÔøΩ Document processing ÔøΩ Status updates
 
 3. **Error Handling Validation**:
    - Test authentication failures
@@ -80,7 +80,7 @@ npm run build -- --analyze  # If configured for bundle analysis
 - Background jobs trigger successfully
 - Frontend error handling displays correctly
 
-### =  Task 3: Performance Impact Assessment
+### =ÔøΩ Task 3: Performance Impact Assessment
 
 **Context**: Major refactoring may have introduced performance regressions. Need baseline measurement.
 
@@ -150,7 +150,7 @@ grep -r "any" src/domains/ --include="*.ts" --include="*.tsx"
 - Supabase queries have correct type inference
 - Build passes with `--strict` mode
 
-### >Í Task 5: Integration Testing for Cross-Domain Interactions
+### >ÔøΩ Task 5: Integration Testing for Cross-Domain Interactions
 
 **Context**: Domain isolation needs validation to ensure proper inter-domain communication.
 
@@ -162,10 +162,10 @@ grep -r "any" src/domains/ --include="*.ts" --include="*.tsx"
    ```
 
 2. **Test Scenarios**:
-   - Expense Claims í Analytics domain data aggregation
-   - Chat domain í Financial data queries across domains
-   - Users domain í Permission enforcement in other domains
-   - Applications í Document processing í Analytics reporting
+   - Expense Claims ÔøΩ Analytics domain data aggregation
+   - Chat domain ÔøΩ Financial data queries across domains
+   - Users domain ÔøΩ Permission enforcement in other domains
+   - Applications ÔøΩ Document processing ÔøΩ Analytics reporting
 
 3. **Domain Boundary Testing**:
    - Verify no direct imports between domain internals
@@ -180,7 +180,7 @@ grep -r "any" src/domains/ --include="*.ts" --include="*.tsx"
 
 ## Priority 3: Enhanced Monitoring & Developer Experience
 
-### =» Task 6: Domain-Specific Monitoring Setup
+### =ÔøΩ Task 6: Domain-Specific Monitoring Setup
 
 **Context**: New domain architecture needs monitoring to track domain-specific metrics and errors.
 
@@ -215,7 +215,7 @@ grep -r "any" src/domains/ --include="*.ts" --include="*.tsx"
 - Business KPIs monitored
 - Alert fatigue minimized
 
-### =‡ Task 7: Development Experience Optimization
+### =ÔøΩ Task 7: Development Experience Optimization
 
 **Context**: Domain architecture requires updated tooling and scripts for optimal developer experience.
 
@@ -255,7 +255,7 @@ grep -r "any" src/domains/ --include="*.ts" --include="*.tsx"
 
 ## Priority 4: Strategic Enhancements
 
-### =Ä Task 8: Domain Architecture Leverage Opportunities
+### =ÔøΩ Task 8: Domain Architecture Leverage Opportunities
 
 **Context**: Now that domains are properly separated, can implement advanced patterns.
 
@@ -338,19 +338,19 @@ npx depcruiser --validate .dependency-cruiser.js src
 - **Documentation**: Comprehensive docs created for new architecture
 - **Dead Code Cleanup**: Initial cleanup of unused imports and endpoints completed
 
-### Lessons Learned =⁄
+### Lessons Learned =ÔøΩ
 - **Systematic Search**: Universal search for old API patterns caught issues that manual review missed
 - **Build-First Approach**: Mandatory build validation prevented broken deployments
 - **Domain Isolation**: Clear boundaries improved code organization and maintainability
 - **Documentation Importance**: Comprehensive docs essential for team adoption
 
-### Next Development Priorities <Ø
+### Next Development Priorities <ÔøΩ
 1. **Performance Validation** - Ensure refactor didn't introduce regressions
 2. **Dead Code Elimination** - Systematic cleanup of unused code paths
 3. **Monitoring Setup** - Domain-specific monitoring and alerting
 4. **Developer Experience** - Optimized tooling for domain-based development
 
-### Risk Assessment †
+### Risk Assessment ÔøΩ
 - **Performance Impact**: Large refactor may have hidden performance issues
 - **Dead Code**: Unused code paths may cause confusion or security issues
 - **Domain Boundaries**: Need validation that boundaries are properly enforced
@@ -358,6 +358,126 @@ npx depcruiser --validate .dependency-cruiser.js src
 
 ---
 
-**Last Updated**: 2025-01-14
+**Last Updated**: 2025-01-15
 **Status**: Post-Major Refactor Cleanup Phase
 **Next Review**: After completing Priority 1 tasks
+
+---
+
+## Recent Fixes Completed (2025-01-15)
+
+### Issues Resolved ‚úÖ
+
+**1. Accounting Category Mapping Issue**
+- **Problem**: Both CSV exports and monthly reports were showing "GENERAL_EXPENSES" instead of proper business accounting categories like "travel_expenses", "entertainment_meals", etc.
+- **Root Cause**: The APIs were using hardcoded 'GENERAL_EXPENSES' as fallback instead of utilizing the existing `mapExpenseCategoryToAccounting()` function
+- **Solution**:
+  - Imported and used `mapExpenseCategoryToAccounting` function from `/src/domains/expense-claims/lib/expense-category-mapper.ts`
+  - Replaced hardcoded fallbacks with proper category mapping in both APIs
+  - Fixed 3 instances in `/src/app/api/v1/expense-claims/reports/route.ts` (lines 172, 193, 267)
+  - Fixed 1 instance in `/src/app/api/v1/expense-claims/reports/export/route.ts` (lines 95, 139)
+
+**2. UI Accessibility Issue**
+- **Problem**: Category badges had light gray text (`text-gray-300`) with no proper hover contrast
+- **Solution**: Added hover states with proper contrast:
+  - `hover:bg-gray-200/90 hover:text-gray-900` for light background with dark text
+  - Added `transition-colors` for smooth transitions
+  - Added `cursor-default` for consistent UX
+
+### Files Modified
+1. `/src/app/api/v1/expense-claims/reports/route.ts` - Added proper category mapping
+2. `/src/app/api/v1/expense-claims/reports/export/route.ts` - Fixed CSV export categories
+3. `/src/domains/expense-claims/components/monthly-report-generator.tsx` - Enhanced badge accessibility
+
+### Impact
+- Monthly reports now display proper IFRS-compliant accounting categories
+- CSV exports show accurate category classifications for compliance reporting
+- Improved UI accessibility with proper text contrast on hover
+- Build validation passed successfully
+
+---
+
+## Session 2 Fixes Completed (2025-01-15 Continuation)
+
+### Team Member Dropdown Investigation & Resolution ‚úÖ
+
+**3. Admin Team Member Access Issue**
+- **Problem**: Admin user's Employee dropdown in monthly report generator only showing "My Reports" instead of all business team members (3 total members expected)
+- **Root Cause Analysis**:
+  - Initial investigation revealed user was testing on personal dashboard (`/expense-claims`) instead of manager approvals dashboard (`/manager/approvals`)
+  - Personal dashboard uses `<MonthlyReportGenerator personalOnly={true} />` which intentionally shows only "My Reports"
+  - Manager dashboard uses `<MonthlyReportGenerator personalOnly={false} />` which should show all team members
+- **Solution**:
+  - Fixed team API endpoint permissions in `/src/app/api/v1/users/team/route.ts` to explicitly allow both admin and manager roles
+  - Added comprehensive debug logging throughout the data flow for troubleshooting
+  - Updated frontend data structure handling to properly access `result.data.users` instead of `result.data` as an array
+  - Implemented extensive logging in monthly report generator component to trace API calls and responses
+
+**4. Manager Dashboard UI Layout Overflow**
+- **Problem**: Manager approvals dashboard had overflow issues with text and icons, user requested 2:1 column ratio with Company Analytics on left and Priority Approvals on right
+- **Root Cause**: Original layout used `grid-cols-2` with equal spacing, causing overflow in compact Priority Approvals section
+- **Solution**:
+  - Restructured `ManagementOverviewContent` in `/src/domains/expense-claims/components/expense-approval-dashboard.tsx`
+  - Changed from `grid-cols-2` to `grid-cols-3` layout system
+  - Company Analytics: `lg:col-span-2` (2/3 width, left side)
+  - Priority Approvals: `lg:col-span-1` (1/3 width, right side, more compact)
+  - Added text truncation and smaller font sizes for compact display
+  - Implemented overflow handling with `truncate` class and substring logic for long descriptions
+
+### Technical Implementation Details
+
+**Debug Logging Added:**
+```typescript
+// Frontend (monthly-report-generator.tsx)
+console.log('[Monthly Report] üöÄ useEffect triggered - personalOnly:', personalOnly)
+console.log('[Monthly Report] üåê Fetching team members from /api/v1/users/team')
+console.log('[Monthly Report] üìä Team API response:', result)
+console.log('[Monthly Report] üë• Team members processed:', teamMembers)
+
+// Backend (team API route.ts)
+console.log('[Team V1 API] üìä User context:', { userId, businessId, role, permissions })
+console.log('[Team V1 API] üîç Calling getTeamMembers with:', { userId, businessId })
+console.log('[Team V1 API] üìã Team data received:', { userCount, users })
+```
+
+**API Permission Fix:**
+```typescript
+// Before: Restrictive check
+if (!userContext.permissions.manager) { ... }
+
+// After: Explicit admin and manager support
+if (!userContext.permissions.manager && !userContext.permissions.admin) {
+  console.log('[Team V1 API] ‚ùå Permission denied - manager:', manager, 'admin:', admin)
+  return NextResponse.json({ success: false, error: 'Insufficient permissions' }, { status: 403 })
+}
+```
+
+**Layout Restructuring:**
+```typescript
+// Before: Equal columns with overflow
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+// After: 2:1 ratio with proper responsive handling
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div className="lg:col-span-2"> {/* Company Analytics - 2/3 width */}
+  <div className="lg:col-span-1"> {/* Priority Approvals - 1/3 width, compact */}
+```
+
+### Files Modified
+1. `/src/app/api/v1/users/team/route.ts` - Fixed admin permissions and added comprehensive debug logging
+2. `/src/domains/expense-claims/components/monthly-report-generator.tsx` - Enhanced with debug logging and data structure fixes
+3. `/src/domains/expense-claims/components/expense-approval-dashboard.tsx` - Restructured layout with 2:1 column ratio and overflow fixes
+
+### Key Findings
+- **Dashboard Context Matters**: Personal dashboard (`personalOnly={true}`) vs Manager dashboard (`personalOnly={false}`) have different behaviors by design
+- **Permission Model Working**: Admin users have proper permissions, the issue was testing context and API endpoint restrictions
+- **Debug Logging Value**: Comprehensive logging enabled rapid diagnosis and will help with future troubleshooting
+- **UI Responsiveness**: 2:1 column layout provides better space utilization and prevents overflow issues
+
+### Validation Results
+- ‚úÖ Build passes successfully with all changes
+- ‚úÖ Admin permissions properly configured for team API access
+- ‚úÖ Debug logging implemented throughout the data flow
+- ‚úÖ UI layout restructured with requested 2:1 ratio
+- ‚úÖ Text overflow issues resolved with truncation and compact design
+- ‚úÖ All changes maintain existing functionality while fixing identified issues

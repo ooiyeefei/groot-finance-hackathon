@@ -1108,17 +1108,13 @@ export async function updateExpenseClaim(
     let exchangeRate = 1
     let exchangeRateDate = new Date().toISOString().split('T')[0]
 
-    // Determine the target home currency (could be user's default or the form selection)
-    const targetHomeCurrency = request.home_currency || userHomeCurrency
-    const sourceAmount = request.original_amount || existingClaim.total_amount
-    const sourceCurrency = request.original_currency || existingClaim.currency
-
-    if (sourceCurrency && sourceAmount && sourceCurrency !== targetHomeCurrency) {
+    if (request.original_currency && request.original_amount &&
+        request.original_currency !== userHomeCurrency) {
       try {
         const conversion = await currencyService.convertAmount(
-          sourceAmount,
-          sourceCurrency,
-          targetHomeCurrency as any
+          request.original_amount,
+          request.original_currency,
+          userHomeCurrency as any
         )
         homeAmount = conversion.converted_amount
         exchangeRate = conversion.exchange_rate
@@ -1126,10 +1122,6 @@ export async function updateExpenseClaim(
       } catch (error) {
         console.error('Currency conversion failed:', error)
       }
-    } else if (sourceCurrency === targetHomeCurrency) {
-      // Same currency, no conversion needed
-      homeAmount = sourceAmount
-      exchangeRate = 1
     }
 
     // Prepare update data
@@ -1148,8 +1140,8 @@ export async function updateExpenseClaim(
     if (request.reference_number !== undefined) updateData.reference_number = request.reference_number
 
     // Update currency fields
-    if (request.original_currency || request.original_amount || request.home_currency) {
-      updateData.home_currency = request.home_currency || userHomeCurrency
+    if (request.original_currency || request.original_amount) {
+      updateData.home_currency = userHomeCurrency
       updateData.home_currency_amount = homeAmount
       updateData.exchange_rate = exchangeRate
     }
@@ -1336,9 +1328,13 @@ export async function getExpenseAnalytics(
       }
     }
 
-    // Calculate monthly trends
+    // Calculate monthly trends based on submitted_at (or created_at as fallback)
     const monthlyTrends = claims.reduce((acc: any, claim: any) => {
-      const month = new Date(claim.created_at).toISOString().slice(0, 7) + '-01'
+      // Use submitted_at if available, otherwise fall back to created_at
+      const dateToUse = claim.submitted_at || claim.created_at
+      const claimDate = new Date(dateToUse)
+      const month = `${claimDate.getFullYear()}-${(claimDate.getMonth() + 1).toString().padStart(2, '0')}-01`
+
       if (!acc[month]) {
         acc[month] = {
           month,
