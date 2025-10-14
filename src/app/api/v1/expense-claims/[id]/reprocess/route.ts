@@ -93,7 +93,24 @@ export async function POST(
 
     console.log('[Reprocess API] Generated signed URL for reprocessing')
 
-    // Trigger the same Trigger.dev job as upload workflow (server-side with environment variables)
+    // Step 1: Update status to 'analyzing' immediately for instant UI feedback
+    const { error: statusError } = await supabase
+      .from('expense_claims')
+      .update({
+        status: 'analyzing',
+        processing_started_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', expenseClaimId)
+
+    if (statusError) {
+      console.error('[Reprocess API] Failed to update status:', statusError)
+      // Continue anyway - status will be set by Trigger.dev job
+    } else {
+      console.log('[Reprocess API] Status updated to analyzing')
+    }
+
+    // Step 2: Trigger the same Trigger.dev job as upload workflow (server-side with environment variables)
     const triggerResult = await tasks.trigger<typeof extractReceiptData>(
       "extract-receipt-data",
       {

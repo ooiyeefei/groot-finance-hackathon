@@ -36,7 +36,6 @@ export async function GET(request: NextRequest) {
       user_id: searchParams.get('user_id') || undefined,
       date_from: searchParams.get('date_from') || undefined,
       date_to: searchParams.get('date_to') || undefined,
-      claim_month: searchParams.get('claim_month') || undefined,
       search: searchParams.get('search') || undefined,
       sort_by: (searchParams.get('sort_by') as any) || 'created_at',
       sort_order: (searchParams.get('sort_order') as any) || 'desc',
@@ -115,7 +114,7 @@ export async function POST(request: NextRequest) {
       createRequest = {
         description: formData.get('description') as string || 'Receipt Upload',
         business_purpose: formData.get('business_purpose') as string || 'Business Expense',
-        expense_category: expenseCategory || 'GENERAL_EXPENSE',
+        expense_category: expenseCategory, // Keep null for AI processing
         original_amount: parseFloat(formData.get('original_amount') as string) || 0,
         original_currency: (formData.get('original_currency') as string || 'SGD') as any,
         transaction_date: formData.get('transaction_date') as string || new Date().toISOString().split('T')[0],

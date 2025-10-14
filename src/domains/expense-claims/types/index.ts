@@ -15,6 +15,8 @@ export type ExpenseClaimStatus =
   | 'reimbursed'
   | 'failed'
 
+// ExpenseCategory is now fully dynamic based on business configuration
+// Categories come from businesses.custom_expense_categories JSONB field
 export type ExpenseCategory = string
 
 export interface ExpenseLineItemRequest {
@@ -29,7 +31,7 @@ export interface CreateExpenseClaimRequest {
   // Basic expense information
   description: string
   business_purpose: string
-  expense_category: ExpenseCategory
+  expense_category: ExpenseCategory | null // Allow null for AI processing
   original_amount: number
   original_currency: SupportedCurrency
   transaction_date: string
@@ -57,6 +59,7 @@ export interface UpdateExpenseClaimRequest {
   expense_category?: ExpenseCategory
   original_amount?: number
   original_currency?: SupportedCurrency
+  home_currency?: SupportedCurrency
   transaction_date?: string
   vendor_name?: string
   vendor_id?: string
@@ -82,7 +85,6 @@ export interface ExpenseClaimListParams {
   user_id?: string
   date_from?: string
   date_to?: string
-  claim_month?: string
   search?: string
   sort_by?: 'submission_date' | 'submitted_at' | 'amount' | 'status' | 'created_at'
   sort_order?: 'asc' | 'desc'
@@ -103,7 +105,6 @@ export interface ExpenseClaim {
   business_purpose: string
   business_purpose_details?: string | null
   expense_category: ExpenseCategory
-  claim_month: string
 
   // Financial fields
   vendor_name?: string

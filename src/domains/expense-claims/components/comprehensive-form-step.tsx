@@ -6,7 +6,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, AlertCircle, CheckCircle, Loader2, Eye, AlertTriangle, Users } from 'lucide-react'
+import { Plus, Trash2, AlertCircle, CheckCircle, Loader2, Eye, AlertTriangle, Users, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -162,9 +162,9 @@ export default function ComprehensiveFormStep({
       {/* OCR Processing Status */}
       {processing && (
         <Alert className="bg-blue-900/20 border-blue-700">
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Brain className="w-4 h-4 animate-spin" />
           <AlertDescription className="text-blue-400">
-            Processing receipt with AI... This may take a few moments.
+            AI Analyzing... This may take a few moments.
           </AlertDescription>
         </Alert>
       )}

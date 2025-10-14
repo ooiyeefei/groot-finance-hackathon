@@ -197,7 +197,27 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 
       console.log('[Dashboard] Starting AI reprocessing for claim:', claimId)
 
-      // Call server-side API endpoint instead of client-side Trigger.dev call
+      // Step 1: Update status to 'analyzing' immediately for UI feedback
+      try {
+        const statusResponse = await fetch(`/api/v1/expense-claims/${claimId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'analyzing' })
+        })
+
+        if (statusResponse.ok) {
+          console.log('[Dashboard] Status updated to analyzing')
+          // Refresh UI immediately to show analyzing status
+          fetchDashboardData()
+        }
+      } catch (statusError) {
+        console.warn('[Dashboard] Failed to update status to analyzing:', statusError)
+        // Continue with reprocessing even if status update fails
+      }
+
+      // Step 2: Call server-side API endpoint to start Trigger.dev job
       const response = await fetch(`/api/v1/expense-claims/${claimId}/reprocess`, {
         method: 'POST',
         headers: {
@@ -225,6 +245,9 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       console.error('Reprocess error:', error)
       setToastType('error')
       setToastMessage(error instanceof Error ? error.message : 'Failed to reprocess expense claim')
+
+      // If reprocessing failed, refresh data to show current status
+      fetchDashboardData()
     } finally {
       setReprocessingClaims(prev => {
         const newSet = new Set(prev)
@@ -472,10 +495,9 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
             // Refresh dashboard data after deletion
             fetchDashboardData()
           }}
-          onReprocess={async () => {
-            // Reprocess NOT IMPLEMENTED in North Star v1 API
-            // TODO: Reprocessing is not part of the 5 core CRUD endpoints
-            throw new Error('Reprocess functionality not implemented yet')
+          onReprocess={() => {
+            // Trigger refresh after reprocessing is complete
+            fetchDashboardData()
           }}
         />
       )}
@@ -686,7 +708,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
             >
               {/* Show appropriate processing icon based on status */}
               {claim.status === 'analyzing' ? (
-                <Brain className="w-3 h-3 mr-1 text-blue-400 animate-pulse" />
+                <Brain className="w-3 h-3 mr-1 text-blue-400 animate-spin" />
               ) : claim.status_display?.isProcessing ? (
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" />
               ) : null}
@@ -788,11 +810,11 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
             className="inline-flex items-center px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors"
           >
             {reprocessingClaims.has(claim.id) ? (
-              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              <Brain className="w-4 h-4 mr-1.5 animate-spin" />
             ) : (
               <RotateCcw className="w-4 h-4 mr-1.5" />
             )}
-            {reprocessingClaims.has(claim.id) ? 'Processing...' : 'Re-extract'}
+            {reprocessingClaims.has(claim.id) ? 'AI Analyzing...' : 'Re-extract'}
           </button>
         )}
 

@@ -75,6 +75,9 @@ export interface ExpenseFormFieldsProps {
   onReprocessClick?: () => void
   isReprocessing?: boolean
 
+  // AI Processing status (NEW)
+  aiProcessingStatus?: 'idle' | 'processing' | 'completed' | 'failed'
+
   // Mode-specific props
   mode?: 'create' | 'edit'
   showReceiptUpload?: boolean
@@ -276,6 +279,7 @@ export default function ExpenseFormFields({
   isManualEntry,
   onReprocessClick,
   isReprocessing = false,
+  aiProcessingStatus = 'idle',
   mode = 'edit',
   showReceiptUpload = false,
   onReceiptUpload,
@@ -312,8 +316,8 @@ export default function ExpenseFormFields({
         </Alert>
       )}
 
-      {/* AI Suggestions - Show bulk suggestions when available */}
-      {aiSuggestions.length > 0 && (
+      {/* AI Suggestions - Show bulk suggestions when available or processing */}
+      {(aiSuggestions.length > 0 || aiProcessingStatus === 'processing' || aiProcessingStatus === 'failed') && (
         <BulkSuggestions
           suggestions={aiSuggestions}
           onAcceptAll={onAcceptAllSuggestions}
@@ -321,6 +325,8 @@ export default function ExpenseFormFields({
           onFieldAccept={onAcceptSuggestion}
           onFieldReject={onRejectSuggestion}
           dismissedFields={dismissedSuggestions}
+          isProcessing={isReprocessing}
+          processingStatus={aiProcessingStatus || 'idle'}
         />
       )}
 

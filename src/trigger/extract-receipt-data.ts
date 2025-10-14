@@ -74,10 +74,11 @@ export const extractReceiptData = task({
     const tableName = DOMAIN_TABLE_MAP[documentDomain];
     console.log(`🔍 Using table: ${tableName} for domain: ${documentDomain}`);
 
+    // Step 1: Fetch business categories for enhanced categorization (if expense claim provided)
+    let businessCategories: any[] = [];
+    let expenseClaim: any = null;
+
     try {
-      // Step 1: Fetch business categories for enhanced categorization (if expense claim provided)
-      let businessCategories: any[] = [];
-      let expenseClaim: any = null;
 
       if (payload.expenseClaimId) {
         console.log(`🏢 Fetching business categories for AI categorization`);
@@ -85,7 +86,7 @@ export const extractReceiptData = task({
         // Get the expense claim and its business_id
         const { data: fetchedExpenseClaim, error: fetchError } = await supabase
           .from('expense_claims')
-          .select('id, accounting_entry_id, business_id, storage_path, converted_image_path, file_name')
+          .select('id, accounting_entry_id, business_id, storage_path, converted_image_path, file_name, processing_metadata, vendor_name, total_amount, status')
           .eq('id', payload.expenseClaimId)
           .single();
 
@@ -401,16 +402,60 @@ export const extractReceiptData = task({
     } catch (error) {
       console.error("❌ AI extraction task failed:", error);
 
-      // Update expense claim status to failed if expenseClaimId provided ✅ Unified status
+      // Smart failure handling based on processing context
       if (payload.expenseClaimId) {
+        // Re-fetch expense claim data if not available (fallback for edge cases)
+        if (!expenseClaim) {
+          const { data: fetchedClaim } = await supabase
+            .from('expense_claims')
+            .select('processing_metadata, vendor_name, total_amount, status')
+            .eq('id', payload.expenseClaimId)
+            .single();
+          expenseClaim = fetchedClaim;
+        }
+
+        // Check if this claim has previous successful processing data
+        const hasPreviousData = expenseClaim && (
+          (expenseClaim.processing_metadata?.extraction_method === 'ai' && expenseClaim.processing_metadata?.extraction_timestamp) ||
+          (expenseClaim.vendor_name && expenseClaim.total_amount > 0) ||
+          expenseClaim.status === 'draft' // Already had some form data
+        );
+
+        console.log(`🔍 Processing failure context - Has previous data: ${hasPreviousData}`);
+
+        const failureMetadata = {
+          extraction_method: 'ai',
+          extraction_timestamp: new Date().toISOString(),
+          ai_processing_status: 'failed',
+          error_message: error instanceof Error ? error.message : 'AI processing failed',
+          failed_at: new Date().toISOString(),
+          processing_type: hasPreviousData ? 'reprocessing' : 'initial_processing'
+        };
+
+        // Smart status determination
+        let targetStatus: string;
+        let logMessage: string;
+
+        if (hasPreviousData) {
+          // Reprocessing scenario: Keep form editable by returning to draft
+          targetStatus = 'draft';
+          logMessage = `🔄 Expense claim ${payload.expenseClaimId} returned to draft status after reprocessing failure (has previous data)`;
+        } else {
+          // First-time processing scenario: Mark as failed since no fallback data exists
+          targetStatus = 'failed';
+          logMessage = `❌ Expense claim ${payload.expenseClaimId} marked as failed after initial processing failure (no previous data)`;
+        }
+
         await supabase
           .from('expense_claims')
           .update({
-            status: 'failed', // ✅ Unified status field
-            error_message: error instanceof Error ? error.message : 'AI processing failed',
-            failed_at: new Date().toISOString()
+            status: targetStatus,
+            processing_metadata: failureMetadata,
+            updated_at: new Date().toISOString()
           })
           .eq('id', payload.expenseClaimId);
+
+        console.log(logMessage);
       }
 
       throw error;
