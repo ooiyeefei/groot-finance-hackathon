@@ -52,8 +52,8 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
       setLoading(true)
       console.log('[EnhancedApprovalDashboard] Fetching dashboard data...')
 
-      // Use the regular expense claims endpoint which returns role info and summary data
-      const response = await fetch('/api/v1/expense-claims?limit=50&sort_order=desc', {
+      // Use the regular expense claims endpoint with approver=me to get role info and summary data
+      const response = await fetch('/api/v1/expense-claims?limit=50&sort_order=desc&approver=me', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -89,6 +89,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           summary,
           recent_claims_count: claims.length
         })
+        console.log('[EnhancedApprovalDashboard] Role check - admin:', role.admin, 'manager:', role.manager)
 
         setDashboardData({
           role,
@@ -598,9 +599,9 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     <span className="text-white font-semibold">
                       {claim.original_amount} {claim.original_currency}
                     </span>
-                    {claim.original_currency !== claim.home_currency && (
+                    {claim.original_currency !== claim.home_currency && claim.converted_amount && (
                       <span className="text-gray-400 text-sm">
-                        (${claim.converted_amount.toFixed(2)})
+                        (${parseFloat(claim.converted_amount).toFixed(2)})
                       </span>
                     )}
                   </div>
