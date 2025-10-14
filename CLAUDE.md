@@ -14,15 +14,41 @@ FinanSEAL is a multimodal financial co-pilot web application designed for Southe
 ## Architecture
 
 - **Frontend**: Next.js 15.4.6 with App Router, TypeScript, Tailwind CSS
-- **Backend**: Next.js API routes with serverless functions
+- **Backend**: Next.js API routes with serverless functions (API v1 versioned)
 - **Database**: Supabase PostgreSQL with Row Level Security (RLS)
 - **Authentication**: Clerk for user management
 - **Vector Database**: Qdrant Cloud for embedding storage
 - **AI Models**: Hugging Face Inference API (ColNomic Embed Multimodal 3B for OCR)
 - **Background Jobs**: Trigger.dev v3 with Python runtime for long-running tasks
 - **Document Processing**: PDF-to-image conversion with multimodal OCR extraction
-- **Image Annotation**: Python + OpenCV for professional computer vision processing  
+- **Image Annotation**: Python + OpenCV for professional computer vision processing
 - **Currency APIs**: Real-time exchange rate conversion with caching
+
+### Domain-Driven Architecture (2025)
+
+The codebase follows a domain-driven design with strict separation of concerns:
+
+```
+src/domains/
+├── account-management/     # Multi-tenancy, business management, team invitations
+├── analytics/              # Financial dashboards, real-time metrics, forecasting
+├── applications/           # Business application workflows, document processing
+├── audit/                  # System audit logs, compliance tracking
+├── chat/                   # AI assistant, conversation management, citations
+├── expense-claims/         # Employee expense submission, manager approval workflows
+├── invoices/              # Document processing, OCR extraction, transaction creation
+├── system/                # System configuration, knowledge base, webhooks
+├── tasks/                 # Background job monitoring, task status tracking
+├── users/                 # User profiles, team management, role assignment
+└── utilities/             # Shared utilities, currency conversion, translation
+```
+
+**Domain Principles:**
+- **Self-contained**: Each domain manages its own components, hooks, services
+- **API Isolation**: Domain-specific API routes under `/api/v1/{domain}/`
+- **Shared Dependencies**: Common utilities in `/src/lib/` for cross-domain needs
+- **Type Safety**: Domain-specific types and interfaces
+- **Component Reuse**: Controlled sharing through well-defined interfaces
 
 ## Key Features
 
