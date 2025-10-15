@@ -88,7 +88,6 @@ export interface ExpenseClaim {
 
   // Expense-specific fields
   expense_category: ExpenseCategory // Dynamic category code from businesses.custom_expense_categories
-  claim_month: string // YYYY-MM format for monthly reporting
   
   // Related data
   transaction?: Transaction
@@ -184,7 +183,6 @@ export interface ExpenseClaimListParams {
   user_id?: string
   date_from?: string
   date_to?: string
-  claim_month?: string
   search?: string
   sort_by?: 'submission_date' | 'amount' | 'status' | 'employee_name'
   sort_order?: 'asc' | 'desc'
