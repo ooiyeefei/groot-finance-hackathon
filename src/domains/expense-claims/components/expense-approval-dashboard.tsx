@@ -51,7 +51,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/v1/expense-claims/analytics', {
+      const response = await fetch('/api/v1/expense-claims?approver=me', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -108,25 +108,25 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <ManagementSummaryCard
           title="Pending Approvals"
-          value={dashboardData.summary.pending_approval.toString()}
+          value={dashboardData?.summary?.pending_approval?.toString() || '0'}
           icon={<Clock className="w-5 h-5" />}
           variant="warning"
         />
         <ManagementSummaryCard
           title="Approved Amount"
-          value={`$${dashboardData.summary.approved_amount.toFixed(2)}`}
+          value={`$${(dashboardData?.summary?.approved_amount || 0).toFixed(2)}`}
           icon={<CheckCircle className="w-5 h-5" />}
           variant="success"
         />
         <ManagementSummaryCard
           title="Total Claims"
-          value={dashboardData.summary.total_claims.toString()}
+          value={dashboardData?.summary?.total_claims?.toString() || '0'}
           icon={<User className="w-5 h-5" />}
           variant="default"
         />
         <ManagementSummaryCard
           title="Rejected Claims"
-          value={dashboardData.summary.rejected_count.toString()}
+          value={dashboardData?.summary?.rejected_count?.toString() || '0'}
           icon={<XCircle className="w-5 h-5" />}
           variant="error"
         />
@@ -147,7 +147,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <TabsTrigger value="approvals" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
             Approvals
           </TabsTrigger>
-          {dashboardData.role.admin && (
+          {dashboardData?.role?.admin && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
               Reimbursements
             </TabsTrigger>
@@ -168,18 +168,18 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <ApprovalTabContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
         </TabsContent>
 
-        {dashboardData.role.admin && (
+        {dashboardData?.role?.admin && (
           <TabsContent value="reimbursements" className="space-y-4">
             <ReimbursementQueueContent data={dashboardData} />
           </TabsContent>
         )}
 
         <TabsContent value="categories" className="space-y-4">
-          <CategoryManagement userRole={dashboardData.role} />
+          <CategoryManagement userRole={dashboardData?.role || { employee: true, manager: false, admin: false }} />
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
-          <ManagementReportsContent userRole={dashboardData.role} />
+          <ManagementReportsContent userRole={dashboardData?.role || { employee: true, manager: false, admin: false }} />
         </TabsContent>
       </Tabs>
     </div>
@@ -204,7 +204,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
             <CardDescription>Real-time expense insights</CardDescription>
           </CardHeader>
           <CardContent>
-            <ExpenseAnalytics scope={data.role.admin ? "company" : "department"} />
+            <ExpenseAnalytics scope={data?.role?.admin ? "company" : "department"} />
           </CardContent>
         </Card>
       </div>
@@ -220,7 +220,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
             <CardDescription className="text-sm">Claims requiring immediate attention</CardDescription>
           </CardHeader>
           <CardContent className="p-4">
-            {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length === 0 ? (
+            {(data?.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length === 0 ? (
               <div className="text-center text-gray-400 py-6">
                 <CheckCircle className="w-8 h-8 mx-auto mb-3" />
                 <p className="text-sm">No pending approvals</p>
@@ -228,7 +228,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
               </div>
             ) : (
               <div className="space-y-2">
-                {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).slice(0, 6).map((claim: any) => (
+                {(data?.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).slice(0, 6).map((claim: any) => (
                   <button
                     key={claim.id}
                     className="w-full flex items-center justify-between p-2 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -241,9 +241,9 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                         {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                       </p>
                       <p className="text-gray-400 text-xs truncate">
-                        {(claim.transaction?.description || claim.description)?.length > 20
-                          ? `${(claim.transaction?.description || claim.description)?.substring(0, 20)}...`
-                          : (claim.transaction?.description || claim.description)
+                        {claim.description?.length > 20
+                          ? `${claim.description?.substring(0, 20)}...`
+                          : claim.description
                         }
                       </p>
                       <p className="text-gray-500 text-xs">
@@ -252,7 +252,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                     </div>
                     <div className="text-right ml-2">
                       <p className="text-white text-xs font-medium">
-                        ${parseFloat(claim.transaction?.home_currency_amount || '0').toFixed(0)}
+                        ${parseFloat(claim.home_currency_amount || claim.total_amount || '0').toFixed(0)}
                       </p>
                       <p className="text-yellow-400 text-xs">
                         {new Date(claim.created_at).toLocaleDateString('en-US', {
@@ -263,7 +263,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                     </div>
                   </button>
                 ))}
-                {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length > 6 && (
+                {(data?.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length > 6 && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -271,7 +271,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                     onClick={() => setActiveTab('approvals')}
                   >
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    Review all {data.recent_claims.filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length}
+                    Review all {(data?.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length}
                   </Button>
                 )}
               </div>
@@ -295,7 +295,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
         <CardDescription>Approved claims ready for payment processing</CardDescription>
       </CardHeader>
       <CardContent>
-        {data.recent_claims.filter(claim => claim.status === 'approved').length === 0 ? (
+        {(data?.recent_claims || []).filter(claim => claim.status === 'approved').length === 0 ? (
           <div className="text-center text-gray-400 py-12">
             <CheckCircle className="w-12 h-12 mx-auto mb-4" />
             <p>No pending reimbursements</p>
@@ -307,7 +307,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
             <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
               <div className="flex items-center gap-4">
                 <input type="checkbox" className="rounded border-gray-600" />
-                <span className="text-white font-medium">Select All ({data.recent_claims.filter(claim => claim.status === 'approved').length} claims)</span>
+                <span className="text-white font-medium">Select All ({(data?.recent_claims || []).filter(claim => claim.status === 'approved').length} claims)</span>
               </div>
               <div className="flex gap-2">
                 <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white">
@@ -322,7 +322,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
 
             {/* Reimbursement Items */}
             <div className="space-y-2">
-              {data.recent_claims.filter(claim => claim.status === 'approved').map((claim: any) => (
+              {(data?.recent_claims || []).filter(claim => claim.status === 'approved').map((claim: any) => (
                 <div key={claim.id} className="flex items-center gap-4 p-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors">
                   <input type="checkbox" className="rounded border-gray-600" />
                   <div className="flex-1">
@@ -332,13 +332,13 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
                           {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                         </p>
                         <p className="text-gray-400 text-xs">
-                          {claim.employee?.department || 'No Department'} • 
-                          {claim.transaction?.description || 'Expense Claim'}
+                          {claim.employee?.department || 'No Department'} •
+                          {claim.description || 'Expense Claim'}
                         </p>
                       </div>
                       <div className="text-right">
                         <p className="text-white font-semibold">
-                          ${parseFloat(claim.transaction?.home_currency_amount || '0').toFixed(2)}
+                          ${parseFloat(claim.home_currency_amount || claim.total_amount || '0').toFixed(2)}
                         </p>
                         <p className="text-green-400 text-xs">
                           Approved {new Date(claim.approval_date || claim.created_at).toLocaleDateString()}
@@ -587,7 +587,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     </span>
                     {claim.original_currency !== claim.home_currency && (
                       <span className="text-gray-400 text-sm">
-                        (${claim.converted_amount.toFixed(2)})
+                        (${(claim.converted_amount || 0).toFixed(2)})
                       </span>
                     )}
                   </div>
