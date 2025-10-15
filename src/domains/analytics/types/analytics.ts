@@ -45,15 +45,12 @@ export interface AnalyticsTrends {
 
 export interface AnalyticsResponse {
   success: boolean;
-  analytics: AnalyticsData;
-  trends?: AnalyticsTrends;
-  previous_period?: AnalyticsData;
-  period_info: {
-    period: 'month' | 'quarter' | 'year';
-    start: string;
-    end: string;
-    home_currency: SupportedCurrency;
+  data: {
+    analytics: AnalyticsData;
+    trends?: AnalyticsTrends;
+    previous_period?: AnalyticsData;
   };
+  error?: string;
 }
 
 export interface DashboardProps {

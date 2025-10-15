@@ -139,17 +139,22 @@ export async function calculateFinancialAnalyticsRPC(
       throw new Error(`RPC analytics calculation failed: ${rpcError.message}`);
     }
 
-    if (!rpcResult) {
+    if (!rpcResult || !Array.isArray(rpcResult) || rpcResult.length === 0) {
       console.log('[Analytics RPC] No data returned from RPC function');
       // Return zero analytics for empty result
       return createEmptyAnalytics(supabaseUserId, periodStart, periodEnd);
     }
 
+    // ✅ FIX: RPC TABLE functions return array, get first row
+    const result = rpcResult[0];
+
     console.log('[Analytics RPC] RPC function completed successfully');
+    console.log('[Analytics RPC] Full RPC result structure:', JSON.stringify(rpcResult, null, 2));
+    console.log('[Analytics RPC] First result object keys:', Object.keys(result || {}));
     console.log('[Analytics RPC] Raw RPC result sample:', {
-      total_income: rpcResult.total_income,
-      total_expenses: rpcResult.total_expenses,
-      transaction_count: rpcResult.transaction_count
+      total_income: result?.total_income,
+      total_expenses: result?.total_expenses,
+      transaction_count: result?.transaction_count
     });
 
     // Transform RPC result to expected FinancialAnalytics interface
@@ -157,26 +162,26 @@ export async function calculateFinancialAnalyticsRPC(
       user_id: supabaseUserId,
       period_start: periodStart,
       period_end: periodEnd,
-      total_income: rpcResult.total_income || 0,
-      total_expenses: rpcResult.total_expenses || 0,
-      net_profit: rpcResult.net_profit || 0,
-      transaction_count: rpcResult.transaction_count || 0,
+      total_income: Number(result.total_income) || 0,
+      total_expenses: Number(result.total_expenses) || 0,
+      net_profit: Number(result.net_profit) || 0,
+      transaction_count: Number(result.transaction_count) || 0,
 
       // Parse JSON strings from RPC response
-      currency_breakdown: rpcResult.currency_breakdown ?
-        (typeof rpcResult.currency_breakdown === 'string' ?
-          JSON.parse(rpcResult.currency_breakdown) : rpcResult.currency_breakdown) : {},
-      category_breakdown: rpcResult.category_breakdown ?
-        (typeof rpcResult.category_breakdown === 'string' ?
-          JSON.parse(rpcResult.category_breakdown) : rpcResult.category_breakdown) : {},
+      currency_breakdown: result.currency_breakdown ?
+        (typeof result.currency_breakdown === 'string' ?
+          JSON.parse(result.currency_breakdown) : result.currency_breakdown) : {},
+      category_breakdown: result.category_breakdown ?
+        (typeof result.category_breakdown === 'string' ?
+          JSON.parse(result.category_breakdown) : result.category_breakdown) : {},
 
       // Enhanced aged receivables with risk distribution
       aged_receivables: {
-        current: rpcResult.aged_receivables?.current || 0,
-        late_31_60: rpcResult.aged_receivables?.late_31_60 || 0,
-        late_61_90: rpcResult.aged_receivables?.late_61_90 || 0,
-        late_90_plus: rpcResult.aged_receivables?.late_90_plus || 0,
-        total_outstanding: rpcResult.aged_receivables?.total_outstanding || 0,
+        current: result.aged_receivables?.current || 0,
+        late_31_60: result.aged_receivables?.late_31_60 || 0,
+        late_61_90: result.aged_receivables?.late_61_90 || 0,
+        late_90_plus: result.aged_receivables?.late_90_plus || 0,
+        total_outstanding: result.aged_receivables?.total_outstanding || 0,
         // Enhanced fields with default values
         risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
         average_risk_score: 0,
@@ -185,11 +190,11 @@ export async function calculateFinancialAnalyticsRPC(
 
       // Enhanced aged payables with risk distribution
       aged_payables: {
-        current: rpcResult.aged_payables?.current || 0,
-        late_31_60: rpcResult.aged_payables?.late_31_60 || 0,
-        late_61_90: rpcResult.aged_payables?.late_61_90 || 0,
-        late_90_plus: rpcResult.aged_payables?.late_90_plus || 0,
-        total_outstanding: rpcResult.aged_payables?.total_outstanding || 0,
+        current: result.aged_payables?.current || 0,
+        late_31_60: result.aged_payables?.late_31_60 || 0,
+        late_61_90: result.aged_payables?.late_61_90 || 0,
+        late_90_plus: result.aged_payables?.late_90_plus || 0,
+        total_outstanding: result.aged_payables?.total_outstanding || 0,
         // Enhanced fields with default values
         risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
         average_risk_score: 0,

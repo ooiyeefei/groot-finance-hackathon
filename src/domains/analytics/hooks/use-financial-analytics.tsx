@@ -112,9 +112,9 @@ export default function useFinancialAnalytics(
 
   // Map TanStack Query results to the original hook interface
   return {
-    analytics: data?.analytics || null,
-    trends: data?.trends || null,
-    previousPeriod: data?.previous_period || null,
+    analytics: data?.data?.analytics || null,
+    trends: data?.data?.trends || null,
+    previousPeriod: data?.data?.previous_period || null,
     loading: isLoading,
     error: isError ? (error instanceof Error ? error.message : 'Failed to fetch analytics') : null,
     refresh,
@@ -199,12 +199,12 @@ export function useRealtimeAnalytics(
   });
 
   return {
-    analytics: data?.analytics || null,
+    analytics: data?.data?.analytics || null,
     loading: isLoading,
     error: isError ? (error instanceof Error ? error.message : 'Failed to fetch real-time analytics') : null,
     refresh: refetch,
     lastUpdated: dataUpdatedAt ? new Date(dataUpdatedAt) : null,
-    performance: data?.performance || null
+    performance: data?.data?.performance || null
   };
 }
 
@@ -246,7 +246,7 @@ export function useBatchAnalytics(periods: Array<{
       }
 
       const result = await response.json();
-      setData(result.results || []);
+      setData(result.data?.results || []);
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch batch analytics';
