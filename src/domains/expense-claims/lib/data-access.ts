@@ -44,6 +44,7 @@ const VALID_EXPENSE_TRANSITIONS = [
   { from: 'draft', to: 'submitted' },
   { from: 'submitted', to: 'draft' }, // Recall
   { from: 'rejected', to: 'draft' }, // Revise
+  { from: 'rejected', to: 'approved' }, // Manager can approve previously rejected claims
   { from: 'submitted', to: 'approved' }, // Approve
   { from: 'submitted', to: 'rejected' }, // Reject
   { from: 'approved', to: 'reimbursed' }, // Reimburse
