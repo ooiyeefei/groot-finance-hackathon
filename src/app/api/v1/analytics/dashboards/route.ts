@@ -72,18 +72,10 @@ export async function GET(request: NextRequest) {
         }, { status: 400 })
       }
     } else {
-      // Use standard period
+      // Use standard period - no special overrides needed
       const periodDates = getAnalyticsPeriod(period)
-
-      // Special handling for month: 60-day rolling window
-      if (period === 'month') {
-        endDate = new Date()
-        startDate = new Date()
-        startDate.setDate(endDate.getDate() - 61)
-      } else {
-        startDate = periodDates.start
-        endDate = periodDates.end
-      }
+      startDate = periodDates.start
+      endDate = periodDates.end
     }
 
     const options = {
