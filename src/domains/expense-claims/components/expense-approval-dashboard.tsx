@@ -17,7 +17,6 @@ import { Textarea } from '@/components/ui/textarea'
 import ExpenseAnalytics from './expense-analytics'
 import MonthlyReportGenerator from './monthly-report-generator'
 import GoogleSheetsExport from './google-sheets-export'
-import CategoryManagement from './category-management'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
 
@@ -140,7 +139,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           fetchDashboardData()
         }
       }} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 bg-gray-800 border border-gray-700">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-gray-800 border border-gray-700">
           <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
             Overview
           </TabsTrigger>
@@ -152,9 +151,6 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
               Reimbursements
             </TabsTrigger>
           )}
-          <TabsTrigger value="categories" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">
-            Categories
-          </TabsTrigger>
           <TabsTrigger value="reports" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
             Reports
           </TabsTrigger>
@@ -173,10 +169,6 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
             <ReimbursementQueueContent data={dashboardData} />
           </TabsContent>
         )}
-
-        <TabsContent value="categories" className="space-y-4">
-          <CategoryManagement userRole={dashboardData?.role || { employee: true, manager: false, admin: false }} />
-        </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
           <ManagementReportsContent userRole={dashboardData?.role || { employee: true, manager: false, admin: false }} />
@@ -220,7 +212,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
             <CardDescription className="text-sm">Claims requiring immediate attention</CardDescription>
           </CardHeader>
           <CardContent className="p-4">
-            {(data?.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length === 0 ? (
+            {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').length === 0 ? (
               <div className="text-center text-gray-400 py-6">
                 <CheckCircle className="w-8 h-8 mx-auto mb-3" />
                 <p className="text-sm">No pending approvals</p>
@@ -228,7 +220,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
               </div>
             ) : (
               <div className="space-y-2">
-                {(data?.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).slice(0, 6).map((claim: any) => (
+                {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').slice(0, 6).map((claim: any) => (
                   <button
                     key={claim.id}
                     className="w-full flex items-center justify-between p-2 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -263,7 +255,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                     </div>
                   </button>
                 ))}
-                {(data?.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length > 6 && (
+                {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').length > 6 && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -271,7 +263,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                     onClick={() => setActiveTab('approvals')}
                   >
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    Review all {(data?.recent_claims || []).filter(claim => ['submitted', 'pending_approval'].includes(claim.status)).length}
+                    Review all {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').length}
                   </Button>
                 )}
               </div>
@@ -461,7 +453,8 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
     try {
       setLoading(true)
       console.log('[ApprovalsList] Fetching pending claims...')
-      const response = await fetch('/api/v1/expense-claims?approver=me')
+      // Only fetch claims that are submitted and pending approval
+      const response = await fetch('/api/v1/expense-claims?approver=me&status=submitted')
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -471,8 +464,10 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
       console.log('[ApprovalsList] API response:', result)
 
       if (result.success) {
-        console.log('[ApprovalsList] Found claims:', result.data.claims.length)
-        setClaims(result.data.claims || [])
+        // Filter to only show submitted claims (double-check on client side)
+        const submittedClaims = (result.data.claims || []).filter((claim: any) => claim.status === 'submitted')
+        console.log('[ApprovalsList] Found submitted claims:', submittedClaims.length)
+        setClaims(submittedClaims)
         setError(null)
       } else {
         console.error('[ApprovalsList] API error:', result.error)
@@ -583,17 +578,19 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                   <div className="flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-gray-400" />
                     <span className="text-white font-semibold">
-                      {claim.original_amount} {claim.original_currency}
+                      {claim.total_amount} {claim.currency}
                     </span>
-                    {claim.original_currency !== claim.home_currency && (
+                    {claim.currency !== claim.home_currency && (
                       <span className="text-gray-400 text-sm">
-                        (${(claim.converted_amount || 0).toFixed(2)})
+                        (${(claim.home_currency_amount || 0).toFixed(2)})
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     <Tag className="w-4 h-4 text-gray-400" />
-                    <span className="text-gray-300">{claim.category_name}</span>
+                    <span className="text-gray-300">
+                      {claim.expense_category?.replace('_', ' ').split(' ').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                    </span>
                   </div>
                 </div>
 

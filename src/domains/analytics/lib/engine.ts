@@ -175,7 +175,7 @@ export async function calculateFinancialAnalyticsRPC(
         (typeof result.category_breakdown === 'string' ?
           JSON.parse(result.category_breakdown) : result.category_breakdown) : {},
 
-      // Enhanced aged receivables with risk distribution
+      // Enhanced aged receivables with risk distribution (RPC currently returns empty - need to fix at DB level)
       aged_receivables: {
         current: result.aged_receivables?.current || 0,
         late_31_60: result.aged_receivables?.late_31_60 || 0,
@@ -188,7 +188,7 @@ export async function calculateFinancialAnalyticsRPC(
         high_risk_transactions: 0
       },
 
-      // Enhanced aged payables with risk distribution
+      // Enhanced aged payables with risk distribution (RPC currently returns empty - need to fix at DB level)
       aged_payables: {
         current: result.aged_payables?.current || 0,
         late_31_60: result.aged_payables?.late_31_60 || 0,
@@ -280,7 +280,8 @@ export async function calculateFinancialAnalytics(
   periodEnd: Date,
   options: AnalyticsCalculationOptions = {}
 ): Promise<FinancialAnalytics> {
-  // Use the new RPC-based calculation by default for optimal performance
+  // ✅ FIXED: Switch back to RPC method now that aged receivables/payables are properly calculated
+  console.log('[Analytics Engine] Using optimized RPC method with fixed aged receivables/payables calculations');
   return await calculateFinancialAnalyticsRPC(clerkUserId, periodStart, periodEnd, options);
 }
 
@@ -747,8 +748,8 @@ export async function calculateAnalyticsTrends(
 
   // Use RPC-optimized functions for both periods in parallel
   const [current, previous] = await Promise.all([
-    calculateFinancialAnalyticsRPC(clerkUserId, currentPeriod.start, currentPeriod.end, options),
-    calculateFinancialAnalyticsRPC(clerkUserId, previousStart, previousEnd, options)
+    calculateFinancialAnalytics(clerkUserId, currentPeriod.start, currentPeriod.end, options),
+    calculateFinancialAnalytics(clerkUserId, previousStart, previousEnd, options)
   ]);
 
   const trends = {

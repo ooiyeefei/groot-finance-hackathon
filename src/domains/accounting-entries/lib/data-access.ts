@@ -19,9 +19,10 @@ export interface AccountingEntry {
   id: string
   user_id: string
   business_id?: string
-  document_id?: string
+  source_record_id?: string
   transaction_type: string
   category: string
+  category_name?: string // Resolved human-readable category name from business categories
   subcategory?: string
   description: string
   reference_number?: string
@@ -266,7 +267,7 @@ export async function createAccountingEntry(
       .insert({
         user_id: userData.id,
         business_id: userData.business_id,
-        document_id: source_document_id || null,
+        source_record_id: source_document_id || null,
         transaction_type,
         category: finalCategory,
         subcategory: finalSubcategory,
@@ -557,6 +558,39 @@ export async function getAccountingEntryById(
     if (error || !accountingEntry) {
       console.error('[Accounting Entries Data Access] Entry not found or access denied:', error)
       return { success: false, error: 'Accounting entry not found or access denied' }
+    }
+
+    // Fetch related expense claim separately (since FK is on expense_claims table)
+    const { data: expenseClaims, error: expenseClaimError } = await supabase
+      .from('expense_claims')
+      .select(`
+        id,
+        status,
+        business_purpose,
+        created_at
+      `)
+      .eq('accounting_entry_id', entryId)
+      .eq('user_id', userData.id)
+
+    // Attach expense claims to the accounting entry (should be at most one)
+    if (!expenseClaimError && expenseClaims && expenseClaims.length > 0) {
+      accountingEntry.expense_claims = expenseClaims
+    } else {
+      accountingEntry.expense_claims = []
+    }
+
+    // Resolve category name using dynamic business categories
+    if (userData.business_id && accountingEntry.transaction_type && accountingEntry.category) {
+      try {
+        const categoryData = await fetchDynamicCategories(supabase, userData.business_id, accountingEntry.transaction_type)
+        const categoryIndex = categoryData.codes.indexOf(accountingEntry.category)
+        if (categoryIndex !== -1 && categoryData.names[categoryIndex]) {
+          accountingEntry.category_name = categoryData.names[categoryIndex]
+        }
+      } catch (error) {
+        console.error('[Accounting Entries Data Access] Failed to resolve category name:', error)
+        // Continue without category name resolution
+      }
     }
 
     return {

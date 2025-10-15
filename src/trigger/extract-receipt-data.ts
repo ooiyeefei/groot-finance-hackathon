@@ -143,23 +143,83 @@ export const extractReceiptData = task({
         throw new Error('No image URL or image data available for processing');
       }
 
-      // Step 3: Run AI extraction using Python script
+      // Step 3: Run AI extraction using Python script with enhanced error handling
       console.log("🐍 Running AI extraction...");
 
-      const result = await python.runScript(
-        "./src/python/extract_receipt_data.py",
-        [JSON.stringify({
-          imageUrl: imageUrl,
-          imageData: payload.receiptImageData,
-          businessCategories: businessCategories,
-          receiptText: payload.receiptText || '',
-          forcedProcessingMethod: payload.forcedProcessingMethod || 'auto',
-          expenseClaimId: payload.expenseClaimId
-        })],
-        {
-          timeout: 180000, // 3 minutes
+      let result: any;
+      try {
+        result = await python.runScript(
+          "./src/python/extract_receipt_data.py",
+          [JSON.stringify({
+            imageUrl: imageUrl,
+            imageData: payload.receiptImageData,
+            businessCategories: businessCategories,
+            receiptText: payload.receiptText || '',
+            forcedProcessingMethod: payload.forcedProcessingMethod || 'auto',
+            expenseClaimId: payload.expenseClaimId
+          })],
+          {
+            timeout: 180000, // 3 minutes
+          }
+        );
+      } catch (pythonError: any) {
+        console.error("🐍 Python execution failed:", pythonError);
+
+        // Enhanced error categorization and user-friendly messages
+        let userFriendlyError = '';
+        let errorCategory = 'unknown';
+
+        if (pythonError.code === 'ENOENT') {
+          // Python environment not found
+          errorCategory = 'environment';
+          userFriendlyError = 'AI processing service is not properly configured. Please contact support to resolve this issue.';
+          console.error('❌ Python environment missing - ENOENT error. Virtual environment may not be activated or Python not installed.');
+        } else if (pythonError.message?.includes('timeout') || pythonError.code === 'ETIMEDOUT') {
+          // Processing timeout
+          errorCategory = 'timeout';
+          userFriendlyError = 'Receipt processing took too long. Please try uploading a clearer image or reduce the file size.';
+        } else if (pythonError.message?.includes('spawn') || pythonError.message?.includes('python')) {
+          // Python execution issues
+          errorCategory = 'execution';
+          userFriendlyError = 'Unable to start AI processing. Please try again in a few moments or contact support if the issue persists.';
+        } else if (pythonError.message?.includes('memory') || pythonError.message?.includes('resource')) {
+          // Resource issues
+          errorCategory = 'resource';
+          userFriendlyError = 'Processing resources are temporarily unavailable. Please try again in a few moments.';
+        } else {
+          // General execution error
+          errorCategory = 'execution';
+          userFriendlyError = 'An unexpected error occurred during AI processing. Please try uploading your receipt again.';
         }
-      );
+
+        // Update expense claim with detailed failure information
+        if (payload.expenseClaimId) {
+          const failureMetadata = {
+            extraction_method: 'ai',
+            extraction_timestamp: new Date().toISOString(),
+            ai_processing_status: 'failed',
+            error_category: errorCategory,
+            error_code: pythonError.code || 'UNKNOWN',
+            error_message: userFriendlyError,
+            technical_error: pythonError.message || pythonError.toString(),
+            failed_at: new Date().toISOString(),
+            processing_stage: 'python_execution'
+          };
+
+          await supabase
+            .from('expense_claims')
+            .update({
+              status: 'failed',
+              processing_metadata: failureMetadata,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', payload.expenseClaimId);
+
+          console.log(`❌ Expense claim ${payload.expenseClaimId} marked as failed due to ${errorCategory} error`);
+        }
+
+        throw new Error(userFriendlyError);
+      }
 
       // Step 4: Parse Python script result
       console.log("🔍 Raw Python result:", JSON.stringify(result, null, 2));
@@ -169,12 +229,42 @@ export const extractReceiptData = task({
         try {
           // Parse JSON output from Python script
           const stdout = (result as any).stdout.trim();
+          if (!stdout) {
+            throw new Error('Empty output from AI processing script');
+          }
           pythonResult = JSON.parse(stdout);
         } catch (parseError) {
           console.error(`❌ Failed to parse Python JSON output:`, parseError);
           console.log(`📄 Raw stdout for debugging:`, (result as any).stdout);
 
-          throw new Error('AI processing encountered an unexpected format error. Please try uploading the receipt again.');
+          // Update expense claim with parsing failure
+          if (payload.expenseClaimId) {
+            const parseFailureMetadata = {
+              extraction_method: 'ai',
+              extraction_timestamp: new Date().toISOString(),
+              ai_processing_status: 'failed',
+              error_category: 'parsing_error',
+              error_code: 'JSON_PARSE_FAILED',
+              error_message: 'AI processing returned invalid data format. Please try uploading the receipt again.',
+              technical_error: parseError instanceof Error ? parseError.message : parseError?.toString(),
+              failed_at: new Date().toISOString(),
+              processing_stage: 'python_result_parsing',
+              raw_stdout: (result as any).stdout?.substring(0, 1000) // First 1000 chars for debugging
+            };
+
+            await supabase
+              .from('expense_claims')
+              .update({
+                status: 'failed',
+                processing_metadata: parseFailureMetadata,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', payload.expenseClaimId);
+
+            console.log(`❌ Expense claim ${payload.expenseClaimId} marked as failed due to parsing error`);
+          }
+
+          throw new Error('AI processing returned invalid data format. Please try uploading the receipt again.');
         }
       } else {
         pythonResult = result;
@@ -402,16 +492,69 @@ export const extractReceiptData = task({
     } catch (error) {
       console.error("❌ AI extraction task failed:", error);
 
+      // Enhanced error categorization for better user experience
+      let userFriendlyError = '';
+      let errorCategory = 'general_failure';
+      let errorCode = 'UNKNOWN';
+
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+
+        // Categorize different types of errors
+        if (errorMessage.includes('no image url') || errorMessage.includes('no image data')) {
+          errorCategory = 'missing_image';
+          userFriendlyError = 'No receipt image found to process. Please ensure the receipt was uploaded correctly.';
+          errorCode = 'MISSING_IMAGE_DATA';
+        } else if (errorMessage.includes('failed to create signed url') || errorMessage.includes('storage')) {
+          errorCategory = 'storage_access';
+          userFriendlyError = 'Unable to access the uploaded receipt. Please try uploading the receipt again.';
+          errorCode = 'STORAGE_ACCESS_ERROR';
+        } else if (errorMessage.includes('expense claim not found')) {
+          errorCategory = 'data_integrity';
+          userFriendlyError = 'Expense claim record not found. Please refresh the page and try again.';
+          errorCode = 'CLAIM_NOT_FOUND';
+        } else if (errorMessage.includes('failed to update expense claim')) {
+          errorCategory = 'database_update';
+          userFriendlyError = 'Failed to save processed data. Please try again or contact support if the issue persists.';
+          errorCode = 'DATABASE_UPDATE_ERROR';
+        } else if (errorMessage.includes('no extraction data returned')) {
+          errorCategory = 'empty_result';
+          userFriendlyError = 'AI processing completed but no data was extracted. Please try uploading a clearer receipt image.';
+          errorCode = 'EMPTY_EXTRACTION_RESULT';
+        } else if (errorMessage.includes('ai processing returned invalid data format')) {
+          errorCategory = 'parsing_error';
+          userFriendlyError = 'AI processing returned invalid data format. Please try uploading the receipt again.';
+          errorCode = 'INVALID_DATA_FORMAT';
+        } else if (errorMessage.includes('unable to extract data from this receipt')) {
+          errorCategory = 'extraction_failure';
+          userFriendlyError = 'Unable to extract data from this receipt. Please try uploading a clearer image or contact support.';
+          errorCode = 'EXTRACTION_FAILED';
+        } else {
+          // General error fallback
+          errorCategory = 'general_failure';
+          userFriendlyError = 'An unexpected error occurred during receipt processing. Please try again or contact support if the issue persists.';
+          errorCode = 'GENERAL_ERROR';
+        }
+      } else {
+        // Non-Error objects
+        userFriendlyError = 'An unexpected system error occurred. Please try again or contact support.';
+      }
+
       // Smart failure handling based on processing context
       if (payload.expenseClaimId) {
         // Re-fetch expense claim data if not available (fallback for edge cases)
         if (!expenseClaim) {
-          const { data: fetchedClaim } = await supabase
-            .from('expense_claims')
-            .select('processing_metadata, vendor_name, total_amount, status')
-            .eq('id', payload.expenseClaimId)
-            .single();
-          expenseClaim = fetchedClaim;
+          try {
+            const { data: fetchedClaim } = await supabase
+              .from('expense_claims')
+              .select('processing_metadata, vendor_name, total_amount, status')
+              .eq('id', payload.expenseClaimId)
+              .single();
+            expenseClaim = fetchedClaim;
+          } catch (fetchError) {
+            console.error('Failed to re-fetch expense claim data:', fetchError);
+            // Continue with null expenseClaim
+          }
         }
 
         // Check if this claim has previous successful processing data
@@ -422,13 +565,18 @@ export const extractReceiptData = task({
         );
 
         console.log(`🔍 Processing failure context - Has previous data: ${hasPreviousData}`);
+        console.log(`🔍 Error category: ${errorCategory}, Error code: ${errorCode}`);
 
         const failureMetadata = {
           extraction_method: 'ai',
           extraction_timestamp: new Date().toISOString(),
           ai_processing_status: 'failed',
-          error_message: error instanceof Error ? error.message : 'AI processing failed',
+          error_category: errorCategory,
+          error_code: errorCode,
+          error_message: userFriendlyError,
+          technical_error: error instanceof Error ? error.message : error?.toString(),
           failed_at: new Date().toISOString(),
+          processing_stage: 'general_execution',
           processing_type: hasPreviousData ? 'reprocessing' : 'initial_processing'
         };
 
@@ -446,19 +594,25 @@ export const extractReceiptData = task({
           logMessage = `❌ Expense claim ${payload.expenseClaimId} marked as failed after initial processing failure (no previous data)`;
         }
 
-        await supabase
-          .from('expense_claims')
-          .update({
-            status: targetStatus,
-            processing_metadata: failureMetadata,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', payload.expenseClaimId);
+        try {
+          await supabase
+            .from('expense_claims')
+            .update({
+              status: targetStatus,
+              processing_metadata: failureMetadata,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', payload.expenseClaimId);
 
-        console.log(logMessage);
+          console.log(logMessage);
+        } catch (updateError) {
+          console.error('Failed to update expense claim with failure metadata:', updateError);
+          // Continue to throw original error even if update fails
+        }
       }
 
-      throw error;
+      // Throw user-friendly error for better UI experience
+      throw new Error(userFriendlyError || (error instanceof Error ? error.message : 'Unknown error occurred'));
     }
   },
 });

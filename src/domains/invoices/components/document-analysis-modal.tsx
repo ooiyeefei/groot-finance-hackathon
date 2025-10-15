@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Languages, Eye, FileText, DollarSign, List } from 'lucide-react'
+import { X, Languages, Eye, FileText, DollarSign, List, Copy } from 'lucide-react'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
 
 interface Document {
@@ -917,6 +917,29 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
             {/* Processing Stats */}
             <div className="mt-4 bg-gray-700/50 rounded-lg p-4 flex-shrink-0">
               <h5 className="text-sm font-medium text-white mb-2">Processing Information</h5>
+
+              {/* Invoice ID Display */}
+              <div className="mb-3 pb-3 border-b border-gray-600">
+                <div className="text-xs text-gray-400 mb-1">Invoice ID</div>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded font-mono flex-1 min-w-0">
+                    {document.id}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(document.id)
+                      // Could add toast notification here
+                      console.log('Invoice ID copied:', document.id)
+                    }}
+                    className="flex-shrink-0 p-1.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded transition-colors"
+                    title="Copy Invoice ID"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <span className="text-gray-400">Status:</span>

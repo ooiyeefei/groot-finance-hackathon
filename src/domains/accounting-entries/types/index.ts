@@ -54,11 +54,12 @@ export interface TransactionCategories {
 export interface Transaction {
   id: string
   user_id: string
-  document_id?: string
+  source_record_id?: string
   
   // Classification
   transaction_type: TransactionType
   category: string
+  category_name?: string // Resolved human-readable category name from business categories
   subcategory?: string
   description: string
   reference_number?: string
@@ -93,6 +94,14 @@ export interface Transaction {
   
   // Related line items
   line_items?: LineItem[]
+
+  // Related expense claims (when accounting entry was created from approved expense claim)
+  expense_claims?: Array<{
+    id: string
+    status: string
+    business_purpose: string
+    created_at: string
+  }>
 }
 
 // Line Item interface for detailed transactions
@@ -166,7 +175,7 @@ export interface UpdateTransactionRequest extends Partial<CreateTransactionReque
 
 // Document to Transaction conversion
 export interface DocumentToTransactionPreview {
-  document_id: string
+  source_record_id: string
   suggested_transaction: Partial<CreateTransactionRequest>
   confidence_score: number
   entity_mapping: EntityMapping[]

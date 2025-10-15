@@ -251,10 +251,10 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
           )}
 
           {success && (
-            <Alert className="bg-green-900/20 border-green-700">
-              <CheckCircle className="w-4 h-4" />
-              <AlertDescription className="text-green-400">{success}</AlertDescription>
-            </Alert>
+            <div className="flex items-center gap-3 p-3 bg-green-900/20 border border-green-700/50 rounded-lg">
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <span className="text-green-300 text-sm">{success}</span>
+            </div>
           )}
 
           {/* Categories List */}

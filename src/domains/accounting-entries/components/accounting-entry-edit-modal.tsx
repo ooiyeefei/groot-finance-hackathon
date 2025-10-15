@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock, AlertCircle } from 'lucide-react'
+import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock, AlertCircle, Copy } from 'lucide-react'
 import { Transaction, CreateTransactionRequest, LineItem, SupportedCurrency, TRANSACTION_CATEGORIES, TransactionType } from '@/domains/accounting-entries/types'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { useHomeCurrency } from '@/domains/users/components/currency-settings'
@@ -760,10 +760,10 @@ export default function AccountingEntryFormModal({
                   </div>
                 )}
 
-                {/* Transaction Summary */}
+                {/* Summary */}
                 {lineItems.length > 0 && (
                   <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
-                    <h5 className="text-sm font-medium text-white mb-3">Transaction Summary</h5>
+                    <h5 className="text-sm font-medium text-white mb-3">Summary</h5>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-400">Items Count:</span>
@@ -785,6 +785,51 @@ export default function AccountingEntryFormModal({
                         </span>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Record ID and Invoice/Expense Claims ID at bottom of right pane */}
+                {transaction?.id && (
+                  <div className="flex flex-col items-end mt-6 pt-4 border-t border-gray-600 space-y-2">
+                    {/* Record ID */}
+                    <div className="flex items-center gap-2 bg-gray-700/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
+                      <span className="text-gray-300 text-xs font-mono">Record ID: {transaction.id}</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(transaction.id)}
+                        className="text-gray-400 hover:text-gray-200 transition-colors"
+                        title="Copy Record ID"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {/* Invoice ID */}
+                    {transaction.source_record_id && (
+                      <div className="flex items-center gap-2 bg-green-700/20 backdrop-blur-sm px-3 py-1.5 rounded-md border border-green-600/30">
+                        <span className="text-green-300 text-xs font-mono">Invoice ID: {transaction.source_record_id}</span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(transaction.source_record_id!)}
+                          className="text-green-400 hover:text-green-200 transition-colors"
+                          title="Copy Invoice ID"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Expense Claims ID */}
+                    {transaction.expense_claims && transaction.expense_claims.length > 0 && (
+                      <div className="flex items-center gap-2 bg-blue-700/20 backdrop-blur-sm px-3 py-1.5 rounded-md border border-blue-600/30">
+                        <span className="text-blue-300 text-xs font-mono">Expense ID: {transaction.expense_claims[0].id}</span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(transaction.expense_claims?.[0]?.id || '')}
+                          className="text-blue-400 hover:text-blue-200 transition-colors"
+                          title="Copy Expense Claims ID"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

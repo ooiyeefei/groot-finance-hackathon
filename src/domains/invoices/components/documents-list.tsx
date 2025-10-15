@@ -10,7 +10,7 @@ import { useDocumentPolling } from '@/domains/invoices/hooks/use-document-pollin
 import DocumentStatusBadge from './document-status-badge'
 import ConfidenceScoreMeter from './confidence-score-meter'
 import DocumentAnalysisModal from './document-analysis-modal'
-import AccountingEntryFormModal from '@/domains/accounting-entries/components/accounting-entry-form-modal'
+import AccountingEntryFormModal from '@/domains/accounting-entries/components/accounting-entry-edit-modal'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { mapDocumentToAccountingEntry, canCreateAccountingEntryFromDocument } from '@/domains/invoices/lib/document-to-accounting-entry-mapper'
 import { CreateTransactionRequest } from '@/domains/accounting-entries/types'

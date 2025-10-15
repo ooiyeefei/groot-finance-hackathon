@@ -31,25 +31,8 @@ import {
   canFilterByUserId
 } from '@/lib/auth/rbac'
 
-// Valid status transitions (without role restrictions - RBAC handles permissions)
-const VALID_EXPENSE_TRANSITIONS = [
-  // File upload transitions
-  { from: 'draft', to: 'uploading' },
-  { from: 'uploading', to: 'analyzing' },
-  { from: 'analyzing', to: 'draft' },
-  { from: 'analyzing', to: 'failed' },
-  { from: 'failed', to: 'draft' },
-
-  // Workflow transitions
-  { from: 'draft', to: 'submitted' },
-  { from: 'submitted', to: 'draft' }, // Recall
-  { from: 'rejected', to: 'draft' }, // Revise
-  { from: 'rejected', to: 'approved' }, // Manager can approve previously rejected claims
-  { from: 'submitted', to: 'approved' }, // Approve
-  { from: 'submitted', to: 'rejected' }, // Reject
-  { from: 'approved', to: 'reimbursed' }, // Reimburse
-  { from: 'approved', to: 'rejected' } // Reject after approval
-]
+// Status transitions are now handled by RBAC permissions only
+// No hardcoded transition validation - removed per user request
 
 /**
  * Find appropriate approver using manager hierarchy with enhanced routing logic
@@ -152,27 +135,7 @@ async function findNextApprover(
 const SUPPORTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
-/**
- * Validate status transition (basic transition validity only)
- */
-function validateStatusTransition(
-  currentStatus: ExpenseClaimStatus,
-  newStatus: ExpenseClaimStatus
-): ValidationResult {
-  const isValidTransition = VALID_EXPENSE_TRANSITIONS.some(
-    t => t.from === currentStatus && t.to === newStatus
-  )
-
-  if (!isValidTransition) {
-    return {
-      isValid: false,
-      errors: [`Invalid status transition from ${currentStatus} to ${newStatus}`],
-      warnings: []
-    }
-  }
-
-  return { isValid: true, errors: [], warnings: [] }
-}
+// Status transition validation removed - RBAC permissions handle all access control
 
 
 /**
@@ -863,11 +826,11 @@ export async function updateExpenseClaim(
 
     // Handle status changes
     if (request.status && request.status !== existingClaim.status) {
-      // First validate that the status transition is valid
-      const validation = validateStatusTransition(existingClaim.status, request.status)
-      if (!validation.isValid) {
-        return { success: false, error: validation.errors.join(', ') }
-      }
+      // REMOVED: Hardcoded status transition validation - let RBAC handle permissions only
+      // const validation = validateStatusTransition(existingClaim.status, request.status)
+      // if (!validation.isValid) {
+      //   return { success: false, error: validation.errors.join(', ') }
+      // }
 
       // Then check RBAC permissions for specific transitions
       let hasPermission = false
@@ -963,12 +926,13 @@ export async function updateExpenseClaim(
           const financialData = processingMetadata.financial_data
           const userData = await getUserData(userId)
 
-          // Create accounting entry
+          // Create accounting entry with proper category mapping and created_by_method
           const accountingEntryData = {
             user_id: userData.id,
             business_id: userProfile.business_id,
+            source_record_id: processingMetadata.document_id || null, // ✅ FIX: Link to receipt document
             transaction_type: 'Expense' as const,
-            category: processingMetadata.category_mapping?.accounting_category || 'GENERAL_EXPENSES',
+            category: existingClaim.expense_category || 'OTHER_OPERATING', // ✅ FIX: Use business expense category directly instead of IFRS mapping
             description: financialData.description || existingClaim.description,
             vendor_name: financialData.vendor_name || existingClaim.vendor_name,
             vendor_id: financialData.vendor_id || null,
@@ -983,6 +947,7 @@ export async function updateExpenseClaim(
             notes: financialData.notes || null,
             status: 'pending' as const,
             document_type: 'receipt',
+            created_by_method: processingMetadata.extraction_method === 'ai' ? 'document_extract' : 'manual', // ✅ FIX: Use correct extraction_method field
             created_at: now,
             updated_at: now
           }
@@ -1000,27 +965,105 @@ export async function updateExpenseClaim(
 
           // Create line items if they exist
           if (processingMetadata.line_items && Array.isArray(processingMetadata.line_items)) {
-            const lineItemsData = processingMetadata.line_items.map((item: any, index: number) => ({
-              accounting_entry_id: accountingEntry.id,
-              item_description: item.item_description || item.description || `Item ${index + 1}`,
-              quantity: item.quantity || 1,
-              unit_price: item.unit_price || 0,
-              total_amount: item.total_amount || (item.quantity * item.unit_price),
-              tax_amount: item.tax_amount || 0,
-              tax_rate: item.tax_rate || 0,
-              item_category: item.item_category || null,
-              line_order: item.line_order || (index + 1),
-              created_at: now,
-              updated_at: now
-            }))
+            console.log(`[Accounting Entry Creation] Found ${processingMetadata.line_items.length} line items in processing metadata`)
+            console.log(`[Accounting Entry Creation] Raw line items data:`, JSON.stringify(processingMetadata.line_items, null, 2))
 
-            const { error: lineItemsError } = await supabase
+            const lineItemsData = processingMetadata.line_items.map((item: any, index: number) => {
+              // Enhanced field mapping with all possible OCR fields
+              const mappedItem = {
+                accounting_entry_id: accountingEntry.id,
+
+                // Item description - try multiple field name variations
+                item_description: item.item_description || item.description || item.name || `Item ${index + 1}`,
+
+                // Item code from OCR/invoice data
+                item_code: item.item_code || item.code || item.sku || null,
+
+                // Quantities and pricing
+                quantity: Number(item.quantity) || 1,
+                unit_measurement: item.unit_measurement || item.unit || item.uom || null,
+                unit_price: Number(item.unit_price) || 0,
+                total_amount: Number(item.total_amount) || Number((item.quantity || 1) * (item.unit_price || 0)) || 0,
+
+                // Currency and categorization
+                currency: financialData.original_currency || existingClaim.currency,
+                item_category: item.item_category || item.category || null,
+
+                // Tax information
+                tax_amount: Number(item.tax_amount) || 0,
+                tax_rate: Number(item.tax_rate) || 0,
+
+                // Ordering
+                line_order: item.line_order || (index + 1)
+              }
+
+              console.log(`[Accounting Entry Creation] Line item ${index + 1} mapping:`, {
+                raw_item: item,
+                mapped_item: mappedItem,
+                field_sources: {
+                  item_description: item.item_description ? 'item_description' : item.description ? 'description' : item.name ? 'name' : 'fallback',
+                  item_code: item.item_code ? 'item_code' : item.code ? 'code' : item.sku ? 'sku' : 'null',
+                  unit_measurement: item.unit_measurement ? 'unit_measurement' : item.unit ? 'unit' : item.uom ? 'uom' : 'null'
+                }
+              })
+
+              return mappedItem
+            })
+
+            // Validate line items before insertion
+            const validationErrors: string[] = []
+            lineItemsData.forEach((item: any, index: number) => {
+              if (!item.item_description || item.item_description.trim() === '') {
+                validationErrors.push(`Line item ${index + 1}: Missing item description`)
+              }
+              if (item.quantity <= 0) {
+                validationErrors.push(`Line item ${index + 1}: Invalid quantity (${item.quantity})`)
+              }
+              if (item.unit_price < 0) {
+                validationErrors.push(`Line item ${index + 1}: Invalid unit price (${item.unit_price})`)
+              }
+            })
+
+            if (validationErrors.length > 0) {
+              console.error('[Accounting Entry Creation] Line item validation errors:', validationErrors)
+              console.error('[Accounting Entry Creation] Attempted line items data:', lineItemsData)
+              // Still don't fail the entire operation, but log validation issues
+            }
+
+            console.log(`[Accounting Entry Creation] Attempting to insert ${lineItemsData.length} line items`)
+            console.log(`[Accounting Entry Creation] Final line items data for insertion:`, JSON.stringify(lineItemsData, null, 2))
+
+            const { data: insertedLineItems, error: lineItemsError } = await supabase
               .from('line_items')
               .insert(lineItemsData)
+              .select('id, item_description, quantity, unit_price, total_amount, item_code, unit_measurement')
 
             if (lineItemsError) {
-              console.error('Failed to create line items:', lineItemsError)
-              // Don't fail the entire operation for line items
+              console.error('[Accounting Entry Creation] ❌ Failed to create line items:', {
+                error: lineItemsError,
+                error_code: lineItemsError.code,
+                error_message: lineItemsError.message,
+                error_details: lineItemsError.details,
+                attempted_data: lineItemsData,
+                validation_errors: validationErrors
+              })
+
+              // Try to provide more specific error information
+              if (lineItemsError.code === '23505') {
+                console.error('[Accounting Entry Creation] Duplicate key violation - line items may already exist for this accounting entry')
+              } else if (lineItemsError.code === '23502') {
+                console.error('[Accounting Entry Creation] Not null violation - missing required field in line items')
+              } else if (lineItemsError.code === '23503') {
+                console.error('[Accounting Entry Creation] Foreign key violation - accounting_entry_id may be invalid')
+              }
+            } else {
+              console.log(`[Accounting Entry Creation] ✅ Successfully created ${insertedLineItems?.length || 0} line items:`, insertedLineItems)
+            }
+          } else {
+            console.log('[Accounting Entry Creation] No line items found in processing metadata or line_items is not an array')
+            if (processingMetadata.line_items) {
+              console.log('[Accounting Entry Creation] Processing metadata line_items type:', typeof processingMetadata.line_items)
+              console.log('[Accounting Entry Creation] Processing metadata line_items content:', processingMetadata.line_items)
             }
           }
 
@@ -1287,7 +1330,16 @@ export async function getExpenseAnalytics(
       supabase = await createBusinessContextSupabaseClient()
     }
 
-    // Build base query for analytics
+    // Calculate date ranges for current and previous periods
+    const now = new Date()
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+
+    console.log('[Analytics] Calculating trends for current month:', currentMonthStart.toISOString().split('T')[0])
+    console.log('[Analytics] Previous month range:', previousMonthStart.toISOString().split('T')[0], 'to', previousMonthEnd.toISOString().split('T')[0])
+
+    // Build base query for ALL claims (for monthly trends calculation)
     let analyticsQuery = supabase
       .from('expense_claims')
       .select('status, total_amount, home_currency_amount, expense_category, created_at, submitted_at')
@@ -1324,10 +1376,70 @@ export async function getExpenseAnalytics(
             reimbursed: 0
           },
           total_amount: 0,
-          currency: employeeProfile.home_currency || 'SGD'
+          currency: employeeProfile.home_currency || 'SGD',
+          trends: {
+            total_amount_change: 0,
+            total_claims_change: 0,
+            avg_claim_change: 0,
+            pending_approval_change: 0
+          }
         }
       }
     }
+
+    // Separate current and previous month data for trend calculation
+    const currentMonthClaims = claims.filter(claim => {
+      const dateToUse = claim.submitted_at || claim.created_at
+      const claimDate = new Date(dateToUse)
+      return claimDate >= currentMonthStart
+    })
+
+    const previousMonthClaims = claims.filter(claim => {
+      const dateToUse = claim.submitted_at || claim.created_at
+      const claimDate = new Date(dateToUse)
+      return claimDate >= previousMonthStart && claimDate <= previousMonthEnd
+    })
+
+    console.log('[Analytics] Current month claims:', currentMonthClaims.length)
+    console.log('[Analytics] Previous month claims:', previousMonthClaims.length)
+
+    // Calculate current period metrics
+    const currentMetrics = {
+      totalAmount: currentMonthClaims.reduce((sum, claim) =>
+        sum + (claim.home_currency_amount || claim.total_amount || 0), 0),
+      totalClaims: currentMonthClaims.length,
+      avgClaim: currentMonthClaims.length > 0 ?
+        currentMonthClaims.reduce((sum, claim) =>
+          sum + (claim.home_currency_amount || claim.total_amount || 0), 0) / currentMonthClaims.length : 0,
+      pendingApproval: currentMonthClaims.filter(claim => claim.status === 'submitted').length
+    }
+
+    // Calculate previous period metrics
+    const previousMetrics = {
+      totalAmount: previousMonthClaims.reduce((sum, claim) =>
+        sum + (claim.home_currency_amount || claim.total_amount || 0), 0),
+      totalClaims: previousMonthClaims.length,
+      avgClaim: previousMonthClaims.length > 0 ?
+        previousMonthClaims.reduce((sum, claim) =>
+          sum + (claim.home_currency_amount || claim.total_amount || 0), 0) / previousMonthClaims.length : 0,
+      pendingApproval: previousMonthClaims.filter(claim => claim.status === 'submitted').length
+    }
+
+    // Calculate percentage changes
+    const trends = {
+      total_amount_change: previousMetrics.totalAmount > 0 ?
+        ((currentMetrics.totalAmount - previousMetrics.totalAmount) / previousMetrics.totalAmount) * 100 : 0,
+      total_claims_change: previousMetrics.totalClaims > 0 ?
+        ((currentMetrics.totalClaims - previousMetrics.totalClaims) / previousMetrics.totalClaims) * 100 : 0,
+      avg_claim_change: previousMetrics.avgClaim > 0 ?
+        ((currentMetrics.avgClaim - previousMetrics.avgClaim) / previousMetrics.avgClaim) * 100 : 0,
+      pending_approval_change: previousMetrics.pendingApproval > 0 ?
+        ((currentMetrics.pendingApproval - previousMetrics.pendingApproval) / previousMetrics.pendingApproval) * 100 : 0
+    }
+
+    console.log('[Analytics] Current metrics:', currentMetrics)
+    console.log('[Analytics] Previous metrics:', previousMetrics)
+    console.log('[Analytics] Calculated trends:', trends)
 
     // Calculate monthly trends based on submitted_at (or created_at as fallback)
     const monthlyTrends = claims.reduce((acc: any, claim: any) => {
@@ -1423,7 +1535,8 @@ export async function getExpenseAnalytics(
         employee: true,
         manager: isManager,
         admin: isAdmin
-      }
+      },
+      trends: trends
     }
 
     return {

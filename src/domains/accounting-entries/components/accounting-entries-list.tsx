@@ -6,8 +6,11 @@ import SkeletonLoader from '@/components/ui/skeleton-loader'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import CategorySelector from './CategorySelector'
 import StatusSelector from './StatusSelector'
-import { Transaction } from '@/domains/accounting-entries/types'
+import { Transaction, TransactionType } from '@/domains/accounting-entries/types'
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
+import { useExpenseCategories, DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories'
+import { useCOGSCategories, DynamicCOGSCategory } from '@/lib/hooks/accounting/use-cogs-categories'
+import { TRANSACTION_CATEGORIES } from '@/domains/accounting-entries/types'
 
 interface AccountingEntriesListProps {
   transactions: Transaction[]
@@ -47,6 +50,10 @@ export default function AccountingEntriesList({
     isLoading: false
   })
 
+  // Dynamic category hooks - same as edit form
+  const { categories: expenseCategories, loading: expenseCategoriesLoading } = useExpenseCategories()
+  const { categories: cogsCategories, loading: cogsCategoriesLoading } = useCOGSCategories()
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
@@ -55,8 +62,20 @@ export default function AccountingEntriesList({
     })
   }
 
-  const formatCategoryName = (category: string) => {
-    return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  // Format category name - supports both dynamic categories and hardcoded ones - same logic as edit form
+  const formatCategoryName = (categoryCode: string, accountingEntryType?: TransactionType) => {
+    if (!categoryCode) return 'Unknown Category'
+
+    if (accountingEntryType === 'Cost of Goods Sold') {
+      const cogsCategory = cogsCategories.find(cat => cat.category_code === categoryCode)
+      return cogsCategory ? cogsCategory.category_name : categoryCode
+    } else if (accountingEntryType === 'Expense') {
+      const expenseCategory = expenseCategories.find(cat => cat.category_code === categoryCode)
+      return expenseCategory ? expenseCategory.category_name : categoryCode
+    } else {
+      // Fallback to formatted hardcoded category names for Income and other types
+      return categoryCode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    }
   }
 
   const handleDeleteClick = (transaction: Transaction) => {
@@ -158,9 +177,15 @@ export default function AccountingEntriesList({
     }
 
     if (selectedCategory) {
+      // Find a transaction with this category to get its type for proper formatting
+      const sampleTransaction = transactions.find(t => t.category === selectedCategory)
+      const categoryLabel = sampleTransaction ?
+        formatCategoryName(selectedCategory, sampleTransaction.transaction_type) :
+        formatCategoryName(selectedCategory)
+
       filters.push({
         label: 'Category',
-        value: formatCategoryName(selectedCategory),
+        value: categoryLabel,
         onRemove: () => setSelectedCategory('')
       })
     }
@@ -259,11 +284,19 @@ export default function AccountingEntriesList({
               className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Categories</option>
-              {uniqueCategories.map(category => (
-                <option key={category} value={category}>
-                  {formatCategoryName(category)}
-                </option>
-              ))}
+              {uniqueCategories.map(category => {
+                // Find a transaction with this category to get its type for proper formatting
+                const sampleTransaction = transactions.find(t => t.category === category)
+                const categoryLabel = sampleTransaction ?
+                  formatCategoryName(category, sampleTransaction.transaction_type) :
+                  formatCategoryName(category)
+
+                return (
+                  <option key={category} value={category}>
+                    {categoryLabel}
+                  </option>
+                )
+              })}
             </select>
 
             {/* Type Filter */}
@@ -447,11 +480,41 @@ export default function AccountingEntriesList({
                           onRefresh()
                         }}
                       />
-                      {transaction.document_type && (
-                        <span className="text-xs px-2 py-1 rounded-full font-medium capitalize bg-blue-600/20 text-blue-400 border border-blue-600/30">
-                          {transaction.document_type}
-                        </span>
-                      )}
+                      {/* Enhanced document type display - shows Receipt/Invoice/Document tags */}
+                      {(() => {
+                        // If document_type is explicitly set, use it
+                        if (transaction.document_type) {
+                          return (
+                            <span className="text-xs px-2 py-1 rounded-full font-medium capitalize bg-blue-600/20 text-blue-400 border border-blue-600/30">
+                              {transaction.document_type}
+                            </span>
+                          )
+                        }
+
+                        // If no document_type but created from document extraction, infer the type
+                        if (transaction.created_by_method === 'document_extract') {
+                          let tagText = 'Document'
+                          let tagColor = 'bg-blue-600/20 text-blue-400 border-blue-600/30'
+
+                          // Infer document type based on transaction type
+                          if (transaction.transaction_type === 'Cost of Goods Sold') {
+                            tagText = 'Invoice'
+                            tagColor = 'bg-green-600/20 text-green-400 border-green-600/30'
+                          } else if (transaction.transaction_type === 'Expense') {
+                            tagText = 'Receipt'
+                            tagColor = 'bg-blue-600/20 text-blue-400 border-blue-600/30'
+                          }
+
+                          return (
+                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${tagColor}`}>
+                              {tagText}
+                            </span>
+                          )
+                        }
+
+                        // No document association
+                        return null
+                      })()}
                     </div>
                     
                     <div className="flex items-center gap-4 text-sm text-gray-400">

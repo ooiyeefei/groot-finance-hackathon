@@ -46,6 +46,12 @@ interface AnalyticsData {
     manager: boolean
     admin: boolean
   }
+  trends: {
+    total_amount_change: number
+    total_claims_change: number
+    avg_claim_change: number
+    pending_approval_change: number
+  }
 }
 
 export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
@@ -102,25 +108,25 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
         <SummaryMetric
           title="Total Amount"
           value={`${data.currency === 'SGD' ? 'S$' : '$'}${(data.total_amount || 0).toFixed(2)}`}
-          change={0} // No change data available in current API
+          change={data.trends?.total_amount_change || 0}
           icon={<DollarSign className="w-5 h-5" />}
         />
         <SummaryMetric
           title="Total Claims"
           value={(data.status_summary.total || 0).toString()}
-          change={0} // No change data available in current API
+          change={data.trends?.total_claims_change || 0}
           icon={<PieChart className="w-5 h-5" />}
         />
         <SummaryMetric
           title="Avg Claim"
           value={`${data.currency === 'SGD' ? 'S$' : '$'}${data.status_summary.total > 0 ? (data.total_amount / data.status_summary.total).toFixed(2) : '0.00'}`}
-          change={0} // No change data available for avg claim
+          change={data.trends?.avg_claim_change || 0}
           icon={<TrendingUp className="w-5 h-5" />}
         />
         <SummaryMetric
           title="Pending Approval"
           value={(data.status_summary.submitted || 0).toString()}
-          change={0}
+          change={data.trends?.pending_approval_change || 0}
           icon={<TrendingUp className="w-5 h-5" />}
         />
       </div>
@@ -135,7 +141,7 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
             {scope === 'company' && 'Company-wide expense breakdown by category'}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           {data.category_breakdown.length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               <PieChart className="w-12 h-12 mx-auto mb-4" />
@@ -143,30 +149,43 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
               <p className="text-sm">Submit some expense claims to see category breakdown</p>
             </div>
           ) : (
-            data.category_breakdown.map((item, index) => (
-              <div key={item.category} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="bg-gray-700 text-gray-300">
-                      📊 {item.category_name || item.category}
-                    </Badge>
-                    <span className="text-gray-400 text-sm">({item.claims_count} claims)</span>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-white font-semibold">${item.total_amount.toFixed(2)}</div>
-                    <div className="text-gray-400 text-sm">{item.percentage.toFixed(1)}%</div>
-                  </div>
-                </div>
-                
-                {/* Progress Bar */}
-                <div className="w-full bg-gray-700 rounded-full h-2">
-                  <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${Math.max(item.percentage, 2)}%` }}
-                  ></div>
-                </div>
+            <div className="flex flex-col lg:flex-row gap-6 items-start">
+              {/* Pie Chart */}
+              <div className="flex-shrink-0">
+                <ExpensePieChart categories={data.category_breakdown} currency={data.currency} />
               </div>
-            ))
+
+              {/* Legend */}
+              <div className="flex-1 space-y-3">
+                <h4 className="text-sm font-medium text-gray-300 mb-3">Category Details</h4>
+                {data.category_breakdown.map((item, index) => (
+                  <div key={item.category} className="flex items-center justify-between p-2 bg-gray-700/50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-4 h-4 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: getPieChartColor(index) }}
+                      />
+                      <div>
+                        <div className="text-white text-sm font-medium">
+                          {item.category_name || item.category}
+                        </div>
+                        <div className="text-gray-400 text-xs">
+                          {item.claims_count} claims
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-white font-semibold text-sm">
+                        ${item.total_amount.toFixed(2)}
+                      </div>
+                      <div className="text-gray-400 text-xs">
+                        {item.percentage.toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -210,6 +229,92 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
           </div>
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+// Color palette for pie chart segments
+const PIE_CHART_COLORS = [
+  '#3B82F6', // Blue
+  '#10B981', // Green
+  '#F59E0B', // Amber
+  '#EF4444', // Red
+  '#8B5CF6', // Purple
+  '#06B6D4', // Cyan
+  '#F97316', // Orange
+  '#84CC16', // Lime
+  '#EC4899', // Pink
+  '#6B7280', // Gray
+]
+
+function getPieChartColor(index: number): string {
+  return PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]
+}
+
+interface ExpensePieChartProps {
+  categories: {
+    category: string
+    category_name?: string
+    total_amount: number
+    percentage: number
+    claims_count: number
+  }[]
+  currency: string
+}
+
+function ExpensePieChart({ categories, currency }: ExpensePieChartProps) {
+  const size = 200
+  const strokeWidth = 40
+  const radius = (size - strokeWidth) / 2
+  const center = size / 2
+
+  let accumulatedPercentage = 0
+
+  return (
+    <div className="relative">
+      <svg width={size} height={size} className="transform -rotate-90">
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="transparent"
+          stroke="#374151"
+          strokeWidth={strokeWidth}
+        />
+
+        {categories.map((category, index) => {
+          const percentage = category.percentage
+          const circumference = 2 * Math.PI * radius
+          const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`
+          const strokeDashoffset = -((accumulatedPercentage / 100) * circumference)
+
+          const segment = (
+            <circle
+              key={category.category}
+              cx={center}
+              cy={center}
+              r={radius}
+              fill="transparent"
+              stroke={getPieChartColor(index)}
+              strokeWidth={strokeWidth}
+              strokeDasharray={strokeDasharray}
+              strokeDashoffset={strokeDashoffset}
+              className="transition-all duration-300 hover:opacity-80"
+            />
+          )
+
+          accumulatedPercentage += percentage
+          return segment
+        })}
+      </svg>
+
+      {/* Center text */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="text-white text-lg font-bold">
+          {currency === 'SGD' ? 'S$' : '$'}{categories.reduce((sum, cat) => sum + cat.total_amount, 0).toFixed(0)}
+        </div>
+        <div className="text-gray-400 text-xs">Total</div>
+      </div>
     </div>
   )
 }

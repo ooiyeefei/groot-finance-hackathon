@@ -1,6 +1,6 @@
 'use client'
 
-import { X, Edit, Trash2, Calendar, Building, FileText, DollarSign, Hash, Eye } from 'lucide-react'
+import { X, Edit, Trash2, Calendar, Building, FileText, DollarSign, Hash, Eye, Copy } from 'lucide-react'
 import { Transaction } from '@/domains/accounting-entries/types'
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
@@ -70,6 +70,17 @@ export default function AccountingEntryDetailModal({
     return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 
+  const formatCreationMethod = (method: string) => {
+    switch (method) {
+      case 'manual':
+        return 'Manual Entry'
+      case 'document_extract':
+        return 'Document Extraction'
+      default:
+        return method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    }
+  }
+
   const calculateLineItemsTotal = () => {
     if (!transaction.line_items || transaction.line_items.length === 0) return 0
     return transaction.line_items.reduce((sum, item) => sum + (item.total_amount || 0), 0)
@@ -85,9 +96,9 @@ export default function AccountingEntryDetailModal({
               <Eye className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-medium text-white">Transaction Details</h3>
+              <h3 className="text-lg font-medium text-white">Record Details</h3>
               <p className="text-sm text-gray-400 mt-1">
-                {formatCategoryName(transaction.category)} • {formatDate(transaction.transaction_date)}
+                {transaction.category_name || formatCategoryName(transaction.category)} • {formatDate(transaction.transaction_date)}
               </p>
             </div>
           </div>
@@ -95,14 +106,14 @@ export default function AccountingEntryDetailModal({
             <button
               onClick={onEdit}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors"
-              title="Edit Transaction"
+              title="Edit Record"
             >
               <Edit className="w-5 h-5" />
             </button>
             <button
               onClick={handleDeleteClick}
               className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded-lg transition-colors"
-              title="Delete Transaction"
+              title="Delete Record"
             >
               <Trash2 className="w-5 h-5" />
             </button>
@@ -117,15 +128,15 @@ export default function AccountingEntryDetailModal({
 
         {/* Modal Content - Two Pane Layout */}
         <div className="flex-1 flex min-h-0">
-          {/* Left Pane - Transaction Information (Scrollable) */}
+          {/* Left Pane - Information (Scrollable) */}
           <div className="w-1/2 border-r border-gray-700 flex flex-col min-h-0">
             <div className="overflow-y-auto flex-1 p-6">
               <div className="space-y-6">
-                {/* Transaction Information */}
+                {/* Information */}
                 <div>
                   <h4 className="text-sm font-medium text-white mb-4 flex items-center">
                     <FileText className="w-4 h-4 mr-2" />
-                    Transaction Information
+                    Information
                   </h4>
                   
                   <div className="space-y-3">
@@ -143,7 +154,7 @@ export default function AccountingEntryDetailModal({
                     
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400">Category:</span>
-                      <span className="text-white">{formatCategoryName(transaction.category)}</span>
+                      <span className="text-white">{transaction.category_name || formatCategoryName(transaction.category)}</span>
                     </div>
                     
                     
@@ -241,19 +252,19 @@ export default function AccountingEntryDetailModal({
                     
                     <div className="flex items-center justify-between">
                       <span className="text-gray-500">Creation Method:</span>
-                      <span className="text-gray-400 capitalize">
-                        {transaction.created_by_method.replace('_', ' ')}
+                      <span className="text-gray-400">
+                        {formatCreationMethod(transaction.created_by_method)}
                       </span>
                     </div>
                     
-                    {transaction.document_id && (
+                    {transaction.source_record_id && (
                       <div className="flex items-center justify-between">
                         <span className="text-gray-500 flex items-center gap-1">
                           <FileText className="w-3 h-3" />
                           Source Document:
                         </span>
                         <button
-                          onClick={() => onViewDocument?.(transaction.document_id!)}
+                          onClick={() => onViewDocument?.(transaction.source_record_id!)}
                           className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
                         >
                           <Eye className="w-3 h-3" />
@@ -333,7 +344,7 @@ export default function AccountingEntryDetailModal({
                 {/* Transaction Summary */}
                 {transaction.line_items && transaction.line_items.length > 0 && (
                   <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
-                    <h5 className="text-sm font-medium text-white mb-3">Transaction Summary</h5>
+                    <h5 className="text-sm font-medium text-white mb-3">Summary</h5>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-400">Items Count:</span>
@@ -363,35 +374,50 @@ export default function AccountingEntryDetailModal({
                   </div>
                 )}
 
-                {/* Additional Details */}
-                {transaction.vendor_details && Object.keys(transaction.vendor_details).length > 0 && (
-                  <div>
-                    <h5 className="text-sm font-medium text-white mb-3">Additional Details</h5>
-                    <div className="bg-gray-900 rounded-lg p-4">
-                      <pre className="text-sm text-gray-300 whitespace-pre-wrap">
-                        {JSON.stringify(transaction.vendor_details, null, 2)}
-                      </pre>
-                    </div>
+                {/* Record ID and Invoice/Expense Claims ID at bottom of right pane */}
+                <div className="flex flex-col items-end mt-6 pt-4 border-t border-gray-600 space-y-2">
+                  {/* Record ID */}
+                  <div className="flex items-center gap-2 bg-gray-700/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
+                    <span className="text-gray-300 text-xs font-mono">Record ID: {transaction.id}</span>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(transaction.id)}
+                      className="text-gray-400 hover:text-gray-200 transition-colors"
+                      title="Copy Record ID"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Footer */}
-        <div className="border-t border-gray-700 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-500">
-              Transaction ID: {transaction.id}
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
-              >
-                Close
-              </button>
+                  {/* Invoice ID */}
+                  {transaction.source_record_id && (
+                    <div className="flex items-center gap-2 bg-green-700/20 backdrop-blur-sm px-3 py-1.5 rounded-md border border-green-600/30">
+                      <span className="text-green-300 text-xs font-mono">Invoice ID: {transaction.source_record_id}</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(transaction.source_record_id!)}
+                        className="text-green-400 hover:text-green-200 transition-colors"
+                        title="Copy Invoice ID"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Expense Claims ID */}
+                  {transaction.expense_claims && transaction.expense_claims.length > 0 && (
+                    <div className="flex items-center gap-2 bg-blue-700/20 backdrop-blur-sm px-3 py-1.5 rounded-md border border-blue-600/30">
+                      <span className="text-blue-300 text-xs font-mono">Expense ID: {transaction.expense_claims[0].id}</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(transaction.expense_claims?.[0]?.id || '')}
+                        className="text-blue-400 hover:text-blue-200 transition-colors"
+                        title="Copy Expense Claims ID"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+              </div>
             </div>
           </div>
         </div>
@@ -402,7 +428,7 @@ export default function AccountingEntryDetailModal({
         isOpen={deleteConfirmation.isOpen}
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        title="Delete Transaction"
+        title="Delete Record"
         message={`Are you sure you want to delete this ${transaction.transaction_type}? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"

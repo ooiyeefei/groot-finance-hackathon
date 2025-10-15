@@ -54,19 +54,25 @@ export default function CategoriesManagementClient({ userId }: CategoriesManagem
   useEffect(() => {
     const fetchUserRole = async () => {
       try {
-        const response = await fetch('/api/v1/expense-claims/analytics')
+        const response = await fetch('/api/v1/users/role')
         const result = await response.json()
 
         if (result.success) {
-          setUserRole(result.data.role)
+          // Map the role string to role permissions
+          const role = result.data.profile.role
+          setUserRole({
+            employee: true, // All users are employees
+            manager: role === 'manager' || role === 'admin',
+            admin: role === 'admin'
+          })
         } else {
           // Fallback role if API fails
-          setUserRole({ employee: true, manager: true, admin: false })
+          setUserRole({ employee: true, manager: false, admin: false })
         }
       } catch (error) {
         console.error('Failed to fetch user role:', error)
         // Fallback role if API fails
-        setUserRole({ employee: true, manager: true, admin: false })
+        setUserRole({ employee: true, manager: false, admin: false })
       } finally {
         setLoading(false)
       }
