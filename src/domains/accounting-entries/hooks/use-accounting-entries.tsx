@@ -3,17 +3,17 @@
 import { useState, useCallback } from 'react';
 import { useInfiniteQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
-  Transaction,
-  CreateTransactionRequest,
-  UpdateTransactionRequest,
-  TransactionListParams,
+  AccountingEntry,
+  CreateAccountingEntryRequest,
+  UpdateAccountingEntryRequest,
+  AccountingEntryListParams,
   SupportedCurrency
 } from '@/domains/accounting-entries/types';
 
 interface AccountingEntryListResponse {
   success: boolean;
   data: {
-    transactions: Transaction[]; // Keep "transactions" key for backwards compatibility
+    transactions: AccountingEntry[]; // Keep "transactions" key for backwards compatibility
     pagination: {
       page: number;
       limit: number;
@@ -29,7 +29,7 @@ interface AccountingEntryListResponse {
 interface AccountingEntryResponse {
   success: boolean;
   data: {
-    transaction: Transaction; // Keep "transaction" key for backwards compatibility
+    transaction: AccountingEntry; // Keep "transaction" key for backwards compatibility
   };
   error?: string;
 }
@@ -45,7 +45,7 @@ export interface AccountingEntryFilters {
 }
 
 interface UseAccountingEntriesReturn {
-  accountingEntries: Transaction[];
+  accountingEntries: AccountingEntry[];
   loading: boolean;
   error: string | null;
   creating: boolean;
@@ -55,17 +55,17 @@ interface UseAccountingEntriesReturn {
   isFetchingMore: boolean;
   totalCount: number;
   // CRUD operations
-  createAccountingEntry: (data: CreateTransactionRequest) => Promise<Transaction | null>;
-  updateAccountingEntry: (id: string, data: UpdateTransactionRequest) => Promise<Transaction | null>;
+  createAccountingEntry: (data: CreateAccountingEntryRequest) => Promise<AccountingEntry | null>;
+  updateAccountingEntry: (id: string, data: UpdateAccountingEntryRequest) => Promise<AccountingEntry | null>;
   deleteAccountingEntry: (id: string) => Promise<boolean>;
   refreshAccountingEntries: () => Promise<void>;
   // Infinite scroll operations
   fetchNextPage: () => void;
   // Utility
-  getAccountingEntryById: (id: string) => Transaction | undefined;
+  getAccountingEntryById: (id: string) => AccountingEntry | undefined;
 }
 
-const DEFAULT_FILTERS: TransactionListParams = {
+const DEFAULT_FILTERS: AccountingEntryListParams = {
   page: 1,
   limit: 20,
   sort_by: 'created_at',
@@ -177,7 +177,7 @@ export function useAccountingEntries(filters: AccountingEntryFilters = {}): UseA
 
   // Create transaction mutation with optimistic updates
   const createMutation = useMutation({
-    mutationFn: async (data: CreateTransactionRequest): Promise<AccountingEntryResponse> => {
+    mutationFn: async (data: CreateAccountingEntryRequest): Promise<AccountingEntryResponse> => {
       const response = await fetch('/api/v1/accounting-entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -226,7 +226,7 @@ export function useAccountingEntries(filters: AccountingEntryFilters = {}): UseA
 
   // Update transaction mutation with optimistic updates
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: UpdateTransactionRequest }): Promise<AccountingEntryResponse> => {
+    mutationFn: async ({ id, data }: { id: string; data: UpdateAccountingEntryRequest }): Promise<AccountingEntryResponse> => {
       const response = await fetch(`/api/v1/accounting-entries/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -340,7 +340,7 @@ export function useAccountingEntries(filters: AccountingEntryFilters = {}): UseA
   }, [refetch]);
 
   // CRUD operation wrappers
-  const createAccountingEntry = useCallback(async (data: CreateTransactionRequest): Promise<Transaction | null> => {
+  const createAccountingEntry = useCallback(async (data: CreateAccountingEntryRequest): Promise<AccountingEntry | null> => {
     try {
       const result = await createMutation.mutateAsync(data);
       return result.data.transaction;
@@ -349,7 +349,7 @@ export function useAccountingEntries(filters: AccountingEntryFilters = {}): UseA
     }
   }, [createMutation]);
 
-  const updateAccountingEntry = useCallback(async (id: string, data: UpdateTransactionRequest): Promise<Transaction | null> => {
+  const updateAccountingEntry = useCallback(async (id: string, data: UpdateAccountingEntryRequest): Promise<AccountingEntry | null> => {
     try {
       const result = await updateMutation.mutateAsync({ id, data });
       return result.data.transaction;
@@ -368,7 +368,7 @@ export function useAccountingEntries(filters: AccountingEntryFilters = {}): UseA
   }, [deleteMutation]);
 
   // Get accounting entry by ID across all pages
-  const getAccountingEntryById = useCallback((id: string): Transaction | undefined => {
+  const getAccountingEntryById = useCallback((id: string): AccountingEntry | undefined => {
     if (!data?.pages) return undefined;
 
     for (const page of data.pages) {

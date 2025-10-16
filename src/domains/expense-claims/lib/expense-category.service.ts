@@ -6,7 +6,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
-import { ensureUserProfile } from '@/lib/auth/ensure-employee-profile'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 
 export interface CustomExpenseCategory {
   id?: string

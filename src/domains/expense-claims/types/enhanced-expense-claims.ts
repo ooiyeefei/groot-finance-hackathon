@@ -4,7 +4,7 @@
  * 100% backward compatible with existing expense-claims.ts
  */
 
-import { SupportedCurrency, Transaction } from '@/domains/accounting-entries/types'
+import { SupportedCurrency, AccountingEntry } from '@/domains/accounting-entries/types'
 import { ExpenseClaimStatus, ComplianceFlag } from './expense-claims' // ✅ Use unified status type
 import { SupabaseClient } from '@supabase/supabase-js'
 
@@ -99,7 +99,7 @@ export interface EnhancedExpenseClaim {
   approval_chain: ApprovalStep[]
   
   // Related data
-  transaction?: Transaction
+  transaction?: AccountingEntry
   employee?: any
   vendor?: Vendor
 }

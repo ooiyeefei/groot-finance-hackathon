@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { rateLimiters } from '@/lib/api/rate-limit'
+import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { acceptInvitation, validateInvitation } from '@/domains/account-management/lib/invitation.service'
 
 export async function POST(request: NextRequest) {

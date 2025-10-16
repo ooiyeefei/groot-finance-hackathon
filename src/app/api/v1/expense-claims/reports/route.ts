@@ -19,7 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getUserData } from '@/lib/db/supabase-server'
-import { ensureUserProfile } from '@/lib/auth/ensure-employee-profile'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { createBusinessContextSupabaseClient, createServiceSupabaseClient } from '@/lib/db/supabase-server'
 import { startOfMonth, addMonths, parse, format } from 'date-fns'
 import { mapExpenseCategoryToAccounting } from '@/domains/expense-claims/lib/expense-category-mapper'

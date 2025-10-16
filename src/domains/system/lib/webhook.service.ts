@@ -17,7 +17,7 @@
 
 import { Webhook } from 'svix'
 import { createServiceSupabaseClient } from '@/lib/db/supabase-server'
-import { syncRoleToClerk } from '@/lib/auth/rbac'
+import { syncRoleToClerk } from '@/domains/security/lib/rbac'
 import { createUserFirstBusiness } from '@/lib/db/business-context'
 
 // ===== TYPE DEFINITIONS =====

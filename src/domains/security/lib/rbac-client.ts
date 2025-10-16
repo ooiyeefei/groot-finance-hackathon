@@ -7,7 +7,7 @@
 
 import React from 'react'
 import { useUser, useAuth } from '@clerk/nextjs'
-import { UserRole, RolePermissions } from './rbac'
+import { UserRole, RolePermissions } from '@/domains/security/lib/rbac'
 
 /**
  * Client-side role checking hook following Clerk patterns

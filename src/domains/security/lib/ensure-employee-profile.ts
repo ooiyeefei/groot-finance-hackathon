@@ -4,7 +4,7 @@
  */
 
 import { createAuthenticatedSupabaseClient } from '@/lib/db/supabase-server'
-import { syncRoleToClerk } from '@/lib/auth/rbac'
+import { syncRoleToClerk } from '@/domains/security/lib/rbac'
 import { getDefaultExpenseCategories } from '@/domains/expense-claims/lib/default-expense-categories'
 
 export interface UserProfile {

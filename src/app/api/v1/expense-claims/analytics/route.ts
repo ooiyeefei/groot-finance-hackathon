@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getUserData } from '@/lib/db/supabase-server'
-import { ensureUserProfile } from '@/lib/auth/ensure-employee-profile'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { getExpenseAnalytics } from '@/domains/expense-claims/lib/data-access'
 
 export async function GET(request: NextRequest) {

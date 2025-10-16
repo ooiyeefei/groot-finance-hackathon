@@ -31,8 +31,8 @@
  * - deleteCOGSCategory() - Delete COGS category
  */
 
-import { createServiceSupabaseClient, getUserData } from '@/lib/db/supabase-server'
-import { syncRoleToClerk } from '@/lib/auth/rbac'
+import { createServiceSupabaseClient, createBusinessContextSupabaseClient, getUserData } from '@/lib/db/supabase-server'
+import { syncRoleToClerk } from '@/domains/security/lib/rbac'
 import { getCurrentBusinessContext, getUserBusinessMemberships as getBusinessMemberships, switchActiveBusiness as switchBusiness } from '@/lib/db/business-context'
 import { emailService } from '@/lib/services/email-service'
 import { createInvitationToken } from './invitation-tokens'
@@ -551,7 +551,8 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
     throw new Error('No business associated with user')
   }
 
-  const supabase = createServiceSupabaseClient()
+  // ✅ SECURITY FIX: Use business context client for business profile access
+  const supabase = await createBusinessContextSupabaseClient()
 
   const { data: businessProfile, error } = await supabase
     .from('businesses')
@@ -586,7 +587,8 @@ export async function updateBusinessProfile(
     throw new Error('No business associated with user')
   }
 
-  const supabase = createServiceSupabaseClient()
+  // ✅ SECURITY FIX: Use business context client for business profile updates
+  const supabase = await createBusinessContextSupabaseClient()
 
   const updateData: any = {
     updated_at: new Date().toISOString()
@@ -984,7 +986,8 @@ export interface UpdateCOGSCategoryRequest {
  * Get all COGS categories for business (including inactive)
  */
 export async function getCOGSCategories(businessId: string): Promise<COGSCategory[]> {
-  const supabase = createServiceSupabaseClient()
+  // ✅ SECURITY FIX: Use business context client for business-scoped COGS operations
+  const supabase = await createBusinessContextSupabaseClient()
 
   const { data: businessData, error } = await supabase
     .from('businesses')
@@ -1006,7 +1009,8 @@ export async function getCOGSCategories(businessId: string): Promise<COGSCategor
  * Get only enabled COGS categories for dropdowns
  */
 export async function getEnabledCOGSCategories(businessId: string): Promise<COGSCategory[]> {
-  const supabase = createServiceSupabaseClient()
+  // ✅ SECURITY FIX: Use business context client for business-scoped COGS operations
+  const supabase = await createBusinessContextSupabaseClient()
 
   const { data: businessData, error } = await supabase
     .from('businesses')
@@ -1044,7 +1048,8 @@ export async function createCOGSCategory(
     throw new Error('Cost type must be either "direct" or "indirect"')
   }
 
-  const supabase = createServiceSupabaseClient()
+  // ✅ SECURITY FIX: Use business context client for business-scoped COGS operations
+  const supabase = await createBusinessContextSupabaseClient()
 
   // Get existing categories to check for duplicates
   const { data: businessData } = await supabase
@@ -1111,7 +1116,8 @@ export async function updateCOGSCategory(
     throw new Error('Cost type must be either "direct" or "indirect"')
   }
 
-  const supabase = createServiceSupabaseClient()
+  // ✅ SECURITY FIX: Use business context client for business-scoped COGS operations
+  const supabase = await createBusinessContextSupabaseClient()
 
   // Get existing categories
   const { data: businessData } = await supabase
@@ -1168,7 +1174,8 @@ export async function deleteCOGSCategory(
     throw new Error('Category ID is required for deletion')
   }
 
-  const supabase = createServiceSupabaseClient()
+  // ✅ SECURITY FIX: Use business context client for business-scoped COGS operations
+  const supabase = await createBusinessContextSupabaseClient()
 
   // Get existing categories
   const { data: businessData } = await supabase

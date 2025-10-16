@@ -10,7 +10,7 @@ import AccountingEntryFormModal from '@/domains/accounting-entries/components/ac
 import AccountingEntryDetailModal from '@/domains/accounting-entries/components/accounting-entry-view-modal'
 import DocumentAnalysisModal from '@/domains/invoices/components/document-analysis-modal'
 import { useAccountingEntries } from '@/domains/accounting-entries/hooks/use-accounting-entries'
-import { Transaction } from '@/domains/accounting-entries/types'
+import { AccountingEntry } from '@/domains/accounting-entries/types'
 import { Plus } from 'lucide-react'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { useActiveBusiness } from '@/contexts/business-context'
@@ -20,8 +20,8 @@ export default function AccountingEntriesClient() {
   const router = useRouter()
   const { businessId } = useActiveBusiness()
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [editingAccountingEntry, setEditingTransaction] = useState<Transaction | null>(null)
-  const [viewingAccountingEntry, setViewingTransaction] = useState<Transaction | null>(null)
+  const [editingAccountingEntry, setEditingTransaction] = useState<AccountingEntry | null>(null)
+  const [viewingAccountingEntry, setViewingTransaction] = useState<AccountingEntry | null>(null)
   const [selectedDocument, setSelectedDocument] = useState<any | null>(null)
   const [highlightProcessed, setHighlightProcessed] = useState(false)
 

@@ -10,7 +10,7 @@
 
 import { createServiceSupabaseClient } from '@/lib/db/supabase-server'
 import { validateInvitationToken, isLegacyUuidToken, createInvitationToken } from './invitation-tokens'
-import { syncRoleToClerk } from '@/lib/auth/rbac'
+import { syncRoleToClerk } from '@/domains/security/lib/rbac'
 import { emailService } from '@/lib/services/email-service'
 
 /**

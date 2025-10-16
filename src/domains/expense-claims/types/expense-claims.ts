@@ -3,7 +3,7 @@
  * Based on expert recommendations from Otto, Mel, and Kevin
  */
 
-import { SupportedCurrency, Transaction } from '@/domains/accounting-entries/types'
+import { SupportedCurrency, AccountingEntry } from '@/domains/accounting-entries/types'
 
 // ✅ Simplified linear workflow status
 export type ExpenseClaimStatus =
@@ -90,7 +90,7 @@ export interface ExpenseClaim {
   expense_category: ExpenseCategory // Dynamic category code from businesses.custom_expense_categories
   
   // Related data
-  transaction?: Transaction
+  transaction?: AccountingEntry
   employee?: EmployeeProfile
   current_approver?: EmployeeProfile // Legacy field - use reviewed_by with status for logic
   

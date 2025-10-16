@@ -17,6 +17,7 @@ import MonthlyReportGenerator from './monthly-report-generator'
 import EditExpenseModalNew from './edit-expense-modal-new'
 import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
+import FileUploadZone from '@/domains/utilities/components/file-upload-zone'
 
 interface PersonalExpenseDashboardProps {
   userId: string
@@ -263,27 +264,66 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     }
   }, [userId, fetchDashboardData])
 
-  // Polling for processing status updates
+  // ✅ FIXED: Smart polling that only updates processing claims without full refresh
   useEffect(() => {
     if (!dashboardData?.recent_claims) return
 
-    // Check if any claims are processing or uploading
-    const hasProcessingClaims = dashboardData.recent_claims.some(claim =>
-      claim.status === 'analyzing' || claim.status === 'uploading'
-    )
+    // Get IDs of claims that are currently processing
+    const processingClaimIds = dashboardData.recent_claims
+      .filter(claim => claim.status === 'analyzing' || claim.status === 'uploading')
+      .map(claim => claim.id)
 
-    if (hasProcessingClaims) {
-      console.log('[Dashboard Polling] Starting polling for processing claims')
-      const interval = setInterval(() => {
+    if (processingClaimIds.length === 0) return
+
+    console.log('[Smart Polling] Starting targeted polling for processing claims:', processingClaimIds)
+
+    const interval = setInterval(async () => {
+      try {
+        // Only fetch status for processing claims - much lighter API call
+        const statusPromises = processingClaimIds.map(async (claimId) => {
+          const response = await fetch(`/api/v1/expense-claims/${claimId}`)
+          if (response.ok) {
+            const result = await response.json()
+            return result.success ? { claimId, claim: result.data } : null
+          }
+          return null
+        })
+
+        const statusResults = await Promise.all(statusPromises)
+
+        // Update only the specific claims that changed status
+        let shouldRefreshAll = false
+
+        statusResults.forEach((result) => {
+          if (result && result.claim) {
+            const { claimId, claim } = result
+
+            // If claim is no longer processing, we need a full refresh to update summary
+            if (claim.status !== 'analyzing' && claim.status !== 'uploading') {
+              shouldRefreshAll = true
+              console.log('[Smart Polling] Claim finished processing:', claimId, 'new status:', claim.status)
+            }
+          }
+        })
+
+        // Only do full refresh when processing is complete, not during processing
+        if (shouldRefreshAll) {
+          console.log('[Smart Polling] Processing completed, refreshing dashboard')
+          fetchDashboardData()
+        }
+
+      } catch (error) {
+        console.error('[Smart Polling] Error checking claim status:', error)
+        // On error, fall back to full refresh but less frequently
         fetchDashboardData()
-      }, 3000) // Poll every 3 seconds
-
-      return () => {
-        console.log('[Dashboard Polling] Stopping polling')
-        clearInterval(interval)
       }
+    }, 5000) // Poll every 5 seconds (less aggressive)
+
+    return () => {
+      console.log('[Smart Polling] Stopping targeted polling')
+      clearInterval(interval)
     }
-  }, [dashboardData?.recent_claims, fetchDashboardData])
+  }, [dashboardData?.recent_claims?.map(c => `${c.id}:${c.status}`).join(',')]) // Only re-run when claim statuses actually change
 
   // Auto-hide toast after 3 seconds
   useEffect(() => {
@@ -572,6 +612,29 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
           <CardDescription>Submit new expense claims</CardDescription>
         </CardHeader>
         <CardContent>
+          {/* File Upload Zone - Above the buttons */}
+          <div className="mb-6">
+            <FileUploadZone
+              domain="expense-claims"
+              allowMultiple={true}
+              autoProcess={true}
+              onUploadSuccess={(document) => {
+                console.log('[Quick Actions] Expense claim uploaded:', document)
+                // Refresh dashboard to show new claims
+                fetchDashboardData()
+              }}
+              onBatchUploadSuccess={(documents) => {
+                console.log('[Quick Actions] Batch expense claims uploaded:', documents)
+                // Refresh dashboard to show all new claims
+                fetchDashboardData()
+              }}
+              onUploadStart={() => {
+                console.log('[Quick Actions] Upload started')
+              }}
+            />
+          </div>
+
+          {/* Existing buttons */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Button
               onClick={() => onNewClaim('camera')}
@@ -818,8 +881,27 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           </button>
         )}
 
-        {/* View Details button for all non-draft claims (except when processing) */}
-        {claim.status !== 'draft' && claim.status !== 'analyzing' && claim.status !== 'uploading' && (
+        {/* Reprocess button for failed claims - Retry AI extraction */}
+        {claim.status === 'failed' && claim.storage_path && (
+          <button
+            onClick={() => handleReprocessClick(claim.id, claim.storage_path)}
+            disabled={reprocessingClaims.has(claim.id)}
+            className="inline-flex items-center px-3 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors"
+          >
+            {reprocessingClaims.has(claim.id) ? (
+              <Brain className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <RotateCcw className="w-4 h-4 mr-1.5" />
+            )}
+            {reprocessingClaims.has(claim.id) ? 'AI Analyzing...' : 'Reprocess'}
+          </button>
+        )}
+
+        {/* View Details button for all non-draft claims (except when processing or failed with reprocess option) */}
+        {claim.status !== 'draft' &&
+         claim.status !== 'analyzing' &&
+         claim.status !== 'uploading' &&
+         !(claim.status === 'failed' && claim.storage_path) && (
           <button
             onClick={() => {
               setDetailsClaimId(claim.id)

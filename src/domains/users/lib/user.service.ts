@@ -13,7 +13,7 @@
  */
 
 import { createServiceSupabaseClient, getUserData, createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
-import { requirePermission, getCurrentUserContextWithBusiness, updateUserRole as rbacUpdateUserRole } from '@/lib/auth/rbac'
+import { requirePermission, getCurrentUserContextWithBusiness, updateUserRole as rbacUpdateUserRole } from '@/domains/security/lib/rbac'
 import { clerkClient } from '@clerk/nextjs/server'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 

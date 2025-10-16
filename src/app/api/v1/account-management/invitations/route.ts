@@ -7,9 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createInvitation, getInvitations } from '@/domains/account-management/lib/account-management.service'
-import { getCurrentUserContext } from '@/lib/auth/rbac'
-import { rateLimiters } from '@/lib/api/rate-limit'
-import { csrfProtection } from '@/lib/auth/csrf-protection'
+import { getCurrentUserContext } from '@/domains/security/lib/rbac'
+import { rateLimiters } from '@/domains/security/lib/rate-limit'
+import { csrfProtection } from '@/domains/security/lib/csrf-protection'
 
 /**
  * Create new business invitation

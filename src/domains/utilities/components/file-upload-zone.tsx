@@ -32,6 +32,7 @@ interface FileUploadZoneProps {
   onUploadStart?: () => void
   autoProcess?: boolean
   allowMultiple?: boolean
+  domain?: 'invoices' | 'expense-claims' // Domain configuration
 }
 
 export default function FileUploadZone({
@@ -39,7 +40,8 @@ export default function FileUploadZone({
   onBatchUploadSuccess,
   onUploadStart,
   autoProcess = true,
-  allowMultiple = false
+  allowMultiple = false,
+  domain = 'invoices' // Default to invoices for backward compatibility
 }: FileUploadZoneProps) {
   const { businessId } = useActiveBusiness()
   const [dragActive, setDragActive] = useState(false)
@@ -86,7 +88,22 @@ export default function FileUploadZone({
       formData.append('file', file)
       formData.append('businessId', businessId)
 
-      const response = await fetch('/api/v1/invoices', {
+      // Add domain-specific fields for expense claims
+      if (domain === 'expense-claims') {
+        formData.append('processing_mode', 'ai') // Enable AI processing for expense claims
+
+        // Add required form fields for unified API - use placeholder values, AI will update
+        formData.append('description', 'Receipt Processing - AI Extraction')
+        formData.append('business_purpose', 'Business Expense - Receipt Upload')
+        formData.append('original_amount', '1') // Temporary amount, will be updated by AI
+        formData.append('original_currency', 'SGD') // Default currency
+        formData.append('transaction_date', new Date().toISOString().split('T')[0]) // Today's date
+        formData.append('vendor_name', 'Processing...') // Placeholder vendor name
+      }
+
+      // Use domain-specific API endpoint
+      const endpoint = domain === 'expense-claims' ? '/api/v1/expense-claims' : '/api/v1/invoices'
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: formData
       })
@@ -94,31 +111,47 @@ export default function FileUploadZone({
       const result = await response.json()
 
       if (result.success) {
-        const uploadedDocument = result.data
-        
-        // Auto-process the document if enabled (only for images, PDFs need conversion first)
-        if (autoProcess && file.type !== 'application/pdf') {
-          try {
-            // Immediately trigger processing for image files only
-            const processResponse = await fetch(`/api/v1/invoices/${uploadedDocument.id}/process`, {
-              method: 'POST'
-            })
-
-            if (processResponse.ok) {
-              console.log('Auto-processing triggered successfully for:', uploadedDocument.id)
-              // Update the returned document status to processing
-              uploadedDocument.status = 'processing'
-            } else {
-              console.error('Auto-processing failed to start')
+        // Handle different response structures based on domain
+        const uploadedDocument = domain === 'expense-claims'
+          ? {
+              id: result.data?.expense_claim_id || result.data?.expense_claim?.id,
+              fileName: file.name,
+              fileSize: file.size,
+              fileType: file.type,
+              status: result.data?.expense_claim?.status || 'processing'
             }
-          } catch (error) {
-            console.error('Auto-processing failed:', error)
+          : result.data
+
+        // Auto-process the document if enabled
+        if (autoProcess && domain === 'invoices') {
+          // Invoice processing logic (only for images, PDFs need conversion first)
+          if (file.type !== 'application/pdf') {
+            try {
+              // Immediately trigger processing for image files only
+              const processResponse = await fetch(`/api/v1/invoices/${uploadedDocument.id}/process`, {
+                method: 'POST'
+              })
+
+              if (processResponse.ok) {
+                console.log('Auto-processing triggered successfully for:', uploadedDocument.id)
+                // Update the returned document status to processing
+                uploadedDocument.status = 'processing'
+              } else {
+                console.error('Auto-processing failed to start')
+              }
+            } catch (error) {
+              console.error('Auto-processing failed:', error)
+            }
+          } else {
+            console.log('PDF upload detected - will process after conversion completes:', uploadedDocument.id)
+            // PDF will be processed automatically after convert-pdf-to-image job completes
           }
-        } else if (autoProcess && file.type === 'application/pdf') {
-          console.log('PDF upload detected - will process after conversion completes:', uploadedDocument.id)
-          // PDF will be processed automatically after convert-pdf-to-image job completes
+        } else if (autoProcess && domain === 'expense-claims') {
+          // Expense claims processing - AI processing is triggered automatically via the API
+          console.log('Expense claim uploaded with AI processing enabled:', uploadedDocument.id)
+          // For expense claims, processing is handled by the API when processing_mode='ai'
         }
-        
+
         return uploadedDocument
       } else {
         throw new Error(result.error || 'Upload failed')
@@ -133,7 +166,7 @@ export default function FileUploadZone({
   const uploadFiles = async (files: File[]) => {
     // Notify parent component that upload is starting
     onUploadStart?.()
-    
+
     setUploadState({
       uploading: true,
       progress: 0,
@@ -150,14 +183,14 @@ export default function FileUploadZone({
       try {
         const uploadedDocument = await uploadFile(files[i])
         uploadedDocuments.push(uploadedDocument)
-        
+
         // Update progress
         setUploadState(prev => ({
           ...prev,
           uploadedFiles: i + 1,
           progress: ((i + 1) / files.length) * 100
         }))
-        
+
         // Notify parent for single file success
         onUploadSuccess?.(uploadedDocument)
       } catch (error) {
@@ -171,13 +204,13 @@ export default function FileUploadZone({
         uploading: false,
         progress: 100,
         error: null,
-        success: uploadedDocuments.length === 1 
+        success: uploadedDocuments.length === 1
           ? `Successfully uploaded "${uploadedDocuments[0].fileName}"`
           : `Successfully uploaded ${uploadedDocuments.length} files`,
         uploadedFiles: uploadedDocuments.length,
         totalFiles: files.length
       })
-      
+
       // Notify parent of batch success
       if (allowMultiple && uploadedDocuments.length > 1) {
         onBatchUploadSuccess?.(uploadedDocuments)
@@ -191,7 +224,7 @@ export default function FileUploadZone({
         uploadedFiles: uploadedDocuments.length,
         totalFiles: files.length
       })
-      
+
       // Notify parent of partial success
       if (allowMultiple && uploadedDocuments.length > 0) {
         onBatchUploadSuccess?.(uploadedDocuments)
@@ -206,7 +239,7 @@ export default function FileUploadZone({
         totalFiles: files.length
       })
     }
-    
+
     // Clear messages after 5 seconds for batch uploads
     setTimeout(() => {
       setUploadState(prev => ({ ...prev, success: null, error: null }))
@@ -267,9 +300,9 @@ export default function FileUploadZone({
     e.preventDefault()
     e.stopPropagation()
     setDragActive(false)
-    
+
     if (uploadState.uploading) return
-    
+
     handleFiles(e.dataTransfer.files)
   }, [handleFiles, uploadState.uploading])
 
@@ -291,8 +324,8 @@ export default function FileUploadZone({
         className={`
           relative border-2 border-dashed rounded-lg p-12 text-center cursor-pointer
           transition-all duration-200
-          ${dragActive 
-            ? 'border-blue-400 bg-blue-400/10' 
+          ${dragActive
+            ? 'border-blue-400 bg-blue-400/10'
             : 'border-gray-600 hover:border-gray-500 hover:bg-gray-700/50'
           }
           ${uploadState.uploading ? 'pointer-events-none opacity-50' : ''}
@@ -312,7 +345,7 @@ export default function FileUploadZone({
           disabled={uploadState.uploading}
           multiple={allowMultiple}
         />
-        
+
         <div className="space-y-4">
           {uploadState.uploading ? (
             <>
@@ -322,14 +355,14 @@ export default function FileUploadZone({
                   {uploadState.totalFiles > 1 ? 'Uploading files...' : 'Uploading file...'}
                 </p>
                 <p className="text-gray-400 text-sm">
-                  {uploadState.totalFiles > 1 
+                  {uploadState.totalFiles > 1
                     ? `Processing ${uploadState.uploadedFiles} of ${uploadState.totalFiles} files`
                     : 'Please wait while we process your document'
                   }
                 </p>
                 {uploadState.totalFiles > 1 && (
                   <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
-                    <div 
+                    <div
                       className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${uploadState.progress}%` }}
                     />
@@ -342,8 +375,8 @@ export default function FileUploadZone({
               <Upload className="w-12 h-12 text-gray-400 mx-auto" />
               <div>
                 <p className="text-white font-medium">
-                  {dragActive 
-                    ? `Drop your ${allowMultiple ? 'files' : 'file'} here` 
+                  {dragActive
+                    ? `Drop your ${allowMultiple ? 'files' : 'file'} here`
                     : `Click to upload or drag and drop`
                   }
                 </p>
@@ -364,7 +397,7 @@ export default function FileUploadZone({
           <p className="text-red-300">{uploadState.error}</p>
         </div>
       )}
-      
+
       {uploadState.success && (
         <div className="flex items-center space-x-2 p-4 bg-green-900/20 border border-green-700 rounded-lg">
           <CheckCircle className="w-5 h-5 text-green-400" />

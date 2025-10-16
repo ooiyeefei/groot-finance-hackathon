@@ -5,7 +5,7 @@
 
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { createBusinessContextSupabaseClient, createServiceSupabaseClient } from '@/lib/db/supabase-server'
-import { ensureUserProfile, UserProfile } from '@/lib/auth/ensure-employee-profile'
+import { ensureUserProfile, UserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { getCurrentBusinessContext, checkBusinessOwnership, type BusinessContext } from '@/lib/db/business-context'
 
 export type UserRole = 'employee' | 'manager' | 'admin'
@@ -147,8 +147,8 @@ export async function updateUserRole(
       return { success: false, error: 'Failed to create or access employee profile' }
     }
 
-    // HYBRID: Use service client for role updates (bypasses RLS for administrative operations)
-    const supabase = createServiceSupabaseClient()
+    // ✅ SECURITY FIX: Use business context client with proper RLS enforcement
+    const supabase = await createBusinessContextSupabaseClient()
     
     // Update employee profile permissions using the correct UUID
     const permissions = roleToPermissions(role)
@@ -395,8 +395,8 @@ export async function getBusinessUsers(businessId: string): Promise<{
       return { success: false, error: 'Insufficient permissions' }
     }
 
-    // HYBRID: Use service client for admin operations (bypasses RLS for cross-business queries)
-    const supabase = createServiceSupabaseClient()
+    // ✅ SECURITY FIX: Use business context client with proper RLS enforcement
+    const supabase = await createBusinessContextSupabaseClient()
     
     const { data: profiles, error } = await supabase
       .from('business_memberships')

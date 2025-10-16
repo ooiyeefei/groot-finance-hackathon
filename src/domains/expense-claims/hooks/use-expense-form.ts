@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useExpenseCategories } from './use-expense-categories'
-import { useHomeCurrency } from '@/domains/users/components/currency-settings'
+import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { AIExtractionResult } from '@/domains/expense-claims/types/expense-extraction'

@@ -5,11 +5,11 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { ensureUserProfile, type UserProfile } from '@/lib/auth/ensure-employee-profile'
+import { ensureUserProfile, type UserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/db/supabase-server'
-import { auditLogger } from '@/lib/api/audit-logger'
-import { getClientIdentifier, applyRateLimit } from '@/lib/api/rate-limit'
-import type { RolePermissions, UserRole } from '@/lib/auth/rbac'
+import { auditLogger } from '@/domains/security/lib/audit-logger'
+import { getClientIdentifier, applyRateLimit } from '@/domains/security/lib/rate-limit'
+import type { RolePermissions, UserRole } from '@/domains/security/lib/rbac'
 
 export interface ApiContext {
   userId: string

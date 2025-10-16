@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw } from 'lucide-react'
 import { useTransactionSummary, getPeriodDisplayName } from '@/domains/accounting-entries/hooks/use-transaction-summary'
-import { useHomeCurrency } from '@/domains/users/components/currency-settings'
+import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 
 interface TransactionSummaryCardsProps {

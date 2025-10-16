@@ -13,8 +13,8 @@ import DocumentAnalysisModal from './document-analysis-modal'
 import AccountingEntryFormModal from '@/domains/accounting-entries/components/accounting-entry-edit-modal'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { mapDocumentToAccountingEntry, canCreateAccountingEntryFromDocument } from '@/domains/invoices/lib/document-to-accounting-entry-mapper'
-import { CreateTransactionRequest } from '@/domains/accounting-entries/types'
-import { useHomeCurrency } from '@/domains/users/components/currency-settings'
+import { CreateAccountingEntryRequest } from '@/domains/accounting-entries/types'
+import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
 import ExtractedInfoTags from './ExtractedInfoTags'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useToast } from '@/components/ui/toast'
@@ -184,17 +184,20 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   }
 
   // Handle transaction creation from document
-  const handleCreateTransaction = async (data: CreateTransactionRequest) => {
+  const handleCreateTransaction = async (data: CreateAccountingEntryRequest) => {
     try {
-      // Ensure home_currency is set if not provided
+      // ✅ POLYMORPHIC: Set both source fields for invoice
       const transactionData = {
         ...data,
-        home_currency: data.home_currency || userHomeCurrency || 'USD'
+        home_currency: data.home_currency || userHomeCurrency || 'USD',
+        source_record_id: data.source_record_id || transactionFormDocument,
+        source_document_type: 'invoice' as const
       }
 
       console.log('[Documents List] Sending transaction data to API:', JSON.stringify(transactionData, null, 2))
       console.log('[Documents List] Home currency being sent:', transactionData.home_currency)
-      console.log('[Documents List] Source document ID being sent:', transactionData.source_document_id)
+      console.log('[Documents List] Source record ID being sent:', transactionData.source_record_id)
+      console.log('[Documents List] Source document type being sent:', transactionData.source_document_type)
 
       const response = await fetch('/api/v1/accounting-entries', {
         method: 'POST',
@@ -214,8 +217,8 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
       if (result.success && result.data.transaction) {
         const createdTransaction = result.data.transaction
-        const sourceDocumentId = transactionData.source_document_id
-        console.log(`[Documents List] Created transaction ${createdTransaction.id} for document ${sourceDocumentId}`)
+        const sourceRecordId = transactionData.source_record_id
+        console.log(`[Documents List] Created transaction ${createdTransaction.id} for document ${sourceRecordId}`)
 
         // Refresh documents list to update the linked transaction status
         await refreshDocuments()
@@ -232,7 +235,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   }
 
   // Handle transaction update from reprocessed document
-  const handleUpdateTransaction = async (data: CreateTransactionRequest) => {
+  const handleUpdateTransaction = async (data: CreateAccountingEntryRequest) => {
     if (!editTransactionData) return
     
     try {
@@ -244,7 +247,8 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         body: JSON.stringify({
           ...data,
           // Remove fields that shouldn't be in the update request
-          source_document_id: undefined,
+          source_record_id: undefined,
+          source_document_type: undefined,
         })
       })
 
@@ -543,7 +547,9 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
           onSubmit={handleCreateTransaction}
           prefilledData={{
             ...mapDocumentToAccountingEntry(getDocumentById(transactionFormDocument)! as any),
-            source_document_id: transactionFormDocument // Link transaction to document
+            // ✅ POLYMORPHIC: Link to invoice record with discriminator
+            source_record_id: transactionFormDocument,
+            source_document_type: 'invoice' as const
           }}
         />
       )}
@@ -554,7 +560,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
           transaction={editTransactionDetails}
           prefilledData={{
             ...mapDocumentToAccountingEntry(getDocumentById(editTransactionData.documentId)! as any)
-            // Don't include source_document_id for updates
+            // Don't include source_record_id for updates
           }}
           onClose={closeTransactionEditForm}
           onSubmit={handleUpdateTransaction}

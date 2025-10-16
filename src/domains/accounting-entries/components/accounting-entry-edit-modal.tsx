@@ -2,18 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock, AlertCircle, Copy } from 'lucide-react'
-import { Transaction, CreateTransactionRequest, LineItem, SupportedCurrency, TRANSACTION_CATEGORIES, TransactionType } from '@/domains/accounting-entries/types'
+import { AccountingEntry, CreateAccountingEntryRequest, LineItem, SupportedCurrency, TRANSACTION_CATEGORIES, TransactionType } from '@/domains/accounting-entries/types'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
-import { useHomeCurrency } from '@/domains/users/components/currency-settings'
+import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
 import { useExpenseCategories, formatCategoriesForSelect, DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories'
 import { useCOGSCategories, formatCOGSCategoriesForSelect, DynamicCOGSCategory } from '@/lib/hooks/accounting/use-cogs-categories'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface AccountingEntryFormModalProps {
-  transaction?: Transaction
-  prefilledData?: Partial<CreateTransactionRequest>
+  transaction?: AccountingEntry
+  prefilledData?: Partial<CreateAccountingEntryRequest>
   onClose: () => void
-  onSubmit: (data: CreateTransactionRequest) => Promise<void>
+  onSubmit: (data: CreateAccountingEntryRequest) => Promise<void>
 }
 
 const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
@@ -80,14 +80,13 @@ export default function AccountingEntryFormModal({
     category: transaction?.category || prefilledData?.category || getDefaultCategory(initialTransactionType),
     vendor_name: transaction?.vendor_name || prefilledData?.vendor_name || '',
     document_number: transaction?.reference_number || prefilledData?.reference_number || '',
-    document_type: transaction?.document_type || prefilledData?.document_type || undefined,
     status: transaction?.status || prefilledData?.status || 'pending',
     due_date: transaction?.due_date?.split('T')[0] || '',
     payment_date: transaction?.payment_date?.split('T')[0] || '',
     payment_method: transaction?.payment_method || '',
     notes: transaction?.notes || '',
     vendor_details: transaction?.vendor_details || {},
-    source_document_id: prefilledData?.source_document_id || undefined
+    source_record_id: prefilledData?.source_record_id || undefined
   })
 
   // Update currencies when user's home currency preference loads/changes
@@ -248,7 +247,7 @@ export default function AccountingEntryFormModal({
 
       console.log('[Transaction Form] Valid line items after filtering:', validLineItems.length, 'out of', lineItems.length)
 
-      const submitData: CreateTransactionRequest = {
+      const submitData: CreateAccountingEntryRequest = {
         ...formData,
         reference_number: formData.document_number, // Map document_number to reference_number for API
         line_items: validLineItems.map(item => ({
@@ -333,7 +332,7 @@ export default function AccountingEntryFormModal({
                 {transaction ? 'Edit Record' : prefilledData ? 'Create Account Record from Document' : 'Create New Record'}
               </h3>
               <p className="text-sm text-gray-400 mt-1">
-                {prefilledData?.source_document_id ? 'Pre-filled from document extraction' : 'Manual transaction entry'}
+                {prefilledData?.source_record_id ? 'Pre-filled from document extraction' : 'Manual transaction entry'}
               </p>
             </div>
           </div>
@@ -626,20 +625,6 @@ export default function AccountingEntryFormModal({
                     rows={3}
                   />
                 </div>
-                
-                {/* Document Type - Read-only field from OCR */}
-                {formData.document_type && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      <FileText className="w-4 h-4 inline mr-1" />
-                      Document Type
-                    </label>
-                    <div className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400">
-                      <span className="capitalize">{formData.document_type}</span>
-                      <span className="text-xs ml-2 text-blue-400">(from OCR)</span>
-                    </div>
-                  </div>
-                )}
 
               </div>
             </form>

@@ -50,12 +50,14 @@ export interface TransactionCategories {
   }
 }
 
-// Core Transaction interface
-export interface Transaction {
+// Core AccountingEntry interface
+export interface AccountingEntry {
   id: string
   user_id: string
+  // ✅ POLYMORPHIC FIELDS: Support both invoices and expense_claims
   source_record_id?: string
-  
+  source_document_type?: 'invoice' | 'expense_claim'
+
   // Classification
   transaction_type: TransactionType
   category: string
@@ -63,7 +65,6 @@ export interface Transaction {
   subcategory?: string
   description: string
   reference_number?: string
-  document_type?: DocumentType // From OCR extraction
   
   // Multi-currency amounts
   original_currency: SupportedCurrency
@@ -136,7 +137,7 @@ export interface LineItem {
 }
 
 // API Request/Response types
-export interface CreateTransactionRequest {
+export interface CreateAccountingEntryRequest {
   transaction_type: TransactionType
   category: string
   subcategory?: string
@@ -153,9 +154,10 @@ export interface CreateTransactionRequest {
   payment_date?: string // ISO date
   payment_method?: string
   notes?: string
-  document_type?: DocumentType // From OCR extraction
   line_items?: CreateLineItemRequest[]
-  source_document_id?: string  // Optional link to source document
+  // ✅ POLYMORPHIC FIELDS: Support both invoices and expense_claims
+  source_record_id?: string  // UUID that can reference invoices.id OR expense_claims.id
+  source_document_type?: 'invoice' | 'expense_claim'  // Discriminator column
 }
 
 export interface CreateLineItemRequest {
@@ -168,15 +170,15 @@ export interface CreateLineItemRequest {
   item_category?: string
 }
 
-export interface UpdateTransactionRequest extends Partial<CreateTransactionRequest> {
+export interface UpdateAccountingEntryRequest extends Partial<CreateAccountingEntryRequest> {
   // All fields are optional for updates
   id?: never // Prevent ID from being updated
 }
 
-// Document to Transaction conversion
-export interface DocumentToTransactionPreview {
+// Document to AccountingEntry conversion
+export interface DocumentToAccountingEntryPreview {
   source_record_id: string
-  suggested_transaction: Partial<CreateTransactionRequest>
+  suggested_accounting_entry: Partial<CreateAccountingEntryRequest>
   confidence_score: number
   entity_mapping: EntityMapping[]
   warnings: string[]
@@ -185,12 +187,12 @@ export interface DocumentToTransactionPreview {
 export interface EntityMapping {
   entity_type: string
   entity_value: string
-  mapped_field: keyof CreateTransactionRequest
+  mapped_field: keyof CreateAccountingEntryRequest
   confidence: number
 }
 
-// Transaction list/filter types
-export interface TransactionListParams {
+// AccountingEntry list/filter types
+export interface AccountingEntryListParams {
   page?: number
   limit?: number
   transaction_type?: TransactionType
@@ -202,8 +204,8 @@ export interface TransactionListParams {
   sort_order?: 'asc' | 'desc'
 }
 
-export interface TransactionListResponse {
-  transactions: Transaction[]
+export interface AccountingEntryListResponse {
+  accounting_entries: AccountingEntry[]
   total: number
   page: number
   limit: number
@@ -228,13 +230,13 @@ export interface ExchangeRateService {
 }
 
 // Dashboard/Analytics types
-export interface TransactionSummary {
+export interface AccountingEntrySummary {
   total_income: number
   total_expense: number
   net_amount: number
   currency: SupportedCurrency
   period: 'month' | 'quarter' | 'year'
-  transaction_count: number
+  accounting_entry_count: number
   top_categories: CategorySummary[]
 }
 
@@ -242,16 +244,17 @@ export interface CategorySummary {
   category: string
   amount: number
   percentage: number
-  transaction_count: number
+  accounting_entry_count: number
 }
 
 // Error types
-export interface TransactionError {
+export interface AccountingEntryError {
   code: string
   message: string
   field?: string
   details?: Record<string, any>
 }
+
 
 // P&L-Focused Chart of Accounts for SME Financial Management
 export const TRANSACTION_CATEGORIES: TransactionCategories = {

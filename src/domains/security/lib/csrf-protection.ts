@@ -160,9 +160,13 @@ export async function csrfProtection(request: NextRequest): Promise<NextResponse
 
     return null // Allow request to proceed
   } catch (error) {
-    console.error('[CSRF] Protection error:', error)
-    // Don't block request if CSRF protection fails - log and continue
-    return null
+    console.error('[CSRF] Protection error - BLOCKING REQUEST:', error)
+    // ✅ FAIL-CLOSED: Block request on any CSRF validation error
+    return NextResponse.json({
+      success: false,
+      error: 'Security validation failed',
+      message: 'CSRF protection encountered an error and blocked the request'
+    }, { status: 403 })
   }
 }
 

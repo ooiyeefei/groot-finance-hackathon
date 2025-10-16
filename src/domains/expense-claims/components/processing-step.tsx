@@ -281,7 +281,7 @@ export default function ProcessingStep({
 
   // Poll for expense claim completion using the expense claim status API
   const pollExpenseClaimCompletion = async (expenseClaimId: string, signal: AbortSignal) => {
-    const maxAttempts = 120 // 2 minutes max polling (2 second intervals)
+    const maxAttempts = 120 // 4 minutes max polling (2 second intervals)
     let attempts = 0
 
     while (attempts < maxAttempts && !signal.aborted) {
@@ -306,17 +306,27 @@ export default function ProcessingStep({
 
         // Extract processing status from processing_metadata
         const processingMetadata = claimData.processing_metadata || {}
-        const processingStatus = processingMetadata.processing_status
+        const processingStatus = processingMetadata.processing_status || processingMetadata.ai_processing_status
+
+        // Also check main claim status for timeout/failure detection
+        const mainStatus = claimData.status
 
         // Update progress indication during polling
-        if (processingStatus === 'analyzing' || processingStatus === 'upload_pending') {
-          console.log(`[AI Processing] Expense claim ${expenseClaimId} still processing (${processingStatus})... (${attempts * 2}s elapsed)`)
+        if (processingStatus === 'analyzing' || processingStatus === 'upload_pending' || mainStatus === 'analyzing') {
+          console.log(`[AI Processing] Expense claim ${expenseClaimId} still processing (${processingStatus || mainStatus})... (${attempts * 2}s elapsed)`)
           attempts++
           continue
         }
 
+        // Check for failures in either processing metadata or main status
+        if (processingStatus === 'failed' || mainStatus === 'failed') {
+          const errorMessage = processingMetadata.error_message || 'Receipt processing failed due to timeout or processing error'
+          console.log(`[AI Processing] Expense claim ${expenseClaimId} failed: ${errorMessage}`)
+          throw new Error(errorMessage)
+        }
+
         // Processing completed successfully
-        if (processingStatus === 'completed') {
+        if (processingStatus === 'completed' || mainStatus === 'draft') {
           console.log(`[AI Processing] Expense claim ${expenseClaimId} completed successfully!`)
 
           // Transform the result to match expected format
@@ -341,12 +351,6 @@ export default function ProcessingStep({
           setExtractionResult(extractionResult)
           onExtractionComplete(extractionResult)
           return
-        }
-
-        // Processing failed
-        if (processingStatus === 'failed') {
-          const errorMessage = processingMetadata.error_message || 'Receipt processing failed'
-          throw new Error(errorMessage)
         }
 
         attempts++

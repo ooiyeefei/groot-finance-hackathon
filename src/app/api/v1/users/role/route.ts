@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { rateLimiters } from '@/lib/api/rate-limit'
+import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { getUserRole } from '@/domains/users/lib/user.service'
 
 // GET /api/v1/users/role - Get current user role and permissions

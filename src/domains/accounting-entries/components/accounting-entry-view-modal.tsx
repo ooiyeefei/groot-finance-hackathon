@@ -1,13 +1,13 @@
 'use client'
 
 import { X, Edit, Trash2, Calendar, Building, FileText, DollarSign, Hash, Eye, Copy } from 'lucide-react'
-import { Transaction } from '@/domains/accounting-entries/types'
+import { AccountingEntry } from '@/domains/accounting-entries/types'
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { useState } from 'react'
 
 interface AccountingEntryDetailModalProps {
-  transaction: Transaction
+  transaction: AccountingEntry
   onClose: () => void
   onEdit: () => void
   onDelete: () => Promise<void>

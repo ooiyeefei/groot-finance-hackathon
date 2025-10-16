@@ -7,8 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getBusinessProfile, updateBusinessProfile } from '@/domains/account-management/lib/account-management.service'
-import { csrfProtection } from '@/lib/auth/csrf-protection'
-import { rateLimiters } from '@/lib/api/rate-limit'
+import { csrfProtection } from '@/domains/security/lib/csrf-protection'
+import { rateLimiters } from '@/domains/security/lib/rate-limit'
 
 /**
  * Get business profile for current user

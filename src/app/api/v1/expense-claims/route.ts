@@ -1,7 +1,7 @@
 /**
  * North Star Expense Claims API v1 - Main Collection Routes
- * GET /api/v1/expense-claims - List expense claims
- * POST /api/v1/expense-claims - Create new expense claim (unified creation + upload)
+ * GET /api/v1/expense-claims - List expense claims (rate limited for queries)
+ * POST /api/v1/expense-claims - Create new expense claim (rate limited for mutations/uploads)
  */
 
 import { auth } from '@clerk/nextjs/server'
@@ -10,12 +10,19 @@ import { createExpenseClaim, listExpenseClaims } from '@/domains/expense-claims/
 import { CreateExpenseClaimRequest, ExpenseClaimListParams } from '@/domains/expense-claims/types'
 import { getBusinessExpenseCategories } from '@/domains/expense-claims/lib/expense-category-mapper'
 import { getUserData } from '@/lib/db/supabase-server'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 
 /**
  * GET /api/v1/expense-claims
  * List expense claims with role-based filtering and pagination
  */
 export async function GET(request: NextRequest) {
+  // Apply rate limiting for query operations (100 requests per minute)
+  const queryRateLimit = await rateLimit(request, RATE_LIMIT_CONFIGS.QUERY)
+
+  if (queryRateLimit) {
+    return queryRateLimit // Return rate limit error response
+  }
   try {
     const { userId } = await auth()
     if (!userId) {
@@ -71,6 +78,30 @@ export async function GET(request: NextRequest) {
  * Unified creation endpoint - handles both manual entry and file upload
  */
 export async function POST(request: NextRequest) {
+  // Determine if this is a file upload to apply appropriate rate limiting
+  const contentType = request.headers.get('content-type')
+  const isFileUpload = contentType?.includes('multipart/form-data')
+
+  // Apply different rate limits based on operation type
+  if (isFileUpload) {
+    // Stricter rate limiting for file uploads (5 uploads per hour)
+    const uploadRateLimit = await rateLimit(request, {
+      windowMs: 60 * 60 * 1000, // 1 hour
+      maxRequests: 5 // 5 file uploads per hour
+    })
+
+    if (uploadRateLimit) {
+      return uploadRateLimit // Return rate limit error response
+    }
+  } else {
+    // Standard mutation rate limiting for manual entry (30 per minute)
+    const mutationRateLimit = await rateLimit(request, RATE_LIMIT_CONFIGS.MUTATION)
+
+    if (mutationRateLimit) {
+      return mutationRateLimit // Return rate limit error response
+    }
+  }
+
   try {
     const { userId } = await auth()
     if (!userId) {
@@ -82,10 +113,7 @@ export async function POST(request: NextRequest) {
 
     let createRequest: CreateExpenseClaimRequest
 
-    // Handle multipart/form-data (file upload) or application/json
-    const contentType = request.headers.get('content-type')
-
-    if (contentType?.includes('multipart/form-data')) {
+    if (isFileUpload) {
       // File upload mode
       const formData = await request.formData()
       const file = formData.get('file') as File
@@ -132,14 +160,26 @@ export async function POST(request: NextRequest) {
       createRequest = await request.json()
     }
 
-    // Validate required fields (expense_category is optional - trigger.dev job will determine it)
+    // Validate required fields based on processing mode
+    // For AI processing mode, be more lenient with validation since AI will fill in the data
+    const isAIProcessing = createRequest.processing_mode === 'ai'
+
     if (!createRequest.description || !createRequest.business_purpose ||
-        !createRequest.original_amount ||
+        (createRequest.original_amount === null || createRequest.original_amount === undefined) ||
         !createRequest.original_currency || !createRequest.transaction_date) {
-      return NextResponse.json(
-        { success: false, error: 'Missing required fields: description, business_purpose, original_amount, original_currency, transaction_date' },
-        { status: 400 }
-      )
+
+      // For AI processing, provide more helpful validation
+      if (isAIProcessing) {
+        return NextResponse.json(
+          { success: false, error: 'AI processing mode requires basic form fields. Missing required fields (will be updated by AI): description, business_purpose, original_amount, original_currency, transaction_date' },
+          { status: 400 }
+        )
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Missing required fields: description, business_purpose, original_amount, original_currency, transaction_date' },
+          { status: 400 }
+        )
+      }
     }
 
     const result = await createExpenseClaim(userId, createRequest)

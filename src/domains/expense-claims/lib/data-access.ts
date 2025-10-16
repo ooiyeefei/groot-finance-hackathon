@@ -4,11 +4,12 @@
  */
 
 import { createBusinessContextSupabaseClient, createServiceSupabaseClient, getUserData } from '@/lib/db/supabase-server'
-import { ensureUserProfile } from '@/lib/auth/ensure-employee-profile'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/services/currency-service'
 import { StoragePathBuilder, generateUniqueFilename, type DocumentType } from '@/lib/storage-paths'
 import { tasks } from '@trigger.dev/sdk/v3'
 import type { extractReceiptData } from '@/trigger/extract-receipt-data'
+import type { convertPdfToImage } from '@/trigger/convert-pdf-to-image'
 import {
   ExpenseClaim,
   ExpenseClaimStatus,
@@ -29,7 +30,7 @@ import {
   canRecallOwnClaim,
   canReviseOwnClaim,
   canFilterByUserId
-} from '@/lib/auth/rbac'
+} from '@/domains/security/lib/rbac'
 
 // Status transitions are now handled by RBAC permissions only
 // No hardcoded transition validation - removed per user request
@@ -345,8 +346,15 @@ export async function createExpenseClaim(
       }
     }
 
-    // Debug: Log the data being inserted
-    console.log('[DEBUG] Expense claim data being inserted:', JSON.stringify(expenseClaimData, null, 2))
+    // Log expense claim creation without sensitive data
+    console.log('[DEBUG] Creating expense claim:', {
+      user_id: expenseClaimData.user_id,
+      business_id: expenseClaimData.business_id,
+      status: expenseClaimData.status,
+      currency: expenseClaimData.currency,
+      amount_present: !!expenseClaimData.total_amount,
+      has_file: !!request.file
+    })
 
     // Create expense claim
     const { data: expenseClaim, error: claimError } = await supabase
@@ -413,38 +421,74 @@ export async function createExpenseClaim(
         })
         .eq('id', expenseClaim.id)
 
-      // Trigger AI processing if needed
+      // Trigger processing based on file type - PDF conversion first, then AI extraction
       if (request.processing_mode === 'ai') {
         try {
-          const { data: urlData } = await supabase.storage
-            .from('expense_claims')
-            .createSignedUrl(standardizedFilePath, 600)
+          if (request.file.type === 'application/pdf') {
+            // PDF files: Trigger conversion first, AI extraction will be triggered automatically after conversion
+            console.log(`[PDF Processing] Triggering PDF-to-image conversion for expense claim: ${expenseClaim.id}`)
 
-          if (urlData) {
-            triggerResult = await tasks.trigger<typeof extractReceiptData>(
-              "extract-receipt-data",
+            triggerResult = await tasks.trigger<typeof convertPdfToImage>(
+              "convert-pdf-to-image",
               {
-                expenseClaimId: expenseClaim.id,
-                documentId: documentId,
-                userId: userData.id,
-                documentDomain: 'expense_claims',
-                receiptImageUrl: urlData.signedUrl
+                documentId: expenseClaim.id,
+                pdfStoragePath: standardizedFilePath,
+                documentDomain: 'expense_claims'
               }
             )
 
             await supabase
               .from('expense_claims')
               .update({
+                status: 'converting', // Indicate PDF conversion in progress
                 processing_metadata: {
                   ...expenseClaim.processing_metadata,
-                  trigger_job_id: triggerResult.id,
-                  trigger_timestamp: new Date().toISOString()
+                  pdf_conversion_job_id: triggerResult.id,
+                  pdf_conversion_timestamp: new Date().toISOString(),
+                  processing_stage: 'pdf_conversion'
                 }
               })
               .eq('id', expenseClaim.id)
+
+            console.log(`[PDF Processing] PDF conversion job triggered: ${triggerResult.id}`)
+
+          } else {
+            // Image files: Direct AI processing
+            console.log(`[Image Processing] Triggering direct AI processing for expense claim: ${expenseClaim.id}`)
+
+            const { data: urlData } = await supabase.storage
+              .from('expense_claims')
+              .createSignedUrl(standardizedFilePath, 600)
+
+            if (urlData) {
+              triggerResult = await tasks.trigger<typeof extractReceiptData>(
+                "extract-receipt-data",
+                {
+                  expenseClaimId: expenseClaim.id,
+                  documentId: documentId,
+                  userId: userData.id,
+                  documentDomain: 'expense_claims',
+                  receiptImageUrl: urlData.signedUrl
+                }
+              )
+
+              await supabase
+                .from('expense_claims')
+                .update({
+                  processing_metadata: {
+                    ...expenseClaim.processing_metadata,
+                    ai_extraction_job_id: triggerResult.id,
+                    ai_extraction_timestamp: new Date().toISOString(),
+                    processing_stage: 'ai_extraction'
+                  }
+                })
+                .eq('id', expenseClaim.id)
+
+              console.log(`[Image Processing] AI extraction job triggered: ${triggerResult.id}`)
+            }
           }
         } catch (triggerError) {
-          console.error('Failed to trigger AI processing:', triggerError)
+          console.error('Failed to trigger processing:', triggerError)
           await supabase
             .from('expense_claims')
             .update({
@@ -507,16 +551,12 @@ export async function listExpenseClaims(
       return { success: false, error: 'Failed to get employee profile' }
     }
 
-    // Use service client for admin/managers, business context for employees
+    // ✅ SECURITY FIX: Use business context client universally to enforce RLS
+    // Role-based access is handled through query logic, not client selection
     const isAdmin = employeeProfile.role_permissions.admin
     const isManager = employeeProfile.role_permissions.manager
 
-    let supabase
-    if (isAdmin || isManager) {
-      supabase = createServiceSupabaseClient()
-    } else {
-      supabase = await createBusinessContextSupabaseClient()
-    }
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Build query with user information
     let query = supabase
@@ -715,16 +755,11 @@ export async function getExpenseClaim(
       return { success: false, error: 'Failed to get user profile' }
     }
 
-    // Determine client based on user roles
+    // ✅ SECURITY FIX: Use business context client universally to enforce RLS
     const isAdmin = userProfile.role_permissions.admin
     const isManager = userProfile.role_permissions.manager
 
-    let supabase
-    if (isAdmin || isManager) {
-      supabase = createServiceSupabaseClient()
-    } else {
-      supabase = await createBusinessContextSupabaseClient()
-    }
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Fetch the expense claim
     let claimQuery = supabase
@@ -799,12 +834,8 @@ export async function updateExpenseClaim(
     const isAdmin = userProfile.role_permissions.admin
     const isManager = userProfile.role_permissions.manager
 
-    let supabase
-    if (isAdmin || isManager) {
-      supabase = createServiceSupabaseClient()
-    } else {
-      supabase = await createBusinessContextSupabaseClient()
-    }
+    // ✅ SECURITY FIX: Use business context client universally to enforce RLS
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Fetch existing claim
     let existingClaimQuery = supabase
@@ -917,160 +948,29 @@ export async function updateExpenseClaim(
           statusUpdateData.approved_at = now
           statusUpdateData.reviewed_by = userProfile.user_id
 
-          // Create accounting entry directly from processing metadata
-          const processingMetadata = existingClaim.processing_metadata
-          if (!processingMetadata || !processingMetadata.financial_data) {
-            return { success: false, error: 'Missing financial data for accounting entry creation' }
-          }
+          // ✅ CRITICAL FIX: Use RPC function instead of direct INSERT to ensure proper category mapping
+          console.log(`[RPC Approval] Creating accounting entry via RPC for expense claim: ${claimId}`)
 
-          const financialData = processingMetadata.financial_data
-          const userData = await getUserData(userId)
-
-          // Create accounting entry with proper category mapping and created_by_method
-          const accountingEntryData = {
-            user_id: userData.id,
-            business_id: userProfile.business_id,
-            source_record_id: processingMetadata.document_id || null, // ✅ FIX: Link to receipt document
-            transaction_type: 'Expense' as const,
-            category: existingClaim.expense_category || 'OTHER_OPERATING', // ✅ FIX: Use business expense category directly instead of IFRS mapping
-            description: financialData.description || existingClaim.description,
-            vendor_name: financialData.vendor_name || existingClaim.vendor_name,
-            vendor_id: financialData.vendor_id || null,
-            original_amount: financialData.total_amount || existingClaim.total_amount,
-            original_currency: financialData.original_currency || existingClaim.currency,
-            home_currency: financialData.home_currency || existingClaim.home_currency,
-            home_currency_amount: financialData.home_currency_amount || existingClaim.home_currency_amount,
-            exchange_rate: financialData.exchange_rate || existingClaim.exchange_rate || 1,
-            exchange_rate_date: financialData.exchange_rate_date || new Date().toISOString().split('T')[0],
-            transaction_date: financialData.transaction_date || existingClaim.transaction_date,
-            reference_number: financialData.reference_number || null,
-            notes: financialData.notes || null,
-            status: 'pending' as const,
-            document_type: 'receipt',
-            created_by_method: processingMetadata.extraction_method === 'ai' ? 'document_extract' : 'manual', // ✅ FIX: Use correct extraction_method field
-            created_at: now,
-            updated_at: now
-          }
-
-          const { data: accountingEntry, error: entryError } = await supabase
-            .from('accounting_entries')
-            .insert(accountingEntryData)
-            .select('id')
-            .single()
-
-          if (entryError) {
-            console.error('Failed to create accounting entry:', entryError)
-            return { success: false, error: `Failed to create accounting entry: ${entryError.message}` }
-          }
-
-          // Create line items if they exist
-          if (processingMetadata.line_items && Array.isArray(processingMetadata.line_items)) {
-            console.log(`[Accounting Entry Creation] Found ${processingMetadata.line_items.length} line items in processing metadata`)
-            console.log(`[Accounting Entry Creation] Raw line items data:`, JSON.stringify(processingMetadata.line_items, null, 2))
-
-            const lineItemsData = processingMetadata.line_items.map((item: any, index: number) => {
-              // Enhanced field mapping with all possible OCR fields
-              const mappedItem = {
-                accounting_entry_id: accountingEntry.id,
-
-                // Item description - try multiple field name variations
-                item_description: item.item_description || item.description || item.name || `Item ${index + 1}`,
-
-                // Item code from OCR/invoice data
-                item_code: item.item_code || item.code || item.sku || null,
-
-                // Quantities and pricing
-                quantity: Number(item.quantity) || 1,
-                unit_measurement: item.unit_measurement || item.unit || item.uom || null,
-                unit_price: Number(item.unit_price) || 0,
-                total_amount: Number(item.total_amount) || Number((item.quantity || 1) * (item.unit_price || 0)) || 0,
-
-                // Currency and categorization
-                currency: financialData.original_currency || existingClaim.currency,
-                item_category: item.item_category || item.category || null,
-
-                // Tax information
-                tax_amount: Number(item.tax_amount) || 0,
-                tax_rate: Number(item.tax_rate) || 0,
-
-                // Ordering
-                line_order: item.line_order || (index + 1)
-              }
-
-              console.log(`[Accounting Entry Creation] Line item ${index + 1} mapping:`, {
-                raw_item: item,
-                mapped_item: mappedItem,
-                field_sources: {
-                  item_description: item.item_description ? 'item_description' : item.description ? 'description' : item.name ? 'name' : 'fallback',
-                  item_code: item.item_code ? 'item_code' : item.code ? 'code' : item.sku ? 'sku' : 'null',
-                  unit_measurement: item.unit_measurement ? 'unit_measurement' : item.unit ? 'unit' : item.uom ? 'uom' : 'null'
-                }
-              })
-
-              return mappedItem
+          const { data: transactionId, error: rpcError } = await supabase
+            .rpc('create_accounting_entry_from_approved_claim', {
+              p_claim_id: claimId,
+              p_approver_id: userProfile.user_id
             })
 
-            // Validate line items before insertion
-            const validationErrors: string[] = []
-            lineItemsData.forEach((item: any, index: number) => {
-              if (!item.item_description || item.item_description.trim() === '') {
-                validationErrors.push(`Line item ${index + 1}: Missing item description`)
-              }
-              if (item.quantity <= 0) {
-                validationErrors.push(`Line item ${index + 1}: Invalid quantity (${item.quantity})`)
-              }
-              if (item.unit_price < 0) {
-                validationErrors.push(`Line item ${index + 1}: Invalid unit price (${item.unit_price})`)
-              }
-            })
+          if (rpcError) {
+            console.error('[RPC Approval] Failed to create accounting entry via RPC:', rpcError)
+            return { success: false, error: `Failed to create accounting entry: ${rpcError.message}` }
+          }
 
-            if (validationErrors.length > 0) {
-              console.error('[Accounting Entry Creation] Line item validation errors:', validationErrors)
-              console.error('[Accounting Entry Creation] Attempted line items data:', lineItemsData)
-              // Still don't fail the entire operation, but log validation issues
-            }
-
-            console.log(`[Accounting Entry Creation] Attempting to insert ${lineItemsData.length} line items`)
-            console.log(`[Accounting Entry Creation] Final line items data for insertion:`, JSON.stringify(lineItemsData, null, 2))
-
-            const { data: insertedLineItems, error: lineItemsError } = await supabase
-              .from('line_items')
-              .insert(lineItemsData)
-              .select('id, item_description, quantity, unit_price, total_amount, item_code, unit_measurement')
-
-            if (lineItemsError) {
-              console.error('[Accounting Entry Creation] ❌ Failed to create line items:', {
-                error: lineItemsError,
-                error_code: lineItemsError.code,
-                error_message: lineItemsError.message,
-                error_details: lineItemsError.details,
-                attempted_data: lineItemsData,
-                validation_errors: validationErrors
-              })
-
-              // Try to provide more specific error information
-              if (lineItemsError.code === '23505') {
-                console.error('[Accounting Entry Creation] Duplicate key violation - line items may already exist for this accounting entry')
-              } else if (lineItemsError.code === '23502') {
-                console.error('[Accounting Entry Creation] Not null violation - missing required field in line items')
-              } else if (lineItemsError.code === '23503') {
-                console.error('[Accounting Entry Creation] Foreign key violation - accounting_entry_id may be invalid')
-              }
-            } else {
-              console.log(`[Accounting Entry Creation] ✅ Successfully created ${insertedLineItems?.length || 0} line items:`, insertedLineItems)
-            }
-          } else {
-            console.log('[Accounting Entry Creation] No line items found in processing metadata or line_items is not an array')
-            if (processingMetadata.line_items) {
-              console.log('[Accounting Entry Creation] Processing metadata line_items type:', typeof processingMetadata.line_items)
-              console.log('[Accounting Entry Creation] Processing metadata line_items content:', processingMetadata.line_items)
-            }
+          if (!transactionId) {
+            console.error('[RPC Approval] RPC function returned null transaction ID')
+            return { success: false, error: 'RPC function failed to return accounting entry ID' }
           }
 
           // Link the accounting entry to the expense claim
-          statusUpdateData.accounting_entry_id = accountingEntry.id
+          statusUpdateData.accounting_entry_id = transactionId
 
-          console.log(`✅ Accounting entry created: ${accountingEntry.id}`)
+          console.log(`✅ Accounting entry created via RPC: ${transactionId}`)
           break
 
         case 'rejected':
@@ -1248,12 +1148,9 @@ export async function deleteExpenseClaim(
     const isAdmin = userProfile.role_permissions.admin
     const isManager = userProfile.role_permissions.manager
 
-    let supabase
-    if (isAdmin || isManager) {
-      supabase = createServiceSupabaseClient()
-    } else {
-      supabase = await createBusinessContextSupabaseClient()
-    }
+    // ✅ SECURITY FIX: Use business context client universally to enforce RLS
+    // Role-based access is handled through query logic, not client selection
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Check if claim exists and is accessible
     let existingClaimQuery = supabase
@@ -1320,15 +1217,9 @@ export async function getExpenseAnalytics(
     const isAdmin = employeeProfile.role_permissions.admin
     const isManager = employeeProfile.role_permissions.manager
 
-    // Use appropriate client based on scope and permissions
-    let supabase
-    if (scope === 'company' && isAdmin) {
-      supabase = createServiceSupabaseClient()
-    } else if (scope === 'department' && (isManager || isAdmin)) {
-      supabase = createServiceSupabaseClient()
-    } else {
-      supabase = await createBusinessContextSupabaseClient()
-    }
+    // ✅ SECURITY FIX: Use business context client universally to enforce RLS
+    // Role-based access is handled through query logic, not client selection
+    const supabase = await createBusinessContextSupabaseClient()
 
     // Calculate date ranges for current and previous periods
     const now = new Date()
@@ -1425,16 +1316,19 @@ export async function getExpenseAnalytics(
       pendingApproval: previousMonthClaims.filter(claim => claim.status === 'submitted').length
     }
 
-    // Calculate percentage changes
+    // ✅ FIXED: Calculate percentage changes with proper handling of new data scenarios
+    const calculateTrendChange = (current: number, previous: number): number => {
+      if (previous === 0 && current === 0) return 0 // Both zero = no change
+      if (previous === 0 && current > 0) return 100 // New data = 100% growth
+      if (previous > 0 && current === 0) return -100 // Lost all data = 100% decline
+      return ((current - previous) / previous) * 100 // Standard percentage change
+    }
+
     const trends = {
-      total_amount_change: previousMetrics.totalAmount > 0 ?
-        ((currentMetrics.totalAmount - previousMetrics.totalAmount) / previousMetrics.totalAmount) * 100 : 0,
-      total_claims_change: previousMetrics.totalClaims > 0 ?
-        ((currentMetrics.totalClaims - previousMetrics.totalClaims) / previousMetrics.totalClaims) * 100 : 0,
-      avg_claim_change: previousMetrics.avgClaim > 0 ?
-        ((currentMetrics.avgClaim - previousMetrics.avgClaim) / previousMetrics.avgClaim) * 100 : 0,
-      pending_approval_change: previousMetrics.pendingApproval > 0 ?
-        ((currentMetrics.pendingApproval - previousMetrics.pendingApproval) / previousMetrics.pendingApproval) * 100 : 0
+      total_amount_change: calculateTrendChange(currentMetrics.totalAmount, previousMetrics.totalAmount),
+      total_claims_change: calculateTrendChange(currentMetrics.totalClaims, previousMetrics.totalClaims),
+      avg_claim_change: calculateTrendChange(currentMetrics.avgClaim, previousMetrics.avgClaim),
+      pending_approval_change: calculateTrendChange(currentMetrics.pendingApproval, previousMetrics.pendingApproval)
     }
 
     console.log('[Analytics] Current metrics:', currentMetrics)

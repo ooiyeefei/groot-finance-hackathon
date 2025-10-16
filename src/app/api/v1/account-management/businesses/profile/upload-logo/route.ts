@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
-import { ensureUserProfile } from '@/lib/auth/ensure-employee-profile'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 
 // Supported image types for business logos
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']

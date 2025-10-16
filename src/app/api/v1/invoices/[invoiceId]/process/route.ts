@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processDocument } from '@/domains/invoices/lib/data-access'
+import { rateLimit } from '@/domains/security/lib/rate-limit'
 
 /**
  * POST /api/v1/invoices/[invoiceId]/process - Process/reprocess invoice with OCR
  * Migrated from /api/invoices/[invoiceId]/process
+ * Rate limited for expensive OCR/AI processing (10 requests per hour per user)
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ invoiceId: string }> }) {
+  // Apply strict rate limiting for expensive document processing operations
+  const processRateLimit = await rateLimit(request, {
+    windowMs: 60 * 60 * 1000, // 1 hour
+    maxRequests: 10 // 10 processing requests per hour
+  })
+
+  if (processRateLimit) {
+    return processRateLimit // Return rate limit error response
+  }
   try {
     const { invoiceId } = await params
 

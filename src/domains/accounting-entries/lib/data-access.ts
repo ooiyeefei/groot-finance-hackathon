@@ -8,10 +8,10 @@ import { createBusinessContextSupabaseClient, getUserData } from '@/lib/db/supab
 import { currencyService } from '@/lib/services/currency-service'
 import { CrossBorderTaxComplianceTool } from '@/lib/ai/tools'
 import {
-  CreateTransactionRequest,
-  UpdateTransactionRequest,
+  CreateAccountingEntryRequest as CreateTransactionRequest,
+  UpdateAccountingEntryRequest as UpdateTransactionRequest,
   SupportedCurrency,
-  TransactionListParams,
+  AccountingEntryListParams as TransactionListParams,
   TRANSACTION_CATEGORIES
 } from '@/domains/accounting-entries/types'
 
@@ -26,7 +26,6 @@ export interface AccountingEntry {
   subcategory?: string
   description: string
   reference_number?: string
-  document_type?: string
   original_currency: string
   original_amount: number
   home_currency: string
@@ -158,9 +157,8 @@ export async function createAccountingEntry(
       home_currency,
       vendor_name,
       reference_number,
-      document_type,
       line_items = [],
-      source_document_id
+      source_record_id
     } = data
 
     // Validate required fields
@@ -267,13 +265,12 @@ export async function createAccountingEntry(
       .insert({
         user_id: userData.id,
         business_id: userData.business_id,
-        source_record_id: source_document_id || null,
+        source_record_id: source_record_id || null,
         transaction_type,
         category: finalCategory,
         subcategory: finalSubcategory,
         description,
         reference_number,
-        document_type,
         original_currency,
         original_amount,
         home_currency: homeCurrency,
@@ -282,11 +279,11 @@ export async function createAccountingEntry(
         exchange_rate_date: exchangeRateDate,
         transaction_date,
         vendor_name,
-        created_by_method: source_document_id ? 'document_extract' : 'manual',
+        created_by_method: source_record_id ? 'document_extract' : 'manual',
         processing_metadata: {
           created_via: 'api',
           conversion_attempted: original_currency !== homeCurrency,
-          source_document_id: source_document_id || null
+          source_record_id: source_record_id || null
         }
       })
       .select()

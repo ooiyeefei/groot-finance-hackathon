@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getInvoices, createInvoice } from '@/domains/invoices/lib/data-access'
-import { rateLimiters } from '@/lib/api/rate-limit'
+import { rateLimiters } from '@/domains/security/lib/rate-limit'
 
 /**
  * GET /api/v1/invoices - List invoices with filtering and pagination

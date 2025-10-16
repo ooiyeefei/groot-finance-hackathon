@@ -4,9 +4,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserContextWithBusiness } from '@/lib/auth/rbac'
-import { teamManagementRateLimiter, getClientIdentifier, applyRateLimit } from '@/lib/api/rate-limit'
-import { auditLogger } from '@/lib/api/audit-logger'
+import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
+import { teamManagementRateLimiter, getClientIdentifier, applyRateLimit } from '@/domains/security/lib/rate-limit'
+import { auditLogger } from '@/domains/security/lib/audit-logger'
 import { getTeamMembers } from '@/domains/users/lib/user.service'
 
 // GET /api/v1/users/team - Get all team members

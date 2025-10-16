@@ -78,7 +78,7 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
     .from('invoices')
     .select(`
       id, file_name, file_type, file_size, storage_path, converted_image_path, converted_image_width, converted_image_height, processing_status, created_at, processed_at, error_message, extracted_data, confidence_score,
-      accounting_entries:accounting_entries!document_id!left (
+      accounting_entries:accounting_entries!source_record_id!left (
         id, description, original_amount, original_currency, created_at, deleted_at
       )
     `)
@@ -410,7 +410,7 @@ export async function getDocument(documentId: string): Promise<Invoice | null> {
     .from('invoices')
     .select(`
       *,
-      accounting_entries:accounting_entries!document_id!left (
+      accounting_entries:accounting_entries!source_record_id!left (
         id, description, original_amount, original_currency, created_at, deleted_at
       )
     `)
@@ -486,7 +486,7 @@ export async function deleteDocument(documentId: string): Promise<boolean> {
     .from('invoices')
     .select(`
       id, storage_path,
-      accounting_entries:accounting_entries!document_id!left(id, deleted_at)
+      accounting_entries:accounting_entries!source_record_id!left(id, deleted_at)
     `)
     .eq('id', documentId)
     .eq('user_id', userData.id)

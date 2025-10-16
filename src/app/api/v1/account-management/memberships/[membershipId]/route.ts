@@ -7,9 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { updateMembership, deleteMembership } from '@/domains/account-management/lib/account-management.service'
-import { getCurrentUserContext } from '@/lib/auth/rbac'
-import { csrfProtection } from '@/lib/auth/csrf-protection'
-import { rateLimiters } from '@/lib/api/rate-limit'
+import { getCurrentUserContext } from '@/domains/security/lib/rbac'
+import { csrfProtection } from '@/domains/security/lib/csrf-protection'
+import { rateLimiters } from '@/domains/security/lib/rate-limit'
 
 /**
  * Update membership - handles role changes, status changes (remove/reactivate)

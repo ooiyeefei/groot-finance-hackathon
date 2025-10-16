@@ -6,20 +6,19 @@ import SkeletonLoader from '@/components/ui/skeleton-loader'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import CategorySelector from './CategorySelector'
 import StatusSelector from './StatusSelector'
-import { Transaction, TransactionType } from '@/domains/accounting-entries/types'
+import { AccountingEntry, TransactionType } from '@/domains/accounting-entries/types'
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { useExpenseCategories, DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories'
 import { useCOGSCategories, DynamicCOGSCategory } from '@/lib/hooks/accounting/use-cogs-categories'
-import { TRANSACTION_CATEGORIES } from '@/domains/accounting-entries/types'
 
 interface AccountingEntriesListProps {
-  transactions: Transaction[]
+  transactions: AccountingEntry[]
   totalTransactions?: number // Total count in user's account (unfiltered)
   isLoading: boolean
   error: string | null
   onRefresh: () => void
-  onView: (transaction: Transaction) => void
-  onEdit: (transaction: Transaction) => void
+  onView: (transaction: AccountingEntry) => void
+  onEdit: (transaction: AccountingEntry) => void
   onDelete: (accountingEntryId: string) => void
 }
 
@@ -42,7 +41,7 @@ export default function AccountingEntriesList({
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     isOpen: boolean
-    transaction: Transaction | null
+    transaction: AccountingEntry | null
     isLoading: boolean
   }>({
     isOpen: false,
@@ -78,7 +77,7 @@ export default function AccountingEntriesList({
     }
   }
 
-  const handleDeleteClick = (transaction: Transaction) => {
+  const handleDeleteClick = (transaction: AccountingEntry) => {
     setDeleteConfirmation({
       isOpen: true,
       transaction,
@@ -480,41 +479,17 @@ export default function AccountingEntriesList({
                           onRefresh()
                         }}
                       />
-                      {/* Enhanced document type display - shows Receipt/Invoice/Document tags */}
-                      {(() => {
-                        // If document_type is explicitly set, use it
-                        if (transaction.document_type) {
-                          return (
-                            <span className="text-xs px-2 py-1 rounded-full font-medium capitalize bg-blue-600/20 text-blue-400 border border-blue-600/30">
-                              {transaction.document_type}
-                            </span>
-                          )
-                        }
-
-                        // If no document_type but created from document extraction, infer the type
-                        if (transaction.created_by_method === 'document_extract') {
-                          let tagText = 'Document'
-                          let tagColor = 'bg-blue-600/20 text-blue-400 border-blue-600/30'
-
-                          // Infer document type based on transaction type
-                          if (transaction.transaction_type === 'Cost of Goods Sold') {
-                            tagText = 'Invoice'
-                            tagColor = 'bg-green-600/20 text-green-400 border-green-600/30'
-                          } else if (transaction.transaction_type === 'Expense') {
-                            tagText = 'Receipt'
-                            tagColor = 'bg-blue-600/20 text-blue-400 border-blue-600/30'
-                          }
-
-                          return (
-                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${tagColor}`}>
-                              {tagText}
-                            </span>
-                          )
-                        }
-
-                        // No document association
-                        return null
-                      })()}
+                      {/* Show source document type tag based on polymorphic source */}
+                      {transaction.source_document_type === 'invoice' && (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-600/20 text-green-400 border border-green-600/30">
+                          Invoice
+                        </span>
+                      )}
+                      {transaction.source_document_type === 'expense_claim' && (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-blue-600/20 text-blue-400 border border-blue-600/30">
+                          Expense
+                        </span>
+                      )}
                     </div>
                     
                     <div className="flex items-center gap-4 text-sm text-gray-400">

@@ -41,6 +41,92 @@ const DOMAIN_TABLE_MAP = {
   'applications': 'application_documents'
 } as const;
 
+// Security validation functions
+function validateImageUrl(url: string): { isValid: boolean; error?: string; sanitizedUrl?: string } {
+  try {
+    const parsedUrl = new URL(url);
+
+    // Allow only HTTPS URLs
+    if (parsedUrl.protocol !== 'https:') {
+      return { isValid: false, error: 'Only HTTPS URLs are allowed' };
+    }
+
+    // Allow only Supabase storage URLs for signed URLs
+    const allowedHosts = [
+      process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('https://', '').replace('http://', ''),
+      // Add other allowed storage providers if needed
+    ].filter(Boolean);
+
+    const hostname = parsedUrl.hostname;
+    const isAllowedHost = allowedHosts.some(host =>
+      hostname === host || hostname.endsWith(`.${host}`) || hostname.endsWith('.supabase.co')
+    );
+
+    if (!isAllowedHost) {
+      return { isValid: false, error: 'URL host not allowed for security reasons' };
+    }
+
+    return { isValid: true, sanitizedUrl: url };
+  } catch (error) {
+    return { isValid: false, error: 'Invalid URL format' };
+  }
+}
+
+function sanitizeBusinessCategories(categories: any[]): any[] {
+  if (!Array.isArray(categories)) {
+    return [];
+  }
+
+  return categories.map(cat => ({
+    category_name: sanitizeTextInput(cat?.category_name || ''),
+    category_code: sanitizeTextInput(cat?.category_code || ''),
+    vendor_patterns: Array.isArray(cat?.vendor_patterns)
+      ? cat.vendor_patterns.map((p: any) => sanitizeTextInput(String(p || ''))).slice(0, 10)
+      : [],
+    ai_keywords: Array.isArray(cat?.ai_keywords)
+      ? cat.ai_keywords.map((k: any) => sanitizeTextInput(String(k || ''))).slice(0, 10)
+      : [],
+    is_active: Boolean(cat?.is_active)
+  })).slice(0, 50); // Limit to 50 categories max
+}
+
+function sanitizeTextInput(input: string): string {
+  if (typeof input !== 'string') {
+    return '';
+  }
+
+  // Remove null bytes, control characters, and limit length
+  return input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
+    .replace(/[`$\\]/g, '') // Remove shell metacharacters
+    .trim()
+    .substring(0, 1000); // Limit length
+}
+
+function sanitizeProcessingMethod(method: string): 'simple' | 'complex' | 'auto' {
+  const allowedMethods = ['simple', 'complex', 'auto'];
+  return allowedMethods.includes(method) ? method as any : 'auto';
+}
+
+function sanitizeUuid(uuid?: string): string | undefined {
+  if (!uuid || typeof uuid !== 'string') {
+    return undefined;
+  }
+
+  // Validate UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid) ? uuid : undefined;
+}
+
+function maskSensitiveData(data: string): string {
+  if (!data || typeof data !== 'string') {
+    return '[REDACTED]';
+  }
+
+  // Show only first 3 characters for debugging while protecting sensitive data
+  return data.length > 3 ? `${data.substring(0, 3)}***` : '***';
+}
+
 export const extractReceiptData = task({
   id: "extract-receipt-data",
   maxDuration: 180, // 3 minutes - with vLLM fallback system
@@ -108,12 +194,9 @@ export const extractReceiptData = task({
             );
             console.log(`🏷️ Found ${businessCategories.length} active categories`);
 
-            // Log categories fed to AI for debugging
+            // Log category count without exposing sensitive business data
             if (businessCategories.length > 0) {
-              const categoriesOverview = businessCategories
-                .map(cat => `${cat.category_code.toUpperCase()}: ${cat.category_name}`)
-                .join(', ');
-              console.log(`🏷️ Categories sent to AI: ${categoriesOverview}`);
+              console.log(`🏷️ Categories available for AI categorization: ${businessCategories.length} active categories`);
             }
           } else {
             console.log(`⚠️ No custom expense categories found for business ${expenseClaim.business_id}`);
@@ -121,49 +204,152 @@ export const extractReceiptData = task({
         }
       }
 
-      // Step 2: Create signed URL for secure image access (following extract tasks pattern)
+      // Step 2: Create signed URL for secure image access with validation and timeout handling
       let imageUrl = payload.receiptImageUrl;
 
       if (!imageUrl && expenseClaim?.storage_path) {
         // Use converted image path for PDFs or original storage path for images
         const imagePath = expenseClaim.converted_image_path || expenseClaim.storage_path;
 
-        const { data: urlData, error: urlError } = await supabase.storage
-          .from('expense_claims')
-          .createSignedUrl(imagePath, 600); // 10 minutes
+        console.log(`🔗 Attempting to create signed URL for path: ${imagePath}`);
 
-        if (urlError || !urlData) {
-          throw new Error(`Failed to create signed URL: ${urlError?.message}`);
+        try {
+          // Step 2a: First verify the file actually exists in storage to prevent hanging
+          console.log(`🔍 Verifying file exists in storage before creating signed URL...`);
+
+          // Extract folder path and filename for file existence check
+          const pathParts = imagePath.split('/');
+          const fileName = pathParts.pop();
+          const folderPath = pathParts.join('/');
+
+          // Check if file exists with a reasonable timeout
+          const listTimeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Storage list operation timed out after 30 seconds')), 30000)
+          );
+
+          const listOperation = supabase.storage
+            .from('expense_claims')
+            .list(folderPath, {
+              limit: 1000,
+              search: fileName
+            });
+
+          const { data: files, error: listError } = await Promise.race([
+            listOperation,
+            listTimeoutPromise
+          ]) as any;
+
+          if (listError) {
+            console.error(`❌ File existence check failed: ${listError.message}`);
+            throw new Error(`Unable to verify file exists in storage: ${listError.message}`);
+          }
+
+          if (!files || files.length === 0) {
+            console.error(`❌ File not found in storage: ${imagePath}`);
+            throw new Error(`Receipt file not found in storage at path: ${imagePath}. The file may not have been uploaded correctly or may have been moved.`);
+          }
+
+          console.log(`✅ File verified to exist: ${files[0].name} (${files[0].metadata?.size || 'unknown size'})`);
+
+          // Step 2b: Create signed URL with timeout protection
+          console.log(`🔗 Creating signed URL with timeout protection...`);
+
+          const signedUrlTimeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Signed URL creation timed out after 20 seconds')), 20000)
+          );
+
+          const signedUrlOperation = supabase.storage
+            .from('expense_claims')
+            .createSignedUrl(imagePath, 600); // 10 minutes
+
+          const { data: urlData, error: urlError } = await Promise.race([
+            signedUrlOperation,
+            signedUrlTimeoutPromise
+          ]) as any;
+
+          if (urlError) {
+            console.error(`❌ Signed URL creation failed: ${urlError.message}`);
+            throw new Error(`Failed to create signed URL: ${urlError.message}`);
+          }
+
+          if (!urlData?.signedUrl) {
+            console.error(`❌ Signed URL creation returned no data`);
+            throw new Error('Signed URL creation returned no data');
+          }
+
+          imageUrl = urlData.signedUrl;
+          console.log(`✅ Signed URL created successfully`);
+
+        } catch (storageError) {
+          console.error(`❌ Storage access error:`, storageError);
+
+          // Enhanced error handling for storage issues
+          let storageErrorMessage = 'Unable to access receipt file in storage.';
+
+          if (storageError instanceof Error) {
+            if (storageError.message.includes('timed out')) {
+              storageErrorMessage = 'Storage access timed out. Please try again in a few moments.';
+            } else if (storageError.message.includes('not found')) {
+              storageErrorMessage = 'Receipt file not found. Please re-upload your receipt.';
+            } else if (storageError.message.includes('permission') || storageError.message.includes('unauthorized')) {
+              storageErrorMessage = 'Permission denied accessing receipt file. Please contact support.';
+            } else {
+              storageErrorMessage = `Storage error: ${storageError.message}`;
+            }
+          }
+
+          throw new Error(storageErrorMessage);
         }
-
-        imageUrl = urlData.signedUrl;
       }
 
       if (!imageUrl && !payload.receiptImageData) {
         throw new Error('No image URL or image data available for processing');
       }
 
-      // Step 3: Run AI extraction using Python script with enhanced error handling
+      // Step 3: Input validation and sanitization before Python execution
+      console.log("🔒 Validating and sanitizing inputs...");
+
+      // Validate and sanitize image URL for SSRF protection
+      if (imageUrl) {
+        const urlValidation = validateImageUrl(imageUrl);
+        if (!urlValidation.isValid) {
+          throw new Error(`Invalid image URL: ${urlValidation.error}`);
+        }
+        imageUrl = urlValidation.sanitizedUrl;
+      }
+
+      // Sanitize text inputs to prevent injection
+      const sanitizedParams = {
+        imageUrl: imageUrl,
+        imageData: payload.receiptImageData,
+        businessCategories: sanitizeBusinessCategories(businessCategories),
+        receiptText: sanitizeTextInput(payload.receiptText || ''),
+        forcedProcessingMethod: sanitizeProcessingMethod(payload.forcedProcessingMethod || 'auto'),
+        expenseClaimId: sanitizeUuid(payload.expenseClaimId)
+      };
+
+      // Step 4: Run AI extraction using Python script
       console.log("🐍 Running AI extraction...");
 
       let result: any;
+
       try {
-        result = await python.runScript(
+        const pythonPromise = python.runScript(
           "./src/python/extract_receipt_data.py",
-          [JSON.stringify({
-            imageUrl: imageUrl,
-            imageData: payload.receiptImageData,
-            businessCategories: businessCategories,
-            receiptText: payload.receiptText || '',
-            forcedProcessingMethod: payload.forcedProcessingMethod || 'auto',
-            expenseClaimId: payload.expenseClaimId
-          })],
+          [JSON.stringify(sanitizedParams)],
           {
             timeout: 180000, // 3 minutes
+            env: {
+              GEMINI_API_KEY: process.env.GEMINI_API_KEY
+            }
           }
         );
+
+        result = await pythonPromise;
+
+        console.log("✅ Python script execution completed");
       } catch (pythonError: any) {
-        console.error("🐍 Python execution failed:", pythonError);
+        console.error("❌ Python execution failed:", pythonError);
 
         // Enhanced error categorization and user-friendly messages
         let userFriendlyError = '';
@@ -174,10 +360,10 @@ export const extractReceiptData = task({
           errorCategory = 'environment';
           userFriendlyError = 'AI processing service is not properly configured. Please contact support to resolve this issue.';
           console.error('❌ Python environment missing - ENOENT error. Virtual environment may not be activated or Python not installed.');
-        } else if (pythonError.message?.includes('timeout') || pythonError.code === 'ETIMEDOUT') {
-          // Processing timeout
+        } else if (pythonError.message?.includes('timeout') || pythonError.message?.includes('AbortError') || pythonError.message?.includes('maxDuration') || pythonError.code === 'ETIMEDOUT') {
+          // Processing timeout - more comprehensive detection
           errorCategory = 'timeout';
-          userFriendlyError = 'Receipt processing took too long. Please try uploading a clearer image or reduce the file size.';
+          userFriendlyError = 'Receipt processing timed out after 3 minutes. This usually happens with very complex receipts or during high server load. Please try uploading a clearer, simpler image or try again later.';
         } else if (pythonError.message?.includes('spawn') || pythonError.message?.includes('python')) {
           // Python execution issues
           errorCategory = 'execution';
@@ -198,12 +384,14 @@ export const extractReceiptData = task({
             extraction_method: 'ai',
             extraction_timestamp: new Date().toISOString(),
             ai_processing_status: 'failed',
+            processing_status: 'failed', // ✅ Also set this for ProcessingStep compatibility
             error_category: errorCategory,
-            error_code: pythonError.code || 'UNKNOWN',
+            error_code: pythonError.code || (errorCategory === 'timeout' ? 'TIMEOUT_ERROR' : 'UNKNOWN'),
             error_message: userFriendlyError,
             technical_error: pythonError.message || pythonError.toString(),
             failed_at: new Date().toISOString(),
-            processing_stage: 'python_execution'
+            processing_stage: 'python_execution',
+            timeout_duration: errorCategory === 'timeout' ? '180 seconds' : undefined
           };
 
           await supabase
@@ -222,7 +410,7 @@ export const extractReceiptData = task({
       }
 
       // Step 4: Parse Python script result
-      console.log("🔍 Raw Python result:", JSON.stringify(result, null, 2));
+      console.log("🔍 Parsing Python extraction result...");
 
       let pythonResult: any;
       if (result && typeof result === 'object' && 'stdout' in result) {
@@ -235,7 +423,7 @@ export const extractReceiptData = task({
           pythonResult = JSON.parse(stdout);
         } catch (parseError) {
           console.error(`❌ Failed to parse Python JSON output:`, parseError);
-          console.log(`📄 Raw stdout for debugging:`, (result as any).stdout);
+          console.log(`📄 Stdout length: ${(result as any).stdout?.length || 0} characters (content redacted for security)`);
 
           // Update expense claim with parsing failure
           if (payload.expenseClaimId) {
@@ -294,24 +482,19 @@ export const extractReceiptData = task({
         throw new Error('No extraction data returned from AI processing');
       }
 
-      console.log(`✅ AI extraction successful: ${extractionResult.vendor_name}, ${extractionResult.total_amount} ${extractionResult.currency}`);
+      console.log(`✅ AI extraction successful for claim ${payload.expenseClaimId}`);
 
-      // Log full extracted data for debugging
-      console.log("📊 Full Extraction Results:");
-      console.log(`🏪 Vendor: ${extractionResult.vendor_name}`);
-      console.log(`💰 Amount: ${extractionResult.total_amount} ${extractionResult.currency}`);
+      // Log extraction summary without sensitive data
+      console.log("📊 Extraction Results Summary:");
+      console.log(`🏪 Vendor: ${maskSensitiveData(extractionResult.vendor_name)}`);
+      console.log(`💰 Amount: [REDACTED] ${extractionResult.currency}`);
       console.log(`🗓️ Date: ${extractionResult.transaction_date}`);
-      console.log(`📄 Receipt #: ${extractionResult.receipt_number || 'N/A'}`);
+      console.log(`📄 Receipt #: ${extractionResult.receipt_number ? '[PRESENT]' : 'N/A'}`);
       console.log(`🎯 Confidence: ${(extractionResult.confidence_score * 100).toFixed(1)}%`);
       console.log(`⚡ Processing time: ${pythonResult.processing_time_ms}ms`);
       if (extractionResult.line_items?.length > 0) {
-        console.log(`📋 Line items: ${extractionResult.line_items.length} items`);
-        extractionResult.line_items.slice(0, 3).forEach((item: any, idx: number) => {
-          console.log(`   ${idx + 1}. ${item.description}: ${item.quantity}x${item.unit_price} = ${item.line_total}`);
-        });
-        if (extractionResult.line_items.length > 3) {
-          console.log(`   ... and ${extractionResult.line_items.length - 3} more items`);
-        }
+        console.log(`📋 Line items: ${extractionResult.line_items.length} items extracted`);
+        // Don't log detailed line item contents to prevent data leakage
       }
 
       // Step 5: Update expense claim with extracted metadata (NO accounting_entries creation)
@@ -457,7 +640,7 @@ export const extractReceiptData = task({
 
         console.log(`✅ Expense claim ${payload.expenseClaimId} updated successfully`);
 
-        // Log audit event
+        // Log audit event without sensitive data
         await supabase
           .from('audit_events')
           .insert({
@@ -468,8 +651,8 @@ export const extractReceiptData = task({
             target_entity_id: payload.expenseClaimId,
             details: {
               extraction_method: 'ai',
-              vendor: extractionResult.vendor_name,
-              amount: extractionResult.total_amount,
+              vendor_masked: maskSensitiveData(extractionResult.vendor_name),
+              amount_present: !!extractionResult.total_amount,
               currency: extractionResult.currency,
               category: autoCategory,
               line_items_count: extractionResult.line_items?.length || 0,

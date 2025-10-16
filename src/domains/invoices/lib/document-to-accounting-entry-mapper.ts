@@ -3,7 +3,7 @@
  * Maps extracted document entities to accounting entry form data
  */
 
-import { CreateTransactionRequest, CreateLineItemRequest, SupportedCurrency } from '@/domains/accounting-entries/types'
+import { CreateAccountingEntryRequest, CreateLineItemRequest, SupportedCurrency } from '@/domains/accounting-entries/types'
 
 interface ExtractedEntity {
   type: string
@@ -51,7 +51,6 @@ interface DocumentData {
     // AI direct fields (new format)
     text?: string
     vendor_name?: string
-    document_type?: string
     total_amount?: string | number
     currency?: string
     document_date?: string
@@ -62,11 +61,6 @@ interface DocumentData {
     // Legacy support (for backward compatibility)
     entities?: ExtractedEntity[]
     document_summary?: {
-      document_type?: {
-        value: string
-        confidence: number
-        bbox?: number[]
-      }
       vendor_name?: {
         value: string
         confidence: number
@@ -123,7 +117,7 @@ interface DocumentData {
 /**
  * Maps extracted document data to accounting entry form data
  */
-export function mapDocumentToAccountingEntry(document: DocumentData): Partial<CreateTransactionRequest> {
+export function mapDocumentToAccountingEntry(document: DocumentData): Partial<CreateAccountingEntryRequest> {
   console.log(`[Accounting Entry Mapper] Starting mapping for document:`, {
     documentId: document.id,
     fileName: document.file_name,
@@ -136,7 +130,7 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
     return {}
   }
 
-  const mappedData: Partial<CreateTransactionRequest> = {}
+  const mappedData: Partial<CreateAccountingEntryRequest> = {}
 
   // Helper function to find entity by type (for legacy format)
   const findEntity = (types: string[]) => {
@@ -239,51 +233,21 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
 
   // Map basic accounting entry information
   mappedData.transaction_type = 'Cost of Goods Sold' // Invoices are supplier invoices (business purchases)
+  mappedData.source_document_type = 'invoice' // This mapper handles invoice documents
 
   // Declare summary variable for use throughout function
   let summary: any = null
 
   // Check if this is AI structure (new format) or legacy structure
   // Priority: AI direct fields > document_summary > entities
-  const isAIFormat = !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type)
+  const isAIFormat = !!(extractedData.vendor_name || extractedData.total_amount)
 
   if (isAIFormat) {
     // Handle AI structure directly (new format)
     console.log(`[Accounting Entry Mapper] Processing AI structure`);
 
-    // Extract document type
-    if (extractedData.document_type) {
-      const docType = extractedData.document_type.toLowerCase()
-      if (docType.includes('invoice')) {
-        mappedData.document_type = 'invoice'
-      } else if (docType.includes('receipt')) {
-        mappedData.document_type = 'receipt'
-      } else if (docType.includes('bill')) {
-        mappedData.document_type = 'bill'
-      } else if (docType.includes('statement')) {
-        mappedData.document_type = 'statement'
-      } else if (docType.includes('contract')) {
-        mappedData.document_type = 'contract'
-      } else {
-        mappedData.document_type = 'other'
-      }
-      console.log(`[Accounting Entry Mapper] Mapped document type: ${mappedData.document_type}`);
-    }
-
-    // Set accounting entry status based on document type
-    if (mappedData.document_type) {
-      if (mappedData.document_type === 'receipt') {
-        mappedData.status = 'paid'
-      } else if (mappedData.document_type === 'invoice') {
-        mappedData.status = 'awaiting_payment'
-      } else if (mappedData.document_type === 'bill') {
-        mappedData.status = 'awaiting_payment'
-      } else {
-        mappedData.status = 'paid'
-      }
-    } else {
-      mappedData.status = 'paid'
-    }
+    // Set default accounting entry status for invoices (supplier documents)
+    mappedData.status = 'pending'
 
     // Extract vendor name
     if (extractedData.vendor_name) {
@@ -321,44 +285,8 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
               document.extracted_data.metadata?.layoutElements?.document_summary
 
     if (summary) {
-    // Extract document type from OCR - this bridges the context gap!
-    if ((summary as any).document_type?.value) {
-      const docType = (summary as any).document_type.value.toLowerCase()
-      // Map common document types to our supported types
-      if (docType.includes('invoice')) {
-        mappedData.document_type = 'invoice'
-      } else if (docType.includes('receipt')) {
-        mappedData.document_type = 'receipt'
-      } else if (docType.includes('bill')) {
-        mappedData.document_type = 'bill'
-      } else if (docType.includes('statement')) {
-        mappedData.document_type = 'statement'
-      } else if (docType.includes('contract')) {
-        mappedData.document_type = 'contract'
-      } else {
-        mappedData.document_type = 'other'
-      }
-    }
-
-    // Set initial accounting entry status based on document type
-    if (mappedData.document_type) {
-      if (mappedData.document_type === 'receipt') {
-        // Receipts indicate payment has already been made
-        mappedData.status = 'paid'
-      } else if (mappedData.document_type === 'invoice') {
-        // Invoices are awaiting payment
-        mappedData.status = 'awaiting_payment'
-      } else if (mappedData.document_type === 'bill') {
-        // Bills are awaiting payment
-        mappedData.status = 'awaiting_payment'
-      } else {
-        // Default status for other document types
-        mappedData.status = 'paid'
-      }
-    } else {
-      // Default status when document type cannot be determined
-      mappedData.status = 'paid'
-    }
+    // Set default accounting entry status for invoices (supplier documents)
+    mappedData.status = 'pending'
 
     // Extract vendor name
     if (summary.vendor_name?.value) {

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw, PiggyBank, CreditCard } from 'lucide-react';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
-import { useHomeCurrency } from '@/domains/users/components/currency-settings';
+import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
 
 interface UnifiedFinancialDashboardProps {

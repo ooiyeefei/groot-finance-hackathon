@@ -28,8 +28,8 @@ export default defineConfig({
       pythonExtension({
         // Path to requirements.txt file
         requirementsFile: "./requirements.txt",
-        // Use virtual environment python for local development (will be ignored in cloud)
-        devPythonBinaryPath: "./.venv/bin/python3",
+        // Let Trigger.dev use default Python binary (works in both dev and production)
+        // devPythonBinaryPath: "./.venv/bin/python3", // Removed - causing ENOENT errors
         // Copy Python script files to build environment
         scripts: ["./src/python/**/*.py"],
       }),

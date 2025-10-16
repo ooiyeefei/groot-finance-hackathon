@@ -6,7 +6,7 @@
 
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { requirePermission } from '@/lib/auth/rbac'
+import { requirePermission } from '@/domains/security/lib/rbac'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import ExpenseApprovalDashboard from '@/domains/expense-claims/components/expense-approval-dashboard'

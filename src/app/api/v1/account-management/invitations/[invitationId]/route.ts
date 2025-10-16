@@ -6,8 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { deleteInvitation } from '@/domains/account-management/lib/account-management.service'
-import { getCurrentUserContext } from '@/lib/auth/rbac'
-import { csrfProtection } from '@/lib/auth/csrf-protection'
+import { getCurrentUserContext } from '@/domains/security/lib/rbac'
+import { csrfProtection } from '@/domains/security/lib/csrf-protection'
 
 /**
  * Delete pending invitation

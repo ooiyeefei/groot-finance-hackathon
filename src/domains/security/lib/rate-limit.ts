@@ -138,9 +138,16 @@ export async function rateLimit(
 
     return null // Allow request
   } catch (error) {
-    // Log error but don't block request if rate limiting fails
-    console.error('[Rate Limit] Error:', error)
-    return null
+    // ✅ FAIL-CLOSED: Block request on any rate limiting error
+    console.error('[Rate Limit] Error - BLOCKING REQUEST:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Rate limiting system error',
+        message: 'Request blocked due to rate limiting system failure'
+      },
+      { status: 503 } // Service Unavailable
+    )
   }
 }
 

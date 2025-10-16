@@ -2,7 +2,6 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import CurrencySettings from '@/domains/users/components/currency-settings'
 import BusinessProfileSettings from '@/domains/account-management/components/business-profile-settings'
 import { ClientProviders } from '@/components/providers/client-providers'
 
@@ -33,11 +32,8 @@ export default async function SettingsPage() {
           <div className="max-w-4xl mx-auto">
             {/* Settings Sections */}
             <div className="space-y-6">
-              {/* Business Profile Settings */}
+              {/* Business Profile Settings (includes Currency Settings) */}
               <BusinessProfileSettings />
-
-              {/* Currency Settings */}
-              <CurrencySettings />
 
               {/* Language Settings */}
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">

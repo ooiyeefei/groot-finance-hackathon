@@ -481,3 +481,193 @@ if (!userContext.permissions.manager && !userContext.permissions.admin) {
 - ✅ UI layout restructured with requested 2:1 ratio
 - ✅ Text overflow issues resolved with truncation and compact design
 - ✅ All changes maintain existing functionality while fixing identified issues
+
+---
+
+## Session 3 Fixes Completed (2025-01-16)
+
+### Extraction Timeout & Multi-file Upload Issues ✅
+
+**5. AI Extraction Timeout Investigation**
+- **Problem**: User reported AI receipt extraction timing out after 180 seconds with poor error handling showing "Ready to Submit" instead of proper timeout errors
+- **Root Cause Investigation**: Timeout occurs at Trigger.dev Python runtime integration level, not in the Python script itself
+- **Solution**:
+  - Added comprehensive timing diagnostics around `python.runScript()` call in Trigger.dev task
+  - Implemented heartbeat logging every 5 seconds during Python execution
+  - Added milestone markers at 30s, 1min, 2min, and 2.5min to identify exact bottleneck location
+  - Enhanced error handling to check both `ai_processing_status` and `processing_status` fields
+  - Proper cleanup of intervals on both success and error cases
+  - Fixed TypeScript compilation errors with variable scope
+
+**6. Multi-file Upload Validation Failure**
+- **Problem**: Multi-file uploads failing with "Missing required fields: description, business_purpose, original_amount, original_currency, transaction_date" validation errors
+- **Root Cause**: FileUploadZone component was only sending `processing_mode: 'ai'` but API validation required all form fields that processing-step.tsx was providing
+- **Solution**:
+  - Updated API validation logic to properly handle `0` amounts (was incorrectly treating as falsy)
+  - Added all required form fields to FileUploadZone component for expense claims domain
+  - Used placeholder values that AI will update (same pattern as processing-step.tsx):
+    - `description: 'Receipt Processing - AI Extraction'`
+    - `business_purpose: 'Business Expense - Receipt Upload'`
+    - `original_amount: '1'` (temporary, AI updates)
+    - `original_currency: 'SGD'`
+    - `transaction_date: new Date().toISOString().split('T')[0]`
+    - `vendor_name: 'Processing...'`
+
+### Technical Implementation Details
+
+**Timing Diagnostics Added:**
+```typescript
+// Pre-execution environment checks
+console.log(`🔍 [TIMING] Environment check - GEMINI_API_KEY present: ${!!process.env.GEMINI_API_KEY}`)
+console.log(`🔍 [TIMING] Data preparation - Sanitized params size: ${JSON.stringify(sanitizedParams).length} chars`)
+
+// Heartbeat logging every 5 seconds
+const heartbeatInterval = setInterval(() => {
+  const elapsed = Date.now() - pythonStartTime;
+  console.log(`💗 [TIMING] Python execution heartbeat - ${elapsed}ms elapsed (${(elapsed/1000).toFixed(1)}s)`)
+
+  // Milestone markers at key intervals
+  if (elapsed >= 30000 && elapsed < 35000) {
+    console.log(`⚠️ [TIMING] 30 second mark - Python still running...`)
+  }
+  // Additional markers at 1min, 2min, 2.5min
+}, 5000)
+```
+
+**Multi-file Upload Fix:**
+```typescript
+// FileUploadZone now includes all required fields for expense claims
+if (domain === 'expense-claims') {
+  formData.append('processing_mode', 'ai')
+  // Add required form fields for unified API - use placeholder values, AI will update
+  formData.append('description', 'Receipt Processing - AI Extraction')
+  formData.append('business_purpose', 'Business Expense - Receipt Upload')
+  formData.append('original_amount', '1') // Temporary amount, will be updated by AI
+  formData.append('original_currency', 'SGD')
+  formData.append('transaction_date', new Date().toISOString().split('T')[0])
+  formData.append('vendor_name', 'Processing...')
+}
+```
+
+**API Validation Enhancement:**
+```typescript
+// Fixed validation to handle 0 amounts correctly
+if (!createRequest.description || !createRequest.business_purpose ||
+    (createRequest.original_amount === null || createRequest.original_amount === undefined) ||
+    !createRequest.original_currency || !createRequest.transaction_date) {
+  // More helpful error messages for AI processing mode
+}
+```
+
+### Files Modified
+1. `/src/trigger/extract-receipt-data.ts` - Added comprehensive timing diagnostics around python.runScript() execution
+2. `/src/app/api/v1/expense-claims/route.ts` - Fixed validation logic to handle AI processing mode correctly
+3. `/src/domains/utilities/components/file-upload-zone.tsx` - Added required form fields for expense claims
+
+### Impact & Value
+- **Timeout Debugging**: Comprehensive timing logs will identify exact bottleneck in Python runtime integration
+- **Multi-file Support**: Multi-file uploads now work properly for expense claims without validation errors
+- **Error Handling**: Better timeout error detection across multiple status fields
+- **User Experience**: Proper error states instead of confusing "Ready to Submit" messages
+- **System Reliability**: Enhanced validation and error handling for AI processing workflows
+
+### Next Steps for Timeout Investigation
+- Monitor new timing logs in production to identify where the 180-second timeout occurs
+- Focus optimization efforts on the identified bottleneck (likely Python runtime initialization)
+- Consider implementing fallback processing methods if runtime bottlenecks persist
+
+### Validation Results
+- ✅ Build passes successfully with all changes
+- ✅ TypeScript compilation errors resolved
+- ✅ Multi-file upload validation logic fixed
+- ✅ Comprehensive timing diagnostics implemented
+- ✅ Error handling enhanced for better user feedback
+- ✅ All changes follow existing code patterns and conventions
+
+---
+
+## Session 4 Fixes Completed (2025-01-16 Continuation)
+
+### Failed Claims Reprocess Functionality ✅
+
+**7. Failed Expense Claims Reprocess Option**
+- **Problem**: User identified that failed expense claims with status "Failed" and "Status pending update" had no way to retry AI processing, leaving users stuck with failed claims
+- **Context**: Failed claims appeared in the UI but only had "View Details" button, with no option to retry the AI extraction process
+- **Root Cause**: Reprocess functionality already existed via `handleReprocessClick` function but was only available for draft claims (purple "Re-extract" button), not failed claims
+- **Solution**:
+  - **Extended Existing Infrastructure**: Leveraged the existing `handleReprocessClick` function that already handled `/api/v1/expense-claims/${claimId}/reprocess` API calls
+  - **Added Conditional Rendering**: Added new button for `claim.status === 'failed' && claim.storage_path` condition
+  - **Orange Styling Differentiation**: Used orange colors (`bg-orange-600 hover:bg-orange-700`) to distinguish from purple re-extract button for draft claims
+  - **Updated View Details Logic**: Modified View Details button condition to avoid showing both reprocess and view details buttons simultaneously for failed claims
+  - **Consistent Icon Usage**: Used `RotateCcw` icon for idle state and `Brain` with animation for processing state (matching existing patterns)
+
+### Technical Implementation Details
+
+**Code Changes in personal-expense-dashboard.tsx:**
+
+**1. New Reprocess Button for Failed Claims (lines 885-898):**
+```typescript
+{/* Reprocess button for failed claims - Retry AI extraction */}
+{claim.status === 'failed' && claim.storage_path && (
+  <button
+    onClick={() => handleReprocessClick(claim.id, claim.storage_path)}
+    disabled={reprocessingClaims.has(claim.id)}
+    className="inline-flex items-center px-3 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors"
+  >
+    {reprocessingClaims.has(claim.id) ? (
+      <Brain className="w-4 h-4 mr-1.5 animate-spin" />
+    ) : (
+      <RotateCcw className="w-4 h-4 mr-1.5" />
+    )}
+    {reprocessingClaims.has(claim.id) ? 'AI Analyzing...' : 'Reprocess'}
+  </button>
+)}
+```
+
+**2. Updated View Details Button Condition (lines 900-905):**
+```typescript
+{/* View Details button for all non-draft claims (except when processing or failed with reprocess option) */}
+{claim.status !== 'draft' &&
+ claim.status !== 'analyzing' &&
+ claim.status !== 'uploading' &&
+ !(claim.status === 'failed' && claim.storage_path) && (
+```
+
+### Key Design Decisions
+
+**1. Color Coding Strategy:**
+- **Purple** (`bg-purple-600`): Re-extract button for draft claims (existing feature)
+- **Orange** (`bg-orange-600`): Reprocess button for failed claims (new feature)
+- Clear visual distinction helps users understand the different contexts
+
+**2. Conditional Logic Enhancement:**
+- Failed claims with `storage_path` (indicating uploaded receipt) show reprocess button
+- Failed claims without `storage_path` only show view details button
+- Prevents UI clutter by avoiding multiple action buttons for same claim
+
+**3. Reuse of Existing Infrastructure:**
+- `handleReprocessClick` function already handled API calls and state management
+- `reprocessingClaims` Set already tracked processing state across multiple claims
+- No need to duplicate logic, just extend existing functionality
+
+### User Experience Impact
+
+**Before:**
+- Failed expense claims showed "Failed • Status pending update" with only "View Details" button
+- Users had no way to retry AI processing, creating dead-end user experience
+- Support tickets likely required for stuck failed claims
+
+**After:**
+- Failed claims with receipts now show orange "Reprocess" button
+- Users can retry AI extraction themselves without support intervention
+- Clear visual feedback with spinning brain icon during reprocessing
+- Consistent with existing reprocess patterns for draft claims
+
+### Validation Results
+- ✅ Build passes successfully with all changes
+- ✅ No TypeScript compilation errors
+- ✅ Consistent UI patterns maintained
+- ✅ Existing reprocess infrastructure properly extended
+- ✅ Color coding provides clear visual distinction
+- ✅ Conditional rendering prevents UI conflicts
+- ✅ User experience improved for failed claims recovery

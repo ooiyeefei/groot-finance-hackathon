@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, useState } from 'react';
 import { AlertTriangle, TrendingDown, TrendingUp, CheckCircle, CreditCard, PiggyBank, AlertCircle, Calendar, Clock } from 'lucide-react';
 import ActionButton from '@/components/ui/action-button';
 import { AnalyticsData, AnalyticsTrends, ActionItem } from '@/domains/analytics/types/analytics';
-import { Transaction } from '@/domains/accounting-entries/types';
+import { AccountingEntry } from '@/domains/accounting-entries/types';
 
 interface ActionCenterProps {
   analytics: AnalyticsData | null;
@@ -20,8 +20,8 @@ export default function ActionCenter({
   loading
 }: ActionCenterProps) {
   const [statusBasedData, setStatusBasedData] = useState<{
-    overdueTransactions: Transaction[];
-    upcomingDueTransactions: Transaction[];
+    overdueTransactions: AccountingEntry[];
+    upcomingDueTransactions: AccountingEntry[];
     awaitingPaymentCount: number;
   }>({
     overdueTransactions: [],
@@ -41,19 +41,19 @@ export default function ActionCenter({
           const nextWeek = new Date();
           nextWeek.setDate(today.getDate() + 7);
           
-          const overdue = data.transactions?.filter((t: Transaction) => 
-            t.status === 'overdue' || 
+          const overdue = data.transactions?.filter((t: AccountingEntry) =>
+            t.status === 'overdue' ||
             (t.due_date && new Date(t.due_date) < today && t.status !== 'paid')
           ) || [];
-          
-          const upcomingDue = data.transactions?.filter((t: Transaction) =>
-            t.due_date && 
-            new Date(t.due_date) >= today && 
+
+          const upcomingDue = data.transactions?.filter((t: AccountingEntry) =>
+            t.due_date &&
+            new Date(t.due_date) >= today &&
             new Date(t.due_date) <= nextWeek &&
             t.status !== 'paid'
           ) || [];
-          
-          const awaitingCount = data.transactions?.filter((t: Transaction) =>
+
+          const awaitingCount = data.transactions?.filter((t: AccountingEntry) =>
             t.status === 'awaiting_payment'
           ).length || 0;
           

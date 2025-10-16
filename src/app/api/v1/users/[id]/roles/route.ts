@@ -10,8 +10,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { rateLimiters } from '@/lib/api/rate-limit'
-import { getCurrentUserContextWithBusiness } from '@/lib/auth/rbac'
+import { rateLimiters } from '@/domains/security/lib/rate-limit'
+import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
 import { updateUserRole, assignManager, removeUserFromBusiness } from '@/domains/users/lib/user.service'
 
 export async function POST(

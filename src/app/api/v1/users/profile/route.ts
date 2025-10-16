@@ -1,15 +1,22 @@
 /**
  * User Profile V1 API Routes
- * GET - Fetch user profile data including home currency
- * PATCH - Update user profile settings
+ * GET - Fetch user profile data including home currency (rate limited for queries)
+ * PATCH - Update user profile settings (rate limited for mutations)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getUserProfile, updateUserProfile } from '@/domains/users/lib/user.service'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 
 // GET /api/v1/users/profile - Fetch user profile
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Apply rate limiting for query operations (100 requests per minute)
+  const queryRateLimit = await rateLimit(request, RATE_LIMIT_CONFIGS.QUERY)
+
+  if (queryRateLimit) {
+    return queryRateLimit // Return rate limit error response
+  }
   try {
     const { userId } = await auth()
     if (!userId) {
@@ -37,6 +44,13 @@ export async function GET() {
 
 // PATCH /api/v1/users/profile - Update user profile (including name)
 export async function PATCH(request: NextRequest) {
+  // Apply rate limiting for mutation operations (30 requests per minute)
+  const mutationRateLimit = await rateLimit(request, RATE_LIMIT_CONFIGS.MUTATION)
+
+  if (mutationRateLimit) {
+    return mutationRateLimit // Return rate limit error response
+  }
+
   try {
     const { userId } = await auth()
     if (!userId) {

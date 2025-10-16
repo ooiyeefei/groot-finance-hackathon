@@ -7,9 +7,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { rateLimiters } from '@/lib/api/rate-limit'
-import { csrfProtection } from '@/lib/auth/csrf-protection'
-import { getCurrentUserContext } from '@/lib/auth/rbac'
+import { rateLimiters } from '@/domains/security/lib/rate-limit'
+import { csrfProtection } from '@/domains/security/lib/csrf-protection'
+import { getCurrentUserContext } from '@/domains/security/lib/rbac'
 import { resendInvitation } from '@/domains/account-management/lib/invitation.service'
 
 export async function POST(

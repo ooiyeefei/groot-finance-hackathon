@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { getDefaultExpenseCategories } from '@/domains/expense-claims/lib/default-expense-categories'
-import { syncRoleToClerk } from '@/lib/auth/rbac'
+import { syncRoleToClerk } from '@/domains/security/lib/rbac'
 
 // Retry utility for network operations
 async function retryOperation<T>(
@@ -620,42 +620,8 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
   })
 }
 
-// Create a user-scoped Supabase client with proper RLS enforcement
-export async function createUserSupabaseClient() {
-  const { userId } = await auth()
-
-  if (!userId) {
-    throw new Error('Authentication required')
-  }
-
-  // Resolve Clerk ID to Supabase UUID
-  const supabaseUserUuid = await getSupabaseUserUuid(userId)
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: {
-        fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
-          return fetch(url, {
-            ...options,
-            signal: AbortSignal.timeout(10000) // 10 second timeout
-          })
-        }
-      }
-    }
-  )
-
-  // Set up RLS context with Supabase UUID (not Clerk ID) with retry
-  await retryOperation(async () => {
-    const { error } = await supabase.rpc('set_user_context', { user_id: supabaseUserUuid })
-    if (error) {
-      throw new Error(`Failed to set RLS context: ${error.message}`)
-    }
-  })
-
-  return supabase
-}
+// ❌ REMOVED: createUserSupabaseClient() - No longer used
+// Replaced by createBusinessContextSupabaseClient() for better multi-tenant support
 
 // Create a simple Supabase client for database operations (still requires proper auth)
 export function createServerSupabaseClient() {

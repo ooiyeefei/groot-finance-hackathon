@@ -7,14 +7,25 @@
  * - Thin wrapper delegating to chat.service.ts
  * - Handles HTTP concerns (auth, validation, error mapping)
  * - Business logic in service layer
+ * - Rate limited for AI usage (30 messages/hour per user)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getUserData } from '@/lib/db/supabase-server'
 import { sendChatMessage } from '@/domains/chat/lib/chat.service'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting for AI chat interactions (30 messages per hour)
+  const chatRateLimit = await rateLimit(request, {
+    windowMs: 60 * 60 * 1000, // 1 hour
+    maxRequests: 30 // 30 messages per hour
+  })
+
+  if (chatRateLimit) {
+    return chatRateLimit // Return rate limit error response
+  }
   try {
     // Authenticate user
     const { userId } = await auth()

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import DocumentsList from './documents-list'
-import FileUploadZone from './file-upload-zone'
+import FileUploadZone from '@/domains/utilities/components/file-upload-zone'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FileText } from 'lucide-react'
 
@@ -49,7 +49,7 @@ export default function DocumentsContainer() {
               onUploadSuccess={handleBusinessDocumentSuccess}
               onUploadStart={() => console.log('Business document upload started')}
               autoProcess={true}
-              allowMultiple={false}
+              allowMultiple={true}
             />
           </CardContent>
         </Card>

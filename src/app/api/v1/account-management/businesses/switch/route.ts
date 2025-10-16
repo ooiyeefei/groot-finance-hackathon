@@ -1,75 +1,78 @@
 /**
  * Business Switching API V1
  * POST /api/v1/businesses/switch - Switch user's active business (updates Clerk JWT)
+ * Rate limited for mutation operations (30 requests per minute)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { switchActiveBusiness } from '@/domains/account-management/lib/account-management.service'
-import { csrfProtection } from '@/lib/auth/csrf-protection'
+import { csrfProtection } from '@/domains/security/lib/csrf-protection'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
+import { createErrorResponse, createValidationErrorResponse, ERROR_CODES, withErrorSanitization } from '@/domains/security/lib/error-sanitizer'
 import { z } from 'zod'
 
 const SwitchBusinessSchema = z.object({
   businessId: z.string().uuid('Invalid business ID format')
 })
 
-export async function POST(request: NextRequest) {
-  try {
-    const { userId } = await auth()
+export const POST = withErrorSanitization(async (request: NextRequest) => {
+  // Apply rate limiting for mutation operations (30 requests per minute)
+  const mutationRateLimit = await rateLimit(request, RATE_LIMIT_CONFIGS.MUTATION)
 
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
+  if (mutationRateLimit) {
+    return mutationRateLimit // Return rate limit error response
+  }
 
-    // Apply CSRF protection
-    const csrfResponse = await csrfProtection(request)
-    if (csrfResponse) {
-      return csrfResponse
-    }
+  const { userId } = await auth()
 
-    // Parse and validate request body
-    const body = await request.json()
-    const validation = SwitchBusinessSchema.safeParse(body)
-
-    if (!validation.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Invalid request data',
-          details: validation.error.issues
-        },
-        { status: 400 }
-      )
-    }
-
-    const { businessId } = validation.data
-
-    // Switch active business
-    const result = await switchActiveBusiness(businessId, userId)
-
-    if (!result.success) {
-      return NextResponse.json(
-        { success: false, error: result.error },
-        { status: 403 }
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Business switched successfully',
-      data: {
-        context: result.context
-      }
-    })
-
-  } catch (error) {
-    console.error('[Business Switch V1 API] Error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to switch business' },
-      { status: 500 }
+  if (!userId) {
+    return createErrorResponse(
+      null,
+      401,
+      ERROR_CODES.AUTH_REQUIRED,
+      'Authentication required'
     )
   }
-}
+
+  // Apply CSRF protection
+  const csrfResponse = await csrfProtection(request)
+  if (csrfResponse) {
+    return csrfResponse
+  }
+
+  // Parse and validate request body
+  const body = await request.json()
+  const validation = SwitchBusinessSchema.safeParse(body)
+
+  if (!validation.success) {
+    return createValidationErrorResponse(
+      validation.error.issues.map(issue => ({
+        field: issue.path.join('.'),
+        message: issue.message
+      }))
+    )
+  }
+
+  const { businessId } = validation.data
+
+  // Switch active business
+  const result = await switchActiveBusiness(businessId, userId)
+
+  if (!result.success) {
+    return createErrorResponse(
+      result.error,
+      403,
+      ERROR_CODES.INSUFFICIENT_PERMISSIONS,
+      'Cannot switch to this business'
+    )
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: 'Business switched successfully',
+    data: {
+      context: result.context
+    }
+  })
+}, 'Business Switch API')

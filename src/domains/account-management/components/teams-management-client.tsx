@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import InvitationDialog, { InvitationFormData } from '@/components/ui/invitation-dialog'
+import InvitationDialog, { InvitationFormData } from '@/domains/account-management/components/invitation-dialog'
 import { clearUserRoleCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
 
@@ -99,7 +99,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         const result = await response.json()
         if (result.success) {
           setUserRole(result.data.permissions)
-          
+
           // Only admin users can manage team roles
           if (!result.data.permissions.admin) {
             router.push('/')
@@ -599,7 +599,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                 <li>• View own transactions</li>
               </ul>
             </div>
-            
+
             <div className="p-4 bg-blue-900/20 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <Shield className="w-4 h-4 text-blue-400" />
@@ -612,7 +612,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                 <li>• View team expenses</li>
               </ul>
             </div>
-            
+
             <div className="p-4 bg-purple-900/20 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <Crown className="w-4 h-4 text-purple-400" />
@@ -750,7 +750,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                     )}
                                   </div>
                                 </div>
-                                
+
                                 <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
                                   <div className="flex items-center gap-1">
                                     <Mail className="w-3 h-3" />
@@ -913,7 +913,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                   {pendingInvitations.map((invitation) => {
                     const displayRole = invitation.role as UserRole // Use role directly from API
                     const RoleIcon = getRoleIcon(displayRole)
-                    
+
                     return (
                       <Card key={invitation.id} className="bg-gray-700 border-gray-600">
                         <CardContent className="p-4">
@@ -929,7 +929,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   {invitation.status}
                                 </Badge>
                               </div>
-                              
+
                               <div className="flex items-center gap-4 text-sm text-gray-400">
                                 <div className="flex items-center gap-1">
                                   <Calendar className="w-3 h-3" />
