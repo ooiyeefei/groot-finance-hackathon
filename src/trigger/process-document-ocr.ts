@@ -14,6 +14,7 @@ import {
   ACCOUNTING_CATEGORIES
 } from '@/domains/expense-claims/lib/expense-category-mapper';
 import { IFRS_CATEGORIES } from '@/lib/constants/ifrs-categories';
+import { getUserFriendlyErrorMessage, type ErrorContext } from '../lib/shared/error-message-mapper';
 
 // Note: AI processing function defined directly in Python inline code below
 
@@ -275,29 +276,105 @@ function categorizeWithIFRSAccountingCategories(
 }
 
 
+// Global error handler to ensure database updates even on system failures
+async function handleInvoiceTaskFailure(
+  documentId: string | undefined,
+  error: any,
+  context: string,
+  tableName: string
+): Promise<void> {
+  if (!documentId) return;
+
+  console.error(`🚨 CRITICAL FAILURE in ${context}:`, error);
+
+  try {
+    // Create error context for mapping
+    const errorContext: ErrorContext = {
+      technicalError: error?.message || error?.toString(),
+      processingStage: context,
+      domain: 'invoices',
+      documentType: 'invoice'
+    };
+
+    // Determine error category and code for system-level failures
+    let errorCode = 'SYSTEM_ERROR';
+    let errorCategory = 'system_failure';
+
+    if (error?.code === 'ENOENT' || error?.message?.includes('ENOENT')) {
+      errorCode = 'PYTHON_ENV_MISSING';
+      errorCategory = 'environment_missing';
+    } else if (error?.message?.includes('CONFIGURED_INCORRECTLY')) {
+      errorCode = 'CONFIGURATION_ERROR';
+      errorCategory = 'configuration_error';
+    } else if (error?.message?.includes('timeout') || error?.message?.includes('maxDuration')) {
+      errorCode = 'SYSTEM_TIMEOUT';
+      errorCategory = 'system_timeout';
+    }
+
+    // Update error context with determined values
+    errorContext.errorCode = errorCode;
+    errorContext.errorCategory = errorCategory;
+
+    // Get user-friendly error message using mapper
+    const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+    const userFriendlyError = userFriendlyMapping.userMessage;
+
+    const failureMetadata = {
+      extraction_method: 'ai',
+      extraction_timestamp: new Date().toISOString(),
+      ai_processing_status: 'failed',
+      processing_status: 'failed', // For ProcessingStep compatibility
+      error_category: errorCategory,
+      error_code: errorCode,
+      error_message: userFriendlyError,
+      technical_error: error?.message || error?.toString() || 'Unknown system error',
+      failed_at: new Date().toISOString(),
+      processing_stage: context,
+      failure_level: 'system' // Indicates this was a system-level failure
+    };
+
+    await supabase
+      .from(tableName)
+      .update({
+        processing_status: 'failed',
+        processing_metadata: failureMetadata,
+        processed_at: new Date().toISOString()
+      })
+      .eq('id', documentId);
+
+    console.log(`🚨 Document ${documentId} marked as failed due to system failure in ${context}`);
+  } catch (updateError) {
+    console.error('🚨 CRITICAL: Failed to update document with system failure:', updateError);
+    // This is the worst case - system failure AND database update failure
+    // Log to external service if available (Sentry, etc.)
+  }
+}
+
 export const processDocumentOCR = task({
   id: "process-document-ocr",
   run: async (payload: { documentId: string; imageStoragePath?: string; expenseCategory?: string; documentDomain: 'invoices' | 'expense_claims' | 'applications' }) => {  // ✅ PHASE 4C: Add domain parameter
-    // ✅ PHASE 4C: Route to correct table based on domain
+    // 🚨 GLOBAL TASK WRAPPER - Catches ALL failures including system failures
+    // ✅ PHASE 4C: Route to correct table based on domain (declare at outer scope)
     const tableName = DOMAIN_TABLE_MAP[payload.documentDomain];
 
-    console.log(`🚀 Starting Document OCR extraction`);
-    console.log(`📄 Document ID: ${payload.documentId}`);
-    console.log(`📊 Table: ${tableName} (domain: ${payload.documentDomain})`);
-    console.log(`🖼️ Image storage path: ${payload.imageStoragePath || 'Will fetch from document record'}`);
-
-    // Dynamic category logging based on document domain
-    const categoryType = payload.documentDomain === 'invoices' ? 'COGS category' : 'Expense category';
-    console.log(`🏷️ ${categoryType}: ${payload.expenseCategory || 'Will fetch from business categories'}`);
-
-    // Declare variables at function scope for catch block access
-    let processedImageBase64: string = '';
-    let processedMimeType: string = '';
-    let docRecord: any = null;
-    let imageStoragePath: string;
-    let businessCategories: DynamicExpenseCategory[] = [];
-
     try {
+      console.log(`🚀 Starting Document OCR extraction`);
+      console.log(`📄 Document ID: ${payload.documentId}`);
+      console.log(`📊 Table: ${tableName} (domain: ${payload.documentDomain})`);
+      console.log(`🖼️ Image storage path: ${payload.imageStoragePath || 'Will fetch from document record'}`);
+
+      // Dynamic category logging based on document domain
+      const categoryType = payload.documentDomain === 'invoices' ? 'COGS category' : 'Expense category';
+      console.log(`🏷️ ${categoryType}: ${payload.expenseCategory || 'Will fetch from business categories'}`);
+
+      // Declare variables at function scope for catch block access
+      let processedImageBase64: string = '';
+      let processedMimeType: string = '';
+      let docRecord: any = null;
+      let imageStoragePath: string;
+      let businessCategories: DynamicExpenseCategory[] = [];
+
+      try {
       // Step 1: Fetch document record and determine image path
       const { data: fetchedDocRecord, error: fetchError } = await supabase
         .from(tableName)  // ✅ PHASE 4C: Routed based on domain
@@ -306,7 +383,20 @@ export const processDocumentOCR = task({
         .single();
 
       if (fetchError || !fetchedDocRecord) {
-        throw new Error(`Failed to fetch document record: ${fetchError?.message}`);
+        // Create error context for fetch failure
+        const errorContext: ErrorContext = {
+          errorCode: 'RECORD_NOT_FOUND',
+          errorCategory: 'data_integrity',
+          technicalError: fetchError?.message || 'Document record not found',
+          processingStage: 'document_fetch',
+          domain: 'invoices',
+          documentType: 'invoice'
+        };
+
+        // Get user-friendly error message using mapper
+        const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+
+        throw new Error(userFriendlyMapping.userMessage);
       }
 
       // Assign to function-scoped variable
@@ -316,7 +406,20 @@ export const processDocumentOCR = task({
       imageStoragePath = payload.imageStoragePath || docRecord.storage_path;
 
       if (!imageStoragePath) {
-        throw new Error('No storage path available - neither provided in payload nor found in document record');
+        // Create error context for missing storage path
+        const errorContext: ErrorContext = {
+          errorCode: 'MISSING_IMAGE_DATA',
+          errorCategory: 'missing_image',
+          technicalError: 'No storage path available - neither provided in payload nor found in document record',
+          processingStage: 'storage_path_determination',
+          domain: 'invoices',
+          documentType: 'invoice'
+        };
+
+        // Get user-friendly error message using mapper
+        const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+
+        throw new Error(userFriendlyMapping.userMessage);
       }
 
       console.log(`📄 Processing: ${docRecord.file_name} (${docRecord.file_type}, ${Math.round(docRecord.file_size / 1024)}KB)`);
@@ -380,11 +483,37 @@ export const processDocumentOCR = task({
           });
 
         if (listError) {
-          throw new Error(`Failed to list converted images: ${listError.message}`);
+          // Create error context for storage list failure
+          const errorContext: ErrorContext = {
+            errorCode: 'STORAGE_ACCESS_ERROR',
+            errorCategory: 'storage_access',
+            technicalError: `Failed to list converted images: ${listError.message}`,
+            processingStage: 'image_listing',
+            domain: 'invoices',
+            documentType: 'invoice'
+          };
+
+          // Get user-friendly error message using mapper
+          const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+
+          throw new Error(userFriendlyMapping.userMessage);
         }
 
         if (!fileList || fileList.length === 0) {
-          throw new Error(`No converted images found in folder: ${docRecord.converted_image_path}`);
+          // Create error context for no images found
+          const errorContext: ErrorContext = {
+            errorCode: 'MISSING_IMAGE_DATA',
+            errorCategory: 'missing_image',
+            technicalError: `No converted images found in folder: ${docRecord.converted_image_path}`,
+            processingStage: 'image_validation',
+            domain: 'invoices',
+            documentType: 'invoice'
+          };
+
+          // Get user-friendly error message using mapper
+          const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+
+          throw new Error(userFriendlyMapping.userMessage);
         }
 
         console.log(`[ProcessDocumentOCR] Found ${fileList.length} converted image(s) for processing`);
@@ -399,7 +528,20 @@ export const processDocumentOCR = task({
             .createSignedUrl(filePath, 600);
 
           if (urlError || !urlData) {
-            throw new Error(`Failed to create signed URL for ${filePath}: ${urlError?.message}`);
+            // Create error context for signed URL failure
+            const errorContext: ErrorContext = {
+              errorCode: 'STORAGE_ACCESS_ERROR',
+              errorCategory: 'storage_access',
+              technicalError: `Failed to create signed URL for ${filePath}: ${urlError?.message}`,
+              processingStage: 'signed_url_creation',
+              domain: 'invoices',
+              documentType: 'invoice'
+            };
+
+            // Get user-friendly error message using mapper
+            const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+
+            throw new Error(userFriendlyMapping.userMessage);
           }
 
           pageUrls.push({
@@ -1118,8 +1260,21 @@ print(json.dumps(result))
       }
       
       if (!finalExtractionData.success) {
-        const errorMessage = finalExtractionData.error || 'Unknown processing error';
-        throw new Error(`AI processing failed: ${errorMessage}`);
+        // Create error context for AI processing failure
+        const errorContext: ErrorContext = {
+          errorCode: 'EXTRACTION_FAILED',
+          errorCategory: 'extraction_failure',
+          technicalError: finalExtractionData.error || 'Unknown processing error',
+          processingStage: 'ai_processing',
+          domain: 'invoices',
+          documentType: 'invoice'
+        };
+
+        // Get user-friendly error message using mapper
+        const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+
+        const errorMessage = userFriendlyMapping.userMessage;
+        throw new Error(errorMessage);
       }
 
       console.log(`✅ Processing successful with ${finalExtractionData.backend_used}`);
@@ -1225,11 +1380,24 @@ print(json.dumps(result))
         .eq('id', payload.documentId);
 
       if (updateError) {
-        throw new Error(`Failed to update document: ${updateError.message}`);
+        // Create error context for database update failure
+        const errorContext: ErrorContext = {
+          errorCode: 'DATABASE_UPDATE_ERROR',
+          errorCategory: 'database_update',
+          technicalError: `Failed to update document: ${updateError.message}`,
+          processingStage: 'database_update',
+          domain: 'invoices',
+          documentType: 'invoice'
+        };
+
+        // Get user-friendly error message using mapper
+        const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+
+        throw new Error(userFriendlyMapping.userMessage);
       }
 
       console.log(`✅ Document ${payload.documentId} processed successfully`);
-      
+
       return {
         success: true,
         documentId: payload.documentId,
@@ -1636,6 +1804,30 @@ print(json.dumps(result))
         
         throw aiError;
       }
+    }
+
+    } catch (systemError) {
+      // 🚨 GLOBAL CATCH - System-level failures (ENOENT, CONFIGURED_INCORRECTLY, etc.)
+      console.error('🚨 SYSTEM-LEVEL FAILURE detected:', systemError);
+
+      // Use the global error handler for system failures
+      await handleInvoiceTaskFailure(payload.documentId, systemError, 'system_task_execution', tableName);
+
+      // Re-throw with user-friendly message
+      let finalError = 'A system error occurred during invoice processing. Please try again or contact support if the issue persists.';
+
+      if (systemError instanceof Error) {
+        const errorWithCode = systemError as Error & { code?: string }
+        if (errorWithCode.code === 'ENOENT' || systemError.message?.includes('ENOENT')) {
+          finalError = 'AI processing service is not properly configured. Please contact support to resolve this issue.';
+        } else if (systemError.message?.includes('CONFIGURED_INCORRECTLY')) {
+          finalError = 'System configuration error. Please contact support to resolve this issue.';
+        } else if (systemError.message?.includes('timeout') || systemError.message?.includes('maxDuration')) {
+          finalError = 'Invoice processing timed out due to system issues. Please try again in a few moments.';
+        }
+      }
+
+      throw new Error(finalError);
     }
   },
 });

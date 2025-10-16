@@ -759,3 +759,80 @@ if (!createRequest.description || !createRequest.business_purpose ||
 - ✅ Color coding provides clear visual distinction
 - ✅ Conditional rendering prevents UI conflicts
 - ✅ User experience improved for failed claims recovery
+
+---
+
+## Session 6 Fixes Completed (2025-01-17)
+
+### Rate Limiting Issue Resolution ✅
+
+**9. Expense Claims Upload Rate Limiting Fix**
+- **Problem**: User encountered "Rate limit exceeded" error when uploading expense claim receipts. Investigation revealed the API had overly restrictive rate limiting - only 5 uploads per hour per user.
+- **Root Cause**: Custom rate limiting configuration in `/src/app/api/v1/expense-claims/route.ts` was using 1-hour window with only 5 uploads, making development and normal usage extremely difficult.
+- **Solution**:
+  - **Updated Rate Limit Configuration**: Changed from custom restrictive config (5 uploads/hour) to using existing `RATE_LIMIT_CONFIGS.EXPENSIVE` (10 uploads/minute)
+  - **120x Improvement**: From 5 uploads per hour to 10 uploads per minute (600 uploads per hour theoretical maximum)
+  - **Enhanced Error Messages**: Added user-friendly rate limit error handling in file upload component with retry timing
+  - **Maintained Security**: Still prevents abuse while allowing reasonable usage patterns
+
+### Technical Implementation Details
+
+**Rate Limit Configuration Change:**
+```typescript
+// Before: Overly restrictive custom configuration
+const uploadRateLimit = await rateLimit(request, {
+  windowMs: 60 * 60 * 1000, // 1 hour
+  maxRequests: 5 // 5 file uploads per hour
+})
+
+// After: Using standard EXPENSIVE rate limit config
+const uploadRateLimit = await rateLimit(request, RATE_LIMIT_CONFIGS.EXPENSIVE) // 10 uploads per minute
+```
+
+**Enhanced User-Friendly Error Handling:**
+```typescript
+// FileUploadZone component now provides clear error messages
+if (response.status === 429 || result.error?.includes('Rate limit exceeded')) {
+  const retryAfter = response.headers.get('Retry-After')
+  const waitTime = retryAfter ? `${retryAfter} seconds` : 'a moment'
+  throw new Error(`Upload limit reached. Please wait ${waitTime} before uploading again.`)
+}
+```
+
+**Rate Limiting Comparison:**
+- **File Uploads**: Now 10 uploads per minute (using `RATE_LIMIT_CONFIGS.EXPENSIVE`)
+- **Manual Entry**: 30 requests per minute (using `RATE_LIMIT_CONFIGS.MUTATION`)
+- **Standard Queries**: 100 requests per minute (using `RATE_LIMIT_CONFIGS.QUERY`)
+
+### Files Modified
+1. `/src/app/api/v1/expense-claims/route.ts` - Changed from custom rate limit to standard EXPENSIVE config
+2. `/src/domains/utilities/components/file-upload-zone.tsx` - Added user-friendly rate limit error messages
+
+### User Experience Impact
+
+**Before:**
+- 5 uploads per hour limit completely blocked development and testing
+- Generic "Upload failed" errors with no guidance on when to retry
+- Unusable for normal business expense claim workflows
+
+**After:**
+- 10 uploads per minute allows normal usage patterns and development
+- Clear error messages: "Upload limit reached. Please wait X seconds before uploading again."
+- Maintains security against abuse while enabling productivity
+
+### Key Benefits
+- **Development Productivity**: No more blocking during expense claims testing and development
+- **User Experience**: Clear, actionable error messages with retry timing information
+- **System Consistency**: Now uses standard rate limiting configurations instead of one-off custom limits
+- **Scalability**: Rate limits now support normal business usage patterns (multiple receipts per day)
+
+### Validation Results
+- ✅ Build passes successfully with all changes
+- ✅ Rate limiting now uses standard system configuration patterns
+- ✅ User-friendly error messages implemented with retry timing
+- ✅ No breaking changes to existing functionality
+- ✅ Security maintained while enabling reasonable usage
+- ✅ 120x improvement in upload capacity (5/hour → 10/minute)
+
+### Resolution Summary
+The rate limiting issue has been completely resolved. Users can now upload expense claim receipts at a reasonable rate without hitting artificial barriers. The 120x improvement in upload capacity makes the system usable for normal business operations while maintaining security through the EXPENSIVE rate limit configuration (10 uploads per minute).
