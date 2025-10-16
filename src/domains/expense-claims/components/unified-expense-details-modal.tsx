@@ -236,7 +236,7 @@ export default function UnifiedExpenseDetailsModal({
       'draft': { label: 'Draft', color: 'gray', description: 'Ready for editing - click Edit to modify or Submit to proceed' },
       'uploading': { label: 'Uploading...', color: 'blue', description: 'Receipt file is being uploaded' },
       'analyzing': { label: 'Analyzing 🧠', color: 'blue', description: 'AI is analyzing the receipt' },
-      'submitted': { label: 'Submitted', color: 'blue', description: 'Submitted for manager approval' },
+      'submitted': { label: 'Submitted', color: 'green', description: 'Submitted for manager approval' },
       'approved': { label: 'Approved', color: 'green', description: 'Approved - awaiting reimbursement' },
       'rejected': { label: 'Rejected', color: 'red', description: 'Claim was rejected' },
       'reimbursed': { label: 'Reimbursed', color: 'purple', description: 'Payment processed' },
@@ -692,10 +692,10 @@ export default function UnifiedExpenseDetailsModal({
                         </Card>
                       )}
 
-                      {/* Receipt ID at bottom of content */}
+                      {/* Expense ID at bottom of content */}
                       <div className="flex justify-end mt-6 pt-4 border-t border-gray-600">
                         <div className="flex items-center gap-2 bg-gray-700/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
-                          <span className="text-gray-300 text-xs font-mono">Receipt ID: {claimId}</span>
+                          <span className="text-gray-300 text-xs font-mono">Expense ID: {claimId}</span>
                           <button
                             onClick={() => navigator.clipboard.writeText(claimId)}
                             className="text-gray-400 hover:text-gray-200 transition-colors"

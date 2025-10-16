@@ -484,6 +484,94 @@ if (!userContext.permissions.manager && !userContext.permissions.admin) {
 
 ---
 
+## Session 5 Fixes Completed (2025-01-16 Continuation)
+
+### Dynamic Source Document ID Display ✅
+
+**8. Dynamic Expense/Invoice ID Labels in Accounting Entry Modals**
+- **Problem**: Accounting entry view and edit modals showed hardcoded "Invoice ID:" and "Expense ID:" labels regardless of the actual source document type, and had separate sections for each type instead of using the polymorphic relationship
+- **Root Cause**: Code was using separate conditional sections for `transaction.source_record_id` (Invoice) and `transaction.expense_claims` (Expense) instead of leveraging the `source_document_type` field from the database schema
+- **Solution**:
+  - **Replaced Hardcoded Sections**: Removed separate hardcoded sections for Invoice ID and Expense Claims ID
+  - **Implemented Dynamic Logic**: Created single dynamic section that uses `transaction.source_document_type` to determine label and styling
+  - **Label Mapping**:
+    - `source_document_type === 'invoice'` → "Invoice ID:" with green colors
+    - `source_document_type === 'expense_claim'` → "Expense ID:" with blue colors
+    - Default fallback → "Source ID:" with gray colors
+  - **Consistent Styling**: Maintained the same color coding scheme (green for invoices, blue for expenses)
+  - **Updated Both Modals**: Applied identical logic to both view and edit modals for consistency
+
+### Technical Implementation Details
+
+**Dynamic Rendering Logic:**
+```typescript
+// Dynamic label and styling based on source document type
+const isInvoice = transaction.source_document_type === 'invoice'
+const isExpense = transaction.source_document_type === 'expense_claim'
+
+const getLabel = () => {
+  if (isInvoice) return 'Invoice ID'
+  if (isExpense) return 'Expense ID'
+  return 'Source ID'
+}
+
+const getColors = () => {
+  if (isInvoice) return {
+    bg: 'bg-green-700/20',
+    border: 'border-green-600/30',
+    text: 'text-green-300',
+    button: 'text-green-400 hover:text-green-200'
+  }
+  if (isExpense) return {
+    bg: 'bg-blue-700/20',
+    border: 'border-blue-600/30',
+    text: 'text-blue-300',
+    button: 'text-blue-400 hover:text-blue-200'
+  }
+  return {
+    bg: 'bg-gray-700/20',
+    border: 'border-gray-600/30',
+    text: 'text-gray-300',
+    button: 'text-gray-400 hover:text-gray-200'
+  }
+}
+```
+
+**Key Benefits:**
+- **Database-Driven**: Uses actual database field (`source_document_type`) instead of hardcoded assumptions
+- **Polymorphic Relationship Support**: Properly supports the accounting entry polymorphic relationship pattern
+- **Single Source of Truth**: One section handles all source document types instead of separate conditional sections
+- **Extensible**: Easy to add new source document types in the future (contracts, receipts, etc.)
+- **Consistent UX**: Same interaction pattern for copying IDs regardless of source type
+
+### Files Modified
+1. `/src/domains/accounting-entries/components/accounting-entry-view-modal.tsx` - Replaced hardcoded sections with dynamic logic using source_document_type
+2. `/src/domains/accounting-entries/components/accounting-entry-edit-modal.tsx` - Applied same dynamic logic for consistency
+
+### User Experience Impact
+
+**Before:**
+- Hardcoded "Invoice ID:" and "Expense ID:" labels regardless of actual source type
+- Separate sections that could potentially show both or neither depending on data inconsistencies
+- Potential confusion if source_document_type didn't match the hardcoded assumptions
+
+**After:**
+- Dynamic labels that correctly reflect the actual source document type from database
+- Single clean section that shows appropriate label and styling
+- Consistent behavior between view and edit modals
+- Future-proof design that can handle additional source document types
+
+### Validation Results
+- ✅ Build passes successfully with all changes
+- ✅ No TypeScript compilation errors
+- ✅ Dynamic logic properly handles all source document types
+- ✅ Color coding maintained for visual consistency
+- ✅ Both view and edit modals updated identically
+- ✅ Polymorphic relationship pattern properly leveraged
+- ✅ Code is extensible for future source document types
+
+---
+
 ## Session 3 Fixes Completed (2025-01-16)
 
 ### Extraction Timeout & Multi-file Upload Issues ✅

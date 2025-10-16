@@ -759,7 +759,11 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           <div className="flex items-center gap-2">
             <Badge
               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                // UNIFIED LOGIC: Dark theme pattern matching invoices/applications
+                // UPDATED: Custom status-based colors per user request
+                claim.status === 'submitted' ? 'bg-green-900/20 text-green-300 border-green-700/50' :
+                claim.status === 'approved' ? 'bg-green-900/20 text-green-300 border-green-700/50' :
+                claim.status === 'rejected' ? 'bg-red-900/20 text-red-300 border-red-700/50' :
+                // UNIFIED LOGIC: Dark theme pattern matching invoices/applications (fallback)
                 claim.status_display?.color === 'green' ? 'bg-green-900/20 text-green-300 border-green-700/50' :
                 claim.status_display?.color === 'blue' ? 'bg-blue-900/20 text-blue-300 border-blue-700/50' :
                 claim.status_display?.color === 'yellow' ? 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50' :

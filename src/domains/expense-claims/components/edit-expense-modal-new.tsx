@@ -549,10 +549,10 @@ export default function EditExpenseModalNew({
                         </CardContent>
                       </Card>
 
-                      {/* Receipt ID at bottom of content */}
+                      {/* Expense ID at bottom of content */}
                       <div className="flex justify-end mt-6 pt-4 border-t border-gray-600">
                         <div className="flex items-center gap-2 bg-gray-700/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
-                          <span className="text-gray-300 text-xs font-mono">Receipt ID: {expenseClaimId}</span>
+                          <span className="text-gray-300 text-xs font-mono">Expense ID: {expenseClaimId}</span>
                           <button
                             onClick={() => navigator.clipboard.writeText(expenseClaimId)}
                             className="text-gray-400 hover:text-gray-200 transition-colors"

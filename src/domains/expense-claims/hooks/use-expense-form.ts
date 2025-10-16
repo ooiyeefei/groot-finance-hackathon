@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { useExpenseCategories } from './use-expense-categories'
+import { useExpenseCategories, validateCategorySelection } from './use-expense-categories'
 import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
@@ -139,7 +139,10 @@ export interface UseExpenseFormReturn {
 
 export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn {
   // Fetch dynamic categories and user home currency
-  const { categories, loading: categoriesLoading, error: categoriesError } = useExpenseCategories()
+  // For edit mode, include disabled categories to handle cases where assigned category was disabled
+  const { categories, loading: categoriesLoading, error: categoriesError } = useExpenseCategories({
+    includeDisabled: props.mode === 'edit'
+  })
   const userHomeCurrency = useHomeCurrency()
 
   // Determine processing method based on mode
@@ -410,9 +413,10 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     }
   }
 
-  // Form validation
+  // Form validation with enhanced category validation
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
+    const newWarnings: Record<string, string> = {}
 
     if (!formData.description.trim()) {
       newErrors.description = 'Description is required'
@@ -420,9 +424,15 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     if (!formData.business_purpose.trim()) {
       newErrors.business_purpose = 'Business purpose is required'
     }
-    if (!formData.expense_category) {
-      newErrors.expense_category = 'Category is required'
+
+    // Enhanced category validation
+    const categoryValidation = validateCategorySelection(formData.expense_category, categories)
+    if (!categoryValidation.isValid) {
+      newErrors.expense_category = categoryValidation.error || 'Category is required'
+    } else if (categoryValidation.warning) {
+      newWarnings.expense_category = categoryValidation.warning
     }
+
     if (formData.original_amount <= 0) {
       newErrors.original_amount = 'Amount must be greater than 0'
     }
@@ -433,7 +443,8 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       newErrors.transaction_date = 'Date is required'
     }
 
-    setErrors(newErrors)
+    // Set both errors and warnings (warnings don't prevent form submission)
+    setErrors({ ...newErrors, ...newWarnings })
     return Object.keys(newErrors).length === 0
   }
 

@@ -788,32 +788,56 @@ export default function AccountingEntryFormModal({
                       </button>
                     </div>
 
-                    {/* Invoice ID */}
+                    {/* Dynamic Source Document ID */}
                     {transaction.source_record_id && (
-                      <div className="flex items-center gap-2 bg-green-700/20 backdrop-blur-sm px-3 py-1.5 rounded-md border border-green-600/30">
-                        <span className="text-green-300 text-xs font-mono">Invoice ID: {transaction.source_record_id}</span>
-                        <button
-                          onClick={() => navigator.clipboard.writeText(transaction.source_record_id!)}
-                          className="text-green-400 hover:text-green-200 transition-colors"
-                          title="Copy Invoice ID"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
+                      (() => {
+                        // Dynamic label and styling based on source document type
+                        const isInvoice = transaction.source_document_type === 'invoice'
+                        const isExpense = transaction.source_document_type === 'expense_claim'
 
-                    {/* Expense Claims ID */}
-                    {transaction.expense_claims && transaction.expense_claims.length > 0 && (
-                      <div className="flex items-center gap-2 bg-blue-700/20 backdrop-blur-sm px-3 py-1.5 rounded-md border border-blue-600/30">
-                        <span className="text-blue-300 text-xs font-mono">Expense ID: {transaction.expense_claims[0].id}</span>
-                        <button
-                          onClick={() => navigator.clipboard.writeText(transaction.expense_claims?.[0]?.id || '')}
-                          className="text-blue-400 hover:text-blue-200 transition-colors"
-                          title="Copy Expense Claims ID"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                      </div>
+                        const getLabel = () => {
+                          if (isInvoice) return 'Invoice ID'
+                          if (isExpense) return 'Expense ID'
+                          return 'Source ID'
+                        }
+
+                        const getColors = () => {
+                          if (isInvoice) return {
+                            bg: 'bg-green-700/20',
+                            border: 'border-green-600/30',
+                            text: 'text-green-300',
+                            button: 'text-green-400 hover:text-green-200'
+                          }
+                          if (isExpense) return {
+                            bg: 'bg-blue-700/20',
+                            border: 'border-blue-600/30',
+                            text: 'text-blue-300',
+                            button: 'text-blue-400 hover:text-blue-200'
+                          }
+                          return {
+                            bg: 'bg-gray-700/20',
+                            border: 'border-gray-600/30',
+                            text: 'text-gray-300',
+                            button: 'text-gray-400 hover:text-gray-200'
+                          }
+                        }
+
+                        const colors = getColors()
+                        const label = getLabel()
+
+                        return (
+                          <div className={`flex items-center gap-2 ${colors.bg} backdrop-blur-sm px-3 py-1.5 rounded-md border ${colors.border}`}>
+                            <span className={`${colors.text} text-xs font-mono`}>{label}: {transaction.source_record_id}</span>
+                            <button
+                              onClick={() => navigator.clipboard.writeText(transaction.source_record_id!)}
+                              className={`${colors.button} transition-colors`}
+                              title={`Copy ${label}`}
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )
+                      })()
                     )}
                   </div>
                 )}

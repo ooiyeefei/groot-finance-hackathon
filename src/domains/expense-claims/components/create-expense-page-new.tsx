@@ -150,6 +150,13 @@ export default function CreateExpensePageNew({
       formData.append('file', file)
       formData.append('processing_mode', 'ai') // Use AI processing for uploaded receipts
 
+      // Add required fields with defaults for AI processing
+      formData.append('description', 'Receipt Upload - AI Processing')
+      formData.append('business_purpose', 'Business Expense - Processing via AI')
+      formData.append('original_amount', '0') // Will be updated by AI
+      formData.append('original_currency', 'SGD')
+      formData.append('transaction_date', new Date().toISOString().split('T')[0])
+
       console.log('Uploading file to expense claims API...')
 
       // Call the unified expense claims upload API

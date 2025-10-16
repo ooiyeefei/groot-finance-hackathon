@@ -4,12 +4,11 @@ import { useState, useEffect } from 'react'
 import { Search, Filter, Plus, Eye, Edit, Trash2, RefreshCw, Calendar, Building, DollarSign, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
-import CategorySelector from './CategorySelector'
 import StatusSelector from './StatusSelector'
 import { AccountingEntry, TransactionType } from '@/domains/accounting-entries/types'
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
-import { useExpenseCategories, DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories'
-import { useCOGSCategories, DynamicCOGSCategory } from '@/lib/hooks/accounting/use-cogs-categories'
+import { useExpenseCategories } from '@/domains/expense-claims/hooks/use-expense-categories'
+import { useCOGSCategories } from '@/lib/hooks/accounting/use-cogs-categories'
 
 interface AccountingEntriesListProps {
   transactions: AccountingEntry[]
@@ -50,8 +49,8 @@ export default function AccountingEntriesList({
   })
 
   // Dynamic category hooks - same as edit form
-  const { categories: expenseCategories, loading: expenseCategoriesLoading } = useExpenseCategories()
-  const { categories: cogsCategories, loading: cogsCategoriesLoading } = useCOGSCategories()
+  const { categories: expenseCategories } = useExpenseCategories()
+  const { categories: cogsCategories } = useCOGSCategories()
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -135,8 +134,29 @@ export default function AccountingEntriesList({
     return matchesSearch && matchesCategory && matchesType && matchesDateFrom && matchesDateTo
   })
 
-  const uniqueCategories = [...new Set(transactions.map(t => t.category))]
-  const accountingEntryTypes = ['income', 'expense', 'transfer']
+  // Dynamic categories based on selected transaction type
+  const getDynamicCategories = () => {
+    if (selectedType === 'Expense') {
+      return expenseCategories.map(cat => ({
+        code: cat.category_code,
+        name: cat.category_name
+      }))
+    } else if (selectedType === 'Cost of Goods Sold') {
+      return cogsCategories.map(cat => ({
+        code: cat.category_code,
+        name: cat.category_name
+      }))
+    } else {
+      // For Income or when no type is selected, show all unique categories from transactions
+      return [...new Set(transactions.map(t => t.category))].map(category => ({
+        code: category,
+        name: formatCategoryName(category)
+      }))
+    }
+  }
+
+  const dynamicCategories = getDynamicCategories()
+  const accountingEntryTypes = ['Income', 'Cost of Goods Sold', 'Expense']
 
   // Detect if any filters are active
   const hasActiveFilters = !!(searchQuery || selectedCategory || selectedType || dateFrom || dateTo)
@@ -236,6 +256,11 @@ export default function AccountingEntriesList({
     setCurrentPage(1)
   }, [searchQuery, selectedCategory, selectedType, dateFrom, dateTo])
 
+  // Clear selected category when transaction type changes to avoid invalid combinations
+  useEffect(() => {
+    setSelectedCategory('')
+  }, [selectedType])
+
   if (error) {
     return (
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
@@ -283,19 +308,11 @@ export default function AccountingEntriesList({
               className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Categories</option>
-              {uniqueCategories.map(category => {
-                // Find a transaction with this category to get its type for proper formatting
-                const sampleTransaction = transactions.find(t => t.category === category)
-                const categoryLabel = sampleTransaction ?
-                  formatCategoryName(category, sampleTransaction.transaction_type) :
-                  formatCategoryName(category)
-
-                return (
-                  <option key={category} value={category}>
-                    {categoryLabel}
-                  </option>
-                )
-              })}
+              {dynamicCategories.map(category => (
+                <option key={category.code} value={category.code}>
+                  {category.name}
+                </option>
+              ))}
             </select>
 
             {/* Type Filter */}
@@ -474,7 +491,7 @@ export default function AccountingEntriesList({
                       <StatusSelector
                         accountingEntryId={transaction.id}
                         currentStatus={transaction.status || 'pending'}
-                        onStatusUpdate={(newStatus) => {
+                        onStatusUpdate={() => {
                           // Optimistically update the transaction in the parent component
                           onRefresh()
                         }}
@@ -505,15 +522,11 @@ export default function AccountingEntriesList({
                         </span>
                       )}
                       
-                      <CategorySelector
-                        accountingEntryId={transaction.id}
-                        currentCategory={transaction.category}
-                        accountingEntryType={transaction.transaction_type}
-                        onCategoryUpdate={(newCategory) => {
-                          // Optimistically update the transaction in the parent component
-                          onRefresh()
-                        }}
-                      />
+                      <span className="flex items-center gap-1">
+                        <span className="text-gray-500 text-xs">
+                          {formatCategoryName(transaction.category, transaction.transaction_type)}
+                        </span>
+                      </span>
                     </div>
                   </div>
                 </div>

@@ -77,10 +77,7 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
   let query = supabase
     .from('invoices')
     .select(`
-      id, file_name, file_type, file_size, storage_path, converted_image_path, converted_image_width, converted_image_height, processing_status, created_at, processed_at, error_message, extracted_data, confidence_score,
-      accounting_entries:accounting_entries!source_record_id!left (
-        id, description, original_amount, original_currency, created_at, deleted_at
-      )
+      id, file_name, file_type, file_size, storage_path, converted_image_path, converted_image_width, converted_image_height, processing_status, created_at, processed_at, error_message, extracted_data, confidence_score
     `)
     .eq('user_id', userData.id) // SECURITY FIX: Use validated Supabase UUID
     .is('deleted_at', null)
@@ -127,17 +124,38 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
     throw new Error('Failed to fetch invoices')
   }
 
-  // Process invoices to include linked accounting entry data (excluding soft-deleted entries)
-  const processedInvoices: Invoice[] = (invoices || []).map((invoice: any) => {
-    // Filter out soft-deleted accounting entries
-    const activeEntries = invoice.accounting_entries?.filter((entry: any) => !entry.deleted_at) || []
+  // Fetch linked accounting entries for all invoices using polymorphic relationship
+  const invoiceIds = (invoices || []).map((invoice: any) => invoice.id)
 
-    return {
-      ...invoice,
-      linked_transaction: activeEntries.length > 0 ? activeEntries[0] : null,
-      accounting_entries: undefined // Remove the raw accounting_entries array from the response
-    }
+  let linkedTransactions: any[] = []
+  if (invoiceIds.length > 0) {
+    const { data: accountingEntries } = await supabase
+      .from('accounting_entries')
+      .select('id, description, original_amount, original_currency, created_at, source_record_id')
+      .eq('source_document_type', 'invoice')
+      .in('source_record_id', invoiceIds)
+      .is('deleted_at', null)
+
+    linkedTransactions = accountingEntries || []
+  }
+
+  // Create a map for quick lookup of linked transactions by invoice ID
+  const linkedTransactionMap = new Map()
+  linkedTransactions.forEach((entry: any) => {
+    linkedTransactionMap.set(entry.source_record_id, {
+      id: entry.id,
+      description: entry.description,
+      original_amount: entry.original_amount,
+      original_currency: entry.original_currency,
+      created_at: entry.created_at
+    })
   })
+
+  // Process invoices with linked transaction data
+  const processedInvoices: Invoice[] = (invoices || []).map((invoice: any) => ({
+    ...invoice,
+    linked_transaction: linkedTransactionMap.get(invoice.id) || null
+  }))
 
   // Get total count for pagination (simplified - in production this would be optimized)
   let totalQuery = supabase
@@ -408,12 +426,7 @@ export async function getDocument(documentId: string): Promise<Invoice | null> {
 
   const { data: document, error } = await supabase
     .from('invoices')
-    .select(`
-      *,
-      accounting_entries:accounting_entries!source_record_id!left (
-        id, description, original_amount, original_currency, created_at, deleted_at
-      )
-    `)
+    .select('*')
     .eq('id', documentId)
     .eq('user_id', userData.id)
     .is('deleted_at', null)
@@ -424,14 +437,11 @@ export async function getDocument(documentId: string): Promise<Invoice | null> {
     return null
   }
 
-  // Process linked transaction data (excluding soft-deleted entries)
-  const docData = document as any
-  const activeEntries = docData.accounting_entries?.filter((entry: any) => !entry.deleted_at) || []
-
+  // Return document with linked_transaction as null for now
+  // TODO: Fetch linked accounting entries separately if needed
   return {
-    ...docData,
-    linked_transaction: activeEntries.length > 0 ? activeEntries[0] : null,
-    accounting_entries: undefined // Remove raw accounting_entries from response
+    ...document,
+    linked_transaction: null
   } as Invoice
 }
 
@@ -484,10 +494,7 @@ export async function deleteDocument(documentId: string): Promise<boolean> {
   // First check if document exists and user owns it
   const { data: document, error: fetchError } = await supabase
     .from('invoices')
-    .select(`
-      id, storage_path,
-      accounting_entries:accounting_entries!source_record_id!left(id, deleted_at)
-    `)
+    .select('id, storage_path')
     .eq('id', documentId)
     .eq('user_id', userData.id)
     .is('deleted_at', null)
@@ -498,13 +505,16 @@ export async function deleteDocument(documentId: string): Promise<boolean> {
     throw new Error('Document not found or access denied')
   }
 
-  // Check if document has linked transactions (excluding soft-deleted ones)
-  const docData = document as any
-  const activeAccountingEntries = docData.accounting_entries?.filter((entry: any) => !entry.deleted_at) || []
+  // Check if document has linked accounting entries (excluding soft-deleted ones)
+  const { data: linkedEntries } = await supabase
+    .from('accounting_entries')
+    .select('id')
+    .eq('source_record_id', documentId)
+    .is('deleted_at', null)
 
-  if (activeAccountingEntries.length > 0) {
+  if (linkedEntries && linkedEntries.length > 0) {
     console.warn('[Document] Cannot delete document with active linked transactions:', documentId)
-    console.warn('[Document] Active transaction IDs:', activeAccountingEntries.map((e: any) => e.id))
+    console.warn('[Document] Active transaction IDs:', linkedEntries.map((e: any) => e.id))
     throw new Error('Cannot delete document that has linked transactions. Please delete the transaction first.')
   }
 

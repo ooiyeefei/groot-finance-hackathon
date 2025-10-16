@@ -321,9 +321,10 @@ export async function createExpenseClaim(
           tax_amount: null
         },
 
-        // Store line items
+        // Store line items with proper field mapping for RPC function
         line_items: line_items.map((item, index) => ({
-          item_description: item.description,
+          item_description: item.description, // Map description to item_description for RPC
+          description: item.description, // Keep both for compatibility
           quantity: item.quantity,
           unit_price: item.unit_price,
           total_amount: item.quantity * item.unit_price,
@@ -1096,6 +1097,7 @@ export async function updateExpenseClaim(
 
       const updatedLineItems = request.line_items.map((item: any, index: number) => ({
         item_description: item.description || item.item_description || 'Item',
+        description: item.description || item.item_description || 'Item', // Keep both for compatibility
         quantity: item.quantity || 1,
         unit_price: item.unit_price || 0,
         total_amount: item.total_amount || 0,
