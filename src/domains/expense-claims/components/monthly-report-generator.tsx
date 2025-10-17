@@ -6,12 +6,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Download, FileText, Calendar, User, Printer } from 'lucide-react'
+import { Download, FileText, Calendar, User, Printer, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import FormattedExpenseReport from './formatted-expense-report'
 
 interface ReportData {
   month: string
@@ -46,6 +47,56 @@ interface ReportData {
   }
 }
 
+// Enhanced formatted report interfaces
+interface CategoryLineItem {
+  date: string
+  description: string
+  amount: number
+  referenceNumber?: string
+  claimId: string
+  vendor: string
+}
+
+interface CategorySection {
+  categoryName: string
+  categoryCode: string
+  accountingCategory: string
+  lineItems: CategoryLineItem[]
+  subtotal: number
+  currency: string
+}
+
+interface EnhancedReportHeader {
+  businessName: string
+  reportTitle: string
+  employeeName: string
+  employeeDesignation: string
+  reportMonth: string
+  approvedBy?: string
+  generatedDate: string
+}
+
+interface FormattedReportData {
+  header: EnhancedReportHeader
+  categorySections: CategorySection[]
+  summary: {
+    totalAmount: number
+    totalClaims: number
+    currency: string
+    statusBreakdown: {
+      approved: number
+      submitted: number
+      rejected: number
+      reimbursed: number
+    }
+  }
+  metadata: {
+    reportScope: string
+    generatedAt: string
+    dataAsOf: string
+  }
+}
+
 interface MonthlyReportGeneratorProps {
   personalOnly?: boolean
 }
@@ -54,7 +105,9 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedEmployee, setSelectedEmployee] = useState('')
   const [reportData, setReportData] = useState<ReportData | null>(null)
+  const [formattedReportData, setFormattedReportData] = useState<FormattedReportData | null>(null)
   const [generating, setGenerating] = useState(false)
+  const [generatingFormatted, setGeneratingFormatted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [employees, setEmployees] = useState([
     { id: 'current', name: 'My Reports' }
@@ -62,6 +115,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
   const [loadingEmployees, setLoadingEmployees] = useState(false)
   const [categories, setCategories] = useState<Array<{business_category_code: string, business_category_name: string}>>([])
   const [loadingCategories, setLoadingCategories] = useState(true)
+  const [activePreview, setActivePreview] = useState<'summary' | 'formatted' | null>(null)
 
   // Generate available months (last 12 months)
   const generateMonthOptions = () => {
@@ -208,6 +262,8 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
       if (result.success) {
         setReportData(result.data)
+        setActivePreview('summary')
+        setFormattedReportData(null) // Clear formatted data when generating summary
       } else {
         setError(result.error || 'Failed to generate report')
       }
@@ -216,6 +272,43 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
       setError('Network error. Please try again.')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const generateFormattedReport = async () => {
+    if (!selectedMonth) {
+      setError('Please select a month')
+      return
+    }
+
+    setGeneratingFormatted(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams({
+        month: selectedMonth
+      })
+
+      if (selectedEmployee && selectedEmployee !== 'current') {
+        params.append('employeeId', selectedEmployee)
+      }
+
+      // Use the new formatted reports API endpoint
+      const response = await fetch(`/api/v1/expense-claims/reports/formatted?${params}`)
+      const result = await response.json()
+
+      if (result.success) {
+        setFormattedReportData(result.data)
+        setActivePreview('formatted')
+        setReportData(null) // Clear summary data when generating formatted
+      } else {
+        setError(result.error || 'Failed to generate formatted report')
+      }
+    } catch (error) {
+      console.error('Formatted report generation failed:', error)
+      setError('Network error. Please try again.')
+    } finally {
+      setGeneratingFormatted(false)
     }
   }
 
@@ -282,11 +375,20 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
           <div className="flex flex-wrap gap-3">
             <Button
               onClick={generateReport}
-              disabled={generating}
+              disabled={generating || generatingFormatted}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <FileText className="w-4 h-4 mr-2" />
-              Preview Report
+              {generating ? 'Generating...' : 'Summary Preview'}
+            </Button>
+
+            <Button
+              onClick={generateFormattedReport}
+              disabled={generating || generatingFormatted}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              {generatingFormatted ? 'Generating...' : 'Formatted Preview'}
             </Button>
 
             {/* CSV Export as direct download link */}
@@ -318,7 +420,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
       </Card>
 
       {/* Report Preview */}
-      {reportData && (
+      {activePreview === 'summary' && reportData && (
         <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -402,6 +504,11 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Formatted Report Preview */}
+      {activePreview === 'formatted' && formattedReportData && (
+        <FormattedExpenseReport reportData={formattedReportData} />
       )}
 
       {/* Quick Access to Recent Reports */}

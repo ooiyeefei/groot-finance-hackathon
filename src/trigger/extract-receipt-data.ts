@@ -8,6 +8,7 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
 import { createClient } from '@supabase/supabase-js';
+import { getUserFriendlyErrorMessage, type ErrorContext } from '../lib/shared/error-message-mapper';
 
 // Initialize Supabase client with service role key for background processing
 const createSupabaseClient = () => {
@@ -127,6 +128,79 @@ function maskSensitiveData(data: string): string {
   return data.length > 3 ? `${data.substring(0, 3)}***` : '***';
 }
 
+// Global error handler to ensure database updates even on system failures
+async function handleTaskFailure(
+  expenseClaimId: string | undefined,
+  error: any,
+  context: string
+): Promise<void> {
+  if (!expenseClaimId) return;
+
+  console.error(`🚨 CRITICAL FAILURE in ${context}:`, error);
+
+  try {
+    // Create error context for mapping
+    const errorContext: ErrorContext = {
+      technicalError: error?.message || error?.toString(),
+      processingStage: context,
+      domain: 'expense_claims',
+      documentType: 'receipt'
+    };
+
+    // Determine error category and code for system-level failures
+    let errorCode = 'SYSTEM_ERROR';
+    let errorCategory = 'system_failure';
+
+    if (error?.code === 'ENOENT' || error?.message?.includes('ENOENT')) {
+      errorCode = 'PYTHON_ENV_MISSING';
+      errorCategory = 'environment_missing';
+    } else if (error?.message?.includes('CONFIGURED_INCORRECTLY')) {
+      errorCode = 'CONFIGURATION_ERROR';
+      errorCategory = 'configuration_error';
+    } else if (error?.message?.includes('timeout') || error?.message?.includes('maxDuration')) {
+      errorCode = 'SYSTEM_TIMEOUT';
+      errorCategory = 'system_timeout';
+    }
+
+    // Update error context with determined values
+    errorContext.errorCode = errorCode;
+    errorContext.errorCategory = errorCategory;
+
+    // Get user-friendly error message using mapper
+    const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+    const userFriendlyError = userFriendlyMapping.userMessage;
+
+    const failureMetadata = {
+      extraction_method: 'ai',
+      extraction_timestamp: new Date().toISOString(),
+      ai_processing_status: 'failed',
+      processing_status: 'failed', // For ProcessingStep compatibility
+      error_category: errorCategory,
+      error_code: errorCode,
+      error_message: userFriendlyError,
+      technical_error: error?.message || error?.toString() || 'Unknown system error',
+      failed_at: new Date().toISOString(),
+      processing_stage: context,
+      failure_level: 'system' // Indicates this was a system-level failure
+    };
+
+    await supabase
+      .from('expense_claims')
+      .update({
+        status: 'failed',
+        processing_metadata: failureMetadata,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', expenseClaimId);
+
+    console.log(`🚨 Expense claim ${expenseClaimId} marked as failed due to system failure in ${context}`);
+  } catch (updateError) {
+    console.error('🚨 CRITICAL: Failed to update expense claim with system failure:', updateError);
+    // This is the worst case - system failure AND database update failure
+    // Log to external service if available (Sentry, etc.)
+  }
+}
+
 export const extractReceiptData = task({
   id: "extract-receipt-data",
   maxDuration: 180, // 3 minutes - with vLLM fallback system
@@ -153,12 +227,14 @@ export const extractReceiptData = task({
     requestId?: string;
     documentDomain?: 'invoices' | 'expense_claims';
   }) => {
-    console.log(`🚀 Starting AI receipt extraction - Claim: ${payload.expenseClaimId}`);
+    // 🚨 GLOBAL TASK WRAPPER - Catches ALL failures including system failures
+    try {
+      console.log(`🚀 Starting AI receipt extraction - Claim: ${payload.expenseClaimId}`);
 
-    // Route to correct table based on domain (fallback to 'invoices' for backward compatibility)
-    const documentDomain = payload.documentDomain || 'invoices';
-    const tableName = DOMAIN_TABLE_MAP[documentDomain];
-    console.log(`🔍 Using table: ${tableName} for domain: ${documentDomain}`);
+      // Route to correct table based on domain (fallback to 'invoices' for backward compatibility)
+      const documentDomain = payload.documentDomain || 'invoices';
+      const tableName = DOMAIN_TABLE_MAP[documentDomain];
+      console.log(`🔍 Using table: ${tableName} for domain: ${documentDomain}`);
 
     // Step 1: Fetch business categories for enhanced categorization (if expense claim provided)
     let businessCategories: any[] = [];
@@ -351,32 +427,41 @@ export const extractReceiptData = task({
       } catch (pythonError: any) {
         console.error("❌ Python execution failed:", pythonError);
 
-        // Enhanced error categorization and user-friendly messages
-        let userFriendlyError = '';
-        let errorCategory = 'unknown';
+        // Create error context for mapping
+        const errorContext: ErrorContext = {
+          technicalError: pythonError.message || pythonError.toString(),
+          processingStage: 'python_execution',
+          domain: 'expense_claims',
+          documentType: 'receipt'
+        };
+
+        // Determine error code based on error type
+        let errorCode = 'SYSTEM_ERROR';
+        let errorCategory = 'execution';
 
         if (pythonError.code === 'ENOENT') {
-          // Python environment not found
+          errorCode = 'PYTHON_ENV_MISSING';
           errorCategory = 'environment';
-          userFriendlyError = 'AI processing service is not properly configured. Please contact support to resolve this issue.';
           console.error('❌ Python environment missing - ENOENT error. Virtual environment may not be activated or Python not installed.');
         } else if (pythonError.message?.includes('timeout') || pythonError.message?.includes('AbortError') || pythonError.message?.includes('maxDuration') || pythonError.code === 'ETIMEDOUT') {
-          // Processing timeout - more comprehensive detection
+          errorCode = 'TIMEOUT_ERROR';
           errorCategory = 'timeout';
-          userFriendlyError = 'Receipt processing timed out after 3 minutes. This usually happens with very complex receipts or during high server load. Please try uploading a clearer, simpler image or try again later.';
+          errorContext.timeoutDuration = '180 seconds';
         } else if (pythonError.message?.includes('spawn') || pythonError.message?.includes('python')) {
-          // Python execution issues
+          errorCode = 'PYTHON_ENV_MISSING';
           errorCategory = 'execution';
-          userFriendlyError = 'Unable to start AI processing. Please try again in a few moments or contact support if the issue persists.';
         } else if (pythonError.message?.includes('memory') || pythonError.message?.includes('resource')) {
-          // Resource issues
+          errorCode = 'SYSTEM_ERROR';
           errorCategory = 'resource';
-          userFriendlyError = 'Processing resources are temporarily unavailable. Please try again in a few moments.';
-        } else {
-          // General execution error
-          errorCategory = 'execution';
-          userFriendlyError = 'An unexpected error occurred during AI processing. Please try uploading your receipt again.';
         }
+
+        // Update error context with determined values
+        errorContext.errorCode = errorCode;
+        errorContext.errorCategory = errorCategory;
+
+        // Get user-friendly error message using mapper
+        const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+        const userFriendlyError = userFriendlyMapping.userMessage;
 
         // Update expense claim with detailed failure information
         if (payload.expenseClaimId) {
@@ -425,6 +510,19 @@ export const extractReceiptData = task({
           console.error(`❌ Failed to parse Python JSON output:`, parseError);
           console.log(`📄 Stdout length: ${(result as any).stdout?.length || 0} characters (content redacted for security)`);
 
+          // Create error context for parsing failure
+          const errorContext: ErrorContext = {
+            errorCode: 'JSON_PARSE_FAILED',
+            errorCategory: 'parsing_error',
+            technicalError: parseError instanceof Error ? parseError.message : parseError?.toString(),
+            processingStage: 'python_result_parsing',
+            domain: 'expense_claims',
+            documentType: 'receipt'
+          };
+
+          // Get user-friendly error message using mapper
+          const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+
           // Update expense claim with parsing failure
           if (payload.expenseClaimId) {
             const parseFailureMetadata = {
@@ -433,7 +531,7 @@ export const extractReceiptData = task({
               ai_processing_status: 'failed',
               error_category: 'parsing_error',
               error_code: 'JSON_PARSE_FAILED',
-              error_message: 'AI processing returned invalid data format. Please try uploading the receipt again.',
+              error_message: userFriendlyMapping.userMessage,
               technical_error: parseError instanceof Error ? parseError.message : parseError?.toString(),
               failed_at: new Date().toISOString(),
               processing_stage: 'python_result_parsing',
@@ -675,53 +773,53 @@ export const extractReceiptData = task({
     } catch (error) {
       console.error("❌ AI extraction task failed:", error);
 
-      // Enhanced error categorization for better user experience
-      let userFriendlyError = '';
+      // Create error context for comprehensive error mapping
+      const errorContext: ErrorContext = {
+        technicalError: error instanceof Error ? error.message : error?.toString(),
+        processingStage: 'general_execution',
+        domain: 'expense_claims',
+        documentType: 'receipt'
+      };
+
+      // Determine error code and category
+      let errorCode = 'GENERAL_ERROR';
       let errorCategory = 'general_failure';
-      let errorCode = 'UNKNOWN';
 
       if (error instanceof Error) {
         const errorMessage = error.message.toLowerCase();
 
         // Categorize different types of errors
         if (errorMessage.includes('no image url') || errorMessage.includes('no image data')) {
-          errorCategory = 'missing_image';
-          userFriendlyError = 'No receipt image found to process. Please ensure the receipt was uploaded correctly.';
           errorCode = 'MISSING_IMAGE_DATA';
+          errorCategory = 'missing_image';
         } else if (errorMessage.includes('failed to create signed url') || errorMessage.includes('storage')) {
-          errorCategory = 'storage_access';
-          userFriendlyError = 'Unable to access the uploaded receipt. Please try uploading the receipt again.';
           errorCode = 'STORAGE_ACCESS_ERROR';
+          errorCategory = 'storage_access';
         } else if (errorMessage.includes('expense claim not found')) {
-          errorCategory = 'data_integrity';
-          userFriendlyError = 'Expense claim record not found. Please refresh the page and try again.';
           errorCode = 'CLAIM_NOT_FOUND';
+          errorCategory = 'data_integrity';
         } else if (errorMessage.includes('failed to update expense claim')) {
-          errorCategory = 'database_update';
-          userFriendlyError = 'Failed to save processed data. Please try again or contact support if the issue persists.';
           errorCode = 'DATABASE_UPDATE_ERROR';
+          errorCategory = 'database_update';
         } else if (errorMessage.includes('no extraction data returned')) {
-          errorCategory = 'empty_result';
-          userFriendlyError = 'AI processing completed but no data was extracted. Please try uploading a clearer receipt image.';
           errorCode = 'EMPTY_EXTRACTION_RESULT';
+          errorCategory = 'empty_result';
         } else if (errorMessage.includes('ai processing returned invalid data format')) {
-          errorCategory = 'parsing_error';
-          userFriendlyError = 'AI processing returned invalid data format. Please try uploading the receipt again.';
           errorCode = 'INVALID_DATA_FORMAT';
+          errorCategory = 'parsing_error';
         } else if (errorMessage.includes('unable to extract data from this receipt')) {
-          errorCategory = 'extraction_failure';
-          userFriendlyError = 'Unable to extract data from this receipt. Please try uploading a clearer image or contact support.';
           errorCode = 'EXTRACTION_FAILED';
-        } else {
-          // General error fallback
-          errorCategory = 'general_failure';
-          userFriendlyError = 'An unexpected error occurred during receipt processing. Please try again or contact support if the issue persists.';
-          errorCode = 'GENERAL_ERROR';
+          errorCategory = 'extraction_failure';
         }
-      } else {
-        // Non-Error objects
-        userFriendlyError = 'An unexpected system error occurred. Please try again or contact support.';
       }
+
+      // Update error context with determined values
+      errorContext.errorCode = errorCode;
+      errorContext.errorCategory = errorCategory;
+
+      // Get user-friendly error message using mapper
+      const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+      const userFriendlyError = userFriendlyMapping.userMessage;
 
       // Smart failure handling based on processing context
       if (payload.expenseClaimId) {
@@ -796,6 +894,30 @@ export const extractReceiptData = task({
 
       // Throw user-friendly error for better UI experience
       throw new Error(userFriendlyError || (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
+
+    } catch (systemError) {
+      // 🚨 GLOBAL CATCH - System-level failures (ENOENT, CONFIGURED_INCORRECTLY, etc.)
+      console.error('🚨 SYSTEM-LEVEL FAILURE detected:', systemError);
+
+      // Use the global error handler for system failures
+      await handleTaskFailure(payload.expenseClaimId, systemError, 'system_task_execution');
+
+      // Re-throw with user-friendly message
+      let finalError = 'A system error occurred during receipt processing. Please try again or contact support if the issue persists.';
+
+      if (systemError instanceof Error) {
+        const errorWithCode = systemError as Error & { code?: string }
+        if (errorWithCode.code === 'ENOENT' || systemError.message?.includes('ENOENT')) {
+          finalError = 'AI processing service is not properly configured. Please contact support to resolve this issue.';
+        } else if (systemError.message?.includes('CONFIGURED_INCORRECTLY')) {
+          finalError = 'System configuration error. Please contact support to resolve this issue.';
+        } else if (systemError.message?.includes('timeout') || systemError.message?.includes('maxDuration')) {
+          finalError = 'Receipt processing timed out due to system issues. Please try again in a few moments.';
+        }
+      }
+
+      throw new Error(finalError);
     }
   },
 });

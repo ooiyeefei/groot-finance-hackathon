@@ -84,11 +84,8 @@ export async function POST(request: NextRequest) {
 
   // Apply different rate limits based on operation type
   if (isFileUpload) {
-    // Stricter rate limiting for file uploads (5 uploads per hour)
-    const uploadRateLimit = await rateLimit(request, {
-      windowMs: 60 * 60 * 1000, // 1 hour
-      maxRequests: 5 // 5 file uploads per hour
-    })
+    // More reasonable rate limiting for file uploads using EXPENSIVE config (10 uploads per minute)
+    const uploadRateLimit = await rateLimit(request, RATE_LIMIT_CONFIGS.EXPENSIVE)
 
     if (uploadRateLimit) {
       return uploadRateLimit // Return rate limit error response
