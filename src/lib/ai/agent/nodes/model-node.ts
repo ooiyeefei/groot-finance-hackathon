@@ -335,6 +335,73 @@ async function handleGeminiResponse(state: AgentState, messages: any[], systemPr
 }
 
 /**
+ * Detect if the query is asking for user's financial data (requires mandatory tool usage)
+ * CRITICAL FIX: Only detect financial queries from human messages, not tool results
+ */
+function detectFinancialQuery(state: AgentState): boolean {
+  const lastMessage = state.messages[state.messages.length - 1];
+  if (!lastMessage || typeof lastMessage.content !== 'string') {
+    return false;
+  }
+
+  // CRITICAL FIX: Don't force tool usage on tool results - allow final answer generation
+  const messageType = lastMessage._getType ? lastMessage._getType() : (lastMessage as any).type;
+  if (messageType === 'tool') {
+    console.log('[CallModel] Skipping financial query detection for tool result - allowing final answer generation');
+    return false;
+  }
+
+  // Only detect financial queries from human messages
+  if (messageType !== 'human') {
+    return false;
+  }
+
+  const query = lastMessage.content.toLowerCase();
+
+  // Financial query indicators - these MUST use tools to prevent hallucination
+  const financialTriggers = [
+    // Direct data requests
+    'my transactions', 'my expenses', 'my invoices', 'my payments', 'my income',
+    'show me', 'list my', 'find my', 'get my', 'what transactions', 'what expenses',
+    'what invoices', 'what payments', 'what income', 'how much', 'total amount',
+    'largest', 'biggest', 'smallest', 'most expensive', 'least expensive',
+
+    // Query patterns that need database access
+    'transactions from', 'expenses from', 'invoices from', 'payments to',
+    'spent on', 'paid to', 'received from', 'amount paid', 'amount spent',
+    'amount received', 'balance', 'outstanding', 'overdue', 'pending',
+
+    // Vendor/company specific queries
+    'vendor', 'company', 'supplier', 'client', 'customer',
+
+    // Time-based financial queries
+    'this month', 'last month', 'this year', 'last year', 'past', 'recent',
+    'today', 'yesterday', 'this week', 'last week',
+
+    // Currency and amounts
+    'usd', 'sgd', 'thb', 'idr', 'myr', 'eur', 'cny', 'vnd', 'php', 'inr',
+    '$', '€', '£', '¥', '₹', '₫', '₱', 'rm', 'rp'
+  ];
+
+  // Personal pronouns indicating user's own data
+  const personalIndicators = ['my', 'i have', 'i paid', 'i spent', 'i received', 'show me', 'list my'];
+
+  // Check for financial triggers
+  const hasFinancialTrigger = financialTriggers.some(trigger => query.includes(trigger));
+
+  // Check for personal data requests
+  const hasPersonalIndicator = personalIndicators.some(indicator => query.includes(indicator));
+
+  const isFinancialQuery = hasFinancialTrigger || (hasPersonalIndicator && query.includes('transaction'));
+
+  if (isFinancialQuery) {
+    console.log(`[CallModel] 🚨 FINANCIAL QUERY DETECTED - Forcing tool usage to prevent hallucination: "${query.substring(0, 100)}..."`);
+  }
+
+  return isFinancialQuery;
+}
+
+/**
  * Handle OpenAI-compatible model response
  */
 async function handleOpenAIResponse(state: AgentState, messages: any[], tools: any[]): Promise<Partial<AgentState>> {
@@ -347,13 +414,17 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
     temperature: 0.3
   };
 
+  // CRITICAL FIX: Detect financial queries and force tool usage to prevent hallucination
+  const isFinancialQuery = detectFinancialQuery(state);
+
   const requestPayload = tools.length > 0 ? {
     ...basePayload,
     tools,
-    tool_choice: "auto"
+    // Force tool usage for financial queries to prevent hallucination
+    tool_choice: isFinancialQuery ? "required" : "auto"
   } : basePayload;
 
-  console.log(`[CallModel] Request with ${tools.length} tools configured`);
+  console.log(`[CallModel] Request with ${tools.length} tools configured, tool_choice: ${isFinancialQuery ? "required" : "auto"} (financial query: ${isFinancialQuery})`);
 
   // Build headers conditionally based on API key presence
   const headers: Record<string, string> = {
@@ -434,6 +505,30 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
       };
     }
 
+    // CRITICAL FIX 4: Block fake transaction IDs in compliance tool calls
+    if (toolName === 'analyze_cross_border_compliance') {
+      const args = JSON.parse(toolCall.function.arguments || '{}');
+      const transactionId = args.transaction_id;
+
+      // Detect fake transaction IDs (pattern matching common fake UUIDs)
+      const fakeTxPatterns = [
+        /^a1b2c3d4-e5f6-7890-abcd-ef[0-9a-f]{12}$/i,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      ];
+
+      const isFakeId = fakeTxPatterns.some(pattern => pattern.test(transactionId)) ||
+                       transactionId === 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' ||
+                       transactionId?.includes('1234567890') ||
+                       transactionId?.includes('abcd-ef');
+
+      if (isFakeId) {
+        console.error(`[CallModel] 🚨 BLOCKED FAKE TRANSACTION ID: ${transactionId}`);
+        return {
+          messages: [...state.messages, new AIMessage('I cannot analyze compliance for fabricated transaction IDs. Please use the get_transactions tool first to retrieve real transaction data, then I can analyze specific transactions for compliance.')],
+        };
+      }
+    }
+
     const aiMessageWithToolCall = new AIMessage({
       content: '',
       tool_calls: [toolCall],
@@ -447,6 +542,16 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
 
   // If no tool call, get the content - simplified for direct command model
   let content = assistantResponse?.content || 'I apologize, but I cannot process your request right now.';
+
+  // CRITICAL ANTI-HALLUCINATION SAFEGUARD: Block financial responses without tool usage
+  if (isFinancialQuery && !hasToolCalls) {
+    console.log(`[CallModel] 🚨 BLOCKED FINANCIAL HALLUCINATION: Financial query detected but no tools used - preventing fictional data response`);
+
+    // Force the AI to use tools for financial data instead of hallucinating
+    return {
+      messages: [...state.messages, new AIMessage('I need to look up your actual financial data to answer that question accurately. Let me search your transactions now.')],
+    };
+  }
 
   // Basic content cleaning for direct command model
   if (content && typeof content === 'string') {

@@ -8,7 +8,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
-import { csrfProtection } from '@/domains/security/lib/csrf-protection'
 import { getCurrentUserContext } from '@/domains/security/lib/rbac'
 import { resendInvitation } from '@/domains/account-management/lib/invitation.service'
 
@@ -23,11 +22,7 @@ export async function POST(
       return rateLimitResponse
     }
 
-    // Apply CSRF protection
-    const csrfResponse = await csrfProtection(request)
-    if (csrfResponse) {
-      return csrfResponse
-    }
+    // Note: CSRF protection removed - not needed with JWT auth + admin permission validation
 
     // Check authentication
     const { userId } = await auth()

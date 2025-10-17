@@ -43,11 +43,18 @@ export class GetVendorsTool extends BaseTool {
     try {
       console.log(`[GetVendorsTool] Getting unique vendors for user ${userContext.userId}`)
 
-      // Query all transactions to get vendor names
-      const { data: vendors, error } = await this.supabase
+      // SECURITY: Use authenticated client for RLS enforcement
+      if (!this.authenticatedSupabase) {
+        throw new Error('Authenticated Supabase client not available')
+      }
+
+      // Query all transactions to get vendor names with proper business context
+      const { data: vendors, error } = await this.authenticatedSupabase
         .from('accounting_entries')
         .select('vendor_name')
-        .eq('user_id', userContext.userId)
+        .eq('user_id', userContext.supabaseUserId)    // ✅ FIXED: Use Supabase user ID
+        .eq('business_id', userContext.businessId)   // ✅ SECURITY: Add business context filtering
+        .is('deleted_at', null)                      // ✅ NEW: Filter out soft-deleted records
         .not('vendor_name', 'is', null)
         .not('vendor_name', 'eq', '')
 
@@ -119,29 +126,24 @@ export class GetVendorsTool extends BaseTool {
   }
 
   /**
-   * Enhanced permission check for vendor access
+   * Enhanced permission check for vendor access with business context validation
    */
   protected async checkUserPermissions(userContext: UserContext): Promise<boolean> {
-    // Call parent permission check first
+    // Call parent permission check first (now includes business context validation)
     const basePermission = await super.checkUserPermissions(userContext)
     if (!basePermission) {
       return false
     }
 
     try {
-      // Additional check: verify user has access to transactions
-      // Query by clerk_user_id since that's the actual column in users table
-      const { data: userProfile, error } = await this.supabase
-        .from('users')
-        .select('id, home_currency, clerk_user_id')
-        .eq('clerk_user_id', userContext.userId)
-        .single()
-
-      if (error || !userProfile) {
-        console.error('[GetVendorsTool] User profile check failed:', error)
+      // SECURITY: Business context validation already performed in parent method
+      // Additional check: verify user has proper business context for vendor access
+      if (!userContext.businessId) {
+        console.error('[GetVendorsTool] Missing business context - vendor access denied')
         return false
       }
 
+      console.log(`[GetVendorsTool] Vendor access granted for business: ${userContext.businessId}`)
       return true
 
     } catch (error) {

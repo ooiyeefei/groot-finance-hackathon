@@ -28,9 +28,29 @@ function checkCircuitBreaker(state: AgentState): { shouldBreak: boolean; reason?
   const currentTurnMessages = state.messages.slice(currentTurnStart);
   const currentTurnLength = currentTurnMessages.length;
 
-  // 1. Check turn length: Prevent excessively long conversation turns
-  if (currentTurnLength > 8) {
-    return { shouldBreak: true, reason: `Turn too long (${currentTurnLength} messages)` };
+  // 1. INTELLIGENT TURN LENGTH: Different limits based on context
+  // Allow more room for successful tool execution flows, stricter for error loops
+  const hasSuccessfulTools = currentTurnMessages.filter(msg => {
+    if (msg._getType && msg._getType() === 'tool') {
+      const content = typeof msg.content === 'string' ? msg.content : '';
+      return content.includes('Found') || content.includes('success') || content.includes('✅');
+    }
+    return false;
+  }).length;
+
+  const hasErrors = currentTurnMessages.filter(msg => {
+    if (msg._getType && msg._getType() === 'tool') {
+      const content = typeof msg.content === 'string' ? msg.content : '';
+      return content.includes('error') || content.includes('failed') || content.includes('timeout');
+    }
+    return false;
+  }).length;
+
+  // Dynamic threshold based on success vs error patterns
+  const turnLimit = hasErrors > hasSuccessfulTools ? 10 : 20; // Stricter for error loops
+
+  if (currentTurnLength > turnLimit) {
+    return { shouldBreak: true, reason: `Turn too long (${currentTurnLength} messages, limit: ${turnLimit})` };
   }
 
   // 2. Check state-based failure count: Use AgentState.failureCount for persistent tracking

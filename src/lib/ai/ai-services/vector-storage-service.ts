@@ -351,17 +351,18 @@ export class VectorStorageService implements IVectorStorageService {
   }
 
   /**
-   * SECURE similarity search with user_id filtering at Qdrant level
+   * SECURE similarity search with user_id and business_id filtering at Qdrant level
    * This prevents data leakage by filtering documents at the database level
    */
   async similaritySearchSecure(
     embedding: number[],
     userId: string,
+    businessId: string,
     limit: number = 10,
     scoreThreshold: number = 0.3
   ): Promise<Array<{ id: string; score: number; payload?: Record<string, unknown> }>> {
     try {
-      console.log(`[Qdrant] SECURE similarity search for user ${userId}: ${limit} documents with threshold ${scoreThreshold}`)
+      console.log(`[Qdrant] SECURE similarity search for user ${userId} in business ${businessId}: ${limit} documents with threshold ${scoreThreshold}`)
 
       const response = await fetch(`${this.qdrantUrl}/collections/${this.collectionName}/points/search`, {
         method: 'POST',
@@ -374,13 +375,19 @@ export class VectorStorageService implements IVectorStorageService {
           limit,
           with_payload: true,
           score_threshold: scoreThreshold,
-          // CRITICAL SECURITY FIX: Filter by user_id at Qdrant level
+          // CRITICAL SECURITY FIX: Filter by both user_id and business_id at Qdrant level
           filter: {
             must: [
               {
                 key: "user_id",
                 match: {
                   value: userId
+                }
+              },
+              {
+                key: "business_id",
+                match: {
+                  value: businessId
                 }
               }
             ]
@@ -417,11 +424,11 @@ export class VectorStorageService implements IVectorStorageService {
         payload: hit.payload || {}
       }))
 
-      console.log(`[Qdrant] SECURE search found ${results.length} documents for user ${userId}`)
+      console.log(`[Qdrant] SECURE search found ${results.length} documents for user ${userId} in business ${businessId}`)
       return results
 
     } catch (error) {
-      console.error(`[Qdrant] Secure similarity search failed for user ${userId}:`, error)
+      console.error(`[Qdrant] Secure similarity search failed for user ${userId} in business ${businessId}:`, error)
       
       if (error instanceof ProcessingError) {
         throw error

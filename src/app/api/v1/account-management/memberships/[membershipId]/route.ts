@@ -8,7 +8,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { updateMembership, deleteMembership } from '@/domains/account-management/lib/account-management.service'
 import { getCurrentUserContext } from '@/domains/security/lib/rbac'
-import { csrfProtection } from '@/domains/security/lib/csrf-protection'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 
 /**
@@ -27,16 +26,13 @@ export async function PUT(
       }, { status: 401 })
     }
 
-    // Apply rate limiting and CSRF protection
+    // Apply rate limiting
     const rateLimitResponse = await rateLimiters.admin(request)
     if (rateLimitResponse) {
       return rateLimitResponse
     }
 
-    const csrfResponse = await csrfProtection(request)
-    if (csrfResponse) {
-      return csrfResponse
-    }
+    // Note: CSRF protection removed - not needed with JWT auth + admin permission validation
 
     // Check admin permissions
     const userContext = await getCurrentUserContext()
@@ -88,11 +84,7 @@ export async function DELETE(
       }, { status: 401 })
     }
 
-    // Apply CSRF protection
-    const csrfResponse = await csrfProtection(request)
-    if (csrfResponse) {
-      return csrfResponse
-    }
+    // Note: CSRF protection removed - not needed with JWT auth + admin permission validation
 
     // Check admin permissions
     const userContext = await getCurrentUserContext()

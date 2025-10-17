@@ -55,7 +55,7 @@ export class CrossBorderTaxComplianceTool extends BaseTool {
   }
 
   getDescription(modelType: ModelType = 'openai'): string {
-    return 'Analyze cross-border financial transactions for tax compliance and regulatory requirements. This tool evaluates transactions involving different currencies or cross-jurisdictional activities to identify potential compliance issues, tax obligations, and regulatory requirements. It provides recommendations for proper documentation and filing requirements specific to Southeast Asian markets.'
+    return '🚫 SECONDARY COMPLIANCE TOOL - DO NOT USE FOR BASIC QUERIES: This tool is ONLY for analyzing specific existing transactions for cross-border tax compliance. ⚠️ CRITICAL RESTRICTIONS: (1) This tool requires a REAL transaction_id from an existing transaction obtained through get_transactions tool first. (2) DO NOT use this tool for basic transaction lookups like "largest transaction", "my transactions", or "transaction history". (3) DO NOT fabricate transaction IDs like "a1b2c3d4-e5f6-7890-abcd-ef1234567890". (4) Use get_transactions tool first for ALL transaction queries. This compliance tool is ONLY for detailed tax analysis of specific real transactions that already exist in the database. ❌ DO NOT USE FOR: finding transactions, listing transactions, analyzing transaction amounts, or basic financial queries.'
   }
 
   getToolSchema(modelType: ModelType = 'openai'): OpenAIToolSchema {
@@ -69,7 +69,7 @@ export class CrossBorderTaxComplianceTool extends BaseTool {
           properties: {
             transaction_id: {
               type: "string",
-              description: "Unique identifier of the transaction to analyze"
+              description: "REQUIRED: Real UUID of existing transaction from get_transactions tool. ❌ NEVER FABRICATE IDs like 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'. ❌ NEVER GUESS transaction IDs. ✅ ONLY use actual UUIDs returned by get_transactions tool. This tool will FAIL if you provide fake IDs."
             },
             amount: {
               type: "number",
@@ -144,12 +144,18 @@ export class CrossBorderTaxComplianceTool extends BaseTool {
     try {
       console.log(`[CrossBorderTaxComplianceTool] RAG-powered analysis for transaction ${params.transaction_id}`)
 
-      // Verify the transaction exists and belongs to the user
-      const { data: transaction, error: txError } = await this.supabase
+      // SECURITY: Use authenticated client for RLS enforcement
+      if (!this.authenticatedSupabase) {
+        throw new Error('Authenticated Supabase client not available')
+      }
+
+      // Verify the transaction exists and belongs to the user with proper business context
+      const { data: transaction, error: txError } = await this.authenticatedSupabase
         .from('accounting_entries')
         .select('*')
         .eq('id', params.transaction_id)
-        .eq('user_id', userContext.userId)
+        .eq('user_id', userContext.supabaseUserId)    // ✅ FIXED: Use Supabase user ID
+        .eq('business_id', userContext.businessId)   // ✅ SECURITY: Add business context filtering
         .single()
 
       if (txError || !transaction) {
@@ -162,15 +168,16 @@ export class CrossBorderTaxComplianceTool extends BaseTool {
       // Perform curated RAG compliance analysis with regulatory knowledge base
       const analysis = await this.performCuratedRAGAnalysis(params)
 
-      // Save the analysis result to the transaction record
-      const { error: updateError } = await this.supabase
+      // Save the analysis result to the transaction record with proper business context
+      const { error: updateError } = await this.authenticatedSupabase
         .from('accounting_entries')
         .update({
           compliance_analysis: analysis,
           updated_at: new Date().toISOString()
         })
         .eq('id', params.transaction_id)
-        .eq('user_id', userContext.userId)
+        .eq('user_id', userContext.supabaseUserId)    // ✅ FIXED: Use Supabase user ID
+        .eq('business_id', userContext.businessId)   // ✅ SECURITY: Add business context filtering
 
       if (updateError) {
         console.error('[CrossBorderTaxComplianceTool] Failed to save compliance analysis:', updateError)
@@ -197,15 +204,18 @@ export class CrossBorderTaxComplianceTool extends BaseTool {
       try {
         const fallbackAnalysis = await this.performFallbackAnalysis(params)
         
-        // Save fallback analysis
-        await this.supabase
-          .from('accounting_entries')
-          .update({
-            compliance_analysis: { ...fallbackAnalysis, analysis_method: 'fallback_rules' },
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', params.transaction_id)
-          .eq('user_id', userContext.userId)
+        // Save fallback analysis with proper business context
+        if (this.authenticatedSupabase) {
+          await this.authenticatedSupabase
+            .from('accounting_entries')
+            .update({
+              compliance_analysis: { ...fallbackAnalysis, analysis_method: 'fallback_rules' },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', params.transaction_id)
+            .eq('user_id', userContext.supabaseUserId)    // ✅ FIXED: Use Supabase user ID
+            .eq('business_id', userContext.businessId)   // ✅ SECURITY: Add business context filtering
+        }
 
         return {
           success: true,

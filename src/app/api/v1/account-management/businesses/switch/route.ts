@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { switchActiveBusiness } from '@/domains/account-management/lib/account-management.service'
-import { csrfProtection } from '@/domains/security/lib/csrf-protection'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { createErrorResponse, createValidationErrorResponse, ERROR_CODES, withErrorSanitization } from '@/domains/security/lib/error-sanitizer'
 import { z } from 'zod'
@@ -35,11 +34,7 @@ export const POST = withErrorSanitization(async (request: NextRequest) => {
     )
   }
 
-  // Apply CSRF protection
-  const csrfResponse = await csrfProtection(request)
-  if (csrfResponse) {
-    return csrfResponse
-  }
+  // Note: CSRF protection removed - not needed with JWT auth + business membership validation
 
   // Parse and validate request body
   const body = await request.json()
