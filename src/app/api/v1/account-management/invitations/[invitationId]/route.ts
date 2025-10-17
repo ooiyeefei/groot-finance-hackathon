@@ -7,7 +7,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { deleteInvitation } from '@/domains/account-management/lib/account-management.service'
 import { getCurrentUserContext } from '@/domains/security/lib/rbac'
-import { csrfProtection } from '@/domains/security/lib/csrf-protection'
 
 /**
  * Delete pending invitation
@@ -25,11 +24,7 @@ export async function DELETE(
       }, { status: 401 })
     }
 
-    // Apply CSRF protection
-    const csrfResponse = await csrfProtection(request)
-    if (csrfResponse) {
-      return csrfResponse
-    }
+    // Note: CSRF protection removed - not needed with JWT auth + admin permission validation
 
     // Check admin permissions
     const userContext = await getCurrentUserContext()

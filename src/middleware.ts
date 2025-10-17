@@ -27,25 +27,27 @@ const isPublicRoute = createRouteMatcher([
 
 // Routes that need authentication but NOT business context (onboarding flow)
 const isOnboardingRoute = createRouteMatcher([
-  '/(en|th|id|zh)?/onboarding(.*)', // Business creation flow
+  '/(en|th|id|zh)/onboarding(.*)', // Business creation flow
 ])
 
 // Routes that need business context protection (automatically catches ALL new routes)
 const needsBusinessContext = createRouteMatcher([
-  '/(en|th|id|zh)?/applications(.*)', // All application routes
-  '/(en|th|id|zh)?/invoices(.*)', // All invoice/document routes
-  '/(en|th|id|zh)?/expense-claims(.*)', // All expense claim routes
-  '/(en|th|id|zh)?/accounting(.*)', // Accounting routes
-  '/(en|th|id|zh)?/manager(.*)', // Manager routes
-  '/(en|th|id|zh)?/admin(.*)', // Admin routes (except setup)
-  '/(en|th|id|zh)?/settings(.*)', // Settings routes
-  '/(en|th|id|zh)?/ai-assistant(.*)', // AI assistant routes
-  '/(en|th|id|zh)?/chat(.*)', // Chat routes
-  '/(en|th|id|zh)?/(.*)', // Dashboard root (with optional locale)
+  '/(en|th|id|zh)/applications(.*)', // All application routes
+  '/(en|th|id|zh)/invoices(.*)', // All invoice/document routes
+  '/(en|th|id|zh)/expense-claims(.*)', // All expense claim routes
+  '/(en|th|id|zh)/accounting(.*)', // Accounting routes
+  '/(en|th|id|zh)/manager(.*)', // Manager routes
+  '/(en|th|id|zh)/admin(.*)', // Admin routes (except setup)
+  '/(en|th|id|zh)/settings(.*)', // Settings routes
+  '/(en|th|id|zh)/ai-assistant(.*)', // AI assistant routes
+  '/(en|th|id|zh)/chat(.*)', // Chat routes
+  '/(en|th|id|zh)(/.*)?', // Dashboard root with optional trailing path
+  '/(en|th|id|zh)', // Dashboard root exact match
   '/', // Root dashboard
   '/api/applications(.*)', // Application APIs
   '/api/invoices(.*)', // Invoice APIs
   '/api/v1/expense-claims(.*)', // V1 expense claim APIs
+  '/api/v1/account-management(.*)', // V1 Account management APIs
   '/api/business/((?!create).*)', // Business APIs except creation
   '/api/v1/accounting-entries(.*)', // V1 Accounting APIs
 ])
@@ -57,25 +59,25 @@ const isSpecialAuthRoute = createRouteMatcher([
 
 // Define role-based route matchers following Clerk patterns (with locale support)
 const isManagerRoute = createRouteMatcher([
-  '/(en|th|id|zh)?/manager(.*)',
-  '/(en|th|id|zh)?/api/expense-claims/approvals(.*)',
-  '/(en|th|id|zh)?/api/v1/expense-claims(.*)'
+  '/(en|th|id|zh)/manager(.*)',
+  '/api/expense-claims/approvals(.*)',
+  '/api/v1/expense-claims(.*)'
 ])
 
 // Admin setup should be accessible to authenticated users (for master key assignment)
 const isAdminSetupRoute = createRouteMatcher([
-  '/(en|th|id|zh)?/admin/setup(.*)'
+  '/(en|th|id|zh)/admin/setup(.*)'
 ])
 
 const isAdminRoute = createRouteMatcher([
-  '/(en|th|id|zh)?/admin/((?!setup).*)', // Admin routes except setup
-  '/(en|th|id|zh)?/finance(.*)',
-  '/(en|th|id|zh)?/api/user/team(.*)'
+  '/(en|th|id|zh)/admin/((?!setup).*)', // Admin routes except setup
+  '/(en|th|id|zh)/finance(.*)',
+  '/api/user/team(.*)'
 ])
 
 // Routes that need different method-based protection
 const isAdminOnlyForUpdates = createRouteMatcher([
-  '/(en|th|id|zh)?/api/user/role(.*)'
+  '/api/user/role(.*)'
 ])
 
 export default clerkMiddleware(async (auth, req) => {

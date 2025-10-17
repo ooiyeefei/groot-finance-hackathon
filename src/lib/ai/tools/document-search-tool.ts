@@ -146,14 +146,24 @@ export class DocumentSearchTool extends BaseTool {
         }
       }
 
-      // SECURITY FIX: Use secure similarity search with user_id filtering at Qdrant level
+      // SECURITY FIX: Use secure similarity search with user_id and business_id filtering at Qdrant level
       // This prevents data leakage and improves performance by filtering at the database
       let searchResults: any[]
       try {
-        console.log(`[DocumentSearchTool] Performing vector similarity search`)
+        // SECURITY: Validate business context for document access
+        if (!userContext.businessId) {
+          console.error('[DocumentSearchTool] Missing business context - document search denied')
+          return {
+            success: false,
+            error: 'Missing business context for document search. Please ensure you are logged into a business account.'
+          }
+        }
+
+        console.log(`[DocumentSearchTool] Performing vector similarity search with business context`)
         searchResults = await this.vectorService.similaritySearchSecure(
           queryEmbedding,
           userContext.userId,
+          userContext.businessId,
           limit,
           threshold
         )
@@ -218,18 +228,24 @@ Upload Date: ${metadata.created_at || 'Unknown'}`
   }
 
   /**
-   * Enhanced permission check for document access
+   * Enhanced permission check for document access with business context validation
    */
   protected async checkUserPermissions(userContext: UserContext): Promise<boolean> {
-    // Call parent permission check first
+    // Call parent permission check first (now includes business context validation)
     const basePermission = await super.checkUserPermissions(userContext)
     if (!basePermission) {
       return false
     }
 
     try {
-      // With secure Qdrant filtering, no additional document validation needed
-      // The secure vector search will return empty results if user has no documents
+      // SECURITY: Business context validation already performed in parent method
+      // Additional check: verify user has proper business context for document search
+      if (!userContext.businessId) {
+        console.error('[DocumentSearchTool] Missing business context - document search denied')
+        return false
+      }
+
+      console.log(`[DocumentSearchTool] Document search access granted for business: ${userContext.businessId}`)
       return true
 
     } catch (error) {

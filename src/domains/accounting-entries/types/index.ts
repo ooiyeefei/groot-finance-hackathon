@@ -92,7 +92,10 @@ export interface AccountingEntry {
   updated_at: string
   created_by_method: CreationMethod
   processing_metadata?: Record<string, any>
-  
+
+  // Cross-border tax compliance analysis (stored as JSONB)
+  compliance_analysis?: Record<string, any>
+
   // Related line items
   line_items?: LineItem[]
 

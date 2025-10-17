@@ -86,7 +86,10 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
         .insert({
           user_id: existingUser.id,
           business_id: existingUser.business_id,
-          role: 'admin'
+          role: 'admin',
+          status: 'active',
+          joined_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
         })
         .select('id, business_id, role, created_at')
         .single()
@@ -156,7 +159,10 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
             .insert({
               user_id: invitation.id,
               business_id: invitation.business_id,
-              role: 'employee' // Default role for invited users
+              role: 'employee', // Default role for invited users
+              status: 'active',
+              joined_at: new Date().toISOString(),
+              created_at: new Date().toISOString()
             })
             .select('id, business_id, role, created_at')
             .single()
@@ -239,32 +245,7 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
         }
       }
 
-      // Safe to create new business now
-      const businessName = clerkUser.firstName && clerkUser.lastName
-        ? `${clerkUser.firstName} ${clerkUser.lastName}'s Business`
-        : `${userEmail?.split('@')[0]}'s Business`
-
-      const { data: newBusiness, error: businessError } = await supabase
-        .from('businesses')
-        .insert({
-          name: businessName,
-          slug: `${userEmail?.split('@')[0]}-business-${Date.now()}`, // Generate unique slug
-          country_code: 'SG',
-          home_currency: 'SGD',
-          custom_expense_categories: getDefaultExpenseCategories(),
-          logo_url: 'https://storage.googleapis.com/finanseal-logo/finanseal.png',
-          logo_fallback_color: '#3b82f6',
-          created_at: new Date().toISOString()
-        })
-        .select('id')
-        .single()
-
-      if (businessError) {
-        console.error('[User Profile] Error creating personal business:', businessError)
-        return null
-      }
-
-      // Create user record for direct signup
+      // Create user record first for direct signup
       const { data: newUser, error: userError } = await supabase
         .from('users')
         .insert({
@@ -273,7 +254,7 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
           full_name: clerkUser.firstName && clerkUser.lastName
             ? `${clerkUser.firstName} ${clerkUser.lastName}`
             : null,
-          business_id: newBusiness.id,
+          business_id: null, // Will be updated after business creation
           home_currency: 'SGD',
           created_at: new Date().toISOString()
         })
@@ -290,13 +271,53 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
         return null
       }
 
+      // Create business with proper owner_id
+      const businessName = clerkUser.firstName && clerkUser.lastName
+        ? `${clerkUser.firstName} ${clerkUser.lastName}'s Business`
+        : `${userEmail?.split('@')[0]}'s Business`
+
+      const { data: newBusiness, error: businessError } = await supabase
+        .from('businesses')
+        .insert({
+          name: businessName,
+          slug: `${userEmail?.split('@')[0]}-business-${Date.now()}`, // Generate unique slug
+          owner_id: newUser.id, // ✅ FIXED: Set proper owner
+          country_code: 'SG',
+          home_currency: 'SGD',
+          custom_expense_categories: getDefaultExpenseCategories(),
+          logo_url: 'https://storage.googleapis.com/finanseal-logo/finanseal.png',
+          logo_fallback_color: '#3b82f6',
+          created_at: new Date().toISOString()
+        })
+        .select('id')
+        .single()
+
+      if (businessError) {
+        console.error('[User Profile] Error creating personal business:', businessError)
+        return null
+      }
+
+      // Update user record with business_id
+      const { error: linkError } = await supabase
+        .from('users')
+        .update({ business_id: newBusiness.id, updated_at: new Date().toISOString() })
+        .eq('id', newUser.id)
+
+      if (linkError) {
+        console.error('[User Profile] Error linking user to business:', linkError)
+        return null
+      }
+
       // Create business membership for direct signup (admin of their own business)
       const { data: newMembership, error: membershipError } = await supabase
         .from('business_memberships')
         .insert({
           user_id: newUser.id,
           business_id: newBusiness.id,
-          role: 'admin'
+          role: 'admin',
+          status: 'active',
+          joined_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
         })
         .select('id, business_id, role, created_at')
         .single()

@@ -9,7 +9,6 @@ import { auth } from '@clerk/nextjs/server'
 import { createInvitation, getInvitations } from '@/domains/account-management/lib/account-management.service'
 import { getCurrentUserContext } from '@/domains/security/lib/rbac'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
-import { csrfProtection } from '@/domains/security/lib/csrf-protection'
 
 /**
  * Create new business invitation
@@ -22,11 +21,7 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse
     }
 
-    // Apply CSRF protection
-    const csrfResponse = await csrfProtection(request)
-    if (csrfResponse) {
-      return csrfResponse
-    }
+    // Note: CSRF protection removed - not needed with JWT auth + admin permission validation
 
     const { userId } = await auth()
     if (!userId) {

@@ -67,11 +67,12 @@ export interface IVectorStorageService {
   ): Promise<Array<{ id: string; score: number; metadata: Record<string, unknown> }>>
 
   /**
-   * SECURE search similar documents with user_id filtering at database level
+   * SECURE search similar documents with user_id and business_id filtering at database level
    */
   similaritySearchSecure(
     embedding: number[],
     userId: string,
+    businessId: string,
     limit?: number,
     scoreThreshold?: number
   ): Promise<Array<{ id: string; score: number; payload?: Record<string, unknown> }>>

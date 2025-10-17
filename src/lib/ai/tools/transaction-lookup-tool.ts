@@ -11,11 +11,12 @@ interface TransactionLookupParameters {
   limit?: number
   startDate?: string
   endDate?: string
-  dateRange?: 'past_7_days' | 'past_30_days' | 'past_60_days' | 'past_90_days' | 'this_month' | 'last_month' | 'this_year'
+  dateRange?: string  // Dynamic date range - supports patterns like "past_30_days", "100 days", "last 2 months", etc.
   category?: string
   minAmount?: number
   maxAmount?: number
-  document_type?: 'invoice' | 'receipt' | 'bill' | 'statement' | 'contract' | 'other'
+  // Internal parameter for source document type filtering (not exposed to AI)
+  _sourceDocumentType?: 'invoice' | 'expense_claim'
 }
 
 export class TransactionLookupTool extends BaseTool {
@@ -41,8 +42,9 @@ export class TransactionLookupTool extends BaseTool {
 
   /**
    * Self-defending query sanitization to prevent temporal contamination
+   * CRITICAL FIX: Preserve analytical terms for analysis queries
    */
-  private _sanitize_query(query: string, dateRange?: string): string {
+  private _sanitize_query(query: string, dateRange?: string, isAnalysisQuery: boolean = false): string {
     if (!query || !query.trim()) {
       return ""
     }
@@ -55,9 +57,15 @@ export class TransactionLookupTool extends BaseTool {
       sanitized = sanitized.replace(pattern, '')
     }
 
-    // Remove analytical contamination  
-    for (const pattern of TransactionLookupTool.ANALYTICAL_PATTERNS) {
-      sanitized = sanitized.replace(pattern, '')
+    // CRITICAL FIX: Only remove analytical contamination for NON-analysis queries
+    // For analysis queries, preserve analytical terms like "largest", "biggest", etc.
+    if (!isAnalysisQuery) {
+      for (const pattern of TransactionLookupTool.ANALYTICAL_PATTERNS) {
+        sanitized = sanitized.replace(pattern, '')
+      }
+      console.log(`[GUARDRAIL] Removed analytical patterns for non-analysis query`)
+    } else {
+      console.log(`[GUARDRAIL] PRESERVED analytical terms for analysis query: "${originalQuery}"`)
     }
 
     // Clean up extra spaces and common words
@@ -66,7 +74,14 @@ export class TransactionLookupTool extends BaseTool {
 
     // Log contamination detection
     if (sanitized !== originalQuery) {
-      console.log(`[GUARDRAIL] Query sanitized: '${originalQuery}' → '${sanitized}'`)
+      console.log(`[GUARDRAIL] Query sanitized: '${originalQuery}' → '${sanitized}' (analysis: ${isAnalysisQuery})`)
+    }
+
+    // CRITICAL FIX: For analysis queries, don't return empty string even if sanitized is short
+    // Analysis queries like "largest" should be preserved
+    if (isAnalysisQuery && originalQuery.match(/\b(largest|biggest|highest|maximum|smallest|lowest|minimum)\b/i)) {
+      console.log(`[GUARDRAIL] Analysis query detected - preserving original: '${originalQuery}'`)
+      return originalQuery
     }
 
     // If date_range exists and query is now empty/meaningless, return empty
@@ -74,7 +89,7 @@ export class TransactionLookupTool extends BaseTool {
       console.log(`[GUARDRAIL] Empty query with dateRange=${dateRange} - returning empty string`)
       return ""
     }
-      
+
     return sanitized
   }
 
@@ -107,7 +122,7 @@ export class TransactionLookupTool extends BaseTool {
 
     // Suggest fixes if issues found
     if (issues.length > 0 && parameters.query) {
-      suggested_fixes.query = this._sanitize_query(parameters.query, parameters.dateRange)
+      suggested_fixes.query = this._sanitize_query(parameters.query, parameters.dateRange, false)
     }
 
     return {
@@ -124,10 +139,10 @@ export class TransactionLookupTool extends BaseTool {
   getDescription(modelType: ModelType = 'openai'): string {
     if (modelType === 'gemini') {
       // Detailed instructions for Gemini - explicitly mention Supabase transactions table
-      return 'CRITICAL: Use this function to retrieve user financial transaction records. This is the ONLY way to access transaction data from the Supabase database. This tool MUST be called whenever a user asks about their spending, purchases, payments, transactions, or financial history over any period of time. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. CRITICAL: When users mention document types like "invoice", "receipt", "bill", "statement", "contract" - use the document_type parameter for precise database filtering. Examples: "largest invoice" → use document_type:"invoice"; "transactions in past 60 days" → use dateRange:"past_60_days"; "receipt from last month" → use document_type:"receipt" + dateRange. This tool handles ALL transaction queries including time periods, vendor searches, and amount analysis.'
+      return '🎯 PRIMARY FINANCIAL TOOL: This is THE PRIMARY AND MANDATORY tool for ALL financial queries. Use this function to retrieve user financial transaction records. This is the ONLY way to access transaction data from the Supabase database. This tool MUST be called whenever a user asks about their spending, purchases, payments, transactions, or financial history over any period of time. ⚠️ NEVER use other tools for transaction lookups. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. ✅ CLARIFICATION REQUIRED: When users mention document types (like "invoice", "receipt", "expense") but query is ambiguous, you should ask for clarification using friendly terms: "Are you looking for invoices or expense claims?" Do NOT expose database column names. This tool handles ALL transaction queries including time periods, vendor searches, and amount analysis. ❌ DO NOT use compliance tools for basic transaction queries.'
     } else {
       // Rich, descriptive description for OpenAI-compatible models
-      return 'CRITICAL: Use this function to retrieve a user\'s financial transactions. This is the ONLY way to access transaction data. This tool MUST be called whenever a user asks about their spending, purchases, payments, transactions, or transaction history over any period of time. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. CRITICAL: When users mention document types like "invoice", "receipt", "bill", "statement", "contract" - use the document_type parameter for precise database filtering instead of the generic query parameter. Examples: "largest invoice" → use document_type:"invoice"; "what are my transactions in past 60 days" → use dateRange:"past_60_days" with empty query; "receipt from last month" → use document_type:"receipt" + dateRange. This tool handles ALL transaction queries including time periods, vendor searches, and amount analysis.'
+      return '🎯 PRIMARY FINANCIAL TOOL: This is THE PRIMARY AND MANDATORY tool for ALL financial queries. Use this function to retrieve a user\'s financial transactions. This is the ONLY way to access transaction data. This tool MUST be called whenever a user asks about their spending, purchases, payments, transactions, or financial history over any period of time. ⚠️ NEVER use other tools for basic transaction lookups - always use this tool first. IMPORTANT: For relative date queries like "past 60 days", use the dateRange parameter instead of guessing startDate/endDate. ✅ CLARIFICATION REQUIRED: When users mention document types (like "invoice", "receipt", "expense") but query is ambiguous, you should ask for clarification using friendly terms: "Are you looking for invoices or expense claims?" Do NOT expose database column names like "source_document_type". This tool handles ALL transaction queries including time periods, vendor searches, and amount analysis. ❌ DO NOT fabricate transaction IDs - this tool provides real transaction data. ❌ DO NOT use compliance tools for basic transaction queries.'
     }
   }
 
@@ -144,14 +159,13 @@ export class TransactionLookupTool extends BaseTool {
           type: "object",
           properties: {
             query: {
-              type: "string", 
-              description: "CONTENT SEARCH ONLY: Vendor names, transaction descriptions, or category terms. NEVER include dates, time words, or analytical terms like 'largest'. Use empty string for 'all transactions' queries.",
-              examples: ["", "McDonald's", "Grab", "office supplies"]
+              type: "string",
+              description: "SEARCH QUERY: Include ALL search terms from user query including 'largest', 'biggest', 'smallest' for analysis. Also include vendor names, transaction descriptions, or category terms. CRITICAL: For queries like 'largest transaction', you MUST include 'largest' in this parameter so the tool can detect it as an analysis query. Do NOT strip analytical terms.",
+              examples: ["largest", "biggest transaction", "smallest expense", "McDonald's", "Grab", "office supplies"]
             },
             dateRange: {
-              type: "string", 
-              description: "TIME CONSTRAINT ONLY: Handles all temporal filtering. Use this for queries like 'past 60 days' instead of calculating specific dates.",
-              enum: ["past_7_days", "past_30_days", "past_60_days", "past_90_days", "this_month", "last_month", "this_year"]
+              type: "string",
+              description: "DYNAMIC DATE RANGE: Flexible temporal filtering that accepts natural language patterns. Examples: 'past_60_days', '100 days', 'last 2 months', 'past 150 days', 'this_month', 'last_year'. Automatically calculates date ranges from user input instead of forcing predefined options.",
             },
             startDate: {
               type: "string",
@@ -178,11 +192,6 @@ export class TransactionLookupTool extends BaseTool {
               description: "Maximum number of results to return (default: 10)",
               minimum: 1,
               maximum: 100
-            },
-            document_type: {
-              type: "string",
-              description: "Filter by document type. Use this for queries mentioning 'invoice', 'receipt', 'bill', etc. for precise database filtering.",
-              enum: ["invoice", "receipt", "bill", "statement", "contract", "other"]
             }
           },
           required: []
@@ -193,7 +202,7 @@ export class TransactionLookupTool extends BaseTool {
 
   protected async validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }> {
     // CRITICAL: Strip out unsupported parameters that AI models sometimes pass
-    const supportedParams = ['query', 'limit', 'startDate', 'endDate', 'dateRange', 'category', 'minAmount', 'maxAmount', 'document_type']
+    const supportedParams = ['query', 'limit', 'startDate', 'endDate', 'dateRange', 'category', 'minAmount', 'maxAmount', '_sourceDocumentType']
     const cleanedParameters: any = {}
     
     for (const [key, value] of Object.entries(parameters)) {
@@ -255,11 +264,11 @@ export class TransactionLookupTool extends BaseTool {
       return { valid: false, error: 'Minimum amount cannot be greater than maximum amount' }
     }
 
-    // Validate document_type if provided (handle both undefined and null)
-    if (params.document_type != null) {
-      const validDocumentTypes = ['invoice', 'receipt', 'bill', 'statement', 'contract', 'other']
-      if (!validDocumentTypes.includes(params.document_type)) {
-        return { valid: false, error: 'Invalid document type. Must be one of: invoice, receipt, bill, statement, contract, other' }
+    // Validate _sourceDocumentType if provided (internal parameter)
+    if (params._sourceDocumentType != null) {
+      const validSourceDocumentTypes = ['invoice', 'expense_claim']
+      if (!validSourceDocumentTypes.includes(params._sourceDocumentType)) {
+        return { valid: false, error: 'Invalid source document type. Must be invoice or expense_claim' }
       }
     }
 
@@ -283,7 +292,7 @@ export class TransactionLookupTool extends BaseTool {
 
     // Handle month_year patterns (e.g., "june_2024") and month-only patterns (e.g., "june")
     const monthYearMatch = params.dateRange.match(/^(\w+)_(\d{4})$/)
-    const monthOnlyMatch = params.dateRange.match(/^(\w+)$/) &&
+    const monthOnlyMatch = params.dateRange.match(/^([a-zA-Z]+)$/) &&
                           !['past_7_days', 'past_30_days', 'past_60_days', 'past_90_days', 'this_month', 'last_month', 'this_year'].includes(params.dateRange)
 
     if (monthYearMatch) {
@@ -373,34 +382,66 @@ export class TransactionLookupTool extends BaseTool {
   }
 
   /**
-   * SIMPLIFIED: Calculate date ranges using direct millisecond calculation
-   * Much simpler approach - extract days and calculate directly
+   * ENHANCED: Dynamic date range calculation supporting flexible user inputs
+   * Supports patterns like "100 days", "past 150 days", "last 2 months", etc.
    */
   private _calculateStandardDateRange(dateRange: string, today: Date): { startDate: string; endDate: string; error?: string } {
     const endDate = today.toISOString().split('T')[0] // YYYY-MM-DD format
+    const dateRangeLower = dateRange.toLowerCase().trim()
 
-    // SIMPLE EXTRACTION: Get number from any "past_X_days" or "X_days" pattern
-    const daysMatch = dateRange.match(/(\d+)/)
+    console.log(`[TransactionLookupTool] DYNAMIC: Processing date range: "${dateRange}"`)
 
+    // ENHANCED PATTERN MATCHING: Support multiple formats
+    // Pattern 1: "X days" or "past X days" or "last X days"
+    const daysMatch = dateRangeLower.match(/(?:past\s+|last\s+)?(\d+)\s*days?/)
     if (daysMatch) {
       const dayCount = parseInt(daysMatch[1], 10)
+      return this._calculateDaysRange(dayCount, today, dateRange, endDate)
+    }
 
-      // VALIDATION: Reasonable range limits (1-730 days = 2 years max)
-      if (dayCount < 1 || dayCount > 730) {
+    // Pattern 2: "X weeks" or "past X weeks" or "last X weeks"
+    const weeksMatch = dateRangeLower.match(/(?:past\s+|last\s+)?(\d+)\s*weeks?/)
+    if (weeksMatch) {
+      const weekCount = parseInt(weeksMatch[1], 10)
+      const dayCount = weekCount * 7
+      return this._calculateDaysRange(dayCount, today, dateRange, endDate)
+    }
+
+    // Pattern 3: "X months" or "past X months" or "last X months"
+    const monthsMatch = dateRangeLower.match(/(?:past\s+|last\s+)?(\d+)\s*months?/)
+    if (monthsMatch) {
+      const monthCount = parseInt(monthsMatch[1], 10)
+
+      // VALIDATION: Reasonable range limits (1-24 months = 2 years max)
+      if (monthCount < 1 || monthCount > 24) {
         return {
           startDate: endDate,
           endDate,
-          error: `Invalid day count: ${dayCount}. Must be between 1 and 730 days.`
+          error: `Invalid month count: ${monthCount}. Must be between 1 and 24 months.`
         }
       }
 
-      // DIRECT CALCULATION: Today minus X days using milliseconds
-      const msPerDay = 24 * 60 * 60 * 1000
-      const startDateMs = today.getTime() - (dayCount * msPerDay)
-      const startDate = new Date(startDateMs).toISOString().split('T')[0]
+      // Calculate start date by going back X months
+      const startDateObj = new Date(today.getFullYear(), today.getMonth() - monthCount, today.getDate())
+      const startDate = startDateObj.toISOString().split('T')[0]
 
-      console.log(`[TransactionLookupTool] SIMPLE: ${dateRange} = ${startDate} to ${endDate} (${dayCount} days)`)
+      console.log(`[TransactionLookupTool] DYNAMIC: ${dateRange} = ${startDate} to ${endDate} (${monthCount} months)`)
       return { startDate, endDate }
+    }
+
+    // Pattern 4: Legacy numbered patterns like "past_60_days"
+    const legacyDaysMatch = dateRangeLower.match(/past_(\d+)_days?/)
+    if (legacyDaysMatch) {
+      const dayCount = parseInt(legacyDaysMatch[1], 10)
+      return this._calculateDaysRange(dayCount, today, dateRange, endDate)
+    }
+
+    // Pattern 5: Simple number extraction as fallback (e.g., user just says "100")
+    const numberMatch = dateRangeLower.match(/(\d+)/)
+    if (numberMatch) {
+      const dayCount = parseInt(numberMatch[1], 10)
+      console.log(`[TransactionLookupTool] FALLBACK: Treating "${dateRange}" as ${dayCount} days`)
+      return this._calculateDaysRange(dayCount, today, dateRange, endDate)
     }
 
     // SIMPLIFIED PREDEFINED RANGES: Use same millisecond approach
@@ -427,9 +468,119 @@ export class TransactionLookupTool extends BaseTool {
         return {
           startDate: endDate,
           endDate,
-          error: `Unknown date range: "${dateRange}". Use "past_X_days", "this_month", "last_month", or "this_year".`
+          error: `Unknown date range: "${dateRange}". Use patterns like "100 days", "past 30 days", "2 months", "this_month", "last_month", or "this_year".`
         }
     }
+  }
+
+  /**
+   * Helper method to calculate date range for day-based periods with validation
+   */
+  private _calculateDaysRange(dayCount: number, today: Date, originalRange: string, endDate: string): { startDate: string; endDate: string; error?: string } {
+    // VALIDATION: Reasonable range limits (1-730 days = 2 years max)
+    if (dayCount < 1 || dayCount > 730) {
+      return {
+        startDate: endDate,
+        endDate,
+        error: `Invalid day count: ${dayCount}. Must be between 1 and 730 days.`
+      }
+    }
+
+    // DIRECT CALCULATION: Today minus X days using milliseconds
+    const msPerDay = 24 * 60 * 60 * 1000
+    const startDateMs = today.getTime() - (dayCount * msPerDay)
+    const startDate = new Date(startDateMs).toISOString().split('T')[0]
+
+    console.log(`[TransactionLookupTool] DYNAMIC: ${originalRange} = ${startDate} to ${endDate} (${dayCount} days)`)
+    return { startDate, endDate }
+  }
+
+  /**
+   * Extract source document type from user query using friendly terms
+   * Maps user-friendly terms to database values
+   */
+  private _extractSourceDocumentType(query: string): 'invoice' | 'expense_claim' | null {
+    if (!query) return null
+
+    const queryLower = query.toLowerCase()
+
+    // Map user-friendly terms to database values
+    const invoiceTerms = ['invoice', 'invoices', 'bill', 'bills', 'vendor invoice', 'supplier invoice']
+    const expenseTerms = ['expense', 'expenses', 'expense claim', 'expense claims', 'reimbursement', 'reimbursements', 'claim', 'claims']
+
+    // Check for expense-related terms first (more specific)
+    const hasExpenseTerms = expenseTerms.some(term => queryLower.includes(term))
+    if (hasExpenseTerms) {
+      console.log(`[TransactionLookupTool] 💳 Detected expense claims request from query: "${query}"`)
+      return 'expense_claim'
+    }
+
+    // Check for invoice-related terms
+    const hasInvoiceTerms = invoiceTerms.some(term => queryLower.includes(term))
+    if (hasInvoiceTerms) {
+      console.log(`[TransactionLookupTool] 📄 Detected invoice request from query: "${query}"`)
+      return 'invoice'
+    }
+
+    return null
+  }
+
+  /**
+   * Detect if query mentions document types but needs clarification
+   * User-friendly clarification for ambiguous document type queries
+   */
+  private _detectDocumentTypeClarificationNeeded(query: string): boolean {
+    if (!query || query.length < 3) {
+      return false // Don't ask for clarification on very short queries
+    }
+
+    const queryLower = query.toLowerCase()
+
+    // Document type terms that might be ambiguous
+    const documentTypeTerms = [
+      'invoice', 'invoices', 'bill', 'bills', 'receipt', 'receipts',
+      'expense', 'expenses', 'claim', 'claims', 'statement', 'statements',
+      'contract', 'contracts', 'document', 'documents'
+    ]
+
+    // Check if query mentions document types
+    const mentionsDocumentType = documentTypeTerms.some(term => queryLower.includes(term))
+
+    if (!mentionsDocumentType) {
+      return false // No document type mentioned, no clarification needed
+    }
+
+    // Specific patterns that are clear and don't need clarification
+    const clearPatterns = [
+      /\b(largest|biggest|highest|maximum|smallest|lowest|minimum)\b.*\b(transaction|amount|payment)\b/i,
+      /\btransactions?\b.*\b(from|in|during|past|last)\b/i,
+      /\ball\s+(my\s+)?transactions?\b/i,
+      /\btotal\b.*\btransactions?\b/i
+    ]
+
+    // If query matches clear patterns, don't ask for clarification
+    const hasTransactionFocus = clearPatterns.some(pattern => pattern.test(queryLower))
+    if (hasTransactionFocus) {
+      return false
+    }
+
+    // Document type queries that are ambiguous and need clarification
+    const ambiguousPatterns = [
+      /\b(invoice|bill|receipt|expense|claim)\b/i, // Generic mentions
+      /\b(show|find|get|list)\b.*\b(invoice|bill|receipt|expense|claim)s?\b/i,
+      /\bmy\s+(invoice|bill|receipt|expense|claim)s?\b/i
+    ]
+
+    const isAmbiguous = ambiguousPatterns.some(pattern => pattern.test(queryLower))
+
+    console.log(`[TransactionLookupTool] CLARIFICATION CHECK:`)
+    console.log(`[TransactionLookupTool]   - Query: "${query}"`)
+    console.log(`[TransactionLookupTool]   - Mentions document type: ${mentionsDocumentType}`)
+    console.log(`[TransactionLookupTool]   - Has transaction focus: ${hasTransactionFocus}`)
+    console.log(`[TransactionLookupTool]   - Is ambiguous: ${isAmbiguous}`)
+    console.log(`[TransactionLookupTool]   - Clarification needed: ${isAmbiguous}`)
+
+    return isAmbiguous
   }
 
   /**
@@ -465,8 +616,9 @@ export class TransactionLookupTool extends BaseTool {
   /**
    * Process and sanitize parameters with guardrail validation
    * LOW RISK: Parameter validation and sanitization with no side effects
+   * CRITICAL FIX: Added isAnalysisQuery parameter to preserve analytical terms
    */
-  private _processAndSanitizeParameters(params: TransactionLookupParameters): {
+  private _processAndSanitizeParameters(params: TransactionLookupParameters, isAnalysisQuery: boolean = false): {
     query: string;
     limit: number;
     sanitizedParams: TransactionLookupParameters
@@ -488,7 +640,7 @@ export class TransactionLookupTool extends BaseTool {
     }
 
     // Execute search with cleaned parameters
-    const sanitizedQuery = this._sanitize_query(sanitizedParams.query || '', sanitizedParams.dateRange)
+    const sanitizedQuery = this._sanitize_query(sanitizedParams.query || '', sanitizedParams.dateRange, isAnalysisQuery)
     if (sanitizedParams.query && sanitizedQuery !== sanitizedParams.query) {
       sanitizedParams.query = sanitizedQuery
       console.log(`[GUARDRAIL] Final sanitized query: '${sanitizedParams.query}'`)
@@ -550,25 +702,58 @@ export class TransactionLookupTool extends BaseTool {
         resultsCount: transactions.length,
         totalAmount,
         dateRangeCalculated: params?.dateRange ? `${startDate} to ${endDate}` : 'none',
-        documentTypeFilter: params?.document_type || 'none'
+        sourceDocumentTypeFilter: params?._sourceDocumentType || 'none'
       }
     }
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as TransactionLookupParameters
-    
-    // Process and sanitize parameters using extracted method
-    const processedParams = this._processAndSanitizeParameters(params)
+
+    // CRITICAL FIX 2: Detect analysis queries BEFORE sanitization to preserve analytical terms like "largest"
+    const originalQuery = params.query || ''
+    const originalLimit = params.limit || 10
+    console.log(`[TransactionLookupTool] ✅ RUNNING ANALYSIS DETECTION WITH ORIGINAL QUERY: "${originalQuery}"`)
+    const isAnalysisQuery = this._detectAnalysisQuery(originalQuery, originalLimit, params)
+
+    // ✅ DOCUMENT TYPE EXTRACTION: Extract source document type from query
+    const extractedSourceDocumentType = this._extractSourceDocumentType(originalQuery)
+
+    // ✅ CLARIFICATION LOGIC: Check if query mentions document types but is ambiguous
+    const clarificationNeeded = this._detectDocumentTypeClarificationNeeded(originalQuery)
+    if (clarificationNeeded && !extractedSourceDocumentType) {
+      console.log(`[TransactionLookupTool] 🤔 CLARIFICATION NEEDED: Query mentions document types but is ambiguous`)
+      return {
+        success: true,
+        data: `I can help you find your transactions! I noticed you mentioned document types in your query. Are you looking for:
+
+📄 **Invoices** - Bills or invoices you've received from vendors
+💳 **Expense Claims** - Submitted expense reports and reimbursements
+
+Please clarify which type you'd like me to search, or say "both" to see all transactions.`,
+        metadata: {
+          queryProcessed: originalQuery,
+          clarificationRequested: true,
+          availableTypes: ['invoices', 'expense_claims', 'both']
+        }
+      }
+    }
+
+    // Process and sanitize parameters using extracted method (AFTER analysis detection)
+    const processedParams = this._processAndSanitizeParameters(params, isAnalysisQuery)
     const query = processedParams.query
     const limit = processedParams.limit
     const sanitizedParams = processedParams.sanitizedParams
 
+    // ✅ APPLY SOURCE DOCUMENT TYPE: Set extracted document type for filtering
+    if (extractedSourceDocumentType) {
+      sanitizedParams._sourceDocumentType = extractedSourceDocumentType
+      console.log(`[TransactionLookupTool] 🎯 Applied source document type filter: ${extractedSourceDocumentType}`)
+    }
+
     try {
       console.log(`[TransactionLookupTool] Processing query for user ${userContext.userId}: ${query}`)
-      
-      // Detect analysis queries using extracted method
-      const isAnalysisQuery = this._detectAnalysisQuery(query, limit, sanitizedParams)
+      console.log(`[TransactionLookupTool] ✅ ANALYSIS QUERY DETECTED (BEFORE SANITIZATION): ${isAnalysisQuery}`)
 
       // Calculate date range using extracted method
       const dateRange = this._calculateDateRange(sanitizedParams)
@@ -608,11 +793,12 @@ export class TransactionLookupTool extends BaseTool {
           category,
           vendor_name,
           transaction_type,
-          document_type,
+          source_document_type,
           created_at
         `)
         .eq('user_id', userContext.supabaseUserId)
         .eq('business_id', userContext.businessId)
+        .is('deleted_at', null)
 
       // Apply high-confidence filters (dates, amounts, specific category)
       if (startDate) {
@@ -650,10 +836,10 @@ export class TransactionLookupTool extends BaseTool {
         console.log(`[TransactionLookupTool] SKIPPED amount filters for analysis query to include negative expenses`)
       }
 
-      // CRITICAL: Apply document_type filter for precise database filtering
-      if (sanitizedParams.document_type) {
-        broadQuery = broadQuery.eq('document_type', sanitizedParams.document_type)
-        console.log(`[TransactionLookupTool] Applied document_type filter: ${sanitizedParams.document_type}`)
+      // ✅ APPLY SOURCE DOCUMENT TYPE FILTER: Use correct database field
+      if (sanitizedParams._sourceDocumentType) {
+        broadQuery = broadQuery.eq('source_document_type', sanitizedParams._sourceDocumentType)
+        console.log(`[TransactionLookupTool] Applied source_document_type filter: ${sanitizedParams._sourceDocumentType}`)
       }
 
       // PERFORMANCE OPTIMIZATION: Apply ordering and limit after all filters for index efficiency
@@ -665,13 +851,35 @@ export class TransactionLookupTool extends BaseTool {
       
       console.log(`[TransactionLookupTool] Fetching ${fetchLimit} records (analysis needed: ${isAnalysisQuery})`)
 
+      // CRITICAL DEBUG: Log the full SQL query for debugging
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG: Executing database query with filters:`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - user_id: ${userContext.supabaseUserId}`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - business_id: ${userContext.businessId}`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - deleted_at: NULL`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - startDate: ${startDate || 'none'}`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - endDate: ${endDate || 'none'}`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - category: ${sanitizedParams.category || 'none'}`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - minAmount: ${sanitizedParams.minAmount || 'none'} (skipped for analysis: ${isAnalysisQuery})`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - maxAmount: ${sanitizedParams.maxAmount || 'none'} (skipped for analysis: ${isAnalysisQuery})`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - _sourceDocumentType: ${sanitizedParams._sourceDocumentType || 'none'}`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - limit: ${fetchLimit}`)
+      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - order: transaction_date DESC`)
+
       const { data: allTransactions, error } = await broadQuery
+
+      // CRITICAL DEBUG: Log actual query results
+      console.log(`[TransactionLookupTool] 🔍 SQL RESULTS: Query returned ${allTransactions?.length || 0} records`)
+      if (allTransactions && allTransactions.length > 0) {
+        console.log(`[TransactionLookupTool] 🔍 SQL RESULTS: First transaction: ID=${allTransactions[0].id}, Date=${allTransactions[0].transaction_date}`)
+        console.log(`[TransactionLookupTool] 🔍 SQL RESULTS: Last transaction: ID=${allTransactions[allTransactions.length - 1].id}, Date=${allTransactions[allTransactions.length - 1].transaction_date}`)
+        console.log(`[TransactionLookupTool] 🔍 SQL RESULTS: All transaction dates: ${allTransactions.map(t => t.transaction_date).join(', ')}`)
+      }
 
       if (error) {
         console.error('[TransactionLookupTool] Query error:', error)
         return {
           success: false,
-          error: 'Failed to retrieve transactions'
+          error: 'I encountered a database error while searching your transactions. Please try again in a moment, or you can view your transactions directly in the UI dashboard. If the issue persists, please contact support for assistance.'
         }
       }
 
@@ -705,9 +913,43 @@ export class TransactionLookupTool extends BaseTool {
           console.log(`[TransactionLookupTool] User has no transactions in business ${userContext.businessId}`)
         }
 
+        // Enhanced user-friendly error message with actionable suggestions
+        let helpfulMessage = `I couldn't find any transactions matching your search criteria.`
+
+        if (totalCount > 0) {
+          helpfulMessage += ` You have ${totalCount} total transactions in your account, but none matched your specific filters.`
+
+          // Provide specific suggestions based on the query parameters
+          const suggestions = []
+          if (startDate && endDate) {
+            suggestions.push(`Try expanding your date range (currently ${startDate} to ${endDate})`)
+          }
+          if (sanitizedParams._sourceDocumentType) {
+            const friendlyType = sanitizedParams._sourceDocumentType === 'expense_claim' ? 'expense claims' : 'invoices'
+            suggestions.push(`Try removing the document type filter (currently filtering for "${friendlyType}")`)
+          }
+          if (sanitizedParams.category) {
+            suggestions.push(`Try removing the category filter (currently filtering for "${sanitizedParams.category}")`)
+          }
+          if (sanitizedParams.minAmount || sanitizedParams.maxAmount) {
+            suggestions.push('Try removing the amount filters')
+          }
+          if (sanitizedParams.query && sanitizedParams.query.trim()) {
+            suggestions.push('Try using broader search terms')
+          }
+
+          if (suggestions.length > 0) {
+            helpfulMessage += `\n\nSuggestions:\n• ${suggestions.join('\n• ')}`
+          }
+        } else {
+          helpfulMessage += ` It looks like you don't have any transactions in this business account yet.`
+        }
+
+        helpfulMessage += `\n\nAlternatively, you can:\n• Browse all your transactions in the UI dashboard with advanced filtering options\n• Contact our support team for assistance with finding your data`
+
         return {
           success: true,
-          data: `No transactions found matching your criteria. You have ${totalCount} total transactions. Try removing date filters or using simpler search terms.`,
+          data: helpfulMessage,
           metadata: {
             queryProcessed: query,
             resultsCount: 0,
@@ -722,14 +964,14 @@ export class TransactionLookupTool extends BaseTool {
       let transactions = [...allTransactions]
 
       // CRITICAL FIX: Only apply text search for NON-analysis, NON-document-type queries
-      // If document_type parameter was used, skip text filtering entirely as database already filtered
+      // If _sourceDocumentType parameter was used, skip text filtering entirely as database already filtered
       console.log(`[TransactionLookupTool] ❗ TEXT FILTER DECISION:`)
-      console.log(`[TransactionLookupTool]   - sanitizedParams.document_type: ${sanitizedParams.document_type}`)
+      console.log(`[TransactionLookupTool]   - sanitizedParams._sourceDocumentType: ${sanitizedParams._sourceDocumentType}`)
       console.log(`[TransactionLookupTool]   - needsAnalysis: ${isAnalysisQuery}`)
       console.log(`[TransactionLookupTool]   - sanitizedParams.query: "${sanitizedParams.query}"`)
-      console.log(`[TransactionLookupTool]   - Will apply text filtering: ${!sanitizedParams.document_type && !isAnalysisQuery && sanitizedParams.query}`)
+      console.log(`[TransactionLookupTool]   - Will apply text filtering: ${!sanitizedParams._sourceDocumentType && !isAnalysisQuery && sanitizedParams.query}`)
 
-      if (!sanitizedParams.document_type && !isAnalysisQuery && sanitizedParams.query) {
+      if (!sanitizedParams._sourceDocumentType && !isAnalysisQuery && sanitizedParams.query) {
         // SAFETY: For analysis queries that might have been missed, double-check
         if (query.toLowerCase().match(/\b(largest|biggest|highest|maximum|smallest|lowest|minimum)\b/)) {
           console.log(`[TransactionLookupTool] SAFETY: Detected analysis terms in query, skipping text filtering`)
@@ -781,7 +1023,7 @@ export class TransactionLookupTool extends BaseTool {
           }
         }
       } else {
-        console.log(`[TransactionLookupTool] Skipping text search - document_type used: ${!!sanitizedParams.document_type}, analysis needed: ${isAnalysisQuery}`)
+        console.log(`[TransactionLookupTool] Skipping text search - _sourceDocumentType used: ${!!sanitizedParams._sourceDocumentType}, analysis needed: ${isAnalysisQuery}`)
       }
 
       // Apply analysis for superlative queries (largest, smallest, etc.)
@@ -815,10 +1057,10 @@ export class TransactionLookupTool extends BaseTool {
         // The database already found the right transactions, just sort them
         console.log(`[TransactionLookupTool] Analysis query detected - skipping text filtering, letting database results through`)
         
-        // If document_type was specified, the database already filtered correctly
-        // If query contains document type terms but document_type param wasn't used, warn but continue
-        if (sanitizedParams.query && sanitizedParams.query.toLowerCase().includes('invoice') && !sanitizedParams.document_type) {
-          console.log(`[TransactionLookupTool] WARNING: Query contains 'invoice' but document_type parameter not used. Consider using document_type='invoice' for better results.`)
+        // If _sourceDocumentType was specified, the database already filtered correctly
+        // If query contains document type terms but _sourceDocumentType param wasn't used, warn but continue
+        if (sanitizedParams.query && sanitizedParams.query.toLowerCase().includes('invoice') && !sanitizedParams._sourceDocumentType) {
+          console.log(`[TransactionLookupTool] WARNING: Query contains 'invoice' but _sourceDocumentType parameter not used. Consider using _sourceDocumentType='invoice' for better results.`)
         }
       } else {
         // Normal limit for non-analysis queries
@@ -831,9 +1073,39 @@ export class TransactionLookupTool extends BaseTool {
         console.log(`[TransactionLookupTool] Original database results: ${allTransactions.length}`)
         console.log(`[TransactionLookupTool] Analysis type: ${isAnalysisQuery ? 'YES (largest/smallest)' : 'NO (regular search)'}`)
         
+        // Enhanced error message for filtered results
+        let filteredMessage = `I found ${allTransactions.length} transactions in your date range, but none matched your specific search criteria.`
+
+        // Provide specific guidance based on what filtering was applied
+        const appliedFilters = []
+        if (sanitizedParams.query && sanitizedParams.query.trim()) {
+          appliedFilters.push(`text search for "${sanitizedParams.query}"`)
+        }
+        if (sanitizedParams._sourceDocumentType) {
+          const friendlyType = sanitizedParams._sourceDocumentType === 'expense_claim' ? 'expense claims' : 'invoices'
+          appliedFilters.push(`document type "${friendlyType}"`)
+        }
+        if (sanitizedParams.category) {
+          appliedFilters.push(`category "${sanitizedParams.category}"`)
+        }
+        if (isAnalysisQuery) {
+          appliedFilters.push('analysis query (largest/smallest)')
+        }
+
+        if (appliedFilters.length > 0) {
+          filteredMessage += `\n\nFilters applied:\n• ${appliedFilters.join('\n• ')}`
+        }
+
+        filteredMessage += `\n\nSuggestions:
+• Try using broader or different search terms
+• Remove some of the filters to see more results
+• Check the spelling of vendor names or descriptions
+• Use the UI dashboard to browse transactions with visual filters
+• Contact support if you're looking for specific transactions you know should exist`
+
         return {
           success: true,
-          data: `No transactions found matching your criteria. I found ${allTransactions.length} total transactions but none matched your specific search. Try removing filters or using broader search terms.`,
+          data: filteredMessage,
           metadata: {
             queryProcessed: query,
             resultsCount: 0,
@@ -868,11 +1140,11 @@ export class TransactionLookupTool extends BaseTool {
     return data.map((transaction, index) => {
       const date = new Date(transaction.transaction_date).toLocaleDateString()
       const amount = `${transaction.original_amount} ${transaction.original_currency}`
-      const homeAmount = transaction.home_currency_amount 
-        ? ` (${transaction.home_currency_amount} home currency)` 
+      const homeAmount = transaction.home_currency_amount
+        ? ` (${transaction.home_currency_amount} home currency)`
         : ''
-      const docType = transaction.document_type ? ` • ${transaction.document_type.charAt(0).toUpperCase() + transaction.document_type.slice(1)}` : ''
-      
+      const docType = transaction.source_document_type ? ` • ${transaction.source_document_type.charAt(0).toUpperCase() + transaction.source_document_type.slice(1)}` : ''
+
       return `${index + 1}. ${transaction.description || 'No description'}
    Amount: ${amount}${homeAmount}
    Date: ${date}
