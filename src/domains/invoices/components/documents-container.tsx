@@ -17,8 +17,6 @@ export default function DocumentsContainer() {
     fileType: string
     status: string
   }) => {
-    console.log('Business document uploaded and processing triggered:', document)
-
     // If document is auto-processing, trigger immediate refresh to show processing status
     if (document.status === 'processing') {
       // Trigger immediate refresh to show the processing status
@@ -35,7 +33,7 @@ export default function DocumentsContainer() {
   }, [])
 
   const handleDocumentsRefresh = useCallback(() => {
-    console.log('Documents list refreshed')
+    // Documents list refreshed - callback handled
   }, [])
 
   return (
@@ -47,7 +45,7 @@ export default function DocumentsContainer() {
 
             <FileUploadZone
               onUploadSuccess={handleBusinessDocumentSuccess}
-              onUploadStart={() => console.log('Business document upload started')}
+              onUploadStart={() => {/* Upload started callback */}}
               autoProcess={true}
               allowMultiple={true}
             />

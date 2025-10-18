@@ -230,12 +230,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   const fetchDocumentPage = async (pageNumber: number = 1) => {
     setIsLoadingPage(true)
     try {
-      console.log('[Document Preview] Fetching page', pageNumber, 'for document:', {
-        id: document.id,
-        fileName: document.file_name,
-        fileType: document.file_type,
-        storagePath: document.storage_path
-      })
+      // Fetching document page image
 
       // Single API call with automatic path resolution on the backend
       const params = new URLSearchParams({
@@ -254,7 +249,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
       if (response.ok) {
         const result = await response.json()
         if (result.success && result.data?.imageUrl) {
-          console.log('[Document Preview] Successfully loaded page', pageNumber, '- total pages:', result.data.totalPages)
+          // Successfully loaded document page
           setDocumentImageUrl(result.data.imageUrl)
           setCurrentPage(result.data.currentPage || pageNumber)
           setTotalPages(result.data.totalPages || 1)
@@ -262,7 +257,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         }
       }
 
-      console.warn('[Document Preview] Failed to load document page', pageNumber)
+      // Failed to load document page
     } catch (error) {
       console.error('[Document Preview] Failed to fetch document image:', error)
     } finally {
@@ -323,7 +318,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
 
         textToTranslate = aiText.join('\n')
 
-        console.log('[DocumentAnalysis] Translation text prepared from AI structure:', textToTranslate)
+        // Translation text prepared from AI structure
       }
 
       // If we have structured financial data, format it properly for translation
@@ -832,7 +827,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                   boundingBoxes={getFilteredBoundingBoxes()}
                   onBoxHover={setHighlightedBox}
                   onBoxClick={(box) => {
-                    console.log('Clicked box:', box)
+                    // Clicked bounding box
                     // TODO: Highlight corresponding text in extracted content
                   }}
                 />
@@ -930,7 +925,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     onClick={() => {
                       navigator.clipboard.writeText(document.id)
                       // Could add toast notification here
-                      console.log('Invoice ID copied:', document.id)
+                      // Invoice ID copied to clipboard
                     }}
                     className="flex-shrink-0 p-1.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded transition-colors"
                     title="Copy Invoice ID"
@@ -956,12 +951,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                          // Legacy fallback
                                          document.extracted_data?.metadata?.ai_confidence;
 
-                      console.log('[DocumentAnalysis] AI Confidence debug:', {
-                        aiConfidence,
-                        extracted_data_keys: document.extracted_data ? Object.keys(document.extracted_data) : null,
-                        hasDirectAiConfidence: !!(document.extracted_data?.ai_confidence),
-                        hasConfidenceScore: !!(document.extracted_data?.confidence_score)
-                      });
+                      // AI Confidence calculation debug info available
 
                       return aiConfidence ? `${Math.round(aiConfidence * 100)}%` : 'N/A';
                     })()}

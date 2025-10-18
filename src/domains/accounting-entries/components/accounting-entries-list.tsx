@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Search, Filter, Plus, Eye, Edit, Trash2, RefreshCw, Calendar, Building, DollarSign, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
@@ -76,15 +76,15 @@ export default function AccountingEntriesList({
     }
   }
 
-  const handleDeleteClick = (transaction: AccountingEntry) => {
+  const handleDeleteClick = useCallback((transaction: AccountingEntry) => {
     setDeleteConfirmation({
       isOpen: true,
       transaction,
       isLoading: false
     })
-  }
+  }, [])
 
-  const handleDeleteConfirm = async () => {
+  const handleDeleteConfirm = useCallback(async () => {
     if (!deleteConfirmation.transaction) return
 
     setDeleteConfirmation(prev => ({ ...prev, isLoading: true }))
@@ -100,15 +100,15 @@ export default function AccountingEntriesList({
       // Keep dialog open on error, just stop loading
       setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
     }
-  }
+  }, [deleteConfirmation.transaction, onDelete])
 
-  const handleDeleteCancel = () => {
+  const handleDeleteCancel = useCallback(() => {
     setDeleteConfirmation({
       isOpen: false,
       transaction: null,
       isLoading: false
     })
-  }
+  }, [])
 
   const filteredTransactions = transactions.filter(transaction => {
     // Enhanced search: includes descriptions, vendor names, reference numbers, and line items
@@ -246,10 +246,10 @@ export default function AccountingEntriesList({
   const resetPagination = () => setCurrentPage(1)
 
   // Handle items per page change
-  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+  const handleItemsPerPageChange = useCallback((newItemsPerPage: number) => {
     setItemsPerPage(newItemsPerPage)
     setCurrentPage(1)
-  }
+  }, [])
 
   // Reset pagination when filters change
   useEffect(() => {

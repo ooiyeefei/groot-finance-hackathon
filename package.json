@@ -16,7 +16,12 @@
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "clean": "rm -rf .next",
+    "setup:python": "./scripts/setup-python.sh",
+    "build:full": "npm run clean && npm run setup:python && npm install && npm run build && npm run dev",
+    "build:with-python": "npm run setup:python && npm install && npm run build",
+    "dev:fresh": "rm -rf .next && npm run setup:python && npm install && npm run build && npm run dev"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.30.0",

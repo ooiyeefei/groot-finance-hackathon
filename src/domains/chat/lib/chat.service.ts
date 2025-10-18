@@ -1,8 +1,6 @@
 /**
  * Chat Service Layer
- *
  * Business logic for LangGraph AI agent conversations, messages, and citations.
- * Handles conversation management, message threading, and citation preview.
  */
 
 import { createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
@@ -11,9 +9,7 @@ import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages'
 import { type Locale, isValidLocale } from '@/i18n'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 
-// ============================================================================
 // Types
-// ============================================================================
 
 export interface SendMessageRequest {
   message: string
@@ -56,13 +52,10 @@ export interface Message {
   created_at: string
 }
 
-// ============================================================================
 // Main Chat Functions
-// ============================================================================
 
 /**
- * Send a chat message and get AI agent response
- * Handles LangGraph agent invocation, conversation history, and citations
+ * Send chat message and get AI agent response with conversation history and citations
  */
 export async function sendChatMessage(
   userId: string,
@@ -75,7 +68,7 @@ export async function sendChatMessage(
 
   const supabase = await createBusinessContextSupabaseClient(userId)
 
-  // Step 1: Get or create conversation
+  // Get or create conversation
   let currentConversationId: string
 
   if (conversationId) {
@@ -99,7 +92,7 @@ export async function sendChatMessage(
     currentConversationId = newConversation.id
   }
 
-  // Step 2: Get recent conversation history (last 10 messages) with metadata
+  // Get recent conversation history (last 10 messages)
   const { data: recentMessages, error: historyError } = await supabase
     .from('messages')
     .select('role, content, metadata')
@@ -112,7 +105,7 @@ export async function sendChatMessage(
     throw new Error(`Failed to fetch conversation history: ${historyError.message}`)
   }
 
-  // Convert database messages to LangChain format (reverse to chronological order)
+  // Convert to LangChain format (reverse to chronological order)
   const conversationHistory: BaseMessage[] = recentMessages.reverse().map(msg => {
     if (msg.role === 'user') {
       return new HumanMessage(msg.content)
@@ -121,7 +114,7 @@ export async function sendChatMessage(
     }
   })
 
-  // Step 3: Check if this is a clarification response
+  // Check if this is a clarification response
   const isClarificationResponse = await _checkIfClarificationResponse(
     supabase,
     currentConversationId,
@@ -130,7 +123,7 @@ export async function sendChatMessage(
     recentMessages
   )
 
-  // Step 4: Create user context for agent
+  // Create user context for agent
   const userContext = {
     userId: userId,
     supabaseUserId: supabaseUserId,
@@ -138,12 +131,11 @@ export async function sendChatMessage(
     conversationId: currentConversationId
   }
 
-  // Step 5: Create or restore agent state
+  // Create or restore agent state
   let agentState: ReturnType<typeof createAgentState>
 
   if (isClarificationResponse.isResponse && isClarificationResponse.originalState) {
     // Restore saved agent state from database metadata
-    console.log('[Chat Service] Restoring agent state from database metadata')
     agentState = isClarificationResponse.originalState as ReturnType<typeof createAgentState>
 
     // Preserve userContext from current request
@@ -163,11 +155,11 @@ export async function sendChatMessage(
     agentState.messages = conversationHistory.concat([new HumanMessage(message)])
   }
 
-  // Step 6: Invoke LangGraph agent
+  // Invoke LangGraph agent
   const financialAgent = createFinancialAgent()
   const agentResult = await financialAgent.invoke(agentState)
 
-  // Step 7: Extract response and citations
+  // Extract response and citations
   const lastMessage = agentResult.messages[agentResult.messages.length - 1]
   let assistantResponse = ''
 
@@ -175,14 +167,14 @@ export async function sendChatMessage(
     assistantResponse = typeof lastMessage.content === 'string' ? lastMessage.content : 'I apologize, but I cannot process your request right now.'
   }
 
-  // Clean up response
+  // Clean response and extract citations
   assistantResponse = _parseFinalAnswer(assistantResponse)
 
   // Extract citations
   const agentCitations = agentResult.citations || []
   assistantResponse = _ensureCitationMarkers(assistantResponse, agentCitations)
 
-  // Step 8: Save messages to database
+  // Save messages to database
   await supabase
     .from('messages')
     .insert({
@@ -192,7 +184,7 @@ export async function sendChatMessage(
       content: message
     })
 
-  // Prepare assistant metadata
+  // Prepare assistant message metadata
   const assistantMetadata: any = {}
 
   if (agentCitations.length > 0) {
@@ -235,7 +227,7 @@ export async function sendChatMessage(
 }
 
 /**
- * List user's conversations with message counts
+ * List user conversations with message counts
  */
 export async function listConversations(
   clerkUserId: string,
@@ -244,12 +236,6 @@ export async function listConversations(
   limit: number = 50
 ): Promise<Conversation[]> {
   const supabase = await createBusinessContextSupabaseClient(clerkUserId)
-
-  console.log(`[Chat Service] DEBUG: Executing conversations query with:`, {
-    supabaseUserId,
-    businessId,
-    limit
-  })
 
   const { data: conversations, error } = await supabase
     .from('conversations')
@@ -280,8 +266,6 @@ export async function listConversations(
     throw new Error(`Failed to fetch conversations: ${error.message}`)
   }
 
-  console.log(`[Chat Service] DEBUG: Raw database result - found ${conversations?.length || 0} conversations`)
-
   // Format conversations with latest message preview
   const formattedConversations = conversations.map(conv => {
     const activeMessages = conv.messages?.filter(msg => !msg.deleted_at) || []
@@ -299,13 +283,11 @@ export async function listConversations(
     }
   })
 
-  console.log(`[Chat Service] DEBUG: Formatted ${formattedConversations.length} conversations for response`)
-
   return formattedConversations
 }
 
 /**
- * Get specific conversation with all messages
+ * Get conversation with all messages
  */
 export async function getConversation(
   conversationId: string,
@@ -365,7 +347,7 @@ export async function getConversation(
 }
 
 /**
- * Soft delete conversation and all its messages
+ * Soft delete conversation and messages
  */
 export async function deleteConversation(
   conversationId: string,
@@ -402,7 +384,7 @@ export async function deleteConversation(
 }
 
 /**
- * Soft delete a specific message
+ * Soft delete message
  */
 export async function deleteMessage(
   messageId: string,
@@ -443,8 +425,7 @@ export async function deleteMessage(
 }
 
 /**
- * Proxy government PDF documents for citation preview
- * Validates domain whitelist and caches responses
+ * Proxy government PDF documents for citation preview with domain validation
  */
 export async function proxyCitationDocument(url: string): Promise<Response> {
   // Validate URL is from trusted government domains
@@ -477,13 +458,10 @@ export async function proxyCitationDocument(url: string): Promise<Response> {
   })
 }
 
-// ============================================================================
 // Private Helper Functions
-// ============================================================================
 
 /**
- * Parse and clean final AI response
- * Removes tool calls, thinking blocks, and DONE commands
+ * Parse and clean AI response - removes tool calls, thinking blocks, and DONE commands
  */
 function _parseFinalAnswer(content: string): string {
   if (!content || typeof content !== 'string') {
@@ -520,7 +498,7 @@ function _parseFinalAnswer(content: string): string {
 }
 
 /**
- * Ensure citation markers are properly inserted
+ * Ensure citation markers are inserted in response text
  */
 function _ensureCitationMarkers(content: string, citations: CitationData[]): string {
   if (!citations || citations.length === 0) {
@@ -564,7 +542,7 @@ function _ensureCitationMarkers(content: string, citations: CitationData[]): str
 }
 
 /**
- * Check if current message is a clarification response
+ * Check if message is a clarification response to previous questions
  */
 async function _checkIfClarificationResponse(
   supabase: any,

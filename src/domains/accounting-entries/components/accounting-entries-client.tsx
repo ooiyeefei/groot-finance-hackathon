@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useLocale } from 'next-intl'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import ActionButton from '@/components/ui/action-button'
@@ -18,12 +19,16 @@ import { useActiveBusiness } from '@/contexts/business-context'
 export default function AccountingEntriesClient() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const locale = useLocale()
   const { businessId } = useActiveBusiness()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingAccountingEntry, setEditingTransaction] = useState<AccountingEntry | null>(null)
   const [viewingAccountingEntry, setViewingTransaction] = useState<AccountingEntry | null>(null)
   const [selectedDocument, setSelectedDocument] = useState<any | null>(null)
   const [highlightProcessed, setHighlightProcessed] = useState(false)
+
+  // Memoize empty filters to prevent unnecessary re-renders and API calls
+  const accountingFilters = useMemo(() => ({}), [])
 
   const {
     accountingEntries,
@@ -33,70 +38,81 @@ export default function AccountingEntriesClient() {
     updateAccountingEntry,
     deleteAccountingEntry,
     getAccountingEntryById
-  } = useAccountingEntries()
+  } = useAccountingEntries(accountingFilters)
+
+  // Extract highlightId as a separate memoized value to prevent useEffect from running unnecessarily
+  const highlightId = useMemo(() => searchParams.get('highlight'), [searchParams])
 
   // Handle highlight parameter to auto-open transaction modal
   useEffect(() => {
-    const highlightId = searchParams.get('highlight')
-    if (highlightId && accountingEntries.length > 0 && !viewingAccountingEntry && !highlightProcessed) {
-      const targetAccountingEntry = getAccountingEntryById(highlightId)
+    // Only process if we have a highlight ID, data is loaded, and we haven't processed this highlight yet
+    if (highlightId && !highlightProcessed && !viewingAccountingEntry && !loading) {
+      // Inline the search logic to avoid unstable function dependency
+      const targetAccountingEntry = accountingEntries.find(entry => entry.id === highlightId)
       if (targetAccountingEntry) {
         setViewingTransaction(targetAccountingEntry)
         setHighlightProcessed(true)
       }
     }
-  }, [searchParams, accountingEntries, getAccountingEntryById, viewingAccountingEntry, highlightProcessed])
+  }, [highlightId, highlightProcessed, viewingAccountingEntry, loading, accountingEntries])
 
   // CRITICAL FIX: Re-fetch transactions when active business context changes
   useEffect(() => {
     if (businessId) {
-      console.log('[AccountingEntriesClient] Business context changed, refreshing transactions:', businessId)
       refreshAccountingEntries()
     }
   }, [businessId, refreshAccountingEntries])
 
-  const handleCreateTransaction = async (data: any) => {
+  const handleCreateTransaction = useCallback(async (data: any) => {
     try {
       await createAccountingEntry(data)
       setShowCreateModal(false)
       refreshAccountingEntries()
     } catch (error) {
-      console.error('Failed to create transaction:', error)
+      // Creation error handled by underlying service
     }
-  }
+  }, [createAccountingEntry, refreshAccountingEntries])
 
-  const handleUpdateTransaction = async (data: any) => {
+  const handleUpdateTransaction = useCallback(async (data: any) => {
     if (!editingAccountingEntry) return
-    
+
     try {
       await updateAccountingEntry(editingAccountingEntry.id, data)
       setEditingTransaction(null)
       refreshAccountingEntries()
     } catch (error) {
-      console.error('Failed to update transaction:', error)
+      // Update error handled by underlying service
     }
-  }
+  }, [editingAccountingEntry, updateAccountingEntry, refreshAccountingEntries])
 
-  const handleDeleteAccountingEntry = async (accountingEntryId: string) => {
+  const handleDeleteAccountingEntry = useCallback(async (accountingEntryId: string) => {
     try {
       await deleteAccountingEntry(accountingEntryId)
       setViewingTransaction(null)
       refreshAccountingEntries()
     } catch (error) {
-      console.error('Failed to delete transaction:', error)
+      // Delete error handled by underlying service
     }
-  }
+  }, [deleteAccountingEntry, refreshAccountingEntries])
 
-  const handleEditFromDetail = () => {
+  const handleEditFromDetail = useCallback(() => {
     if (viewingAccountingEntry) {
       setEditingTransaction(viewingAccountingEntry)
       setViewingTransaction(null)
     }
-  }
+  }, [viewingAccountingEntry])
 
-  const handleViewDocument = async (documentId: string) => {
+  const handleViewDocument = async (documentId: string, sourceDocumentType?: string) => {
     try {
-      // Fetch the document by ID
+      // Route based on source document type
+      if (sourceDocumentType === 'expense_claim') {
+        // For expense claims, navigate to the expense claim view page
+        router.push(`/${locale}/expense-claims?highlight=${documentId}`)
+        setViewingTransaction(null) // Close transaction modal
+        return
+      }
+
+      // For invoices or unknown types, fetch the document and show analysis modal
       const response = await fetch(`/api/v1/invoices/${documentId}`)
       if (response.ok) {
         const result = await response.json()
@@ -104,29 +120,35 @@ export default function AccountingEntriesClient() {
           setSelectedDocument(result.data)
           setViewingTransaction(null) // Close transaction modal
         } else {
-          console.error('Failed to fetch document:', result.error)
+          // Document fetch failed - handled silently
         }
       } else {
-        console.error('Failed to fetch document:', response.status, response.statusText)
+        // Document fetch failed - handled silently
       }
     } catch (error) {
-      console.error('Failed to fetch document:', error)
+      // Document fetch failed - handled silently
     }
   }
 
   // Custom close handler that removes highlight parameter from URL
-  const handleCloseAccountingEntryModal = () => {
+  const handleCloseAccountingEntryModal = useCallback(() => {
     setViewingTransaction(null)
-    setHighlightProcessed(false) // Reset the flag
+    // Don't reset highlightProcessed here to avoid race condition
 
     // Remove highlight parameter from URL if present
-    const highlightId = searchParams.get('highlight')
     if (highlightId) {
       const url = new URL(window.location.href)
       url.searchParams.delete('highlight')
       router.push(url.pathname + url.search, { scroll: false })
     }
-  }
+  }, [highlightId, router])
+
+  // Separate effect to reset highlightProcessed when highlightId is removed
+  useEffect(() => {
+    if (!highlightId && highlightProcessed) {
+      setHighlightProcessed(false)
+    }
+  }, [highlightId, highlightProcessed])
 
   return (
     <ClientProviders>

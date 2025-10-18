@@ -61,8 +61,6 @@ export function useDocumentPolling({
 
   // Trigger refetch of the unified documents query
   const triggerRefetch = useCallback(() => {
-    console.log('[Polling] Triggering refetch for processing documents...')
-
     // Use queryClient to refetch the main documents query
     // This will cause useDocuments to fetch from /api/v1/invoices
     queryClient.refetchQueries({
@@ -77,8 +75,6 @@ export function useDocumentPolling({
       return // Already polling or disabled
     }
 
-    console.log('[Polling] Starting polling for processing documents...')
-
     pollingInterval.current = setInterval(() => {
       if (hasProcessingDocuments()) {
         triggerRefetch()
@@ -92,7 +88,6 @@ export function useDocumentPolling({
   // Stop polling
   const stopPolling = useCallback(() => {
     if (pollingInterval.current) {
-      console.log('[Polling] Stopping polling...')
       clearInterval(pollingInterval.current)
       pollingInterval.current = null
     }

@@ -111,6 +111,9 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   // Track if initial data load has completed to prevent premature redirects
   const [hasCompletedInitialLoad, setHasCompletedInitialLoad] = useState(false)
 
+  // Track if we've already started initial loading to prevent duplicate API calls
+  const [hasStartedInitialLoad, setHasStartedInitialLoad] = useState(false)
+
   // ============================================================================
   // Data Fetching Functions
   // ============================================================================
@@ -288,7 +291,14 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
       return
     }
 
+    // Prevent duplicate initialization due to Clerk auth state changes
+    if (hasStartedInitialLoad) {
+      console.log('[BusinessContext] Initial load already started, skipping duplicate initialization')
+      return
+    }
+
     console.log('[BusinessContext] Initializing business context for authenticated user')
+    setHasStartedInitialLoad(true)
 
     // Load initial data without artificial delays
     const loadData = async () => {
@@ -302,11 +312,13 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         setHasCompletedInitialLoad(true)
       } catch (error) {
         console.error('[BusinessContext] Error during initial data load:', error)
+        // Reset the flag on error so it can retry
+        setHasStartedInitialLoad(false)
       }
     }
 
     loadData()
-  }, [isAuthLoaded, isSignedIn, userId, refreshMemberships, refreshContext, refreshProfile])
+  }, [isAuthLoaded, isSignedIn, userId, hasStartedInitialLoad, refreshMemberships, refreshContext, refreshProfile])
 
   // Auto-switch and redirect logic
   useEffect(() => {

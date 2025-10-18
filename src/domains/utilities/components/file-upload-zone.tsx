@@ -133,22 +133,17 @@ export default function FileUploadZone({
               })
 
               if (processResponse.ok) {
-                console.log('Auto-processing triggered successfully for:', uploadedDocument.id)
                 // Update the returned document status to processing
                 uploadedDocument.status = 'processing'
-              } else {
-                console.error('Auto-processing failed to start')
               }
             } catch (error) {
               console.error('Auto-processing failed:', error)
             }
           } else {
-            console.log('PDF upload detected - will process after conversion completes:', uploadedDocument.id)
             // PDF will be processed automatically after convert-pdf-to-image job completes
           }
         } else if (autoProcess && domain === 'expense-claims') {
           // Expense claims processing - AI processing is triggered automatically via the API
-          console.log('Expense claim uploaded with AI processing enabled:', uploadedDocument.id)
           // For expense claims, processing is handled by the API when processing_mode='ai'
         }
 

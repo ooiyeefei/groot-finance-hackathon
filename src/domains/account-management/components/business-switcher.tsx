@@ -2,16 +2,7 @@
 
 /**
  * Business Switcher Component
- *
- * Displays the current active business and allows users to switch
- * between different businesses they have access to.
- *
- * Features:
- * - Shows current business name and user role
- * - Dropdown with all available businesses
- * - Role badges and ownership indicators
- * - Loading and error states
- * - Responsive design for header integration
+ * Displays active business and allows switching between businesses
  */
 
 import React from 'react'
@@ -34,9 +25,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-// ============================================================================
 // Role Badge Component
-// ============================================================================
 
 interface RoleBadgeProps {
   role: 'admin' | 'manager' | 'employee'
@@ -46,10 +35,10 @@ interface RoleBadgeProps {
 
 function RoleBadge({ role, isOwner, className }: RoleBadgeProps) {
   const getRoleVariant = (role: string, isOwner: boolean) => {
-    if (isOwner) return 'default' // Primary color for owners
+    if (isOwner) return 'default'
     if (role === 'admin') return 'secondary'
     if (role === 'manager') return 'outline'
-    return 'outline' // Employee
+    return 'outline'
   }
 
   const getRoleLabel = (role: string, isOwner: boolean) => {
@@ -67,9 +56,7 @@ function RoleBadge({ role, isOwner, className }: RoleBadgeProps) {
   )
 }
 
-// ============================================================================
 // Business Display Component
-// ============================================================================
 
 interface BusinessDisplayProps {
   businessName: string
@@ -96,9 +83,7 @@ function BusinessDisplay({ businessName, role, isOwner, isCompact }: BusinessDis
   )
 }
 
-// ============================================================================
 // Main Business Switcher Component
-// ============================================================================
 
 export default function BusinessSwitcher() {
   const { business, isLoading: contextLoading, error: contextError } = useActiveBusiness()
@@ -106,27 +91,18 @@ export default function BusinessSwitcher() {
   const { switchBusiness, isSwitching, error: switchError } = useBusinessSwitcher()
   const { state, hasActualError, isInitialLoading, hasNoBusinessAccess } = useBusinessState()
 
-  // ============================================================================
   // Event Handlers
-  // ============================================================================
 
   const handleBusinessSwitch = async (businessId: string) => {
     if (businessId === business?.businessId) return
 
-    console.log('[BusinessSwitcher] Switching to business:', businessId)
     const success = await switchBusiness(businessId)
-
-    if (success) {
-      console.log('[BusinessSwitcher] Successfully switched business')
-      // The context will automatically update through the provider
-    } else {
+    if (!success) {
       console.error('[BusinessSwitcher] Failed to switch business')
     }
   }
 
-  // ============================================================================
   // Loading and Error States
-  // ============================================================================
 
   if (isInitialLoading) {
     return (
@@ -159,9 +135,7 @@ export default function BusinessSwitcher() {
     )
   }
 
-  // ============================================================================
   // Single Business Case
-  // ============================================================================
 
   if (memberships.length <= 1) {
     return (
@@ -173,9 +147,7 @@ export default function BusinessSwitcher() {
     )
   }
 
-  // ============================================================================
   // Multiple Business Case - Show Switcher
-  // ============================================================================
 
   return (
     <div className="relative">
@@ -237,9 +209,7 @@ export default function BusinessSwitcher() {
   )
 }
 
-// ============================================================================
 // Compact Version for Smaller Spaces
-// ============================================================================
 
 export function BusinessSwitcherCompact() {
   const { business, isLoading: contextLoading } = useActiveBusiness()

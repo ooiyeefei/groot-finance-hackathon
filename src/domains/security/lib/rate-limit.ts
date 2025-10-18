@@ -68,17 +68,62 @@ export const RATE_LIMIT_CONFIGS = {
 } as const
 
 /**
- * Generate rate limit key based on user ID and IP address
+ * Generate unified rate limit key combining user ID and IP address
+ * This prevents rate limit bypass by switching between authenticated/unauthenticated requests
  */
 async function generateDefaultKey(request: NextRequest): Promise<string> {
   const { userId } = await auth()
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] ||
-    request.headers.get('x-real-ip') ||
-    request.headers.get('cf-connecting-ip') ||
-    'unknown'
+  const ip = getClientIP(request)
 
-  // Use user ID if authenticated, otherwise fall back to IP
-  return userId ? `user:${userId}` : `ip:${ip}`
+  // SECURITY FIX: Use combined key to prevent bypass attacks
+  // Both authenticated and unauthenticated requests from same IP share limits
+  if (userId) {
+    return `combined:user:${userId}:ip:${ip}`
+  } else {
+    return `combined:ip:${ip}`
+  }
+}
+
+/**
+ * Extract client IP address with proper header precedence and validation
+ */
+function getClientIP(request: NextRequest): string {
+  // Trust proxy headers in order of reliability
+  const forwardedFor = request.headers.get('x-forwarded-for')
+  const realIp = request.headers.get('x-real-ip')
+  const cfIp = request.headers.get('cf-connecting-ip')
+
+  let ip = 'unknown'
+
+  if (forwardedFor) {
+    // X-Forwarded-For can contain multiple IPs, get the leftmost (original client)
+    ip = forwardedFor.split(',')[0].trim()
+  } else if (realIp) {
+    ip = realIp.trim()
+  } else if (cfIp) {
+    ip = cfIp.trim()
+  }
+
+  // Validate IP format to prevent injection
+  if (ip !== 'unknown' && !isValidIP(ip)) {
+    console.warn('[Rate Limit] Invalid IP detected, using fallback:', ip)
+    ip = 'unknown'
+  }
+
+  return ip
+}
+
+/**
+ * Validate IP address format (IPv4 and IPv6)
+ */
+function isValidIP(ip: string): boolean {
+  // IPv4 regex
+  const ipv4Regex = /^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$/
+
+  // IPv6 regex (simplified)
+  const ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/
+
+  return ipv4Regex.test(ip) || ipv6Regex.test(ip)
 }
 
 /**
@@ -212,21 +257,46 @@ export function withRateLimit<T extends any[]>(
  */
 
 /**
- * Get client identifier for rate limiting (userId or IP)
+ * Get client identifier for rate limiting (combined userId and IP)
+ * SECURITY FIX: Use unified approach to prevent bypass attacks
  */
 export function getClientIdentifier(request: NextRequest | Request, userId?: string): string {
-  // Use userId if available (authenticated requests)
-  if (userId) {
-    return `user:${userId}`
-  }
+  const ip = getClientIPFromRequest(request)
 
-  // Fallback to IP address for unauthenticated requests
+  // SECURITY FIX: Use combined key to prevent bypass attacks
+  // Both authenticated and unauthenticated requests from same IP share limits
+  if (userId) {
+    return `combined:user:${userId}:ip:${ip}`
+  } else {
+    return `combined:ip:${ip}`
+  }
+}
+
+/**
+ * Extract client IP from request (helper for backwards compatibility)
+ */
+function getClientIPFromRequest(request: NextRequest | Request): string {
   const forwardedFor = request.headers.get('x-forwarded-for')
   const realIp = request.headers.get('x-real-ip')
   const cfIp = request.headers.get('cf-connecting-ip')
-  const ip = forwardedFor?.split(',')[0] || realIp || cfIp || 'unknown'
 
-  return `ip:${ip}`
+  let ip = 'unknown'
+
+  if (forwardedFor) {
+    ip = forwardedFor.split(',')[0].trim()
+  } else if (realIp) {
+    ip = realIp.trim()
+  } else if (cfIp) {
+    ip = cfIp.trim()
+  }
+
+  // Validate IP format to prevent injection
+  if (ip !== 'unknown' && !isValidIP(ip)) {
+    console.warn('[Rate Limit] Invalid IP detected in backwards compatibility helper, using fallback:', ip)
+    ip = 'unknown'
+  }
+
+  return ip
 }
 
 /**

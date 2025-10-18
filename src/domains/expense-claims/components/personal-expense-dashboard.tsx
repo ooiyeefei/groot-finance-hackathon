@@ -7,6 +7,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -34,6 +35,8 @@ interface PersonalDashboardData {
 }
 
 export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDashboardProps) {
+  const searchParams = useSearchParams()
+  const router = useRouter()
 
   const [activeTab, setActiveTab] = useState('overview')
   const [dashboardData, setDashboardData] = useState<PersonalDashboardData | null>(null)
@@ -50,6 +53,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   const [toastType, setToastType] = useState<'success' | 'error'>('success')
   const [submissionMode, setSubmissionMode] = useState<'camera' | 'manual'>('camera')
   const [reprocessingClaims, setReprocessingClaims] = useState<Set<string>>(new Set())
+  const [highlightProcessed, setHighlightProcessed] = useState(false)
 
   // Helper function to get workflow progress - matching unified modal
   const getWorkflowProgress = useCallback((status: string): number => {
@@ -70,17 +74,12 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true)
-      console.log('[PersonalExpenseDashboard] Fetching dashboard data...')
-
       const response = await fetch('/api/v1/expense-claims?limit=10&sort_order=desc', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
       })
-
-      console.log('[PersonalExpenseDashboard] Response status:', response.status)
-      console.log('[PersonalExpenseDashboard] Response ok:', response.ok)
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -89,7 +88,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       }
 
       const result = await response.json()
-      console.log('[PersonalExpenseDashboard] API result:', JSON.stringify(result, null, 2))
 
       if (result.success) {
         // Transform v1 API response to dashboard format
@@ -110,11 +108,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
           ...claim,
           workflow_progress: getWorkflowProgress(claim.status)
         }))
-
-        console.log('[PersonalExpenseDashboard] Setting dashboard data:', {
-          summary: summary,
-          recent_claims_count: enrichedClaims.length
-        })
 
         setDashboardData({
           summary: summary,
@@ -196,7 +189,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       setToastType('success')
       setToastMessage('Starting AI reprocessing...')
 
-      console.log('[Dashboard] Starting AI reprocessing for claim:', claimId)
 
       // Step 1: Update status to 'analyzing' immediately for UI feedback
       try {
@@ -209,7 +201,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         })
 
         if (statusResponse.ok) {
-          console.log('[Dashboard] Status updated to analyzing')
           // Refresh UI immediately to show analyzing status
           fetchDashboardData()
         }
@@ -232,7 +223,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         throw new Error(result.error || 'Failed to start reprocessing')
       }
 
-      console.log('[Dashboard] Reprocessing API response:', result)
 
       setToastType('success')
       setToastMessage('AI reprocessing started successfully! Results will appear in a few moments.')
@@ -264,6 +254,35 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     }
   }, [userId, fetchDashboardData])
 
+  // Handle highlight parameter to auto-open expense claim details modal
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight')
+
+    if (highlightId && !highlightProcessed && !showDetailsModal && !loading && dashboardData?.recent_claims) {
+      // Find the expense claim with the matching ID
+      const targetClaim = dashboardData.recent_claims.find(claim => claim.id === highlightId)
+
+      if (targetClaim) {
+        setDetailsClaimId(highlightId)
+        setShowDetailsModal(true)
+        setHighlightProcessed(true)
+
+        // Remove highlight parameter from URL
+        const url = new URL(window.location.href)
+        url.searchParams.delete('highlight')
+        router.push(url.pathname + url.search, { scroll: false })
+      }
+    }
+  }, [searchParams, highlightProcessed, showDetailsModal, loading, dashboardData?.recent_claims, router])
+
+  // Reset highlight processed when highlight parameter is removed
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight')
+    if (!highlightId && highlightProcessed) {
+      setHighlightProcessed(false)
+    }
+  }, [searchParams, highlightProcessed])
+
   // ✅ FIXED: Smart polling that only updates processing claims without full refresh
   useEffect(() => {
     if (!dashboardData?.recent_claims) return
@@ -275,7 +294,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 
     if (processingClaimIds.length === 0) return
 
-    console.log('[Smart Polling] Starting targeted polling for processing claims:', processingClaimIds)
 
     const interval = setInterval(async () => {
       try {
@@ -301,14 +319,12 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
             // If claim is no longer processing, we need a full refresh to update summary
             if (claim.status !== 'analyzing' && claim.status !== 'uploading') {
               shouldRefreshAll = true
-              console.log('[Smart Polling] Claim finished processing:', claimId, 'new status:', claim.status)
             }
           }
         })
 
         // Only do full refresh when processing is complete, not during processing
         if (shouldRefreshAll) {
-          console.log('[Smart Polling] Processing completed, refreshing dashboard')
           fetchDashboardData()
         }
 
@@ -320,7 +336,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     }, 5000) // Poll every 5 seconds (less aggressive)
 
     return () => {
-      console.log('[Smart Polling] Stopping targeted polling')
       clearInterval(interval)
     }
   }, [dashboardData?.recent_claims?.map(c => `${c.id}:${c.status}`).join(',')]) // Only re-run when claim statuses actually change
@@ -453,8 +468,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
                 timestamp: new Date().toISOString(),
                 type: 'info'
               }))
-              
-              console.log('[Background Processing] Processing continues after dialog close')
             }
             
             // Refresh dashboard when form closes
@@ -462,8 +475,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
           }}
           onSubmit={async (data) => {
             try {
-              console.log('Submitting expense claim:', data)
-              
               // Transform form data to API format
               const requestBody = {
                 description: data.description,
@@ -495,8 +506,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
               }
               
               const result = await response.json()
-              console.log('Expense claim created successfully:', result)
-              
+
               // Close the form after successful submission
               setShowSubmissionForm(false)
               
@@ -619,17 +629,15 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
               allowMultiple={true}
               autoProcess={true}
               onUploadSuccess={(document) => {
-                console.log('[Quick Actions] Expense claim uploaded:', document)
                 // Refresh dashboard to show new claims
                 fetchDashboardData()
               }}
               onBatchUploadSuccess={(documents) => {
-                console.log('[Quick Actions] Batch expense claims uploaded:', documents)
                 // Refresh dashboard to show all new claims
                 fetchDashboardData()
               }}
               onUploadStart={() => {
-                console.log('[Quick Actions] Upload started')
+                // Upload started
               }}
             />
           </div>
@@ -850,7 +858,6 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
                   const result = await response.json()
 
                   if (response.ok && result.success) {
-                    console.log('Claim submitted successfully:', result.data.message)
                     fetchDashboardData() // Refresh data
                   } else {
                     console.error('Submit failed:', result.error)

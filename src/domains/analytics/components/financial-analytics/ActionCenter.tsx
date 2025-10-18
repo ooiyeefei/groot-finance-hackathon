@@ -53,8 +53,9 @@ export default function ActionCenter({
             t.status !== 'paid'
           ) || [];
 
+          // NOTE: 'awaiting_payment' status removed from system - using 'pending' instead
           const awaitingCount = data.transactions?.filter((t: AccountingEntry) =>
-            t.status === 'awaiting_payment'
+            t.status === 'pending'
           ).length || 0;
           
           setStatusBasedData({
@@ -64,7 +65,7 @@ export default function ActionCenter({
           });
         }
       } catch (error) {
-        console.error('Failed to fetch status-based analytics:', error);
+        // Error handled silently - status-based analytics are non-critical
       }
     };
 

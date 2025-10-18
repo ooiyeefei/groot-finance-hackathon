@@ -660,7 +660,7 @@ export function createServiceSupabaseClient() {
   )
 }
 
-// SECURITY: Proper Clerk+Supabase JWT integration following official docs
+// SECURITY: Proper Clerk+Supabase JWT integration
 export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
   const authenticatedClerkUserId = clerkUserId || (await auth()).userId
 
@@ -668,27 +668,18 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
     throw new Error('Authentication required')
   }
 
-  // Get Clerk JWT token for Supabase authentication
-  let jwtToken: string | null = null
-  try {
-    // In server components, we need to get the token differently
-    const { getToken } = await auth()
-    jwtToken = await getToken({ template: 'supabase' })
-  } catch (error) {
-    console.error('[Supabase Client] Failed to get Clerk JWT token:', error)
-    throw new Error('Failed to authenticate with Clerk')
-  }
+  // Get JWT token from Clerk
+  const { getToken } = await auth()
+  const jwtToken = await getToken({ template: 'supabase' })
 
   if (!jwtToken) {
     throw new Error('No JWT token available')
   }
 
-  // JWT authentication configured for Clerk integration
-
-  // Create Supabase client with proper JWT authentication
+  // Create Supabase client with Clerk JWT
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // Use anon key, not JWT token
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       auth: {
         autoRefreshToken: false,
@@ -702,25 +693,23 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
         fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
           return fetch(url, {
             ...options,
-            signal: AbortSignal.timeout(10000) // 10 second timeout for user operations
+            signal: AbortSignal.timeout(10000) // 10 second timeout
           })
         }
       }
     }
   )
 
-  // 🔧 CRITICAL FIX: Set the session with JWT token for RPC functions to access claims
+  // Set the session with the JWT token
   await supabase.auth.setSession({
     access_token: jwtToken,
-    refresh_token: '' // Empty refresh token since we don't use it
+    refresh_token: 'placeholder_refresh_token' // Clerk manages the actual refresh
   })
-
-  // JWT session configured for RPC access
 
   return supabase
 }
 
-// HYBRID: Multi-tenant Supabase client with database-first business context + caching
+// HYBRID: Multi-tenant Supabase client with database-first business context
 export async function createBusinessContextSupabaseClient(clerkUserId?: string) {
   const authenticatedClerkUserId = clerkUserId || (await auth()).userId
 
@@ -728,7 +717,6 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
     throw new Error('Authentication required')
   }
 
-  // HYBRID APPROACH: Database is single source of truth with application layer caching
   console.log(`[BusinessContext] Getting business context for user: ${authenticatedClerkUserId}`)
 
   try {
@@ -744,21 +732,15 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
 
     console.log(`[BusinessContext] ✅ Using business context: ${activeBusinessId}`)
 
-    // HYBRID: Use Clerk JWT authentication for RPC functions
-    let jwtToken: string | null = null
-    try {
-      const { getToken } = await auth()
-      jwtToken = await getToken({ template: 'supabase' })
-    } catch (error) {
-      console.error('[BusinessContext] Failed to get Clerk JWT token:', error)
-      throw new Error('Failed to authenticate with Clerk')
-    }
+    // Get JWT token from Clerk
+    const { getToken } = await auth()
+    const jwtToken = await getToken({ template: 'supabase' })
 
     if (!jwtToken) {
       throw new Error('No JWT token available')
     }
 
-    // Create authenticated Supabase client with Clerk JWT
+    // Create Supabase client with Clerk JWT
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -771,18 +753,24 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
         global: {
           headers: {
             Authorization: `Bearer ${jwtToken}`
+          },
+          fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
+            return fetch(url, {
+              ...options,
+              signal: AbortSignal.timeout(10000) // 10 second timeout
+            })
           }
         }
       }
     )
 
-    // Set the session with JWT token for RPC functions to access claims
+    // Set the session with the JWT token
     await supabase.auth.setSession({
       access_token: jwtToken,
-      refresh_token: ''
+      refresh_token: 'placeholder_refresh_token' // Clerk manages the actual refresh
     })
 
-    // Validate business membership (no session variables needed with direct filtering)
+    // Validate business membership using RPC for secure tenant context
     console.log(`[BusinessContext] Validating business membership for: ${activeBusinessId}`)
 
     const { error: rpcError } = await supabase.rpc('set_tenant_context', { p_business_id: activeBusinessId })
@@ -854,8 +842,6 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
     }
 
     console.log(`[BusinessContext] ✅ Business membership validated for: ${activeBusinessId}`)
-
-    // Business context validated (database + cache + JWT)
 
     return supabase
 

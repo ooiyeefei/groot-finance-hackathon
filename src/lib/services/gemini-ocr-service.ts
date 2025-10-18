@@ -689,8 +689,8 @@ export class GeminiOCRService {
               error: 'Invalid or missing Gemini API key',
               error_type: 'auth_error',
               debug_info: {
-                totalProcessingTime: totalTime,
-                hasApiKey: !!process.env.GEMINI_API_KEY
+                totalProcessingTime: totalTime
+                // SECURITY FIX: Removed API key existence check to prevent information disclosure
               }
             },
             processing_time_ms: totalTime
