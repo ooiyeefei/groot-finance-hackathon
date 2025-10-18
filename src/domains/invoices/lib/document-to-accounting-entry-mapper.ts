@@ -58,7 +58,7 @@ interface DocumentData {
     document_number?: string
     line_items?: any[]
 
-    // Legacy support (for backward compatibility)
+    // Legacy support
     entities?: ExtractedEntity[]
     document_summary?: {
       vendor_name?: {
@@ -132,7 +132,7 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
 
   const mappedData: Partial<CreateAccountingEntryRequest> = {}
 
-  // Helper function to find entity by type (for legacy format)
+  // Find entity by type (legacy format)
   const findEntity = (types: string[]) => {
     if (!document.extracted_data?.entities) return null;
     return document.extracted_data.entities.find(entity =>
@@ -143,7 +143,7 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
     )
   }
 
-  // Helper function to parse amount from string or number
+  // Parse amount from string or number
   const parseAmount = (value: string | number | undefined | null): number => {
     if (value === null || value === undefined || value === '') {
       return 0;
@@ -161,7 +161,7 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
     return isNaN(parsed) ? 0 : parsed;
   }
 
-  // Helper function to detect currency from text
+  // Detect currency from text
   const detectCurrency = (text: string): SupportedCurrency => {
     const textLower = text.toLowerCase()
 
@@ -176,10 +176,10 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
     if (textLower.includes('eur') || textLower.includes('€') || textLower.includes('euro')) return 'EUR'
     if (textLower.includes('inr') || textLower.includes('₹') || textLower.includes('india') || textLower.includes('rupee')) return 'INR'
 
-    return 'USD' // Default fallback
+    return 'USD'
   }
 
-  // Helper function to parse and format date
+  // Parse and format date
   const parseDate = (dateStr: string): string => {
     try {
       // Try various date formats
@@ -202,17 +202,16 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
         return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
       }
 
-      // Return today's date as fallback
+      // Fallback to today's date
       return new Date().toISOString().split('T')[0]
     } catch {
       return new Date().toISOString().split('T')[0]
     }
   }
 
-  // Note: Category determination now handled by AI pipeline with business-defined categories
-  // Fallback function for when no AI category is available
+  // Fallback category when no AI category available
   const getDefaultCategoryForInvoice = (): string => {
-    // Default to 'direct_cost' for invoices as it's most appropriate for supplier invoices
+    // Default to 'direct_cost' for supplier invoices
     return 'direct_cost'
   }
 

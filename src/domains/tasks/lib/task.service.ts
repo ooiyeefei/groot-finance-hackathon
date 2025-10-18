@@ -1,23 +1,11 @@
 /**
  * Task Service Layer
- *
- * Business logic for background task status tracking:
- * - Trigger.dev task status polling
- * - Document processing status queries
- * - AI extraction progress tracking
- *
- * North Star Architecture:
- * - All business logic centralized in service layer
- * - API routes are thin wrappers handling HTTP concerns
- *
- * Use Case:
- * - Frontend polls for background job completion
- * - Links to DSPy extraction, PDF conversion, OCR processing
+ * Business logic for background task status tracking and document processing queries
  */
 
 import { createAuthenticatedSupabaseClient } from '@/lib/db/supabase-server'
 
-// ===== TYPE DEFINITIONS =====
+// Type Definitions
 
 export interface TaskStatusResult {
   task_id: string
@@ -33,18 +21,9 @@ export interface TaskStatusResult {
   error?: string
 }
 
-// ===== CORE SERVICE FUNCTIONS =====
-
 /**
- * Get Task Status
- *
- * Checks document processing status by task ID.
- * Maps document processing status to task status for frontend polling.
- *
- * @param taskId - Trigger.dev task ID stored in document processing_metadata
- * @param userId - Clerk user ID for authentication
- * @returns Task status with processing details
- * @throws Error if task not found or database query fails
+ * Get task status by checking document processing status
+ * Maps document processing status to task status for frontend polling
  */
 export async function getTaskStatus(taskId: string, userId: string): Promise<TaskStatusResult> {
   if (!taskId) {

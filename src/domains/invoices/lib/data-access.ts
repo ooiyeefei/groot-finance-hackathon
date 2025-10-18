@@ -5,6 +5,11 @@ import { processDocumentOCR } from "@/trigger/process-document-ocr"
 import { convertPdfToImage } from "@/trigger/convert-pdf-to-image"
 import { randomUUID } from 'crypto'
 import { generateStoragePath, type DocumentType } from '@/lib/storage-paths'
+import {
+  validateSearchParameter,
+  createSafeILikePattern,
+  logSuspiciousSearch
+} from '@/lib/security/search-validator'
 
 export interface InvoiceFilters {
   search?: string;
@@ -100,9 +105,19 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
     query = query.lte('created_at', filters.date_to)
   }
 
-  // Apply search filter (search in file_name)
+  // Apply search filter (search in file_name) with security validation
   if (filters.search) {
-    query = query.ilike('file_name', `%${filters.search}%`)
+    const searchValidation = validateSearchParameter(filters.search, 100)
+
+    if (!searchValidation.isValid) {
+      // Log suspicious search attempt
+      logSuspiciousSearch(filters.search, userData.id)
+      throw new Error(`Invalid search parameter: ${searchValidation.error}`)
+    }
+
+    // Use safe ILIKE pattern to prevent SQL injection
+    const safePattern = createSafeILikePattern(searchValidation.sanitizedValue)
+    query = query.ilike('file_name', safePattern)
   }
 
   // Apply pagination
@@ -178,7 +193,17 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
     totalQuery = totalQuery.lte('created_at', filters.date_to)
   }
   if (filters.search) {
-    totalQuery = totalQuery.ilike('file_name', `%${filters.search}%`)
+    const searchValidation = validateSearchParameter(filters.search, 100)
+
+    if (!searchValidation.isValid) {
+      // Log suspicious search attempt
+      logSuspiciousSearch(filters.search, userData.id)
+      throw new Error(`Invalid search parameter: ${searchValidation.error}`)
+    }
+
+    // Use safe ILIKE pattern to prevent SQL injection
+    const safePattern = createSafeILikePattern(searchValidation.sanitizedValue)
+    totalQuery = totalQuery.ilike('file_name', safePattern)
   }
 
   const { count: totalCount } = await totalQuery
@@ -254,32 +279,176 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
     }
   }
 
-  // Magic byte validation for security
+  // Check minimum file size (prevent empty files or header-only attacks)
+  const minSize = 100 // 100 bytes minimum
+  if (file.size < minSize) {
+    return {
+      isValid: false,
+      error: 'File is too small or corrupted.'
+    }
+  }
+
+  // Comprehensive file content validation for security
   const buffer = await file.arrayBuffer()
   const uint8Array = new Uint8Array(buffer)
+  const fileSize = buffer.byteLength
 
-  // Check PDF magic bytes
+  // Validate PDF files with comprehensive checks
   if (file.type === 'application/pdf') {
+    // Check PDF magic bytes
     const pdfMagic = [0x25, 0x50, 0x44, 0x46] // %PDF
-    const matches = pdfMagic.every((byte, index) => uint8Array[index] === byte)
-    if (!matches) {
+    const hasPdfHeader = pdfMagic.every((byte, index) => uint8Array[index] === byte)
+
+    if (!hasPdfHeader) {
       return {
         isValid: false,
-        error: 'Invalid PDF file format'
+        error: 'Invalid PDF file format - missing PDF header'
+      }
+    }
+
+    // Check for PDF version after %PDF
+    if (fileSize > 8) {
+      const versionByte = uint8Array[5]
+      if (versionByte < 0x30 || versionByte > 0x39) { // ASCII '0' to '9'
+        return {
+          isValid: false,
+          error: 'Invalid PDF version format'
+        }
+      }
+    }
+
+    // Look for %%EOF at the end of file (within last 1024 bytes)
+    const searchStart = Math.max(0, fileSize - 1024)
+    const endSection = uint8Array.slice(searchStart)
+    const eofMarker = [0x25, 0x25, 0x45, 0x4F, 0x46] // %%EOF
+    let hasEofMarker = false
+
+    for (let i = 0; i <= endSection.length - eofMarker.length; i++) {
+      if (eofMarker.every((byte, index) => endSection[i + index] === byte)) {
+        hasEofMarker = true
+        break
+      }
+    }
+
+    if (!hasEofMarker) {
+      return {
+        isValid: false,
+        error: 'Invalid PDF file - missing EOF marker'
       }
     }
   }
 
-  // Check image magic bytes
+  // Validate image files with comprehensive checks
   if (file.type.startsWith('image/')) {
-    const isJPEG = uint8Array[0] === 0xFF && uint8Array[1] === 0xD8
-    const isPNG = uint8Array[0] === 0x89 && uint8Array[1] === 0x50 && uint8Array[2] === 0x4E && uint8Array[3] === 0x47
-    const isWebP = uint8Array[8] === 0x57 && uint8Array[9] === 0x45 && uint8Array[10] === 0x42 && uint8Array[11] === 0x50
+    let isValidImage = false
+    let errorMessage = 'Invalid image file format'
 
-    if (!isJPEG && !isPNG && !isWebP) {
+    // JPEG validation
+    if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
+      // Check JPEG SOI (Start of Image) marker
+      const hasJpegStart = uint8Array[0] === 0xFF && uint8Array[1] === 0xD8
+
+      // Check JPEG EOI (End of Image) marker at the end
+      const hasJpegEnd = fileSize >= 2 &&
+        uint8Array[fileSize - 2] === 0xFF &&
+        uint8Array[fileSize - 1] === 0xD9
+
+      if (hasJpegStart && hasJpegEnd) {
+        isValidImage = true
+      } else {
+        errorMessage = 'Invalid JPEG file - missing start or end markers'
+      }
+    }
+
+    // PNG validation
+    else if (file.type === 'image/png') {
+      // Check PNG signature (8 bytes)
+      const pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+      const hasPngSignature = pngSignature.every((byte, index) => uint8Array[index] === byte)
+
+      // Check for IHDR chunk (must be first chunk after signature)
+      if (hasPngSignature && fileSize > 16) {
+        const ihdrMarker = [0x49, 0x48, 0x44, 0x52] // 'IHDR'
+        const hasIhdr = ihdrMarker.every((byte, index) => uint8Array[12 + index] === byte)
+
+        // Check for IEND chunk at the end
+        const iendMarker = [0x49, 0x45, 0x4E, 0x44] // 'IEND'
+        let hasIend = false
+        for (let i = fileSize - 12; i >= Math.max(0, fileSize - 100); i--) {
+          if (iendMarker.every((byte, index) => uint8Array[i + index] === byte)) {
+            hasIend = true
+            break
+          }
+        }
+
+        if (hasIhdr && hasIend) {
+          isValidImage = true
+        } else {
+          errorMessage = 'Invalid PNG file - missing required chunks'
+        }
+      } else {
+        errorMessage = 'Invalid PNG file - malformed header'
+      }
+    }
+
+    // WebP validation
+    else if (file.type === 'image/webp') {
+      // Check RIFF container
+      const riffHeader = [0x52, 0x49, 0x46, 0x46] // 'RIFF'
+      const webpMarker = [0x57, 0x45, 0x42, 0x50] // 'WEBP'
+
+      const hasRiffHeader = fileSize >= 12 &&
+        riffHeader.every((byte, index) => uint8Array[index] === byte)
+      const hasWebpMarker = fileSize >= 12 &&
+        webpMarker.every((byte, index) => uint8Array[8 + index] === byte)
+
+      if (hasRiffHeader && hasWebpMarker) {
+        isValidImage = true
+      } else {
+        errorMessage = 'Invalid WebP file - malformed RIFF container'
+      }
+    }
+
+    if (!isValidImage) {
       return {
         isValid: false,
-        error: 'Invalid image file format'
+        error: errorMessage
+      }
+    }
+  }
+
+  // Additional security checks for all file types
+
+  // Check for embedded executables (PE header)
+  if (fileSize > 64) {
+    // Look for MZ header (PE executables) - common in malicious files
+    for (let i = 0; i < Math.min(fileSize - 2, 1024); i++) {
+      if (uint8Array[i] === 0x4D && uint8Array[i + 1] === 0x5A) { // 'MZ'
+        return {
+          isValid: false,
+          error: 'File contains executable code and is not allowed'
+        }
+      }
+    }
+  }
+
+  // Check for suspicious script patterns in the first 2KB
+  const searchLength = Math.min(fileSize, 2048)
+  const searchBytes = uint8Array.slice(0, searchLength)
+  const suspiciousPatterns = [
+    [0x3C, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74], // '<script'
+    [0x6A, 0x61, 0x76, 0x61, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74], // 'javascript'
+    [0x3C, 0x69, 0x66, 0x72, 0x61, 0x6D, 0x65], // '<iframe'
+    [0x3C, 0x6F, 0x62, 0x6A, 0x65, 0x63, 0x74] // '<object'
+  ]
+
+  for (const pattern of suspiciousPatterns) {
+    for (let i = 0; i <= searchLength - pattern.length; i++) {
+      if (pattern.every((byte, index) => searchBytes[i + index] === byte)) {
+        return {
+          isValid: false,
+          error: 'File contains suspicious content and is not allowed'
+        }
       }
     }
   }

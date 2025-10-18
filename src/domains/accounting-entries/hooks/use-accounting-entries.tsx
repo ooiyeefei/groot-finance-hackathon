@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useInfiniteQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   AccountingEntry,
@@ -126,10 +126,11 @@ export function useAccountingEntries(filters: AccountingEntryFilters = {}): UseA
   const [deleting, setDeleting] = useState(new Set<string>());
 
   // Merge user filters with defaults to ensure consistent sorting
-  const mergedFilters = {
+  // Memoize to prevent unnecessary query refetches due to object reference changes
+  const mergedFilters = useMemo(() => ({
     ...DEFAULT_FILTERS,
     ...filters
-  };
+  }), [filters]);
 
   // TanStack Query useInfiniteQuery for transactions with server-side filtering
   const {

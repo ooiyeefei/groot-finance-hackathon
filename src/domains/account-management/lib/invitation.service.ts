@@ -1,11 +1,6 @@
 /**
  * Invitation Service Layer
- * Handles business logic for invitation acceptance and management
- *
- * Functions:
- * - validateInvitation() - Validate invitation token and return invitation details
- * - acceptInvitation() - Accept invitation and associate user with business
- * - resendInvitation() - Resend invitation email with new token
+ * Handles invitation validation, acceptance, and management
  */
 
 import { createServiceSupabaseClient } from '@/lib/db/supabase-server'
@@ -14,17 +9,16 @@ import { syncRoleToClerk } from '@/domains/security/lib/rbac'
 import { emailService } from '@/lib/services/email-service'
 
 /**
- * Validate invitation token and return invitation details
- * Used for frontend validation before user signs up/in
+ * Validate invitation token and return details for frontend display
  */
 export async function validateInvitation(
   token: string
 ): Promise<{ success: boolean; invitation: { email: string; role: string; businessName: string }; error?: string }> {
   try {
-    // Step 1: Validate token format and decode
+    // Validate token and decode
     const tokenData = await _validateInvitationToken(token)
 
-    // Step 2: Get business name for display
+    // Get business name for display
     const supabase = createServiceSupabaseClient()
     const { data: business } = await supabase
       .from('businesses')
@@ -32,7 +26,7 @@ export async function validateInvitation(
       .eq('id', tokenData.businessId)
       .single()
 
-    // Step 3: Return invitation details for frontend display
+    // Return invitation details
     return {
       success: true,
       invitation: {
@@ -52,15 +46,14 @@ export async function validateInvitation(
 }
 
 /**
- * Accept invitation and associate authenticated user with business
- * Primary entry point for invitation acceptance workflow
+ * Accept invitation and associate user with business
  */
 export async function acceptInvitation(
   token: string,
   clerkUserId: string,
   fullName?: string
 ): Promise<{ success: boolean; message: string; profile?: any; alreadyProcessed?: boolean; crossBusiness?: boolean }> {
-  // Step 1: Validate token
+  // Validate token
   const tokenData = await _validateInvitationToken(token)
 
   // Step 2: Get and validate invitation record
@@ -115,7 +108,7 @@ async function _validateInvitationToken(token: string): Promise<{
 }> {
   // Check if this is a legacy UUID token or new secure token
   if (isLegacyUuidToken(token)) {
-    console.log('[Invitation Service] Processing legacy UUID token')
+    // Processing legacy UUID token
 
     const supabase = createServiceSupabaseClient()
 
@@ -156,7 +149,7 @@ async function _validateInvitationToken(token: string): Promise<{
     }
 
   } else {
-    console.log('[Invitation Service] Processing JWT token')
+    // Processing JWT token
 
     // Handle JWT token
     const tokenValidation = await validateInvitationToken(token)
@@ -224,7 +217,7 @@ async function _getAndValidateInvitation(
 
   // If user recovery already processed this invitation, return early
   if (isUserRecoveryProcessed) {
-    console.log(`[Invitation Service] User recovery already processed invitation for ${invitation.email}`)
+    // User recovery already processed invitation
     return {
       invitation,
       membershipRole: 'employee',
@@ -311,7 +304,7 @@ async function _updateUserAndMembership(
 
   // FLOW 1 & 2: Existing user (cross-business or re-invitation)
   if (existingUserRecord && existingUserRecord.id !== invitation.id) {
-    console.log(`[Invitation Service] Found existing user ${existingUserRecord.id} for ${tokenData.email}`)
+    // Found existing user for cross-business invitation
 
     // Check if this is a re-invitation to the same business
     const { data: existingMembership } = await supabase
@@ -323,7 +316,7 @@ async function _updateUserAndMembership(
 
     if (existingMembership) {
       // FLOW 1: Same-business re-invitation - reactivate existing membership
-      console.log('[Invitation Service] Same-business re-invitation detected - reactivating existing membership')
+      // Same-business re-invitation detected - reactivating existing membership
 
       const { data: membership, error: membershipError } = await supabase
         .from('business_memberships')
@@ -366,7 +359,7 @@ async function _updateUserAndMembership(
 
     } else {
       // FLOW 2: Cross-business invitation - create new membership for existing user
-      console.log(`[Invitation Service] Cross-business invitation detected for existing user ${existingUserRecord.id}`)
+      // Cross-business invitation detected for existing user
 
       const { data: membership, error: membershipError } = await supabase
         .from('business_memberships')
@@ -423,7 +416,7 @@ async function _updateUserAndMembership(
   }
 
   // FLOW 3: New user - update invitation record and activate membership
-  console.log('[Invitation Service] Processing new user invitation')
+  // Processing new user invitation
 
   // Determine full name
   let finalFullName = null
@@ -571,7 +564,7 @@ export async function resendInvitation(
     throw new Error('Failed to send invitation email')
   }
 
-  console.log(`[Invitation Service] Invitation resent: ${invitation.email} → ${businessId}`)
+  // Invitation resent successfully
 
   return {
     success: true,

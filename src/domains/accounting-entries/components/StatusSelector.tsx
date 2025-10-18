@@ -2,66 +2,44 @@
 
 import { useState } from 'react'
 import { Check, ChevronDown, Clock, CheckCircle, XCircle, AlertCircle, CreditCard, Ban } from 'lucide-react'
+import { TRANSACTION_STATUSES, TransactionStatus } from '@/domains/accounting-entries/constants/transaction-status'
 
 interface StatusSelectorProps {
   accountingEntryId: string
-  currentStatus: string | null
-  onStatusUpdate?: (newStatus: string) => void
+  currentStatus: TransactionStatus | null
+  onStatusUpdate?: (newStatus: TransactionStatus) => void
   className?: string
 }
 
-interface StatusOption {
-  value: string
-  label: string
+// Status option interface with icon and styling
+interface StatusOptionDisplay {
   icon: React.ComponentType<{ className?: string }>
   className: string
-  description: string
 }
 
-const STATUS_OPTIONS: StatusOption[] = [
-  {
-    value: 'pending',
-    label: 'Pending',
+// Map status values to display properties (icons, colors)
+const STATUS_DISPLAY_CONFIG: Record<TransactionStatus, StatusOptionDisplay> = {
+  pending: {
     icon: Clock,
-    className: 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50',
-    description: 'Transaction is being processed'
+    className: 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50'
   },
-  {
-    value: 'awaiting_payment',
-    label: 'Awaiting Payment',
-    icon: CreditCard,
-    className: 'bg-blue-900/20 text-blue-300 border-blue-700/50',
-    description: 'Waiting for payment to be received'
-  },
-  {
-    value: 'paid',
-    label: 'Paid',
+  paid: {
     icon: CheckCircle,
-    className: 'bg-green-900/20 text-green-300 border-green-700/50',
-    description: 'Payment has been completed'
+    className: 'bg-green-900/20 text-green-300 border-green-700/50'
   },
-  {
-    value: 'overdue',
-    label: 'Overdue',
+  overdue: {
     icon: AlertCircle,
-    className: 'bg-red-900/20 text-red-300 border-red-700/50',
-    description: 'Payment is past due date'
+    className: 'bg-red-900/20 text-red-300 border-red-700/50'
   },
-  {
-    value: 'cancelled',
-    label: 'Cancelled',
+  cancelled: {
     icon: Ban,
-    className: 'bg-gray-900/20 text-gray-300 border-gray-700/50',
-    description: 'Transaction has been cancelled'
+    className: 'bg-gray-900/20 text-gray-300 border-gray-700/50'
   },
-  {
-    value: 'disputed',
-    label: 'Disputed',
+  disputed: {
     icon: XCircle,
-    className: 'bg-orange-900/20 text-orange-300 border-orange-700/50',
-    description: 'Payment is being disputed'
+    className: 'bg-orange-900/20 text-orange-300 border-orange-700/50'
   }
-]
+}
 
 export default function StatusSelector({
   accountingEntryId,
@@ -72,11 +50,14 @@ export default function StatusSelector({
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
-  const currentStatusConfig = STATUS_OPTIONS.find(
+  // Get current status configuration from centralized constants
+  const currentStatusOption = TRANSACTION_STATUSES.find(
     opt => opt.value === currentStatus
-  ) || STATUS_OPTIONS[0] // Default to pending if not found
+  ) || TRANSACTION_STATUSES[0] // Default to pending if not found
 
-  const handleStatusSelect = async (newStatus: string) => {
+  const currentStatusDisplay = STATUS_DISPLAY_CONFIG[currentStatusOption.value]
+
+  const handleStatusSelect = async (newStatus: TransactionStatus) => {
     setIsLoading(true)
     try {
       const response = await fetch(`/api/v1/accounting-entries/${accountingEntryId}/status`, {
@@ -93,8 +74,7 @@ export default function StatusSelector({
       }
 
       const result = await response.json()
-      console.log('Status updated successfully:', result)
-      
+
       // Call parent callback if provided
       onStatusUpdate?.(newStatus)
       
@@ -107,7 +87,7 @@ export default function StatusSelector({
     }
   }
 
-  const CurrentIcon = currentStatusConfig.icon
+  const CurrentIcon = currentStatusDisplay.icon
 
   return (
     <div className={`relative ${className}`}>
@@ -116,13 +96,13 @@ export default function StatusSelector({
         onClick={() => setIsOpen(!isOpen)}
         disabled={isLoading}
         className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-md border border-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-32"
-        aria-label={`Change status from ${currentStatusConfig.label}`}
+        aria-label={`Change status from ${currentStatusOption.label}`}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
-        <CurrentIcon className={`w-4 h-4 ${currentStatusConfig.className.split(' ').find(c => c.startsWith('text-')) || 'text-gray-400'}`} />
+        <CurrentIcon className={`w-4 h-4 ${currentStatusDisplay.className.split(' ').find(c => c.startsWith('text-')) || 'text-gray-400'}`} />
         <span className="text-gray-200 max-w-24 truncate">
-          {isLoading ? 'Updating...' : currentStatusConfig.label}
+          {isLoading ? 'Updating...' : currentStatusOption.label}
         </span>
         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -130,8 +110,8 @@ export default function StatusSelector({
       {/* Dropdown Menu */}
       {isOpen && (
         <div className="absolute top-full mt-1 left-0 min-w-56 bg-gray-800 border border-gray-600 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto" role="listbox">
-          {STATUS_OPTIONS.map((statusOption) => {
-            const StatusIcon = statusOption.icon
+          {TRANSACTION_STATUSES.map((statusOption) => {
+            const StatusIcon = STATUS_DISPLAY_CONFIG[statusOption.value].icon
             return (
               <button
                 key={statusOption.value}

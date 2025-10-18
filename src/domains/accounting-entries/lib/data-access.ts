@@ -158,7 +158,8 @@ export async function createAccountingEntry(
       vendor_name,
       reference_number,
       line_items = [],
-      source_record_id
+      source_record_id,
+      source_document_type
     } = data
 
     // Validate required fields
@@ -189,6 +190,35 @@ export async function createAccountingEntry(
 
     const userData = await getUserData(userId)
     const supabase = await createBusinessContextSupabaseClient()
+
+    // DUPLICATE PREVENTION: Check if accounting entry already exists for this source document
+    if (source_record_id && source_document_type) {
+      const { data: existingEntry, error: existingError } = await supabase
+        .from('accounting_entries')
+        .select('id, description, original_amount, original_currency')
+        .eq('source_record_id', source_record_id)
+        .eq('source_document_type', source_document_type)
+        .eq('user_id', userData.id)
+        .is('deleted_at', null)
+        .single()
+
+      if (existingEntry) {
+        console.log(`[Accounting Entries Data Access] Duplicate prevention: Entry already exists for ${source_document_type} ${source_record_id}:`, existingEntry)
+        return {
+          success: false,
+          error: `An accounting entry already exists for this ${source_document_type}. Description: "${existingEntry.description}" (${existingEntry.original_amount} ${existingEntry.original_currency})`
+        }
+      } else if (existingError && existingError.code !== 'PGRST116') {
+        // PGRST116 is "no rows found" which is expected, any other error is concerning
+        console.error(`[Accounting Entries Data Access] Error checking for duplicates:`, existingError)
+        return {
+          success: false,
+          error: 'Failed to verify duplicate entries'
+        }
+      }
+
+      console.log(`[Accounting Entries Data Access] No duplicate found for ${source_document_type} ${source_record_id}, proceeding with creation`)
+    }
 
     // Ensure user has a business_id for category validation
     if (!userData.business_id) {
@@ -266,6 +296,7 @@ export async function createAccountingEntry(
         user_id: userData.id,
         business_id: userData.business_id,
         source_record_id: source_record_id || null,
+        source_document_type: source_document_type || null,
         transaction_type,
         category: finalCategory,
         subcategory: finalSubcategory,

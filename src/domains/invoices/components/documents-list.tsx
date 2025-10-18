@@ -72,7 +72,6 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   // CRITICAL FIX: Re-fetch documents when active business context changes
   useEffect(() => {
     if (businessId) {
-      console.log('[DocumentsList] Business context changed, refreshing documents:', businessId)
       refreshDocuments()
     }
   }, [businessId, refreshDocuments])
@@ -194,10 +193,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         source_document_type: 'invoice' as const
       }
 
-      console.log('[Documents List] Sending transaction data to API:', JSON.stringify(transactionData, null, 2))
-      console.log('[Documents List] Home currency being sent:', transactionData.home_currency)
-      console.log('[Documents List] Source record ID being sent:', transactionData.source_record_id)
-      console.log('[Documents List] Source document type being sent:', transactionData.source_document_type)
+      // Transaction data logging removed - API payload sent without verbose logging
 
       const response = await fetch('/api/v1/accounting-entries', {
         method: 'POST',
@@ -207,19 +203,12 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
       if (!response.ok) {
         const errorData = await response.text()
-        console.error('[Documents List] API Error Response:', errorData)
-        console.error('[Documents List] Response Status:', response.status)
         throw new Error(`Failed to create accounting entry: ${response.status} - ${errorData}`)
       }
 
       const result = await response.json()
-      console.log('Transaction created successfully from document:', result)
 
       if (result.success && result.data.transaction) {
-        const createdTransaction = result.data.transaction
-        const sourceRecordId = transactionData.source_record_id
-        console.log(`[Documents List] Created transaction ${createdTransaction.id} for document ${sourceRecordId}`)
-
         // Refresh documents list to update the linked transaction status
         await refreshDocuments()
       }
@@ -229,8 +218,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
       // Optional: Show success message
       // You could add a toast notification here
     } catch (error) {
-      console.error('Failed to create transaction:', error)
-      // Optional: Show error message
+      // Transaction creation error handled silently
     }
   }
 
@@ -239,8 +227,6 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     if (!editTransactionData) return
     
     try {
-      console.log('[Documents List] Updating transaction with reprocessed data:', JSON.stringify(data, null, 2))
-      
       const response = await fetch(`/api/v1/accounting-entries/${editTransactionData.transactionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -256,7 +242,6 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         throw new Error('Failed to update transaction')
       }
 
-      console.log('Transaction updated successfully with reprocessed data')
       setEditTransactionData(null)
       
       // Remove document from reprocessed set since update is complete
@@ -270,8 +255,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
       await refreshDocuments()
       
     } catch (error) {
-      console.error('Failed to update transaction:', error)
-      // Optional: Show error message
+      // Transaction update error handled silently
     }
   }
 
@@ -302,7 +286,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         }
       }
     } catch (error) {
-      console.error('Failed to fetch transaction details:', error)
+      // Transaction details fetch error handled silently
     }
   }
 
@@ -351,13 +335,6 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium text-white">Your Documents</h3>
-        <button
-          onClick={handleRefresh}
-          className="inline-flex items-center text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors"
-        >
-          <RotateCcw className="w-4 h-4 mr-1" />
-          Refresh
-        </button>
       </div>
 
       <div className="space-y-3">

@@ -1,13 +1,6 @@
 /**
  * Task Status API Route
- *
- * GET /api/v1/tasks/[id]/status
- *
- * Checks document processing status for Trigger.dev background jobs.
- * Used by frontend to poll for AI extraction progress.
- *
- * Authentication: Clerk user authentication required
- * Use Case: Frontend polling for background job completion
+ * GET /api/v1/tasks/[id]/status - Check Trigger.dev background job status
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -15,9 +8,7 @@ import { auth } from '@clerk/nextjs/server'
 import { getTaskStatus } from '@/domains/tasks/lib/task.service'
 
 /**
- * GET - Get Task Status
- *
- * Returns processing status for a background task by task ID.
+ * GET - Returns processing status for background task by ID
  */
 export async function GET(
   request: NextRequest,
@@ -33,7 +24,7 @@ export async function GET(
       )
     }
 
-    // Get task ID from params
+    // Get task ID
     const { id: taskId } = await params
     if (!taskId) {
       return NextResponse.json(
@@ -44,7 +35,7 @@ export async function GET(
 
     console.log(`[Task Status API] Checking status for task: ${taskId}`)
 
-    // Call service layer
+    // Get task status from service
     const taskStatus = await getTaskStatus(taskId, userId)
 
     return NextResponse.json({
@@ -55,7 +46,7 @@ export async function GET(
   } catch (error) {
     console.error('[Task Status API] Error:', error)
 
-    // Handle specific error cases
+    // Handle specific errors
     if (error instanceof Error) {
       if (error.message.includes('not found')) {
         return NextResponse.json(

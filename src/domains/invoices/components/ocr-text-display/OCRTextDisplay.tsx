@@ -198,8 +198,72 @@ export default function OCRTextDisplay({
   )
 
   const renderRawTextView = () => {
-    const highlightedText = InvoiceTextParser.highlightText(rawText, defaultHighlightConfig)
-    
+    // SECURITY FIX: Use safe text rendering instead of dangerouslySetInnerHTML
+    const renderHighlightedText = (text: string) => {
+      // Parse the text and render with safe React elements instead of raw HTML
+      const patterns = [
+        {
+          regex: /(?:RM|USD|SGD|MYR|THB|IDR|PHP|EUR|CNY|VND)?\s*[\$]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g,
+          color: defaultHighlightConfig.amounts,
+          type: 'amount'
+        },
+        {
+          regex: /\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}/g,
+          color: defaultHighlightConfig.dates,
+          type: 'date'
+        },
+        {
+          regex: /(?:I-|INV|RECEIPT)[A-Z0-9\-\/]+/gi,
+          color: defaultHighlightConfig.identifiers,
+          type: 'identifier'
+        }
+      ];
+
+      // Split text by patterns to create safe React elements
+      let parts: (string | React.ReactElement)[] = [text];
+      let keyCounter = 0;
+
+      patterns.forEach(pattern => {
+        const newParts: (string | React.ReactElement)[] = [];
+        parts.forEach(part => {
+          if (typeof part === 'string') {
+            const matches = [...part.matchAll(pattern.regex)];
+            if (matches.length === 0) {
+              newParts.push(part);
+              return;
+            }
+
+            let lastIndex = 0;
+            matches.forEach(match => {
+              // Add text before match
+              if (match.index! > lastIndex) {
+                newParts.push(part.slice(lastIndex, match.index));
+              }
+              // Add highlighted match as safe React element
+              newParts.push(
+                <span
+                  key={`highlight-${keyCounter++}`}
+                  style={{ color: pattern.color, fontWeight: 600 }}
+                >
+                  {match[0]}
+                </span>
+              );
+              lastIndex = match.index! + match[0].length;
+            });
+            // Add remaining text
+            if (lastIndex < part.length) {
+              newParts.push(part.slice(lastIndex));
+            }
+          } else {
+            newParts.push(part);
+          }
+        });
+        parts = newParts;
+      });
+
+      return parts;
+    };
+
     return (
       <div className="bg-gray-800/50 rounded-lg p-4">
         <h3 className="text-lg font-semibold text-white mb-3">Raw OCR Text</h3>
@@ -230,10 +294,9 @@ export default function OCRTextDisplay({
             </div>
           </div>
         ) : (
-          <div 
-            className="p-3 bg-gray-900 rounded-lg text-gray-300 font-mono text-sm whitespace-pre-wrap max-h-64 overflow-y-auto"
-            dangerouslySetInnerHTML={{ __html: highlightedText }}
-          />
+          <div className="p-3 bg-gray-900 rounded-lg text-gray-300 font-mono text-sm whitespace-pre-wrap max-h-64 overflow-y-auto">
+            {renderHighlightedText(rawText)}
+          </div>
         )}
       </div>
     )

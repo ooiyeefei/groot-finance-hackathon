@@ -87,7 +87,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   // CRITICAL FIX: Re-check permissions when business context changes
   useEffect(() => {
     if (businessId) {
-      console.log('[Teams Management] Business context changed, re-checking permissions:', businessId)
+      // Business context changed, re-checking permissions
       checkPermissions()
     }
   }, [businessId])
@@ -239,7 +239,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
     // manager_id is the manager's users.id, so we need to find which team member has that user_id
     const manager = teamMembers.find(m => m.user_id === member.manager_id)
-    console.log(`[Manager Dropdown] Employee: ${member.full_name}, manager_id: ${member.manager_id}, found manager: ${manager?.full_name}`)
+    // Manager dropdown assignment tracking
     return manager ? manager.user_id : 'none'
   }
 

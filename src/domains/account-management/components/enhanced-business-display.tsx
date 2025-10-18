@@ -2,16 +2,7 @@
 
 /**
  * Enhanced Business Display Component for Sidebar
- *
- * Combines business profile display (logo, name) with multi-tenant switching capability.
- * Designed specifically for sidebar integration to reduce header crowding.
- *
- * Features:
- * - Shows business logo/fallback and name
- * - Displays user role with ownership indicators
- * - Dropdown business switcher (only when multiple businesses available)
- * - Responsive behavior for expanded/collapsed sidebar states
- * - Integrates seamlessly with existing sidebar styling
+ * Combines business profile display with multi-tenant switching capability
  */
 
 import React from 'react'
@@ -35,9 +26,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-// ============================================================================
 // Role Badge Component
-// ============================================================================
 
 interface RoleBadgeProps {
   role: 'admin' | 'manager' | 'employee'
@@ -48,11 +37,11 @@ interface RoleBadgeProps {
 
 function RoleBadge({ role, isOwner, className, size = 'xs' }: RoleBadgeProps) {
   const getRoleColors = (role: string, isOwner: boolean) => {
-    if (isOwner) return 'bg-yellow-900/30 text-yellow-400 border-yellow-500/30' // Owner - dark theme
+    if (isOwner) return 'bg-yellow-900/30 text-yellow-400 border-yellow-500/30'
     switch (role) {
       case 'admin': return 'bg-purple-900/30 text-purple-400 border-purple-500/30'
       case 'manager': return 'bg-blue-900/30 text-blue-400 border-blue-500/30'
-      default: return 'bg-gray-700/50 text-gray-300 border-gray-600/50' // Employee - dark theme
+      default: return 'bg-gray-700/50 text-gray-300 border-gray-600/50'
     }
   }
 
@@ -77,9 +66,7 @@ function RoleBadge({ role, isOwner, className, size = 'xs' }: RoleBadgeProps) {
   )
 }
 
-// ============================================================================
-// Material Design Workspace Logo Component
-// ============================================================================
+// Workspace Logo Component
 
 interface WorkspaceLogoProps {
   businessProfile: any
@@ -88,7 +75,7 @@ interface WorkspaceLogoProps {
 }
 
 function WorkspaceLogo({ businessProfile, isHydrated, size = 'standard' }: WorkspaceLogoProps) {
-  // Material Design: Maximized logo sizes - 56px for standard, 48px for compact
+  // Logo sizes - 56px for standard, 48px for compact
   const dimensions = size === 'standard' ? { width: 56, height: 56, className: 'w-14 h-14' } : { width: 48, height: 48, className: 'w-12 h-12' }
   const { width, height, className } = dimensions
 
@@ -102,7 +89,7 @@ function WorkspaceLogo({ businessProfile, isHydrated, size = 'standard' }: Works
         alt="Workspace Logo"
         width={width}
         height={height}
-        className={cn(className, 'rounded-xl object-cover')} // Material Design: 12px border radius for squircle
+        className={cn(className, 'rounded-xl object-cover')}
       />
     )
   }
@@ -122,9 +109,7 @@ function WorkspaceLogo({ businessProfile, isHydrated, size = 'standard' }: Works
   )
 }
 
-// ============================================================================
 // Main Enhanced Business Display Component
-// ============================================================================
 
 interface EnhancedBusinessDisplayProps {
   isExpanded: boolean
@@ -155,11 +140,11 @@ export default function EnhancedBusinessDisplay({
   const handleBusinessSwitch = async (businessId: string) => {
     if (businessId === business?.businessId || isSwitching) return
 
-    console.log('[EnhancedBusinessDisplay] Switching to business:', businessId)
+    // Switching to business
 
     const success = await switchBusiness(businessId)
     if (success) {
-      console.log('[EnhancedBusinessDisplay] Successfully switched business')
+      // Successfully switched business
     } else {
       console.error('[EnhancedBusinessDisplay] Failed to switch business')
     }

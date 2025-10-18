@@ -22,9 +22,9 @@ draft → submitted → approved → reimbursed
 
 ## Approval Routing Logic
 
-### Enhanced Manager Hierarchy Routing
+### Manager Hierarchy Routing
 
-The system uses `business_memberships.manager_id` with intelligent fallback logic:
+Uses `business_memberships.manager_id` with intelligent fallback logic:
 
 ```mermaid
 flowchart TD
@@ -154,9 +154,7 @@ case 'approved':
   statusUpdateData.accounting_entry_id = accountingEntry.id
 ```
 
-## Enhanced Workflow Engine
-
-### Enterprise Features
+## Workflow Engine
 
 Location: `src/domains/expense-claims/lib/enhanced-workflow-engine.ts`
 

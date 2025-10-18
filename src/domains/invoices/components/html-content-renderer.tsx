@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Copy, Check } from 'lucide-react'
 
 interface HtmlContentRendererProps {
@@ -49,7 +49,7 @@ export default function HtmlContentRenderer({ content, className = '' }: HtmlCon
     }).filter(Boolean)
   }
 
-  // Sanitize and style HTML tables
+  // SECURITY FIX: Enhanced HTML sanitization for tables
   const sanitizeTable = (tableHtml: string) => {
     return tableHtml
       // Add Tailwind classes to table elements
@@ -59,25 +59,122 @@ export default function HtmlContentRenderer({ content, className = '' }: HtmlCon
       .replace(/<tr[^>]*>/gi, '<tr class="hover:bg-gray-700/50 transition-colors">')
       .replace(/<th[^>]*>/gi, '<th class="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">')
       .replace(/<td[^>]*>/gi, '<td class="px-3 py-2 text-sm text-gray-200">')
-      // Remove any potentially dangerous attributes
-      .replace(/on\w+="[^"]*"/gi, '')
-      .replace(/javascript:/gi, '')
+      // SECURITY: Remove all potentially dangerous content
+      .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '') // Remove all event handlers
+      .replace(/javascript\s*:/gi, '') // Remove javascript: URIs
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove script tags
+      .replace(/<link[^>]*>/gi, '') // Remove link tags
+      .replace(/<meta[^>]*>/gi, '') // Remove meta tags
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove style tags
+      .replace(/href\s*=\s*["']javascript:[^"']*["']/gi, '') // Remove javascript hrefs
+      .replace(/src\s*=\s*["']javascript:[^"']*["']/gi, '') // Remove javascript src
+      .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '') // Remove iframes
+      .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '') // Remove objects
+      .replace(/<embed[^>]*>/gi, '') // Remove embeds
+      .replace(/data\s*:\s*[^;]*;base64/gi, 'data:blocked') // Block data URIs
   }
 
-  // Render regular text content with basic markdown-like formatting
+  // SECURITY FIX: Safe markdown-like formatting without dangerouslySetInnerHTML
   const renderTextContent = (text: string) => {
-    // Handle basic markdown patterns
-    const formatted = text
-      // Bold text
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
-      // Italic text  
-      .replace(/\*(.*?)\*/g, '<em class="italic text-gray-300">$1</em>')
-      // Headers
-      .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-white mt-4 mb-2">$1</h3>')
-      .replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-white mt-4 mb-2">$1</h2>')
-      .replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-white mt-4 mb-2">$1</h1>')
+    // Split text into lines for processing
+    const lines = text.split('\n');
 
-    return <div dangerouslySetInnerHTML={{ __html: formatted }} />
+    return (
+      <div>
+        {lines.map((line, index) => {
+          // Handle headers
+          if (line.startsWith('### ')) {
+            return (
+              <h3 key={index} className="text-lg font-semibold text-white mt-4 mb-2">
+                {line.slice(4)}
+              </h3>
+            );
+          }
+          if (line.startsWith('## ')) {
+            return (
+              <h2 key={index} className="text-xl font-semibold text-white mt-4 mb-2">
+                {line.slice(3)}
+              </h2>
+            );
+          }
+          if (line.startsWith('# ')) {
+            return (
+              <h1 key={index} className="text-2xl font-bold text-white mt-4 mb-2">
+                {line.slice(2)}
+              </h1>
+            );
+          }
+
+          // Handle inline formatting (bold/italic)
+          const renderInlineFormatting = (text: string) => {
+            const parts: (string | React.ReactElement)[] = [];
+            let currentIndex = 0;
+            let partKey = 0;
+
+            // Find bold text (**text**)
+            const boldRegex = /\*\*(.*?)\*\*/g;
+            let match: RegExpExecArray | null;
+            const boldMatches: Array<{start: number, end: number, content: string, type: string}> = [];
+            while ((match = boldRegex.exec(text)) !== null) {
+              boldMatches.push({ start: match.index!, end: match.index! + match[0].length, content: match[1], type: 'bold' });
+            }
+
+            // Find italic text (*text*)
+            const italicRegex = /\*(.*?)\*/g;
+            const italicMatches: Array<{start: number, end: number, content: string, type: string}> = [];
+            while ((match = italicRegex.exec(text)) !== null) {
+              // Skip if this is part of a bold match
+              const isPartOfBold = boldMatches.some(bold => match!.index! >= bold.start && match!.index! < bold.end);
+              if (!isPartOfBold) {
+                italicMatches.push({ start: match.index!, end: match.index! + match[0].length, content: match[1], type: 'italic' });
+              }
+            }
+
+            // Combine and sort all matches
+            const allMatches = [...boldMatches, ...italicMatches].sort((a, b) => a.start - b.start);
+
+            // Build parts array
+            allMatches.forEach(match => {
+              // Add text before match
+              if (match.start > currentIndex) {
+                parts.push(text.slice(currentIndex, match.start));
+              }
+
+              // Add formatted match
+              if (match.type === 'bold') {
+                parts.push(
+                  <strong key={`bold-${partKey++}`} className="font-semibold text-white">
+                    {match.content}
+                  </strong>
+                );
+              } else if (match.type === 'italic') {
+                parts.push(
+                  <em key={`italic-${partKey++}`} className="italic text-gray-300">
+                    {match.content}
+                  </em>
+                );
+              }
+
+              currentIndex = match.end;
+            });
+
+            // Add remaining text
+            if (currentIndex < text.length) {
+              parts.push(text.slice(currentIndex));
+            }
+
+            return parts.length > 0 ? parts : [text];
+          };
+
+          // Return regular text with inline formatting
+          return (
+            <div key={index} className="text-gray-300">
+              {renderInlineFormatting(line)}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
   return (

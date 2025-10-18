@@ -54,8 +54,8 @@ const nextConfig = {
     },
   },
 
-  // Enable React StrictMode to catch potential issues early
-  reactStrictMode: true,
+  // Enable React StrictMode in production only - disabled in development to prevent confusing duplicate API calls
+  reactStrictMode: process.env.NODE_ENV !== 'development',
 };
 
 export default withNextIntl(nextConfig);

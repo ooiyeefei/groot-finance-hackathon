@@ -70,7 +70,7 @@ export default function BusinessProfileSettings() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfData.data.token
+          'X-CSRF-Token': csrfData.data.csrfToken
         },
         body: JSON.stringify({
           name: businessName.trim()

@@ -96,7 +96,7 @@ export default function DocumentPreviewWithAnnotations({
       const width = box.x2 - box.x1
       const height = box.y2 - box.y1
       
-      console.log(`[BBox] CSS-aware positioning: coords [${box.x1}%,${box.y1}%,${box.x2}%,${box.y2}%] → positioned at left:${left}%, top:${top}%, width:${width}%, height:${height}%`)
+      // CSS-aware positioning applied
       
       const isHovered = hoveredBox === box
       const color = '#3B82F6' // blue-500
@@ -126,7 +126,6 @@ export default function DocumentPreviewWithAnnotations({
     
     // Prevent division by zero
     if (naturalWidth === 0 || naturalHeight === 0) {
-      console.warn('[BBox] Natural image dimensions are zero, skipping bounding box')
       return {}
     }
     
@@ -146,7 +145,7 @@ export default function DocumentPreviewWithAnnotations({
     width = Math.min(width, displayWidth - left)
     height = Math.min(height, displayHeight - top)
     
-    console.log(`[BBox] Legacy pixel scaling: [${box.x1},${box.y1},${box.x2},${box.y2}] × [${scaleX.toFixed(3)},${scaleY.toFixed(3)}] → [${left.toFixed(1)},${top.toFixed(1)},${width.toFixed(1)},${height.toFixed(1)}]`)
+    // Legacy pixel scaling applied
     
     const isHovered = hoveredBox === box
     const color = '#3B82F6' // blue-500

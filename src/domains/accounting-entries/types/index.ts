@@ -81,7 +81,7 @@ export interface AccountingEntry {
   vendor_details?: Record<string, any>
   
   // Transaction status and workflow
-  status?: 'pending' | 'awaiting_payment' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
+  status?: 'pending' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
   due_date?: string // ISO date
   payment_date?: string // ISO date
   payment_method?: string
@@ -152,7 +152,7 @@ export interface CreateAccountingEntryRequest {
   vendor_name?: string // Legacy field for backward compatibility
   vendor_id?: string // NEW: Link to vendors table
   reference_number?: string
-  status?: 'pending' | 'awaiting_payment' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
+  status?: 'pending' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
   due_date?: string // ISO date
   payment_date?: string // ISO date
   payment_method?: string
