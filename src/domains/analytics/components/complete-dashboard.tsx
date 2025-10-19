@@ -1,15 +1,29 @@
 'use client';
 
-import { useState } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw, PiggyBank, CreditCard } from 'lucide-react';
+import { useState, Suspense, lazy } from 'react';
+import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw, PiggyBank, CreditCard, Loader2 } from 'lucide-react';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
 import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
-import CurrencyBreakdown from './financial-analytics/CurrencyBreakdown';
-import CategoryAnalysis from './financial-analytics/CategoryAnalysis';
-import ActionCenter from './financial-analytics/ActionCenter';
-import AgedReceivablesWidget from './AgedReceivablesWidget';
-import AgedPayablesWidget from './AgedPayablesWidget';
+
+// Lazy load heavy components to improve initial page load
+const CurrencyBreakdown = lazy(() => import('./financial-analytics/CurrencyBreakdown'));
+const CategoryAnalysis = lazy(() => import('./financial-analytics/CategoryAnalysis'));
+const ActionCenter = lazy(() => import('./financial-analytics/ActionCenter'));
+const AgedReceivablesWidget = lazy(() => import('./AgedReceivablesWidget'));
+const AgedPayablesWidget = lazy(() => import('./AgedPayablesWidget'));
+
+// Loading component for Suspense fallbacks
+const ComponentLoader = ({ title }: { title: string }) => (
+  <div className="bg-gray-800 border-gray-700 border rounded-lg p-6">
+    <div className="flex items-center justify-center h-32">
+      <div className="text-center">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-400 mx-auto mb-2" />
+        <p className="text-sm text-gray-400">Loading {title}...</p>
+      </div>
+    </div>
+  </div>
+);
 
 export default function CompleteDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
@@ -336,62 +350,72 @@ export default function CompleteDashboard() {
       {/* Charts and Analysis Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Aged Receivables - Priority placement for critical business metric */}
-        <AgedReceivablesWidget
-          agedReceivables={analytics?.aged_receivables || {
-            current: 0,
-            late_31_60: 0,
-            late_61_90: 0,
-            late_90_plus: 0,
-            total_outstanding: 0,
-            risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
-            average_risk_score: 0,
-            high_risk_transactions: 0
-          }}
-          homeCurrency={homeCurrency}
-          loading={loading}
-        />
+        <Suspense fallback={<ComponentLoader title="Aged Receivables" />}>
+          <AgedReceivablesWidget
+            agedReceivables={analytics?.aged_receivables || {
+              current: 0,
+              late_31_60: 0,
+              late_61_90: 0,
+              late_90_plus: 0,
+              total_outstanding: 0,
+              risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+              average_risk_score: 0,
+              high_risk_transactions: 0
+            }}
+            homeCurrency={homeCurrency}
+            loading={loading}
+          />
+        </Suspense>
 
         {/* Aged Payables - Critical for cash flow management */}
-        <AgedPayablesWidget
-          agedPayables={analytics?.aged_payables || {
-            current: 0,
-            late_31_60: 0,
-            late_61_90: 0,
-            late_90_plus: 0,
-            total_outstanding: 0,
-            risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
-            average_risk_score: 0,
-            high_risk_transactions: 0
-          }}
-          homeCurrency={homeCurrency}
-          loading={loading}
-        />
+        <Suspense fallback={<ComponentLoader title="Aged Payables" />}>
+          <AgedPayablesWidget
+            agedPayables={analytics?.aged_payables || {
+              current: 0,
+              late_31_60: 0,
+              late_61_90: 0,
+              late_90_plus: 0,
+              total_outstanding: 0,
+              risk_distribution: { low: 0, medium: 0, high: 0, critical: 0 },
+              average_risk_score: 0,
+              high_risk_transactions: 0
+            }}
+            homeCurrency={homeCurrency}
+            loading={loading}
+          />
+        </Suspense>
 
         {/* Currency Breakdown Chart */}
-        <CurrencyBreakdown
-          currencyData={analytics?.currency_breakdown || {}}
-          homeCurrency={homeCurrency}
-          loading={loading}
-        />
+        <Suspense fallback={<ComponentLoader title="Currency Analysis" />}>
+          <CurrencyBreakdown
+            currencyData={analytics?.currency_breakdown || {}}
+            homeCurrency={homeCurrency}
+            loading={loading}
+          />
+        </Suspense>
 
         {/* Category Analysis Chart */}
-        <CategoryAnalysis
-          categoryData={analytics?.category_breakdown || {}}
-          homeCurrency={homeCurrency}
-          loading={loading}
-        />
+        <Suspense fallback={<ComponentLoader title="Category Analysis" />}>
+          <CategoryAnalysis
+            categoryData={analytics?.category_breakdown || {}}
+            homeCurrency={homeCurrency}
+            loading={loading}
+          />
+        </Suspense>
       </div>
 
       {/* Action Center */}
-      <ActionCenter
-        analytics={analytics}
-        trends={trends}
-        onActionClick={(action) => {
-          console.log('Action clicked:', action);
-          // Handle action clicks here
-        }}
-        loading={loading}
-      />
+      <Suspense fallback={<ComponentLoader title="Action Center" />}>
+        <ActionCenter
+          analytics={analytics}
+          trends={trends}
+          onActionClick={(action) => {
+            console.log('Action clicked:', action);
+            // Handle action clicks here
+          }}
+          loading={loading}
+        />
+      </Suspense>
     </div>
   );
 }

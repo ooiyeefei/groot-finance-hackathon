@@ -787,97 +787,71 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8 min-w-[110px]">
                                     <SelectValue />
                                   </SelectTrigger>
-                                  <SelectContent className="bg-gray-700 border-gray-600">
-                                    <SelectItem value="employee" className="text-white">
-                                      <div className="flex items-center gap-2">
-                                        <UserCheck className="w-3 h-3" />
-                                        Employee
-                                      </div>
+                                  <SelectContent className="bg-gray-800 border-gray-700">
+                                    <SelectItem value="employee" className="text-white hover:bg-gray-700">
+                                      Employee
                                     </SelectItem>
-                                    <SelectItem value="manager" className="text-white">
-                                      <div className="flex items-center gap-2">
-                                        <Shield className="w-3 h-3" />
-                                        Manager
-                                      </div>
+                                    <SelectItem value="manager" className="text-white hover:bg-gray-700">
+                                      Manager
                                     </SelectItem>
-                                    <SelectItem value="admin" className="text-white">
-                                      <div className="flex items-center gap-2">
-                                        <Crown className="w-3 h-3" />
-                                        Admin
-                                      </div>
+                                    <SelectItem value="admin" className="text-white hover:bg-gray-700">
+                                      Admin
                                     </SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
 
-                              {/* Manager Assignment - For all roles (optional for managers/admins) */}
+                              {/* Manager Assignment - All roles can have managers */}
                               <div className="flex flex-col">
                                 <span className="text-xs text-gray-500 mb-1">
                                   {currentRole === 'employee' ? 'Manager' : 'Manager (Optional)'}
                                 </span>
                                 <Select
                                   value={getCurrentManagerUserId(member)}
-                                  onValueChange={(managerId: string) => assignManager(member.user_id, managerId)}
+                                  onValueChange={(managerId) => assignManager(member.user_id, managerId)}
                                   disabled={isUpdating}
                                 >
-                                  <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8 min-w-[130px]">
-                                    <SelectValue placeholder={
-                                      currentRole === 'employee' ? 'Assign manager' : 'Optional manager'
-                                    } />
+                                  <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8 min-w-[120px]">
+                                    <SelectValue placeholder={currentRole === 'employee' ? 'Assign manager' : 'Optional manager'} />
                                   </SelectTrigger>
-                                  <SelectContent className="bg-gray-700 border-gray-600">
-                                    <SelectItem value="none" className="text-white">
+                                  <SelectContent className="bg-gray-800 border-gray-700">
+                                    <SelectItem value="none" className="text-white hover:bg-gray-700">
                                       {currentRole === 'employee' ? 'No Manager' : 'No Assignment'}
                                     </SelectItem>
                                     {getAvailableManagers()
-                                      .filter(manager =>
-                                        // For employees, allow assignment to any manager/admin
-                                        // For managers/admins, prevent self-assignment
-                                        currentRole === 'employee' || manager.user_id !== member.user_id
-                                      )
+                                      .filter(manager => manager.user_id !== member.user_id) // Don't let user be their own manager
                                       .map((manager) => (
                                         <SelectItem
                                           key={manager.user_id}
                                           value={manager.user_id}
-                                          className="text-white"
+                                          className="text-white hover:bg-gray-700"
                                         >
-                                          <div className="flex items-center gap-2">
-                                            {manager.role_permissions.admin ? (
-                                              <Crown className="w-3 h-3" />
-                                            ) : (
-                                              <Shield className="w-3 h-3" />
-                                            )}
-                                            {manager.clerk_user?.firstName && manager.clerk_user?.lastName
-                                              ? `${manager.clerk_user.firstName} ${manager.clerk_user.lastName}`
-                                              : manager.clerk_user?.firstName || manager.full_name
-                                              || manager.email?.split('@')[0] || 'User'
-                                            }
-                                            {manager.user_id === member.user_id && ' (Self)'}
-                                          </div>
+                                          {manager.clerk_user?.firstName && manager.clerk_user?.lastName
+                                            ? `${manager.clerk_user.firstName} ${manager.clerk_user.lastName}`
+                                            : manager.clerk_user?.firstName || manager.full_name
+                                            || manager.email?.split('@')[0]
+                                            || 'Manager'
+                                          }
                                         </SelectItem>
-                                      ))}
+                                      ))
+                                    }
                                   </SelectContent>
                                 </Select>
                               </div>
 
-                              {/* Actions */}
-                              <div className="flex flex-col">
-                                <span className="text-xs text-gray-500 mb-1">Action</span>
-                                <Button
-                                  size="sm"
-                                  onClick={() => removeUserFromBusiness(member.user_id)}
-                                  disabled={updating.has(member.user_id)}
-                                  className="h-8 bg-red-600 hover:bg-red-700 text-white"
-                                >
-                                  <Trash2 className="w-3 h-3 mr-1" />
-                                  Remove
-                                </Button>
-                              </div>
-
-                              {/* Loading Indicator */}
-                              {isUpdating && (
-                                <Loader2 className="w-4 h-4 animate-spin text-blue-400 ml-2" />
-                              )}
+                              {/* Remove User Button */}
+                              <Button
+                                size="sm"
+                                onClick={() => removeUserFromBusiness(member.user_id)}
+                                disabled={isUpdating}
+                                className="bg-red-600 hover:bg-red-700 text-white h-8 px-3"
+                              >
+                                {isUpdating ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3 h-3" />
+                                )}
+                              </Button>
                             </div>
                           </div>
                         </CardContent>
@@ -898,7 +872,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                 Pending Invitations
               </CardTitle>
               <CardDescription className="text-gray-400">
-                Track and manage sent invitations
+                Manage outstanding invitations to your business
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -906,65 +880,53 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                 <div className="text-center py-8">
                   <Mail className="w-12 h-12 mx-auto mb-4 text-gray-500" />
                   <p className="text-gray-400">No pending invitations</p>
-                  <p className="text-sm text-gray-500 mt-2">Send your first invitation to grow your team</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {pendingInvitations.map((invitation) => {
-                    const displayRole = invitation.role as UserRole // Use role directly from API
-                    const RoleIcon = getRoleIcon(displayRole)
-
-                    return (
-                      <Card key={invitation.id} className="bg-gray-700 border-gray-600">
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <h4 className="text-white font-medium">{invitation.email}</h4>
-                                <Badge variant="outline" className={getRoleColor(displayRole)}>
-                                  <RoleIcon className="w-3 h-3 mr-1" />
-                                  {displayRole}
+                <div className="space-y-3">
+                  {pendingInvitations.map((invitation) => (
+                    <Card key={invitation.id} className="bg-gray-700 border-gray-600">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Mail className="w-4 h-4 text-blue-400" />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-white font-medium">{invitation.email}</span>
+                                <Badge variant="outline" className={getRoleColor(invitation.role)}>
+                                  {invitation.role}
                                 </Badge>
-                                <Badge className={getInvitationStatusColor(invitation.status)}>
+                                <Badge variant="outline" className={getInvitationStatusColor(invitation.status)}>
                                   {invitation.status}
                                 </Badge>
                               </div>
-
-                              <div className="flex items-center gap-4 text-sm text-gray-400">
-                                <div className="flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
-                                  <span>Sent {new Date(invitation.invited_at).toLocaleDateString()}</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {invitation.status === 'pending' && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => resendInvitation(invitation.id)}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                                  >
-                                    <Send className="w-3 h-3 mr-1" />
-                                    Resend
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => deleteInvitation(invitation.id)}
-                                    className="bg-red-600 hover:bg-red-700 text-white border-red-600"
-                                  >
-                                    <Trash2 className="w-3 h-3 mr-1" />
-                                    Delete
-                                  </Button>
-                                </>
-                              )}
+                              <p className="text-gray-400 text-sm">
+                                Invited {new Date(invitation.invited_at).toLocaleDateString()}
+                              </p>
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => resendInvitation(invitation.id)}
+                              className="border-gray-600 hover:bg-gray-600 text-white"
+                            >
+                              <Send className="w-3 h-3 mr-1" />
+                              Resend
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => deleteInvitation(invitation.id)}
+                              className="bg-red-600 hover:bg-red-700 text-white"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               )}
             </CardContent>

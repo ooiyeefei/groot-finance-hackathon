@@ -2,6 +2,11 @@ import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
+// Bundle analyzer - only in dev mode
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Your other Next.js config options can go here
@@ -22,16 +27,56 @@ const nextConfig = {
     ],
   },
   
-  // Exclude Supabase Edge Functions from Next.js build
-  webpack: (config: any) => {
+  // Performance optimizations and bundle analysis
+  webpack: (config: any, { dev, isServer }: { dev: boolean, isServer: boolean }) => {
     config.resolve.alias = {
       ...config.resolve.alias,
     };
+
     // Exclude supabase functions directory from build
     config.watchOptions = {
       ...config.watchOptions,
       ignored: ['**/supabase/functions/**'],
     };
+
+    // Performance optimizations
+    if (!dev && !isServer) {
+      // Enable tree shaking for better bundle optimization
+      config.optimization.usedExports = true;
+      config.optimization.sideEffects = false;
+
+      // Split chunks for better caching
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        cacheGroups: {
+          default: {
+            minChunks: 2,
+            priority: -20,
+            reuseExistingChunk: true,
+          },
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            priority: -10,
+            chunks: 'all',
+          },
+          // Separate chunks for heavy libraries
+          recharts: {
+            test: /[\\/]node_modules[\\/]recharts[\\/]/,
+            name: 'recharts',
+            priority: 10,
+            chunks: 'all',
+          },
+          lucide: {
+            test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+            name: 'lucide',
+            priority: 10,
+            chunks: 'all',
+          },
+        },
+      };
+    }
+
     return config;
   },
 
@@ -45,17 +90,26 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // Exclude from static analysis
+  // Performance and experimental features
   experimental: {
     typedRoutes: false,
     // Increase Server Actions body size limit for file uploads (5MB to match business profile validation)
     serverActions: {
       bodySizeLimit: 5 * 1024 * 1024, // 5MB in bytes to match business profile component limit
     },
+    // Note: optimizeCss removed due to critters dependency issues
   },
 
-  // Enable React StrictMode in production only - disabled in development to prevent confusing duplicate API calls
-  reactStrictMode: process.env.NODE_ENV !== 'development',
+  // Performance optimizations for production
+  productionBrowserSourceMaps: false, // Disable source maps in production for smaller builds
+  poweredByHeader: false, // Remove X-Powered-By header
+  compress: true, // Enable gzip compression
+
+  // Enable React StrictMode to catch potential issues early
+  reactStrictMode: true,
+
+  // Generate static pages where possible
+  output: 'standalone' as const,
 };
 
-export default withNextIntl(nextConfig);
+export default withBundleAnalyzer(withNextIntl(nextConfig));

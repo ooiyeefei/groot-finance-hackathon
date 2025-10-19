@@ -6,6 +6,7 @@
     "dev": "next dev",
     "prebuild": "npm run lint:translations",
     "build": "next build",
+    "build:analyze": "ANALYZE=true npm run build",
     "start": "next start",
     "lint": "next lint",
     "lint:translations": "node scripts/translations/validate-translations.js",
@@ -21,7 +22,14 @@
     "setup:python": "./scripts/setup-python.sh",
     "build:full": "npm run clean && npm run setup:python && npm install && npm run build && npm run dev",
     "build:with-python": "npm run setup:python && npm install && npm run build",
-    "dev:fresh": "rm -rf .next && npm run setup:python && npm install && npm run build && npm run dev"
+    "dev:fresh": "rm -rf .next && npm run setup:python && npm install && npm run build && npm run dev",
+    "perf:build": "npm run build && npm run build:analyze",
+    "perf:lighthouse": "lighthouse http://localhost:3000 --output=html --output-path=lighthouse-report.html --chrome-flags='--headless'",
+    "analyze:dead-code": "node scripts/analyze-dead-code.js",
+    "analyze:bundle": "npm run build:analyze && echo 'Open .next/analyze/client.html'",
+    "analyze:dependencies": "npx madge --circular src/ && npx dependency-cruiser --validate .dependency-cruiser.js src || echo 'dependency-cruiser config needed'",
+    "clean:unused-exports": "npx ts-prune --project ./tsconfig.json | grep -v 'used in module' > unused-exports.txt",
+    "lint:unused-imports": "npx eslint src/ --ext .ts,.tsx --fix --rule 'unused-imports/no-unused-imports: error' || echo 'unused-imports plugin needed'"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.30.0",
@@ -71,6 +79,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@next/bundle-analyzer": "^15.5.6",
     "@playwright/test": "^1.56.0",
     "@testing-library/jest-dom": "^6.9.0",
     "@testing-library/react": "^16.3.0",
@@ -79,16 +88,24 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@typescript-eslint/eslint-plugin": "^8.46.1",
     "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.4.21",
+    "dependency-cruiser": "^16.10.4",
     "dotenv-cli": "^10.0.0",
     "eslint": "^9",
     "eslint-config-next": "15.4.6",
+    "eslint-plugin-unused-imports": "^4.2.0",
     "jsdom": "^27.0.0",
+    "madge": "^8.0.0",
     "postcss": "^8.5.6",
+    "source-map-explorer": "^2.5.3",
     "tailwindcss": "^3.4.17",
+    "ts-prune": "^0.10.3",
+    "ts-unused-exports": "^11.0.1",
     "typescript": "^5",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "webpack-bundle-analyzer": "^4.10.2"
   },
   "trigger.dev": {
     "endpointId": "proj_qjsdxdsoxmrgplspwuwj"

@@ -22,7 +22,8 @@ export default function Sidebar() {
   const pathname = usePathname()
   const locale = useLocale()
   const t = useTranslations('navigation')
-  const [isExpanded, setIsExpanded] = useState(true)
+  // CRITICAL CLS FIX: Initialize with null to prevent layout shift until hydration
+  const [isExpanded, setIsExpanded] = useState<boolean | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false) // Track hydration completion
   const [hasInitialLoad, setHasInitialLoad] = useState(false) // Track if initial role load completed
@@ -80,20 +81,36 @@ export default function Sidebar() {
       setUserRole(cachedRole)
     }
 
+    // CRITICAL CLS FIX: Determine initial sidebar state without layout shift
+    let initialExpanded = true // Desktop default
     const savedState = localStorage.getItem('sidebar-expanded')
-    if (savedState !== null) {
-      setIsExpanded(JSON.parse(savedState))
+
+    // Check if mobile first to avoid flash
+    const isMobileDevice = window.innerWidth < 768
+    setIsMobile(isMobileDevice)
+
+    if (isMobileDevice) {
+      // Mobile: always start collapsed
+      initialExpanded = false
+    } else if (savedState !== null) {
+      // Desktop: use saved preference
+      initialExpanded = JSON.parse(savedState)
     }
 
-    // Check if mobile
+    // Set initial state only once to prevent CLS
+    setIsExpanded(initialExpanded)
+
+    // Setup responsive handler for future resizes
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768)
-      if (window.innerWidth < 768) {
+      const nowMobile = window.innerWidth < 768
+      setIsMobile(nowMobile)
+      // Only auto-collapse if transitioning to mobile
+      if (nowMobile && !isMobileDevice) {
         setIsExpanded(false)
+        localStorage.setItem('sidebar-expanded', JSON.stringify(false))
       }
     }
 
-    checkMobile()
     window.addEventListener('resize', checkMobile)
 
     // Load user role from cache first, then always validate with API
@@ -187,10 +204,29 @@ export default function Sidebar() {
     localStorage.setItem('sidebar-expanded', JSON.stringify(newState))
   }
 
+  // CRITICAL CLS FIX: Don't render sidebar until hydration determines proper width
+  if (isExpanded === null) {
+    // Return a stable placeholder that matches the final desktop collapsed width
+    return (
+      <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col relative">
+        <div className="p-4 border-b border-gray-700">
+          <div className="w-8 h-8 bg-gray-700 rounded animate-pulse"></div>
+        </div>
+        <div className="flex-1 p-4">
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="w-8 h-8 bg-gray-700 rounded animate-pulse"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <TooltipProvider>
       <div className={`
-        ${isExpanded ? 'w-64' : 'w-20'} 
+        ${isExpanded ? 'w-64' : 'w-20'}
         bg-gray-800 border-r border-gray-700 flex flex-col
         transition-all duration-300 ease-in-out
         ${isMobile ? 'fixed left-0 top-0 h-full z-50' : 'relative'}
