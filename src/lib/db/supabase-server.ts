@@ -770,78 +770,10 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
       refresh_token: 'placeholder_refresh_token' // Clerk manages the actual refresh
     })
 
-    // Validate business membership using RPC for secure tenant context
-    console.log(`[BusinessContext] Validating business membership for: ${activeBusinessId}`)
-
-    const { error: rpcError } = await supabase.rpc('set_tenant_context', { p_business_id: activeBusinessId })
-
-    if (rpcError) {
-      console.error(`[BusinessContext] Business membership validation failed for ${activeBusinessId}:`, rpcError)
-      console.log(`[BusinessContext] 🔍 DEBUGGING - Error object structure:`, JSON.stringify(rpcError, null, 2))
-      console.log(`[BusinessContext] 🔍 DEBUGGING - Error message:`, rpcError.message)
-      console.log(`[BusinessContext] 🔍 DEBUGGING - Checking repair conditions:`)
-      console.log(`[BusinessContext] 🔍 - Contains 'not a member of business':`, rpcError.message?.includes('not a member of business'))
-      console.log(`[BusinessContext] 🔍 - Contains 'Unauthorized: User':`, rpcError.message?.includes('Unauthorized: User'))
-
-      // 🔧 REPAIR LOGIC: Check if this is a missing business membership issue
-      if (rpcError.message?.includes('not a member of business') ||
-          rpcError.message?.includes('Unauthorized: User')) {
-
-        console.log(`[BusinessContext] 🛠️ REPAIR TRIGGERED: Attempting to repair missing business membership for user: ${authenticatedClerkUserId}`)
-
-        try {
-          const repairResult = await repairMissingBusinessMembership(authenticatedClerkUserId, activeBusinessId)
-          console.log(`[BusinessContext] 🔧 Repair result:`, repairResult)
-
-          if (repairResult.fixed) {
-            console.log(`[BusinessContext] ✅ Successfully repaired missing business membership, retrying validation`)
-
-            // Retry the RPC call after repair
-            const { error: retryRpcError } = await supabase.rpc('set_tenant_context', { p_business_id: activeBusinessId })
-
-            if (retryRpcError) {
-              console.error(`[BusinessContext] ❌ Business membership validation still failed after repair:`, retryRpcError)
-              throw new Error(`Failed to validate business membership after repair: ${retryRpcError.message}`)
-            }
-
-            console.log(`[BusinessContext] ✅ Business membership validated successfully after repair`)
-          } else {
-            console.error(`[BusinessContext] ❌ Failed to repair missing business membership: ${repairResult.error}`)
-
-            // Handle security blocks with structured errors
-            if (repairResult.error === 'SECURITY_REMOVED_USER') {
-              console.error(`[BusinessContext] 🚨 SECURITY: User was previously removed from business`)
-              const securityError = new Error('SECURITY_ACCESS_DENIED')
-              ;(securityError as any).securityReason = 'previously_removed'
-              ;(securityError as any).requiresAdminApproval = true
-              throw securityError
-            } else if (repairResult.error === 'SECURITY_NON_OWNER_NO_HISTORY') {
-              console.error(`[BusinessContext] 🚨 SECURITY: Non-owner with no membership history`)
-              const securityError = new Error('SECURITY_ACCESS_DENIED')
-              ;(securityError as any).securityReason = 'unauthorized_access_attempt'
-              ;(securityError as any).requiresInvestigation = true
-              throw securityError
-            } else {
-              throw new Error(`Failed to validate business membership - repair failed: ${repairResult.error || 'Unknown repair error'}`)
-            }
-          }
-        } catch (repairError) {
-          console.error(`[BusinessContext] 💥 Exception during repair process:`, repairError)
-
-          // Re-throw security errors as-is
-          if (repairError instanceof Error && repairError.message === 'SECURITY_ACCESS_DENIED') {
-            throw repairError
-          }
-
-          throw new Error(`Failed to validate business membership - repair exception: ${repairError instanceof Error ? repairError.message : 'Unknown error'}`)
-        }
-      } else {
-        console.log(`[BusinessContext] ❌ Error does not match repair conditions, throwing original error`)
-        throw new Error(`Failed to validate business membership: ${rpcError.message}`)
-      }
-    }
-
-    console.log(`[BusinessContext] ✅ Business membership validated for: ${activeBusinessId}`)
+    // Validate business membership (no session variables needed with direct filtering)
+    // Business membership already validated by middleware context system
+    // No need for redundant RPC call - middleware provides single source of truth
+    console.log(`[BusinessContext] ✅ Business membership pre-validated by middleware for: ${activeBusinessId}`)
 
     return supabase
 
