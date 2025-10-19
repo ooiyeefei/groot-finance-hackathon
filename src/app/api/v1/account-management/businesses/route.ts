@@ -32,6 +32,9 @@ export async function POST(request: NextRequest) {
 
     // Note: CSRF protection removed - not needed with JWT auth + business context validation
 
+    // Parse request body first (used in multiple paths)
+    const body = await request.json()
+
     // 🔧 REPAIR LOGIC: Check for broken user state before creating new business
     console.log(`[Business API] 🛠️ Checking for broken user state: ${userId}`)
     const repairResult = await repairBrokenUserState(userId)
@@ -47,6 +50,39 @@ export async function POST(request: NextRequest) {
     }
 
     if (repairResult.hasExistingBusiness) {
+      // CRITICAL FIX: Check if existing business has default name and user wants to update it
+      const existingBusinessName = repairResult.business?.name || ''
+      const userProvidedName = body.name?.trim()
+
+      console.log(`[Business API] Existing business name: "${existingBusinessName}", User input: "${userProvidedName}"`)
+
+      // If existing business has default name pattern AND user provided a different name, allow update
+      const isDefaultName = existingBusinessName.includes("'s Business") || existingBusinessName.includes("@")
+      const shouldUpdateName = isDefaultName && userProvidedName && userProvidedName !== existingBusinessName
+
+      if (shouldUpdateName) {
+        console.log(`[Business API] 🔧 Updating business name from "${existingBusinessName}" to "${userProvidedName}"`)
+
+        try {
+          // Update the business name using the service layer
+          const { updateBusinessProfile } = await import('@/domains/account-management/lib/account-management.service')
+          const updatedBusiness = await updateBusinessProfile(userId, { name: userProvidedName })
+
+          return NextResponse.json({
+            success: true,
+            business: {
+              ...repairResult.business,
+              name: updatedBusiness.name
+            },
+            message: 'Business name updated successfully',
+            action: 'redirect_to_dashboard'
+          })
+        } catch (updateError) {
+          console.error('[Business API] Failed to update business name:', updateError)
+          // Fall through to existing business response
+        }
+      }
+
       console.log(`[Business API] ⚠️ User already has business, redirecting to dashboard`)
       return NextResponse.json({
         success: true,
@@ -55,8 +91,6 @@ export async function POST(request: NextRequest) {
         action: 'redirect_to_dashboard'
       })
     }
-
-    const body = await request.json()
     const business = await createBusiness(userId, body)
 
     return NextResponse.json({

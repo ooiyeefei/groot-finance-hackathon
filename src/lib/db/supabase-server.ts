@@ -348,41 +348,42 @@ async function createMissingUserRecords(
     // 🛡️ STEP 3: Create user record FIRST (only for genuinely new users)
     console.log(`[User Recovery] 👤 Creating user record for NEW user ${email}`)
 
+    // CRITICAL RACE CONDITION FIX: Use upsert instead of insert to handle concurrent creation attempts
     const userData = {
       clerk_user_id: clerkUserId,
       email: email,
       full_name: fullName,
       business_id: null, // Will be updated after business creation
       home_currency: 'SGD',
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     }
 
+    // Use upsert with clerk_user_id as conflict column to prevent duplicates
     const { data: newUser, error: userError } = await supabase
       .from('users')
-      .insert(userData)
-      .select('id')
+      .upsert(userData, {
+        onConflict: 'clerk_user_id',
+        ignoreDuplicates: false
+      })
+      .select('id, business_id')
       .single()
 
     if (userError) {
-      console.error('[User Recovery] ❌ Error creating user record:', userError)
+      console.error('[User Recovery] ❌ Error creating/updating user record:', userError)
 
-      // Check if it's a duplicate key error and handle gracefully
-      if (userError.message.includes('duplicate') || userError.message.includes('unique')) {
-        console.log(`[User Recovery] 🔄 Duplicate key error detected, checking for existing user again...`)
+      // Final fallback: try to find existing user by clerk_user_id
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id, business_id')
+        .eq('clerk_user_id', clerkUserId)
+        .single()
 
-        // Race condition: user was created between our check and insert
-        const { data: raceConditionUser } = await supabase
-          .from('users')
-          .select('id, business_id')
-          .eq('clerk_user_id', clerkUserId)
-          .single()
-
-        if (raceConditionUser) {
-          console.log(`[User Recovery] ✅ Found user created by race condition: ${raceConditionUser.id}`)
-          return {
-            id: raceConditionUser.id,
-            business_id: raceConditionUser.business_id
-          }
+      if (existingUser) {
+        console.log(`[User Recovery] ✅ Found existing user after upsert failure: ${existingUser.id}`)
+        return {
+          id: existingUser.id,
+          business_id: existingUser.business_id
         }
       }
 

@@ -7,6 +7,7 @@ import HeaderWithUser from '@/components/ui/header-with-user'
 import CompleteDashboard from '@/domains/analytics/components/complete-dashboard'
 import { GeneralDisclaimer } from '@/components/ui/financial-disclaimer'
 import { ClientProviders } from '@/components/providers/client-providers'
+import { getUserData } from '@/lib/db/supabase-server'
 
 export default async function Dashboard({ params }: { params: Promise<{ locale: string }> }) {
   // Server-side authentication check
@@ -14,6 +15,25 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
 
   if (!userId) {
     redirect('/sign-in')
+  }
+
+  // CRITICAL FIX: Check business context before rendering dashboard
+  try {
+    const userData = await getUserData(userId)
+
+    // If user has no business_id, redirect to onboarding immediately
+    if (!userData.business_id) {
+      console.log(`[Dashboard] User ${userData.email} has no business context, redirecting to onboarding`)
+      const { locale } = await params
+      redirect(`/${locale}/onboarding/business`)
+    }
+
+    console.log(`[Dashboard] User ${userData.email} has business context: ${userData.business_id}`)
+  } catch (error) {
+    console.error('[Dashboard] Error checking business context:', error)
+    // If user doesn't exist in our system, redirect to onboarding
+    const { locale } = await params
+    redirect(`/${locale}/onboarding/business`)
   }
 
   const user = await currentUser()
