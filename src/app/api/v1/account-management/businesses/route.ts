@@ -39,17 +39,8 @@ export async function POST(request: NextRequest) {
     console.log(`[Business API] 🛠️ Checking for broken user state: ${userId}`)
     const repairResult = await repairBrokenUserState(userId)
 
-    if (repairResult.fixed) {
-      console.log(`[Business API] ✅ Repaired broken user state, redirecting to dashboard`)
-      return NextResponse.json({
-        success: true,
-        business: repairResult.business,
-        message: 'Account setup completed successfully',
-        action: 'redirect_to_dashboard' // Signal frontend to redirect
-      })
-    }
-
-    if (repairResult.hasExistingBusiness) {
+    // Handle existing business cases (both repaired and non-repaired)
+    if (repairResult.hasExistingBusiness || repairResult.fixed) {
       // CRITICAL FIX: Check if existing business has default name and user wants to update it
       const existingBusinessName = repairResult.business?.name || ''
       const userProvidedName = body.name?.trim()
@@ -74,7 +65,9 @@ export async function POST(request: NextRequest) {
               ...repairResult.business,
               name: updatedBusiness.name
             },
-            message: 'Business name updated successfully',
+            message: repairResult.fixed
+              ? 'Account setup completed and business name updated successfully'
+              : 'Business name updated successfully',
             action: 'redirect_to_dashboard'
           })
         } catch (updateError) {
@@ -83,11 +76,16 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      console.log(`[Business API] ⚠️ User already has business, redirecting to dashboard`)
+      // Return existing business (either repaired or not)
+      const responseMessage = repairResult.fixed
+        ? 'Account setup completed successfully'
+        : 'You already have a business account'
+
+      console.log(`[Business API] ${repairResult.fixed ? '✅ Repaired broken user state' : '⚠️ User already has business'}, redirecting to dashboard`)
       return NextResponse.json({
         success: true,
         business: repairResult.business,
-        message: 'You already have a business account',
+        message: responseMessage,
         action: 'redirect_to_dashboard'
       })
     }
