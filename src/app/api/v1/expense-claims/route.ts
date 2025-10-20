@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createExpenseClaim, listExpenseClaims } from '@/domains/expense-claims/lib/data-access'
 import { CreateExpenseClaimRequest, ExpenseClaimListParams } from '@/domains/expense-claims/types'
 import { getBusinessExpenseCategories } from '@/domains/expense-claims/lib/expense-category-mapper'
-import { getUserData } from '@/lib/db/supabase-server'
+import { getUserData, createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 
 /**
@@ -177,6 +177,69 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
+    }
+
+    // ✅ BUSINESS CURRENCY VALIDATION (OPTIMIZED - SINGLE QUERY)
+    // Validate that the submitted currency is allowed by the business
+    try {
+      const supabase = await createBusinessContextSupabaseClient()
+
+      // Single query with JOIN to fetch user and business data together
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select(`
+          business_id,
+          businesses (
+            home_currency,
+            allowed_currencies
+          )
+        `)
+        .eq('clerk_user_id', userId)
+        .single()
+
+      if (userError || !userData || !userData.businesses) {
+        console.error('[Currency Validation] Failed to fetch user and business data:', userError)
+        return NextResponse.json(
+          { success: false, error: 'Failed to validate currency against business settings' },
+          { status: 500 }
+        )
+      }
+
+      const businessData = Array.isArray(userData.businesses) ? userData.businesses[0] : userData.businesses
+
+      if (!businessData) {
+        console.error('[Currency Validation] No business data found for user')
+        return NextResponse.json(
+          { success: false, error: 'Business not found or not accessible' },
+          { status: 404 }
+        )
+      }
+
+      const allowedCurrencies = businessData.allowed_currencies || ['USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR']
+
+      if (!allowedCurrencies.includes(createRequest.original_currency)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Currency ${createRequest.original_currency} is not allowed by your business. Allowed currencies: ${allowedCurrencies.join(', ')}`,
+            allowed_currencies: allowedCurrencies
+          },
+          { status: 400 }
+        )
+      }
+
+      console.log(`[Currency Validation] ✅ Currency ${createRequest.original_currency} is allowed by business`)
+
+      // Add business currency context to the request for downstream processing
+      createRequest.business_home_currency = businessData.home_currency
+      createRequest.business_allowed_currencies = allowedCurrencies
+
+    } catch (error) {
+      console.error('[Currency Validation] Error during currency validation:', error)
+      return NextResponse.json(
+        { success: false, error: 'Failed to validate currency settings' },
+        { status: 500 }
+      )
     }
 
     const result = await createExpenseClaim(userId, createRequest)

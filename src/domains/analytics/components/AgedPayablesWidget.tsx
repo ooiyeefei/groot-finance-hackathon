@@ -170,6 +170,9 @@ export default function AgedPayablesWidget({
           <div className="text-lg font-bold text-white">
             {formatCurrency(totalOutstanding)}
           </div>
+          <div className="text-xs text-gray-500">
+            {homeCurrency} equivalent
+          </div>
         </div>
       </div>
 

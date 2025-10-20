@@ -152,6 +152,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   }, [])
 
   const refreshContext = useCallback(async () => {
+    console.log('[BusinessContext] Starting refreshContext - isLoadingContext will be true')
     setIsLoadingContext(true)
     setContextError(null)
 
@@ -166,6 +167,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         const errorMsg = ('error' in response ? response.error : 'Failed to load business context') as string
         setContextError(errorMsg)
         console.error('[BusinessContext] Error loading context:', errorMsg)
+        console.log('[BusinessContext] Full response:', response)
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error loading context'
@@ -178,6 +180,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
       } else {
         setContextError(errorMsg)
         console.error('[BusinessContext] Exception loading context:', error)
+        console.log('[BusinessContext] Error details:', { error, errorMsg })
       }
     } finally {
       setIsLoadingContext(false)
@@ -205,13 +208,29 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         console.log('[BusinessContext] Loaded profile:', result.data.name)
       } else {
         const errorMsg = result.error || 'Failed to fetch business profile'
-        setProfileError(errorMsg)
-        console.error('[BusinessContext] Error loading profile:', errorMsg)
+
+        // For new users, "No business associated with user" is expected - don't treat as error
+        if (errorMsg.includes('No business associated with user')) {
+          console.log('[BusinessContext] No business profile available - user needs to create/join a business')
+          setProfile(null)
+          setProfileError(null) // Clear error for new users
+        } else {
+          setProfileError(errorMsg)
+          console.error('[BusinessContext] Error loading profile:', errorMsg)
+        }
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error loading profile'
-      setProfileError(errorMsg)
-      console.error('[BusinessContext] Exception loading profile:', error)
+
+      // For new users, network errors when fetching profile are expected - don't treat as critical error
+      if (errorMsg.includes('No business associated with user') || errorMsg.includes('500')) {
+        console.log('[BusinessContext] Profile loading expected failure for new user:', errorMsg)
+        setProfile(null)
+        setProfileError(null) // Clear error for new users
+      } else {
+        setProfileError(errorMsg)
+        console.error('[BusinessContext] Exception loading profile:', error)
+      }
     } finally {
       setIsLoadingProfile(false)
     }
@@ -258,15 +277,25 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
 
   const updateProfile = useCallback((updatedProfile: BusinessProfile) => {
     setProfile(updatedProfile)
+
     // Update cache when profile is updated
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('business-profile', JSON.stringify(updatedProfile))
+        console.log(`[BusinessContext] ✅ Updated business profile cache with name: "${updatedProfile.name}"`)
       } catch (error) {
         console.warn('[BusinessContext] Failed to update cached business profile:', error)
       }
     }
-  }, [])
+
+    // CRITICAL FIX: If business name changed, also refresh the active context
+    // This ensures sidebar and profile stay in sync when name is updated via settings
+    if (activeContext && activeContext.businessName !== updatedProfile.name) {
+      console.log(`[BusinessContext] Business name updated from settings: "${activeContext.businessName}" → "${updatedProfile.name}"`)
+      console.log('[BusinessContext] Refreshing active context to sync sidebar display...')
+      refreshContext()
+    }
+  }, [activeContext, refreshContext])
 
   // ============================================================================
   // Utility Functions
@@ -306,7 +335,10 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         // Load memberships first, then context to avoid duplicate user creation attempts
         await refreshMemberships()
         await refreshContext()
-        await refreshProfile() // Load profile data
+
+        // Only load profile if we have business context (avoid errors for new users)
+        // Profile will be loaded later when business is created or switched
+        console.log('[BusinessContext] Skipping profile load for initial data - will load after business context is established')
 
         console.log('[BusinessContext] ✅ Initial data load complete')
         setHasCompletedInitialLoad(true)
@@ -318,7 +350,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     }
 
     loadData()
-  }, [isAuthLoaded, isSignedIn, userId, hasStartedInitialLoad, refreshMemberships, refreshContext, refreshProfile])
+  }, [isAuthLoaded, isSignedIn, userId, hasStartedInitialLoad, refreshMemberships, refreshContext])
 
   // Auto-switch and redirect logic
   useEffect(() => {
@@ -423,6 +455,36 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
       }
     }
   }, [memberships, activeContext, isLoadingMemberships, isLoadingContext, isSwitching, isAuthLoaded, isSignedIn, membershipsError, switchActiveBusiness, hasCompletedInitialLoad])
+
+  // Load business profile when active context becomes available
+  useEffect(() => {
+    // Only load profile if we have active context and haven't loaded it yet
+    if (activeContext && !isLoadingProfile && !profile) {
+      console.log('[BusinessContext] Active context available, loading business profile...')
+      refreshProfile()
+    }
+
+    // CRITICAL FIX: Check for business name mismatch between context and cached profile
+    if (activeContext && profile && activeContext.businessName !== profile.name) {
+      console.log(`[BusinessContext] Business name mismatch detected:`)
+      console.log(`[BusinessContext] - Active context: "${activeContext.businessName}"`)
+      console.log(`[BusinessContext] - Cached profile: "${profile.name}"`)
+      console.log(`[BusinessContext] - Refreshing profile to resolve discrepancy...`)
+
+      // Clear stale cache and reload fresh profile data
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('business-profile')
+          console.log('[BusinessContext] ✅ Cleared stale business-profile cache')
+        } catch (error) {
+          console.warn('[BusinessContext] Failed to clear business-profile cache:', error)
+        }
+      }
+
+      // Refresh profile from API to get updated business name
+      refreshProfile()
+    }
+  }, [activeContext, isLoadingProfile, profile, refreshProfile])
 
   // ============================================================================
   // Context Value

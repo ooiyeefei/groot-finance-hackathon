@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { getDefaultExpenseCategories } from '@/domains/expense-claims/lib/default-expense-categories'
+import { getDefaultCOGSCategories } from '@/domains/invoices/lib/default-cogs-categories'
 import { syncRoleToClerk } from '@/domains/security/lib/rbac'
 
 // Retry utility for network operations
@@ -343,17 +344,17 @@ async function createMissingUserRecords(
       }
     }
 
-    console.log(`[User Recovery] ✅ Confirmed: ${email} has NO invitation history - safe to create new business`)
+    console.log(`[User Recovery] ✅ Confirmed: ${email} has NO invitation history - redirecting to business onboarding`)
 
-    // 🛡️ STEP 3: Create user record FIRST (only for genuinely new users)
-    console.log(`[User Recovery] 👤 Creating user record for NEW user ${email}`)
+    // 🛡️ NEW APPROACH: Create user record WITHOUT business, redirect to onboarding
+    console.log(`[User Recovery] 👤 Creating user record for NEW user ${email} - NO auto-business creation`)
 
     // CRITICAL RACE CONDITION FIX: Use upsert instead of insert to handle concurrent creation attempts
     const userData = {
       clerk_user_id: clerkUserId,
       email: email,
       full_name: fullName,
-      business_id: null, // Will be updated after business creation
+      business_id: null, // NO business - user will create via onboarding
       home_currency: 'SGD',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -390,116 +391,14 @@ async function createMissingUserRecords(
       return null
     }
 
-    console.log(`[User Recovery] ✅ Created user with ID: ${newUser.id}`)
+    console.log(`[User Recovery] ✅ Created user with ID: ${newUser.id} - NO business created, user will go through onboarding`)
 
-    // 🛡️ STEP 4: Create business with owner_id = user UUID (only for new users)
-    const businessName = fullName ? `${fullName}'s Business` : `${email.split('@')[0]}'s Business`
-    const businessSlug = `${email.split('@')[0]}-business-${Date.now()}`
-
-    console.log(`[User Recovery] 🏪 Creating business: name="${businessName}", slug="${businessSlug}", owner_id="${newUser.id}"`)
-
-    const { data: newBusiness, error: businessError } = await supabase
-      .from('businesses')
-      .insert({
-        name: businessName,
-        slug: businessSlug,
-        owner_id: newUser.id, // 🔧 Use the created user UUID as owner
-        country_code: 'SG',
-        home_currency: 'SGD',
-        custom_expense_categories: getDefaultExpenseCategories(),
-        created_at: new Date().toISOString()
-      })
-      .select('id')
-      .single()
-
-    if (businessError) {
-      console.error('[User Recovery] ❌ Error creating business:', businessError)
-      return null
-    }
-
-    console.log(`[User Recovery] ✅ Created business with ID: ${newBusiness.id}`)
-
-    // 🛡️ STEP 3: Update user record with business_id
-    console.log(`[User Recovery] 🔗 Linking user ${newUser.id} to business ${newBusiness.id}`)
-
-    const { error: linkError } = await supabase
-      .from('users')
-      .update({ business_id: newBusiness.id, updated_at: new Date().toISOString() })
-      .eq('id', newUser.id)
-
-    if (linkError) {
-      console.error('[User Recovery] ❌ Error linking user to business:', linkError)
-      return null
-    }
-
-    // 🛡️ STEP 4: Create employee profile
-    console.log(`[User Recovery] 👔 Creating employee profile for user ${newUser.id}`)
-
-    const rolePermissions = {
-      employee: true,
-      manager: true, // Admin has all permissions
-      admin: true
-    }
-
-    const employeeId = `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
-
-    const { error: employeeError } = await supabase
-      .from('employee_profiles')
-      .insert({
-        user_id: newUser.id,
-        business_id: newBusiness.id,
-        employee_id: employeeId,
-        department: 'General',
-        job_title: 'Administrator',
-        role_permissions: rolePermissions,
-        created_at: new Date().toISOString()
-      })
-
-    if (employeeError) {
-      console.error('[User Recovery] ❌ Error creating employee profile:', employeeError)
-      return null
-    }
-
-    console.log(`[User Recovery] ✅ Employee profile created successfully`)
-
-    // 🛡️ STEP 5: Create business membership record (CRITICAL - was missing!)
-    console.log(`[User Recovery] 🏢 Creating business membership for user ${newUser.id}`)
-
-    const { error: membershipError } = await supabase
-      .from('business_memberships')
-      .insert({
-        user_id: newUser.id,
-        business_id: newBusiness.id,
-        role: 'admin', // Owner is admin of their own business
-        status: 'active',
-        joined_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
-      })
-
-    if (membershipError) {
-      console.error('[User Recovery] ❌ Error creating business membership:', membershipError)
-      return null
-    }
-
-    console.log(`[User Recovery] ✅ Business membership created successfully`)
-
-    // 🛡️ STEP 6: Sync role permissions to Clerk metadata (critical for middleware access)
-    console.log(`[User Recovery] 🔄 Syncing role permissions to Clerk metadata`)
-    await new Promise(resolve => setTimeout(resolve, 500)) // 500ms delay to ensure Clerk user is fully available
-    const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
-
-    if (!syncResult.success) {
-      console.error(`[User Recovery] ❌ CRITICAL: Clerk sync failed after all retries: ${syncResult.error}`)
-      console.error(`[User Recovery] 📋 User will have database access but middleware will block manager routes`)
-    } else {
-      console.log(`[User Recovery] ✅ Clerk sync successful`)
-    }
-
-    console.log(`[User Recovery] 🎉 Successfully recovered user: ${email} → User: ${newUser.id} → Business: ${newBusiness.id}`)
+    // 🔄 IMPORTANT: Return user with business_id: null to trigger onboarding redirect
+    console.log(`[User Recovery] 📍 User ${email} created without business - will be redirected to onboarding`)
 
     return {
       id: newUser.id,
-      business_id: newBusiness.id
+      business_id: null // This will trigger redirect to /onboarding/business
     }
 
   } catch (error) {

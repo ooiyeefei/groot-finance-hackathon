@@ -130,6 +130,14 @@ export async function createBusiness(
 
   console.log(`[Business Service] Creating business for user ${userData.email}: "${name}" (${businessSlug})`)
 
+  // Generate default categories (with debug logging)
+  const defaultExpenseCategories = getDefaultExpenseCategories()
+  const defaultCogsCategories = getDefaultCOGSCategories()
+
+  console.log(`[Business Service] Generated ${defaultExpenseCategories.length} default expense categories`)
+  console.log(`[Business Service] Generated ${defaultCogsCategories.length} default COGS categories`)
+  console.log(`[Business Service] First COGS category:`, defaultCogsCategories[0]?.category_name || 'NONE')
+
   // Create the business with user as owner
   const { data: newBusiness, error: businessError } = await supabase
     .from('businesses')
@@ -139,8 +147,8 @@ export async function createBusiness(
       owner_id: userData.id,
       country_code,
       home_currency,
-      custom_expense_categories: getDefaultExpenseCategories(),
-      custom_cogs_categories: getDefaultCOGSCategories(),
+      custom_expense_categories: defaultExpenseCategories,
+      custom_cogs_categories: defaultCogsCategories,
       created_at: new Date().toISOString()
     })
     .select('*')

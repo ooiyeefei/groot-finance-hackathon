@@ -49,6 +49,10 @@ export interface CreateExpenseClaimRequest {
   // File upload support
   file?: File
   processing_mode?: 'ai' | 'manual'
+
+  // Business currency context (added for two-level currency system)
+  business_home_currency?: SupportedCurrency
+  business_allowed_currencies?: SupportedCurrency[]
 }
 
 export interface UpdateExpenseClaimRequest {

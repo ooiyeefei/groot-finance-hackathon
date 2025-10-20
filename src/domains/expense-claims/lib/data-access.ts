@@ -218,25 +218,33 @@ export async function createExpenseClaim(
       accountingCategory = categoryInfo?.accounting_category || mapExpenseCategoryToAccounting(expense_category)
     }
 
-    // Convert to home currency
-    const userHomeCurrency = userData.home_currency
+    // ✅ TWO-LEVEL CURRENCY CONVERSION
+    // Convert to business home currency (functional currency for accounting)
+    const businessHomeCurrency = request.business_home_currency || userData.home_currency
     let homeAmount = original_amount
     let exchangeRate = 1
     let exchangeRateDate = new Date().toISOString().split('T')[0]
 
-    if (original_currency !== userHomeCurrency) {
+    console.log(`[Currency Conversion] Converting ${original_amount} ${original_currency} to business currency ${businessHomeCurrency}`)
+
+    if (original_currency !== businessHomeCurrency) {
       try {
         const conversion = await currencyService.convertAmount(
           original_amount,
           original_currency,
-          userHomeCurrency as any
+          businessHomeCurrency as any
         )
         homeAmount = conversion.converted_amount
         exchangeRate = conversion.exchange_rate
         exchangeRateDate = conversion.rate_date
+
+        console.log(`[Currency Conversion] ✅ Converted: ${original_amount} ${original_currency} = ${homeAmount} ${businessHomeCurrency} (rate: ${exchangeRate})`)
       } catch (error) {
-        console.error('Currency conversion failed:', error)
+        console.error('[Currency Conversion] ❌ Currency conversion failed:', error)
+        // Continue with original amount if conversion fails
       }
+    } else {
+      console.log(`[Currency Conversion] ✅ No conversion needed (same currency: ${original_currency})`)
     }
 
     // Server-side duplicate detection
@@ -288,7 +296,7 @@ export async function createExpenseClaim(
       currency: original_currency,
       transaction_date: transaction_date,
       reference_number: reference_number || null,
-      home_currency: userHomeCurrency,
+      home_currency: businessHomeCurrency,
       home_currency_amount: homeAmount,
       exchange_rate: exchangeRate,
 
@@ -309,7 +317,7 @@ export async function createExpenseClaim(
           vendor_id: vendor_id || null,
           total_amount: original_amount,
           original_currency,
-          home_currency: userHomeCurrency,
+          home_currency: businessHomeCurrency,
           home_currency_amount: homeAmount,
           exchange_rate: exchangeRate,
           exchange_rate_date: exchangeRateDate,

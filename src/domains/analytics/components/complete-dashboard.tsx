@@ -148,7 +148,7 @@ export default function CompleteDashboard() {
         <div>
           <h2 className="text-xl font-semibold text-white">Financial Dashboard</h2>
           <p className="text-sm text-gray-400">
-            {getPeriodDisplayName(selectedPeriod)} • Displayed in {homeCurrency}
+            {getPeriodDisplayName(selectedPeriod)} • Converted to {homeCurrency}
             {lastUpdated && (
               <span className="ml-2">• Updated {lastUpdated.toLocaleTimeString()}</span>
             )}

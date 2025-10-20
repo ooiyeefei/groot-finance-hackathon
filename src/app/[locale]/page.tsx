@@ -11,7 +11,15 @@ import { getUserData } from '@/lib/db/supabase-server'
 
 export default async function Dashboard({ params }: { params: Promise<{ locale: string }> }) {
   // Server-side authentication check
-  const { userId } = await auth()
+  let userId: string | null = null
+
+  try {
+    const authResult = await auth()
+    userId = authResult.userId
+  } catch (error) {
+    console.error('[Dashboard] Auth error:', error)
+    redirect('/sign-in')
+  }
 
   if (!userId) {
     redirect('/sign-in')

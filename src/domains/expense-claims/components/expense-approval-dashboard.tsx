@@ -277,6 +277,36 @@ function ManagementOverviewContent({ data, setActiveTab }: {
 
 // Reimbursement Queue Content (Admin Only)
 function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) {
+
+  // Handle individual reimbursement processing
+  const handleReimbursement = async (claimId: string) => {
+    try {
+      console.log(`[ReimbursementQueue] Processing reimbursement for claim ${claimId}`)
+
+      const response = await fetch(`/api/v1/expense-claims/${claimId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'reimbursed',
+          comment: 'Processed by admin via reimbursement queue'
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        console.log(`✅ Successfully processed reimbursement for claim ${claimId}`)
+        // Refresh the page to update the reimbursement queue
+        window.location.reload()
+      } else {
+        console.error('Failed to process reimbursement:', result.error)
+        alert(`Failed to process reimbursement: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Network error processing reimbursement:', error)
+      alert('Network error while processing reimbursement')
+    }
+  }
   return (
     <Card className="bg-gray-800 border-gray-700">
       <CardHeader>
@@ -302,7 +332,14 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
                 <span className="text-white font-medium">Select All ({(data?.recent_claims || []).filter(claim => claim.status === 'approved').length} claims)</span>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white">
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => {
+                    // TODO: Implement bulk processing when selection state is added
+                    alert('Bulk processing will be implemented when selection checkboxes are functional')
+                  }}
+                >
                   <DollarSign className="w-4 h-4 mr-2" />
                   Process Selected
                 </Button>
@@ -341,6 +378,7 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
                   <Button
                     size="sm"
                     className="bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => handleReimbursement(claim.id)}
                   >
                     Process
                   </Button>

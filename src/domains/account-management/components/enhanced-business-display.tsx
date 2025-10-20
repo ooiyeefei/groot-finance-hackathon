@@ -179,7 +179,9 @@ export default function EnhancedBusinessDisplay({
     )
   }
 
-  if (hasError || !business) {
+  // CRITICAL FIX: Only show error state if there's an actual error AND we're not still loading
+  // This prevents the transient "Error loading business" flash during normal initialization
+  if (hasError && !isLoading) {
     return (
       <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}>
         <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
@@ -187,6 +189,53 @@ export default function EnhancedBusinessDisplay({
             <AlertCircle className="w-8 h-8" />
             {isExpanded && (
               <span className="text-sm">Error loading business</span>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // If no business context but still loading, show loading state instead of error
+  if (!business && isLoading) {
+    return (
+      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}>
+        <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
+          <div className={cn('flex items-center', isExpanded ? 'space-x-3' : 'flex-col space-y-2')}>
+            <WorkspaceLogo
+              businessProfile={businessProfile}
+              isHydrated={isHydrated}
+              size={isExpanded ? 'standard' : 'compact'}
+            />
+            {isExpanded && (
+              <div className="flex flex-col">
+                <div className="h-4 bg-gray-600 rounded w-24 animate-pulse"></div>
+                <div className="h-3 bg-gray-600 rounded w-16 mt-1 animate-pulse"></div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // If no business context and not loading, this could be a genuine no-business state
+  // (new user case) - still show loading to let context provider handle redirect
+  if (!business) {
+    return (
+      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}>
+        <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
+          <div className={cn('flex items-center', isExpanded ? 'space-x-3' : 'flex-col space-y-2')}>
+            <WorkspaceLogo
+              businessProfile={businessProfile}
+              isHydrated={isHydrated}
+              size={isExpanded ? 'standard' : 'compact'}
+            />
+            {isExpanded && (
+              <div className="flex flex-col">
+                <div className="h-4 bg-gray-600 rounded w-24 animate-pulse"></div>
+                <div className="h-3 bg-gray-600 rounded w-16 mt-1 animate-pulse"></div>
+              </div>
             )}
           </div>
         </div>

@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useToast } from '@/components/ui/toast'
+import { SupportedCurrency } from '@/domains/accounting-entries/types'
 
 interface ExpenseSubmissionFormProps {
   onClose: () => void
@@ -93,51 +94,78 @@ export default function ExpenseSubmissionForm({ onClose, onSubmit }: ExpenseSubm
   const [loadingCategories, setLoadingCategories] = useState(true)
   const [processingFailed, setProcessingFailed] = useState(false)
   const [documentId, setDocumentId] = useState<string | null>(null)
+  const [allowedCurrencies, setAllowedCurrencies] = useState<SupportedCurrency[]>([])
+  const [loadingCurrencies, setLoadingCurrencies] = useState(true)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  // Fetch categories on component mount - NO FALLBACK
-  // Categories must be configured by business admin in /manager/categories
+  // Fetch categories and allowed currencies on component mount
   useEffect(() => {
-    const fetchCategories = async () => {
+    const fetchCategoriesAndCurrencies = async () => {
       setLoadingCategories(true)
+      setLoadingCurrencies(true)
 
       try {
-        const response = await fetch('/api/v1/expense-claims/categories')
+        // Fetch categories
+        const categoriesResponse = await fetch('/api/v1/expense-claims/categories')
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch categories: ${response.statusText}`)
+        if (!categoriesResponse.ok) {
+          throw new Error(`Failed to fetch categories: ${categoriesResponse.statusText}`)
         }
 
-        const result = await response.json()
+        const categoriesResult = await categoriesResponse.json()
 
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to fetch categories')
+        if (!categoriesResult.success) {
+          throw new Error(categoriesResult.error || 'Failed to fetch categories')
         }
 
-        if (!result.data.categories || result.data.categories.length === 0) {
+        if (!categoriesResult.data.categories || categoriesResult.data.categories.length === 0) {
           throw new Error('No expense categories configured. Please contact your business admin to set up categories.')
         }
 
-        setCategories(result.data.categories)
-        console.log('[Categories] Loaded from API:', result.data.categories.length)
+        setCategories(categoriesResult.data.categories)
+        console.log('[Categories] Loaded from API:', categoriesResult.data.categories.length)
+
+        // Fetch business profile for allowed currencies
+        const businessResponse = await fetch('/api/v1/account-management/businesses/profile')
+
+        if (!businessResponse.ok) {
+          throw new Error(`Failed to fetch business profile: ${businessResponse.statusText}`)
+        }
+
+        const businessResult = await businessResponse.json()
+
+        if (!businessResult.success) {
+          throw new Error(businessResult.error || 'Failed to fetch business profile')
+        }
+
+        const businessAllowedCurrencies = businessResult.data.allowed_currencies || ['USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR']
+        setAllowedCurrencies(businessAllowedCurrencies)
+        console.log('[Currencies] Loaded allowed currencies:', businessAllowedCurrencies)
+
+        // Set default currency to business home currency if available
+        const homeCurrency = businessResult.data.home_currency
+        if (homeCurrency && businessAllowedCurrencies.includes(homeCurrency)) {
+          setFormData(prev => ({ ...prev, original_currency: homeCurrency }))
+        }
 
       } catch (error) {
-        console.error('[Categories] Error fetching categories:', error)
+        console.error('[Data Loading] Error fetching categories or currencies:', error)
         addToast({
           type: 'error',
-          title: 'Categories Not Available',
-          description: error instanceof Error ? error.message : 'Failed to load expense categories. Please contact your admin.'
+          title: 'Setup Required',
+          description: error instanceof Error ? error.message : 'Failed to load required data. Please contact your admin.'
         })
-        // Close the form since we can't proceed without categories
+        // Close the form since we can't proceed without this data
         setTimeout(() => onClose(), 2000)
       } finally {
         setLoadingCategories(false)
+        setLoadingCurrencies(false)
       }
     }
 
-    fetchCategories()
+    fetchCategoriesAndCurrencies()
   }, [])
 
   // Auto-categorization when OCR results include suggested category
@@ -300,6 +328,12 @@ export default function ExpenseSubmissionForm({ onClose, onSubmit }: ExpenseSubm
       newErrors.vendor_name = 'Vendor name is required'
     }
 
+    if (!formData.original_currency) {
+      newErrors.original_currency = 'Currency is required'
+    } else if (allowedCurrencies.length > 0 && !allowedCurrencies.includes(formData.original_currency as SupportedCurrency)) {
+      newErrors.original_currency = `Currency ${formData.original_currency} is not allowed by your business`
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -396,6 +430,8 @@ export default function ExpenseSubmissionForm({ onClose, onSubmit }: ExpenseSubm
               previewUrl={previewUrl}
               categories={categories}
               loadingCategories={loadingCategories}
+              allowedCurrencies={allowedCurrencies}
+              loadingCurrencies={loadingCurrencies}
               onNext={() => setStep('review')}
               onBack={() => setStep('capture')}
               onReUpload={handleReUpload}
@@ -488,7 +524,7 @@ function CaptureStep({ onCameraCapture, onFileUpload, onSkip, error }: {
   )
 }
 
-function FormStep({ formData, setFormData, errors, processing, processingFailed, ocrResult, selectedFile, previewUrl, categories, loadingCategories, onNext, onBack, onReUpload, onReprocess }: any) {
+function FormStep({ formData, setFormData, errors, processing, processingFailed, ocrResult, selectedFile, previewUrl, categories, loadingCategories, allowedCurrencies, loadingCurrencies, onNext, onBack, onReUpload, onReprocess }: any) {
   return (
     <div className="space-y-6">
       {/* OCR Processing Status */}
@@ -694,17 +730,38 @@ function FormStep({ formData, setFormData, errors, processing, processingFailed,
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="original_currency" className="text-white">Currency</Label>
-          <Select value={formData.original_currency} onValueChange={(value) => setFormData({...formData, original_currency: value})}>
+          <Label htmlFor="original_currency" className="text-white">Currency *</Label>
+          <Select
+            value={formData.original_currency}
+            onValueChange={(value) => setFormData({...formData, original_currency: value})}
+            disabled={loadingCurrencies}
+          >
             <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-              <SelectValue placeholder="Select currency" />
+              <SelectValue placeholder={loadingCurrencies ? "Loading currencies..." : "Select currency"} />
             </SelectTrigger>
             <SelectContent className="bg-gray-700 border-gray-600">
-              {['SGD', 'USD', 'EUR', 'MYR', 'THB', 'IDR', 'CNY', 'VND', 'PHP'].map(currency => (
+              {allowedCurrencies.map((currency: SupportedCurrency) => (
                 <SelectItem key={currency} value={currency} className="text-white">{currency}</SelectItem>
               ))}
+              {allowedCurrencies.length === 0 && !loadingCurrencies && (
+                <SelectItem value="no-currencies" disabled className="text-gray-500">
+                  No currencies available
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
+          {loadingCurrencies && (
+            <p className="text-gray-400 text-sm">Loading allowed currencies...</p>
+          )}
+          {errors.original_currency && <p className="text-red-400 text-sm">{errors.original_currency}</p>}
+          {!loadingCurrencies && allowedCurrencies.length === 0 && (
+            <Alert className="bg-yellow-900/20 border-yellow-700">
+              <AlertCircle className="w-4 h-4" />
+              <AlertDescription className="text-yellow-400">
+                No currencies configured. Contact your business admin to set up allowed currencies.
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       </div>
 

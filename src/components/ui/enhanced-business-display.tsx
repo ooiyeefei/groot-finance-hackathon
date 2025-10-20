@@ -172,6 +172,17 @@ export default function EnhancedBusinessDisplay({
   const isLoading = contextLoading || membershipsLoading || profileLoading || isSwitching
   const hasError = contextError || membershipsError || switchError
 
+  // Debug logging for error flash issue
+  if (hasError && process.env.NODE_ENV === 'development') {
+    console.log('[EnhancedBusinessDisplay] Error state detected:', {
+      contextError,
+      membershipsError,
+      switchError,
+      isLoading,
+      business: business?.businessId || 'none'
+    })
+  }
+
   if (!isHydrated || isLoading) {
     return (
       <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}>
