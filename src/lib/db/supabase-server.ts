@@ -430,9 +430,19 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
     )
 
     // 🛡️ RESILIENT QUERY: Handle potential duplicate records gracefully
+    // Get user data with business home currency from joined businesses table
     const { data: users, error } = await serviceClient
       .from('users')
-      .select('id, business_id, home_currency, email, full_name, created_at')
+      .select(`
+        id,
+        business_id,
+        email,
+        full_name,
+        created_at,
+        businesses (
+          home_currency
+        )
+      `)
       .eq('clerk_user_id', clerkUserId)
       .order('created_at', { ascending: false }) // Get most recent first
 
@@ -454,17 +464,36 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
         console.log(`[User Recovery] ✅ Successfully created missing records for: ${clerkUserId}`)
 
         // Query for complete user data after recovery
-        const { data: completeUser, error: recoveryError } = await serviceClient
+        const { data: completeUserData, error: recoveryError } = await serviceClient
           .from('users')
-          .select('id, business_id, home_currency, email, full_name, created_at')
+          .select(`
+            id,
+            business_id,
+            email,
+            full_name,
+            created_at,
+            businesses (
+              home_currency
+            )
+          `)
           .eq('id', recoveredUser.id)
           .single()
 
-        if (recoveryError || !completeUser) {
+        if (recoveryError || !completeUserData) {
           throw new Error('Failed to fetch complete user data after recovery')
         }
 
-        return completeUser
+        // Extract home_currency from joined business data for recovery
+        const recoveryBusinessData = Array.isArray(completeUserData.businesses) ? completeUserData.businesses[0] : completeUserData.businesses
+        const recoveryHomeCurrency = recoveryBusinessData?.home_currency || 'SGD'
+
+        return {
+          id: completeUserData.id,
+          business_id: completeUserData.business_id,
+          home_currency: recoveryHomeCurrency,
+          email: completeUserData.email,
+          full_name: completeUserData.full_name
+        }
       }
 
       throw new Error('Failed to fetch user data: User not found')
@@ -512,7 +541,17 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
     const recordsWithBusiness = users.filter(u => u.business_id)
     const user = recordsWithBusiness.length > 0 ? recordsWithBusiness[0] : users[0]
 
-    return user
+    // Extract home_currency from joined business data
+    const businessData = Array.isArray(user.businesses) ? user.businesses[0] : user.businesses
+    const homeCurrency = businessData?.home_currency || 'SGD' // Default fallback
+
+    return {
+      id: user.id,
+      business_id: user.business_id,
+      home_currency: homeCurrency,
+      email: user.email,
+      full_name: user.full_name
+    }
   })
 }
 
