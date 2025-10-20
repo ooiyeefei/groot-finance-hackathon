@@ -99,7 +99,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
           pending_approval: claims.filter((claim: any) => claim.status === 'submitted').length,
           approved_amount: claims
             .filter((claim: any) => claim.status === 'approved' || claim.status === 'reimbursed')
-            .reduce((sum: number, claim: any) => sum + (claim.total_amount || 0), 0),
+            .reduce((sum: number, claim: any) => sum + (claim.home_currency_amount || claim.total_amount || 0), 0),
           rejected_count: claims.filter((claim: any) => claim.status === 'rejected').length,
         };
 
