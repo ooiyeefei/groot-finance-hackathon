@@ -719,7 +719,6 @@ export async function createInvitation(
         business_id: businessId,
         invited_by: inviterUserId,
         full_name: null,
-        home_currency: 'SGD',
         clerk_user_id: null,
         invited_role: role
       })

@@ -204,7 +204,7 @@ export async function GET(request: NextRequest) {
               .from('expense_claims')
               .select(`
                 *,
-                employee:users!expense_claims_user_id_fkey(id, full_name, email, home_currency)
+                employee:users!expense_claims_user_id_fkey(id, full_name, email, business_id, businesses!users_business_id_fkey(home_currency))
               `)
               .eq('business_id', userProfile.business_id)
               .gte('submitted_at', startDate.toISOString())

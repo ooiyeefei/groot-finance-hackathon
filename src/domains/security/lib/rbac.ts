@@ -410,7 +410,8 @@ export async function getBusinessUsers(businessId: string): Promise<{
           id,
           email,
           full_name,
-          home_currency
+          business_id,
+          businesses!users_business_id_fkey(home_currency)
         )
       `)
       .eq('business_id', businessId)
@@ -437,7 +438,7 @@ export async function getBusinessUsers(businessId: string): Promise<{
               manager: membership.role === 'admin' || membership.role === 'manager',
               admin: membership.role === 'admin'
             },
-            home_currency: membership.users?.[0]?.home_currency,
+            home_currency: (membership.users?.[0] as any)?.businesses?.home_currency,
             created_at: membership.created_at,
             updated_at: membership.created_at, // Use created_at as fallback for updated_at
             clerk_user: clerkUser
@@ -456,7 +457,7 @@ export async function getBusinessUsers(businessId: string): Promise<{
               manager: membership.role === 'admin' || membership.role === 'manager',
               admin: membership.role === 'admin'
             },
-            home_currency: membership.users?.[0]?.home_currency,
+            home_currency: (membership.users?.[0] as any)?.businesses?.home_currency,
             created_at: membership.created_at,
             updated_at: membership.created_at
           }

@@ -154,6 +154,9 @@ export async function getTeamMembers(
       business_id_param: businessId
     })
 
+  console.log('[User Service] 🔍 RAW RPC Response - Count:', rpcTeamData?.length || 0)
+  console.log('[User Service] 🔍 RAW RPC Response - Data:', JSON.stringify(rpcTeamData, null, 2))
+
   let enrichedProfiles: TeamMember[] = []
 
   if (rpcError) {
@@ -171,8 +174,9 @@ export async function getTeamMembers(
           id,
           email,
           full_name,
-          home_currency,
-          clerk_user_id
+          business_id,
+          clerk_user_id,
+          businesses!users_business_id_fkey(home_currency)
         )
       `)
       .eq('business_id', businessId)
@@ -198,7 +202,7 @@ export async function getTeamMembers(
           manager: membership.role === 'admin' || membership.role === 'manager',
           admin: membership.role === 'admin'
         },
-        home_currency: user?.home_currency || null,
+        home_currency: (user as any)?.businesses?.home_currency || null,
         manager_id: null,
         manager_name: null,
         manager_user_id: null,
@@ -209,6 +213,7 @@ export async function getTeamMembers(
     })
   } else {
     // RPC returns pre-joined data
+    console.log('[User Service] RPC returned data:', JSON.stringify(rpcTeamData, null, 2))
     enrichedProfiles = (rpcTeamData || []).map((member: any) => ({
       id: member.membership_id || member.employee_id, // Use membership_id if available, fallback to employee_id
       user_id: member.user_id,
@@ -230,6 +235,17 @@ export async function getTeamMembers(
     }))
   }
 
+  console.log('[User Service] 📊 Profiles before Clerk enrichment:', enrichedProfiles.length)
+  enrichedProfiles.forEach((profile, index) => {
+    console.log(`[User Service] Profile ${index + 1}:`, {
+      id: profile.id,
+      user_id: profile.user_id,
+      full_name: profile.full_name,
+      email: profile.email,
+      role_permissions: profile.role_permissions
+    })
+  })
+
   // Batch fetch Clerk user data
   if (enrichedProfiles.length > 0) {
     const clerkUserIds: string[] = []
@@ -237,7 +253,7 @@ export async function getTeamMembers(
 
     enrichedProfiles.forEach((profile) => {
       const memberData = rpcTeamData ? rpcTeamData.find((member: any) => member.user_id === profile.user_id) : null
-      const clerkId = memberData?.manager_user_id_field || memberData?.clerk_user_id
+      const clerkId = memberData?.clerk_user_id
 
       if (clerkId) {
         clerkUserIds.push(clerkId)
@@ -265,12 +281,14 @@ export async function getTeamMembers(
             profile.clerk_user = clerkUsersMap.get(clerkId)
           }
           return profile
-        }).filter(profile => profile.clerk_user !== null || profile.user_id)
+        }) // Remove the filter - always return all profiles even if Clerk data is missing
       } catch (error) {
         console.error('[User Service] Batch Clerk fetch failed:', error)
       }
     }
   }
+
+  console.log('[User Service] Final profiles returned:', enrichedProfiles.length, enrichedProfiles.map(p => ({ user_id: p.user_id, full_name: p.full_name })))
 
   return {
     users: enrichedProfiles,
