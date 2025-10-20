@@ -908,9 +908,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                           <div className="flex items-center gap-2">
                             <Button
                               size="sm"
-                              variant="outline"
                               onClick={() => resendInvitation(invitation.id)}
-                              className="border-gray-600 hover:bg-gray-600 text-white"
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
                             >
                               <Send className="w-3 h-3 mr-1" />
                               Resend
