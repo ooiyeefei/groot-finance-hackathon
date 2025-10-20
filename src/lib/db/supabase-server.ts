@@ -431,6 +431,7 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
 
     // 🛡️ RESILIENT QUERY: Handle potential duplicate records gracefully
     // Get user data with business home currency from joined businesses table
+    // Use explicit foreign key relationship to resolve ambiguity
     const { data: users, error } = await serviceClient
       .from('users')
       .select(`
@@ -439,7 +440,7 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
         email,
         full_name,
         created_at,
-        businesses (
+        businesses!users_business_id_fkey (
           home_currency
         )
       `)
@@ -472,7 +473,7 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
             email,
             full_name,
             created_at,
-            businesses (
+            businesses!users_business_id_fkey (
               home_currency
             )
           `)
