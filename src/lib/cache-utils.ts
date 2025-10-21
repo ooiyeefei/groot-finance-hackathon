@@ -149,3 +149,21 @@ export async function fetchUserRoleWithCache(): Promise<any> {
     throw error
   }
 }
+
+/**
+ * Prefetch user role early (before component mounting)
+ * Call this as soon as authentication is available
+ */
+export function prefetchUserRole(): Promise<any> {
+  // Return cached data immediately if available
+  const cached = getCachedUserRole()
+  if (cached) {
+    return Promise.resolve(cached)
+  }
+
+  // Start prefetching in background
+  return fetchUserRoleWithCache().catch(error => {
+    console.warn('[CacheUtils] Prefetch failed, will retry on component mount:', error)
+    return null
+  })
+}

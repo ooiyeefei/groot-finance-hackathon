@@ -22,6 +22,7 @@ import {
   getBusinessContext,
   switchBusiness
 } from '@/lib/api-client'
+import { prefetchUserRole } from '@/lib/cache-utils'
 
 // ============================================================================
 // Context Types
@@ -312,6 +313,16 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   // Effect Hooks
   // ============================================================================
 
+  // ULTRA-EARLY PREFETCH: Start role prefetching as soon as Clerk is ready
+  useEffect(() => {
+    if (isAuthLoaded && isSignedIn && userId) {
+      // Start prefetching immediately, don't wait for business context initialization
+      prefetchUserRole().catch(error => {
+        console.warn('[BusinessContext] Ultra-early role prefetch failed:', error)
+      })
+    }
+  }, [isAuthLoaded, isSignedIn, userId])
+
   // Initial data loading - only when authenticated
   useEffect(() => {
     // Only load data if Clerk is loaded and user is signed in
@@ -328,6 +339,11 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
 
     console.log('[BusinessContext] Initializing business context for authenticated user')
     setHasStartedInitialLoad(true)
+
+    // PERFORMANCE: Start prefetching user roles early (parallel to business context loading)
+    prefetchUserRole().catch(error => {
+      console.warn('[BusinessContext] Early role prefetch failed:', error)
+    })
 
     // Load initial data without artificial delays
     const loadData = async () => {

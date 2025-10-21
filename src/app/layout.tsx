@@ -86,7 +86,7 @@ export default function RootLayout({
     >
       <html>
         <head>
-          <link rel="manifest" href="/manifest.json" />
+          <link rel="icon" href="https://storage.googleapis.com/finanseal-logo/finanseal.png" />
         </head>
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-900 text-white`}>
           <ToastProvider>

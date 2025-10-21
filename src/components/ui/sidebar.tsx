@@ -113,7 +113,7 @@ export default function Sidebar() {
     // Load user role using optimized cache-first approach
     const loadUserRole = async () => {
       try {
-        // Use centralized cache-first role fetching with automatic validation
+        // Check cache first for instant loading (prefetched data should be available)
         const roleData = await fetchUserRoleWithCache()
 
         if (roleData && roleData.permissions) {
@@ -121,6 +121,8 @@ export default function Sidebar() {
         }
       } catch (error) {
         console.error('[Sidebar] Failed to load user role:', error)
+        // Fallback to default permissions on error
+        setUserRole({ employee: true, manager: false, admin: false })
       }
 
       // Mark initial load as completed to prevent duplicate calls
