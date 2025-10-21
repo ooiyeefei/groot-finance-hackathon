@@ -128,7 +128,6 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
 
       if (response.success) {
         setMemberships(response.data.memberships)
-        console.log('[BusinessContext] Loaded memberships:', response.data.memberships.length)
       } else {
         // Handle error response
         const errorMsg = ('error' in response ? response.error : 'Failed to load business memberships') as string
@@ -140,7 +139,6 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
 
       // For new users, this is expected - don't treat as error
       if (errorMsg.includes('User not found') || errorMsg.includes('500')) {
-        console.log('[BusinessContext] New user detected, no memberships yet:', errorMsg)
         setMemberships([])
         setMembershipsError(null) // Clear error for new users
       } else {
@@ -153,7 +151,6 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   }, [])
 
   const refreshContext = useCallback(async () => {
-    console.log('[BusinessContext] Starting refreshContext - isLoadingContext will be true')
     setIsLoadingContext(true)
     setContextError(null)
 
@@ -162,26 +159,22 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
 
       if (response.success) {
         setActiveContext(response.data.context)
-        console.log('[BusinessContext] Loaded context:', response.data.context?.businessName || 'None')
       } else {
         // Handle error response
         const errorMsg = ('error' in response ? response.error : 'Failed to load business context') as string
         setContextError(errorMsg)
         console.error('[BusinessContext] Error loading context:', errorMsg)
-        console.log('[BusinessContext] Full response:', response)
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error loading context'
 
       // For new users, this is expected - don't treat as error
       if (errorMsg.includes('User not found') || errorMsg.includes('500')) {
-        console.log('[BusinessContext] New user detected, no business context yet:', errorMsg)
         setActiveContext(null)
         setContextError(null) // Clear error for new users
       } else {
         setContextError(errorMsg)
         console.error('[BusinessContext] Exception loading context:', error)
-        console.log('[BusinessContext] Error details:', { error, errorMsg })
       }
     } finally {
       setIsLoadingContext(false)
@@ -206,13 +199,11 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
             console.warn('[BusinessContext] Failed to cache business profile:', error)
           }
         }
-        console.log('[BusinessContext] Loaded profile:', result.data.name)
       } else {
         const errorMsg = result.error || 'Failed to fetch business profile'
 
         // For new users, "No business associated with user" is expected - don't treat as error
         if (errorMsg.includes('No business associated with user')) {
-          console.log('[BusinessContext] No business profile available - user needs to create/join a business')
           setProfile(null)
           setProfileError(null) // Clear error for new users
         } else {
@@ -225,7 +216,6 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
 
       // For new users, network errors when fetching profile are expected - don't treat as critical error
       if (errorMsg.includes('No business associated with user') || errorMsg.includes('500')) {
-        console.log('[BusinessContext] Profile loading expected failure for new user:', errorMsg)
         setProfile(null)
         setProfileError(null) // Clear error for new users
       } else {
@@ -242,8 +232,6 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     setSwitchError(null)
 
     try {
-      console.log('[BusinessContext] Switching to business:', businessId)
-
       const request: TSwitchBusinessRequest = { businessId }
       const response = await switchBusiness(request)
 
@@ -257,7 +245,6 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         // Refresh profile for new business
         await refreshProfile()
 
-        console.log('[BusinessContext] Successfully switched to:', response.data.context.businessName)
         return true
       } else {
         // Handle error response
@@ -283,7 +270,6 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('business-profile', JSON.stringify(updatedProfile))
-        console.log(`[BusinessContext] ✅ Updated business profile cache with name: "${updatedProfile.name}"`)
       } catch (error) {
         console.warn('[BusinessContext] Failed to update cached business profile:', error)
       }
@@ -292,8 +278,6 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     // CRITICAL FIX: If business name changed, also refresh the active context
     // This ensures sidebar and profile stay in sync when name is updated via settings
     if (activeContext && activeContext.businessName !== updatedProfile.name) {
-      console.log(`[BusinessContext] Business name updated from settings: "${activeContext.businessName}" → "${updatedProfile.name}"`)
-      console.log('[BusinessContext] Refreshing active context to sync sidebar display...')
       refreshContext()
     }
   }, [activeContext, refreshContext])
@@ -352,9 +336,14 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         await refreshMemberships()
         await refreshContext()
 
-        // Only load profile if we have business context (avoid errors for new users)
-        // Profile will be loaded later when business is created or switched
-        console.log('[BusinessContext] Skipping profile load for initial data - will load after business context is established')
+        // Load profile after context is established (if we have a business context)
+        if (memberships.length > 0) {
+          console.log('[BusinessContext] Loading profile after business context is established')
+          await refreshProfile()
+        } else {
+          console.log('[BusinessContext] No memberships found - setting isLoadingProfile to false')
+          setIsLoadingProfile(false)
+        }
 
         console.log('[BusinessContext] ✅ Initial data load complete')
         setHasCompletedInitialLoad(true)

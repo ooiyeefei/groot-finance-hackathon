@@ -9,8 +9,12 @@ import { redirect } from 'next/navigation'
 import { requirePermission } from '@/domains/security/lib/rbac'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import TeamsManagementClient from '@/domains/account-management/components/teams-management-client'
 import { ClientProviders } from '@/components/providers/client-providers'
+import { Suspense, lazy } from 'react'
+import { Loader2 } from 'lucide-react'
+
+// PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
+const TeamsManagementClient = lazy(() => import('@/domains/account-management/components/teams-management-client'))
 
 export default async function TeamsManagementPage() {
   // Server-side authentication check
@@ -48,7 +52,14 @@ export default async function TeamsManagementPage() {
           <main className="flex-1 overflow-auto p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
               {/* Teams Management Client Component */}
-              <TeamsManagementClient userId={userId} />
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                  <span className="ml-2 text-gray-400">Loading teams management...</span>
+                </div>
+              }>
+                <TeamsManagementClient userId={userId} />
+              </Suspense>
             </div>
           </main>
         </div>

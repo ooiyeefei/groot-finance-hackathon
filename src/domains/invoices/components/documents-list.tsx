@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
+import { useState, useEffect, forwardRef, useImperativeHandle, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus, Loader2 } from 'lucide-react'
@@ -9,15 +9,17 @@ import { useDocuments } from '@/domains/invoices/hooks/use-documents'
 import { useDocumentPolling } from '@/domains/invoices/hooks/use-document-polling'
 import DocumentStatusBadge from './document-status-badge'
 import ConfidenceScoreMeter from './confidence-score-meter'
-import DocumentAnalysisModal from './document-analysis-modal'
-import AccountingEntryFormModal from '@/domains/accounting-entries/components/accounting-entry-edit-modal'
-import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { mapDocumentToAccountingEntry, canCreateAccountingEntryFromDocument } from '@/domains/invoices/lib/document-to-accounting-entry-mapper'
 import { CreateAccountingEntryRequest } from '@/domains/accounting-entries/types'
 import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
 import ExtractedInfoTags from './ExtractedInfoTags'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useToast } from '@/components/ui/toast'
+
+// PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
+const DocumentAnalysisModal = lazy(() => import('./document-analysis-modal'))
+const AccountingEntryFormModal = lazy(() => import('@/domains/accounting-entries/components/accounting-entry-edit-modal'))
+const ConfirmationDialog = lazy(() => import('@/components/ui/confirmation-dialog'))
 
 interface DocumentsListProps {
   onRefresh?: () => void
@@ -511,51 +513,59 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
       {/* Document Analysis Modal */}
       {selectedDocument && getDocumentById(selectedDocument) && (
-        <DocumentAnalysisModal
-          document={getDocumentById(selectedDocument)!}
-          onClose={closeModal}
-        />
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+          <DocumentAnalysisModal
+            document={getDocumentById(selectedDocument)!}
+            onClose={closeModal}
+          />
+        </Suspense>
       )}
 
       {/* Transaction Form Modal with pre-filled data */}
       {transactionFormDocument && getDocumentById(transactionFormDocument) && (
-        <AccountingEntryFormModal
-          onClose={closeTransactionForm}
-          onSubmit={handleCreateTransaction}
-          prefilledData={{
-            ...mapDocumentToAccountingEntry(getDocumentById(transactionFormDocument)! as any),
-            // ✅ POLYMORPHIC: Link to invoice record with discriminator
-            source_record_id: transactionFormDocument,
-            source_document_type: 'invoice' as const
-          }}
-        />
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+          <AccountingEntryFormModal
+            onClose={closeTransactionForm}
+            onSubmit={handleCreateTransaction}
+            prefilledData={{
+              ...mapDocumentToAccountingEntry(getDocumentById(transactionFormDocument)! as any),
+              // ✅ POLYMORPHIC: Link to invoice record with discriminator
+              source_record_id: transactionFormDocument,
+              source_document_type: 'invoice' as const
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Transaction Edit Form Modal for reprocessed documents */}
       {editTransactionData && getDocumentById(editTransactionData.documentId) && editTransactionDetails && (
-        <AccountingEntryFormModal
-          transaction={editTransactionDetails}
-          prefilledData={{
-            ...mapDocumentToAccountingEntry(getDocumentById(editTransactionData.documentId)! as any)
-            // Don't include source_record_id for updates
-          }}
-          onClose={closeTransactionEditForm}
-          onSubmit={handleUpdateTransaction}
-        />
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+          <AccountingEntryFormModal
+            transaction={editTransactionDetails}
+            prefilledData={{
+              ...mapDocumentToAccountingEntry(getDocumentById(editTransactionData.documentId)! as any)
+              // Don't include source_record_id for updates
+            }}
+            onClose={closeTransactionEditForm}
+            onSubmit={handleUpdateTransaction}
+          />
+        </Suspense>
       )}
 
       {/* Standardized Delete Confirmation Dialog */}
-      <ConfirmationDialog
-        isOpen={deleteConfirmation.isOpen}
-        onClose={handleDeleteCancel}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Document"
-        message="Are you sure you want to delete this document? This action cannot be undone."
-        confirmText="Delete"
-        cancelText="Cancel"
-        confirmVariant="danger"
-        isLoading={deleteConfirmation.isLoading}
-      />
+      <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-6 h-6 animate-spin text-white" /></div>}>
+        <ConfirmationDialog
+          isOpen={deleteConfirmation.isOpen}
+          onClose={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
+          title="Delete Document"
+          message="Are you sure you want to delete this document? This action cannot be undone."
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmVariant="danger"
+          isLoading={deleteConfirmation.isLoading}
+        />
+      </Suspense>
     </div>
   )
 })

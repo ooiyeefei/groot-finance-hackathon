@@ -1,11 +1,13 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
+import { Suspense, lazy } from 'react'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { ClientProviders } from '@/components/providers/client-providers'
-import { Building2, User, Globe, Clock, Settings as SettingsIcon } from 'lucide-react'
-import BusinessSettingsSection from '@/domains/account-management/components/business-settings-section'
-import UserProfileSection from '@/domains/account-management/components/user-profile-section'
+import { User, Globe, Clock, Settings as SettingsIcon, Loader2 } from 'lucide-react'
+
+// PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
+const UserProfileSection = lazy(() => import('@/domains/account-management/components/user-profile-section'))
 
 export default async function SettingsPage() {
   // Server-side authentication check
@@ -26,57 +28,14 @@ export default async function SettingsPage() {
         {/* Header */}
         <HeaderWithUser
           title="Settings"
-          subtitle="Manage business and personal preferences"
+          subtitle="Manage your personal preferences and profile"
         />
 
         {/* Main Content Area */}
         <main className="flex-1 p-6 overflow-auto">
-          <div className="max-w-6xl mx-auto">
-            {/* Two-Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-              {/* Left Column: Business-Level Settings (Admin Only) */}
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <Building2 className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-semibold text-white">Business Settings</h2>
-                    <p className="text-sm text-gray-400">Configuration settings for your organization</p>
-                  </div>
-                </div>
-
-                {/* Business Settings Component */}
-                <BusinessSettingsSection />
-
-                {/* Business Timezone */}
-                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <Clock className="w-5 h-5 text-gray-400" />
-                    <h3 className="text-lg font-semibold text-white">Business Timezone</h3>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Default Timezone for Operations
-                    </label>
-                    <select className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="Asia/Singapore">Asia/Singapore (GMT+8)</option>
-                      <option value="Asia/Bangkok">Asia/Bangkok (GMT+7)</option>
-                      <option value="Asia/Jakarta">Asia/Jakarta (GMT+7)</option>
-                      <option value="Asia/Kuala_Lumpur">Asia/Kuala_Lumpur (GMT+8)</option>
-                      <option value="Asia/Manila">Asia/Manila (GMT+8)</option>
-                      <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (GMT+7)</option>
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Used for financial reporting and compliance timestamps
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: User-Level Settings */}
-              <div className="space-y-6">
+          <div className="max-w-4xl mx-auto">
+            {/* Single Column Layout - Personal Settings Only */}
+            <div className="space-y-6">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
                     <User className="w-5 h-5 text-white" />
@@ -88,7 +47,16 @@ export default async function SettingsPage() {
                 </div>
 
                 {/* User Profile Component */}
-                <UserProfileSection />
+                <Suspense fallback={
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                    <div className="flex items-center justify-center p-8">
+                      <Loader2 className="w-8 h-8 animate-spin text-green-500" />
+                      <span className="ml-2 text-gray-400">Loading personal settings...</span>
+                    </div>
+                  </div>
+                }>
+                  <UserProfileSection />
+                </Suspense>
 
                 {/* Language Settings */}
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
@@ -145,7 +113,6 @@ export default async function SettingsPage() {
                     </p>
                   </div>
                 </div>
-              </div>
             </div>
           </div>
         </main>

@@ -43,7 +43,9 @@
     "approvals": "Persetujuan",
     "team": "Tim",
     "categories": "Kategori",
-    "admin": "Admin"
+    "admin": "Admin",
+    "businessSettings": "Business Settings",
+    "managerApprovals": "Persetujuan Manajer"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -370,7 +372,6 @@
     "delete": "Hapus",
     "cancel": "Batal",
     "search": "Cari",
-    "category": "Kategori",
     "type": "Jenis",
     "from": "Dari",
     "removeFilter": "Hapus filter {label}",
@@ -605,7 +606,15 @@
     "subtitle": "Kelola preferensi akun Anda",
     "profile": "Profil",
     "language": "Bahasa",
-    "currency": "Mata Uang",
+    "currency": {
+      "preferences": "Preferensi Mata Uang",
+      "homeCurrency": "Mata Uang Utama",
+      "description": "Mata uang ini akan digunakan untuk ringkasan dasbor dan konversi di seluruh aplikasi.",
+      "conversion": "Konversi Mata Uang",
+      "conversionDescription": "Transaksi dalam mata uang lain akan dikonversi ke {currency} untuk ringkasan dasbor. Jumlah dan mata uang asli selalu dipertahankan.",
+      "saved": "Disimpan {time}",
+      "savingPreferences": "Menyimpan preferensi..."
+    },
     "notifications": "Notifikasi",
     "privacy": "Privasi",
     "security": "Keamanan",
@@ -637,15 +646,6 @@
       "accessManagerDashboard": "Akses ke dashboard persetujuan manager",
       "abilityToAssignRoles": "Kemampuan untuk menetapkan peran kepada pengguna lain",
       "teamManagementCapabilities": "Kemampuan manajemen tim"
-    },
-    "currency": {
-      "preferences": "Preferensi Mata Uang",
-      "homeCurrency": "Mata Uang Utama",
-      "description": "Mata uang ini akan digunakan untuk ringkasan dasbor dan konversi di seluruh aplikasi.",
-      "conversion": "Konversi Mata Uang",
-      "conversionDescription": "Transaksi dalam mata uang lain akan dikonversi ke {currency} untuk ringkasan dasbor. Jumlah dan mata uang asli selalu dipertahankan.",
-      "saved": "Disimpan {time}",
-      "savingPreferences": "Menyimpan preferensi..."
     },
     "businessProfile": {
       "title": "Profil Bisnis",
@@ -835,14 +835,11 @@
       "categoryBreakdownTitle": "Rincian Kategori",
       "recentReportsTitle": "Laporan Terbaru",
       "quickAccessDescription": "Akses cepat ke laporan yang sebelumnya dibuat",
-      "pleaseSelectMonth": "Silakan pilih bulan",
       "failedToGenerate": "Gagal membuat laporan",
-      "networkError": "Kesalahan jaringan. Silakan coba lagi.",
       "selectMonthPlaceholder": "Pilih bulan",
       "selectEmployeePlaceholder": "Pilih karyawan (opsional)",
       "claimsText": "klaim",
-      "reportGeneratedOn": "Laporan dibuat pada:",
-      "dataAsOf": "Data per:"
+      "reportGeneratedOn": "Laporan dibuat pada:"
     }
   },
   "categories": {

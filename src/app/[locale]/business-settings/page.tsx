@@ -1,6 +1,6 @@
 /**
- * Manager Categories Page
- * Interface for managing expense and COGS categories
+ * Business Settings Page
+ * Central hub for business management functions (managers and admins only)
  * SECURITY: Server-side role authorization required
  */
 
@@ -13,10 +13,10 @@ import { ClientProviders } from '@/components/providers/client-providers'
 import { Suspense, lazy } from 'react'
 import { Loader2 } from 'lucide-react'
 
-// PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
-const CategoriesManagementClient = lazy(() => import('@/domains/expense-claims/components/categories-management-client'))
+// PERFORMANCE OPTIMIZATION: Dynamic import for tabbed business settings (only load when needed)
+const TabbedBusinessSettings = lazy(() => import('@/domains/account-management/components/tabbed-business-settings'))
 
-export default async function CategoriesManagementPage() {
+export default async function BusinessSettingsPage() {
   // Server-side authentication check
   const { userId } = await auth()
 
@@ -24,14 +24,15 @@ export default async function CategoriesManagementPage() {
     redirect('/sign-in')
   }
 
-  const user = await currentUser()
-
-  if (!user) {
-    redirect('/sign-in')
+  // SECURITY: Server-side role authorization - require manager or admin permission
+  try {
+    await requirePermission('manager') // This allows both manager and admin
+  } catch (error) {
+    console.error('[Business Settings Page] Authorization failed:', error)
+    redirect('/')
   }
 
-  // SECURITY: Enforce manager role requirement on server-side
-  await requirePermission('manager')
+  const user = await currentUser()
 
   return (
     <ClientProviders>
@@ -43,20 +44,20 @@ export default async function CategoriesManagementPage() {
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <HeaderWithUser
-            title="Category Management"
-            subtitle="Manage expense and Cost of Goods Sold categories for your organization"
+            title="Business Settings"
+            subtitle="Manage your business configuration and team"
           />
 
-          {/* Main Content Area */}
+          {/* Main Content Area - Full Width Tabbed Interface */}
           <main className="flex-1 overflow-auto p-4 sm:p-6">
-            <div className="max-w-7xl mx-auto">
+            <div className="w-full max-w-none">
               <Suspense fallback={
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-                  <span className="ml-2 text-gray-400">Loading categories management...</span>
+                  <span className="ml-2 text-gray-400">Loading business settings...</span>
                 </div>
               }>
-                <CategoriesManagementClient userId={userId} />
+                <TabbedBusinessSettings />
               </Suspense>
             </div>
           </main>

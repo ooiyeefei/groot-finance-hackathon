@@ -608,12 +608,35 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
     throw new Error('Authentication required')
   }
 
-  // Get JWT token from Clerk
+  // Get JWT token from Clerk with enhanced error handling
   const { getToken } = await auth()
-  const jwtToken = await getToken({ template: 'supabase' })
+
+  console.log(`[Auth] Attempting to get JWT token for user: ${authenticatedClerkUserId}`)
+
+  let jwtToken: string | null = null
+  try {
+    jwtToken = await getToken({ template: 'supabase' })
+    console.log(`[Auth] JWT token obtained successfully: ${jwtToken ? 'exists' : 'null'}`)
+
+    if (jwtToken) {
+      // Validate JWT structure before using
+      const tokenParts = jwtToken.split('.')
+      if (tokenParts.length !== 3) {
+        console.error(`[Auth] Invalid JWT structure - expected 3 parts, got ${tokenParts.length}`)
+        throw new Error('Invalid JWT token structure')
+      }
+      console.log(`[Auth] JWT token validation passed`)
+    }
+  } catch (error) {
+    console.error(`[Auth] Failed to get JWT token:`, error)
+    console.error(`[Auth] This usually means the 'supabase' JWT template is not configured in Clerk`)
+    console.error(`[Auth] Please check your Clerk dashboard JWT templates configuration`)
+    throw new Error(`JWT token generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
 
   if (!jwtToken) {
-    throw new Error('No JWT token available')
+    console.error(`[Auth] No JWT token available - template 'supabase' may not exist in Clerk`)
+    throw new Error('No JWT token available - please configure the supabase JWT template in Clerk')
   }
 
   // Create Supabase client with Clerk JWT
@@ -672,12 +695,34 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
 
     console.log(`[BusinessContext] ✅ Using business context: ${activeBusinessId}`)
 
-    // Get JWT token from Clerk
+    // Get JWT token from Clerk with enhanced error handling
     const { getToken } = await auth()
-    const jwtToken = await getToken({ template: 'supabase' })
+
+    console.log(`[BusinessContext] Attempting to get JWT token for user: ${authenticatedClerkUserId}`)
+
+    let jwtToken: string | null = null
+    try {
+      jwtToken = await getToken({ template: 'supabase' })
+      console.log(`[BusinessContext] JWT token obtained successfully: ${jwtToken ? 'exists' : 'null'}`)
+
+      if (jwtToken) {
+        // Validate JWT structure before using
+        const tokenParts = jwtToken.split('.')
+        if (tokenParts.length !== 3) {
+          console.error(`[BusinessContext] Invalid JWT structure - expected 3 parts, got ${tokenParts.length}`)
+          throw new Error('Invalid JWT token structure')
+        }
+        console.log(`[BusinessContext] JWT token validation passed`)
+      }
+    } catch (error) {
+      console.error(`[BusinessContext] Failed to get JWT token:`, error)
+      console.error(`[BusinessContext] This usually means the 'supabase' JWT template is not configured in Clerk`)
+      throw new Error(`JWT token generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
 
     if (!jwtToken) {
-      throw new Error('No JWT token available')
+      console.error(`[BusinessContext] No JWT token available - template 'supabase' may not exist in Clerk`)
+      throw new Error('No JWT token available - please configure the supabase JWT template in Clerk')
     }
 
     // Create Supabase client with Clerk JWT

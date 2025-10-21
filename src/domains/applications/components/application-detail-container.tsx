@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,24 +34,34 @@ import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useDocumentPolling } from '@/domains/invoices/hooks/useDocumentPolling'
 import { useDocumentSchema } from '@/domains/invoices/hooks/useDocumentSchema'
-import DynamicFieldRenderer from '@/domains/invoices/components/dynamic-field-renderer'
-import SmartPayslipUploader from '@/domains/applications/components/smart-payslip-uploader'
-import ICDataDisplay from '@/domains/invoices/components/ic-data-display'
-import ApplicationFormDataDisplay from '@/domains/invoices/components/application-form-data-display'
 import { transformErrorMessage, getErrorSuggestions } from '@/domains/applications/lib/error-message-transformer'
-import PayslipDataDisplay from '@/domains/invoices/components/payslip-data-display'
+
+// PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
+const DynamicFieldRenderer = lazy(() => import('@/domains/invoices/components/dynamic-field-renderer'))
+const SmartPayslipUploader = lazy(() => import('@/domains/applications/components/smart-payslip-uploader'))
+const ICDataDisplay = lazy(() => import('@/domains/invoices/components/ic-data-display'))
+const ApplicationFormDataDisplay = lazy(() => import('@/domains/invoices/components/application-form-data-display'))
+const PayslipDataDisplay = lazy(() => import('@/domains/invoices/components/payslip-data-display'))
 
 // Component to display extracted data for completed documents
 function ExtractedDataDisplay({ documentType, extractedData }: { documentType: string, extractedData: any }) {
 
   // Use specialized IC component for identity card documents
   if (documentType === 'ic') {
-    return <ICDataDisplay data={extractedData} />
+    return (
+      <Suspense fallback={<div className="mt-4 p-4 bg-gray-700 rounded-lg animate-pulse"><div className="h-4 bg-gray-600 rounded w-1/3 mb-2"></div></div>}>
+        <ICDataDisplay data={extractedData} />
+      </Suspense>
+    )
   }
 
   // Use specialized application form component for application forms
   if (documentType === 'application_form') {
-    return <ApplicationFormDataDisplay data={extractedData} />
+    return (
+      <Suspense fallback={<div className="mt-4 p-4 bg-gray-700 rounded-lg animate-pulse"><div className="h-4 bg-gray-600 rounded w-1/3 mb-2"></div></div>}>
+        <ApplicationFormDataDisplay data={extractedData} />
+      </Suspense>
+    )
   }
 
   // Handle multi_payslip documents - return flag to render individual containers
@@ -62,7 +72,11 @@ function ExtractedDataDisplay({ documentType, extractedData }: { documentType: s
 
   // Handle single payslip documents
   if (documentType === 'payslip') {
-    return <PayslipDataDisplay data={extractedData} />
+    return (
+      <Suspense fallback={<div className="mt-4 p-4 bg-gray-700 rounded-lg animate-pulse"><div className="h-4 bg-gray-600 rounded w-1/3 mb-2"></div></div>}>
+        <PayslipDataDisplay data={extractedData} />
+      </Suspense>
+    )
   }
 
   // Use generic schema-based renderer for other document types
@@ -96,10 +110,12 @@ function ExtractedDataDisplay({ documentType, extractedData }: { documentType: s
         Extracted Data
       </h5>
       <div className="text-sm">
-        <DynamicFieldRenderer
-          schema={schema}
-          data={extractedData}
-        />
+        <Suspense fallback={<div className="h-4 bg-gray-600 rounded w-2/3 animate-pulse"></div>}>
+          <DynamicFieldRenderer
+            schema={schema}
+            data={extractedData}
+          />
+        </Suspense>
       </div>
     </div>
   )
@@ -866,18 +882,20 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
             }) || []
 
             return (
-              <SmartPayslipUploader
-                applicationId={applicationId}
-                payslipSlots={payslipSlots}
-                onFileUpload={handleFileUpload}
-                onReprocess={handleReprocess}
-                onViewDocument={handleViewDocument}
-                onDownloadDocument={handleDownloadDocument}
-                onDeleteDocument={confirmDeleteDocument}
-                uploadingSlots={uploadingSlots}
-                formatDate={formatDate}
-                validationResults={application.validation_results?.payslips}
-              />
+              <Suspense fallback={<div className="bg-gray-800 border-gray-700 rounded-lg p-6 animate-pulse"><div className="h-32 bg-gray-700 rounded"></div></div>}>
+                <SmartPayslipUploader
+                  applicationId={applicationId}
+                  payslipSlots={payslipSlots}
+                  onFileUpload={handleFileUpload}
+                  onReprocess={handleReprocess}
+                  onViewDocument={handleViewDocument}
+                  onDownloadDocument={handleDownloadDocument}
+                  onDeleteDocument={confirmDeleteDocument}
+                  uploadingSlots={uploadingSlots}
+                  formatDate={formatDate}
+                  validationResults={application.validation_results?.payslips}
+                />
+              </Suspense>
             )
           }
 
@@ -888,18 +906,20 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
           if (payslipSlots.length > 0) {
             return (
-              <SmartPayslipUploader
-                applicationId={applicationId}
-                payslipSlots={payslipSlots}
-                onFileUpload={handleFileUpload}
-                onReprocess={handleReprocess}
-                onViewDocument={handleViewDocument}
-                onDownloadDocument={handleDownloadDocument}
-                onDeleteDocument={confirmDeleteDocument}
-                uploadingSlots={uploadingSlots}
-                formatDate={formatDate}
-                validationResults={application.validation_results?.payslips}
-              />
+              <Suspense fallback={<div className="bg-gray-800 border-gray-700 rounded-lg p-6 animate-pulse"><div className="h-32 bg-gray-700 rounded"></div></div>}>
+                <SmartPayslipUploader
+                  applicationId={applicationId}
+                  payslipSlots={payslipSlots}
+                  onFileUpload={handleFileUpload}
+                  onReprocess={handleReprocess}
+                  onViewDocument={handleViewDocument}
+                  onDownloadDocument={handleDownloadDocument}
+                  onDeleteDocument={confirmDeleteDocument}
+                  uploadingSlots={uploadingSlots}
+                  formatDate={formatDate}
+                  validationResults={application.validation_results?.payslips}
+                />
+              </Suspense>
             )
           }
           return null
@@ -1057,7 +1077,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                           {expandedContainers.has(`${slot.document?.id}-payslip-${index}`) && (
                             <div className="border-t border-gray-500">
                               <div className="p-4">
-                                <PayslipDataDisplay data={payslip} />
+                                <Suspense fallback={<div className="h-16 bg-gray-600 rounded animate-pulse"></div>}>
+                                  <PayslipDataDisplay data={payslip} />
+                                </Suspense>
                               </div>
                             </div>
                           )}

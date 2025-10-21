@@ -3,7 +3,7 @@
  * Handles exchange rates for Southeast Asian SME transactions
  */
 
-import { SupportedCurrency, CurrencyConversion, ExchangeRateService } from '@/domains/accounting-entries/types'
+import { SupportedCurrency, CurrencyConversion, ExchangeRateService, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types'
 
 // Exchange rate cache interface
 interface CachedRate {
@@ -349,12 +349,9 @@ export class CurrencyService implements ExchangeRateService {
     return formatter.format(amount)
   }
 
-  // Validate currency code
+  // Validate currency code using centralized currency definitions
   isSupportedCurrency(currency: string): currency is SupportedCurrency {
-    const supportedCurrencies: SupportedCurrency[] = [
-      'THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP', 'INR'
-    ]
-    return supportedCurrencies.includes(currency as SupportedCurrency)
+    return currency in CURRENCY_SYMBOLS
   }
 }
 

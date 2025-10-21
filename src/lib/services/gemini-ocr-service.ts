@@ -49,14 +49,6 @@ export class GeminiOCRService {
     const startTime = Date.now()
 
     try {
-      console.log(`[Gemini OCR] 🚀 Starting processing: ${request.documentType} with model ${this.config.model}`)
-      console.log(`[Gemini OCR] Request validation:`, {
-        hasImageData: !!request.imageBase64,
-        imageSize: request.imageBase64 ? `${Math.round(Buffer.from(request.imageBase64, 'base64').length / 1024)}KB` : 'N/A',
-        mimeType: request.mimeType,
-        documentType: request.documentType,
-        timestamp: new Date().toISOString()
-      })
 
       // Enhanced input validation
       if (!request.imageBase64 || request.imageBase64.trim().length === 0) {
@@ -90,14 +82,12 @@ export class GeminiOCRService {
         }
       }
 
-      console.log('[Gemini OCR] ✅ Input validation passed - starting retry logic')
-
       const result = await this.retryWithBackoff(async () => {
         return await this.callGeminiAPI(request)
       })
 
       const processingTime = Date.now() - startTime
-      
+
       // Add enhanced processing metadata
       if (result.success && result.data) {
         result.data.processing_metadata = {
@@ -109,23 +99,13 @@ export class GeminiOCRService {
           temperature_config: this.config.temperature,
           confidence_threshold: this.config.confidenceThreshold
         }
-        console.log(`[Gemini OCR] ✅ Processing metadata added:`, result.data.processing_metadata)
       } else if (!result.success) {
         console.error(`[Gemini OCR] ❌ Processing failed - error details:`, result.error)
       }
 
       result.processing_time_ms = processingTime
-      
-      if (result.success) {
-        console.log(`[Gemini OCR] 🎉 Processing completed successfully in ${processingTime}ms`)
-        console.log(`[Gemini OCR] Result summary:`, {
-          hasData: !!result.data,
-          vendor: result.data?.vendor_name || 'unknown',
-          amount: result.data?.total_amount || 0,
-          currency: result.data?.currency || 'unknown',
-          confidence: result.data?.confidence_score || 0
-        })
-      } else {
+
+      if (!result.success) {
         console.error(`[Gemini OCR] ❌ Processing failed after ${processingTime}ms`)
       }
 
@@ -174,51 +154,31 @@ export class GeminiOCRService {
     const startTime = Date.now()
     
     try {
-      console.log(`[Gemini OCR] === Starting Gemini API Call ===`)
-      console.log(`[Gemini OCR] Model: ${this.config.model}`)
-      console.log(`[Gemini OCR] Timeout: ${this.config.timeoutMs}ms`)
-      console.log(`[Gemini OCR] Image size: ${Math.round(Buffer.from(request.imageBase64, 'base64').length / 1024)}KB`)
-      console.log(`[Gemini OCR] MIME type: ${request.mimeType}`)
-      
-      // Enhanced model initialization with comprehensive error handling
-      try {
-        console.log('[Gemini OCR] Initializing Gemini model...')
-        console.log('[Gemini OCR] ✅ Model initialized successfully with new GoogleGenAI SDK')
-      } catch (modelInitError) {
-        console.error('[Gemini OCR] ❌ Model initialization failed:', modelInitError)
-        throw new Error(`Model initialization failed: ${modelInitError instanceof Error ? modelInitError.message : 'Unknown error'}`)
-      }
-
       // Stage 1: Document type classification with enhanced error handling
-      console.log('[Gemini OCR] === Stage 1: Document Classification ===')
       const classificationStartTime = Date.now()
-      
+
       let classificationPrompt
       try {
-        console.log('[Gemini OCR] Building classification prompt...')
         classificationPrompt = this.buildDocumentClassificationPrompt()
-        console.log(`[Gemini OCR] ✅ Classification prompt built: ${classificationPrompt.length} characters`)
       } catch (promptError) {
         console.error('[Gemini OCR] ❌ Failed to build classification prompt:', promptError)
         throw new Error(`Classification prompt build failed: ${promptError instanceof Error ? promptError.message : 'Unknown error'}`)
       }
-      
+
       // Enhanced image part validation and creation
       let imagePart
       try {
-        console.log('[Gemini OCR] Creating image part for Gemini...')
-        
         // Validate base64 data
         if (!request.imageBase64 || request.imageBase64.length === 0) {
           throw new Error('Empty base64 image data provided')
         }
-        
+
         // Validate MIME type
         const validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
         if (!validMimeTypes.includes(request.mimeType.toLowerCase())) {
           throw new Error(`Invalid MIME type: ${request.mimeType}. Supported: ${validMimeTypes.join(', ')}`)
         }
-        
+
         // Create image part with validation
         imagePart = {
           inlineData: {
@@ -226,13 +186,10 @@ export class GeminiOCRService {
             mimeType: request.mimeType
           }
         }
-        console.log('[Gemini OCR] ✅ Image part created successfully')
       } catch (imagePartError) {
         console.error('[Gemini OCR] ❌ Image part creation failed:', imagePartError)
         throw new Error(`Image part creation failed: ${imagePartError instanceof Error ? imagePartError.message : 'Unknown error'}`)
       }
-
-      console.log('[Gemini OCR] Calling Gemini for classification...')
       
       // Configure safety settings to reduce false positives on financial documents
       const safetySettings = [
@@ -257,8 +214,6 @@ export class GeminiOCRService {
       // First API call for document type detection with comprehensive error handling
       let classificationResult
       try {
-        console.log('[Gemini OCR] 🚀 Starting classification API call...')
-        
         // Create the generation call with timeout wrapper using new API
         const classificationCall = this.genAI.models.generateContent({
           model: this.config.model,
@@ -269,25 +224,17 @@ export class GeminiOCRService {
             safetySettings
           }
         })
-        
-        // Enhanced timeout handling with detailed logging
+
+        // Enhanced timeout handling
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => {
             const elapsed = Date.now() - classificationStartTime
             console.error(`[Gemini OCR] ❌ Classification timeout after ${elapsed}ms (limit: ${this.config.timeoutMs}ms)`)
-            console.error(`[Gemini OCR] Timeout details:`)
-            console.error(`  - Model: ${this.config.model}`)
-            console.error(`  - Image size: ${Math.round(Buffer.from(request.imageBase64, 'base64').length / 1024)}KB`)
-            console.error(`  - MIME type: ${request.mimeType}`)
-            console.error(`  - Prompt length: ${classificationPrompt.length} chars`)
             reject(new Error(`Classification timeout after ${elapsed}ms`))
           }, this.config.timeoutMs)
         })
-        
+
         classificationResult = await Promise.race([classificationCall, timeoutPromise])
-        
-        const classificationTime = Date.now() - classificationStartTime
-        console.log(`[Gemini OCR] ✅ Classification API call completed in ${classificationTime}ms`)
         
       } catch (classificationError) {
         const classificationTime = Date.now() - classificationStartTime

@@ -43,7 +43,9 @@
     "approvals": "审批",
     "team": "团队",
     "categories": "类别",
-    "admin": "系统管理"
+    "admin": "系统管理",
+    "businessSettings": "Business Settings",
+    "managerApprovals": "经理审批"
   },
   "dashboard": {
     "title": "仪表板",
@@ -370,7 +372,6 @@
     "delete": "删除",
     "cancel": "取消",
     "search": "搜索",
-    "category": "类别",
     "type": "类型",
     "from": "从",
     "removeFilter": "移除{label}筛选器",
@@ -427,8 +428,7 @@
     "unitPlaceholder": "公斤、包等",
     "removeItem": "移除项目",
     "noLineItemsYet": "尚未添加明细项目",
-    "clickAddItemToStart": "点击\\\"添加项目\\\"开始添加明细项目",
-    "awaitingPayment": "等待付款"
+    "clickAddItemToStart": "点击\\\"添加项目\\\"开始添加明细项目"
   },
   "expenseClaims": {
     "title": "费用报销",
@@ -609,14 +609,11 @@
       "categoryBreakdownTitle": "类别明细",
       "recentReportsTitle": "最近报告",
       "quickAccessDescription": "快速访问以前生成的报告",
-      "pleaseSelectMonth": "请选择月份",
       "failedToGenerate": "生成报告失败",
-      "networkError": "网络错误。请重试。",
       "selectMonthPlaceholder": "选择月份",
       "selectEmployeePlaceholder": "选择员工（可选）",
       "claimsText": "个报销",
-      "reportGeneratedOn": "报告生成于：",
-      "dataAsOf": "数据截止："
+      "reportGeneratedOn": "报告生成于："
     }
   },
   "chat": {
@@ -656,7 +653,15 @@
     "subtitle": "管理您的账户偏好",
     "profile": "个人资料",
     "language": "语言",
-    "currency": "货币",
+    "currency": {
+      "preferences": "货币偏好",
+      "homeCurrency": "主货币",
+      "description": "此货币将用于整个应用程序的仪表板摘要和转换。",
+      "conversion": "货币转换",
+      "conversionDescription": "其他货币的交易将转换为{currency}以用于仪表板摘要。始终保留原始金额和货币。",
+      "saved": "已保存 {time}",
+      "savingPreferences": "正在保存偏好..."
+    },
     "notifications": "通知",
     "privacy": "隐私",
     "security": "安全",
@@ -688,15 +693,6 @@
       "accessManagerDashboard": "访问管理员审批仪表板",
       "abilityToAssignRoles": "为其他用户分配角色的能力",
       "teamManagementCapabilities": "团队管理功能"
-    },
-    "currency": {
-      "preferences": "货币偏好",
-      "homeCurrency": "主货币",
-      "description": "此货币将用于整个应用程序的仪表板摘要和转换。",
-      "conversion": "货币转换",
-      "conversionDescription": "其他货币的交易将转换为{currency}以用于仪表板摘要。始终保留原始金额和货币。",
-      "saved": "已保存 {time}",
-      "savingPreferences": "正在保存偏好..."
     },
     "businessProfile": {
       "title": "商业资料",

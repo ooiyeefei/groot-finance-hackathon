@@ -43,7 +43,9 @@
     "approvals": "การอนุมัติ",
     "team": "ทีม",
     "categories": "หมวดหมู่",
-    "admin": "ผู้ดูแลระบบ"
+    "admin": "ผู้ดูแลระบบ",
+    "businessSettings": "Business Settings",
+    "managerApprovals": "การอนุมัติผู้จัดการ"
   },
   "dashboard": {
     "title": "แดชบอร์ด",
@@ -370,7 +372,6 @@
     "delete": "ลบ",
     "cancel": "ยกเลิก",
     "search": "ค้นหา",
-    "category": "หมวดหมู่",
     "type": "ประเภท",
     "from": "จาก",
     "removeFilter": "ลบตัวกรอง {label}",
@@ -427,8 +428,7 @@
     "unitPlaceholder": "กก., แพ็ค",
     "removeItem": "ลบรายการ",
     "noLineItemsYet": "ยังไม่มีรายการสินค้าที่เพิ่ม",
-    "clickAddItemToStart": "คลิก \\\"เพิ่มรายการ\\\" เพื่อเริ่มเพิ่มรายการสินค้า",
-    "awaitingPayment": "รอการชำระเงิน"
+    "clickAddItemToStart": "คลิก \\\"เพิ่มรายการ\\\" เพื่อเริ่มเพิ่มรายการสินค้า"
   },
   "expenseClaims": {
     "title": "เคลมค่าใช้จ่าย",
@@ -606,7 +606,15 @@
     "subtitle": "จัดการการตั้งค่าบัญชีของคุณ",
     "profile": "โปรไฟล์",
     "language": "ภาษา",
-    "currency": "สกุลเงิน",
+    "currency": {
+      "preferences": "การตั้งค่าสกุลเงิน",
+      "homeCurrency": "สกุลเงินหลัก",
+      "description": "สกุลเงินนี้จะถูกใช้สำหรับสรุปแดชบอร์ดและการแปลงสกุลเงินทั่วทั้งแอป",
+      "conversion": "การแปลงสกุลเงิน",
+      "conversionDescription": "ธุรกรรมในสกุลเงินอื่นจะถูกแปลงเป็น {currency} สำหรับสรุปแดชบอร์ด จำนวนเงินและสกุลเงินต้นฉบับจะถูกเก็บไว้เสมอ",
+      "saved": "บันทึกแล้ว {time}",
+      "savingPreferences": "กำลังบันทึกการตั้งค่า..."
+    },
     "notifications": "การแจ้งเตือน",
     "privacy": "ความเป็นส่วนตัว",
     "security": "ความปลอดภัย",
@@ -638,15 +646,6 @@
       "accessManagerDashboard": "เข้าถึงแดชบอร์ดอนุมัติของผู้จัดการ",
       "abilityToAssignRoles": "ความสามารถในการกำหนดบทบาทให้ผู้ใช้อื่น",
       "teamManagementCapabilities": "ความสามารถจัดการทีม"
-    },
-    "currency": {
-      "preferences": "การตั้งค่าสกุลเงิน",
-      "homeCurrency": "สกุลเงินหลัก",
-      "description": "สกุลเงินนี้จะถูกใช้สำหรับสรุปแดชบอร์ดและการแปลงสกุลเงินทั่วทั้งแอป",
-      "conversion": "การแปลงสกุลเงิน",
-      "conversionDescription": "ธุรกรรมในสกุลเงินอื่นจะถูกแปลงเป็น {currency} สำหรับสรุปแดชบอร์ด จำนวนเงินและสกุลเงินต้นฉบับจะถูกเก็บไว้เสมอ",
-      "saved": "บันทึกแล้ว {time}",
-      "savingPreferences": "กำลังบันทึกการตั้งค่า..."
     },
     "businessProfile": {
       "title": "โปรไฟล์ธุรกิจ",
@@ -818,14 +817,11 @@
       "categoryBreakdownTitle": "รายละเอียดตามหมวดหมู่",
       "recentReportsTitle": "รายงานล่าสุด",
       "quickAccessDescription": "เข้าถึงรายงานที่สร้างไว้ก่อนหน้านี้ได้อย่างรวดเร็ว",
-      "pleaseSelectMonth": "กรุณาเลือกเดือน",
       "failedToGenerate": "ไม่สามารถสร้างรายงานได้",
-      "networkError": "ข้อผิดพลาดของเครือข่าย กรุณาลองอีกครั้ง",
       "selectMonthPlaceholder": "เลือกเดือน",
       "selectEmployeePlaceholder": "เลือกพนักงาน (ไม่บังคับ)",
       "claimsText": "เคลม",
-      "reportGeneratedOn": "รายงานสร้างเมื่อ:",
-      "dataAsOf": "ข้อมูล ณ วันที่:"
+      "reportGeneratedOn": "รายงานสร้างเมื่อ:"
     }
   },
   "analytics": {

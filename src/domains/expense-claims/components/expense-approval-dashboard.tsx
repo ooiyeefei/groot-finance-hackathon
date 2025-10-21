@@ -134,13 +134,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
       </div>
 
       {/* Management Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => {
-        setActiveTab(value)
-        // Refresh dashboard data when switching to reimbursement tab to show newly approved claims
-        if (value === 'reimbursements') {
-          fetchDashboardData()
-        }
-      }} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-gray-800 border border-gray-700">
           <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
             Overview
@@ -168,7 +162,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 
         {dashboardData?.role?.admin && (
           <TabsContent value="reimbursements" className="space-y-4">
-            <ReimbursementQueueContent data={dashboardData} />
+            <ReimbursementQueueContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
           </TabsContent>
         )}
 
@@ -280,13 +274,17 @@ function ManagementOverviewContent({ data, setActiveTab }: {
 }
 
 // Reimbursement Queue Content (Admin Only)
-function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) {
+function ReimbursementQueueContent({
+  data,
+  onRefreshNeeded
+}: {
+  data: ManagementDashboardData
+  onRefreshNeeded: () => void
+}) {
 
   // Handle individual reimbursement processing
   const handleReimbursement = async (claimId: string) => {
     try {
-      console.log(`[ReimbursementQueue] Processing reimbursement for claim ${claimId}`)
-
       const response = await fetch(`/api/v1/expense-claims/${claimId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -299,9 +297,8 @@ function ReimbursementQueueContent({ data }: { data: ManagementDashboardData }) 
       const result = await response.json()
 
       if (result.success) {
-        console.log(`✅ Successfully processed reimbursement for claim ${claimId}`)
-        // Refresh the page to update the reimbursement queue
-        window.location.reload()
+        // Refresh data to update the reimbursement queue
+        onRefreshNeeded()
       } else {
         console.error('Failed to process reimbursement:', result.error)
         alert(`Failed to process reimbursement: ${result.error}`)
@@ -498,7 +495,6 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
   const fetchPendingClaims = async () => {
     try {
       setLoading(true)
-      console.log('[ApprovalsList] Fetching pending claims...')
       // Only fetch claims that are submitted and pending approval
       const response = await fetch('/api/v1/expense-claims?approver=me&status=submitted')
 
@@ -507,12 +503,10 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
       }
 
       const result = await response.json()
-      console.log('[ApprovalsList] API response:', result)
 
       if (result.success) {
         // Filter to only show submitted claims (double-check on client side)
         const submittedClaims = (result.data.claims || []).filter((claim: any) => claim.status === 'submitted')
-        console.log('[ApprovalsList] Found submitted claims:', submittedClaims.length)
         setClaims(submittedClaims)
         setError(null)
       } else {
@@ -531,7 +525,6 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
     try {
       setProcessingClaims(prev => new Set([...prev, claimId]))
 
-      console.log(`[ApprovalsList] ${action}ing claim ${claimId} with notes:`, notes)
       const response = await fetch(`/api/v1/expense-claims/${claimId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

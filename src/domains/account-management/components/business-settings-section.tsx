@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building2, DollarSign, Tag, Shield, CheckCircle, AlertCircle } from 'lucide-react'
+import { Building2, DollarSign, Tag, Shield, CheckCircle, AlertCircle, ArrowRight, Users, Settings, FileText } from 'lucide-react'
 import { useBusinessContext } from '@/contexts/business-context'
-import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types'
+import { usePermissions } from '@/contexts/business-context'
+import { SupportedCurrency, CURRENCY_SYMBOLS, CURRENCY_NAMES } from '@/domains/accounting-entries/types'
+import Link from 'next/link'
 
-// Create array of supported currencies from the type
+// Create array of all supported currencies from the centralized type definition
 const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
-  'USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR'
+  'USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR', 'INR'
 ]
 
 interface BusinessSettingsSectionProps {
@@ -16,71 +18,10 @@ interface BusinessSettingsSectionProps {
 
 export default function BusinessSettingsSection({ className }: BusinessSettingsSectionProps) {
   const { profile, isLoadingProfile } = useBusinessContext()
-  const [allowedCurrencies, setAllowedCurrencies] = useState<SupportedCurrency[]>([])
-  const [homeCurrency, setHomeCurrency] = useState<SupportedCurrency>('USD')
-  const [saving, setSaving] = useState(false)
-  const [successMessage, setSuccessMessage] = useState('')
+  const { isAdmin, isManager } = usePermissions()
 
-  // Load business settings when data is available
-  useEffect(() => {
-    // For now, set default values since we haven't implemented the API endpoint yet
-    // This will be updated when we implement the business settings API
-    setAllowedCurrencies(['USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR'])
-    setHomeCurrency('USD')
-  }, [profile])
-
-  const handleCurrencyToggle = (currency: SupportedCurrency) => {
-    setAllowedCurrencies(prev => {
-      if (prev.includes(currency)) {
-        // Don't allow removing home currency
-        if (currency === homeCurrency) {
-          return prev
-        }
-        return prev.filter(c => c !== currency)
-      } else {
-        return [...prev, currency]
-      }
-    })
-  }
-
-  const handleHomeCurrencyChange = (newHomeCurrency: SupportedCurrency) => {
-    setHomeCurrency(newHomeCurrency)
-    // Ensure new home currency is in allowed currencies
-    if (!allowedCurrencies.includes(newHomeCurrency)) {
-      setAllowedCurrencies(prev => [...prev, newHomeCurrency])
-    }
-  }
-
-  const handleSave = async () => {
-    try {
-      setSaving(true)
-      setSuccessMessage('')
-
-      const response = await fetch('/api/v1/businesses/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          home_currency: homeCurrency,
-          allowed_currencies: allowedCurrencies
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update business settings')
-      }
-
-      setSuccessMessage('Business settings saved successfully!')
-      setTimeout(() => setSuccessMessage(''), 3000)
-
-    } catch (error) {
-      console.error('Error saving business settings:', error)
-      alert('Failed to save business settings. Please try again.')
-    } finally {
-      setSaving(false)
-    }
-  }
+  // Only show business management cards to managers and admins
+  const canManageBusiness = isAdmin || isManager
 
   if (isLoadingProfile) {
     return (
@@ -96,157 +37,121 @@ export default function BusinessSettingsSection({ className }: BusinessSettingsS
     )
   }
 
+  // Navigation cards for business management (only visible to managers/admins)
+  const managementCards = [
+    {
+      title: 'Business Profile',
+      description: 'Company information, logo, and basic settings',
+      icon: Building2,
+      href: '/settings/business',
+      color: 'blue',
+      available: true
+    },
+    {
+      title: 'Currency & Finance',
+      description: 'Functional currency and operational currencies',
+      icon: DollarSign,
+      href: '/manager/categories',
+      color: 'green',
+      available: true
+    },
+    {
+      title: 'Team Management',
+      description: 'Invite members, manage roles and permissions',
+      icon: Users,
+      href: '/manager/teams',
+      color: 'purple',
+      available: true,
+      adminOnly: true
+    },
+    {
+      title: 'Approval Workflows',
+      description: 'Review and approve expense claims',
+      icon: FileText,
+      href: '/manager/approvals',
+      color: 'orange',
+      available: true
+    }
+  ]
+
   return (
     <div className={`space-y-6 ${className}`}>
-      {/* Business Currency Settings */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <DollarSign className="w-5 h-5 text-gray-400" />
-          <div>
-            <h3 className="text-lg font-semibold text-white">Currency Configuration</h3>
-            <p className="text-sm text-gray-400">Manage your business's functional and operational currencies</p>
+      {/* Business Management Navigation Cards */}
+      {canManageBusiness && (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Settings className="w-5 h-5 text-gray-400" />
+            <div>
+              <h3 className="text-lg font-semibold text-white">Business Management</h3>
+              <p className="text-sm text-gray-400">Quick access to advanced business settings</p>
+            </div>
           </div>
-        </div>
 
-        {/* Home Currency (Functional Currency) */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4" />
-              Functional Currency (Home Currency)
-            </div>
-          </label>
-          <select
-            value={homeCurrency}
-            onChange={(e) => handleHomeCurrencyChange(e.target.value as SupportedCurrency)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {SUPPORTED_CURRENCIES.map(currency => (
-              <option key={currency} value={currency}>
-                {CURRENCY_SYMBOLS[currency]} {currency} - {getCurrencyName(currency)}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-gray-500 mt-1">
-            Primary currency for financial reporting and consolidation (IFRS functional currency)
-          </p>
-        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {managementCards.map((card) => {
+              // Hide admin-only cards for non-admins
+              if (card.adminOnly && !isAdmin) return null
 
-        {/* Allowed Currencies */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-3">
-            <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4" />
-              Operational Currencies
-            </div>
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {SUPPORTED_CURRENCIES.map(currency => {
-              const isSelected = allowedCurrencies.includes(currency)
-              const isHomeCurrency = currency === homeCurrency
+              const IconComponent = card.icon
+              const colorClasses = {
+                blue: 'from-blue-600/20 to-blue-800/20 border-blue-500/30 hover:border-blue-400',
+                green: 'from-green-600/20 to-green-800/20 border-green-500/30 hover:border-green-400',
+                purple: 'from-purple-600/20 to-purple-800/20 border-purple-500/30 hover:border-purple-400',
+                orange: 'from-orange-600/20 to-orange-800/20 border-orange-500/30 hover:border-orange-400'
+              }
 
               return (
-                <button
-                  key={currency}
-                  onClick={() => handleCurrencyToggle(currency)}
-                  disabled={isHomeCurrency}
+                <Link
+                  key={card.title}
+                  href={card.href}
                   className={`
-                    flex items-center justify-between p-3 rounded-lg border transition-all text-sm font-medium
-                    ${isSelected
-                      ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                      : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
-                    }
-                    ${isHomeCurrency
-                      ? 'opacity-100 cursor-default'
-                      : 'cursor-pointer hover:scale-105'
-                    }
+                    group relative p-4 rounded-lg border transition-all duration-200
+                    bg-gradient-to-br ${colorClasses[card.color as keyof typeof colorClasses]}
+                    hover:scale-105 hover:shadow-lg
                   `}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono">{CURRENCY_SYMBOLS[currency]}</span>
-                    <span>{currency}</span>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className={`
+                          p-2 rounded-lg
+                          ${card.color === 'blue' ? 'bg-blue-500/20 text-blue-300' : ''}
+                          ${card.color === 'green' ? 'bg-green-500/20 text-green-300' : ''}
+                          ${card.color === 'purple' ? 'bg-purple-500/20 text-purple-300' : ''}
+                          ${card.color === 'orange' ? 'bg-orange-500/20 text-orange-300' : ''}
+                        `}>
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+                        <h4 className="text-white font-semibold">{card.title}</h4>
+                        {card.adminOnly && (
+                          <span className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-md">
+                            Admin
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-gray-400 text-sm">{card.description}</p>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
                   </div>
-                  {isSelected && (
-                    <CheckCircle className={`w-4 h-4 ${isHomeCurrency ? 'text-green-400' : 'text-blue-400'}`} />
-                  )}
-                  {isHomeCurrency && (
-                    <Shield className="w-4 h-4 text-green-400" />
-                  )}
-                </button>
+                </Link>
               )
             })}
           </div>
-          <p className="text-xs text-gray-500 mt-2">
-            Currencies employees can use for expense submissions and transactions
-            {homeCurrency && (
-              <span className="block mt-1">
-                <Shield className="w-3 h-3 inline mr-1 text-green-400" />
-                {homeCurrency} is your functional currency and cannot be removed
-              </span>
-            )}
-          </p>
         </div>
+      )}
 
-        {/* Save Button and Status */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-700">
-          <div className="flex items-center gap-2">
-            {successMessage && (
-              <div className="flex items-center gap-2 text-green-400 text-sm">
-                <CheckCircle className="w-4 h-4" />
-                {successMessage}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={handleSave}
-            disabled={saving || allowedCurrencies.length === 0}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-md font-medium transition-colors flex items-center gap-2"
-          >
-            {saving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Expense Categories (Future Enhancement) */}
-      <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Tag className="w-5 h-5 text-gray-400" />
-          <div>
-            <h3 className="text-lg font-semibold text-white">Expense Categories</h3>
-            <p className="text-sm text-gray-400">Configure business expense categories and approval workflows</p>
+      {/* Info message for non-managers */}
+      {!canManageBusiness && (
+        <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-6">
+          <div className="text-center py-4">
+            <AlertCircle className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
+            <p className="text-gray-400 text-sm">
+              Business management settings are available to managers and administrators
+            </p>
           </div>
         </div>
-        <div className="text-center py-6">
-          <AlertCircle className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-          <p className="text-gray-400 text-sm">
-            Category management will be available in a future update
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
-// Helper function to get currency display names
-function getCurrencyName(currency: SupportedCurrency): string {
-  const names: Record<SupportedCurrency, string> = {
-    USD: 'US Dollar',
-    SGD: 'Singapore Dollar',
-    MYR: 'Malaysian Ringgit',
-    THB: 'Thai Baht',
-    IDR: 'Indonesian Rupiah',
-    VND: 'Vietnamese Dong',
-    PHP: 'Philippine Peso',
-    CNY: 'Chinese Yuan',
-    EUR: 'Euro',
-    INR: 'Indian Rupee'
-  }
-  return names[currency] || currency
-}

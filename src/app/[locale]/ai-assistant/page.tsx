@@ -1,16 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import ActionButton from '@/components/ui/action-button'
-import ChatInterface from '@/domains/chat/components/chat-interface'
-import ConversationSidebar from '@/domains/chat/components/conversation-sidebar'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { Menu } from 'lucide-react'
 import { ClientProviders } from '@/components/providers/client-providers'
+
+// PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
+const ChatInterface = lazy(() => import('@/domains/chat/components/chat-interface'))
+const ConversationSidebar = lazy(() => import('@/domains/chat/components/conversation-sidebar'))
 
 interface Message {
   id: string
@@ -76,7 +78,6 @@ interface ConversationData {
 export default function AIAssistantPage() {
   const { userId, isLoaded } = useAuth()
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>()
-  const [chatKey, setChatKey] = useState<string>('initial')
   const [currentMessages, setCurrentMessages] = useState<Message[]>([])
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -87,18 +88,18 @@ export default function AIAssistantPage() {
     redirect('/sign-in')
   }
 
-  // Auto-load most recent conversation on page load
+  // Auto-load most recent conversation on initial page load only
   useEffect(() => {
-    const loadMostRecentConversation = async () => {
-      if (!isLoaded || !userId || initialLoadComplete) return
+    if (!isLoaded || !userId || initialLoadComplete) return
 
+    const loadMostRecentConversation = async () => {
       setLoading(true)
       try {
         const response = await fetch('/api/v1/chat/conversations')
         if (response.ok) {
           const data = await response.json()
           const conversations = data.conversations
-          
+
           // Load the most recent conversation if it exists
           if (conversations && conversations.length > 0) {
             const mostRecentConversation = conversations[0]
@@ -114,7 +115,7 @@ export default function AIAssistantPage() {
     }
 
     loadMostRecentConversation()
-  }, [isLoaded, userId, initialLoadComplete])
+  }, [isLoaded, userId]) // Removed initialLoadComplete dependency to prevent re-runs
 
   // Load specific conversation
   const loadConversation = async (conversationId: string) => {
@@ -136,7 +137,6 @@ export default function AIAssistantPage() {
         
         setCurrentMessages(formattedMessages)
         setCurrentConversationId(conversationId)
-        setChatKey(`conversation-${conversationId}`) // Force component remount when switching conversations
       }
     } catch (error) {
       console.error('Failed to load conversation:', error)
@@ -150,7 +150,6 @@ export default function AIAssistantPage() {
     setCurrentMessages([])
     setCurrentConversationId(undefined)
     setLoading(false) // Ensure loading state is reset
-    setChatKey(`new-chat-${Date.now()}`) // Force component remount
   }
 
   // Handle conversation creation from chat interface
@@ -199,14 +198,16 @@ export default function AIAssistantPage() {
           <Sidebar />
 
           {/* Chat History Sidebar */}
-          <ConversationSidebar
-            isOpen={isChatSidebarOpen}
-            onClose={() => setIsChatSidebarOpen(false)}
-            currentConversationId={currentConversationId}
-            onConversationSelect={loadConversation}
-            onNewChat={startNewChat}
-            onConversationDeleted={handleConversationDeleted}
-          />
+          <Suspense fallback={<div className="w-80 bg-gray-800 border-r border-gray-700 animate-pulse"></div>}>
+            <ConversationSidebar
+              isOpen={isChatSidebarOpen}
+              onClose={() => setIsChatSidebarOpen(false)}
+              currentConversationId={currentConversationId}
+              onConversationSelect={loadConversation}
+              onNewChat={startNewChat}
+              onConversationDeleted={handleConversationDeleted}
+            />
+          </Suspense>
 
           {/* Main Content */}
           <div className="flex-1 flex flex-col">
@@ -251,13 +252,14 @@ export default function AIAssistantPage() {
                 {loading ? (
                   <SkeletonLoader variant="chat" className="mt-8" />
                 ) : (
-                  <ChatInterface
-                    key={chatKey}
-                    conversationId={currentConversationId}
-                    onConversationCreated={handleConversationCreated}
-                    initialMessages={currentMessages}
-                    onMessagesUpdate={handleMessagesUpdate}
-                  />
+                  <Suspense fallback={<SkeletonLoader variant="chat" className="mt-8" />}>
+                    <ChatInterface
+                      conversationId={currentConversationId}
+                      onConversationCreated={handleConversationCreated}
+                      initialMessages={currentMessages}
+                      onMessagesUpdate={handleMessagesUpdate}
+                    />
+                  </Suspense>
                 )}
               </div>
             </main>

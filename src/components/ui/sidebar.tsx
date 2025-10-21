@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, ClipboardList, Tag } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, ClipboardList, Tag, Building2, FileCheck } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/domains/account-management/components/enhanced-business-display'
@@ -36,37 +36,41 @@ export default function Sidebar() {
 
   // Helper function to create localized hrefs (our i18n feature)
   const localizedHref = (path: string) => `/${locale}${path}`
-  // Base navigation items
-  const baseNavigation = [
+  // Core navigation items (available to everyone) - Part 1
+  const coreNavigationPart1 = [
     { name: t('dashboard'), href: localizedHref('/'), icon: Home },
     { name: t('invoices'), href: localizedHref('/invoices'), icon: FileText },
     { name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard },
     { name: t('applications'), href: localizedHref('/applications'), icon: ClipboardList },
     { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
+  ]
+
+  // Manager/Admin navigation items (approvals between expense claims and AI assistant)
+  const managerNavigation = userRole.manager || userRole.admin ? [
+    { name: t('managerApprovals'), href: localizedHref('/manager/approvals'), icon: FileCheck },
+  ] : []
+
+  // Core navigation items (available to everyone) - Part 2
+  const coreNavigationPart2 = [
     { name: t('aiAssistant'), href: localizedHref('/ai-assistant'), icon: MessageSquare },
   ]
 
-  // Manager-specific navigation items (approvals and categories)
-  const managerNavigation = [
-    { name: t('approvals'), href: localizedHref('/manager/approvals'), icon: CheckCircle },
-    { name: t('categories'), href: localizedHref('/manager/categories'), icon: Tag },
-  ]
+  // Business management navigation (managers and admins only)
+  const businessNavigation = userRole.manager || userRole.admin ? [
+    { name: t('businessSettings'), href: localizedHref('/business-settings'), icon: Building2 },
+  ] : []
 
-  // Admin-only navigation items (team management)
-  const adminNavigation = [
-    { name: t('team'), href: localizedHref('/manager/teams'), icon: Users },
-  ]
-
-  // Settings always at the end
+  // Personal settings (available to everyone)
   const settingsNavigation = [
     { name: t('settings'), href: localizedHref('/settings'), icon: Settings }
   ]
 
   // Build complete navigation based on role
   const navigation = [
-    ...baseNavigation,
-    ...(userRole.manager || userRole.admin ? managerNavigation : []),
-    ...(userRole.admin ? adminNavigation : []),
+    ...coreNavigationPart1,
+    ...managerNavigation,
+    ...coreNavigationPart2,
+    ...businessNavigation,
     ...settingsNavigation
   ]
 
