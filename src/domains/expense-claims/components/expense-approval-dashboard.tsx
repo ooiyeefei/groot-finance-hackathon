@@ -6,19 +6,21 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X } from 'lucide-react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import ExpenseAnalytics from './expense-analytics'
-import MonthlyReportGenerator from './monthly-report-generator'
-import GoogleSheetsExport from './google-sheets-export'
-import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
-import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
+
+// PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
+const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
+const MonthlyReportGenerator = lazy(() => import('./monthly-report-generator'))
+const GoogleSheetsExport = lazy(() => import('./google-sheets-export'))
+const DocumentPreviewWithAnnotations = lazy(() => import('@/domains/invoices/components/document-preview-with-annotations'))
+const UnifiedExpenseDetailsModal = lazy(() => import('./unified-expense-details-modal'))
 
 interface EnhancedApprovalDashboardProps {
   userId: string
@@ -196,7 +198,9 @@ function ManagementOverviewContent({ data, setActiveTab }: {
             <CardDescription>Real-time expense insights</CardDescription>
           </CardHeader>
           <CardContent>
-            <ExpenseAnalytics scope={data?.role?.admin ? "company" : "department"} />
+            <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+              <ExpenseAnalytics scope={data?.role?.admin ? "company" : "department"} />
+            </Suspense>
           </CardContent>
         </Card>
       </div>
@@ -405,7 +409,9 @@ function ManagementReportsContent({ userRole }: { userRole: UserRole }) {
           <CardDescription>Generate comprehensive expense reports with full employee selection</CardDescription>
         </CardHeader>
         <CardContent>
-          <MonthlyReportGenerator personalOnly={false} />
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+            <MonthlyReportGenerator personalOnly={false} />
+          </Suspense>
         </CardContent>
       </Card>
 
@@ -415,7 +421,9 @@ function ManagementReportsContent({ userRole }: { userRole: UserRole }) {
           <CardDescription>Export data to external systems</CardDescription>
         </CardHeader>
         <CardContent>
-          <GoogleSheetsExport userRole={userRole} />
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+            <GoogleSheetsExport userRole={userRole} />
+          </Suspense>
         </CardContent>
       </Card>
     </div>
@@ -695,27 +703,29 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 
       {/* Unified Expense Details Modal - Manager View */}
       {selectedClaim && (
-        <UnifiedExpenseDetailsModal
-          claimId={selectedClaim.id}
-          isOpen={Boolean(selectedClaim)}
-          onClose={() => {
-            setSelectedClaim(null)
-            setApprovalNotes('')
-          }}
-          viewMode="manager"
-          onApprove={async (claimId: string, notes?: string) => {
-            await handleApproval(claimId, 'approve', notes)
-          }}
-          onReject={async (claimId: string, notes?: string) => {
-            await handleApproval(claimId, 'reject', notes)
-          }}
-          onRefreshNeeded={() => {
-            fetchPendingClaims()
-            if (onRefreshNeeded) {
-              onRefreshNeeded()
-            }
-          }}
-        />
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+          <UnifiedExpenseDetailsModal
+            claimId={selectedClaim.id}
+            isOpen={Boolean(selectedClaim)}
+            onClose={() => {
+              setSelectedClaim(null)
+              setApprovalNotes('')
+            }}
+            viewMode="manager"
+            onApprove={async (claimId: string, notes?: string) => {
+              await handleApproval(claimId, 'approve', notes)
+            }}
+            onReject={async (claimId: string, notes?: string) => {
+              await handleApproval(claimId, 'reject', notes)
+            }}
+            onRefreshNeeded={() => {
+              fetchPendingClaims()
+              if (onRefreshNeeded) {
+                onRefreshNeeded()
+              }
+            }}
+          />
+        </Suspense>
       )}
 
     </>

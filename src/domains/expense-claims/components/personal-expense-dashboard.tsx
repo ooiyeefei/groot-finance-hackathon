@@ -6,19 +6,21 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import ExpenseSubmissionFlow from './expense-submission-flow'
-import MonthlyReportGenerator from './monthly-report-generator'
-import EditExpenseModalNew from './edit-expense-modal-new'
-import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
-import ConfirmationDialog from '@/components/ui/confirmation-dialog'
-import FileUploadZone from '@/domains/utilities/components/file-upload-zone'
+
+// PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
+const ExpenseSubmissionFlow = lazy(() => import('./expense-submission-flow'))
+const MonthlyReportGenerator = lazy(() => import('./monthly-report-generator'))
+const EditExpenseModalNew = lazy(() => import('./edit-expense-modal-new'))
+const UnifiedExpenseDetailsModal = lazy(() => import('./unified-expense-details-modal'))
+const ConfirmationDialog = lazy(() => import('@/components/ui/confirmation-dialog'))
+const FileUploadZone = lazy(() => import('@/domains/utilities/components/file-upload-zone'))
 
 interface PersonalExpenseDashboardProps {
   userId: string
@@ -455,128 +457,138 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 
       {/* AI Expense Submission Flow */}
       {showSubmissionForm && (
-        <ExpenseSubmissionFlow
-          initialStep={submissionMode === 'manual' ? 'form' : 'upload'}
-          onClose={(hasBackgroundProcessing = false) => {
-            setShowSubmissionForm(false)
-            
-            // If there's background processing, show a notification
-            if (hasBackgroundProcessing) {
-              // Store background processing notification in localStorage
-              localStorage.setItem('backgroundProcessing', JSON.stringify({
-                message: 'Receipt processing continues in background',
-                timestamp: new Date().toISOString(),
-                type: 'info'
-              }))
-            }
-            
-            // Refresh dashboard when form closes
-            fetchDashboardData()
-          }}
-          onSubmit={async (data) => {
-            try {
-              // Transform form data to API format
-              const requestBody = {
-                description: data.description,
-                business_purpose: data.business_purpose,
-                expense_category: data.expense_category,
-                original_amount: data.original_amount,
-                original_currency: data.original_currency,
-                home_currency: data.home_currency, // Include home currency for conversion
-                transaction_date: data.transaction_date,
-                vendor_name: data.vendor_name,
-                reference_number: data.reference_number || undefined,
-                notes: data.notes || undefined,
-                // Include storage_path for manual receipt uploads
-                storage_path: data.storage_path || undefined,
-                line_items: data.line_items || []
-              }
-              
-              const response = await fetch('/api/v1/expense-claims', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-              })
-              
-              if (!response.ok) {
-                const errorData = await response.json()
-                throw new Error(errorData.error || 'Failed to submit expense claim')
-              }
-              
-              const result = await response.json()
-
-              // Close the form after successful submission
+        <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>}>
+          <ExpenseSubmissionFlow
+            initialStep={submissionMode === 'manual' ? 'form' : 'upload'}
+            onClose={(hasBackgroundProcessing = false) => {
               setShowSubmissionForm(false)
-              
-              // Refresh dashboard data to show new claim
+
+              // If there's background processing, show a notification
+              if (hasBackgroundProcessing) {
+                // Store background processing notification in localStorage
+                localStorage.setItem('backgroundProcessing', JSON.stringify({
+                  message: 'Receipt processing continues in background',
+                  timestamp: new Date().toISOString(),
+                  type: 'info'
+                }))
+              }
+
+              // Refresh dashboard when form closes
               fetchDashboardData()
-              
-              // Return result for any additional processing
-              return result
-              
-            } catch (error) {
-              console.error('Error submitting expense claim:', error)
-              throw error // Let the form handle the error display
-            }
-          }}
-        />
+            }}
+            onSubmit={async (data) => {
+              try {
+                // Transform form data to API format
+                const requestBody = {
+                  description: data.description,
+                  business_purpose: data.business_purpose,
+                  expense_category: data.expense_category,
+                  original_amount: data.original_amount,
+                  original_currency: data.original_currency,
+                  home_currency: data.home_currency, // Include home currency for conversion
+                  transaction_date: data.transaction_date,
+                  vendor_name: data.vendor_name,
+                  reference_number: data.reference_number || undefined,
+                  notes: data.notes || undefined,
+                  // Include storage_path for manual receipt uploads
+                  storage_path: data.storage_path || undefined,
+                  line_items: data.line_items || []
+                }
+
+                const response = await fetch('/api/v1/expense-claims', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(requestBody)
+                })
+
+                if (!response.ok) {
+                  const errorData = await response.json()
+                  throw new Error(errorData.error || 'Failed to submit expense claim')
+                }
+
+                const result = await response.json()
+
+                // Close the form after successful submission
+                setShowSubmissionForm(false)
+
+                // Refresh dashboard data to show new claim
+                fetchDashboardData()
+
+                // Return result for any additional processing
+                return result
+
+              } catch (error) {
+                console.error('Error submitting expense claim:', error)
+                throw error // Let the form handle the error display
+              }
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Expense Edit Modal */}
       {showEditModal && editingClaimId && (
-        <EditExpenseModalNew
-          expenseClaimId={editingClaimId}
-          isOpen={showEditModal}
-          onClose={() => {
-            setShowEditModal(false)
-            setEditingClaimId(null)
-          }}
-          onSave={() => {
-            setShowEditModal(false)
-            setEditingClaimId(null)
-            // Refresh dashboard data to show updated claim
-            fetchDashboardData()
-          }}
-          onDelete={() => {
-            setShowEditModal(false)
-            setEditingClaimId(null)
-            // Refresh dashboard data after deletion
-            fetchDashboardData()
-          }}
-          onReprocess={() => {
-            // Trigger refresh after reprocessing is complete
-            fetchDashboardData()
-          }}
-        />
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+          <EditExpenseModalNew
+            expenseClaimId={editingClaimId}
+            isOpen={showEditModal}
+            onClose={() => {
+              setShowEditModal(false)
+              setEditingClaimId(null)
+            }}
+            onSave={() => {
+              setShowEditModal(false)
+              setEditingClaimId(null)
+              // Refresh dashboard data to show updated claim
+              fetchDashboardData()
+            }}
+            onDelete={() => {
+              setShowEditModal(false)
+              setEditingClaimId(null)
+              // Refresh dashboard data after deletion
+              fetchDashboardData()
+            }}
+            onReprocess={() => {
+              // Trigger refresh after reprocessing is complete
+              fetchDashboardData()
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Expense Claim Details Modal */}
       {showDetailsModal && detailsClaimId && (
-        <UnifiedExpenseDetailsModal
-          claimId={detailsClaimId}
-          isOpen={showDetailsModal}
-          onClose={() => {
-            setShowDetailsModal(false)
-            setDetailsClaimId(null)
-          }}
-          viewMode="personal"
-        />
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+          <UnifiedExpenseDetailsModal
+            claimId={detailsClaimId}
+            isOpen={showDetailsModal}
+            onClose={() => {
+              setShowDetailsModal(false)
+              setDetailsClaimId(null)
+            }}
+            viewMode="personal"
+          />
+        </Suspense>
       )}
 
       {/* Delete Confirmation Dialog */}
-      <ConfirmationDialog
-        isOpen={showDeleteConfirm}
-        onClose={handleCloseDeleteConfirm}
-        onConfirm={deleteClaim}
-        title="Delete Expense Claim"
-        message="Are you sure you want to delete this draft expense claim? This action cannot be undone."
-        confirmText="Delete"
-        cancelText="Cancel"
-        confirmVariant="danger"
-        isLoading={isDeleting}
-      />
+      {showDeleteConfirm && (
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-6 h-6 animate-spin text-white" /></div>}>
+          <ConfirmationDialog
+            isOpen={showDeleteConfirm}
+            onClose={handleCloseDeleteConfirm}
+            onConfirm={deleteClaim}
+            title="Delete Expense Claim"
+            message="Are you sure you want to delete this draft expense claim? This action cannot be undone."
+            confirmText="Delete"
+            cancelText="Cancel"
+            confirmVariant="danger"
+            isLoading={isDeleting}
+          />
+        </Suspense>
+      )}
 
       {/* Toast Notification */}
       {toastMessage && (
@@ -624,22 +636,24 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
         <CardContent>
           {/* File Upload Zone - Above the buttons */}
           <div className="mb-6">
-            <FileUploadZone
-              domain="expense-claims"
-              allowMultiple={true}
-              autoProcess={true}
-              onUploadSuccess={(document) => {
-                // Refresh dashboard to show new claims
-                fetchDashboardData()
-              }}
-              onBatchUploadSuccess={(documents) => {
-                // Refresh dashboard to show all new claims
-                fetchDashboardData()
-              }}
-              onUploadStart={() => {
-                // Upload started
-              }}
-            />
+            <Suspense fallback={<div className="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center"><Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /></div>}>
+              <FileUploadZone
+                domain="expense-claims"
+                allowMultiple={true}
+                autoProcess={true}
+                onUploadSuccess={(document) => {
+                  // Refresh dashboard to show new claims
+                  fetchDashboardData()
+                }}
+                onBatchUploadSuccess={(documents) => {
+                  // Refresh dashboard to show all new claims
+                  fetchDashboardData()
+                }}
+                onUploadStart={() => {
+                  // Upload started
+                }}
+              />
+            </Suspense>
           </div>
 
           {/* Existing buttons */}
@@ -995,7 +1009,9 @@ function PersonalReportsContent() {
         <CardDescription>Generate personal expense reports</CardDescription>
       </CardHeader>
       <CardContent>
-        <MonthlyReportGenerator personalOnly={true} />
+        <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+          <MonthlyReportGenerator personalOnly={true} />
+        </Suspense>
       </CardContent>
     </Card>
   )
