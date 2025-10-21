@@ -29,10 +29,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // PERFORMANCE FIX: Check cache first to avoid repeated API calls on navigation
+    // Check cache first to avoid repeated API calls on navigation
     const cached = roleCache.get(userId)
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      console.log('[Role API] Cache hit for user:', userId)
       return NextResponse.json({
         success: true,
         data: cached.data,
@@ -44,8 +43,6 @@ export async function GET(request: NextRequest) {
     }
 
     const startTime = Date.now()
-    console.log('[Role API] Cache miss, fetching role data for user:', userId)
-
     const roleInfo = await getUserRole()
 
     // Cache the result
@@ -55,7 +52,6 @@ export async function GET(request: NextRequest) {
     })
 
     const duration = Date.now() - startTime
-    console.log(`[Role API] Role data fetched and cached in ${duration}ms`)
 
     return NextResponse.json({
       success: true,
@@ -89,5 +85,4 @@ export async function GET(request: NextRequest) {
  */
 function clearRoleCache(userId: string) {
   roleCache.delete(userId)
-  console.log('[Role API] Cache cleared for user:', userId)
 }

@@ -68,14 +68,9 @@ function getCacheWithTTL(key: string): any | null {
  * Clear user role cache - use when user roles are updated
  */
 export function clearUserRoleCache(): void {
-  if (typeof __PRIVATE_CLEAR_ROLE_CACHE_GLOBALLY !== 'undefined') {
-    __PRIVATE_CLEAR_ROLE_CACHE_GLOBALLY()
-  }
-
   if (typeof window !== 'undefined') {
     try {
       localStorage.removeItem(cacheKeys.USER_ROLE)
-      console.log('User role cache cleared')
     } catch (error) {
       console.warn('Failed to clear user role cache:', error)
     }
@@ -89,7 +84,6 @@ export function clearBusinessProfileCache(): void {
   if (typeof window !== 'undefined') {
     try {
       localStorage.removeItem(cacheKeys.BUSINESS_PROFILE)
-      console.log('Business profile cache cleared')
     } catch (error) {
       console.warn('Failed to clear business profile cache:', error)
     }
@@ -105,7 +99,6 @@ export function clearAllAppCaches(): void {
       Object.values(cacheKeys).forEach(key => {
         localStorage.removeItem(key)
       })
-      console.log('All app caches cleared')
     } catch (error) {
       console.warn('Failed to clear app caches:', error)
     }
@@ -134,11 +127,8 @@ export async function fetchUserRoleWithCache(): Promise<any> {
   // Check cache first
   const cached = getCachedUserRole()
   if (cached) {
-    console.log('[CacheUtils] Using cached user role data')
     return cached
   }
-
-  console.log('[CacheUtils] Cache miss, fetching from API...')
 
   try {
     const response = await fetch('/api/v1/users/role')
@@ -150,7 +140,6 @@ export async function fetchUserRoleWithCache(): Promise<any> {
     if (result.success) {
       // Cache the result with TTL
       cacheUserRole(result.data)
-      console.log(`[CacheUtils] Role data cached (${result.meta?.duration_ms}ms, server cached: ${result.meta?.cached})`)
       return result.data
     } else {
       throw new Error(result.error || 'Failed to fetch role data')

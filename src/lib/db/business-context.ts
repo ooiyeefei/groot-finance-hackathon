@@ -141,20 +141,13 @@ export async function verifyBusinessMembership(
 ): Promise<BusinessMembership | null> {
   const clerkUserId = userId || (await auth()).userId
 
-  console.log(`[BusinessContext] 🔍 verifyBusinessMembership - businessId: ${businessId}, clerkUserId: ${clerkUserId}`)
-
   if (!clerkUserId) {
-    console.error('[BusinessContext] ❌ No clerkUserId provided to verifyBusinessMembership')
     return null
   }
 
   try {
     const userData = await getUserData(clerkUserId)
-    console.log(`[BusinessContext] 📊 getUserData result - supabaseUserId: ${userData.id}`)
-
     const supabase = createServiceSupabaseClient()
-
-    console.log(`[BusinessContext] 🔎 Querying business_memberships - user_id: ${userData.id}, business_id: ${businessId}, status: active`)
 
     const { data: membership, error } = await supabase
       .from('business_memberships')
@@ -165,33 +158,17 @@ export async function verifyBusinessMembership(
       .single()
 
     if (error) {
-      console.error('[BusinessContext] ❌ Query error from business_memberships:', error)
+      console.error('[BusinessContext] Query error from business_memberships:', error)
       return null
     }
 
     if (!membership) {
-      console.error(`[BusinessContext] ❌ No membership found - user_id: ${userData.id}, business_id: ${businessId}`)
-
-      // Debug: Query all memberships for this user to see what exists
-      const { data: allMemberships, error: debugError } = await supabase
-        .from('business_memberships')
-        .select('business_id, role, status')
-        .eq('user_id', userData.id)
-
-      if (debugError) {
-        console.error('[BusinessContext] 🐛 Debug query error:', debugError)
-      } else {
-        console.log(`[BusinessContext] 🐛 User's all memberships:`, JSON.stringify(allMemberships, null, 2))
-      }
-
       return null
     }
 
-    console.log(`[BusinessContext] ✅ Membership found - role: ${membership.role}, status: ${membership.status}`)
     return membership
   } catch (error) {
-    console.error('[BusinessContext] ❌ Exception in verifyBusinessMembership:', error)
-    console.error('[BusinessContext] Error details:', error instanceof Error ? error.message : 'Unknown error')
+    console.error('[BusinessContext] Exception in verifyBusinessMembership:', error)
     return null
   }
 }
@@ -267,35 +244,21 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
 }> {
   const clerkUserId = userId || (await auth()).userId
 
-  console.log(`[BusinessContext] 🔄 Switch request - businessId: ${businessId}, userId: ${userId || 'from auth()'}`)
-
   if (!clerkUserId) {
-    console.error('[BusinessContext] ❌ Authentication failed - no clerkUserId')
     return { success: false, error: 'Authentication required' }
   }
 
-  console.log(`[BusinessContext] ✅ Authenticated - clerkUserId: ${clerkUserId}`)
-
   try {
     // Verify user has access to this business
-    console.log(`[BusinessContext] 🔍 Verifying membership for business: ${businessId}`)
     const membership = await verifyBusinessMembership(businessId, clerkUserId)
 
     if (!membership) {
-      console.error(`[BusinessContext] ❌ Access denied - no membership found for user ${clerkUserId} in business ${businessId}`)
       return { success: false, error: 'Access denied to business' }
     }
 
-    console.log(`[BusinessContext] ✅ Membership verified - role: ${membership.role}, status: ${membership.status}`)
-
-    // HYBRID APPROACH: Update database only (single source of truth)
+    // Update database only (single source of truth)
     const userData = await getUserData(clerkUserId)
-    console.log(`[BusinessContext] 📊 User data retrieved - supabase userId: ${userData.id}, current business_id: ${userData.business_id}`)
-
     const supabase = createServiceSupabaseClient()
-
-    // Update user's active business in database
-    console.log(`[BusinessContext] 💾 Updating users table - setting business_id to ${businessId}`)
     const { error: updateUserError } = await supabase
       .from('users')
       .update({
@@ -305,14 +268,11 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
       .eq('id', userData.id)
 
     if (updateUserError) {
-      console.error('[BusinessContext] ❌ Failed to update users table:', updateUserError)
+      console.error('[BusinessContext] Failed to update users table:', updateUserError)
       throw updateUserError
     }
 
-    console.log(`[BusinessContext] ✅ Users table updated successfully`)
-
     // Update last accessed time in business_memberships
-    console.log(`[BusinessContext] 💾 Updating business_memberships last_accessed_at`)
     const { error: updateMembershipError } = await supabase
       .from('business_memberships')
       .update({
@@ -323,37 +283,24 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
       .eq('business_id', businessId)
 
     if (updateMembershipError) {
-      console.error('[BusinessContext] ⚠️  Failed to update business_memberships (non-critical):', updateMembershipError)
-    } else {
-      console.log(`[BusinessContext] ✅ Business memberships updated successfully`)
+      console.error('[BusinessContext] Failed to update business_memberships (non-critical):', updateMembershipError)
     }
 
-    console.log(`[BusinessContext] 🗄️  Database updated: activeBusinessId = ${businessId}`)
-    // Note: No JWT metadata update needed - database is authoritative source
-
-    // HYBRID: Invalidate cache when business context changes
-    console.log(`[BusinessContext] 🗑️  Invalidating cache for user ${clerkUserId}`)
+    // Invalidate cache when business context changes
     const { invalidateUserCache } = await import('./business-context-cache')
     invalidateUserCache(clerkUserId)
-    console.log(`[BusinessContext] ✅ Cache invalidated`)
 
     // Return the new context
-    console.log(`[BusinessContext] 🔄 Fetching new business context`)
     const context = await getCurrentBusinessContext(clerkUserId)
 
     if (!context) {
-      console.error(`[BusinessContext] ❌ Failed to fetch new context after switch`)
       return { success: false, error: 'Failed to load new business context' }
     }
 
-    console.log(`[BusinessContext] ✅ Business switched successfully: ${clerkUserId} → ${businessId}`)
-    console.log(`[BusinessContext] 📋 New context:`, JSON.stringify(context, null, 2))
     return { success: true, context: context || undefined }
 
   } catch (error) {
-    console.error('[BusinessContext] ❌ Error switching business:', error)
-    console.error('[BusinessContext] Error details:', error instanceof Error ? error.message : 'Unknown error')
-    console.error('[BusinessContext] Stack trace:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('[BusinessContext] Error switching business:', error)
     return { success: false, error: 'Failed to switch business' }
   }
 }
@@ -445,11 +392,7 @@ export async function createUserFirstBusiness(
       })
       .eq('id', user.id)
 
-    // 5. HYBRID: Database is single source of truth - no JWT metadata needed
-    console.log(`[BusinessContext] Business context stored in database: activeBusinessId = ${business.id}`)
-    // Note: Database business_id is authoritative source, no JWT metadata required
-
-    console.log(`[BusinessContext] First business created: ${clerkUserId} → ${business.id}`)
+    // Database is single source of truth - no JWT metadata needed
     return { businessId: business.id, userId: user.id }
 
   } catch (error) {
