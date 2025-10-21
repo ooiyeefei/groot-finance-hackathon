@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import CategoryFormModal, { CategoryFormData } from '@/domains/expense-claims/components/category-form-modal'
 import COGSCategoryManagement from '@/domains/invoices/components/cogs-category-management'
+import { fetchUserRoleWithCache } from '@/lib/cache-utils'
 
 interface ExpenseCategory {
   id: string
@@ -50,21 +51,14 @@ export default function CategoriesManagementClient({ userId }: CategoriesManagem
   const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch user role information
+  // Fetch user role information using centralized caching
   useEffect(() => {
     const fetchUserRole = async () => {
       try {
-        const response = await fetch('/api/v1/users/role')
-        const result = await response.json()
+        const roleData = await fetchUserRoleWithCache()
 
-        if (result.success) {
-          // Map the role string to role permissions
-          const role = result.data.profile.role
-          setUserRole({
-            employee: true, // All users are employees
-            manager: role === 'manager' || role === 'admin',
-            admin: role === 'admin'
-          })
+        if (roleData && roleData.permissions) {
+          setUserRole(roleData.permissions)
         } else {
           // Fallback role if API fails
           setUserRole({ employee: true, manager: false, admin: false })

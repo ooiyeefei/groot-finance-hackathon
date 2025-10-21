@@ -60,26 +60,35 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
 }
 
 /**
- * Get current user context with multi-tenant business context (HYBRID)
+ * Get current user context with multi-tenant business context (OPTIMIZED)
  */
 export async function getCurrentUserContextWithBusiness(): Promise<UserContext | null> {
   try {
     const { userId } = await auth()
     if (!userId) return null
 
-    // HYBRID: Get business context from database (not JWT)
+    // PERFORMANCE FIX: Get business context with ownership info (no duplicate calls)
     const businessContext = await getCurrentBusinessContext(userId)
     if (!businessContext) {
       console.warn('[RBAC] No active business context for user')
       return null
     }
 
-    // Get employee profile
-    const profile = await ensureUserProfile(userId)
-    if (!profile) return null
-
-    // Check if user is owner of the active business
-    const isOwner = await checkBusinessOwnership(businessContext.businessId, userId)
+    // PERFORMANCE FIX: Skip ensureUserProfile on every call - only needed once at login/switch
+    // Business membership already provides the profile data we need
+    const profile = {
+      id: `membership_${businessContext.businessId}`,
+      user_id: userId,
+      business_id: businessContext.businessId,
+      role: businessContext.role,
+      role_permissions: {
+        employee: true,
+        manager: businessContext.role === 'manager' || businessContext.role === 'admin',
+        admin: businessContext.role === 'admin'
+      },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
 
     // Use business context permissions from business_memberships
     const permissions: RolePermissions = {
@@ -99,9 +108,9 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
       canManageCategories: permissions.manager || permissions.admin,
       canViewAllExpenses: permissions.manager || permissions.admin,
       canManageUsers: permissions.admin,
-      // HYBRID: Business context from database
+      // OPTIMIZED: Business context already includes ownership info
       businessContext,
-      isBusinessOwner: isOwner
+      isBusinessOwner: businessContext.isOwner
     }
   } catch (error) {
     console.error('[RBAC] Error getting user context with business:', error)

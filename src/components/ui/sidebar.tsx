@@ -8,7 +8,7 @@ import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Use
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/domains/account-management/components/enhanced-business-display'
-import { getCachedUserRole, cacheUserRole, clearUserRoleCache } from '@/lib/cache-utils'
+import { fetchUserRoleWithCache, clearUserRoleCache } from '@/lib/cache-utils'
 import { useTranslations, useLocale } from 'next-intl'
 import { useActiveBusiness } from '@/contexts/business-context'
 
@@ -75,11 +75,8 @@ export default function Sidebar() {
     // Mark as hydrated - prevents hydration mismatch
     setIsHydrated(true)
 
-    // Load cached user role to prevent hydration mismatch
-    const cachedRole = getCachedUserRole()
-    if (cachedRole) {
-      setUserRole(cachedRole)
-    }
+    // Load cached user role to prevent hydration mismatch (synchronous cache check)
+    // fetchUserRoleWithCache will be called in loadUserRole for full functionality
 
     // CRITICAL CLS FIX: Determine initial sidebar state without layout shift
     let initialExpanded = true // Desktop default
@@ -113,17 +110,18 @@ export default function Sidebar() {
 
     window.addEventListener('resize', checkMobile)
 
-    // Load user role from cache first, then always validate with API
+    // Load user role using optimized cache-first approach
     const loadUserRole = async () => {
-      // Try to load from cache first for immediate display (after hydration)
-      const cached = getCachedUserRole()
-      if (cached) {
-        setUserRole(cached)
-      }
+      try {
+        // Use centralized cache-first role fetching with automatic validation
+        const roleData = await fetchUserRoleWithCache()
 
-      // SECURITY: Always validate with API to ensure permissions are current
-      // This will detect and clear stale caches automatically
-      await fetchUserRole()
+        if (roleData && roleData.permissions) {
+          setUserRole(roleData.permissions)
+        }
+      } catch (error) {
+        console.error('[Sidebar] Failed to load user role:', error)
+      }
 
       // Mark initial load as completed to prevent duplicate calls
       setHasInitialLoad(true)
@@ -137,41 +135,13 @@ export default function Sidebar() {
   }, [])
 
 
-  // Fetch user role and cache the result with validation
+  // Fetch user role using centralized cache-first approach
   const fetchUserRole = useCallback(async () => {
     try {
-      console.log('[Sidebar] Fetching user role from API...')
+      const roleData = await fetchUserRoleWithCache()
 
-      // Get user role from employee profile
-      const roleResponse = await fetch('/api/v1/users/role')
-      if (roleResponse.ok) {
-        const roleResult = await roleResponse.json()
-        if (roleResult.success) {
-          const freshPermissions = roleResult.data.permissions
-          const cachedPermissions = getCachedUserRole()
-
-          // SECURITY FIX: Validate cached permissions against fresh API data
-          const rolesMatch = cachedPermissions &&
-            cachedPermissions.admin === freshPermissions.admin &&
-            cachedPermissions.manager === freshPermissions.manager &&
-            cachedPermissions.employee === freshPermissions.employee
-
-          if (!rolesMatch && cachedPermissions) {
-            console.log('[Sidebar] Role permissions changed, clearing stale cache:', {
-              cached: cachedPermissions,
-              fresh: freshPermissions
-            })
-            clearUserRoleCache()
-          }
-
-          console.log('[Sidebar] Setting user role permissions:', freshPermissions)
-          setUserRole(freshPermissions)
-
-          // Cache the fresh result
-          cacheUserRole(freshPermissions)
-        }
-      } else {
-        console.error('[Sidebar] Role API request failed:', roleResponse.status)
+      if (roleData && roleData.permissions) {
+        setUserRole(roleData.permissions)
       }
     } catch (error) {
       console.error('[Sidebar] Failed to fetch user role:', error)

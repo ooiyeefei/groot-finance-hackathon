@@ -197,15 +197,14 @@ export async function verifyBusinessMembership(
 }
 
 /**
- * Get current business context from Clerk JWT
+ * Get current business context (OPTIMIZED - single query approach)
  */
 export async function getCurrentBusinessContext(userId?: string): Promise<BusinessContext | null> {
   const clerkUserId = userId || (await auth()).userId
   if (!clerkUserId) return null
 
   try {
-    // Get business context from database (users.business_id)
-    // No need for JWT business context - simpler approach
+    // PERFORMANCE FIX: Single getUserData call instead of 3 duplicate calls
     const userData = await getUserData(clerkUserId)
     const businessId = userData.business_id
 
@@ -214,30 +213,43 @@ export async function getCurrentBusinessContext(userId?: string): Promise<Busine
       return null
     }
 
-    // Verify membership and get business details
-    const membership = await verifyBusinessMembership(businessId, clerkUserId)
-    if (!membership) {
+    // PERFORMANCE FIX: Single optimized query to get all needed data
+    const supabase = createServiceSupabaseClient()
+    const { data: businessData, error } = await supabase
+      .from('business_memberships')
+      .select(`
+        id,
+        user_id,
+        business_id,
+        role,
+        status,
+        businesses!business_memberships_business_id_fkey(
+          id,
+          name,
+          owner_id
+        )
+      `)
+      .eq('user_id', userData.id)
+      .eq('business_id', businessId)
+      .eq('status', 'active')
+      .single()
+
+    if (error || !businessData) {
       console.warn('[BusinessContext] User has invalid businessId in database:', businessId)
       return null
     }
 
-    // Check if user is owner
-    const isOwner = await checkBusinessOwnership(businessId, clerkUserId)
-
-    // Get business name
-    const supabase = createServiceSupabaseClient()
-    const { data: business } = await supabase
-      .from('businesses')
-      .select('name')
-      .eq('id', businessId)
-      .single()
+    const business = Array.isArray(businessData.businesses)
+      ? businessData.businesses[0]
+      : businessData.businesses
+    const isOwner = business?.owner_id === userData.id
 
     return {
       businessId: businessId,
       businessName: business?.name || 'Unknown Business',
-      role: membership.role,
+      role: businessData.role,
       isOwner,
-      permissions: computePermissions(membership.role, isOwner)
+      permissions: computePermissions(businessData.role, isOwner)
     }
   } catch (error) {
     console.error('[BusinessContext] Error getting current context:', error)

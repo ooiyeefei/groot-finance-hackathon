@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import InvitationDialog, { InvitationFormData } from '@/domains/account-management/components/invitation-dialog'
-import { clearUserRoleCache } from '@/lib/cache-utils'
+import { clearUserRoleCache, fetchUserRoleWithCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
 
 interface TeamMember {
@@ -94,18 +94,18 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
   const checkPermissions = async () => {
     try {
-      const response = await fetch('/api/v1/users/role')
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          setUserRole(result.data.permissions)
+      const roleData = await fetchUserRoleWithCache()
 
-          // Only admin users can manage team roles
-          if (!result.data.permissions.admin) {
-            router.push('/')
-            return
-          }
+      if (roleData && roleData.permissions) {
+        setUserRole(roleData.permissions)
+
+        // Only admin users can manage team roles
+        if (!roleData.permissions.admin) {
+          router.push('/')
+          return
         }
+      } else {
+        router.push('/')
       }
     } catch (error) {
       console.error('Failed to check permissions:', error)
