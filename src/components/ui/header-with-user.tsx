@@ -3,6 +3,7 @@
 import React from 'react'
 import { UserButton } from '@clerk/nextjs'
 import { LanguageSwitcher } from '@/components/language-switcher'
+import { ThemeToggle } from '@/domains/utilities/components/theme-toggle'
 
 interface HeaderWithUserProps {
   title?: string
@@ -12,16 +13,16 @@ interface HeaderWithUserProps {
 
 export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithUserProps) {
   return (
-    <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <header className="bg-card border-b border-border px-6 py-4">
       <div className="flex items-center justify-between gap-4">
         {/* Left: Title and subtitle */}
         <div className="flex-1">
-          <h1 className="text-3xl font-bold text-white mb-2">{title}</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-2">{title}</h1>
           {subtitle && (
-            <p className="text-gray-400">{subtitle}</p>
+            <p className="text-muted-foreground">{subtitle}</p>
           )}
         </div>
-        
+
         {/* Center: Actions */}
         {actions && (
           <div className="flex items-center gap-3">
@@ -29,8 +30,9 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
           </div>
         )}
 
-        {/* Right: Language switcher and user button */}
+        {/* Right: Theme toggle, language switcher and user button */}
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           <LanguageSwitcher />
           <UserButton
             afterSignOutUrl="/en/sign-in"

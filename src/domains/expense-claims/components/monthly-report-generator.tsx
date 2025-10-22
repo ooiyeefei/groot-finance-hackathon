@@ -315,31 +315,31 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
   return (
     <div className="space-y-6">
       {/* Report Configuration */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
-          <CardTitle className="text-white">Generate Monthly Report</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-record-title">Generate Monthly Report</CardTitle>
+          <CardDescription className="text-record-supporting">
             Create detailed expense reports for compliance and reimbursement processing
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
-            <Alert className="bg-red-900/20 border-red-700">
-              <AlertDescription className="text-red-400">{error}</AlertDescription>
+            <Alert className="bg-danger/20 border-danger/30">
+              <AlertDescription className="text-danger">{error}</AlertDescription>
             </Alert>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Month Selection */}
             <div className="space-y-2">
-              <label className="text-white text-sm font-medium">Report Month *</label>
+              <label className="text-record-title text-sm font-medium">Report Month *</label>
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                <SelectTrigger className="bg-record-layer-2 border-record-border text-record-title">
                   <SelectValue placeholder="Select month" />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
+                <SelectContent className="bg-record-layer-2 border-record-border">
                   {monthOptions.map((month) => (
-                    <SelectItem key={month.value} value={month.value} className="text-white">
+                    <SelectItem key={month.value} value={month.value} className="text-record-title">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
                         {month.label}
@@ -352,14 +352,14 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
             {/* Employee Selection (for managers/finance) */}
             <div className="space-y-2">
-              <label className="text-white text-sm font-medium">Employee</label>
+              <label className="text-record-title text-sm font-medium">Employee</label>
               <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                <SelectTrigger className="bg-record-layer-2 border-record-border text-record-title">
                   <SelectValue placeholder="Select employee (optional)" />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
+                <SelectContent className="bg-record-layer-2 border-record-border">
                   {employees.map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id} className="text-white">
+                    <SelectItem key={employee.id} value={employee.id} className="text-record-title">
                       <div className="flex items-center gap-2">
                         <User className="w-4 h-4" />
                         {employee.name}
@@ -376,7 +376,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             <Button
               onClick={generateReport}
               disabled={generating || generatingFormatted}
-              className="bg-blue-600 hover:bg-blue-700"
+              variant="view"
             >
               <FileText className="w-4 h-4 mr-2" />
               {generating ? 'Generating...' : 'Summary Preview'}
@@ -385,7 +385,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             <Button
               onClick={generateFormattedReport}
               disabled={generating || generatingFormatted}
-              className="bg-purple-600 hover:bg-purple-700"
+              variant="view"
             >
               <Eye className="w-4 h-4 mr-2" />
               {generatingFormatted ? 'Generating...' : 'Formatted Preview'}
@@ -395,7 +395,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             {selectedMonth ? (
               <Button
                 asChild
-                className="bg-green-600 hover:bg-green-700 text-white"
+                variant="primary"
               >
                 <a
                   href={generateCSVExportURL()}
@@ -409,7 +409,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             ) : (
               <Button
                 disabled
-                className="bg-gray-600 text-gray-400 cursor-not-allowed"
+                variant="primary"
               >
                 <Download className="w-4 h-4 mr-2" />
                 Export CSV
@@ -421,12 +421,12 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
       {/* Report Preview */}
       {activePreview === 'summary' && reportData && (
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="bg-record-layer-1 border-record-border">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-white">Monthly Expense Report</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-record-title">Monthly Expense Report</CardTitle>
+                <CardDescription className="text-record-supporting">
                   {reportData.employeeName} - {new Date(reportData.month + '-01').toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long'
@@ -467,26 +467,26 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
             {/* Category Breakdown */}
             <div className="space-y-4">
-              <h4 className="text-white font-semibold">Category Breakdown</h4>
+              <h4 className="text-record-title font-semibold">Category Breakdown</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.entries(reportData.groupedClaims).map(([categoryCode, categoryData]) => {
                   if (categoryData.claimsCount === 0) return null
 
                   return (
-                    <div key={categoryCode} className="bg-gray-700 rounded-lg p-4">
+                    <div key={categoryCode} className="bg-record-layer-2 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <Badge
                           variant="secondary"
-                          className="bg-gray-900/20 text-gray-300 border border-gray-700/50 hover:bg-gray-200/90 hover:text-gray-900 transition-colors cursor-default"
+                          className="bg-muted/20 text-record-title border border-muted/30 hover:bg-muted/40 transition-colors cursor-default"
                         >
                           {categoryData.categoryName}
                         </Badge>
-                        <span className="text-gray-400 text-sm">{categoryData.claimsCount} claims</span>
+                        <span className="text-record-supporting text-sm">{categoryData.claimsCount} claims</span>
                       </div>
-                      <div className="text-white font-semibold">
+                      <div className="text-record-title font-semibold">
                         {categoryData.totalAmount.toFixed(2)} {reportData.currency}
                       </div>
-                      <div className="text-xs text-gray-400 mt-1">
+                      <div className="text-xs text-record-supporting mt-1">
                         {categoryData.accountingCategory}
                       </div>
                     </div>
@@ -496,7 +496,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             </div>
 
             {/* Report Metadata */}
-            <div className="border-t border-gray-700 pt-4 text-gray-400 text-sm">
+            <div className="border-t border-record-border pt-4 text-record-supporting text-sm">
               <p>Report generated on: {new Date(reportData.metadata.generatedAt).toLocaleString()}</p>
               <p>Report scope: {reportData.metadata.scope.replace(/_/g, ' ')}</p>
               <p>Generated by: {reportData.metadata.requestedByRole}</p>
@@ -512,13 +512,13 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
       )}
 
       {/* Quick Access to Recent Reports */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
-          <CardTitle className="text-white">Recent Reports</CardTitle>
-          <CardDescription>Quick access to previously generated reports</CardDescription>
+          <CardTitle className="text-record-title">Recent Reports</CardTitle>
+          <CardDescription className="text-record-supporting">Quick access to previously generated reports</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center text-gray-400 py-8">
+          <div className="text-center text-record-supporting py-8">
             <FileText className="w-12 h-12 mx-auto mb-4" />
             <p>No recent reports</p>
             <p className="text-sm">Generate your first monthly report to see it here</p>
@@ -535,10 +535,10 @@ function ReportSummaryCard({ title, value, variant }: {
   variant: 'default' | 'success' | 'warning' | 'error'
 }) {
   const variantStyles = {
-    default: 'bg-gray-700 text-white',
-    success: 'bg-green-900/20 border border-green-700 text-green-400',
-    warning: 'bg-yellow-900/20 border border-yellow-700 text-yellow-400',
-    error: 'bg-red-900/20 border border-red-700 text-red-400'
+    default: 'bg-primary/20 border border-primary/30 text-primary',
+    success: 'bg-success/20 border border-success/30 text-success',
+    warning: 'bg-warning/20 border border-warning/30 text-warning',
+    error: 'bg-danger/20 border border-danger/30 text-danger'
   }
 
   return (

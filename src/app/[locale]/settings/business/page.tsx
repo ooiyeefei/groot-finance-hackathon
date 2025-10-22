@@ -41,7 +41,7 @@ export default async function BusinessProfilePage({
 
   return (
     <ClientProviders>
-      <div className="flex h-screen bg-gray-900">
+      <div className="flex h-screen bg-background">
         {/* Sidebar */}
         <Sidebar />
 
@@ -67,7 +67,7 @@ export default async function BusinessProfilePage({
               </Link>
 
               {/* Business Profile Section */}
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+              <div className="bg-gray-800 rounded-lg border border-border p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <Building2 className="w-5 h-5 text-gray-400" />
                   <div>

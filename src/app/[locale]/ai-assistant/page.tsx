@@ -173,7 +173,7 @@ export default function AIAssistantPage() {
   if (!isLoaded || !userId) {
     return (
       <ClientProviders>
-        <div className="flex h-screen bg-gray-900">
+        <div className="flex h-screen bg-background">
           <Sidebar />
           <div className="flex-1 flex flex-col">
             <HeaderWithUser
@@ -193,12 +193,12 @@ export default function AIAssistantPage() {
 
   return (
     <ClientProviders>
-      <div className="flex h-screen bg-gray-900">
+      <div className="flex h-screen bg-background">
           {/* Main Navigation Sidebar */}
           <Sidebar />
 
           {/* Chat History Sidebar */}
-          <Suspense fallback={<div className="w-80 bg-gray-800 border-r border-gray-700 animate-pulse"></div>}>
+          <Suspense fallback={<div className="w-80 bg-record-layer-2 border-r border-border animate-pulse"></div>}>
             <ConversationSidebar
               isOpen={isChatSidebarOpen}
               onClose={() => setIsChatSidebarOpen(false)}
@@ -227,8 +227,8 @@ export default function AIAssistantPage() {
                   <button
                     onClick={() => setIsChatSidebarOpen(!isChatSidebarOpen)}
                     className={`relative group inline-flex items-center justify-center px-3 py-2 rounded-md transition-all duration-200 ease-in-out ${isChatSidebarOpen
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                       }`}
                     aria-label={isChatSidebarOpen ? "Close Chat History" : "Open Chat History"}
                     title={isChatSidebarOpen ? "Close Chat History" : "Open Chat History"}
@@ -236,9 +236,9 @@ export default function AIAssistantPage() {
                     <Menu className="w-4 h-4" />
 
                     {/* Tooltip */}
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-300 pointer-events-none whitespace-nowrap z-10">
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-300 pointer-events-none whitespace-nowrap z-10">
                       {isChatSidebarOpen ? "Close Chat History" : "Chat History"}
-                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-border"></div>
                     </div>
                   </button>
                 </>

@@ -20,7 +20,7 @@ export default async function ApplicationsPage() {
 
   return (
     <ClientProviders>
-      <div className="flex h-screen bg-gray-900">
+      <div className="flex h-screen bg-background">
         {/* Sidebar */}
         <Sidebar />
 
@@ -33,7 +33,7 @@ export default async function ApplicationsPage() {
           />
 
           {/* Main Content Area */}
-          <main className="flex-1 overflow-auto p-4 sm:p-6">
+          <main className="flex-1 overflow-auto p-4 sm:p-card-padding">
             <div className="max-w-7xl mx-auto">
               {/* Applications Container */}
               <ApplicationsContainer />

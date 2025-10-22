@@ -17,12 +17,12 @@ export default function ConfidenceScoreMeter({
   const normalizedScore = Math.max(0, Math.min(1, score))
   const percentage = Math.round(normalizedScore * 100)
   
-  // Determine color based on confidence level
-  const getScoreColor = (score: number) => {
-    if (score >= 0.8) return 'text-green-400 border-green-400 bg-green-400/20'
-    if (score >= 0.6) return 'text-yellow-400 border-yellow-400 bg-yellow-400/20'
-    if (score >= 0.4) return 'text-orange-400 border-orange-400 bg-orange-400/20'
-    return 'text-red-400 border-red-400 bg-red-400/20'
+  // Determine variant based on confidence level - using semantic Badge variants
+  const getScoreVariant = (score: number) => {
+    if (score >= 0.8) return 'success' as const
+    if (score >= 0.6) return 'warning' as const
+    if (score >= 0.4) return 'warning' as const
+    return 'error' as const
   }
 
   const getProgressColor = (score: number) => {
@@ -44,21 +44,29 @@ export default function ConfidenceScoreMeter({
     lg: 'w-5 h-5'
   }
 
+  // Map score to CSS class
+  const getScoreCSSClass = (score: number) => {
+    if (score >= 0.8) return 'badge-success-status'
+    if (score >= 0.6) return 'badge-warning-status'
+    if (score >= 0.4) return 'badge-warning-status'
+    return 'badge-error-status'
+  }
+
   if (score === 0 || isNaN(score)) {
     return (
-      <span className={`inline-flex items-center rounded-full font-medium border text-gray-400 border-gray-600 bg-gray-800/50 ${sizeClasses[size]}`}>
+      <div className="badge-info-metadata inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
         <Target className={`mr-1 ${iconSizes[size]}`} />
         No data
-      </span>
+      </div>
     )
   }
 
   return (
     <div className="flex items-center space-x-2">
-      <span className={`inline-flex items-center rounded-full font-medium border ${getScoreColor(normalizedScore)} ${sizeClasses[size]}`}>
+      <div className={`${getScoreCSSClass(normalizedScore)} inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors`}>
         <Target className={`mr-1 ${iconSizes[size]}`} />
         {percentage}%
-      </span>
+      </div>
       
       {/* Progress bar for medium and large sizes */}
       {size !== 'sm' && (

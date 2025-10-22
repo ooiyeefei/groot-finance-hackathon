@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from '@clerk/nextjs';
 import { ToastProvider } from '@/components/ui/toast';
+import { ThemeProvider } from '@/domains/utilities/components/theme-provider';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -84,14 +85,21 @@ export default function RootLayout({
         }
       }}
     >
-      <html>
+      <html suppressHydrationWarning>
         <head>
           <link rel="icon" href="https://storage.googleapis.com/finanseal-logo/finanseal.png" />
         </head>
-        <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-900 text-white`}>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
+        <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <ToastProvider>
+              {children}
+            </ToastProvider>
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

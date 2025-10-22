@@ -6,6 +6,7 @@
 5. Please every step of the way just give me a high level explanation of what changes you made
 6. Make every task and code change you do as simple as possible. We want to avoid making any massive or complex changes. Every change should impact as little code as possible. Everything is about simplicity.
 7. Finally, add a review section to the [todo.md](http://todo.md/) file with a summary of the changes you made and any other relevant information.
+8. You have access to Supabase mcp. if you encountered error access issue. Please list all the projects available to you through the MCP and ensure you are working with the correct one. Supabase project should be 'ohxwghdgsuyabgsndfzc'
 
 ## Project Overview
 
@@ -94,7 +95,7 @@ src/domains/
 These are the fundamental rules that govern all development work in this repository.
 
 1.  **Rule: Prefer Modification Over Creation**
-    *   To maintain a clean and predictable project structure, you must ALWAYS seek to update existing files before creating new ones.
+    *  Do not create new files or alternative files unless necessary. Before creating any new file, get my approval and justify yourself with proof to show none in the codebase has similar purpose. To maintain a clean and predictable project structure, you must ALWAYS seek to update existing files before creating new ones.
     *   Before creating a new file, analyze the current file tree to see if an existing file can be modified to meet the request.
     *   *Example:* Update the existing `app/page.tsx` for the main dashboard UI instead of creating a new `app/dashboard/page.tsx`, unless a new route is explicitly required.
 
@@ -111,6 +112,50 @@ These are the fundamental rules that govern all development work in this reposit
     *   To maximize development speed, you must run tasks in parallel whenever they have no direct dependencies on each other.
     *   If a prompt contains multiple, independent workstreams (e.g., one backend task, one frontend task), you should address them simultaneously.
     *   *Example:* Setting up the Supabase database schema and building the frontend Clerk authentication UI are non-dependent tasks and can be executed in parallel.
+
+### **Design System Rules**
+
+FinanSEAL implements a **Layer 1-2-3 Semantic Design System** for consistent theming across light and dark modes. These rules are **MANDATORY** for all UI component work.
+
+4.  **Rule: Always Check Existing Components First**
+    *   Before creating ANY new UI component, you MUST check existing implementations in the correct order:
+        1. **Check `src/components/ui/`** - UI component library (Button, Card, Badge, etc.)
+        2. **Check `src/app/globals.css`** - Available semantic tokens (--background, --foreground, --primary, etc.)
+        3. **Check `tailwind.config.js`** - Custom utilities and theme extensions
+        4. **Search domain components** - Look for similar patterns in `src/domains/*/components/`
+    *   **Documentation**: Detailed component standards in `src/components/ui/CLAUDE.md`
+
+5.  **Rule: Mandatory Semantic Token Usage**
+    *   **NEVER use hardcoded colors**: No `bg-gray-700`, `text-white`, `border-gray-600`, `bg-blue-600`, etc.
+    *   **ALWAYS use semantic tokens**: `bg-card`, `text-foreground`, `border-border`, `bg-primary`, etc.
+    *   **Follow Layer Hierarchy**: `bg-background` → `bg-surface` → `bg-card` → `bg-muted` for proper elevation
+    *   **Light/Dark Mode Pattern for Badges**: `bg-{color}-500/10 text-{color}-600 dark:text-{color}-400 border border-{color}-500/30`
+
+6.  **Rule: Design Standards Compliance**
+    *   **Design Language**: Material Design 3 inspired with Google-style clean aesthetics
+    *   **Accessibility**: WCAG AA compliant contrast ratios (4.5:1 minimum)
+    *   **Color System**: HSL-based semantic tokens with automatic light/dark adaptation
+    *   **Typography**: Optimized scale with `text-foreground` → `text-muted-foreground` hierarchy
+    *   **Border Radius**: Material Design rounded corners (`rounded-md` standard)
+    *   **Focus States**: `ring-ring` for keyboard navigation accessibility
+
+7.  **Rule: Component Integration Pattern**
+    *   **Import from UI library**: `import { Button, Card, Badge } from '@/components/ui'`
+    *   **Use CVA variants**: Prefer `<Button variant="default">` over custom styling
+    *   **Test both themes**: Verify light and dark mode rendering before completion
+    *   **App-level patterns**: Reference `src/app/CLAUDE.md` for modals, forms, navigation
+    *   **Build validation**: Components must pass `npm run build` without errors
+
+8.  **Rule: Modal and Overlay Standards**
+    *   **Full coverage**: Backdrop must cover entire viewport with no gaps
+    *   **Proper layering**: Modal content uses `m-4` for spacing, not backdrop `p-4`
+    *   **Close patterns**: Use `<Button variant="ghost" size="sm">` with semantic hover states
+    *   **Z-index**: Use `z-50` for modal overlays to ensure proper layering
+
+**Quick Reference:**
+- **Component docs**: `src/components/ui/CLAUDE.md` (Layer 1-2-3 system, CVA patterns)
+- **App patterns**: `src/app/CLAUDE.md` (pages, modals, forms, navigation)
+- **Semantic tokens**: `src/app/globals.css` (all available CSS variables)
 
 ---
 

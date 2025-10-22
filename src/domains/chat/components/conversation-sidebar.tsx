@@ -201,34 +201,34 @@ export default function ConversationSidebar({
         fixed lg:relative
         left-0 top-0 
         h-full w-80 
-        bg-gray-800 border-r border-gray-700 
+        bg-card border-r border-border 
         transform transition-transform duration-300 ease-in-out
         z-50 lg:z-auto
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         flex flex-col
       `}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-lg font-semibold text-white flex items-center">
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <h2 className="text-lg font-semibold text-foreground flex items-center">
             <MessageSquare className="w-5 h-5 mr-2" />
             {t('chatHistory')}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors lg:hidden"
+            className="text-muted-foreground hover:text-foreground transition-colors lg:hidden"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* New Chat Button */}
-        <div className="p-4 border-b border-gray-700">
+        <div className="p-4 border-b border-border">
           <button
             onClick={() => {
               onNewChat()
               onClose()
             }}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
           >
             <Plus className="w-4 h-4 mr-2" />
             {t('newChat')}
@@ -236,15 +236,15 @@ export default function ConversationSidebar({
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b border-gray-700">
+        <div className="p-4 border-b border-border">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
               placeholder={t('searchConversations')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-gray-700 text-white placeholder-gray-400 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600"
+              className="w-full bg-input text-foreground placeholder-muted-foreground rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring border border-input"
             />
           </div>
         </div>
@@ -252,11 +252,11 @@ export default function ConversationSidebar({
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-4 text-center text-gray-400">
+            <div className="p-4 text-center text-muted-foreground">
               <div className="animate-pulse">{t('loadingConversations')}</div>
             </div>
           ) : filteredConversations.length === 0 ? (
-            <div className="p-4 text-center text-gray-400">
+            <div className="p-4 text-center text-muted-foreground">
               {searchQuery ? (
                 <div>
                   <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -279,8 +279,8 @@ export default function ConversationSidebar({
                   className={`
                     relative rounded-lg transition-colors
                     ${currentConversationId === conversation.id
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                     }
                   `}
                 >
@@ -323,10 +323,10 @@ export default function ConversationSidebar({
                     <button
                       onClick={(e) => toggleMenu(conversation.id, e)}
                       onKeyDown={(e) => handleMenuKeyDown(conversation.id, e)}
-                      className={`group/menu p-1.5 rounded-md transition-all duration-150 ease-in-out group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+                      className={`group/menu p-1.5 rounded-md transition-all duration-150 ease-in-out group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring ${
                         currentConversationId === conversation.id
-                          ? 'text-white opacity-70 bg-gray-700 hover:bg-gray-600 focus:bg-gray-600'
-                          : 'text-gray-300 opacity-70 bg-gray-700 hover:bg-gray-600 focus:bg-gray-600'
+                          ? 'text-primary-foreground/70 opacity-70 hover:bg-primary-foreground/10 focus:bg-primary-foreground/10'
+                          : 'text-muted-foreground opacity-70 hover:bg-accent focus:bg-accent'
                       }`}
                       aria-label={`Options for conversation: ${conversation.title}`}
                       title="Conversation options"
@@ -337,11 +337,11 @@ export default function ConversationSidebar({
                     
                     {/* Dropdown Menu */}
                     {openMenuId === conversation.id && (
-                      <div className="absolute right-0 top-8 bg-gray-800 border border-gray-600 rounded-md shadow-lg z-30 min-w-[90px] overflow-hidden">
+                      <div className="absolute right-0 top-8 bg-popover border border-border rounded-md shadow-lg z-30 min-w-[90px] overflow-hidden">
                         <button
                           onClick={(e) => handleOpenDeleteDialog(conversation.id, e)}
                           onKeyDown={(e) => handleDeleteKeyDown(conversation.id, e)}
-                          className="w-full text-left px-2 py-1.5 text-xs text-red-400 hover:bg-red-900 hover:bg-opacity-30 hover:text-red-300 transition-colors flex items-center focus:outline-none focus:bg-red-900 focus:bg-opacity-30 focus:ring-2 focus:ring-red-500 focus:ring-inset"
+                          className="w-full text-left px-2 py-1.5 text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors flex items-center focus:outline-none focus:ring-2 focus:ring-destructive focus:ring-inset"
                           aria-label={`Delete conversation: ${conversation.title}`}
                           tabIndex={0}
                         >

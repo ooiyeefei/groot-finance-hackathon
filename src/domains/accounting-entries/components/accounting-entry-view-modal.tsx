@@ -5,6 +5,7 @@ import { AccountingEntry } from '@/domains/accounting-entries/types'
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import MultiPageDocumentPreview from './multi-page-document-preview'
+import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 
 interface AccountingEntryDetailModalProps {
@@ -88,17 +89,17 @@ export default function AccountingEntryDetailModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-800 z-50 flex flex-col">
+    <div className="fixed inset-0 bg-background z-50 flex flex-col">
       <div className="w-full h-full flex flex-col">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-900 flex-shrink-0">
+        <div className="flex items-center justify-between p-4 border-b border-border bg-card flex-shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Eye className="w-5 h-5 text-white" />
+            <div className="p-2 bg-primary rounded-lg">
+              <Eye className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h3 className="text-lg font-medium text-white">Record Details</h3>
-              <p className="text-sm text-gray-400 mt-1">
+              <h3 className="text-lg font-medium text-foreground">Record Details</h3>
+              <p className="text-sm text-muted-foreground mt-1">
                 {transaction.category_name || formatCategoryName(transaction.category)} • {formatDate(transaction.transaction_date)}
               </p>
             </div>
@@ -109,7 +110,7 @@ export default function AccountingEntryDetailModal({
               <button
                 type="button"
                 onClick={() => setIsPreviewVisible(!isPreviewVisible)}
-                className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+                className="px-3 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg font-medium transition-colors flex items-center gap-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
                 title={isPreviewVisible ? 'Hide Document' : 'Show Document'}
                 aria-expanded={isPreviewVisible}
                 aria-controls="document-preview-pane"
@@ -121,23 +122,25 @@ export default function AccountingEntryDetailModal({
               </button>
             )}
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 onClick={onEdit}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors"
+                size="sm"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 title="Edit Record"
               >
-                <Edit className="w-5 h-5" />
-              </button>
-              <button
+                <Edit className="w-4 h-4" />
+              </Button>
+              <Button
                 onClick={handleDeleteClick}
-                className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded-lg transition-colors"
+                size="sm"
+                variant="destructive"
                 title="Delete Record"
               >
-                <Trash2 className="w-5 h-5" />
-              </button>
+                <Trash2 className="w-4 h-4" />
+              </Button>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -151,7 +154,7 @@ export default function AccountingEntryDetailModal({
           {isPreviewVisible && transaction.source_record_id && (
             <div
               id="document-preview-pane"
-              className="w-full lg:w-1/2 lg:border-r lg:border-gray-700 flex flex-col min-h-0 mt-4 lg:mt-0"
+              className="w-full lg:w-1/2 lg:border-r lg:border-border flex flex-col min-h-0 mt-4 lg:mt-0"
               aria-label="Document preview"
             >
               <MultiPageDocumentPreview
@@ -167,59 +170,59 @@ export default function AccountingEntryDetailModal({
             <div className={`flex ${isPreviewVisible && transaction.source_record_id ? 'flex-col' : 'flex-col xl:flex-row'} min-h-0 h-full`}>
 
               {/* Information Section */}
-              <div className={`${isPreviewVisible && transaction.source_record_id ? 'w-full' : 'w-full xl:w-1/2'} overflow-y-auto ${isPreviewVisible && transaction.source_record_id ? '' : 'xl:border-r xl:border-gray-700'} p-6`}>
+              <div className={`${isPreviewVisible && transaction.source_record_id ? 'w-full' : 'w-full xl:w-1/2'} overflow-y-auto ${isPreviewVisible && transaction.source_record_id ? '' : 'xl:border-r xl:border-border'} p-6`}>
                 <div className="space-y-6">
                 {/* Information */}
                 <div>
-                  <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                  <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                     <FileText className="w-4 h-4 mr-2" />
                     Information
                   </h4>
                   
-                  <div className="space-y-3">
+                  <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Type:</span>
+                      <span className="text-muted-foreground">Type:</span>
                       <span className={`font-medium capitalize ${getAccountingEntryTypeColor(transaction.transaction_type)}`}>
                         {transaction.transaction_type}
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Description:</span>
-                      <span className="text-white font-medium">{transaction.description}</span>
+                      <span className="text-muted-foreground">Description:</span>
+                      <span className="text-foreground font-medium">{transaction.description}</span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Category:</span>
-                      <span className="text-white">{transaction.category_name || formatCategoryName(transaction.category)}</span>
+                      <span className="text-muted-foreground">Category:</span>
+                      <span className="text-foreground">{transaction.category_name || formatCategoryName(transaction.category)}</span>
                     </div>
-                    
-                    
+
+
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400 flex items-center gap-1">
+                      <span className="text-muted-foreground flex items-center gap-1">
                         <Calendar className="w-4 h-4" />
                         Date:
                       </span>
-                      <span className="text-white">{formatDate(transaction.transaction_date)}</span>
+                      <span className="text-foreground">{formatDate(transaction.transaction_date)}</span>
                     </div>
-                    
+
                     {transaction.vendor_name && (
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-400 flex items-center gap-1">
+                        <span className="text-muted-foreground flex items-center gap-1">
                           <Building className="w-4 h-4" />
                           Vendor:
                         </span>
-                        <span className="text-white">{transaction.vendor_name}</span>
+                        <span className="text-foreground">{transaction.vendor_name}</span>
                       </div>
                     )}
-                    
+
                     {transaction.reference_number && (
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-400 flex items-center gap-1">
+                        <span className="text-muted-foreground flex items-center gap-1">
                           <Hash className="w-4 h-4" />
                           Reference:
                         </span>
-                        <span className="text-white">{transaction.reference_number}</span>
+                        <span className="text-foreground">{transaction.reference_number}</span>
                       </div>
                     )}
                   </div>
@@ -227,39 +230,39 @@ export default function AccountingEntryDetailModal({
 
                 {/* Amount & Currency */}
                 <div>
-                  <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                  <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                     <DollarSign className="w-4 h-4 mr-2" />
                     Amount & Currency
                   </h4>
-                  
-                  <div className="bg-gray-900 rounded-lg p-4 space-y-3">
+
+                  <div className="bg-card rounded-lg border border-border p-4 space-y-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Original Amount:</span>
+                      <span className="text-muted-foreground">Original Amount:</span>
                       <span className={`text-xl font-bold ${getAccountingEntryTypeColor(transaction.transaction_type)}`}>
                         {transaction.transaction_type === 'Expense' && '-'}
                         {formatCurrency(transaction.original_amount, transaction.original_currency)}
                       </span>
                     </div>
-                    
+
                     {transaction.original_currency !== transaction.home_currency && (
                       <>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-400">Home Currency:</span>
-                          <span className="text-white font-semibold">
+                          <span className="text-muted-foreground">Home Currency:</span>
+                          <span className="text-foreground font-semibold">
                             {formatCurrency(transaction.home_currency_amount, transaction.home_currency)}
                           </span>
                         </div>
-                        
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-500">Exchange Rate:</span>
-                          <span className="text-gray-400">
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Exchange Rate:</span>
+                          <span className="text-muted-foreground">
                             1 {transaction.original_currency} = {transaction.exchange_rate.toFixed(6)} {transaction.home_currency}
                           </span>
                         </div>
-                        
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-500">Rate Date:</span>
-                          <span className="text-gray-400">
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Rate Date:</span>
+                          <span className="text-muted-foreground">
                             {formatDate(transaction.exchange_rate_date)}
                           </span>
                         </div>
@@ -270,39 +273,39 @@ export default function AccountingEntryDetailModal({
                 
                 {/* System Information */}
                 <div>
-                  <h4 className="text-sm font-medium text-white mb-4">System Information</h4>
-                  
+                  <h4 className="text-sm font-medium text-foreground mb-4">System Information</h4>
+
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Created:</span>
-                      <span className="text-gray-400">
+                      <span className="text-muted-foreground">Created:</span>
+                      <span className="text-muted-foreground">
                         {new Date(transaction.created_at).toLocaleString()}
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Last Updated:</span>
-                      <span className="text-gray-400">
+                      <span className="text-muted-foreground">Last Updated:</span>
+                      <span className="text-muted-foreground">
                         {new Date(transaction.updated_at).toLocaleString()}
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Creation Method:</span>
-                      <span className="text-gray-400">
+                      <span className="text-muted-foreground">Creation Method:</span>
+                      <span className="text-muted-foreground">
                         {formatCreationMethod(transaction.created_by_method)}
                       </span>
                     </div>
-                    
+
                     {transaction.source_record_id && (
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-500 flex items-center gap-1">
+                        <span className="text-muted-foreground flex items-center gap-1">
                           <FileText className="w-3 h-3" />
                           Source Document:
                         </span>
                         <button
                           onClick={() => onViewDocument?.(transaction.source_record_id!, transaction.source_document_type)}
-                          className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                          className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
                         >
                           <Eye className="w-3 h-3" />
                           View Document
@@ -318,7 +321,7 @@ export default function AccountingEntryDetailModal({
               <div className={`${isPreviewVisible && transaction.source_record_id ? 'w-full' : 'w-full xl:w-1/2'} overflow-y-auto p-6`}>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-white flex items-center">
+                    <h4 className="text-sm font-medium text-foreground flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       Line Items ({transaction.line_items?.length || 0})
                     </h4>
@@ -326,39 +329,39 @@ export default function AccountingEntryDetailModal({
 
                   {/* Line Items Table */}
                   {transaction.line_items && transaction.line_items.length > 0 ? (
-                    <div className="bg-gray-900 rounded-lg overflow-hidden">
+                    <div className="bg-card rounded-lg border border-border overflow-hidden">
                       <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead className="bg-gray-800">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted">
                             <tr>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">#</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">Description</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">Item Code</th>
+                              <th className="px-3 py-2 text-right text-muted-foreground font-medium">Qty</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">Unit</th>
+                              <th className="px-3 py-2 text-right text-muted-foreground font-medium">Unit Price</th>
+                              <th className="px-3 py-2 text-right text-muted-foreground font-medium">Total</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-700">
+                          <tbody className="divide-y divide-border">
                             {transaction.line_items.map((item, index) => (
-                              <tr key={item.id || index} className="hover:bg-gray-800">
-                                <td className="px-3 py-2 text-gray-400">{index + 1}</td>
+                              <tr key={item.id || index} className="hover:bg-muted/50">
+                                <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
                                 <td className="px-3 py-2">
-                                  <div className="text-white font-medium">{item.item_description}</div>
+                                  <div className="text-foreground font-medium">{item.item_description}</div>
                                   {item.item_category && (
-                                    <div className="text-xs text-gray-400 mt-1">
+                                    <div className="text-xs text-muted-foreground mt-1">
                                       {formatCategoryName(item.item_category)}
                                     </div>
                                   )}
                                 </td>
-                                <td className="px-3 py-2 text-white">{item.item_code || '-'}</td>
-                                <td className="px-3 py-2 text-right text-white">{item.quantity}</td>
-                                <td className="px-3 py-2 text-white">{item.unit_measurement || '-'}</td>
-                                <td className="px-3 py-2 text-right text-white">
+                                <td className="px-3 py-2 text-foreground">{item.item_code || '-'}</td>
+                                <td className="px-3 py-2 text-right text-foreground">{item.quantity}</td>
+                                <td className="px-3 py-2 text-foreground">{item.unit_measurement || '-'}</td>
+                                <td className="px-3 py-2 text-right text-foreground">
                                   {formatCurrency(item.unit_price, transaction.original_currency)}
                                 </td>
-                                <td className="px-3 py-2 text-right text-green-400 font-medium">
+                                <td className="px-3 py-2 text-right text-foreground font-medium">
                                   {formatCurrency(item.total_amount || 0, transaction.original_currency)}
                                 </td>
                               </tr>
@@ -368,7 +371,7 @@ export default function AccountingEntryDetailModal({
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-gray-400">
+                    <div className="text-center py-8 text-muted-foreground">
                       <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
                       <p>No line items found</p>
                       <p className="text-xs mt-1">This accounting entry has no itemized details</p>
@@ -377,29 +380,29 @@ export default function AccountingEntryDetailModal({
 
                   {/* Transaction Summary */}
                   {transaction.line_items && transaction.line_items.length > 0 && (
-                    <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
-                      <h5 className="text-sm font-medium text-white mb-3">Summary</h5>
-                      <div className="space-y-2 text-sm">
+                    <div className="bg-card rounded-lg border border-border p-4 text-sm">
+                      <h5 className="text-sm font-medium text-foreground mb-3">Summary</h5>
+                      <div className="space-y-2">
                         <div className="flex justify-between">
-                          <span className="text-gray-400">Items Count:</span>
-                          <span className="text-white">{transaction.line_items.length}</span>
+                          <span className="text-muted-foreground">Items Count:</span>
+                          <span className="text-foreground">{transaction.line_items.length}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-400">Subtotal:</span>
-                          <span className="text-white">
+                          <span className="text-muted-foreground">Subtotal:</span>
+                          <span className="text-foreground">
                             {formatCurrency(calculateLineItemsTotal(), transaction.original_currency)}
                           </span>
                         </div>
-                        <div className="flex justify-between border-t border-gray-700 pt-2">
-                          <span className="text-gray-300 font-medium">Total Amount:</span>
-                          <span className="text-green-400 font-medium">
+                        <div className="flex justify-between border-t border-border pt-2">
+                          <span className="text-foreground font-medium">Total Amount:</span>
+                          <span className="text-foreground font-medium">
                             {formatCurrency(transaction.original_amount, transaction.original_currency)}
                           </span>
                         </div>
 
                         {/* Note about line items vs main amount */}
                         {Math.abs(calculateLineItemsTotal() - transaction.original_amount) > 0.01 && (
-                          <div className="mt-3 text-xs text-yellow-400 bg-yellow-900/20 rounded p-2">
+                          <div className="mt-3 text-xs text-muted-foreground bg-muted/50 rounded p-2">
                             Note: Line items total differs from accounting entry amount.
                             This may be due to additional fees, discounts, or rounding differences.
                           </div>
@@ -409,13 +412,13 @@ export default function AccountingEntryDetailModal({
                   )}
 
                   {/* Record ID and Invoice/Expense Claims ID at bottom of line items section */}
-                  <div className="flex flex-col items-end pt-4 border-t border-gray-600 space-y-2">
+                  <div className="flex flex-col items-end pt-4 border-t border-border space-y-2">
                     {/* Record ID */}
-                    <div className="flex items-center gap-2 bg-gray-700/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
-                      <span className="text-gray-300 text-xs font-mono">Record ID: {transaction.id}</span>
+                    <div className="flex items-center gap-2 bg-muted/50 backdrop-blur-sm px-3 py-1.5 rounded-md border border-border">
+                      <span className="text-foreground text-xs font-mono">Record ID: {transaction.id}</span>
                       <button
                         onClick={() => navigator.clipboard.writeText(transaction.id)}
-                        className="text-gray-400 hover:text-gray-200 transition-colors"
+                        className="text-muted-foreground hover:text-foreground transition-colors"
                         title="Copy Record ID"
                       >
                         <Copy className="w-3 h-3" />
@@ -440,7 +443,7 @@ export default function AccountingEntryDetailModal({
                             bg: 'bg-green-700/20',
                             border: 'border-green-600/30',
                             text: 'text-green-300',
-                            button: 'text-green-400 hover:text-green-200'
+                            button: 'text-success-foreground hover:text-green-200'
                           }
                           if (isExpense) return {
                             bg: 'bg-blue-700/20',
@@ -449,10 +452,10 @@ export default function AccountingEntryDetailModal({
                             button: 'text-blue-400 hover:text-blue-200'
                           }
                           return {
-                            bg: 'bg-gray-700/20',
-                            border: 'border-gray-600/30',
-                            text: 'text-gray-300',
-                            button: 'text-gray-400 hover:text-gray-200'
+                            bg: 'bg-muted/20',
+                            border: 'border-border',
+                            text: 'text-foreground',
+                            button: 'text-muted-foreground hover:text-foreground'
                           }
                         }
 

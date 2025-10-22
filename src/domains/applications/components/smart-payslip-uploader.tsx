@@ -322,20 +322,20 @@ export default function SmartPayslipUploader({
   const getStatusColor = (status: string, isCritical: boolean) => {
     switch (status) {
       case 'completed':
-        return 'bg-green-900/20 text-green-300 border-green-700/50'
+        return 'bg-success/20 text-success border-success/30'
       case 'processing':
-        return 'bg-blue-900/20 text-blue-300 border-blue-700/50'
+        return 'bg-primary/20 text-primary border-primary/30'
       case 'classifying':
-        return 'bg-indigo-900/20 text-indigo-300 border-indigo-700/50'
+        return 'bg-primary/20 text-primary border-primary/30'
       case 'pending_extraction':
-        return 'bg-amber-900/20 text-amber-300 border-amber-700/50'
+        return 'bg-warning/20 text-warning border-warning/30'
       case 'extracting':
-        return 'bg-cyan-900/20 text-cyan-300 border-cyan-700/50'
+        return 'bg-primary/20 text-primary border-primary/30'
       case 'failed':
       case 'validation_failed':
-        return 'bg-red-900/20 text-red-300 border-red-700/50'
+        return 'bg-danger/20 text-danger border-danger/30'
       default:
-        return 'bg-gray-900/20 text-gray-300 border-gray-700/50'
+        return 'bg-muted/20 text-muted-foreground border-muted/30'
     }
   }
 
@@ -451,21 +451,21 @@ export default function SmartPayslipUploader({
   const canUploadMore = uploadedFiles.length < payslipSlots.length
 
   return (
-    <div className="bg-gray-800 border-gray-700 rounded-lg p-6">
+    <div className="bg-record-layer-1 border-record-border rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-white mb-1">
+          <h3 className="text-lg font-semibold text-record-title mb-1">
             Payslips ({payslipSlots.length} slots, 3 minimum required)
           </h3>
-          <p className="text-gray-400 text-sm">
+          <p className="text-record-supporting text-sm">
             Upload your most recent monthly payslips for verification (minimum 3 consecutive months)
           </p>
         </div>
       </div>
 
       {/* Status Overview */}
-      <div className="mb-4 p-3 bg-gray-700/50 rounded-lg">
-        <p className="text-sm text-gray-300">
+      <div className="mb-4 p-3 bg-record-layer-2 rounded-lg">
+        <p className="text-sm text-record-supporting">
           {getOverallStatus()}
         </p>
       </div>
@@ -476,25 +476,25 @@ export default function SmartPayslipUploader({
           className={cn(
             "border-2 border-dashed rounded-lg p-6 text-center transition-colors",
             isDragOver
-              ? "border-blue-400 bg-blue-900/10"
-              : "border-gray-600 hover:border-gray-500"
+              ? "border-primary bg-primary/10"
+              : "border-border hover:border-muted-foreground"
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
           <div className="space-y-3">
-            <Upload className="w-8 h-8 text-gray-500 mx-auto" />
+            <Upload className="w-8 h-8 text-muted-foreground mx-auto" />
             <div>
-              <p className="text-gray-300 font-medium">
+              <p className="text-foreground font-medium">
                 Drop multiple payslip files here or click to browse
               </p>
-              <p className="text-gray-500 text-sm mt-1">
+              <p className="text-muted-foreground text-sm mt-1">
                 Supports PDF, JPEG, PNG (max 10MB each) • {payslipSlots.length - uploadedFiles.length} more slots available
               </p>
             </div>
             <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+              variant="primary"
               onClick={() => fileInputRef.current?.click()}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -513,16 +513,16 @@ export default function SmartPayslipUploader({
 
         return uploadingPayslipSlots.length > 0 && (
           <div className="mt-4 space-y-3">
-            <h4 className="text-sm font-medium text-gray-300">Uploading Files</h4>
+            <h4 className="text-sm font-medium text-foreground">Uploading Files</h4>
             {uploadingPayslipSlots.map((slotName) => {
               const slot = payslipSlots.find(s => s.slot === slotName)
               return (
-                <div key={`uploading-${slotName}`} className="bg-gray-700 p-4 rounded-lg">
+                <div key={`uploading-${slotName}`} className="bg-record-layer-2 p-4 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                    <Loader2 className="w-5 h-5 text-primary animate-spin" />
                     <div>
-                      <p className="text-blue-300 font-medium">Uploading document...</p>
-                      <p className="text-gray-400 text-sm">Processing will begin automatically</p>
+                      <p className="text-primary font-medium">Uploading document...</p>
+                      <p className="text-muted-foreground text-sm">Processing will begin automatically</p>
                     </div>
                   </div>
                 </div>
@@ -535,7 +535,7 @@ export default function SmartPayslipUploader({
       {/* File List */}
       {uploadedFiles.length > 0 && (
         <div className="mt-4 space-y-3">
-          <h4 className="text-sm font-medium text-gray-300">Uploaded Files</h4>
+          <h4 className="text-sm font-medium text-foreground">Uploaded Files</h4>
           {payslipSlots
             .filter(slot => slot.document)
             .map((slot) => {
@@ -546,11 +546,11 @@ export default function SmartPayslipUploader({
               const clientValidation = validatePayslipDateClientSide(doc)
 
               return (
-                <div key={slot.slot} className="bg-gray-700 p-4 rounded-lg">
+                <div key={slot.slot} className="bg-record-layer-2 p-4 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
-                      <FileText className="w-4 h-4 text-gray-400" />
-                      <span className="text-white font-medium">{doc.file_name}</span>
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-foreground font-medium">{doc.file_name}</span>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(getEffectiveStatus(slot), slot.is_critical)}`}>
                         {getStatusIcon(getEffectiveStatus(slot), true)}
                         <span className="ml-1">{getStatusText(doc.processing_status, doc.error_message, slot)}</span>
@@ -559,7 +559,7 @@ export default function SmartPayslipUploader({
                       {/* Show success validation badge only for valid payslips */}
                       {doc.processing_status === 'completed' &&
                        ((validation && validation.isValid) || (clientValidation && clientValidation.isValid)) && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-green-900/20 text-green-300 border-green-700/50">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-success/20 text-success border-success/30">
                           ✅
                           <span className="ml-1">Recent payslip</span>
                         </span>
@@ -568,7 +568,7 @@ export default function SmartPayslipUploader({
                     <div className="flex gap-2">
                       <Button
                         size="sm"
-                        className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+                        variant="view"
                         onClick={() => onViewDocument(slot.document)}
                         title="View Document"
                       >
@@ -578,7 +578,7 @@ export default function SmartPayslipUploader({
                         <>
                           <Button
                             size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white border-0"
+                            variant="primary"
                             onClick={() => onDownloadDocument(slot.document)}
                             title="Download Document"
                           >
@@ -590,7 +590,7 @@ export default function SmartPayslipUploader({
                       {(doc.processing_status === 'completed' || doc.processing_status === 'failed' || doc.processing_status === 'classification_failed') && (
                         <Button
                           size="sm"
-                          className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                          variant="primary"
                           onClick={() => onReprocess(doc.id)}
                           title="Reprocess Document"
                         >
@@ -600,7 +600,7 @@ export default function SmartPayslipUploader({
                       {(doc.processing_status === 'failed' || doc.processing_status === 'classification_failed') && (
                         <Button
                           size="sm"
-                          className="bg-red-600 hover:bg-red-700 text-white border-0"
+                          variant="primary"
                           onClick={() => onReprocess(doc.id)}
                           title="Reprocess Document"
                         >
@@ -610,7 +610,7 @@ export default function SmartPayslipUploader({
                       {onDeleteDocument && (
                         <Button
                           size="sm"
-                          className="bg-red-600 hover:bg-red-700 text-white border-0"
+                          variant="destructive"
                           onClick={() => onDeleteDocument(doc.id, doc.file_name)}
                           title="Remove Document from Application"
                         >
@@ -620,15 +620,15 @@ export default function SmartPayslipUploader({
                     </div>
                   </div>
 
-                  <div className="text-sm text-gray-400 space-y-1">
+                  <div className="text-sm text-muted-foreground space-y-1">
                     <div>Uploaded: {formatDate(doc.uploaded_at)}</div>
                     {/* Show errors for failed documents OR completed documents with validation failures */}
                     {((doc.processing_status === 'failed' || doc.processing_status === 'classification_failed') ||
                       (doc.processing_status === 'completed' && validation && !validation.isValid) ||
                       (doc.processing_status === 'completed' && clientValidation && !clientValidation.isValid)) && (
                       <div className="space-y-2">
-                        <div className="text-red-400 flex items-start gap-2">
-                          <span className="text-red-400 mt-0.5">🚫</span>
+                        <div className="text-danger flex items-start gap-2">
+                          <span className="text-danger mt-0.5">🚫</span>
                           <div>
                             {/* Priority: classification error > validation error */}
                             {doc.error_message ||
@@ -676,12 +676,12 @@ export default function SmartPayslipUploader({
 
                           const suggestions = getContextualSuggestions(errorMsg, slot.slot)
                           return suggestions.length > 0 && (
-                            <div className="text-gray-400 text-xs">
+                            <div className="text-muted-foreground text-xs">
                               <div className="font-medium mb-1">💡 Suggestions:</div>
                               <ul className="space-y-1">
                                 {suggestions.slice(0, 3).map((suggestion, idx) => (
                                   <li key={idx} className="flex items-start gap-1">
-                                    <span className="text-gray-500">•</span>
+                                    <span className="text-muted-foreground">•</span>
                                     <span>{suggestion}</span>
                                   </li>
                                 ))}
@@ -695,8 +695,8 @@ export default function SmartPayslipUploader({
 
                   {/* Processing Status Display */}
                   {(['classifying', 'pending_extraction', 'extracting'].includes(doc.processing_status)) && (
-                    <div className="mt-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg">
-                      <div className="flex items-center gap-2 text-blue-300">
+                    <div className="mt-3 p-3 bg-primary/20 border border-primary/30 rounded-lg">
+                      <div className="flex items-center gap-2 text-primary">
                         <Brain className="w-4 h-4 animate-spin" />
                         <span className="text-sm font-medium">
                           {doc.processing_status === 'classifying' && 'Analyzing document type...'}
@@ -726,27 +726,27 @@ export default function SmartPayslipUploader({
                           // Render individual collapsible containers for each payslip using consistent pattern
                           return (
                             <div className="mt-4 space-y-3">
-                              <div className="text-sm text-green-400 mb-3 flex items-center">
+                              <div className="text-sm text-success mb-3 flex items-center">
                                 <CheckCircle className="w-4 h-4 mr-2" />
                                 {doc.extracted_data.payslips.length} Payslips Extracted
                               </div>
                               {doc.extracted_data.payslips.map((payslip: any, index: number) => (
-                                <div key={`${doc.id}-payslip-${index}`} className="bg-gray-600 border border-gray-500 rounded-lg">
+                                <div key={`${doc.id}-payslip-${index}`} className="bg-record-layer-2 border border-border rounded-lg">
                                   {/* Collapsible Header */}
                                   <div
-                                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-500/30 transition-colors"
+                                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent transition-colors"
                                     onClick={() => toggleContainer(`${doc.id}-payslip-${index}`)}
                                   >
                                     <div className="flex flex-col gap-2">
                                       <div className="flex items-center gap-2">
-                                        <FileText className="w-4 h-4 text-gray-400" />
-                                        <span className="text-white font-medium">
+                                        <FileText className="w-4 h-4 text-muted-foreground" />
+                                        <span className="text-foreground font-medium">
                                           Payslip #{index + 1} - {payslip.pay_period || `Month ${index + 1}`}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        <CheckCircle className="w-4 h-4 text-green-400" />
-                                        <span className="text-sm font-medium text-green-400">
+                                        <CheckCircle className="w-4 h-4 text-success" />
+                                        <span className="text-sm font-medium text-success">
                                           Net: {payslip.net_wages ? `MYR ${payslip.net_wages.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A'}
                                         </span>
                                       </div>
@@ -754,7 +754,6 @@ export default function SmartPayslipUploader({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="text-gray-400 hover:text-white hover:bg-gray-700"
                                     >
                                       {expandedContainers.has(`${doc.id}-payslip-${index}`) ? (
                                         <ChevronUp className="w-4 h-4" />
@@ -766,7 +765,7 @@ export default function SmartPayslipUploader({
 
                                   {/* Collapsible Content */}
                                   {expandedContainers.has(`${doc.id}-payslip-${index}`) && (
-                                    <div className="border-t border-gray-500">
+                                    <div className="border-t border-border">
                                       <div className="p-4">
                                         <PayslipDataDisplay data={payslip} />
                                       </div>

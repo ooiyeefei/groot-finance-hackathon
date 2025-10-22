@@ -1,4 +1,4 @@
-import { defineConfig } from "@trigger.dev/sdk";
+import { defineConfig } from "@trigger.dev/sdk/v3";
 import { pythonExtension } from "@trigger.dev/python/extension";
 import { aptGet } from "@trigger.dev/build/extensions/core";
 

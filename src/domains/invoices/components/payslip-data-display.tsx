@@ -43,16 +43,16 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
   const totalItems = earningsCount + deductionsCount
 
   return (
-    <div className="mt-4 p-4 bg-gray-700 rounded-lg">
+    <div className="mt-4 p-4 bg-record-layer-1 rounded-lg">
       {/* Summary View (Always Visible) - Key Information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         {/* Employee Name */}
         {hasData(data.employee_name) && (
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
               Employee Name
             </label>
-            <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600">
+            <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
               {data.employee_name}
             </div>
           </div>
@@ -61,10 +61,10 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
         {/* Pay Period */}
         {hasData(data.pay_period) && (
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
               Pay Period
             </label>
-            <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600">
+            <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
               {data.pay_period}
             </div>
           </div>
@@ -73,10 +73,10 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
         {/* Net Wages */}
         {hasData(data.net_wages) && (
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
               Net Wages
             </label>
-            <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600 font-mono">
+            <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono">
               {formatCurrency(data.net_wages)}
             </div>
           </div>
@@ -85,10 +85,10 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
         {/* Employer Name */}
         {hasData(data.employer_name) && (
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
               Employer Name
             </label>
-            <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600">
+            <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
               {data.employer_name}
             </div>
           </div>
@@ -97,19 +97,19 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
 
       {/* Progress Summary */}
       {totalItems > 0 && (
-        <div className="mb-4 p-3 bg-gray-600/30 rounded-lg">
+        <div className="mb-4 p-3 bg-record-layer-2/50 rounded-lg">
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
-              <div className="text-sm font-medium text-white">{earningsCount}</div>
-              <div className="text-xs text-gray-400">Earnings Items</div>
+              <div className="text-sm font-medium text-record-title">{earningsCount}</div>
+              <div className="text-xs text-record-supporting">Earnings Items</div>
             </div>
             <div>
-              <div className="text-sm font-medium text-white">{deductionsCount}</div>
-              <div className="text-xs text-gray-400">Deduction Items</div>
+              <div className="text-sm font-medium text-record-title">{deductionsCount}</div>
+              <div className="text-xs text-record-supporting">Deduction Items</div>
             </div>
           </div>
           <div className="mt-2 text-center">
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-record-supporting">
               {totalItems} line items extracted
             </span>
           </div>
@@ -117,17 +117,17 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
       )}
 
       {/* Details */}
-      <div className="space-y-6 pt-4 border-t border-gray-600">
+      <div className="space-y-6 pt-4 border-t border-record-border">
           {/* Basic Information */}
           <div>
-            <h6 className="text-sm font-medium text-gray-300 mb-3">Basic Information</h6>
+            <h6 className="text-sm font-medium text-record-title mb-3">Basic Information</h6>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {hasData(data.ic_number) && (
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     IC Number
                   </label>
-                  <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600 font-mono">
+                  <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono">
                     {data.ic_number}
                   </div>
                 </div>
@@ -135,10 +135,10 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
 
               {hasData(data.employee_code) && (
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Employee Code
                   </label>
-                  <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600 font-mono">
+                  <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono">
                     {data.employee_code}
                   </div>
                 </div>
@@ -148,14 +148,14 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
 
           {/* Financial Summary */}
           <div>
-            <h6 className="text-sm font-medium text-gray-300 mb-3">Financial Summary</h6>
+            <h6 className="text-sm font-medium text-record-title mb-3">Financial Summary</h6>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {hasData(data.gross_wages) && (
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Gross Wages
                   </label>
-                  <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600 font-mono">
+                  <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono">
                     {formatCurrency(data.gross_wages)}
                   </div>
                 </div>
@@ -163,10 +163,10 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
 
               {hasData(data.total_deductions) && (
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Total Deductions
                   </label>
-                  <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600 font-mono">
+                  <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono">
                     {formatCurrency(data.total_deductions)}
                   </div>
                 </div>
@@ -174,10 +174,10 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
 
               {hasData(data.net_wages) && (
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Net Wages
                   </label>
-                  <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600 font-mono font-semibold">
+                  <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono font-semibold">
                     {formatCurrency(data.net_wages)}
                   </div>
                 </div>
@@ -188,26 +188,26 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
           {/* Earnings Breakdown */}
           {data.earnings_breakdown && data.earnings_breakdown.length > 0 && (
             <div>
-              <h6 className="text-sm font-medium text-gray-300 mb-3">Earnings Breakdown</h6>
-              <div className="bg-gray-800 rounded border border-gray-600 overflow-hidden">
+              <h6 className="text-sm font-medium text-record-title mb-3">Earnings Breakdown</h6>
+              <div className="bg-record-layer-2 rounded border border-record-border overflow-hidden">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr className="bg-gray-700">
-                      <th className="text-left text-xs text-gray-400 px-3 py-2 border-b border-gray-600">
+                    <tr className="bg-record-layer-1">
+                      <th className="text-left text-xs text-record-supporting px-3 py-2 border-b border-record-border">
                         Description
                       </th>
-                      <th className="text-right text-xs text-gray-400 px-3 py-2 border-b border-gray-600">
+                      <th className="text-right text-xs text-record-supporting px-3 py-2 border-b border-record-border">
                         Amount
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.earnings_breakdown.map((item, index) => (
-                      <tr key={index} className={index < data.earnings_breakdown!.length - 1 ? "border-b border-gray-700/50" : ""}>
-                        <td className="px-3 py-2 text-sm text-white">
+                      <tr key={index} className={index < data.earnings_breakdown!.length - 1 ? "border-b border-record-border/50" : ""}>
+                        <td className="px-3 py-2 text-sm text-record-title">
                           {item.description}
                         </td>
-                        <td className="px-3 py-2 text-sm text-white font-mono text-right">
+                        <td className="px-3 py-2 text-sm text-record-title font-mono text-right">
                           {formatCurrency(item.amount)}
                         </td>
                       </tr>
@@ -221,26 +221,26 @@ export default function PayslipDataDisplay({ data }: PayslipDataDisplayProps) {
           {/* Deductions Breakdown */}
           {data.deductions_breakdown && data.deductions_breakdown.length > 0 && (
             <div>
-              <h6 className="text-sm font-medium text-gray-300 mb-3">Deductions Breakdown</h6>
-              <div className="bg-gray-800 rounded border border-gray-600 overflow-hidden">
+              <h6 className="text-sm font-medium text-record-title mb-3">Deductions Breakdown</h6>
+              <div className="bg-record-layer-2 rounded border border-record-border overflow-hidden">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr className="bg-gray-700">
-                      <th className="text-left text-xs text-gray-400 px-3 py-2 border-b border-gray-600">
+                    <tr className="bg-record-layer-1">
+                      <th className="text-left text-xs text-record-supporting px-3 py-2 border-b border-record-border">
                         Description
                       </th>
-                      <th className="text-right text-xs text-gray-400 px-3 py-2 border-b border-gray-600">
+                      <th className="text-right text-xs text-record-supporting px-3 py-2 border-b border-record-border">
                         Amount
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.deductions_breakdown.map((item, index) => (
-                      <tr key={index} className={index < data.deductions_breakdown!.length - 1 ? "border-b border-gray-700/50" : ""}>
-                        <td className="px-3 py-2 text-sm text-white">
+                      <tr key={index} className={index < data.deductions_breakdown!.length - 1 ? "border-b border-record-border/50" : ""}>
+                        <td className="px-3 py-2 text-sm text-record-title">
                           {item.description}
                         </td>
-                        <td className="px-3 py-2 text-sm text-white font-mono text-right">
+                        <td className="px-3 py-2 text-sm text-record-title font-mono text-right">
                           {formatCurrency(item.amount)}
                         </td>
                       </tr>

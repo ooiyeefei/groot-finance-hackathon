@@ -53,9 +53,9 @@ export default function OCRTextDisplay({
   }
 
   const getConfidenceColor = (conf: number) => {
-    if (conf >= 0.9) return 'text-green-400'
-    if (conf >= 0.7) return 'text-yellow-400'
-    return 'text-red-400'
+    if (conf >= 0.9) return 'text-success-foreground'
+    if (conf >= 0.7) return 'text-warning-foreground'
+    return 'text-danger-foreground'
   }
 
   const getConfidenceLabel = (conf: number) => {

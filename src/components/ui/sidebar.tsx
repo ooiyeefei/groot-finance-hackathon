@@ -184,14 +184,14 @@ export default function Sidebar() {
   if (isExpanded === null) {
     // Return a stable placeholder that matches the final desktop collapsed width
     return (
-      <div className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col relative">
-        <div className="p-4 border-b border-gray-700">
-          <div className="w-8 h-8 bg-gray-700 rounded animate-pulse"></div>
+      <div className="w-sidebar-collapsed bg-card border-r border-border flex flex-col relative">
+        <div className="p-4 border-b border-border">
+          <div className="w-8 h-8 bg-record-layer-2 rounded animate-pulse"></div>
         </div>
         <div className="flex-1 p-4">
           <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="w-8 h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div key={i} className="w-8 h-8 bg-record-layer-2 rounded animate-pulse"></div>
             ))}
           </div>
         </div>
@@ -202,8 +202,8 @@ export default function Sidebar() {
   return (
     <TooltipProvider>
       <div className={`
-        ${isExpanded ? 'w-64' : 'w-20'}
-        bg-gray-800 border-r border-gray-700 flex flex-col
+        ${isExpanded ? 'w-sidebar' : 'w-sidebar-collapsed'}
+        bg-card border-r border-border flex flex-col
         transition-all duration-300 ease-in-out
         ${isMobile ? 'fixed left-0 top-0 h-full z-50' : 'relative'}
       `}>
@@ -226,9 +226,9 @@ export default function Sidebar() {
                   className={`
                     flex items-center rounded-lg transition-colors relative
                     ${isExpanded ? 'p-3' : 'p-3 justify-center'}
-                    ${isActive 
-                      ? 'bg-blue-600 text-white' 
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    ${isActive
+                      ? 'bg-accent/70 text-accent-foreground font-medium'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     }
                   `}
                 >
@@ -282,11 +282,32 @@ export default function Sidebar() {
           </ul>
         </nav>
 
+        {/* AI Disclaimer */}
+        <div className="px-4 pb-3">
+          <div className="text-xs text-muted-foreground">
+            {isExpanded ? (
+              <p className="leading-relaxed">
+                AI models may make mistakes, double-check outputs.
+              </p>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex justify-center">
+                    <MessageSquare className="w-4 h-4 opacity-60" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-[200px]">
+                  AI models may make mistakes, double-check outputs.
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </div>
 
         {/* Powered by FinanSEAL */}
         <div className="p-4">
           {isExpanded ? (
-            <div className="flex items-center justify-center space-x-2 text-gray-400 text-sm">
+            <div className="flex items-center justify-center space-x-2 text-muted-foreground text-sm">
               <span>Powered by</span>
               <Image
                 src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
@@ -308,7 +329,7 @@ export default function Sidebar() {
                   className="rounded opacity-60 hover:opacity-80 transition-opacity"
                 />
                 {/* Tooltip for collapsed state */}
-                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                   Powered by FinanSEAL
                 </div>
               </div>
@@ -320,8 +341,8 @@ export default function Sidebar() {
 
       {/* Mobile overlay */}
       {isMobile && isExpanded && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+        <div
+          className="fixed inset-0 bg-background/50 backdrop-blur-sm z-40"
           onClick={() => setIsExpanded(false)}
         />
       )}

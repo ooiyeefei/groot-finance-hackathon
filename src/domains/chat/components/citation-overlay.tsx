@@ -91,7 +91,7 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
   return (
     <>
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300"
         onClick={handleBackdropClick}
         aria-hidden="true"
@@ -102,7 +102,7 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
         ref={overlayRef}
         className={`
           fixed top-0 right-0 h-full w-full max-w-md sm:max-w-lg lg:max-w-xl xl:max-w-2xl
-          bg-gray-800 border-l border-gray-700 shadow-2xl z-50
+          bg-record-layer-1 border-l border-record-border shadow-2xl z-50
           transform transition-transform duration-300 ease-out
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}
           flex flex-col
@@ -112,21 +112,21 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
         aria-labelledby="citation-title"
       >
         {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-gray-700 bg-gray-800/95 backdrop-blur">
+        <div className="flex items-start justify-between p-6 border-b border-record-border bg-record-layer-1 backdrop-blur">
           <div className="flex items-start space-x-3 flex-1 min-w-0">
-            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <FileText className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
+              <FileText className="w-4 h-4 text-primary-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 
+              <h2
                 id="citation-title"
-                className="text-lg font-semibold text-white truncate"
+                className="text-lg font-semibold text-foreground truncate"
               >
                 {citation.source_name}
               </h2>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-400 mt-1">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
                 <span className="flex items-center">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span className="w-2 h-2 bg-success rounded-full mr-2"></span>
                   {citation.country}
                 </span>
                 {citation.section && (
@@ -142,15 +142,15 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                   </>
                 )}
                 <span>•</span>
-                <span className="text-blue-400 font-medium">
+                <span className="text-primary font-medium">
                   {(citation.confidence_score * 100).toFixed(1)}% confidence
                 </span>
               </div>
             </div>
           </div>
-          <button 
+          <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors ml-4 flex-shrink-0"
+            className="text-muted-foreground hover:text-foreground transition-colors ml-4 flex-shrink-0"
             aria-label="Close citation details"
           >
             <X className="w-6 h-6" />
@@ -164,12 +164,12 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
             <div className="space-y-6">
               {/* Content Preview */}
               <div>
-                <h3 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
-                  <span className="w-1 h-4 bg-blue-500 rounded-full mr-2"></span>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center">
+                  <span className="w-1 h-4 bg-primary rounded-full mr-2"></span>
                   Relevant Content
                 </h3>
-                <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
-                  <p className="text-gray-100 text-sm leading-relaxed">
+                <div className="bg-record-layer-2 rounded-lg p-4 border border-record-border">
+                  <p className="text-foreground text-sm leading-relaxed">
                     {citation.content_snippet}
                   </p>
                 </div>
@@ -177,8 +177,8 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
 
               {/* Document Actions */}
               <div>
-                <h3 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
-                  <span className="w-1 h-4 bg-green-500 rounded-full mr-2"></span>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center">
+                  <span className="w-1 h-4 bg-success rounded-full mr-2"></span>
                   Document Access
                 </h3>
                 <div className="flex flex-col gap-3">
@@ -187,7 +187,7 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                       href={citation.official_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      className="inline-flex items-center justify-center px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition-colors"
                     >
                       <ExternalLink className="w-4 h-4 mr-2" />
                       View Official Document
@@ -198,7 +198,7 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                       href={citation.pdf_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center px-4 py-3 bg-gray-600 hover:bg-gray-500 text-white text-sm font-medium rounded-lg transition-colors border border-gray-500"
+                      className="inline-flex items-center justify-center px-4 py-3 bg-secondary hover:bg-secondary-hover text-secondary-foreground text-sm font-medium rounded-lg transition-colors border border-input"
                     >
                       <FileText className="w-4 h-4 mr-2" />
                       View PDF Document
@@ -209,24 +209,24 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
 
               {/* Document Preview */}
               <div>
-                <h3 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
+                <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center">
                   <span className="w-1 h-4 bg-purple-500 rounded-full mr-2"></span>
                   Document Preview
                 </h3>
                 {citation.pdf_url ? (
                   // PDF Preview Section
-                  <div className="bg-gray-700/30 rounded-lg border border-gray-600">
-                    <div className="p-4 border-b border-gray-600">
+                  <div className="bg-record-layer-2 rounded-lg border border-record-border">
+                    <div className="p-4 border-b border-record-border">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <FileText className="w-4 h-4 text-blue-400" />
-                          <span className="text-sm text-gray-300">
+                          <FileText className="w-4 h-4 text-primary" />
+                          <span className="text-sm text-muted-foreground">
                             PDF Document {citation.page_number && `• Page ${citation.page_number}`}
                           </span>
                         </div>
                         <div className="flex items-center space-x-2">
                           {citation.text_coordinates && (
-                            <span className="text-xs text-gray-500 bg-gray-600 px-2 py-1 rounded">
+                            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
                               Highlighted
                             </span>
                           )}
@@ -234,7 +234,7 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                             href={citation.pdf_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-blue-400 hover:text-blue-300"
+                            className="text-xs text-primary hover:text-primary/80"
                           >
                             Open Full PDF
                           </a>
@@ -258,10 +258,10 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                         }}
                       />
                       {/* Enhanced fallback for PDFs that can't be embedded */}
-                      <div className="hidden bg-gray-700 rounded p-8 text-center">
-                        <FileText className="w-12 h-12 text-gray-500 mx-auto mb-3" />
-                        <h4 className="text-gray-300 font-medium mb-2">PDF Preview Not Available</h4>
-                        <p className="text-gray-400 text-sm mb-4">
+                      <div className="hidden bg-record-layer-2 rounded p-8 text-center">
+                        <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                        <h4 className="text-foreground font-medium mb-2">PDF Preview Not Available</h4>
+                        <p className="text-muted-foreground text-sm mb-4">
                           This PDF document cannot be embedded due to security restrictions or server configuration.
                         </p>
                         <div className="space-y-2">
@@ -269,12 +269,12 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                             href={citation.pdf_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+                            className="inline-flex items-center px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm rounded-lg transition-colors"
                           >
                             <ExternalLink className="w-4 h-4 mr-2" />
                             Open PDF Document
                           </a>
-                          <p className="text-xs text-gray-500 mt-2">
+                          <p className="text-xs text-muted-foreground mt-2">
                             URL: {citation.pdf_url.length > 50 ? citation.pdf_url.substring(0, 50) + '...' : citation.pdf_url}
                           </p>
                         </div>
@@ -291,25 +291,25 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                     </div>
                   </div>
                 ) : citation.official_url ? (
-                  // Website Preview Section  
-                  <div className="bg-gray-700/30 rounded-lg border border-gray-600">
-                    <div className="p-4 border-b border-gray-600">
+                  // Website Preview Section
+                  <div className="bg-record-layer-2 rounded-lg border border-record-border">
+                    <div className="p-4 border-b border-record-border">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <Globe className="w-4 h-4 text-green-400" />
-                          <span className="text-sm text-gray-300">
+                          <Globe className="w-4 h-4 text-success" />
+                          <span className="text-sm text-muted-foreground">
                             Government Website
                           </span>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <span className="text-xs text-gray-500 bg-green-600/20 px-2 py-1 rounded">
+                          <span className="text-xs text-muted-foreground bg-success/20 px-2 py-1 rounded">
                             Official Source
                           </span>
                           <a
                             href={citation.official_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-green-400 hover:text-green-300"
+                            className="text-xs text-success hover:text-success/80"
                           >
                             Open Website
                           </a>
@@ -319,10 +319,10 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                     <div className="relative">
                       {/* Loading State */}
                       {webPreviewLoading && (
-                        <div className="absolute inset-0 bg-gray-700 flex items-center justify-center z-10">
+                        <div className="absolute inset-0 bg-record-layer-2 flex items-center justify-center z-10">
                           <div className="text-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-400 mx-auto mb-2"></div>
-                            <span className="text-sm text-gray-300">Loading website preview...</span>
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-success mx-auto mb-2"></div>
+                            <span className="text-sm text-muted-foreground">Loading website preview...</span>
                           </div>
                         </div>
                       )}
@@ -359,10 +359,10 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                         />
                       ) : (
                         // Enhanced fallback for websites that can't be embedded
-                        <div className="bg-gray-700 rounded p-8 text-center h-96 flex flex-col justify-center">
-                          <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-                          <h4 className="text-gray-300 font-medium mb-2">Website Preview Not Available</h4>
-                          <p className="text-gray-400 text-sm mb-4 max-w-sm mx-auto">
+                        <div className="bg-record-layer-2 rounded p-8 text-center h-96 flex flex-col justify-center">
+                          <AlertCircle className="w-12 h-12 text-warning mx-auto mb-3" />
+                          <h4 className="text-foreground font-medium mb-2">Website Preview Not Available</h4>
+                          <p className="text-muted-foreground text-sm mb-4 max-w-sm mx-auto">
                             This website cannot be embedded due to security policies (X-Frame-Options header).
                           </p>
                           <div className="space-y-2">
@@ -370,30 +370,30 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
                               href={citation.official_url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors mx-auto"
+                              className="inline-flex items-center px-4 py-2 bg-success hover:bg-success/90 text-success-foreground text-sm rounded-lg transition-colors mx-auto"
                             >
                               <Globe className="w-4 h-4 mr-2" />
                               Visit Official Website
                             </a>
-                            <p className="text-xs text-gray-500 mt-2">
+                            <p className="text-xs text-muted-foreground mt-2">
                               URL: {new URL(citation.official_url).hostname}
                             </p>
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Website URL Display */}
-                      <div className="absolute bottom-2 left-2 bg-gray-800/90 rounded px-2 py-1 text-xs text-gray-300 max-w-xs truncate">
+                      <div className="absolute bottom-2 left-2 bg-record-layer-2 rounded px-2 py-1 text-xs text-muted-foreground max-w-xs truncate">
                         {new URL(citation.official_url).hostname}
                       </div>
                     </div>
                   </div>
                 ) : (
                   // No Preview Available
-                  <div className="bg-gray-700/30 rounded-lg p-8 text-center border border-gray-600 border-dashed">
-                    <FileText className="w-12 h-12 text-gray-500 mx-auto mb-3" />
-                    <h4 className="text-gray-300 font-medium mb-2">No Document Preview Available</h4>
-                    <p className="text-gray-400 text-sm max-w-sm mx-auto">
+                  <div className="bg-record-layer-2 rounded-lg p-8 text-center border border-record-border border-dashed">
+                    <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                    <h4 className="text-foreground font-medium mb-2">No Document Preview Available</h4>
+                    <p className="text-muted-foreground text-sm max-w-sm mx-auto">
                       This citation does not have an associated document or website for preview.
                     </p>
                   </div>
@@ -402,27 +402,27 @@ export default function CitationOverlay({ citation, isOpen, onClose }: CitationO
 
               {/* Metadata Section */}
               <div>
-                <h3 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
-                  <span className="w-1 h-4 bg-yellow-500 rounded-full mr-2"></span>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center">
+                  <span className="w-1 h-4 bg-warning rounded-full mr-2"></span>
                   Citation Metadata
                 </h3>
-                <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
+                <div className="bg-record-layer-2 rounded-lg p-4 border border-record-border">
                   <dl className="grid grid-cols-1 gap-3 text-sm">
                     <div>
-                      <dt className="text-gray-400 font-medium">Citation ID</dt>
-                      <dd className="text-gray-200 font-mono">{citation.id}</dd>
+                      <dt className="text-muted-foreground font-medium">Citation ID</dt>
+                      <dd className="text-foreground font-mono">{citation.id}</dd>
                     </div>
                     <div>
-                      <dt className="text-gray-400 font-medium">Reference Index</dt>
-                      <dd className="text-gray-200">[^{citation.index}]</dd>
+                      <dt className="text-muted-foreground font-medium">Reference Index</dt>
+                      <dd className="text-foreground">[^{citation.index}]</dd>
                     </div>
                     <div>
-                      <dt className="text-gray-400 font-medium">Confidence Score</dt>
-                      <dd className="text-gray-200">
+                      <dt className="text-muted-foreground font-medium">Confidence Score</dt>
+                      <dd className="text-foreground">
                         <div className="flex items-center space-x-2">
-                          <div className="flex-1 bg-gray-600 rounded-full h-2">
-                            <div 
-                              className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
+                          <div className="flex-1 bg-muted rounded-full h-2">
+                            <div
+                              className="bg-primary h-2 rounded-full transition-all duration-300"
                               style={{ width: `${citation.confidence_score * 100}%` }}
                             ></div>
                           </div>

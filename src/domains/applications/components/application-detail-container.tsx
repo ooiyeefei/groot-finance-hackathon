@@ -49,7 +49,7 @@ function ExtractedDataDisplay({ documentType, extractedData }: { documentType: s
   // Use specialized IC component for identity card documents
   if (documentType === 'ic') {
     return (
-      <Suspense fallback={<div className="mt-4 p-4 bg-gray-700 rounded-lg animate-pulse"><div className="h-4 bg-gray-600 rounded w-1/3 mb-2"></div></div>}>
+      <Suspense fallback={<div className="mt-4 p-4 bg-record-layer-1 rounded-lg animate-pulse"><div className="h-4 bg-record-layer-2 rounded w-1/3 mb-2"></div></div>}>
         <ICDataDisplay data={extractedData} />
       </Suspense>
     )
@@ -58,7 +58,7 @@ function ExtractedDataDisplay({ documentType, extractedData }: { documentType: s
   // Use specialized application form component for application forms
   if (documentType === 'application_form') {
     return (
-      <Suspense fallback={<div className="mt-4 p-4 bg-gray-700 rounded-lg animate-pulse"><div className="h-4 bg-gray-600 rounded w-1/3 mb-2"></div></div>}>
+      <Suspense fallback={<div className="mt-4 p-4 bg-record-layer-1 rounded-lg animate-pulse"><div className="h-4 bg-record-layer-2 rounded w-1/3 mb-2"></div></div>}>
         <ApplicationFormDataDisplay data={extractedData} />
       </Suspense>
     )
@@ -73,7 +73,7 @@ function ExtractedDataDisplay({ documentType, extractedData }: { documentType: s
   // Handle single payslip documents
   if (documentType === 'payslip') {
     return (
-      <Suspense fallback={<div className="mt-4 p-4 bg-gray-700 rounded-lg animate-pulse"><div className="h-4 bg-gray-600 rounded w-1/3 mb-2"></div></div>}>
+      <Suspense fallback={<div className="mt-4 p-4 bg-record-layer-1 rounded-lg animate-pulse"><div className="h-4 bg-record-layer-2 rounded w-1/3 mb-2"></div></div>}>
         <PayslipDataDisplay data={extractedData} />
       </Suspense>
     )
@@ -84,10 +84,10 @@ function ExtractedDataDisplay({ documentType, extractedData }: { documentType: s
 
   if (isLoading) {
     return (
-      <div className="mt-4 p-4 bg-gray-700 rounded-lg">
+      <div className="mt-4 p-4 bg-record-layer-1 rounded-lg">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-600 rounded w-1/3 mb-2"></div>
-          <div className="h-3 bg-gray-600 rounded w-2/3"></div>
+          <div className="h-4 bg-record-layer-2 rounded w-1/3 mb-2"></div>
+          <div className="h-3 bg-record-layer-2 rounded w-2/3"></div>
         </div>
       </div>
     )
@@ -95,8 +95,8 @@ function ExtractedDataDisplay({ documentType, extractedData }: { documentType: s
 
   if (error || !schema) {
     return (
-      <div className="mt-4 p-3 bg-yellow-900/20 border border-yellow-700 rounded-lg">
-        <p className="text-yellow-300 text-sm">
+      <div className="mt-4 p-3 bg-warning/20 border border-warning rounded-lg">
+        <p className="text-warning-foreground text-sm">
           Extracted data available but schema not found for display
         </p>
       </div>
@@ -104,13 +104,13 @@ function ExtractedDataDisplay({ documentType, extractedData }: { documentType: s
   }
 
   return (
-    <div className="mt-4 p-4 bg-gray-700 rounded-lg">
-      <h5 className="text-sm font-medium text-green-400 mb-3 flex items-center">
+    <div className="mt-4 p-4 bg-record-layer-1 rounded-lg">
+      <h5 className="text-sm font-medium text-success-foreground mb-3 flex items-center">
         <CheckCircle className="w-4 h-4 mr-2" />
         Extracted Data
       </h5>
       <div className="text-sm">
-        <Suspense fallback={<div className="h-4 bg-gray-600 rounded w-2/3 animate-pulse"></div>}>
+        <Suspense fallback={<div className="h-4 bg-record-layer-2 rounded w-2/3 animate-pulse"></div>}>
           <DynamicFieldRenderer
             schema={schema}
             data={extractedData}
@@ -588,9 +588,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
       case 'failed':
         return 'bg-red-900/20 text-red-300 border-red-700/50'
       case 'empty':
-        return isCritical ? 'bg-orange-900/20 text-orange-300 border-orange-700/50' : 'bg-gray-900/20 text-gray-300 border-gray-700/50'
+        return isCritical ? 'bg-warning/20 text-warning border-warning/30' : 'bg-muted/20 text-muted-foreground border-muted/30'
       default:
-        return 'bg-gray-900/20 text-gray-300 border-gray-700/50'
+        return 'bg-muted/20 text-muted-foreground border-muted/30'
     }
   }
 
@@ -666,11 +666,11 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
     return (
       <div className="space-y-6">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-700 rounded w-1/3 mb-4"></div>
-          <div className="h-32 bg-gray-700 rounded mb-6"></div>
+          <div className="h-8 bg-record-layer-2 rounded w-1/3 mb-4"></div>
+          <div className="h-32 bg-record-layer-2 rounded mb-6"></div>
           <div className="grid grid-cols-1 gap-4">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-40 bg-gray-700 rounded"></div>
+              <div key={i} className="h-40 bg-record-layer-2 rounded"></div>
             ))}
           </div>
         </div>
@@ -685,12 +685,12 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
         <p className="text-red-400 mb-4">{error}</p>
         <div className="flex gap-4 justify-center">
           <Link href={`/${locale}/applications`}>
-            <Button variant="outline" className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600 hover:border-gray-500">
+            <Button variant="outline">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Applications
             </Button>
           </Link>
-          <Button onClick={() => fetchApplicationDetail()} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button onClick={() => fetchApplicationDetail()} variant="primary">
             Try Again
           </Button>
         </div>
@@ -701,10 +701,10 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
   if (!application) {
     return (
       <div className="text-center py-12">
-        <FileText className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-        <p className="text-gray-400">Application not found</p>
+        <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <p className="text-muted-foreground">Application not found</p>
         <Link href={`/${locale}/applications`}>
-          <Button variant="outline" className="mt-4 text-gray-300 border-gray-600 hover:border-gray-500">
+          <Button variant="outline" className="mt-4">
             Back to Applications
           </Button>
         </Link>
@@ -717,7 +717,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <Link href={`/${locale}/applications`}>
-          <Button variant="outline" size="sm" className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600 hover:border-gray-500">
+          <Button variant="primary" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
@@ -728,7 +728,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
               <Input
                 value={editedTitle}
                 onChange={(e) => setEditedTitle(e.target.value)}
-                className="text-2xl font-bold bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+                className="text-2xl font-bold"
                 placeholder="Enter application title"
                 maxLength={100}
                 disabled={savingTitle}
@@ -746,7 +746,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                   size="sm"
                   onClick={handleSaveTitle}
                   disabled={savingTitle || !editedTitle.trim()}
-                  className="bg-green-600 hover:bg-green-700 text-white border-0"
+                  variant="default"
                 >
                   {savingTitle ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -758,7 +758,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                   size="sm"
                   onClick={handleCancelEditTitle}
                   disabled={savingTitle}
-                  className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                  variant="secondary"
                 >
                   <XCircle className="w-4 h-4" />
                 </Button>
@@ -766,21 +766,21 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
             </div>
           ) : (
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-white">{application.title}</h1>
+              <h1 className="text-2xl font-bold text-record-title">{application.title}</h1>
               <Button
                 size="sm"
                 onClick={handleStartEditTitle}
-                className="bg-gray-700 hover:bg-gray-600 text-gray-300 border-gray-600 hover:border-gray-500"
+                variant="primary"
                 title="Edit application title"
               >
                 <Edit3 className="w-4 h-4" />
               </Button>
             </div>
           )}
-          <p className="text-gray-400 mt-1">{application.application_types.display_name}</p>
+          <p className="text-record-supporting mt-1">{application.application_types.display_name}</p>
         </div>
         <Button
-          className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+          variant="primary"
           onClick={() => router.push(`/${locale}/applications/${applicationId}/summary`)}
         >
           <FileText className="w-4 h-4 mr-2" />
@@ -789,34 +789,34 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
       </div>
 
       {/* Progress Overview */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
-          <CardTitle className="text-white">Application Progress</CardTitle>
+          <CardTitle className="text-record-title">Application Progress</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-gray-300">Overall Progress</span>
-              <span className="text-gray-300">
+              <span className="text-record-supporting">Overall Progress</span>
+              <span className="text-record-supporting">
                 {application.progress_stats.completed_slots} of {application.progress_stats.total_slots} documents
               </span>
             </div>
             <Progress value={application.progress_stats.progress_percentage} className="h-3" />
 
             <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="bg-gray-700 p-4 rounded-lg">
-                <div className="text-sm text-gray-400">Critical Documents</div>
-                <div className="text-lg font-semibold text-white">
+              <div className="bg-record-layer-2 p-4 rounded-lg">
+                <div className="text-sm text-record-supporting">Critical Documents</div>
+                <div className="text-lg font-semibold text-record-title">
                   {application.progress_stats.completed_critical_slots} / {application.progress_stats.critical_slots}
                 </div>
-                <div className="text-xs text-gray-500">Required for submission</div>
+                <div className="text-xs text-muted-foreground">Required for submission</div>
               </div>
-              <div className="bg-gray-700 p-4 rounded-lg">
-                <div className="text-sm text-gray-400">Submission Status</div>
-                <div className="text-lg font-semibold text-white">
+              <div className="bg-record-layer-2 p-4 rounded-lg">
+                <div className="text-sm text-record-supporting">Submission Status</div>
+                <div className="text-lg font-semibold text-record-title">
                   {application.progress_stats.can_submit ? 'Ready' : 'Incomplete'}
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-muted-foreground">
                   {application.progress_stats.can_submit ? 'All required documents uploaded' : 'Upload critical documents to submit'}
                 </div>
               </div>
@@ -827,7 +827,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
       {/* Document Slots */}
       <div className="space-y-4">
-        <h2 className="text-xl font-bold text-white">Required Documents</h2>
+        <h2 className="text-xl font-bold text-record-title">Required Documents</h2>
 
         {/* Smart Payslip Uploader */}
         {(() => {
@@ -882,7 +882,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
             }) || []
 
             return (
-              <Suspense fallback={<div className="bg-gray-800 border-gray-700 rounded-lg p-6 animate-pulse"><div className="h-32 bg-gray-700 rounded"></div></div>}>
+              <Suspense fallback={<div className="bg-record-layer-1 border-record-border rounded-lg p-6 animate-pulse"><div className="h-32 bg-record-layer-2 rounded"></div></div>}>
                 <SmartPayslipUploader
                   applicationId={applicationId}
                   payslipSlots={payslipSlots}
@@ -906,7 +906,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
           if (payslipSlots.length > 0) {
             return (
-              <Suspense fallback={<div className="bg-gray-800 border-gray-700 rounded-lg p-6 animate-pulse"><div className="h-32 bg-gray-700 rounded"></div></div>}>
+              <Suspense fallback={<div className="bg-record-layer-1 border-record-border rounded-lg p-6 animate-pulse"><div className="h-32 bg-record-layer-2 rounded"></div></div>}>
                 <SmartPayslipUploader
                   applicationId={applicationId}
                   payslipSlots={payslipSlots}
@@ -947,12 +947,12 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
           console.log('🎨 [OTHER-SLOTS] About to render', filteredSlots.length, 'individual containers')
 
           return filteredSlots.map((slot) => (
-          <Card key={slot.slot} className="bg-gray-800 border-gray-700">
+          <Card key={slot.slot} className="bg-record-layer-1 border-record-border">
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-white">{slot.display_name}</h3>
+                    <h3 className="text-lg font-semibold text-record-title">{slot.display_name}</h3>
                     {(() => {
                       const status = getDocumentProcessingStatus(slot)
                       return (
@@ -963,7 +963,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                       )
                     })()}
                   </div>
-                  <p className="text-gray-400 text-sm mb-2">{slot.description}</p>
+                  <p className="text-record-supporting text-sm mb-2">{slot.description}</p>
                 </div>
               </div>
 
@@ -991,20 +991,20 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                   })() ? (
                     <div className="space-y-4">
                       {/* Header for multi-payslip container */}
-                      <div className="bg-gray-600 border border-gray-500 rounded-lg p-4">
+                      <div className="bg-record-layer-2 border border-record-border rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <FileText className="w-4 h-4 text-gray-400" />
-                            <span className="text-white font-medium">{slot.document.file_name}</span>
-                            <CheckCircle className="w-4 h-4 text-green-400" />
-                            <span className="text-sm font-medium text-green-400">
+                            <FileText className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-record-title font-medium">{slot.document.file_name}</span>
+                            <CheckCircle className="w-4 h-4 text-success" />
+                            <span className="text-sm font-medium text-success">
                               {slot.document.extracted_data.payslips.length} Payslips Extracted
                             </span>
                           </div>
                           <div className="flex gap-2">
                             <Button
                               size="sm"
-                              className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+                              variant="view"
                               onClick={() => handleViewDocument(slot.document)}
                               title="View Document"
                             >
@@ -1012,7 +1012,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                             </Button>
                             <Button
                               size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white border-0"
+                              variant="primary"
                               onClick={() => handleDownloadDocument(slot.document)}
                               title="Download Document"
                             >
@@ -1020,7 +1020,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                             </Button>
                             <Button
                               size="sm"
-                              className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                              variant="primary"
                               onClick={() => slot.document && handleReprocess(slot.document.id)}
                               title="Reprocess Document"
                             >
@@ -1028,7 +1028,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                             </Button>
                             <Button
                               size="sm"
-                              className="bg-red-600 hover:bg-red-700 text-white border-0"
+                              variant="destructive"
                               onClick={() => slot.document && confirmDeleteDocument(slot.document.id, slot.document.file_name)}
                               disabled={deletingDocument === slot.document?.id}
                               title="Remove Document from Application"
@@ -1041,21 +1041,21 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
                       {/* Individual payslip containers */}
                       {slot.document.extracted_data.payslips.map((payslip: any, index: number) => (
-                        <div key={`${slot.document?.id}-payslip-${index}`} className="bg-gray-600 border border-gray-500 rounded-lg">
+                        <div key={`${slot.document?.id}-payslip-${index}`} className="bg-record-layer-2 border border-record-border rounded-lg">
                           <div
-                            className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-500/30 transition-colors"
+                            className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent transition-colors"
                             onClick={() => toggleContainer(`${slot.document?.id}-payslip-${index}`)}
                           >
                             <div className="flex flex-col gap-2">
                               <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-gray-400" />
-                                <span className="text-white font-medium">
+                                <FileText className="w-4 h-4 text-muted-foreground" />
+                                <span className="text-record-title font-medium">
                                   Payslip #{index + 1} - {payslip.pay_period || `Month ${index + 1}`}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <CheckCircle className="w-4 h-4 text-green-400" />
-                                <span className="text-sm font-medium text-green-400">
+                                <CheckCircle className="w-4 h-4 text-success" />
+                                <span className="text-sm font-medium text-success">
                                   Net: {payslip.net_wages ? `MYR ${payslip.net_wages.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A'}
                                 </span>
                               </div>
@@ -1063,7 +1063,6 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-gray-400 hover:text-white hover:bg-gray-700"
                             >
                               {expandedContainers.has(`${slot.document?.id}-payslip-${index}`) ? (
                                 <ChevronUp className="w-4 h-4" />
@@ -1075,9 +1074,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
                           {/* Collapsible Content for Individual Payslip */}
                           {expandedContainers.has(`${slot.document?.id}-payslip-${index}`) && (
-                            <div className="border-t border-gray-500">
+                            <div className="border-t border-border">
                               <div className="p-4">
-                                <Suspense fallback={<div className="h-16 bg-gray-600 rounded animate-pulse"></div>}>
+                                <Suspense fallback={<div className="h-16 bg-record-layer-2 rounded animate-pulse"></div>}>
                                   <PayslipDataDisplay data={payslip} />
                                 </Suspense>
                               </div>
@@ -1087,33 +1086,35 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                       ))}
                     </div>
                   ) : slot.document.processing_status === 'completed' && slot.document.extracted_data ? (
-                    <div className="bg-gray-600 border border-gray-500 rounded-lg">
+                    <div className="bg-record-layer-2 border border-record-border rounded-lg">
                       {/* Combined Header with Filename and Actions */}
                       <div
-                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-500/30 transition-colors"
+                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent transition-colors"
                         onClick={() => toggleContainer(slot.document?.id || '')}
                       >
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-gray-400" />
-                            <span className="text-white font-medium">{slot.document.file_name}</span>
+                            <FileText className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-record-title font-medium">{slot.document.file_name}</span>
                           </div>
                           {/* Extracted Status - Show above collapsible region */}
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-green-400" />
-                            <span className="text-sm font-medium text-green-400">
-                              {slot.document.document_type === 'ic' && 'Identity Card Data Extracted'}
-                              {slot.document.document_type === 'application_form' && 'Application Form Data Extracted'}
-                              {(slot.document.document_type === 'payslip' || slot.document.document_type === 'multi_payslip') && 'Payslip Data Extracted'}
-                              {!['ic', 'application_form', 'payslip', 'multi_payslip'].includes(slot.document.document_type) && 'Data Extracted'}
-                            </span>
+                            <div className="flex items-center gap-2 px-2 py-1 bg-success/20 text-success border border-success/30 rounded-md">
+                              <CheckCircle className="w-4 h-4" />
+                              <span className="text-sm font-medium">
+                                {slot.document.document_type === 'ic' && 'Identity Card Data Extracted'}
+                                {slot.document.document_type === 'application_form' && 'Application Form Data Extracted'}
+                                {(slot.document.document_type === 'payslip' || slot.document.document_type === 'multi_payslip') && 'Payslip Data Extracted'}
+                                {!['ic', 'application_form', 'payslip', 'multi_payslip'].includes(slot.document.document_type) && 'Data Extracted'}
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="flex gap-2 mr-4">
                             <Button
                               size="sm"
-                              className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+                              variant="view"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleViewDocument(slot.document)
@@ -1124,7 +1125,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                             </Button>
                             <Button
                               size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white border-0"
+                              variant="primary"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDownloadDocument(slot.document)
@@ -1135,7 +1136,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                             </Button>
                             <Button
                               size="sm"
-                              className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                              variant="primary"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 slot.document && handleReprocess(slot.document.id)
@@ -1146,7 +1147,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                             </Button>
                             <Button
                               size="sm"
-                              className="bg-red-600 hover:bg-red-700 text-white border-0"
+                              variant="destructive"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 slot.document && confirmDeleteDocument(slot.document.id, slot.document.file_name)
@@ -1160,7 +1161,6 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-gray-400 hover:text-white hover:bg-gray-700"
                           >
                             {expandedContainers.has(slot.document?.id || '') ? (
                               <ChevronUp className="w-4 h-4" />
@@ -1173,9 +1173,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
                       {/* Collapsible Content */}
                       {expandedContainers.has(slot.document?.id || '') && (
-                        <div className="border-t border-gray-500">
+                        <div className="border-t border-border">
                           <div className="p-4">
-                            <div className="text-sm text-gray-400 mb-4">
+                            <div className="text-sm text-muted-foreground mb-4">
                               <div>Uploaded: {formatDate(slot.document.uploaded_at)}</div>
                             </div>
                             <ExtractedDataDisplay
@@ -1188,16 +1188,16 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                     </div>
                   ) : (
                     // Non-collapsible version for processing/failed documents
-                    <div className="bg-gray-700 p-4 rounded-lg">
+                    <div className="bg-record-layer-1 p-4 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-gray-400" />
-                          <span className="text-white font-medium">{slot.document.file_name}</span>
+                          <FileText className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-record-title font-medium">{slot.document.file_name}</span>
                         </div>
                         <div className="flex gap-2">
                           <Button
                             size="sm"
-                            className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+                            variant="view"
                             onClick={() => handleViewDocument(slot.document)}
                             title="View Document"
                           >
@@ -1207,7 +1207,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                             <>
                               <Button
                                 size="sm"
-                                className="bg-green-600 hover:bg-green-700 text-white border-0"
+                                variant="primary"
                                 onClick={() => handleDownloadDocument(slot.document)}
                                 title="Download Document"
                               >
@@ -1215,7 +1215,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                               </Button>
                               <Button
                                 size="sm"
-                                className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                                variant="primary"
                                 onClick={() => slot.document && handleReprocess(slot.document.id)}
                                 title="Reprocess Document"
                               >
@@ -1225,7 +1225,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                           )}
                           <Button
                             size="sm"
-                            className="bg-red-600 hover:bg-red-700 text-white border-0"
+                            variant="destructive"
                             onClick={() => slot.document && confirmDeleteDocument(slot.document.id, slot.document.file_name)}
                             disabled={deletingDocument === slot.document?.id}
                             title="Remove Document from Application"
@@ -1235,12 +1235,12 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                         </div>
                       </div>
 
-                      <div className="text-sm text-gray-400 space-y-1">
+                      <div className="text-sm text-muted-foreground space-y-1">
                         <div>Uploaded: {formatDate(slot.document.uploaded_at)}</div>
                         {(slot.document.processing_status === 'failed' || slot.document.processing_status === 'classification_failed') && (
                           <div className="space-y-2">
-                            <div className="text-red-400 flex items-start gap-2">
-                              <span className="text-red-400 mt-0.5">🚫</span>
+                            <div className="flex items-start gap-2 px-2 py-1 bg-danger/20 text-danger border border-danger/30 rounded-md">
+                              <span className="mt-0.5">🚫</span>
                               <div>
                                 {slot.document.error_message || 'Document processing failed. Please try uploading again.'}
                               </div>
@@ -1280,12 +1280,12 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
                               const suggestions = getContextualSuggestions(slot.document.error_message, slot.slot)
                               return suggestions.length > 0 && (
-                                <div className="text-gray-400 text-xs">
+                                <div className="text-muted-foreground text-xs">
                                   <div className="font-medium mb-1">💡 Suggestions:</div>
                                   <ul className="space-y-1">
                                     {suggestions.slice(0, 3).map((suggestion, idx) => (
                                       <li key={idx} className="flex items-start gap-1">
-                                        <span className="text-gray-500">•</span>
+                                        <span className="text-muted-foreground">•</span>
                                         <span>{suggestion}</span>
                                       </li>
                                     ))}
@@ -1336,7 +1336,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                     <div className="flex gap-2 mt-3">
                       <Button
                         size="sm"
-                        className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+                        variant="primary"
                         onClick={() => slot.document && handleReprocess(slot.document.id)}
                       >
                         <RotateCcw className="w-4 h-4 mr-2" />
@@ -1354,7 +1354,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                   )}
                 </div>
               ) : (
-                <div className="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center">
+                <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
                   {uploadingSlots.has(slot.slot) ? (
                     <div className="space-y-3">
                       <Loader2 className="w-8 h-8 text-blue-400 mx-auto animate-spin" />
@@ -1368,11 +1368,12 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <Upload className="w-8 h-8 text-gray-500 mx-auto" />
-                      <p className="text-gray-400">Upload {slot.display_name.toLowerCase()}</p>
-                      <p className="text-gray-500 text-sm">Supports PDF, JPEG, PNG (max 10MB)</p>
+                      <Upload className="w-8 h-8 text-muted-foreground mx-auto" />
+                      <p className="text-record-supporting">Upload {slot.display_name.toLowerCase()}</p>
+                      <p className="text-muted-foreground text-sm">Supports PDF, JPEG, PNG (max 10MB)</p>
                       <Button
-                        className="mt-3 bg-blue-600 hover:bg-blue-700 text-white border-0"
+                        className="mt-3"
+                        variant="primary"
                         onClick={() => fileInputRefs.current[slot.slot]?.click()}
                       >
                         Choose File
@@ -1411,10 +1412,10 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
       <div className="flex gap-4 pt-6">
         {/* Smart Auto-Refresh Status */}
         {isPolling ? (
-          <div className="flex items-center gap-2 px-4 py-2 bg-blue-900/30 border border-blue-700 rounded-lg">
-            <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-            <RefreshCw className="w-4 h-4 text-blue-300 animate-spin" />
-            <span className="text-blue-300 text-sm">
+          <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary rounded-lg">
+            <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+            <RefreshCw className="w-4 h-4 text-primary animate-spin" />
+            <span className="text-primary text-sm">
               {hasProcessingDocuments
                 ? 'Auto-refresh active - monitoring document processing'
                 : 'Auto-refresh active - checking for updates'
@@ -1422,14 +1423,14 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg">
-            <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
-            <span className="text-gray-400 text-sm">Auto-refresh paused - all documents processed</span>
+          <div className="flex items-center gap-2 px-4 py-2 bg-record-layer-1 border border-record-border rounded-lg">
+            <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
+            <span className="text-muted-foreground text-sm">Auto-refresh paused - all documents processed</span>
             <Button
               onClick={() => fetchApplicationDetail()}
               variant="outline"
               size="sm"
-              className="ml-2 bg-gray-700 text-white border-gray-600 hover:bg-gray-600 hover:border-gray-500"
+              className="ml-2"
             >
               <RefreshCw className="w-3 h-3 mr-1" />
               Check Now
@@ -1439,7 +1440,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
 
         {application.progress_stats.can_submit && (
-          <Button className="bg-green-600 hover:bg-green-700 text-white border-0">
+          <Button variant="default">
             <CheckCircle className="w-4 h-4 mr-2" />
             Submit Application
           </Button>
@@ -1448,27 +1449,27 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-record-layer-1 border border-record-border rounded-lg p-6 max-w-md w-full mx-4">
             <div className="flex items-center mb-4">
-              <AlertCircle className="w-6 h-6 text-red-500 mr-3" />
-              <h3 className="text-lg font-semibold text-white">Remove Document</h3>
+              <AlertCircle className="w-6 h-6 text-danger-foreground mr-3" />
+              <h3 className="text-lg font-semibold text-record-title">Remove Document</h3>
             </div>
-            <p className="text-gray-300 mb-6">
-              Are you sure you want to remove "<strong>{deleteConfirmation.fileName}</strong>" from this application?
+            <p className="text-record-supporting mb-6">
+              Are you sure you want to remove "<strong className="text-record-title">{deleteConfirmation.fileName}</strong>" from this application?
               The document will be preserved in storage but removed from this application, allowing you to upload a replacement.
             </p>
             <div className="flex justify-end gap-3">
               <Button
                 onClick={() => setDeleteConfirmation(null)}
-                className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                variant="secondary"
                 disabled={deletingDocument === deleteConfirmation.documentId}
               >
                 Cancel
               </Button>
               <Button
                 onClick={() => handleDeleteDocument(deleteConfirmation.documentId)}
-                className="bg-red-600 hover:bg-red-700 text-white"
+                variant="destructive"
                 disabled={deletingDocument === deleteConfirmation.documentId}
               >
                 {deletingDocument === deleteConfirmation.documentId ? (

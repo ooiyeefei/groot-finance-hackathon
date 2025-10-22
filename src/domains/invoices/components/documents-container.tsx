@@ -39,13 +39,13 @@ export default function DocumentsContainer() {
   }, [])
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-section-gap">
       {/* Business Document Upload */}
       <div>
-        <Card className="bg-gray-800 border-gray-700">
-          <CardContent className="pt-6">
+        <Card className="bg-card border-border">
+          <CardContent className="pt-card-padding">
 
-            <Suspense fallback={<div className="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center"><Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /></div>}>
+            <Suspense fallback={<div className="border-2 border-dashed border-border rounded-lg p-card-padding text-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto" /></div>}>
               <FileUploadZone
                 onUploadSuccess={handleBusinessDocumentSuccess}
                 onUploadStart={() => {/* Upload started callback */}}
@@ -59,8 +59,8 @@ export default function DocumentsContainer() {
 
       {/* Documents List */}
       <div>
-        <Card className="bg-gray-800 border-gray-700">
-          <CardContent className="pt-6">
+        <Card className="bg-card border-border">
+          <CardContent className="pt-card-padding">
 
             <DocumentsList
               key={refreshTrigger}

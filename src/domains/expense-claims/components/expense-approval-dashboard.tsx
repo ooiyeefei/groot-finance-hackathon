@@ -99,14 +99,14 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
   }
 
   if (!dashboardData) {
-    return <div className="text-center text-gray-400 p-8">Failed to load management dashboard data</div>
+    return <div className="text-center text-muted-foreground p-8">Failed to load management dashboard data</div>
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-section-gap">
 
       {/* Management Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-card-gap">
         <ManagementSummaryCard
           title="Pending Approvals"
           value={dashboardData?.summary?.pending_approval?.toString() || '0'}
@@ -135,19 +135,19 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 
       {/* Management Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-gray-800 border border-gray-700">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-muted border border-border">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Overview
           </TabsTrigger>
-          <TabsTrigger value="approvals" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
+          <TabsTrigger value="approvals" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Approvals
           </TabsTrigger>
           {dashboardData?.role?.admin && (
-            <TabsTrigger value="reimbursements" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+            <TabsTrigger value="reimbursements" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Reimbursements
             </TabsTrigger>
           )}
-          <TabsTrigger value="reports" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+          <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Reports
           </TabsTrigger>
         </TabsList>
@@ -180,19 +180,19 @@ function ManagementOverviewContent({ data, setActiveTab }: {
   setActiveTab: (tab: string) => void
 }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-card-gap">
       {/* Company Analytics - Left side, takes 2/3 width */}
       <div className="lg:col-span-2">
-        <Card className="bg-gray-800 border-gray-700 h-full">
+        <Card className="bg-record-layer-1 border-record-border h-full">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
+            <CardTitle className="text-foreground flex items-center gap-2">
               <BarChart3 className="w-5 h-5" />
               Company Analytics
             </CardTitle>
             <CardDescription>Real-time expense insights</CardDescription>
           </CardHeader>
           <CardContent>
-            <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+            <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
               <ExpenseAnalytics scope={data?.role?.admin ? "company" : "department"} />
             </Suspense>
           </CardContent>
@@ -201,17 +201,17 @@ function ManagementOverviewContent({ data, setActiveTab }: {
 
       {/* Priority Approvals Queue - Right side, takes 1/3 width, more compact */}
       <div className="lg:col-span-1">
-        <Card className="bg-gray-800 border-gray-700 h-full">
+        <Card className="bg-record-layer-1 border-record-border h-full">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2 text-lg">
+            <CardTitle className="text-foreground flex items-center gap-2 text-lg">
               <Clock className="w-4 h-4" />
               Priority Approvals
             </CardTitle>
             <CardDescription className="text-sm">Claims requiring immediate attention</CardDescription>
           </CardHeader>
-          <CardContent className="p-4">
+          <CardContent className="p-card-padding">
             {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').length === 0 ? (
-              <div className="text-center text-gray-400 py-6">
+              <div className="text-center text-muted-foreground py-6">
                 <CheckCircle className="w-8 h-8 mx-auto mb-3" />
                 <p className="text-sm">No pending approvals</p>
                 <p className="text-xs">All claims reviewed</p>
@@ -221,30 +221,30 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                 {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').slice(0, 6).map((claim: any) => (
                   <button
                     key={claim.id}
-                    className="w-full flex items-center justify-between p-2 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full flex items-center justify-between p-2 bg-record-layer-2 rounded-md hover:bg-accent transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
                     onClick={() => {
                       setActiveTab('approvals')
                     }}
                   >
                     <div className="flex-1 text-left min-w-0">
-                      <p className="text-white text-xs font-medium truncate">
+                      <p className="text-foreground text-xs font-medium truncate">
                         {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                       </p>
-                      <p className="text-gray-400 text-xs truncate">
+                      <p className="text-muted-foreground text-xs truncate">
                         {claim.description?.length > 20
                           ? `${claim.description?.substring(0, 20)}...`
                           : claim.description
                         }
                       </p>
-                      <p className="text-gray-500 text-xs">
+                      <p className="text-muted-foreground text-xs">
                         {claim.expense_category?.replace('_', ' ').split(' ').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                       </p>
                     </div>
                     <div className="text-right ml-2">
-                      <p className="text-white text-xs font-medium">
+                      <p className="text-foreground text-xs font-medium">
                         ${parseFloat(claim.home_currency_amount || claim.total_amount || '0').toFixed(0)}
                       </p>
-                      <p className="text-yellow-400 text-xs">
+                      <p className="text-warning-foreground text-xs">
                         {new Date(claim.created_at).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric'
@@ -257,7 +257,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-full text-green-400 hover:text-green-300 text-xs"
+                    className="w-full text-primary hover:text-primary/80 text-xs"
                     onClick={() => setActiveTab('approvals')}
                   >
                     <CheckCircle className="w-3 h-3 mr-1" />
@@ -309,9 +309,9 @@ function ReimbursementQueueContent({
     }
   }
   return (
-    <Card className="bg-gray-800 border-gray-700">
+    <Card className="bg-record-layer-1 border-record-border">
       <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
+        <CardTitle className="text-foreground flex items-center gap-2">
           <DollarSign className="w-5 h-5" />
           Reimbursement Processing
         </CardTitle>
@@ -319,7 +319,7 @@ function ReimbursementQueueContent({
       </CardHeader>
       <CardContent>
         {(data?.recent_claims || []).filter(claim => claim.status === 'approved').length === 0 ? (
-          <div className="text-center text-gray-400 py-12">
+          <div className="text-center text-muted-foreground py-12">
             <CheckCircle className="w-12 h-12 mx-auto mb-4" />
             <p>No pending reimbursements</p>
             <p className="text-sm">All approved claims have been processed</p>
@@ -327,15 +327,15 @@ function ReimbursementQueueContent({
         ) : (
           <div className="space-y-4">
             {/* Bulk Actions */}
-            <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+            <div className="flex items-center justify-between p-4 bg-record-layer-2 rounded-lg">
               <div className="flex items-center gap-4">
-                <input type="checkbox" className="rounded border-gray-600" />
-                <span className="text-white font-medium">Select All ({(data?.recent_claims || []).filter(claim => claim.status === 'approved').length} claims)</span>
+                <input type="checkbox" className="rounded border" />
+                <span className="text-foreground font-medium">Select All ({(data?.recent_claims || []).filter(claim => claim.status === 'approved').length} claims)</span>
               </div>
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  variant="success"
                   onClick={() => {
                     // TODO: Implement bulk processing when selection state is added
                     alert('Bulk processing will be implemented when selection checkboxes are functional')
@@ -344,7 +344,7 @@ function ReimbursementQueueContent({
                   <DollarSign className="w-4 h-4 mr-2" />
                   Process Selected
                 </Button>
-                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+                <Button size="sm" variant="primary">
                   Export List
                 </Button>
               </div>
@@ -353,24 +353,24 @@ function ReimbursementQueueContent({
             {/* Reimbursement Items */}
             <div className="space-y-2">
               {(data?.recent_claims || []).filter(claim => claim.status === 'approved').map((claim: any) => (
-                <div key={claim.id} className="flex items-center gap-4 p-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors">
-                  <input type="checkbox" className="rounded border-gray-600" />
+                <div key={claim.id} className="flex items-center gap-4 p-3 bg-record-layer-2 rounded-lg hover:bg-accent transition-colors">
+                  <input type="checkbox" className="rounded border" />
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-white font-medium text-sm">
+                        <p className="text-foreground font-medium text-sm">
                           {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
                         </p>
-                        <p className="text-gray-400 text-xs">
+                        <p className="text-muted-foreground text-xs">
                           {claim.employee?.department || 'No Department'} •
                           {claim.description || 'Expense Claim'}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-white font-semibold">
+                        <p className="text-foreground font-semibold">
                           ${parseFloat(claim.home_currency_amount || claim.total_amount || '0').toFixed(2)}
                         </p>
-                        <p className="text-green-400 text-xs">
+                        <p className="text-success-foreground text-xs">
                           Approved {new Date(claim.approval_date || claim.created_at).toLocaleDateString()}
                         </p>
                       </div>
@@ -378,7 +378,7 @@ function ReimbursementQueueContent({
                   </div>
                   <Button
                     size="sm"
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    variant="success"
                     onClick={() => handleReimbursement(claim.id)}
                   >
                     Process
@@ -396,29 +396,29 @@ function ReimbursementQueueContent({
 // Management Reports Content - Full employee selection
 function ManagementReportsContent({ userRole }: { userRole: UserRole }) {
   return (
-    <div className="space-y-6">
-      <Card className="bg-gray-800 border-gray-700">
+    <div className="space-y-section-gap">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-foreground flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
             Management Reports
           </CardTitle>
           <CardDescription>Generate comprehensive expense reports with full employee selection</CardDescription>
         </CardHeader>
         <CardContent>
-          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
             <MonthlyReportGenerator personalOnly={false} />
           </Suspense>
         </CardContent>
       </Card>
 
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
-          <CardTitle className="text-white">Export & Integration</CardTitle>
+          <CardTitle className="text-foreground">Export & Integration</CardTitle>
           <CardDescription>Export data to external systems</CardDescription>
         </CardHeader>
         <CardContent>
-          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
             <GoogleSheetsExport userRole={userRole} />
           </Suspense>
         </CardContent>
@@ -427,7 +427,7 @@ function ManagementReportsContent({ userRole }: { userRole: UserRole }) {
   )
 }
 
-// Management summary card component
+// Management summary card component with layer1-2-3 semantic design system
 function ManagementSummaryCard({ title, value, icon, variant }: {
   title: string
   value: string
@@ -435,17 +435,38 @@ function ManagementSummaryCard({ title, value, icon, variant }: {
   variant: 'default' | 'success' | 'warning' | 'error'
 }) {
   const variantStyles = {
-    default: 'bg-gray-800 border-gray-700',
-    success: 'bg-green-900/20 border-green-700',
-    warning: 'bg-yellow-900/20 border-yellow-700',
-    error: 'bg-red-900/20 border-red-700'
+    // Total Claims - Blue translucent (both light and dark modes)
+    default: 'bg-blue-50 dark:bg-gray-800 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50',
+    // Approved Amount - Green translucent (both light and dark modes)
+    success: 'bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50',
+    // Pending Approval - Yellow/Orange translucent (both light and dark modes)
+    warning: 'bg-yellow-50 dark:bg-gray-800 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-700/50',
+    // Rejected - Red translucent (both light and dark modes)
+    error: 'bg-red-50 dark:bg-gray-800 dark:bg-red-900/10 border border-red-200 dark:border-red-700/50'
   }
 
   const textStyles = {
-    default: 'text-white',
-    success: 'text-green-400',
-    warning: 'text-yellow-400',
-    error: 'text-red-400'
+    // Light mode: dark text, Dark mode: white text
+    default: 'text-blue-900 dark:text-white',
+    success: 'text-green-900 dark:text-white',
+    warning: 'text-yellow-900 dark:text-white',
+    error: 'text-red-900 dark:text-white'
+  }
+
+  const labelStyles = {
+    // Light mode: medium colored text, Dark mode: light gray text
+    default: 'text-blue-700 dark:text-gray-300',
+    success: 'text-green-700 dark:text-gray-300',
+    warning: 'text-yellow-700 dark:text-gray-300',
+    error: 'text-red-700 dark:text-gray-300'
+  }
+
+  const iconStyles = {
+    // Light mode: darker colored icons, Dark mode: light gray icons
+    default: 'text-blue-700 dark:text-gray-400',
+    success: 'text-green-700 dark:text-gray-400',
+    warning: 'text-yellow-700 dark:text-gray-400',
+    error: 'text-red-700 dark:text-gray-400'
   }
 
   return (
@@ -453,10 +474,10 @@ function ManagementSummaryCard({ title, value, icon, variant }: {
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-gray-400 text-sm font-medium">{title}</p>
+            <p className={`text-sm font-medium ${labelStyles[variant]}`}>{title}</p>
             <p className={`text-2xl font-bold ${textStyles[variant]}`}>{value}</p>
           </div>
-          <div className={`${textStyles[variant]}`}>
+          <div className={iconStyles[variant]}>
             {icon}
           </div>
         </div>
@@ -471,7 +492,7 @@ function ApprovalTabContent({ data, onRefreshNeeded }: {
   onRefreshNeeded: () => void
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-section-gap">
       {/* Just the approval list - stats are already shown above */}
       <ApprovalsList onRefreshNeeded={onRefreshNeeded} />
     </div>
@@ -556,10 +577,10 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 
   if (loading) {
     return (
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardContent className="p-12 text-center">
-          <Clock className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-400" />
-          <p className="text-gray-400">Loading expense approvals...</p>
+          <Clock className="w-8 h-8 mx-auto mb-4 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading expense approvals...</p>
         </CardContent>
       </Card>
     )
@@ -567,10 +588,10 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 
   if (error) {
     return (
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardContent className="p-12 text-center">
-          <XCircle className="w-8 h-8 mx-auto mb-4 text-red-400" />
-          <p className="text-red-400">{error}</p>
+          <XCircle className="w-8 h-8 mx-auto mb-4 text-danger" />
+          <p className="text-danger">{error}</p>
         </CardContent>
       </Card>
     )
@@ -578,11 +599,11 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 
   if (claims.length === 0) {
     return (
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50">
         <CardContent className="p-12 text-center">
-          <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-400" />
-          <h3 className="text-xl font-semibold text-white mb-2">All Caught Up!</h3>
-          <p className="text-gray-400">No expense claims pending your approval.</p>
+          <CheckCircle className="w-16 h-16 mx-auto mb-4 text-success" />
+          <h3 className="text-xl font-semibold text-green-900 dark:text-white mb-2">All Caught Up!</h3>
+          <p className="text-green-700 dark:text-gray-300">No expense claims pending your approval.</p>
         </CardContent>
       </Card>
     )
@@ -591,21 +612,21 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
   return (
     <>
       {/* Claims Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-card-gap">
         {claims.map((claim) => {
           const isProcessing = processingClaims.has(claim.id)
 
           return (
-            <Card key={claim.id} className="bg-gray-800 border-gray-700">
+            <Card key={claim.id} className="bg-record-layer-1 border-0 shadow-sm">
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <CardTitle className="text-white text-lg">{claim.description}</CardTitle>
-                    <CardDescription className="text-gray-400">
+                    <CardTitle className="text-foreground text-lg">{claim.description}</CardTitle>
+                    <CardDescription>
                       By {claim.employee_name} • {new Date(claim.submission_date).toLocaleDateString()}
                     </CardDescription>
                   </div>
-                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                  <Badge variant="success">
                     {claim.status.replace('_', ' ')}
                   </Badge>
                 </div>
@@ -615,19 +636,19 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                 {/* Amount and Category */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-gray-400" />
-                    <span className="text-white font-semibold">
+                    <DollarSign className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-foreground font-semibold">
                       {claim.total_amount} {claim.currency}
                     </span>
                     {claim.currency !== claim.home_currency && (
-                      <span className="text-gray-400 text-sm">
+                      <span className="text-muted-foreground text-sm">
                         (${(claim.home_currency_amount || 0).toFixed(2)})
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Tag className="w-4 h-4 text-gray-400" />
-                    <span className="text-gray-300">
+                    <Tag className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-foreground">
                       {claim.expense_category?.replace('_', ' ').split(' ').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                     </span>
                   </div>
@@ -636,12 +657,12 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                 {/* Vendor and Date */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-gray-400" />
-                    <span className="text-gray-300">{claim.vendor_name}</span>
+                    <User className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-foreground">{claim.vendor_name}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-white" />
-                    <span className="text-gray-300">
+                    <Calendar className="w-4 h-4 text-foreground" />
+                    <span className="text-foreground">
                       {new Date(claim.transaction_date).toLocaleDateString()}
                     </span>
                   </div>
@@ -649,16 +670,16 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 
                 {/* Business Purpose */}
                 <div>
-                  <p className="text-gray-400 text-sm">Business Purpose:</p>
-                  <p className="text-gray-300">{claim.business_purpose}</p>
+                  <p className="text-muted-foreground text-sm">Business Purpose:</p>
+                  <p className="text-foreground">{claim.business_purpose}</p>
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-3 pt-4 border-t border-gray-700">
+                <div className="flex gap-3 pt-4 border-t border">
                   <Button
                     size="sm"
                     onClick={() => setSelectedClaim(claim)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    variant="primary"
                   >
                     <Eye className="w-4 h-4 mr-2" />
                     Review
@@ -668,7 +689,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     size="sm"
                     onClick={() => handleApproval(claim.id, 'approve')}
                     disabled={isProcessing}
-                    className="bg-green-600 hover:bg-green-700"
+                    variant="success"
                   >
                     {isProcessing ? (
                       <Clock className="w-4 h-4 mr-2 animate-spin" />
@@ -682,7 +703,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     size="sm"
                     onClick={() => handleApproval(claim.id, 'reject')}
                     disabled={isProcessing}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    variant="destructive"
                   >
                     <XCircle className="w-4 h-4 mr-2" />
                     Reject
@@ -696,7 +717,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 
       {/* Unified Expense Details Modal - Manager View */}
       {selectedClaim && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
           <UnifiedExpenseDetailsModal
             claimId={selectedClaim.id}
             isOpen={Boolean(selectedClaim)}
@@ -728,23 +749,23 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 // Loading skeleton
 function ManagementDashboardSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-section-gap">
       <div className="animate-pulse">
-        <div className="h-8 bg-gray-700 rounded-lg w-1/3 mb-2"></div>
-        <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+        <div className="h-8 bg-record-layer-2 rounded-lg w-1/3 mb-2"></div>
+        <div className="h-4 bg-record-layer-2 rounded w-1/2"></div>
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-card-gap">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-gray-800 rounded-lg p-6 animate-pulse">
-            <div className="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
-            <div className="h-8 bg-gray-700 rounded w-1/3"></div>
+          <div key={i} className="bg-record-layer-1 border-record-border rounded-lg p-6 animate-pulse">
+            <div className="h-4 bg-record-layer-2 rounded w-1/2 mb-2"></div>
+            <div className="h-8 bg-record-layer-2 rounded w-1/3"></div>
           </div>
         ))}
       </div>
 
-      <div className="bg-gray-800 rounded-lg p-6 animate-pulse">
-        <div className="h-64 bg-gray-700 rounded"></div>
+      <div className="bg-record-layer-1 border-record-border rounded-lg p-6 animate-pulse">
+        <div className="h-64 bg-record-layer-2 rounded"></div>
       </div>
     </div>
   )

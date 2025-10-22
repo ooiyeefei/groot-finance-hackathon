@@ -169,28 +169,28 @@ export default function DocumentPreviewWithAnnotations({
       {/* Toolbar */}
       <div className="flex items-center mb-4 gap-3">
         {/* Zoom Controls Section - Separate background */}
-        <div className="flex items-center space-x-2 bg-gray-700/30 rounded-lg p-2 flex-grow-[2]">
+        <div className="flex items-center space-x-2 bg-muted border border-border rounded-lg p-2 flex-grow-[2]">
           <button
             onClick={handleZoomOut}
-            className="p-1 text-gray-400 hover:text-white transition-colors"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             title="Zoom Out"
           >
             <ZoomOut className="w-4 h-4" />
           </button>
-          <span className="text-xs text-gray-300 min-w-[3rem] text-center">
+          <span className="text-xs text-foreground min-w-[3rem] text-center font-medium">
             {Math.round(scale * 100)}%
           </span>
           <button
             onClick={handleZoomIn}
-            className="p-1 text-gray-400 hover:text-white transition-colors"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             title="Zoom In"
           >
             <ZoomIn className="w-4 h-4" />
           </button>
-          <div className="w-px h-4 bg-gray-600 mx-2" />
+          <div className="w-px h-4 bg-border mx-2" />
           <button
             onClick={handleResetView}
-            className="p-1 text-gray-400 hover:text-white transition-colors"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             title="Reset View"
           >
             <RotateCcw className="w-4 h-4" />
@@ -208,16 +208,16 @@ export default function DocumentPreviewWithAnnotations({
 
         {/* Regions Count (when not hidden) */}
         {!hideRegionsCount && !extraToolbarActions && (
-          <div className="text-xs text-gray-400 flex-grow-[1] text-right bg-gray-700/30 rounded-lg p-2 h-10 flex items-center justify-end">
+          <div className="text-xs text-muted-foreground flex-grow-[1] text-right bg-muted border border-border rounded-lg p-2 h-10 flex items-center justify-end font-medium">
             {boundingBoxes.length} regions detected
           </div>
         )}
       </div>
 
       {/* Document Container */}
-      <div 
+      <div
         ref={containerRef}
-        className="flex-1 relative overflow-auto bg-gray-900 rounded-lg border border-gray-600 p-4"
+        className="flex-1 relative overflow-auto bg-card border border-border rounded-lg p-4"
       >
         {imageUrl ? (
           <div 

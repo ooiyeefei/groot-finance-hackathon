@@ -15,7 +15,7 @@ export default async function DocumentsPage() {
   
   return (
     <ClientProviders>
-      <div className="flex h-screen bg-gray-900">
+      <div className="flex h-screen bg-background">
         {/* Sidebar */}
         <Sidebar />
 
@@ -28,7 +28,7 @@ export default async function DocumentsPage() {
           />
 
           {/* Main Content Area */}
-          <main className="flex-1 overflow-auto p-6">
+          <main className="flex-1 overflow-auto p-card-padding">
             <DocumentsContainer />
           </main>
         </div>

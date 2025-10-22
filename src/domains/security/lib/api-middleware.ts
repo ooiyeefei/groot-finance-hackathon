@@ -151,7 +151,39 @@ export async function withApiMiddleware(
 
       // Validate business context (if not skipped)
       if (!skipBusinessContext) {
-        const userData = await getUserData(userId)
+        // Use the already authenticated Supabase client instead of calling getUserData
+        // which would fetch JWT token again
+        const { data: users, error } = await supabase
+          .from('users')
+          .select(`
+            id,
+            business_id,
+            email,
+            full_name,
+            created_at,
+            businesses!users_business_id_fkey (
+              home_currency
+            )
+          `)
+          .eq('clerk_user_id', userId)
+          .order('created_at', { ascending: false })
+
+        if (error || !users || users.length === 0) {
+          auditLogger.logAuthEvent(
+            userId,
+            userProfile.business_id,
+            'business_context',
+            false,
+            request,
+            userProfile.role_permissions,
+            false,
+            'Failed to fetch user data for business context validation'
+          )
+          throw new ApiError('Failed to validate business context', 500)
+        }
+
+        const recordsWithBusiness = users.filter((u: any) => u.business_id)
+        const userData = recordsWithBusiness.length > 0 ? recordsWithBusiness[0] : users[0]
 
         if (userProfile.business_id !== userData.business_id) {
           auditLogger.logAuthEvent(

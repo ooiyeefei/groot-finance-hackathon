@@ -301,10 +301,10 @@ function MultiPageDocumentPreview({
 
   if (loading) {
     return (
-      <div className={`flex items-center justify-center h-full bg-gray-900 ${className}`}>
+      <div className={`flex items-center justify-center h-full bg-record-layer-1 ${className}`}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-          <p className="text-gray-400 text-sm">Loading document...</p>
+          <p className="text-record-supporting text-sm">Loading document...</p>
         </div>
       </div>
     )
@@ -312,11 +312,11 @@ function MultiPageDocumentPreview({
 
   if (error || !documentInfo) {
     return (
-      <div className={`flex items-center justify-center h-full bg-gray-900 ${className}`}>
+      <div className={`flex items-center justify-center h-full bg-record-layer-1 ${className}`}>
         <div className="text-center p-4">
-          <EyeOff className="w-12 h-12 text-gray-500 mx-auto mb-2" />
-          <p className="text-gray-400 text-sm mb-1">Unable to load document</p>
-          <p className="text-gray-500 text-xs">{error}</p>
+          <EyeOff className="w-12 h-12 text-record-supporting-light mx-auto mb-2" />
+          <p className="text-record-supporting text-sm mb-1">Unable to load document</p>
+          <p className="text-record-supporting-light text-xs">{error}</p>
         </div>
       </div>
     )
@@ -326,16 +326,16 @@ function MultiPageDocumentPreview({
 
   return (
     <div
-      className={`flex flex-col h-full bg-gray-900 ${className}`}
+      className={`flex flex-col h-full bg-record-layer-1 ${className}`}
       data-document-preview
       role="application"
       aria-label="Document viewer with navigation controls"
     >
       {/* Document Controls Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-700 bg-gray-800">
+      <div className="flex items-center justify-between p-3 border-b border-record-border bg-record-layer-2">
         <div className="flex items-center space-x-2">
           <Eye className="w-4 h-4 text-blue-400" aria-hidden="true" />
-          <span className="text-white text-sm font-medium" id="document-preview-title">Document Preview</span>
+          <span className="text-record-title text-sm font-medium" id="document-preview-title">Document Preview</span>
         </div>
 
         {/* Page Navigation */}
@@ -348,7 +348,7 @@ function MultiPageDocumentPreview({
             <button
               onClick={goToPreviousPage}
               disabled={currentPage === 1}
-              className="p-1 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
+              className="p-1 text-record-supporting hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
               aria-label={`Go to previous page. Current page ${currentPage} of ${documentInfo.pageCount}`}
               aria-describedby="page-info"
             >
@@ -356,7 +356,7 @@ function MultiPageDocumentPreview({
             </button>
 
             <span
-              className="text-gray-300 text-sm px-2"
+              className="text-record-supporting text-sm px-2"
               id="page-info"
               aria-live="polite"
               aria-atomic="true"
@@ -367,7 +367,7 @@ function MultiPageDocumentPreview({
             <button
               onClick={goToNextPage}
               disabled={currentPage === documentInfo.pageCount}
-              className="p-1 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
+              className="p-1 text-record-supporting hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
               aria-label={`Go to next page. Current page ${currentPage} of ${documentInfo.pageCount}`}
               aria-describedby="page-info"
             >
@@ -384,7 +384,7 @@ function MultiPageDocumentPreview({
         >
           <button
             onClick={zoomOut}
-            className="p-1 text-gray-400 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
+            className="p-1 text-record-supporting hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
             aria-label={`Zoom out. Current zoom ${Math.round(scale * 100)}%`}
             title="Zoom out (Ctrl+-)"
             aria-describedby="zoom-info"
@@ -394,7 +394,7 @@ function MultiPageDocumentPreview({
 
           <button
             onClick={fitToWidth}
-            className="p-1 text-gray-400 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
+            className="p-1 text-record-supporting hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
             aria-label="Reset zoom to 100%"
             title="Reset zoom (Ctrl+0)"
             aria-describedby="zoom-info"
@@ -404,7 +404,7 @@ function MultiPageDocumentPreview({
 
           <button
             onClick={zoomIn}
-            className="p-1 text-gray-400 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
+            className="p-1 text-record-supporting hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
             aria-label={`Zoom in. Current zoom ${Math.round(scale * 100)}%`}
             title="Zoom in (Ctrl++)"
             aria-describedby="zoom-info"
@@ -414,7 +414,7 @@ function MultiPageDocumentPreview({
 
           <button
             onClick={rotate}
-            className="p-1 text-gray-400 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
+            className="p-1 text-record-supporting hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded"
             aria-label={`Rotate document 90 degrees. Current rotation ${rotation} degrees`}
             title="Rotate 90° (R key)"
             aria-describedby="rotation-info"
@@ -434,7 +434,7 @@ function MultiPageDocumentPreview({
 
       {/* Document Image Container */}
       <div
-        className="flex-1 overflow-auto bg-gray-800 relative"
+        className="flex-1 overflow-auto bg-record-layer-2 relative"
         role="img"
         aria-labelledby="document-preview-title"
         aria-describedby="document-description"
@@ -445,7 +445,7 @@ function MultiPageDocumentPreview({
             <div className="relative">
               {!imageLoaded && (
                 <div
-                  className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded"
+                  className="absolute inset-0 flex items-center justify-center bg-record-layer-1 rounded"
                   aria-hidden="true"
                 >
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
@@ -481,8 +481,8 @@ function MultiPageDocumentPreview({
       </div>
 
       {/* Keyboard Shortcuts Help */}
-      <div className="p-2 border-t border-gray-700 bg-gray-800">
-        <p className="text-xs text-gray-500 text-center" role="status" aria-live="polite">
+      <div className="p-2 border-t border-record-border bg-record-layer-2">
+        <p className="text-xs text-record-supporting-light text-center" role="status" aria-live="polite">
           Keyboard: ← → navigate • Home/End first/last • Ctrl +/- zoom • Ctrl 0 reset • R rotate
           {documentInfo.pageCount > 1 && ` • ${documentInfo.pageCount} pages total`}
         </p>

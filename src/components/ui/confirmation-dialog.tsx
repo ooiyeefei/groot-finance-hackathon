@@ -1,5 +1,7 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
+import { Loader2 } from 'lucide-react'
 
 interface ConfirmationDialogProps {
   isOpen: boolean
@@ -26,14 +28,10 @@ export default function ConfirmationDialog({
 }: ConfirmationDialogProps) {
   if (!isOpen) return null
 
-  const confirmButtonClasses = confirmVariant === 'danger'
-    ? 'bg-red-600 hover:bg-red-500 focus:ring-red-500 shadow-red-600/25'
-    : 'bg-blue-600 hover:bg-blue-500 focus:ring-blue-500 shadow-blue-600/25'
-
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Enhanced Backdrop for Better Visibility */}
-      <div 
+      <div
         className="fixed inset-0 transition-opacity"
         style={{
           backgroundColor: 'rgba(0, 0, 0, 0.4)',
@@ -42,55 +40,53 @@ export default function ConfirmationDialog({
         }}
         onClick={onClose}
       />
-      
+
       {/* Dialog */}
-      <div className="flex min-h-full items-center justify-center p-4 text-center sm:items-center sm:p-6">
-        <div className="relative transform overflow-hidden rounded-xl bg-gray-800 shadow-2xl text-left transition-all sm:my-8 w-full max-w-md">
+      <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-md">
           {/* Content with proper spacing */}
           <div className="p-6 space-y-5">
             {/* Title Section */}
             <div className="text-center">
-              <h3 className="text-lg font-semibold leading-6 text-white">
+              <h3 className="text-lg font-semibold leading-6 text-foreground">
                 {title}
               </h3>
             </div>
-            
+
             {/* Message Section */}
             <div className="text-center">
-              <p className="text-sm leading-relaxed text-gray-300">
+              <p className="text-sm leading-relaxed text-muted-foreground">
                 {message}
               </p>
             </div>
             
             {/* Actions Section - Centered Layout */}
             <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={onClose}
                 disabled={isLoading}
-                className="inline-flex justify-center rounded-xl bg-gray-700 px-6 py-3 text-sm font-medium text-white shadow-sm ring-1 ring-inset ring-gray-600 hover:bg-gray-800 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px] sm:min-w-[120px]"
+                className="min-w-[100px] sm:min-w-[120px]"
               >
                 {cancelText}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant={confirmVariant === 'danger' ? 'destructive' : 'default'}
                 onClick={onConfirm}
                 disabled={isLoading}
-                className={`inline-flex justify-center rounded-xl px-6 py-3 text-sm font-medium text-white shadow-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px] sm:min-w-[120px] ${confirmButtonClasses}`}
+                className="min-w-[100px] sm:min-w-[120px]"
               >
                 {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Loading...</span>
-                  </div>
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
                 ) : (
                   confirmText
                 )}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
-      </div>
     </div>
   )
 }

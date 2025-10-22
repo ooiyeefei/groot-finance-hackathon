@@ -275,14 +275,14 @@ export default function ActionCenter({
 
   if (loading) {
     return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <div className="h-6 bg-gray-700 rounded w-32 mb-4 animate-pulse"></div>
+      <div className="bg-card border border-border rounded-lg p-6">
+        <div className="h-6 bg-record-layer-2 rounded w-32 mb-4 animate-pulse"></div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="bg-gray-700/50 rounded-lg p-4 animate-pulse">
-              <div className="h-4 bg-gray-600 rounded w-3/4 mb-2"></div>
-              <div className="h-3 bg-gray-600 rounded w-full mb-3"></div>
-              <div className="h-8 bg-gray-600 rounded w-20"></div>
+            <div key={i} className="bg-record-layer-2/50 rounded-lg p-4 animate-pulse">
+              <div className="h-4 bg-record-layer-2 rounded w-3/4 mb-2"></div>
+              <div className="h-3 bg-record-layer-2 rounded w-full mb-3"></div>
+              <div className="h-8 bg-record-layer-2 rounded w-20"></div>
             </div>
           ))}
         </div>
@@ -292,11 +292,11 @@ export default function ActionCenter({
 
   if (actionItems.length === 0) {
     return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Action Center</h3>
-        <div className="flex items-center justify-center py-8 text-gray-400">
+      <div className="bg-card border border-border rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4">Action Center</h3>
+        <div className="flex items-center justify-center py-8 text-muted-foreground">
           <div className="text-center">
-            <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-400" />
+            <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-600 dark:text-green-400" />
             <p className="text-sm">All looking good!</p>
             <p className="text-xs mt-1">No urgent actions needed at this time</p>
           </div>
@@ -306,10 +306,10 @@ export default function ActionCenter({
   }
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+    <div className="bg-card border border-border rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white">Action Center</h3>
-        <span className="text-xs text-gray-400">
+        <h3 className="text-lg font-semibold text-foreground">Action Center</h3>
+        <span className="text-xs text-muted-foreground">
           {actionItems.length} {actionItems.length === 1 ? 'item' : 'items'}
         </span>
       </div>
@@ -321,9 +321,9 @@ export default function ActionCenter({
       </div>
 
       {/* Summary footer */}
-      <div className="mt-6 pt-4 border-t border-gray-700 flex items-center justify-between text-xs text-gray-400">
+      <div className="mt-6 pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
         <span>
-          Priority items: {actionItems.filter(item => item.priority === 'high').length} high, 
+          Priority items: {actionItems.filter(item => item.priority === 'high').length} high,
           {' '}{actionItems.filter(item => item.priority === 'medium').length} medium
         </span>
         <span>Last updated: {new Date().toLocaleTimeString()}</span>
@@ -369,9 +369,9 @@ function ActionCard({ item }: { item: ActionItem }) {
 
   const getPriorityBadge = () => {
     const colors = {
-      high: 'bg-red-900/20 text-red-300 border-red-700/50',
-      medium: 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50',
-      low: 'bg-gray-900/20 text-gray-300 border-gray-700/50'
+      high: 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700/50',
+      medium: 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border-yellow-300 dark:border-yellow-700/50',
+      low: 'bg-muted text-muted-foreground border-border'
     };
 
     return (
@@ -386,20 +386,20 @@ function ActionCard({ item }: { item: ActionItem }) {
 
   return (
     <div className={`
-      border rounded-lg p-4 transition-all hover:bg-gray-750
+      border rounded-lg p-4 transition-all hover:bg-accent/50
       ${styles.borderColor} ${styles.backgroundColor}
     `}>
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center">
           <Icon className={`w-5 h-5 mr-2 ${styles.iconColor}`} />
-          <h4 className="font-medium text-white text-sm">{item.title}</h4>
+          <h4 className="font-medium text-foreground text-sm">{item.title}</h4>
         </div>
         {getPriorityBadge()}
       </div>
 
       {/* Description */}
-      <p className="text-gray-300 text-xs mb-4 leading-relaxed">
+      <p className="text-muted-foreground text-xs mb-4 leading-relaxed">
         {item.description}
       </p>
 

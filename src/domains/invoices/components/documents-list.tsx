@@ -15,11 +15,13 @@ import { useHomeCurrency } from '@/domains/account-management/components/busines
 import ExtractedInfoTags from './ExtractedInfoTags'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useToast } from '@/components/ui/toast'
+import { Button } from '@/components/ui/button'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const DocumentAnalysisModal = lazy(() => import('./document-analysis-modal'))
 const AccountingEntryFormModal = lazy(() => import('@/domains/accounting-entries/components/accounting-entry-edit-modal'))
 const ConfirmationDialog = lazy(() => import('@/components/ui/confirmation-dialog'))
+
 
 interface DocumentsListProps {
   onRefresh?: () => void
@@ -294,11 +296,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
   const getFileIcon = (fileType: string) => {
     if (fileType.startsWith('image/')) {
-      return <Image className="w-5 h-5 text-blue-400" />
+      return <Image className="w-5 h-5 text-primary" />
     } else if (fileType === 'application/pdf') {
-      return <FileText className="w-5 h-5 text-red-400" />
+      return <FileText className="w-5 h-5 text-danger" />
     }
-    return <File className="w-5 h-5 text-gray-400" />
+    return <File className="w-5 h-5 text-muted-foreground" />
   }
 
   const formatFileSize = (bytes: number) => {
@@ -326,9 +328,9 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   if (documents.length === 0) {
     return (
       <div className="text-center py-12">
-        <FileText className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-        <p className="text-gray-400">No documents uploaded yet.</p>
-        <p className="text-gray-500 text-sm mt-1">Upload your first document above to get started.</p>
+        <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <p className="text-muted-foreground">No documents uploaded yet.</p>
+        <p className="text-muted-foreground text-sm mt-1">Upload your first document above to get started.</p>
       </div>
     )
   }
@@ -336,21 +338,21 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-white">Your Documents</h3>
+        <h3 className="text-lg font-medium text-foreground">Your Documents</h3>
       </div>
 
       <div className="space-y-3">
         {documents.map((document) => (
           <div
             key={document.id}
-            className="bg-gray-700/50 rounded-lg border border-gray-600 p-4 hover:bg-gray-700/70 transition-colors"
+            className="bg-muted/50 rounded-lg border border-border p-card-padding hover:bg-muted/70 transition-colors"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3 flex-1 min-w-0">
                 {getFileIcon(document.file_type)}
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-white font-medium truncate">{document.file_name}</h4>
-                  <div className="flex items-center space-x-4 text-sm text-gray-400 mt-1">
+                  <h4 className="text-foreground font-medium truncate">{document.file_name}</h4>
+                  <div className="flex items-center space-x-4 text-sm text-muted-foreground mt-1">
                     <span>{formatFileSize(document.file_size)}</span>
                     <span>•</span>
                     <span>Uploaded {formatDate(document.created_at)}</span>
@@ -373,16 +375,16 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   
                   {/* Show transaction linked status */}
                   {document.linked_transaction && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/20 text-green-400 border border-green-700">
+                    <div className="badge-success-status inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
                       💰 Record Created
-                    </span>
+                    </div>
                   )}
-                  
+
                   {/* Show reprocessed status for documents that have been reprocessed */}
                   {reprocessedDocuments.has(document.id) && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-900/20 text-orange-400 border border-orange-700">
+                    <div className="badge-warning-status inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
                       🔄 Reprocessed
-                    </span>
+                    </div>
                   )}
                   
                   {/* Show confidence score for completed documents */}
@@ -401,23 +403,24 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     <button
                       onClick={() => processDocument(document.id)}
                       disabled={processingDocuments.has(document.id)}
-                      className="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
+                      className="btn-action inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 disabled:opacity-50"
                     >
                       <Play className="w-4 h-4 mr-1.5" />
                       Process
                     </button>
                   )}
-                  
+
                   {/* Analyze Document button for completed documents */}
                   {document.processing_status === 'completed' && document.extracted_data && (
-                    <button
+                    <Button
                       onClick={() => viewExtractedData(document.id)}
-                      className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
+                      variant="view"
+                      size="sm"
                       title="Analyze document and view extracted data"
                     >
                       <Eye className="w-4 h-4 mr-1.5" />
                       Analyze
-                    </button>
+                    </Button>
                   )}
 
                   {/* Add/View/Update Transaction button for completed documents with extractable data */}
@@ -425,43 +428,47 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     document.linked_transaction ? (
                       reprocessedDocuments.has(document.id) ? (
                         // Show Update Transaction for reprocessed documents
-                        <button
+                        <Button
                           onClick={() => openTransactionEditForm(document.id, document.linked_transaction!.id)}
-                          className="inline-flex items-center px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-md transition-colors"
+                          variant="primary"
+                          size="sm"
                           title={`Update transaction with reprocessed data: ${document.linked_transaction.description}`}
                         >
                           <Plus className="w-4 h-4 mr-1.5" />
                           Update Record
-                        </button>
+                        </Button>
                       ) : (
                         // Show View Transaction for normal processed documents
-                        <button
+                        <Button
                           onClick={() => openTransactionView(document.linked_transaction!.id)}
-                          className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
+                          variant="view"
+                          size="sm"
                           title={`View transaction: ${document.linked_transaction.description}`}
                         >
                           <Eye className="w-4 h-4 mr-1.5" />
                           View Record
-                        </button>
+                        </Button>
                       )
                     ) : (
-                      <button
+                      <Button
                         onClick={() => openTransactionForm(document.id)}
-                        className="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
+                        variant="primary"
+                        size="sm"
                         title="Create transaction from extracted document data"
                       >
                         <Plus className="w-4 h-4 mr-1.5" />
                         Create Record
-                      </button>
+                      </Button>
                     )
                   )}
 
                   {/* Reprocess button for completed documents */}
                   {document.processing_status === 'completed' && (
-                    <button
+                    <Button
                       onClick={() => reprocessDocument(document.id)}
                       disabled={processingDocuments.has(document.id)}
-                      className="inline-flex items-center px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
+                      variant="primary"
+                      size="sm"
                       title="Reprocess this document"
                     >
                       {processingDocuments.has(document.id) ? (
@@ -470,40 +477,42 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                         <RotateCcw className="w-4 h-4 mr-1.5" />
                       )}
                       {processingDocuments.has(document.id) ? 'Processing...' : 'Reprocess'}
-                    </button>
+                    </Button>
                   )}
                   
                   {/* Retry button for failed documents */}
                   {document.processing_status === 'failed' && (
-                    <button
+                    <Button
                       onClick={() => retryProcessing(document.id)}
                       disabled={processingDocuments.has(document.id)}
-                      className="inline-flex items-center px-3 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
+                      variant="primary"
+                      size="sm"
                       title="Retry processing (works for both general failures and classification failures)"
                     >
                       <RotateCcw className="w-4 h-4 mr-1.5" />
                       Retry
-                    </button>
+                    </Button>
                   )}
 
                   {/* Delete button for all documents */}
-                  <button
+                  <Button
                     onClick={() => handleDeleteClick(document.id)}
                     disabled={deletingDocuments.has(document.id)}
-                    className="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
+                    variant="destructive"
+                    size="sm"
                     title="Delete this document"
                   >
                     <Trash2 className="w-4 h-4 mr-1.5" />
                     Delete
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
 
             {/* Show extracted information for completed documents using cleaner ExtractedInfoTags component */}
             {document.processing_status === 'completed' && document.extracted_data && (
-              <div className="mt-4 pt-4 border-t border-gray-600">
-                <h5 className="text-sm font-medium text-gray-300 mb-2">Extracted Information</h5>
+              <div className="mt-4 pt-4 border-t border-border">
+                <h5 className="text-sm font-medium text-muted-foreground mb-2">Extracted Information</h5>
                 <ExtractedInfoTags extractedData={document.extracted_data} />
               </div>
             )}
@@ -513,7 +522,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
       {/* Document Analysis Modal */}
       {selectedDocument && getDocumentById(selectedDocument) && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
           <DocumentAnalysisModal
             document={getDocumentById(selectedDocument)!}
             onClose={closeModal}
@@ -523,7 +532,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
       {/* Transaction Form Modal with pre-filled data */}
       {transactionFormDocument && getDocumentById(transactionFormDocument) && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
           <AccountingEntryFormModal
             onClose={closeTransactionForm}
             onSubmit={handleCreateTransaction}
@@ -539,7 +548,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
       {/* Transaction Edit Form Modal for reprocessed documents */}
       {editTransactionData && getDocumentById(editTransactionData.documentId) && editTransactionDetails && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
           <AccountingEntryFormModal
             transaction={editTransactionDetails}
             prefilledData={{
@@ -553,7 +562,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
       )}
 
       {/* Standardized Delete Confirmation Dialog */}
-      <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-6 h-6 animate-spin text-white" /></div>}>
+      <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-6 h-6 animate-spin text-primary-foreground" /></div>}>
         <ConfirmationDialog
           isOpen={deleteConfirmation.isOpen}
           onClose={handleDeleteCancel}

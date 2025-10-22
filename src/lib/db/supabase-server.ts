@@ -608,23 +608,17 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
     throw new Error('Authentication required')
   }
 
-  // Get JWT token from Clerk with enhanced error handling
-  const { getToken } = await auth()
+  // Get JWT token from cache or Clerk with enhanced error handling
+  const { getCachedJWTToken } = await import('./business-context-cache')
 
   console.log(`[Auth] Attempting to get JWT token for user: ${authenticatedClerkUserId}`)
 
   let jwtToken: string | null = null
   try {
-    jwtToken = await getToken({ template: 'supabase' })
+    jwtToken = await getCachedJWTToken(authenticatedClerkUserId)
     console.log(`[Auth] JWT token obtained successfully: ${jwtToken ? 'exists' : 'null'}`)
 
     if (jwtToken) {
-      // Validate JWT structure before using
-      const tokenParts = jwtToken.split('.')
-      if (tokenParts.length !== 3) {
-        console.error(`[Auth] Invalid JWT structure - expected 3 parts, got ${tokenParts.length}`)
-        throw new Error('Invalid JWT token structure')
-      }
       console.log(`[Auth] JWT token validation passed`)
     }
   } catch (error) {
@@ -695,23 +689,17 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
 
     console.log(`[BusinessContext] ✅ Using business context: ${activeBusinessId}`)
 
-    // Get JWT token from Clerk with enhanced error handling
-    const { getToken } = await auth()
+    // Get JWT token from cache or Clerk with enhanced error handling
+    const { getCachedJWTToken } = await import('./business-context-cache')
 
     console.log(`[BusinessContext] Attempting to get JWT token for user: ${authenticatedClerkUserId}`)
 
     let jwtToken: string | null = null
     try {
-      jwtToken = await getToken({ template: 'supabase' })
+      jwtToken = await getCachedJWTToken(authenticatedClerkUserId)
       console.log(`[BusinessContext] JWT token obtained successfully: ${jwtToken ? 'exists' : 'null'}`)
 
       if (jwtToken) {
-        // Validate JWT structure before using
-        const tokenParts = jwtToken.split('.')
-        if (tokenParts.length !== 3) {
-          console.error(`[BusinessContext] Invalid JWT structure - expected 3 parts, got ${tokenParts.length}`)
-          throw new Error('Invalid JWT token structure')
-        }
         console.log(`[BusinessContext] JWT token validation passed`)
       }
     } catch (error) {

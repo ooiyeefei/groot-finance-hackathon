@@ -10,7 +10,7 @@ export default async function SignInPage({ params }: SignInPageProps) {
   const { locale } = await params
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">
@@ -27,7 +27,7 @@ export default async function SignInPage({ params }: SignInPageProps) {
           appearance={{
             elements: {
               rootBox: "mx-auto",
-              card: "bg-gray-800 border border-gray-700",
+              card: "bg-gray-800 border border-border",
               headerTitle: "text-white",
               headerSubtitle: "text-gray-400",
               socialButtonsBlockButton: "bg-gray-700 border-gray-600 text-white hover:bg-gray-600",

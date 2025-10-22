@@ -19,7 +19,7 @@ export default async function SettingsPage() {
 
   return (
     <ClientProviders>
-      <div className="flex h-screen bg-gray-900">
+      <div className="flex h-screen bg-background">
         {/* Sidebar */}
         <Sidebar />
 
@@ -37,21 +37,21 @@ export default async function SettingsPage() {
             {/* Single Column Layout - Personal Settings Only */}
             <div className="space-y-6">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
-                    <User className="w-5 h-5 text-white" />
+                  <div className="w-8 h-8 bg-success rounded-lg flex items-center justify-center">
+                    <User className="w-5 h-5 text-success-foreground" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-white">Personal Settings</h2>
-                    <p className="text-sm text-gray-400">Your individual preferences and profile</p>
+                    <h2 className="text-xl font-semibold text-foreground">Personal Settings</h2>
+                    <p className="text-sm text-muted-foreground">Your individual preferences and profile</p>
                   </div>
                 </div>
 
                 {/* User Profile Component */}
                 <Suspense fallback={
-                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                  <div className="bg-card rounded-lg border border-border p-6">
                     <div className="flex items-center justify-center p-8">
-                      <Loader2 className="w-8 h-8 animate-spin text-green-500" />
-                      <span className="ml-2 text-gray-400">Loading personal settings...</span>
+                      <Loader2 className="w-8 h-8 animate-spin text-success" />
+                      <span className="ml-2 text-muted-foreground">Loading personal settings...</span>
                     </div>
                   </div>
                 }>
@@ -59,17 +59,17 @@ export default async function SettingsPage() {
                 </Suspense>
 
                 {/* Language Settings */}
-                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <div className="bg-card rounded-lg border border-border p-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <Globe className="w-5 h-5 text-gray-400" />
-                    <h3 className="text-lg font-semibold text-white">Language Preferences</h3>
+                    <Globe className="w-5 h-5 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold text-foreground">Language Preferences</h3>
                   </div>
                   <div className="grid gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Interface Language
                       </label>
-                      <select className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <select className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
                         <option value="en">English</option>
                         <option value="th">ไทย (Thai)</option>
                         <option value="id">Bahasa Indonesia</option>
@@ -77,10 +77,10 @@ export default async function SettingsPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         AI Assistant Language
                       </label>
-                      <select className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <select className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
                         <option value="en">English</option>
                         <option value="th">ไทย (Thai)</option>
                         <option value="id">Bahasa Indonesia</option>
@@ -91,16 +91,16 @@ export default async function SettingsPage() {
                 </div>
 
                 {/* Personal Timezone */}
-                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <div className="bg-card rounded-lg border border-border p-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <SettingsIcon className="w-5 h-5 text-gray-400" />
-                    <h3 className="text-lg font-semibold text-white">Personal Preferences</h3>
+                    <SettingsIcon className="w-5 h-5 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold text-foreground">Personal Preferences</h3>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-foreground mb-2">
                       Your Timezone
                     </label>
-                    <select className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
                       <option value="Asia/Singapore">Asia/Singapore (GMT+8)</option>
                       <option value="Asia/Bangkok">Asia/Bangkok (GMT+7)</option>
                       <option value="Asia/Jakarta">Asia/Jakarta (GMT+7)</option>
@@ -108,7 +108,7 @@ export default async function SettingsPage() {
                       <option value="Asia/Manila">Asia/Manila (GMT+8)</option>
                       <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (GMT+7)</option>
                     </select>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       Used for your personal dashboard and notifications
                     </p>
                   </div>

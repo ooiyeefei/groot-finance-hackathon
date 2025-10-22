@@ -276,32 +276,32 @@ export default function ExpenseSubmissionFlow({
         {steps.map((step, index) => {
           const isActive = step.id === flowState.currentStep
           const isCompleted = index < getCurrentStepIndex()
-          
+
           return (
             <div key={step.id} className="flex items-center">
               <div className={`flex flex-col items-center ${index > 0 ? 'ml-4' : ''}`}>
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${
-                  isActive 
-                    ? 'bg-blue-600 text-white ring-2 ring-blue-400' 
-                    : isCompleted 
-                    ? 'bg-green-600 text-white' 
-                    : 'bg-gray-700 text-gray-400'
+                  isActive
+                    ? 'bg-primary text-primary-foreground ring-2 ring-primary/40'
+                    : isCompleted
+                    ? 'bg-green-600 dark:bg-green-500 text-white'
+                    : 'bg-muted text-muted-foreground'
                 }`}>
                   {index + 1}
                 </div>
                 <div className="text-center mt-1">
                   <div className={`text-sm font-medium ${
-                    isActive ? 'text-blue-400' : isCompleted ? 'text-green-400' : 'text-gray-400'
+                    isActive ? 'text-primary' : isCompleted ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'
                   }`}>
                     {step.label}
                   </div>
-                  <div className="text-xs text-gray-500">{step.description}</div>
+                  <div className="text-xs text-muted-foreground">{step.description}</div>
                 </div>
               </div>
-              
+
               {index < steps.length - 1 && (
                 <ArrowRight className={`w-4 h-4 mx-2 ${
-                  isCompleted ? 'text-green-400' : 'text-gray-600'
+                  isCompleted ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'
                 }`} />
               )}
             </div>
@@ -313,7 +313,14 @@ export default function ExpenseSubmissionFlow({
 
   return (
     <div
-      className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50 p-2"
+      className="fixed top-0 left-0 right-0 bottom-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+      style={{
+        margin: 0,
+        padding: 0,
+        width: '100vw',
+        height: '100vh',
+        position: 'fixed'
+      }}
       onClick={(e) => {
         // Only close if clicking on the backdrop (not the modal content)
         if (e.target === e.currentTarget) {
@@ -322,7 +329,7 @@ export default function ExpenseSubmissionFlow({
       }}
     >
       <div
-        className={`bg-gray-800 rounded-lg w-full max-h-[96vh] overflow-hidden ${
+        className={`bg-card rounded-lg w-full max-h-[96vh] overflow-hidden border border-border m-4 ${
           flowState.currentStep === 'upload' ? 'max-w-2xl' :
           flowState.currentStep === 'processing' ? 'max-w-4xl' :
           'max-w-7xl'
@@ -330,10 +337,10 @@ export default function ExpenseSubmissionFlow({
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <div>
-            <h2 className="text-xl font-semibold text-white">Expense Submission</h2>
-            <p className="text-gray-400 text-sm">
+            <h2 className="text-xl font-semibold text-foreground">Expense Submission</h2>
+            <p className="text-muted-foreground text-sm">
               {flowState.extractionResult?.extractedData.processingMethod === 'manual_entry'
                 ? 'Manually fill out expense details and attach a receipt'
                 : 'Intelligent receipt processing with Chain-of-Thought AI'
@@ -344,8 +351,8 @@ export default function ExpenseSubmissionFlow({
             {/* Document icon and Draft status */}
             {flowState.currentStep === 'form' && (
               <>
-                <FileText className="w-5 h-5 text-blue-400" />
-                <Badge variant="secondary" className="bg-blue-900/20 text-blue-300 border border-blue-700/50">
+                <FileText className="w-5 h-5 text-primary" />
+                <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30">
                   Draft
                 </Badge>
               </>
@@ -374,13 +381,14 @@ export default function ExpenseSubmissionFlow({
                 {flowState.extractionResult.extractedData.extractionQuality} quality
               </Badge>
             )}
-            <button
+            <Button
               onClick={() => onClose(hasActiveProcessing || flowState.isBackgroundProcessing)}
               disabled={flowState.isSubmitting}
-              className="inline-flex items-center px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              variant="ghost"
+              size="sm"
             >
               <X className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -433,17 +441,18 @@ export default function ExpenseSubmissionFlow({
 
         {/* Navigation Footer */}
         {(flowState.currentStep === 'upload' || flowState.currentStep === 'processing') && (
-          <div className="p-6 pt-0 border-t border-gray-700">
-            <div className="flex justify-between items-center text-sm text-gray-400">
+          <div className="p-6 pt-0">
+            <div className="flex justify-between items-center text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 {flowState.currentStep === 'processing' && (
-                  <button
+                  <Button
                     onClick={handleBack}
-                    className="inline-flex items-center px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 text-white text-sm font-medium rounded-md transition-colors"
+                    variant="secondary"
+                    size="sm"
                   >
                     <ArrowLeft className="w-4 h-4 mr-1" />
                     Change File
-                  </button>
+                  </Button>
                 )}
               </div>
               <div>

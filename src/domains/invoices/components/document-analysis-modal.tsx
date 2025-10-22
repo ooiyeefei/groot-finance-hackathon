@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, Languages, Eye, FileText, DollarSign, List, Copy } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
 
 interface Document {
@@ -759,24 +760,24 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-800 z-50 flex flex-col">
+    <div className="fixed inset-0 bg-background z-50 flex flex-col">
       <div className="w-full h-full flex flex-col">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-900 flex-shrink-0">
+        <div className="flex items-center justify-between p-4 border-b border-border bg-card flex-shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Eye className="w-5 h-5 text-white" />
+            <div className="p-2 bg-primary rounded-lg">
+              <Eye className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h3 className="text-lg font-medium text-white">Document Analysis</h3>
-              <p className="text-sm text-gray-400 mt-1">
+              <h3 className="text-lg font-medium text-foreground">Document Analysis</h3>
+              <p className="text-sm text-muted-foreground mt-1">
                 {document.file_name} • {formatDate(document.processed_at || document.created_at)}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="w-6 h-6" />
           </button>
@@ -785,10 +786,10 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         {/* Modal Content - Two Pane Layout */}
         <div className="flex-1 flex min-h-0">
           {/* Left Pane - Visual (Scrollable) */}
-          <div className="w-1/2 border-r border-gray-700 flex flex-col min-h-0">
+          <div className="w-1/2 border-r border-border flex flex-col min-h-0">
             <div className="overflow-y-auto flex-1 p-6">
               <div className="flex items-center justify-between mb-4">
-                <h4 className="text-sm font-medium text-white flex items-center">
+                <h4 className="text-sm font-medium text-foreground flex items-center">
                   <FileText className="w-4 h-4 mr-2" />
                   Document Preview
                 </h4>
@@ -796,23 +797,25 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Page Navigation - Only show if more than 1 page */}
                 {totalPages > 1 && (
                   <div className="flex items-center space-x-2">
-                    <button
+                    <Button
                       onClick={handlePreviousPage}
                       disabled={currentPage === 1 || isLoadingPage}
-                      className="px-2 py-1 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:opacity-50 text-white text-xs rounded transition-colors"
+                      variant="secondary"
+                      size="sm"
                     >
                       ◀ Previous
-                    </button>
-                    <span className="text-xs text-gray-300 px-2">
+                    </Button>
+                    <span className="text-xs text-muted-foreground px-2">
                       {isLoadingPage ? 'Loading...' : `Page ${currentPage} of ${totalPages}`}
                     </span>
-                    <button
+                    <Button
                       onClick={handleNextPage}
                       disabled={currentPage === totalPages || isLoadingPage}
-                      className="px-2 py-1 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:opacity-50 text-white text-xs rounded transition-colors"
+                      variant="secondary"
+                      size="sm"
                     >
                       Next ▶
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -834,8 +837,8 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
               </div>
 
             {/* Translation Feature */}
-            <div className="mt-4 bg-gray-700/50 rounded-lg p-4 flex-shrink-0">
-              <h5 className="text-sm font-medium text-white mb-4 flex items-center">
+            <div className="mt-4 bg-muted/50 rounded-lg p-4 flex-shrink-0">
+              <h5 className="text-sm font-medium text-foreground mb-4 flex items-center">
                 <Languages className="w-4 h-4 mr-2" />
                 Translation
               </h5>
@@ -844,13 +847,13 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Language Selection */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-300 mb-1">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
                       Source Language
                     </label>
                     <select
                       value={sourceLanguage}
                       onChange={(e) => setSourceLanguage(e.target.value)}
-                      className="w-full bg-gray-600 border border-gray-500 rounded-md px-2 py-1 text-white text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full bg-input border border-input rounded-md px-2 py-1 text-foreground text-xs focus:ring-2 focus:ring-ring focus:border-transparent"
                     >
                       <option value="auto">Auto-detect</option>
                       {SUPPORTED_LANGUAGES.map((lang) => (
@@ -861,13 +864,13 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-300 mb-1">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
                       Target Language
                     </label>
                     <select
                       value={targetLanguage}
                       onChange={(e) => setTargetLanguage(e.target.value)}
-                      className="w-full bg-gray-600 border border-gray-500 rounded-md px-2 py-1 text-white text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full bg-input border border-input rounded-md px-2 py-1 text-foreground text-xs focus:ring-2 focus:ring-ring focus:border-transparent"
                     >
                       {SUPPORTED_LANGUAGES.map((lang) => (
                         <option key={lang.code} value={lang.code}>
@@ -879,14 +882,16 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 </div>
 
                 {/* Translate Button */}
-                <button
+                <Button
                   onClick={handleTranslate}
                   disabled={isTranslating || !document.extracted_data}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white py-1.5 px-3 rounded-md text-xs font-medium transition-colors flex items-center justify-center"
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
                 >
                   {isTranslating ? (
                     <>
-                      <div className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full mr-2" />
+                      <div className="animate-spin w-3 h-3 border-2 border-current border-t-transparent rounded-full mr-2" />
                       Translating...
                     </>
                   ) : (
@@ -895,13 +900,13 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       Translate
                     </>
                   )}
-                </button>
+                </Button>
 
                 {/* Translation Output */}
                 {translatedText && (
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <h6 className="text-xs font-medium text-gray-300 mb-2">Translation Result</h6>
-                    <div className="text-xs text-white whitespace-pre-wrap max-h-64 overflow-y-auto bg-gray-800/50 rounded-md p-3 border border-gray-600">
+                  <div className="bg-muted rounded-lg p-3">
+                    <h6 className="text-xs font-medium text-muted-foreground mb-2">Translation Result</h6>
+                    <div className="text-xs text-foreground whitespace-pre-wrap max-h-64 overflow-y-auto bg-muted/50 rounded-md p-3 border border-border">
                       {translatedText}
                     </div>
                   </div>
@@ -910,14 +915,14 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
             </div>
 
             {/* Processing Stats */}
-            <div className="mt-4 bg-gray-700/50 rounded-lg p-4 flex-shrink-0">
-              <h5 className="text-sm font-medium text-white mb-2">Processing Information</h5>
+            <div className="mt-4 bg-muted/50 rounded-lg p-4 flex-shrink-0">
+              <h5 className="text-sm font-medium text-foreground mb-2">Processing Information</h5>
 
               {/* Invoice ID Display */}
-              <div className="mb-3 pb-3 border-b border-gray-600">
-                <div className="text-xs text-gray-400 mb-1">Invoice ID</div>
+              <div className="mb-3 pb-3 border-b border-border">
+                <div className="text-xs text-muted-foreground mb-1">Invoice ID</div>
                 <div className="flex items-center gap-2">
-                  <code className="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded font-mono flex-1 min-w-0">
+                  <code className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded font-mono flex-1 min-w-0">
                     {document.id}
                   </code>
                   <button
@@ -927,7 +932,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       // Could add toast notification here
                       // Invoice ID copied to clipboard
                     }}
-                    className="flex-shrink-0 p-1.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded transition-colors"
+                    className="flex-shrink-0 p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
                     title="Copy Invoice ID"
                   >
                     <Copy className="w-3 h-3" />
@@ -937,12 +942,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
 
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className="text-gray-400">Status:</span>
-                  <span className="ml-2 text-green-400 capitalize">{document.processing_status}</span>
+                  <span className="text-muted-foreground">Status:</span>
+                  <span className="ml-2 text-success capitalize">{document.processing_status}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400">AI Confidence:</span>
-                  <span className="ml-2 text-white">
+                  <span className="text-muted-foreground">AI Confidence:</span>
+                  <span className="ml-2 text-foreground">
                     {(() => {
                       // Try multiple possible confidence score locations for robust access
                       const aiConfidence = document.extracted_data?.ai_confidence ||
@@ -977,11 +982,11 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Document Summary - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       Document Summary
                       {highlightedBox && (
-                        <span className="ml-2 px-2 py-1 bg-blue-600 text-xs rounded">
+                        <span className="ml-2 px-2 py-1 bg-primary text-primary-foreground text-xs rounded">
                           Hovering: {highlightedBox.category}
                         </span>
                       )}
@@ -990,12 +995,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {getFieldValue('document_type') && (
                         <div
-                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                           onMouseEnter={() => setHoveredEntity('document_type')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
-                          <div className="text-xs text-gray-400 mb-1">Document Type</div>
-                          <div className="text-sm text-white font-medium">
+                          <div className="text-xs text-muted-foreground mb-1">Document Type</div>
+                          <div className="text-sm text-foreground font-medium">
                             {getFieldValue('document_type')}
                           </div>
                         </div>
@@ -1003,12 +1008,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
 
                       {getFieldValue('vendor_name') && (
                         <div
-                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                           onMouseEnter={() => setHoveredEntity('vendor_name')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
-                          <div className="text-xs text-gray-400 mb-1">Vendor</div>
-                          <div className="text-sm text-white font-medium">
+                          <div className="text-xs text-muted-foreground mb-1">Vendor</div>
+                          <div className="text-sm text-foreground font-medium">
                             {getFieldValue('vendor_name')}
                           </div>
                         </div>
@@ -1016,12 +1021,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
 
                       {getFieldValue('total_amount') && (
                         <div
-                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                           onMouseEnter={() => setHoveredEntity('total_amount')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
-                          <div className="text-xs text-gray-400 mb-1">Amount</div>
-                          <div className="text-sm text-green-400 font-medium">
+                          <div className="text-xs text-muted-foreground mb-1">Amount</div>
+                          <div className="text-sm text-success font-medium">
                             {getFieldValue('currency') || 'SGD'} {getFieldValue('total_amount')}
                           </div>
                         </div>
@@ -1029,12 +1034,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
 
                       {getFieldValue('document_date', 'transaction_date') && (
                         <div
-                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                           onMouseEnter={() => setHoveredEntity('transaction_date')}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
-                          <div className="text-xs text-gray-400 mb-1">Date</div>
-                          <div className="text-sm text-white font-medium">
+                          <div className="text-xs text-muted-foreground mb-1">Date</div>
+                          <div className="text-sm text-foreground font-medium">
                             {getFieldValue('document_date', 'transaction_date')}
                           </div>
                         </div>
@@ -1046,47 +1051,47 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Vendor Information - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       Vendor Information
                     </h4>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('vendor_address')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Address</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Address</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('vendor_address') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
 
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('vendor_contact')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Contact</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Contact</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('vendor_contact') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
 
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('vendor_tax_id')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Tax ID / Registration</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Tax ID / Registration</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('vendor_tax_id') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
@@ -1097,47 +1102,47 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Customer Information - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       Customer Information
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('customer_name')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Customer Name</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Customer Name</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('customer_name') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
 
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('customer_address')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Customer Address</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Customer Address</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('customer_address') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
 
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('customer_contact')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Customer Contact</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Customer Contact</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('customer_contact') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
@@ -1148,34 +1153,34 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Document Identifiers - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       Document Information
                     </h4>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('document_number')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Document Number</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Document Number</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('document_number') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
 
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('due_date')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Due Date</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Due Date</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('due_date') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
@@ -1186,47 +1191,47 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Payment Information - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <DollarSign className="w-4 h-4 mr-2" />
                       Payment Information
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('payment_terms')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Payment Terms</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Payment Terms</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('payment_terms') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
 
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('payment_method')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Payment Method</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Payment Method</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('payment_method') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
 
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500 md:col-span-2"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary md:col-span-2"
                         onMouseEnter={() => setHoveredEntity('bank_details')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Bank Details</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Bank Details</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('bank_details') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
@@ -1237,47 +1242,47 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Tax Information - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <DollarSign className="w-4 h-4 mr-2" />
                       Tax & Financial Breakdown
                     </h4>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('subtotal_amount')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Subtotal</div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Subtotal</div>
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('subtotal_amount') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
 
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('tax_amount')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Tax Amount</div>
-                        <div className="text-sm text-orange-400 font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Tax Amount</div>
+                        <div className="text-sm text-warning font-medium">
                           {getFieldValue('tax_amount') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
 
                       <div
-                        className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                        className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                         onMouseEnter={() => setHoveredEntity('discount_amount')}
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
-                        <div className="text-xs text-gray-400 mb-1">Discount</div>
-                        <div className="text-sm text-blue-400 font-medium">
+                        <div className="text-xs text-muted-foreground mb-1">Discount</div>
+                        <div className="text-sm text-info font-medium">
                           {getFieldValue('discount_amount') || (
-                            <span className="text-gray-500 italic">Not extracted</span>
+                            <span className="text-muted-foreground italic">Not extracted</span>
                           )}
                         </div>
                       </div>
@@ -1288,7 +1293,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Document-Specific Information */}
                 {document.extracted_data?.document_specific_data && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       Document-Specific Information
                     </h4>
@@ -1296,37 +1301,37 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     <div className="space-y-4">
                       {/* Invoice Data */}
                       {document.extracted_data.document_specific_data.invoice_data && (
-                        <div className="bg-gray-900 rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-blue-400 mb-2">Invoice Details</h5>
+                        <div className="bg-card rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-info mb-2">Invoice Details</h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             {document.extracted_data.document_specific_data.invoice_data.invoice_number && (
                               <div>
-                                <span className="text-gray-400">Invoice Number:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Invoice Number:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.invoice_data.invoice_number}
                                 </span>
                               </div>
                             )}
                             {document.extracted_data.document_specific_data.invoice_data.customer_info?.name && (
                               <div>
-                                <span className="text-gray-400">Customer:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Customer:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.invoice_data.customer_info.name}
                                 </span>
                               </div>
                             )}
                             {document.extracted_data.document_specific_data.invoice_data.payment_terms && (
                               <div>
-                                <span className="text-gray-400">Payment Terms:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Payment Terms:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.invoice_data.payment_terms}
                                 </span>
                               </div>
                             )}
                             {document.extracted_data.document_specific_data.invoice_data.due_date && (
                               <div>
-                                <span className="text-gray-400">Due Date:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Due Date:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.invoice_data.due_date}
                                 </span>
                               </div>
@@ -1337,29 +1342,29 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       
                       {/* Receipt Data */}
                       {document.extracted_data.document_specific_data.receipt_data && (
-                        <div className="bg-gray-900 rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-green-400 mb-2">Receipt Details</h5>
+                        <div className="bg-card rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-success mb-2">Receipt Details</h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             {document.extracted_data.document_specific_data.receipt_data.receipt_number && (
                               <div>
-                                <span className="text-gray-400">Receipt Number:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Receipt Number:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.receipt_data.receipt_number}
                                 </span>
                               </div>
                             )}
                             {document.extracted_data.document_specific_data.receipt_data.payment_method && (
                               <div>
-                                <span className="text-gray-400">Payment Method:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Payment Method:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.receipt_data.payment_method}
                                 </span>
                               </div>
                             )}
                             {document.extracted_data.document_specific_data.receipt_data.cashier_id && (
                               <div>
-                                <span className="text-gray-400">Cashier ID:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Cashier ID:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.receipt_data.cashier_id}
                                 </span>
                               </div>
@@ -1370,29 +1375,29 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       
                       {/* Transport Data */}
                       {document.extracted_data.document_specific_data.transport_data && (
-                        <div className="bg-gray-900 rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-yellow-400 mb-2">Transport Details</h5>
+                        <div className="bg-card rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-warning mb-2">Transport Details</h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             {document.extracted_data.document_specific_data.transport_data.trip_id && (
                               <div>
-                                <span className="text-gray-400">Trip ID:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Trip ID:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.transport_data.trip_id}
                                 </span>
                               </div>
                             )}
                             {document.extracted_data.document_specific_data.transport_data.pickup_location && (
                               <div>
-                                <span className="text-gray-400">Pickup:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Pickup:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.transport_data.pickup_location}
                                 </span>
                               </div>
                             )}
                             {document.extracted_data.document_specific_data.transport_data.dropoff_location && (
                               <div>
-                                <span className="text-gray-400">Dropoff:</span>
-                                <span className="ml-2 text-white font-medium">
+                                <span className="text-muted-foreground">Dropoff:</span>
+                                <span className="ml-2 text-foreground font-medium">
                                   {document.extracted_data.document_specific_data.transport_data.dropoff_location}
                                 </span>
                               </div>
@@ -1407,7 +1412,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Financial Entities */}
                 {document.extracted_data?.financial_entities && document.extracted_data.financial_entities.length > 0 && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <DollarSign className="w-4 h-4 mr-2" />
                       Financial Entities ({document.extracted_data.financial_entities.length})
                     </h4>
@@ -1416,13 +1421,13 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       {document.extracted_data.financial_entities.map((entity, index) => (
                         <div 
                           key={index} 
-                          className="bg-gray-900 rounded-lg p-3 cursor-pointer hover:bg-gray-800 transition-colors border border-transparent hover:border-blue-500"
+                          className="bg-card rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors border border-transparent hover:border-primary"
                           onMouseEnter={() => setHoveredEntity(`financial_entity_${index}`)}
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
-                          <div className="text-xs text-gray-400 mb-1">{entity.label}</div>
-                          <div className="text-sm text-white font-medium">{entity.value}</div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-muted-foreground mb-1">{entity.label}</div>
+                          <div className="text-sm text-foreground font-medium">{entity.value}</div>
+                          <div className="text-xs text-muted-foreground">
                             {entity.category}
                           </div>
                         </div>
@@ -1434,31 +1439,31 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Line Items Table */}
                 {document.extracted_data?.line_items && document.extracted_data.line_items.length > 0 && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <List className="w-4 h-4 mr-2" />
                       Line Items ({document.extracted_data.line_items.length})
                     </h4>
                     
-                    <div className="bg-gray-900 rounded-lg overflow-hidden">
+                    <div className="bg-card rounded-lg overflow-hidden">
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
-                          <thead className="bg-gray-800">
+                          <thead className="bg-muted">
                             <tr>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">#</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">Description</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">Item Code</th>
+                              <th className="px-3 py-2 text-right text-muted-foreground font-medium">Qty</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">Unit</th>
+                              <th className="px-3 py-2 text-right text-muted-foreground font-medium">Unit Price</th>
+                              <th className="px-3 py-2 text-right text-muted-foreground font-medium">Total</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-700">
+                          <tbody className="divide-y divide-border">
                             {document.extracted_data.line_items.map((item, index) => (
-                              <tr key={index} className="hover:bg-gray-800">
-                                <td className="px-3 py-2 text-gray-400">{index + 1}</td>
+                              <tr key={index} className="hover:bg-muted/80">
+                                <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
                                 <td
-                                  className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  className="px-3 py-2 text-foreground cursor-pointer hover:bg-primary/20 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_description`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
@@ -1471,7 +1476,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   })()}
                                 </td>
                                 <td
-                                  className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  className="px-3 py-2 text-foreground cursor-pointer hover:bg-primary/20 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_item_code`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
@@ -1484,7 +1489,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   })()}
                                 </td>
                                 <td
-                                  className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  className="px-3 py-2 text-right text-foreground cursor-pointer hover:bg-primary/20 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_quantity`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
@@ -1498,7 +1503,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   })()}
                                 </td>
                                 <td
-                                  className="px-3 py-2 text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  className="px-3 py-2 text-foreground cursor-pointer hover:bg-primary/20 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_unit_measurement`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
@@ -1513,7 +1518,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   })()}
                                 </td>
                                 <td
-                                  className="px-3 py-2 text-right text-white cursor-pointer hover:bg-blue-900/30 rounded"
+                                  className="px-3 py-2 text-right text-foreground cursor-pointer hover:bg-primary/20 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_unit_price`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
@@ -1527,7 +1532,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   })()}
                                 </td>
                                 <td
-                                  className="px-3 py-2 text-right text-green-400 font-medium cursor-pointer hover:bg-blue-900/30 rounded"
+                                  className="px-3 py-2 text-right text-success font-medium cursor-pointer hover:bg-primary/20 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_line_total`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >
@@ -1557,14 +1562,14 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 {/* Full Extracted Text */}
                 {document.extracted_data?.text && !(document.extracted_data.text.includes('error') || document.extracted_data.text.includes('failed')) && (
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium text-white mb-4 flex items-center">
+                    <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       Complete Extracted Text
                     </h4>
                     
-                    <div className="bg-gray-900 rounded-lg p-4">
-                      <div className="text-xs text-gray-400 mb-2">Clean OCR Output</div>
-                      <div className="text-xs text-gray-300 whitespace-pre-wrap overflow-auto max-h-64 leading-relaxed">
+                    <div className="bg-card rounded-lg p-4">
+                      <div className="text-xs text-muted-foreground mb-2">Clean OCR Output</div>
+                      <div className="text-xs text-muted-foreground whitespace-pre-wrap overflow-auto max-h-64 leading-relaxed">
                         {(() => {
                           // Filter out AI reasoning patterns from the displayed text
                           let cleanText = document.extracted_data.text;
@@ -1651,14 +1656,14 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                     <div className="mt-4">
                       <button
                         onClick={() => setShowRawJson(!showRawJson)}
-                        className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                        className="text-sm text-primary hover:text-primary/80 transition-colors"
                       >
                         {showRawJson ? 'Hide' : 'Show'} Raw JSON Data
                       </button>
                       
                       {showRawJson && (
-                        <div className="mt-3 bg-gray-800 rounded-lg p-4">
-                          <pre className="text-xs text-gray-300 whitespace-pre-wrap overflow-auto max-h-64">
+                        <div className="mt-3 bg-muted rounded-lg p-4">
+                          <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-auto max-h-64">
                             {JSON.stringify(document.extracted_data, null, 2)}
                           </pre>
                         </div>

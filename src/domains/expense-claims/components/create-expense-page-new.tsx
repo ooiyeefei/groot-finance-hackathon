@@ -223,11 +223,11 @@ export default function CreateExpensePageNew({
     return (
       <div className="container mx-auto p-6">
         <div className="text-center py-12">
-          <Loader2 className="w-12 h-12 mx-auto text-blue-500 mb-4 animate-spin" />
-          <h3 className="text-lg font-semibold text-white mb-2">
+          <Loader2 className="w-12 h-12 mx-auto text-primary mb-4 animate-spin" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">
             Loading Expense Form
           </h3>
-          <p className="text-gray-400">
+          <p className="text-muted-foreground">
             Please wait while we prepare the form...
           </p>
         </div>
@@ -239,11 +239,11 @@ export default function CreateExpensePageNew({
     return (
       <div className="container mx-auto p-6">
         <div className="text-center py-12">
-          <AlertCircle className="w-12 h-12 mx-auto text-red-500 mb-4" />
-          <h3 className="text-lg font-semibold text-white mb-2">
+          <AlertCircle className="w-12 h-12 mx-auto text-destructive mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">
             Cannot Load Expense Form
           </h3>
-          <p className="text-gray-400 mb-6">
+          <p className="text-muted-foreground mb-6">
             {loadError}
           </p>
           {onBack && (
@@ -264,14 +264,14 @@ export default function CreateExpensePageNew({
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-white">{pageTitle}</h1>
-              <p className="text-gray-400">{pageDescription}</p>
+              <h1 className="text-2xl font-bold text-foreground">{pageTitle}</h1>
+              <p className="text-muted-foreground">{pageDescription}</p>
             </div>
             {showBackButton && onBack && (
               <Button
                 onClick={onBack}
                 variant="outline"
-                className="border-gray-600 text-gray-300 hover:border-gray-500"
+                className="border-border text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back
@@ -280,23 +280,23 @@ export default function CreateExpensePageNew({
           </div>
 
           {/* Processing Method Indicator */}
-          <Card className="bg-gray-800 border-gray-600">
+          <Card className="bg-card border-border">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 {isManualEntry ? (
                   <>
-                    <FileText className="w-5 h-5 text-blue-400" />
+                    <FileText className="w-5 h-5 text-primary" />
                     <div>
-                      <p className="text-white font-medium">Manual Entry</p>
-                      <p className="text-gray-400 text-sm">Creating expense claim with manual data entry</p>
+                      <p className="text-foreground font-medium">Manual Entry</p>
+                      <p className="text-muted-foreground text-sm">Creating expense claim with manual data entry</p>
                     </div>
                   </>
                 ) : (
                   <>
-                    <Upload className="w-5 h-5 text-green-400" />
+                    <Upload className="w-5 h-5 text-green-600 dark:text-green-400" />
                     <div>
-                      <p className="text-white font-medium">AI Extracted</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-foreground font-medium">AI Extracted</p>
+                      <p className="text-muted-foreground text-sm">
                         Data extracted from receipt using AI • {extractionResult.extractedData.processingMethod}
                       </p>
                     </div>
@@ -471,12 +471,12 @@ export default function CreateExpensePageNew({
       </div>
 
       {/* Action Buttons */}
-      <div className="bg-gray-800 border-t border-gray-700 p-6">
+      <div className="bg-card border-t border-border p-6">
         <div className="flex items-center justify-center space-x-4">
           <Button
             onClick={() => handleFormSubmit('draft')}
             disabled={saving || submitting}
-            className="bg-gray-600 hover:bg-gray-700 text-white"
+            variant="secondary"
           >
             {saving ? (
               <>
@@ -494,7 +494,7 @@ export default function CreateExpensePageNew({
           <Button
             onClick={() => handleFormSubmit('submit')}
             disabled={saving || submitting}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             {submitting ? (
               <>

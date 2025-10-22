@@ -58,7 +58,7 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
 
   return (
     <ClientProviders>
-      <div className="flex h-screen bg-gray-900">
+      <div className="flex h-screen bg-background">
         {/* Sidebar */}
         <Sidebar />
 
@@ -79,7 +79,7 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
           </main>
 
           {/* Footer Disclaimer */}
-          <footer className="border-t border-gray-700 p-4">
+          <footer className="border-t border-border p-4">
             <div className="max-w-7xl mx-auto">
               <GeneralDisclaimer />
             </div>

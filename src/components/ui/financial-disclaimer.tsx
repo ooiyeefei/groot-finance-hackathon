@@ -48,22 +48,22 @@ const getDisclaimerContent = (type: DisclaimerType, t: any) => {
 
 const colorClasses = {
   blue: {
-    banner: 'bg-blue-50 border-blue-200 text-blue-800',
-    card: 'bg-blue-900/10 border-blue-700',
-    icon: 'text-blue-600',
-    button: 'text-blue-700 hover:text-blue-900'
+    banner: 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300',
+    card: 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-700',
+    icon: 'text-blue-600 dark:text-blue-400',
+    button: 'text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100'
   },
   amber: {
-    banner: 'bg-amber-50 border-amber-200 text-amber-800',
-    card: 'bg-amber-900/10 border-amber-700',
-    icon: 'text-amber-600',
-    button: 'text-amber-700 hover:text-amber-900'
+    banner: 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-300',
+    card: 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-700',
+    icon: 'text-amber-600 dark:text-amber-400',
+    button: 'text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100'
   },
   gray: {
-    banner: 'bg-gray-800/30 border-gray-700/50 text-gray-400',
-    card: 'bg-gray-800 border-gray-700',
-    icon: 'text-gray-400',
-    button: 'text-gray-400 hover:text-gray-300'
+    banner: 'bg-muted/50 border-border text-muted-foreground',
+    card: 'bg-card border-border',
+    icon: 'text-muted-foreground',
+    button: 'text-muted-foreground hover:text-foreground'
   }
 }
 
@@ -130,7 +130,7 @@ export function FinancialDisclaimer({
           <div className="flex items-start gap-3">
             <IconComponent className={`w-5 h-5 flex-shrink-0 mt-0.5 ${colors.icon}`} />
             <div className="flex-1">
-              <p className="text-sm text-white">{content.text}</p>
+              <p className="text-sm text-foreground">{content.text}</p>
             </div>
             {isDismissible && (
               <Button
@@ -163,7 +163,7 @@ export function FinancialDisclaimer({
     return (
       <Alert className={`${colors.card} ${className}`}>
         <IconComponent className={`h-4 w-4 ${colors.icon}`} />
-        <AlertDescription className="text-white">
+        <AlertDescription className="text-foreground">
           {content.text}
         </AlertDescription>
       </Alert>

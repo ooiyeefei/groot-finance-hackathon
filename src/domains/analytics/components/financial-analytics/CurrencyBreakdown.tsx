@@ -41,18 +41,18 @@ export default function CurrencyBreakdown({
 
   if (loading) {
     return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <div className="h-6 bg-gray-700 rounded w-40 mb-6 animate-pulse"></div>
-        <div className="h-64 bg-gray-700 rounded animate-pulse"></div>
+      <div className="bg-card border border-border rounded-lg p-card-padding">
+        <div className="h-6 bg-record-layer-2 rounded w-40 mb-6 animate-pulse"></div>
+        <div className="h-64 bg-record-layer-2 rounded animate-pulse"></div>
       </div>
     );
   }
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-6">Currency Breakdown</h3>
-        <div className="flex items-center justify-center h-64 text-gray-400">
+      <div className="bg-card border border-border rounded-lg p-card-padding">
+        <h3 className="text-lg font-semibold text-foreground mb-6">Currency Breakdown</h3>
+        <div className="flex items-center justify-center h-64 text-muted-foreground">
           <div className="text-center">
             <p className="text-sm">No currency data available</p>
             <p className="text-xs mt-1">Complete some transactions to see breakdown</p>
@@ -67,22 +67,22 @@ export default function CurrencyBreakdown({
 
     const data = payload[0].payload;
     const symbol = CURRENCY_SYMBOLS[data.currency as SupportedCurrency] || data.currency;
-    
+
     return (
-      <div className="bg-gray-900 border border-gray-600 rounded-lg p-3 shadow-lg">
-        <p className="text-white font-medium">{data.currency}</p>
-        <p className="text-gray-300 text-sm">
+      <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
+        <p className="text-popover-foreground font-medium">{data.currency}</p>
+        <p className="text-popover-foreground text-sm">
           Amount: {symbol}{Math.abs(data.displayValue).toLocaleString()}
         </p>
-        <p className="text-gray-300 text-sm">
+        <p className="text-popover-foreground text-sm">
           Share: {data.percentage.toFixed(1)}%
         </p>
         <div className="flex items-center mt-2">
-          <div 
-            className="w-3 h-3 rounded mr-2" 
+          <div
+            className="w-3 h-3 rounded mr-2"
             style={{ backgroundColor: data.color }}
           />
-          <span className={`text-xs ${data.displayValue >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <span className={`text-xs ${data.displayValue >= 0 ? 'text-success-foreground' : 'text-danger-foreground'}`}>
             {data.displayValue >= 0 ? 'Net Positive' : 'Net Negative'}
           </span>
         </div>
@@ -97,11 +97,11 @@ export default function CurrencyBreakdown({
           const symbol = CURRENCY_SYMBOLS[entry.currency] || entry.currency;
           return (
             <div key={entry.name} className="flex items-center">
-              <div 
-                className="w-3 h-3 rounded mr-2" 
+              <div
+                className="w-3 h-3 rounded mr-2"
                 style={{ backgroundColor: entry.color }}
               />
-              <span className="text-gray-300 text-xs">
+              <span className="text-muted-foreground text-xs">
                 {entry.currency} ({entry.percentage.toFixed(1)}%)
               </span>
             </div>
@@ -112,10 +112,10 @@ export default function CurrencyBreakdown({
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+    <div className="bg-card border border-border rounded-lg p-card-padding">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white">Currency Breakdown</h3>
-        <span className="text-xs text-gray-400">
+        <h3 className="text-lg font-semibold text-foreground">Currency Breakdown</h3>
+        <span className="text-xs text-muted-foreground">
           {chartData.length} {chartData.length === 1 ? 'currency' : 'currencies'}
         </span>
       </div>
@@ -133,11 +133,12 @@ export default function CurrencyBreakdown({
               dataKey="value"
             >
               {chartData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
+                <Cell
+                  key={`cell-${index}`}
                   fill={entry.color}
-                  stroke="#374151"
+                  stroke="currentColor"
                   strokeWidth={1}
+                  className="text-border"
                 />
               ))}
             </Pie>
@@ -149,17 +150,17 @@ export default function CurrencyBreakdown({
       <CustomLegend />
 
       {/* Summary Stats */}
-      <div className="mt-6 pt-4 border-t border-gray-700">
+      <div className="mt-6 pt-4 border-t border-border">
         <div className="grid grid-cols-2 gap-4 text-center">
           <div>
-            <p className="text-xs text-gray-400 mb-1">Home Currency</p>
-            <p className="text-sm font-medium text-white">
+            <p className="text-xs text-muted-foreground mb-1">Home Currency</p>
+            <p className="text-sm font-medium text-foreground">
               {CURRENCY_SYMBOLS[homeCurrency]} {homeCurrency}
             </p>
           </div>
           <div>
-            <p className="text-xs text-gray-400 mb-1">Total Volume</p>
-            <p className="text-sm font-medium text-white">
+            <p className="text-xs text-muted-foreground mb-1">Total Volume</p>
+            <p className="text-sm font-medium text-foreground">
               {chartData.reduce((sum, entry) => sum + entry.value, 0).toLocaleString()}
             </p>
           </div>

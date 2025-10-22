@@ -327,8 +327,8 @@ export default function FileUploadZone({
           relative border-2 border-dashed rounded-lg p-12 text-center cursor-pointer
           transition-all duration-200
           ${dragActive
-            ? 'border-blue-400 bg-blue-400/10'
-            : 'border-gray-600 hover:border-gray-500 hover:bg-gray-700/50'
+            ? 'border-primary bg-primary/10'
+            : 'border-border hover:border-muted-foreground hover:bg-muted/50'
           }
           ${uploadState.uploading ? 'pointer-events-none opacity-50' : ''}
         `}
@@ -351,21 +351,21 @@ export default function FileUploadZone({
         <div className="space-y-4">
           {uploadState.uploading ? (
             <>
-              <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto" />
+              <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto" />
               <div>
-                <p className="text-white font-medium">
+                <p className="text-foreground font-medium">
                   {uploadState.totalFiles > 1 ? 'Uploading files...' : 'Uploading file...'}
                 </p>
-                <p className="text-gray-400 text-sm">
+                <p className="text-muted-foreground text-sm">
                   {uploadState.totalFiles > 1
                     ? `Processing ${uploadState.uploadedFiles} of ${uploadState.totalFiles} files`
                     : 'Please wait while we process your document'
                   }
                 </p>
                 {uploadState.totalFiles > 1 && (
-                  <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
+                  <div className="w-full bg-muted rounded-full h-2 mt-2">
                     <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-primary h-2 rounded-full transition-all duration-300"
                       style={{ width: `${uploadState.progress}%` }}
                     />
                   </div>
@@ -374,15 +374,15 @@ export default function FileUploadZone({
             </>
           ) : (
             <>
-              <Upload className="w-12 h-12 text-gray-400 mx-auto" />
+              <Upload className="w-12 h-12 text-muted-foreground mx-auto" />
               <div>
-                <p className="text-white font-medium">
+                <p className="text-foreground font-medium">
                   {dragActive
                     ? `Drop your ${allowMultiple ? 'files' : 'file'} here`
                     : `Click to upload or drag and drop`
                   }
                 </p>
-                <p className="text-gray-400 text-sm mt-1">
+                <p className="text-muted-foreground text-sm mt-1">
                   JPG, PNG, or PDF files up to 10MB
                   {allowMultiple && ' (multiple files supported)'}
                 </p>
@@ -394,36 +394,36 @@ export default function FileUploadZone({
 
       {/* Status Messages */}
       {uploadState.error && (
-        <div className="flex items-center space-x-2 p-4 bg-red-900/20 border border-red-700 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-400" />
-          <p className="text-red-300">{uploadState.error}</p>
+        <div className="flex items-center space-x-2 p-4 bg-danger/10 border border-danger rounded-lg">
+          <AlertCircle className="w-5 h-5 text-danger-foreground" />
+          <p className="text-danger-foreground">{uploadState.error}</p>
         </div>
       )}
 
       {uploadState.success && (
-        <div className="flex items-center space-x-2 p-4 bg-green-900/20 border border-green-700 rounded-lg">
-          <CheckCircle className="w-5 h-5 text-green-400" />
-          <p className="text-green-300">{uploadState.success}</p>
+        <div className="flex items-center space-x-2 p-4 bg-success/10 border border-success rounded-lg">
+          <CheckCircle className="w-5 h-5 text-success-foreground" />
+          <p className="text-success-foreground">{uploadState.success}</p>
         </div>
       )}
 
       {/* File Format Info */}
-      <div className="bg-gray-700/50 rounded-lg p-4">
-        <h3 className="text-white font-medium mb-2 flex items-center">
+      <div className="bg-muted/50 rounded-lg p-4">
+        <h3 className="text-foreground font-medium mb-2 flex items-center">
           <FileText className="w-4 h-4 mr-2" />
           Supported File Types
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-300">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground">
           <div>
-            <strong className="text-white">Images:</strong>
+            <strong className="text-foreground">Images:</strong>
             <br />JPG, JPEG, PNG
           </div>
           <div>
-            <strong className="text-white">Documents:</strong>
+            <strong className="text-foreground">Documents:</strong>
             <br />PDF (converted to image for OCR)
           </div>
           <div>
-            <strong className="text-white">Size Limit:</strong>
+            <strong className="text-foreground">Size Limit:</strong>
             <br />Maximum 10MB
           </div>
         </div>

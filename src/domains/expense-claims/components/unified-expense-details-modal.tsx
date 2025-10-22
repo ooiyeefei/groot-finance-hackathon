@@ -308,20 +308,20 @@ export default function UnifiedExpenseDetailsModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="bg-gray-800 border-gray-700 w-full max-w-7xl max-h-[95vh] overflow-hidden relative">
+      <Card className="bg-record-layer-1 border-record-border w-full max-w-7xl max-h-[95vh] overflow-hidden relative">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 px-6 py-4">
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-foreground flex items-center gap-2">
             <Receipt className="w-5 h-5" />
             Expense Claim Details
             {viewMode === 'manager' && (
-              <Badge variant="outline" className="bg-green-600 text-white border-green-400 ml-2">
+              <Badge variant="success" className="ml-2">
                 Manager View
               </Badge>
             )}
           </CardTitle>
           <button
             onClick={onClose}
-            className="inline-flex items-center px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 hover:text-gray-900 text-sm font-medium rounded-md transition-colors"
+            className="inline-flex items-center px-3 py-1.5 bg-secondary hover:bg-secondary-hover text-secondary-foreground text-sm font-medium rounded-md transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -331,17 +331,16 @@ export default function UnifiedExpenseDetailsModal({
           <CardContent className="p-0 h-full">
             {loading ? (
               <div className="text-center py-12">
-                <Loader2 className="w-12 h-12 mx-auto text-blue-500 mb-4 animate-spin" />
-                <p className="text-gray-400">Loading claim details...</p>
+                <Loader2 className="w-12 h-12 mx-auto text-primary mb-4 animate-spin" />
+                <p className="text-muted-foreground">Loading claim details...</p>
               </div>
             ) : error ? (
               <div className="text-center py-12">
-                <AlertCircle className="w-12 h-12 mx-auto text-red-500 mb-4" />
-                <p className="text-red-400 mb-4">{error}</p>
+                <AlertCircle className="w-12 h-12 mx-auto text-danger mb-4" />
+                <p className="text-danger mb-4">{error}</p>
                 <Button
                   onClick={fetchClaimDetails}
                   variant="outline"
-                  className="border-gray-600 text-gray-300"
                 >
                   Try Again
                 </Button>
@@ -349,69 +348,69 @@ export default function UnifiedExpenseDetailsModal({
             ) : claimDetails ? (
               <div className="flex flex-col h-full">
                 {/* Top Banner - Summary (compact height) */}
-                <div className="bg-gray-700 p-3 border-b border-gray-600">
+                <div className="bg-record-layer-2 p-3 border-b border-record-border">
                   <div className="flex items-center justify-between mb-3">
                     {/* Left side - Status and key info */}
                     <div className="flex items-center gap-4">
                       <Badge
-                        className={`text-sm px-3 py-1 ${
-                          claimDetails.status_display?.color === 'green' ? 'bg-green-600 text-white' :
-                          claimDetails.status_display?.color === 'blue' ? 'bg-blue-600 text-white' :
-                          claimDetails.status_display?.color === 'yellow' ? 'bg-yellow-600 text-white' :
-                          claimDetails.status_display?.color === 'red' ? 'bg-red-600 text-white' :
-                          claimDetails.status_display?.color === 'purple' ? 'bg-purple-600 text-white' :
-                          'bg-gray-600 text-white'
-                        }`}
+                        variant={
+                          claimDetails.status_display?.color === 'green' ? 'success' :
+                          claimDetails.status_display?.color === 'blue' ? 'primary' :
+                          claimDetails.status_display?.color === 'yellow' ? 'warning' :
+                          claimDetails.status_display?.color === 'red' ? 'error' :
+                          'default'
+                        }
+                        className="text-sm px-3 py-1"
                       >
                         {claimDetails.status_display?.label || claimDetails.status?.toWellFormed() || 'UNKNOWN'} {/* ✅ Unified status field */}
                       </Badge>
 
                       {/* Key expense summary info - Enhanced prominence */}
-                      <div className="flex items-center gap-8 text-white">
+                      <div className="flex items-center gap-8 text-foreground">
                         <div className="flex items-center gap-3">
-                          <DollarSign className="w-5 h-5 text-green-400" />
-                          <span className="font-semibold text-lg text-green-400">
+                          <DollarSign className="w-5 h-5 text-success" />
+                          <span className="font-semibold text-lg text-success">
                             {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Building className="w-5 h-5 text-blue-400" />
+                          <Building className="w-5 h-5 text-primary" />
                           <span className="font-semibold text-lg">{claimDetails.vendor_name || claimDetails.transaction?.vendor_name || 'N/A'}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Calendar className="w-5 h-5 text-white" />
+                          <Calendar className="w-5 h-5 text-foreground" />
                           <span className="font-semibold text-lg">{new Date(claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '').toLocaleDateString()}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Right side - Receipt status and Progress bar */}
-                    <div className="text-right text-gray-400 flex items-center gap-6">
+                    <div className="text-right text-muted-foreground flex items-center gap-6">
                       {/* Receipt Status for Manager View */}
                       {viewMode === 'manager' && (
                         <div className="flex items-center gap-2">
                           {claimDetails.has_receipt || signedImageUrl ? (
                             <>
-                              <Receipt className="w-4 h-4 text-green-400" />
-                              <CheckCircle className="w-4 h-4 text-green-400" />
-                              <span className="text-green-400 text-sm font-medium">Attached</span>
+                              <Receipt className="w-4 h-4 text-success" />
+                              <CheckCircle className="w-4 h-4 text-success" />
+                              <span className="text-success text-sm font-medium">Attached</span>
                             </>
                           ) : (
                             <>
-                              <Receipt className="w-4 h-4 text-gray-500" />
-                              <XCircle className="w-4 h-4 text-gray-500" />
-                              <span className="text-gray-500 text-sm">No receipt</span>
+                              <Receipt className="w-4 h-4 text-muted-foreground" />
+                              <XCircle className="w-4 h-4 text-muted-foreground" />
+                              <span className="text-muted-foreground text-sm">No receipt</span>
                             </>
                           )}
                         </div>
                       )}
 
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-lg">{claimDetails.workflow_progress || 0}%</span>
-                        <div className="w-16 bg-gray-600 rounded-full h-2">
+                        <span className="font-semibold text-lg text-foreground">{claimDetails.workflow_progress || 0}%</span>
+                        <div className="w-16 bg-muted rounded-full h-2">
                           <div
                             className={`h-2 rounded-full transition-all duration-300 ${
-                              claimDetails.status === 'rejected' ? 'bg-red-500' : 'bg-blue-500' // ✅ Unified status field
+                              claimDetails.status === 'rejected' ? 'bg-danger' : 'bg-primary' // ✅ Unified status field
                             }`}
                             style={{ width: `${claimDetails.workflow_progress || 0}%` }}
                           />
@@ -422,8 +421,8 @@ export default function UnifiedExpenseDetailsModal({
 
                   {/* Current approver info only */}
                   {claimDetails.current_approver_name && ['submitted'].includes(claimDetails.status) && ( /* ✅ Simplified: only 'submitted' shows approver */
-                    <div className="text-sm text-gray-400">
-                      Currently with: <span className="text-white">{claimDetails.current_approver_name}</span>
+                    <div className="text-sm text-muted-foreground">
+                      Currently with: <span className="text-foreground">{claimDetails.current_approver_name}</span>
                     </div>
                   )}
                 </div>
@@ -431,11 +430,11 @@ export default function UnifiedExpenseDetailsModal({
                 {/* Bottom Section - 40/60 Split */}
                 <div className="flex flex-1 overflow-hidden">
                   {/* Left Panel - Receipt Preview (40%) */}
-                  <div className="w-2/5 border-r border-gray-700 flex flex-col">
-                    <div className="flex-1 bg-gray-900 overflow-hidden">
+                  <div className="w-2/5 border-r border-record-border flex flex-col">
+                    <div className="flex-1 bg-record-layer-1 overflow-hidden">
                       {imageLoading ? (
                         <div className="flex items-center justify-center h-full">
-                          <div className="text-center text-gray-400">
+                          <div className="text-center text-muted-foreground">
                             <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin" />
                             <p className="text-xs">Loading preview...</p>
                           </div>
@@ -451,15 +450,15 @@ export default function UnifiedExpenseDetailsModal({
                         />
                       ) : claimDetails.storage_path ? (
                         <div className="flex items-center justify-center h-full">
-                          <div className="text-center text-gray-400">
+                          <div className="text-center text-muted-foreground">
                             <Receipt className="w-12 h-12 mx-auto mb-2" />
                             <p className="text-xs">Failed to generate secure URL</p>
-                            <p className="text-xs text-gray-500">Please contact support if this persists</p>
+                            <p className="text-xs text-muted-foreground">Please contact support if this persists</p>
                           </div>
                         </div>
                       ) : (
                         <div className="flex items-center justify-center h-full">
-                          <div className="text-center text-gray-400">
+                          <div className="text-center text-muted-foreground">
                             <Receipt className="w-12 h-12 mx-auto mb-2" />
                             <p className="text-xs">No receipt attached</p>
                           </div>
@@ -473,25 +472,25 @@ export default function UnifiedExpenseDetailsModal({
                     <div className="p-6 space-y-6">
                       {/* Manager Approval Section - Show for manager mode and move to top */}
                       {viewMode === 'manager' && (
-                        <Card className="bg-gray-700 border-gray-600">
+                        <Card className="bg-record-layer-2 border-record-border">
                           <CardHeader className="pb-3">
-                            <CardTitle className="text-gray-300 text-sm flex items-center gap-2">
-                              <CheckCircle className="w-4 h-4 text-gray-400" />
+                            <CardTitle className="text-foreground text-sm flex items-center gap-2">
+                              <CheckCircle className="w-4 h-4 text-muted-foreground" />
                               Manager Actions
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-4">
                             {/* Employee Info for Manager */}
                             {claimDetails.employee_name && (
-                              <div className="flex justify-between items-center py-2 border-b border-gray-600">
-                                <span className="text-gray-400">Employee</span>
-                                <span className="text-white font-medium">{claimDetails.employee_name}</span>
+                              <div className="flex justify-between items-center py-2 border-b border-record-border">
+                                <span className="text-muted-foreground">Employee</span>
+                                <span className="text-foreground font-medium">{claimDetails.employee_name}</span>
                               </div>
                             )}
 
                             {/* Approval Notes */}
                             <div className="space-y-2">
-                              <Label htmlFor="approval_notes" className="text-white">
+                              <Label htmlFor="approval_notes" className="text-foreground">
                                 Approval Notes (Optional)
                               </Label>
                               <Textarea
@@ -499,17 +498,18 @@ export default function UnifiedExpenseDetailsModal({
                                 value={approvalNotes}
                                 onChange={(e) => setApprovalNotes(e.target.value)}
                                 placeholder="Add notes about this approval decision..."
-                                className="bg-gray-600 border-gray-500 text-white"
+                                className="bg-input border-input text-foreground"
                                 rows={2}
                               />
                             </div>
 
                             {/* Approval Actions */}
-                            <div className="flex gap-3 pt-4 border-t border-gray-600">
+                            <div className="flex gap-3 pt-4 border-t border-record-border">
                               <Button
                                 onClick={() => handleApproval('reject')}
                                 disabled={processing}
-                                className="bg-red-600 hover:bg-red-700 text-white flex-1"
+                                variant="destructive"
+                                className="flex-1"
                               >
                                 <XCircle className="w-4 h-4 mr-2" />
                                 Reject
@@ -518,7 +518,8 @@ export default function UnifiedExpenseDetailsModal({
                               <Button
                                 onClick={() => handleApproval('approve')}
                                 disabled={processing}
-                                className="bg-green-600 hover:bg-green-700 flex-1"
+                                variant="success"
+                                className="flex-1"
                               >
                                 {processing ? (
                                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -533,29 +534,29 @@ export default function UnifiedExpenseDetailsModal({
                       )}
 
                       {/* Basic Information */}
-                      <Card className="bg-gray-800 border-gray-600">
+                      <Card className="bg-record-layer-1 border-record-border">
                         <CardHeader className="pb-3">
-                          <CardTitle className="text-gray-300 text-sm flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-gray-400" />
+                          <CardTitle className="text-foreground text-sm flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-muted-foreground" />
                             Basic Information
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                              <label className="text-gray-400 flex items-center gap-2 text-sm">
+                              <label className="text-muted-foreground flex items-center gap-2 text-sm">
                                 <Tag className="w-4 h-4" />
                                 Category
                               </label>
-                              <div className="bg-gray-700 border-gray-600 text-gray-300 p-2 rounded text-sm">
+                              <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded text-sm">
                                 {categories.find(c => c.business_category_code === (claimDetails.expense_category || claimDetails.transaction?.expense_category))?.business_category_name ||
                                  claimDetails.expense_category || claimDetails.transaction?.expense_category || 'N/A'}
                               </div>
                             </div>
                             {(claimDetails.reference_number || claimDetails.transaction?.reference_number) && (
                               <div className="space-y-2">
-                                <label className="text-gray-400 text-sm">Reference Number</label>
-                                <div className="bg-gray-700 border-gray-600 text-gray-300 p-2 rounded text-sm">
+                                <label className="text-muted-foreground text-sm">Reference Number</label>
+                                <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded text-sm">
                                   {claimDetails.reference_number || claimDetails.transaction?.reference_number}
                                 </div>
                               </div>
@@ -563,23 +564,23 @@ export default function UnifiedExpenseDetailsModal({
                           </div>
 
                           <div className="space-y-2">
-                            <label className="text-gray-400 text-sm">Description</label>
-                            <div className="bg-gray-700 border-gray-600 text-gray-300 p-2 rounded text-sm">
+                            <label className="text-muted-foreground text-sm">Description</label>
+                            <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded text-sm">
                               {claimDetails.transaction?.description || 'N/A'}
                             </div>
                           </div>
 
                           <div className="space-y-2">
-                            <label className="text-gray-400 text-sm">Business Purpose</label>
-                            <div className="bg-gray-700 border-gray-600 text-gray-300 p-2 rounded min-h-[60px] text-sm">
+                            <label className="text-muted-foreground text-sm">Business Purpose</label>
+                            <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded min-h-[60px] text-sm">
                               {claimDetails.business_purpose || claimDetails.transaction?.business_purpose || 'N/A'}
                             </div>
                           </div>
 
                           {claimDetails.transaction?.notes && (
                             <div className="space-y-2">
-                              <label className="text-gray-400 text-sm">Additional Notes</label>
-                              <div className="bg-gray-700 border-gray-600 text-gray-300 p-2 rounded text-sm">
+                              <label className="text-muted-foreground text-sm">Additional Notes</label>
+                              <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded text-sm">
                                 {claimDetails.transaction.notes}
                               </div>
                             </div>
@@ -588,10 +589,10 @@ export default function UnifiedExpenseDetailsModal({
                       </Card>
 
                       {/* Line Items Display */}
-                      <Card className="bg-gray-800 border-gray-600">
+                      <Card className="bg-record-layer-1 border-record-border">
                         <CardHeader>
-                          <CardTitle className="text-gray-300 text-sm flex items-center gap-2">
-                            <DollarSign className="w-4 h-4 text-gray-400" />
+                          <CardTitle className="text-foreground text-sm flex items-center gap-2">
+                            <DollarSign className="w-4 h-4 text-muted-foreground" />
                             Line Items {claimDetails.transaction?.line_items && claimDetails.transaction.line_items.length > 0 ? `(${claimDetails.transaction.line_items.length})` : '(0)'}
                           </CardTitle>
                         </CardHeader>
@@ -599,7 +600,7 @@ export default function UnifiedExpenseDetailsModal({
                           {claimDetails.transaction?.line_items && claimDetails.transaction.line_items.length > 0 ? (
                             <div className="space-y-3">
                               {/* Line Items Table Header */}
-                              <div className="grid grid-cols-4 gap-2 text-xs font-medium text-gray-400 uppercase tracking-wide border-b border-gray-600 pb-2">
+                              <div className="grid grid-cols-4 gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide border-b border-record-border pb-2">
                                 <span>Description</span>
                                 <span className="text-center">Qty</span>
                                 <span className="text-right">Unit Price</span>
@@ -608,35 +609,35 @@ export default function UnifiedExpenseDetailsModal({
 
                               {/* Line Items Rows */}
                               {claimDetails.transaction.line_items.map((item, index) => (
-                                <div key={item.id || index} className="grid grid-cols-4 gap-2 items-center bg-gray-600/50 p-3 rounded-lg border border-gray-600">
-                                  <span className="text-white font-medium truncate" title={item.item_description}>
+                                <div key={item.id || index} className="grid grid-cols-4 gap-2 items-center bg-record-layer-2 p-3 rounded-lg border border-record-border">
+                                  <span className="text-foreground font-medium truncate" title={item.item_description}>
                                     {item.item_description || 'Item'}
                                   </span>
-                                  <span className="text-gray-300 text-center">
+                                  <span className="text-foreground text-center">
                                     {item.quantity || 1}
                                   </span>
-                                  <span className="text-gray-300 text-right">
+                                  <span className="text-foreground text-right">
                                     {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.unit_price || '0').toFixed(2)}
                                   </span>
-                                  <span className="text-white font-medium text-right">
+                                  <span className="text-foreground font-medium text-right">
                                     {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.total_amount || '0').toFixed(2)}
                                   </span>
                                 </div>
                               ))}
 
                               {/* Total Summary */}
-                              <div className="grid grid-cols-4 gap-2 items-center bg-blue-900/20 p-3 rounded-lg border border-blue-700 mt-4">
-                                <span className="text-blue-300 font-medium col-span-3">Total Amount</span>
-                                <span className="text-blue-300 font-bold text-right text-lg">
+                              <div className="grid grid-cols-4 gap-2 items-center bg-blue-50 dark:bg-gray-800 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-200 dark:border-blue-700/50 mt-4">
+                                <span className="text-blue-900 dark:text-white font-medium col-span-3">Total Amount</span>
+                                <span className="text-blue-900 dark:text-white font-bold text-right text-lg">
                                   {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
                                 </span>
                               </div>
                             </div>
                           ) : (
                             <div className="text-center py-8">
-                              <DollarSign className="w-12 h-12 mx-auto text-gray-500 mb-4" />
-                              <p className="text-gray-400">No itemized breakdown available</p>
-                              <p className="text-gray-500 text-sm">This expense was entered as a single amount</p>
+                              <DollarSign className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                              <p className="text-muted-foreground">No itemized breakdown available</p>
+                              <p className="text-muted-foreground text-sm">This expense was entered as a single amount</p>
                             </div>
                           )}
                         </CardContent>
@@ -645,9 +646,9 @@ export default function UnifiedExpenseDetailsModal({
 
                       {/* Document Processing Status */}
                       {claimDetails.document && (
-                        <Card className="bg-gray-700 border-gray-600">
+                        <Card className="bg-record-layer-2 border-record-border">
                           <CardHeader>
-                            <CardTitle className="text-white flex items-center gap-2">
+                            <CardTitle className="text-foreground flex items-center gap-2">
                               <ImageIcon className="w-5 h-5" />
                               Document Processing Status
                             </CardTitle>
@@ -655,8 +656,8 @@ export default function UnifiedExpenseDetailsModal({
                           <CardContent className="space-y-4">
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="text-white font-medium">{claimDetails.document.original_filename}</p>
-                                <p className="text-gray-400 text-sm">{claimDetails.document.file_type.toUpperCase()} • {claimDetails.document.ocr_processing_status.replace('_', ' ').toUpperCase()}</p>
+                                <p className="text-foreground font-medium">{claimDetails.document.original_filename}</p>
+                                <p className="text-muted-foreground text-sm">{claimDetails.document.file_type.toUpperCase()} • {claimDetails.document.ocr_processing_status.replace('_', ' ').toUpperCase()}</p>
                               </div>
                               <div className="flex items-center gap-2">
                                 {getProcessingStatusIcon(claimDetails.document.ocr_processing_status)}
@@ -665,7 +666,6 @@ export default function UnifiedExpenseDetailsModal({
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setShowDocument(true)}
-                                    className="border-gray-600 text-gray-300"
                                   >
                                     <Eye className="w-4 h-4 mr-1" />
                                     View
@@ -677,12 +677,12 @@ export default function UnifiedExpenseDetailsModal({
                             {claimDetails.document.processing_progress !== undefined && (
                               <div className="space-y-2">
                                 <div className="flex justify-between text-sm">
-                                  <span className="text-gray-300">Processing Progress</span>
-                                  <span className="text-gray-400">{claimDetails.document.processing_progress}%</span>
+                                  <span className="text-foreground">Processing Progress</span>
+                                  <span className="text-muted-foreground">{claimDetails.document.processing_progress}%</span>
                                 </div>
-                                <div className="w-full bg-gray-600 rounded-full h-2">
+                                <div className="w-full bg-muted rounded-full h-2">
                                   <div
-                                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                    className="bg-primary h-2 rounded-full transition-all duration-300"
                                     style={{ width: `${claimDetails.document.processing_progress}%` }}
                                   />
                                 </div>
@@ -693,12 +693,12 @@ export default function UnifiedExpenseDetailsModal({
                       )}
 
                       {/* Expense ID at bottom of content */}
-                      <div className="flex justify-end mt-6 pt-4 border-t border-gray-600">
-                        <div className="flex items-center gap-2 bg-gray-700/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
-                          <span className="text-gray-300 text-xs font-mono">Expense ID: {claimId}</span>
+                      <div className="flex justify-end mt-6 pt-4 border-t border-record-border">
+                        <div className="flex items-center gap-2 bg-record-layer-2 backdrop-blur-sm px-3 py-1.5 rounded-md border border-record-border">
+                          <span className="text-foreground text-xs font-mono">Expense ID: {claimId}</span>
                           <button
                             onClick={() => navigator.clipboard.writeText(claimId)}
-                            className="text-gray-400 hover:text-gray-200 transition-colors"
+                            className="text-muted-foreground hover:text-foreground transition-colors"
                             title="Copy Receipt ID"
                           >
                             <Copy className="w-3 h-3" />
@@ -711,8 +711,8 @@ export default function UnifiedExpenseDetailsModal({
               </div>
             ) : (
               <div className="text-center py-12">
-                <AlertCircle className="w-12 h-12 mx-auto text-gray-500 mb-4" />
-                <p className="text-gray-400">No claim details available</p>
+                <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No claim details available</p>
               </div>
             )}
           </CardContent>
@@ -722,14 +722,14 @@ export default function UnifiedExpenseDetailsModal({
       {/* Document Viewer Modal - Full Screen */}
       {showDocument && claimDetails?.document?.annotated_image_url && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-60 flex items-center justify-center p-4">
-          <div className="bg-gray-900 rounded-lg w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-gray-700">
-              <h3 className="text-white font-medium">Receipt Preview</h3>
+          <div className="bg-record-layer-1 rounded-lg w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-record-border">
+              <h3 className="text-foreground font-medium">Receipt Preview</h3>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowDocument(false)}
-                className="text-gray-400 hover:text-white"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <X className="w-4 h-4" />
               </Button>

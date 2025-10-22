@@ -84,16 +84,16 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="animate-pulse bg-gray-700 h-32 rounded"></div>
-        <div className="animate-pulse bg-gray-700 h-48 rounded"></div>
+        <div className="animate-pulse bg-record-layer-2 h-32 rounded"></div>
+        <div className="animate-pulse bg-record-layer-2 h-48 rounded"></div>
       </div>
     )
   }
 
   if (!data) {
     return (
-      <Card className="bg-gray-800 border-gray-700">
-        <CardContent className="p-6 text-center text-gray-400">
+      <Card className="bg-record-layer-1 border-record-border">
+        <CardContent className="p-6 text-center text-muted-foreground">
           <PieChart className="w-12 h-12 mx-auto mb-4" />
           <p>No analytics data available</p>
         </CardContent>
@@ -132,9 +132,9 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
       </div>
 
       {/* Category Breakdown */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
-          <CardTitle className="text-white">Expense Categories</CardTitle>
+          <CardTitle className="text-foreground">Expense Categories</CardTitle>
           <CardDescription>
             {scope === 'personal' && 'Your expense breakdown by category'}
             {scope === 'department' && 'Department expense breakdown by category'}
@@ -143,7 +143,7 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
         </CardHeader>
         <CardContent>
           {data.category_breakdown.length === 0 ? (
-            <div className="text-center text-gray-400 py-8">
+            <div className="text-center text-muted-foreground py-8">
               <PieChart className="w-12 h-12 mx-auto mb-4" />
               <p>No category data available</p>
               <p className="text-sm">Submit some expense claims to see category breakdown</p>
@@ -157,28 +157,28 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
 
               {/* Legend */}
               <div className="flex-1 space-y-3">
-                <h4 className="text-sm font-medium text-gray-300 mb-3">Category Details</h4>
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Category Details</h4>
                 {data.category_breakdown.map((item, index) => (
-                  <div key={item.category} className="flex items-center justify-between p-2 bg-gray-700/50 rounded-lg">
+                  <div key={item.category} className="flex items-center justify-between p-2 bg-accent/50 rounded-lg">
                     <div className="flex items-center gap-3">
                       <div
                         className="w-4 h-4 rounded-full flex-shrink-0"
                         style={{ backgroundColor: getPieChartColor(index) }}
                       />
                       <div>
-                        <div className="text-white text-sm font-medium">
+                        <div className="text-foreground text-sm font-medium">
                           {item.category_name || item.category}
                         </div>
-                        <div className="text-gray-400 text-xs">
+                        <div className="text-muted-foreground text-xs">
                           {item.claims_count} claims
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-white font-semibold text-sm">
+                      <div className="text-foreground font-semibold text-sm">
                         ${item.total_amount.toFixed(2)}
                       </div>
-                      <div className="text-gray-400 text-xs">
+                      <div className="text-muted-foreground text-xs">
                         {item.percentage.toFixed(1)}%
                       </div>
                     </div>
@@ -191,35 +191,35 @@ export default function ExpenseAnalytics({ scope }: ExpenseAnalyticsProps) {
       </Card>
 
       {/* Monthly Trends */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
-          <CardTitle className="text-white">Monthly Trends</CardTitle>
+          <CardTitle className="text-foreground">Monthly Trends</CardTitle>
           <CardDescription>Expense trends over the last 3 months</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {data.monthly_trends.length === 0 ? (
-              <div className="text-center text-gray-400 py-8">
+              <div className="text-center text-muted-foreground py-8">
                 <TrendingUp className="w-12 h-12 mx-auto mb-4" />
                 <p>No trend data available</p>
                 <p className="text-sm">Submit expense claims over multiple months to see trends</p>
               </div>
             ) : (
               data.monthly_trends.map((month, index) => (
-                <div key={month.month} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                <div key={month.month} className="flex items-center justify-between p-3 bg-accent rounded-lg">
                   <div>
-                    <div className="text-white font-medium">
+                    <div className="text-foreground font-medium">
                       {new Date(month.month + '-01').toLocaleDateString('en-US', { 
                         year: 'numeric', 
                         month: 'long' 
                       })}
                     </div>
-                    <div className="text-gray-400 text-sm">{month.claims_count} claims</div>
+                    <div className="text-muted-foreground text-sm">{month.claims_count} claims</div>
                   </div>
 
                   <div className="text-right">
-                    <div className="text-white font-semibold">${month.total_amount.toFixed(2)}</div>
-                    <div className="text-gray-400 text-sm">
+                    <div className="text-foreground font-semibold">${month.total_amount.toFixed(2)}</div>
+                    <div className="text-muted-foreground text-sm">
                       Approved: ${month.approved_amount.toFixed(2)}
                     </div>
                   </div>
@@ -278,7 +278,7 @@ function ExpensePieChart({ categories, currency }: ExpensePieChartProps) {
           cy={center}
           r={radius}
           fill="transparent"
-          stroke="#374151"
+          stroke="hsl(var(--muted-foreground))"
           strokeWidth={strokeWidth}
         />
 
@@ -310,10 +310,10 @@ function ExpensePieChart({ categories, currency }: ExpensePieChartProps) {
 
       {/* Center text */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="text-white text-lg font-bold">
+        <div className="text-foreground text-lg font-bold">
           {currency === 'SGD' ? 'S$' : '$'}{categories.reduce((sum, cat) => sum + cat.total_amount, 0).toFixed(0)}
         </div>
-        <div className="text-gray-400 text-xs">Total</div>
+        <div className="text-muted-foreground text-xs">Total</div>
       </div>
     </div>
   )
@@ -326,16 +326,71 @@ function SummaryMetric({ title, value, change, icon }: {
   icon: React.ReactNode
 }) {
   const isPositive = change >= 0
-  
+
+  // Determine translucent background based on content type - consistent with layer1-2-3 design
+  const getCardStyle = (title: string) => {
+    switch (title) {
+      case 'Pending Approval':
+        // Yellow translucent for pending/warning states (both light and dark)
+        return 'bg-yellow-50 dark:bg-gray-800 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-700/50'
+      case 'Total Amount':
+      case 'Total Claims':
+      case 'Avg Claim':
+      default:
+        // Blue translucent for neutral info (both light and dark)
+        return 'bg-blue-50 dark:bg-gray-800 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50'
+    }
+  }
+
+  const getTextColor = (title: string) => {
+    switch (title) {
+      case 'Pending Approval':
+        // Light mode: dark text, Dark mode: white text
+        return 'text-yellow-900 dark:text-white'
+      case 'Total Amount':
+      case 'Total Claims':
+      case 'Avg Claim':
+      default:
+        // Light mode: dark text, Dark mode: white text
+        return 'text-blue-900 dark:text-white'
+    }
+  }
+
+  const getLabelColor = (title: string) => {
+    switch (title) {
+      case 'Pending Approval':
+        // Light mode: medium colored text, Dark mode: light gray text
+        return 'text-yellow-700 dark:text-gray-300'
+      case 'Total Amount':
+      case 'Total Claims':
+      case 'Avg Claim':
+      default:
+        // Light mode: medium colored text, Dark mode: light gray text
+        return 'text-blue-700 dark:text-gray-300'
+    }
+  }
+
+  const getIconColor = (title: string) => {
+    switch (title) {
+      case 'Pending Approval':
+        return 'text-yellow-700 dark:text-gray-400'
+      case 'Total Amount':
+      case 'Total Claims':
+      case 'Avg Claim':
+      default:
+        return 'text-blue-700 dark:text-gray-400'
+    }
+  }
+
   return (
-    <Card className="bg-gray-800 border-gray-700">
+    <Card className={getCardStyle(title)}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-gray-400 text-sm font-medium">{title}</p>
-            <p className="text-white text-xl font-bold">{value}</p>
+            <p className={`text-sm font-medium ${getLabelColor(title)}`}>{title}</p>
+            <p className={`text-xl font-bold ${getTextColor(title)}`}>{value}</p>
             <div className={`flex items-center text-xs mt-1 ${
-              isPositive ? 'text-green-400' : 'text-red-400'
+              isPositive ? 'text-success' : 'text-danger'
             }`}>
               {isPositive ? (
                 <TrendingUp className="w-3 h-3 mr-1" />
@@ -345,7 +400,7 @@ function SummaryMetric({ title, value, change, icon }: {
               {isPositive ? '+' : ''}{change.toFixed(1)}%
             </div>
           </div>
-          <div className="text-blue-500">
+          <div className={getIconColor(title)}>
             {icon}
           </div>
         </div>

@@ -501,9 +501,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
   const getRoleColor = (role: UserRole) => {
     switch (role) {
-      case 'admin': return 'bg-purple-100 text-purple-800 border-purple-200'
-      case 'manager': return 'bg-blue-100 text-blue-800 border-blue-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'admin': return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
+      case 'manager': return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+      default: return 'bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30'
     }
   }
 
@@ -517,28 +517,28 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
   const getInvitationStatusColor = (status: string) => {
     switch (status) {
-      case 'accepted': return 'bg-green-100 text-green-800'
-      case 'expired': return 'bg-red-100 text-red-800'
-      default: return 'bg-yellow-100 text-yellow-800'
+      case 'accepted': return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30'
+      case 'expired': return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30'
+      default: return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30'
     }
   }
 
   if (loading) {
     return (
       <div className="text-center py-12">
-        <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-400" />
-        <p className="text-gray-400">Loading teams management...</p>
+        <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-primary" />
+        <p className="text-muted-foreground">Loading teams management...</p>
       </div>
     )
   }
 
   if (!userRole || !userRole.admin) {
     return (
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-card border-border">
         <CardContent className="p-12 text-center">
-          <ShieldAlert className="w-16 h-16 mx-auto mb-4 text-red-400" />
-          <h3 className="text-xl font-semibold text-white mb-2">Access Denied</h3>
-          <p className="text-gray-400">
+          <ShieldAlert className="w-16 h-16 mx-auto mb-4 text-destructive" />
+          <h3 className="text-xl font-semibold text-foreground mb-2">Access Denied</h3>
+          <p className="text-muted-foreground">
             Teams management requires administrator permissions.
           </p>
         </CardContent>
@@ -550,36 +550,36 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     <div className="space-y-6">
       {/* Status Messages */}
       {error && (
-        <Alert className="bg-red-900/20 border-red-700">
-          <AlertCircle className="w-4 h-4" style={{ color: '#f87171' }} />
-          <AlertDescription className="text-red-400">{error}</AlertDescription>
+        <Alert className="bg-destructive/10 border-destructive/30">
+          <AlertCircle className="w-4 h-4 text-destructive" />
+          <AlertDescription className="text-destructive">{error}</AlertDescription>
         </Alert>
       )}
 
       {success && (
-        <Alert className="bg-green-900/20 border-green-700">
-          <CheckCircle className="w-4 h-4" style={{ color: '#4ade80' }} />
-          <AlertDescription className="text-green-400">{success}</AlertDescription>
+        <Alert className="bg-action-view/10 border-action-view/30">
+          <CheckCircle className="w-4 h-4 text-action-view" />
+          <AlertDescription className="text-action-view">{success}</AlertDescription>
         </Alert>
       )}
 
 
       {/* Role Information */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-card border-border">
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
-              <CardTitle className="text-white flex items-center gap-2">
+              <CardTitle className="text-foreground flex items-center gap-2">
                 <Shield className="w-5 h-5" />
                 Role Permissions
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription>
                 Understanding role permissions and capabilities
               </CardDescription>
             </div>
             <Button
               onClick={() => setShowInviteDialog(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               <UserPlus className="w-4 h-4 mr-2" />
               Invite Team Member
@@ -588,24 +588,24 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-gray-700 rounded-lg">
+            <div className="p-4 bg-muted rounded-lg">
               <div className="flex items-center gap-2 mb-2">
-                <UserCheck className="w-4 h-4 text-gray-400" />
-                <h4 className="font-medium text-white">Employee</h4>
+                <UserCheck className="w-4 h-4 text-muted-foreground" />
+                <h4 className="font-medium text-foreground">Employee</h4>
               </div>
-              <ul className="text-sm text-gray-300 space-y-1">
+              <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• Submit expense claims</li>
                 <li>• Upload receipts</li>
                 <li>• View own transactions</li>
               </ul>
             </div>
 
-            <div className="p-4 bg-blue-900/20 rounded-lg">
+            <div className="p-4 bg-primary/10 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
-                <Shield className="w-4 h-4 text-blue-400" />
-                <h4 className="font-medium text-white">Manager</h4>
+                <Shield className="w-4 h-4 text-primary" />
+                <h4 className="font-medium text-foreground">Manager</h4>
               </div>
-              <ul className="text-sm text-gray-300 space-y-1">
+              <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• All employee permissions</li>
                 <li>• Approve/reject expenses</li>
                 <li>• Manage categories</li>
@@ -613,12 +613,12 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
               </ul>
             </div>
 
-            <div className="p-4 bg-purple-900/20 rounded-lg">
+            <div className="p-4 bg-primary/10 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
-                <Crown className="w-4 h-4 text-purple-400" />
-                <h4 className="font-medium text-white">Admin</h4>
+                <Crown className="w-4 h-4 text-primary" />
+                <h4 className="font-medium text-foreground">Admin</h4>
               </div>
-              <ul className="text-sm text-gray-300 space-y-1">
+              <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• All manager permissions</li>
                 <li>• Manage user roles</li>
                 <li>• Send invitations</li>
@@ -639,31 +639,31 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
       {/* Teams and Invitations Tabs */}
       <Tabs defaultValue="members" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 bg-gray-800 border border-gray-700">
-          <TabsTrigger value="members" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+        <TabsList className="grid w-full grid-cols-2 bg-muted border border-border">
+          <TabsTrigger value="members" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Team Members ({teamMembers.length})
           </TabsTrigger>
-          <TabsTrigger value="invitations" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
+          <TabsTrigger value="invitations" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Pending Invitations ({pendingInvitations.length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="members" className="space-y-4">
-          <Card className="bg-gray-800 border-gray-700">
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
+              <CardTitle className="text-foreground flex items-center gap-2">
                 <Users className="w-5 h-5" />
                 Active Team Members
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription>
                 Manage role assignments for current team members
               </CardDescription>
             </CardHeader>
             <CardContent>
               {teamMembers.length === 0 ? (
                 <div className="text-center py-8">
-                  <Users className="w-12 h-12 mx-auto mb-4 text-gray-500" />
-                  <p className="text-gray-400">No team members found</p>
+                  <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground">No team members found</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -673,7 +673,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                     const isUpdating = updating.has(member.id)
 
                     return (
-                      <Card key={member.id} className="bg-gray-700 border-gray-600">
+                      <Card key={member.id} className="bg-muted border-border">
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
@@ -684,7 +684,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                       <Input
                                         value={editingNameValue}
                                         onChange={(e) => setEditingNameValue(e.target.value)}
-                                        className="bg-gray-600 border-gray-500 text-white h-8 w-48"
+                                        className="bg-input border-input text-foreground h-8 w-48"
                                         placeholder="Enter full name"
                                         autoFocus
                                       />
@@ -692,7 +692,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                         size="sm"
                                         onClick={() => updateUserName(member.user_id, member.clerk_user?.id === userId)}
                                         disabled={updating.has(member.id)}
-                                        className="h-8 px-2 bg-green-600 hover:bg-green-700"
+                                        className="h-8 px-2 bg-action-view hover:bg-action-view/90 text-action-view-foreground"
                                       >
                                         <Save className="w-3 h-3" />
                                       </Button>
@@ -700,14 +700,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                         size="sm"
                                         variant="outline"
                                         onClick={() => cancelEditingName(member.id)}
-                                        className="h-8 px-2 border-gray-600"
+                                        className="h-8 px-2"
                                       >
                                         <X className="w-3 h-3" />
                                       </Button>
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-2">
-                                      <h4 className="text-white font-medium">
+                                      <h4 className="text-foreground font-medium">
                                         {member.clerk_user?.firstName && member.clerk_user?.lastName
                                           ? `${member.clerk_user.firstName} ${member.clerk_user.lastName}`
                                           : member.clerk_user?.firstName || member.full_name
@@ -715,12 +715,11 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                           || 'User'
                                         }
                                         {member.clerk_user?.id === userId && (
-                                          <span className="text-gray-400 font-normal ml-1">(You)</span>
+                                          <span className="text-muted-foreground font-normal ml-1">(You)</span>
                                         )}
                                       </h4>
                                       <Button
                                         size="sm"
-                                        variant="outline"
                                         onClick={() => startEditingName(
                                           member.id,
                                           member.clerk_user?.firstName && member.clerk_user?.lastName
@@ -728,7 +727,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                             : member.clerk_user?.firstName || member.full_name
                                             || member.email?.split('@')[0] || ''
                                         )}
-                                        className="h-6 px-1 border-gray-600 hover:bg-gray-700"
+                                        className="h-6 px-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                                       >
                                         <Edit3 className="w-3 h-3" />
                                       </Button>
@@ -743,7 +742,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                     </Badge>
                                     {/* Show Owner badge for the current logged-in user (temporary) */}
                                     {member.clerk_user?.id === userId && (
-                                      <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                                      <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30">
                                         <Crown className="w-3 h-3 mr-1" />
                                         Owner
                                       </Badge>
@@ -751,7 +750,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
+                                <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                                   <div className="flex items-center gap-1">
                                     <Mail className="w-3 h-3" />
                                     <span>{member.clerk_user?.emailAddresses?.[0]?.emailAddress || member.email || 'No email'}</span>
@@ -775,26 +774,26 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                             </div>
 
                             {/* Controls Section - Clean layout without column headers */}
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-end gap-4">
                               {/* Role Selection */}
                               <div className="flex flex-col">
-                                <span className="text-xs text-gray-500 mb-1">Role</span>
+                                <span className="text-xs text-muted-foreground mb-1.5">Role</span>
                                 <Select
                                   value={currentRole}
                                   onValueChange={(newRole: UserRole) => updateUserRole(member.id, newRole)}
                                   disabled={isUpdating}
                                 >
-                                  <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8 min-w-[110px]">
+                                  <SelectTrigger className="bg-input border border-border text-foreground h-9 min-w-[110px]">
                                     <SelectValue />
                                   </SelectTrigger>
-                                  <SelectContent className="bg-gray-800 border-gray-700">
-                                    <SelectItem value="employee" className="text-white hover:bg-gray-700">
+                                  <SelectContent className="bg-popover border-border">
+                                    <SelectItem value="employee">
                                       Employee
                                     </SelectItem>
-                                    <SelectItem value="manager" className="text-white hover:bg-gray-700">
+                                    <SelectItem value="manager">
                                       Manager
                                     </SelectItem>
-                                    <SelectItem value="admin" className="text-white hover:bg-gray-700">
+                                    <SelectItem value="admin">
                                       Admin
                                     </SelectItem>
                                   </SelectContent>
@@ -803,7 +802,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
                               {/* Manager Assignment - All roles can have managers */}
                               <div className="flex flex-col">
-                                <span className="text-xs text-gray-500 mb-1">
+                                <span className="text-xs text-muted-foreground mb-1.5">
                                   {currentRole === 'employee' ? 'Manager' : 'Manager (Optional)'}
                                 </span>
                                 <Select
@@ -811,11 +810,11 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   onValueChange={(managerId) => assignManager(member.user_id, managerId)}
                                   disabled={isUpdating}
                                 >
-                                  <SelectTrigger className="bg-gray-600 border-gray-500 text-white h-8 min-w-[120px]">
+                                  <SelectTrigger className="bg-input border border-border text-foreground h-9 min-w-[160px]">
                                     <SelectValue placeholder={currentRole === 'employee' ? 'Assign manager' : 'Optional manager'} />
                                   </SelectTrigger>
-                                  <SelectContent className="bg-gray-800 border-gray-700">
-                                    <SelectItem value="none" className="text-white hover:bg-gray-700">
+                                  <SelectContent className="bg-popover border-border">
+                                    <SelectItem value="none">
                                       {currentRole === 'employee' ? 'No Manager' : 'No Assignment'}
                                     </SelectItem>
                                     {getAvailableManagers()
@@ -824,7 +823,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                         <SelectItem
                                           key={manager.user_id}
                                           value={manager.user_id}
-                                          className="text-white hover:bg-gray-700"
                                         >
                                           {manager.clerk_user?.firstName && manager.clerk_user?.lastName
                                             ? `${manager.clerk_user.firstName} ${manager.clerk_user.lastName}`
@@ -842,9 +840,10 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                               {/* Remove User Button */}
                               <Button
                                 size="sm"
+                                variant="destructive"
                                 onClick={() => removeUserFromBusiness(member.user_id)}
                                 disabled={isUpdating}
-                                className="bg-red-600 hover:bg-red-700 text-white h-8 px-3"
+                                className="h-9 px-3"
                               >
                                 {isUpdating ? (
                                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -865,33 +864,33 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         </TabsContent>
 
         <TabsContent value="invitations" className="space-y-4">
-          <Card className="bg-gray-800 border-gray-700">
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
+              <CardTitle className="text-foreground flex items-center gap-2">
                 <Mail className="w-5 h-5" />
                 Pending Invitations
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription>
                 Manage outstanding invitations to your business
               </CardDescription>
             </CardHeader>
             <CardContent>
               {pendingInvitations.length === 0 ? (
                 <div className="text-center py-8">
-                  <Mail className="w-12 h-12 mx-auto mb-4 text-gray-500" />
-                  <p className="text-gray-400">No pending invitations</p>
+                  <Mail className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground">No pending invitations</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {pendingInvitations.map((invitation) => (
-                    <Card key={invitation.id} className="bg-gray-700 border-gray-600">
+                    <Card key={invitation.id} className="bg-muted border-border">
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <Mail className="w-4 h-4 text-blue-400" />
+                            <Mail className="w-4 h-4 text-primary" />
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="text-white font-medium">{invitation.email}</span>
+                                <span className="text-foreground font-medium">{invitation.email}</span>
                                 <Badge variant="outline" className={getRoleColor(invitation.role)}>
                                   {invitation.role}
                                 </Badge>
@@ -899,7 +898,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   {invitation.status}
                                 </Badge>
                               </div>
-                              <p className="text-gray-400 text-sm">
+                              <p className="text-muted-foreground text-sm">
                                 Invited {new Date(invitation.invited_at).toLocaleDateString()}
                               </p>
                             </div>
@@ -909,15 +908,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                             <Button
                               size="sm"
                               onClick={() => resendInvitation(invitation.id)}
-                              className="bg-blue-600 hover:bg-blue-700 text-white"
                             >
                               <Send className="w-3 h-3 mr-1" />
                               Resend
                             </Button>
                             <Button
                               size="sm"
+                              variant="destructive"
                               onClick={() => deleteInvitation(invitation.id)}
-                              className="bg-red-600 hover:bg-red-700 text-white"
                             >
                               <Trash2 className="w-3 h-3" />
                             </Button>

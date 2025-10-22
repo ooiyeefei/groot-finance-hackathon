@@ -144,24 +144,24 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
   const hasData = (value: any) => value !== null && value !== undefined && value !== ''
 
   return (
-    <div className="mt-4 p-4 bg-gray-700 rounded-lg">
+    <div className="mt-4 p-4 bg-record-layer-1 rounded-lg">
       {/* Three Independent Sections */}
       <div className="space-y-4">
 
         {/* Section 1: Financing Details */}
-        <div className="bg-gray-800 border border-gray-600 rounded-lg">
+        <div className="bg-record-layer-2 border border-record-border rounded-lg">
           {/* Header with Summary */}
-          <div className="p-4 border-b border-gray-600">
+          <div className="p-4 border-b border-record-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-amber-400" />
-                <h6 className="text-sm font-medium text-white">Financing Details</h6>
+                <h6 className="text-sm font-medium text-record-title">Financing Details</h6>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsFinancingExpanded(!isFinancingExpanded)}
-                className="text-gray-400 hover:text-white hover:bg-gray-700"
+                className="text-muted-foreground hover:text-foreground hover:bg-accent"
               >
                 {isFinancingExpanded ? (
                   <ChevronUp className="w-4 h-4" />
@@ -174,18 +174,18 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
             {/* Summary (Always Visible) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
               <div>
-                <label className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Type of Financing
                 </label>
-                <div className="text-sm text-white">
+                <div className="text-sm text-record-title">
                   {getFinancingValue('type_of_financing') || 'Not provided'}
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Amount Requested
                 </label>
-                <div className="text-sm text-white font-mono">
+                <div className="text-sm text-record-title font-mono">
                   {formatCurrency(getFinancingValue('amount_requested'))}
                 </div>
               </div>
@@ -197,27 +197,27 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
             <div className="p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Application Type
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                     {getFinancingValue('application_type') || 'Not specified'}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Tenure
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                     {formatTenor(getFinancingValue('tenor'))}
                   </div>
                 </div>
                 {getFinancingValue('purpose_of_financing') && (
                   <div className="md:col-span-2">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Purpose of Financing
                     </label>
-                    <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                    <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                       {getFinancingValue('purpose_of_financing')}
                     </div>
                   </div>
@@ -228,19 +228,19 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
         </div>
 
         {/* Section 2: Personal Information */}
-        <div className="bg-gray-800 border border-gray-600 rounded-lg">
+        <div className="bg-record-layer-2 border border-record-border rounded-lg">
           {/* Header with Summary */}
-          <div className="p-4 border-b border-gray-600">
+          <div className="p-4 border-b border-record-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4 text-blue-400" />
-                <h6 className="text-sm font-medium text-white">Personal Information</h6>
+                <h6 className="text-sm font-medium text-record-title">Personal Information</h6>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsPersonalExpanded(!isPersonalExpanded)}
-                className="text-gray-400 hover:text-white hover:bg-gray-700"
+                className="text-muted-foreground hover:text-foreground hover:bg-accent"
               >
                 {isPersonalExpanded ? (
                   <ChevronUp className="w-4 h-4" />
@@ -253,18 +253,18 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
             {/* Summary (Always Visible) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
               <div>
-                <label className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Full Name
                 </label>
-                <div className="text-sm text-white">
+                <div className="text-sm text-record-title">
                   {getPersonalValue('name') || 'Not provided'}
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   MyKad Number
                 </label>
-                <div className="text-sm text-white font-mono">
+                <div className="text-sm text-record-title font-mono">
                   {getPersonalValue('mykad_no') || 'Not provided'}
                 </div>
               </div>
@@ -276,42 +276,42 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
             <div className="p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Date of Birth
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                     {formatDate(getPersonalValue('date_of_birth'))}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Marital Status
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                     {getPersonalValue('marital_status') || 'Not provided'}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Phone Number
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 font-mono">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border font-mono">
                     {getPersonalValue('hp_no') || 'Not provided'}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Email Address
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                     {getPersonalValue('email') || 'Not provided'}
                   </div>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Residential Address
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 min-h-[60px]">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border min-h-[60px]">
                     {getPersonalValue('residential_address') || 'Not provided'}
                   </div>
                 </div>
@@ -321,19 +321,19 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
         </div>
 
         {/* Section 3: Employment Details */}
-        <div className="bg-gray-800 border border-gray-600 rounded-lg">
+        <div className="bg-record-layer-2 border border-record-border rounded-lg">
           {/* Header with Summary */}
-          <div className="p-4 border-b border-gray-600">
+          <div className="p-4 border-b border-record-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-green-400" />
-                <h6 className="text-sm font-medium text-white">Employment Details</h6>
+                <h6 className="text-sm font-medium text-record-title">Employment Details</h6>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsEmploymentExpanded(!isEmploymentExpanded)}
-                className="text-gray-400 hover:text-white hover:bg-gray-700"
+                className="text-muted-foreground hover:text-foreground hover:bg-accent"
               >
                 {isEmploymentExpanded ? (
                   <ChevronUp className="w-4 h-4" />
@@ -346,18 +346,18 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
             {/* Summary (Always Visible) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
               <div>
-                <label className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Employer Name
                 </label>
-                <div className="text-sm text-white">
+                <div className="text-sm text-record-title">
                   {getEmploymentValue('employer_name') || 'Not provided'}
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Monthly Income
                 </label>
-                <div className="text-sm text-white font-mono">
+                <div className="text-sm text-record-title font-mono">
                   {formatCurrency(getEmploymentValue('monthly_income'))}
                 </div>
               </div>
@@ -369,50 +369,50 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
             <div className="p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Job Title
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                     {getEmploymentValue('job_title') || getEmploymentValue('occupation') || 'Not provided'}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Employment Type
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                     {getEmploymentValue('employment_type') || getEmploymentValue('employment_status') || 'Not provided'}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Years of Service
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                     {formatYearsOfService(getEmploymentValue('years_of_service'))}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Department
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border">
                     {getEmploymentValue('department') || getEmploymentValue('employment_sector') || 'Not provided'}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Office Phone
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 font-mono">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border font-mono">
                     {getEmploymentValue('office_phone') || 'Not provided'}
                   </div>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                     Employer Address
                   </label>
-                  <div className="text-sm text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 min-h-[60px]">
+                  <div className="text-sm text-record-title bg-record-layer-1 px-3 py-2 rounded border border-record-border min-h-[60px]">
                     {getEmploymentValue('employer_address') || 'Not provided'}
                   </div>
                 </div>

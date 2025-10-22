@@ -72,7 +72,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             elements.push(
               <button
                 key={`citation-${i}`}
-                className="inline-flex items-center px-1 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer transition-colors"
+                className="inline-flex items-center px-1 py-0.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 cursor-pointer transition-colors"
                 style={{ margin: '0 1px' }}
                 onClick={() => handleCitationClick(citation)}
                 title={`${citation.source_name} (${citation.country})`}
@@ -82,7 +82,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             )
           } else {
             elements.push(
-              <span key={`missing-citation-${i}`} className="inline-flex items-center px-1 py-0.5 text-xs bg-gray-500 text-white rounded" style={{ margin: '0 1px' }}>
+              <span key={`missing-citation-${i}`} className="inline-flex items-center px-1 py-0.5 text-xs bg-muted text-muted-foreground rounded" style={{ margin: '0 1px' }}>
                 [^{citationNum}]
               </span>
             )
@@ -124,8 +124,8 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
           },
           strong: ({ children, ...props }: React.ComponentProps<'strong'>) => <strong {...props} className="font-semibold">{children}</strong>,
           em: ({ children, ...props }: React.ComponentProps<'em'>) => <em {...props} className="italic">{children}</em>,
-          code: ({ children, ...props }: React.ComponentProps<'code'>) => <code {...props} className="bg-gray-800 px-1 py-0.5 rounded text-sm">{children}</code>,
-          pre: ({ children, ...props }: React.ComponentProps<'pre'>) => <pre {...props} className="bg-gray-800 p-2 rounded text-sm overflow-x-auto mb-2">{children}</pre>
+          code: ({ children, ...props }: React.ComponentProps<'code'>) => <code {...props} className="bg-muted px-1 py-0.5 rounded text-sm">{children}</code>,
+          pre: ({ children, ...props }: React.ComponentProps<'pre'>) => <pre {...props} className="bg-muted p-2 rounded text-sm overflow-x-auto mb-2">{children}</pre>
         }}
       >
         {content}
@@ -313,7 +313,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
   }, [openMessageMenuId])
 
   return (
-    <div className="flex flex-col h-full bg-gray-800 rounded-lg border border-gray-700">
+    <div className="flex flex-col h-full bg-record-layer-1 rounded-lg border border-record-border">
       {/* Financial Disclaimer Banner */}
       <div className="px-4 pt-4">
         <ChatDisclaimer />
@@ -323,13 +323,13 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center py-8">
-            <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Bot className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
+              <Bot className="w-8 h-8 text-primary-foreground" />
             </div>
-            <h4 className="text-lg font-medium text-white mb-2">
+            <h4 className="text-lg font-medium text-foreground mb-2">
               {t('welcome')}
             </h4>
-            <p className="text-gray-400 text-sm max-w-md mx-auto">
+            <p className="text-muted-foreground text-sm max-w-md mx-auto">
               {t('welcomeSubtitle')}
             </p>
           </div>
@@ -343,8 +343,8 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             } group relative`}
           >
             {message.role === 'assistant' && (
-              <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
-                <Bot className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
+                <Bot className="w-4 h-4 text-primary-foreground" />
               </div>
             )}
             
@@ -352,8 +352,8 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
               <div
                 className={`max-w-xs lg:max-w-md rounded-lg ${
                   message.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-100'
+                    ? 'bg-action-view text-action-view-foreground'
+                    : 'bg-record-layer-2 text-foreground'
                 }`}
               >
                 <div className="flex items-start justify-between px-4 py-2">
@@ -365,7 +365,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
                       }
                     </div>
                     <p className={`text-xs mt-1 ${
-                      message.role === 'user' ? 'text-blue-200' : 'text-gray-400'
+                      message.role === 'user' ? 'text-action-view-foreground/70' : 'text-muted-foreground'
                     }`}>
                       {formatTime(message.timestamp)}
                     </p>
@@ -377,10 +377,10 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
                       <button
                         onClick={(e) => toggleMessageMenu(message.id, e)}
                         onKeyDown={(e) => handleMenuKeyDown(message.id, e)}
-                        className={`p-1.5 rounded-md transition-all duration-150 ease-in-out group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+                        className={`p-1.5 rounded-md transition-all duration-150 ease-in-out group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring ${
                           message.role === 'user'
-                            ? 'text-blue-200 opacity-70 hover:bg-blue-700 hover:bg-opacity-30 focus:bg-blue-700 focus:bg-opacity-30'
-                            : 'text-gray-300 opacity-70 hover:bg-gray-600 hover:bg-opacity-50 focus:bg-gray-600 focus:bg-opacity-50'
+                            ? 'text-action-view-foreground/70 opacity-70 hover:bg-action-view-foreground/10 focus:bg-action-view-foreground/10'
+                            : 'text-muted-foreground opacity-70 hover:bg-accent focus:bg-accent'
                         }`}
                         aria-label={`Options for message sent at ${formatTime(message.timestamp)}`}
                         tabIndex={0}
@@ -392,11 +392,11 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
                       {openMessageMenuId === message.id && (
                         <div className={`absolute top-8 ${
                           message.role === 'user' ? 'right-0' : 'right-0'
-                        } bg-gray-800 border border-gray-600 rounded-md shadow-lg z-30 min-w-[80px] overflow-hidden`}>
+                        } bg-popover border-border rounded-md shadow-lg z-30 min-w-[80px] overflow-hidden`}>
                           <button
                             onClick={(e) => handleOpenDeleteDialog(message.id, e)}
                             onKeyDown={(e) => handleDeleteKeyDown(message.id, e)}
-                            className="w-full text-left px-2 py-1.5 text-xs text-red-400 hover:bg-red-900 hover:bg-opacity-30 hover:text-red-300 transition-colors flex items-center focus:outline-none focus:bg-red-900 focus:bg-opacity-30 focus:ring-2 focus:ring-red-500 focus:ring-inset"
+                            className="w-full text-left px-2 py-1.5 text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors flex items-center focus:outline-none focus:ring-2 focus:ring-destructive focus:ring-inset"
                             tabIndex={0}
                             aria-label={`Delete message sent at ${formatTime(message.timestamp)}`}
                           >
@@ -412,8 +412,8 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             </div>
 
             {message.role === 'user' && (
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                <User className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
+                <User className="w-4 h-4 text-primary-foreground" />
               </div>
             )}
           </div>
@@ -421,10 +421,10 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
 
         {isLoading && (
           <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <Bot className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
+              <Bot className="w-4 h-4 text-primary-foreground" />
             </div>
-            <div className="bg-gray-700 text-gray-100 px-4 py-2 rounded-lg">
+            <div className="bg-record-layer-2 text-foreground px-4 py-2 rounded-lg">
               <div className="flex items-center space-x-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-sm">{t('thinking')}</span>
@@ -437,7 +437,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-gray-700">
+      <div className="p-4 border-t border-record-border">
         <div className="flex items-center space-x-2">
           <input
             ref={inputRef}
@@ -446,19 +446,19 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
             placeholder={t('inputPlaceholder')}
-            className="flex-1 bg-gray-700 text-white placeholder-gray-400 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600"
+            className="flex-1 bg-input text-foreground placeholder:text-muted-foreground rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring border border-input"
             disabled={isLoading}
           />
           <button
             onClick={sendMessage}
             disabled={!inputValue.trim() || isLoading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
+            className="bg-primary hover:bg-primary/90 disabled:bg-muted disabled:cursor-not-allowed text-primary-foreground p-2 rounded-lg transition-colors"
             aria-label={t('send')}
           >
             <Send className="w-5 h-5" />
           </button>
         </div>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-muted-foreground mt-2">
           {t('inputHelp')}
         </p>
       </div>

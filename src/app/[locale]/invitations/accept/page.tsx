@@ -167,8 +167,8 @@ function AcceptInvitationContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-border">
           <CardContent className="flex flex-col items-center justify-center py-8">
             <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
             <h2 className="text-lg font-semibold text-white mb-2">
@@ -185,8 +185,8 @@ function AcceptInvitationContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-border">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-500" />
@@ -213,8 +213,8 @@ function AcceptInvitationContent() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-border">
           <CardContent className="flex flex-col items-center justify-center py-8">
             <CheckCircle className="w-12 h-12 text-green-500 mb-4" />
             <h2 className="text-xl font-semibold text-white mb-2">
@@ -234,8 +234,8 @@ function AcceptInvitationContent() {
 
   if (showNameForm && isSignedIn) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-border">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <User className="w-5 h-5 text-blue-500" />
@@ -302,8 +302,8 @@ function AcceptInvitationContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-gray-800 border-border">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-blue-500" />
@@ -362,8 +362,8 @@ function AcceptInvitationContent() {
 export default function AcceptInvitationPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-border">
           <CardContent className="flex flex-col items-center justify-center py-8">
             <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
             <h2 className="text-lg font-semibold text-white mb-2">

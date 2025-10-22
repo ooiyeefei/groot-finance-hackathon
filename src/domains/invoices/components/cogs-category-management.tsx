@@ -191,10 +191,10 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
 
   if (!canManage) {
     return (
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-card border-border">
         <CardContent className="p-6 text-center">
-          <Package className="w-12 h-12 mx-auto mb-4 text-gray-500" />
-          <p className="text-gray-400">COGS category management is available for managers and finance users only.</p>
+          <Package className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground">COGS category management is available for managers and finance users only.</p>
         </CardContent>
       </Card>
     )
@@ -203,15 +203,15 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
   return (
     <div className="space-y-6">
       {/* Header and Actions */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-card border-border">
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <CardTitle className="text-white flex items-center gap-2">
+              <CardTitle className="text-foreground flex items-center gap-2">
                 <Package className="w-5 h-5" />
                 Cost of Goods Sold Categories
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription>
                 Manage COGS categories for invoice and supplier transactions
               </CardDescription>
             </div>
@@ -222,7 +222,7 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
                 setError(null)
                 setSuccess(null)
               }}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Category
@@ -233,78 +233,78 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
         <CardContent className="space-y-4">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
               placeholder="Search COGS categories..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-gray-700 border-gray-600 text-white"
+              className="pl-10 bg-input border-input text-foreground"
             />
           </div>
 
           {/* Status Messages */}
           {error && (
-            <Alert className="bg-red-900/20 border-red-700">
-              <AlertCircle className="w-4 h-4" />
-              <AlertDescription className="text-red-400">{error}</AlertDescription>
+            <Alert className="bg-destructive/10 border-destructive/30">
+              <AlertCircle className="w-4 h-4 text-destructive" />
+              <AlertDescription className="text-destructive">{error}</AlertDescription>
             </Alert>
           )}
 
           {success && (
-            <div className="flex items-center gap-3 p-3 bg-green-900/20 border border-green-700/50 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-              <span className="text-green-300 text-sm">{success}</span>
+            <div className="flex items-center gap-3 p-3 bg-action-view/10 border border-action-view/30 rounded-lg">
+              <CheckCircle className="w-5 h-5 text-action-view flex-shrink-0" />
+              <span className="text-action-view text-sm">{success}</span>
             </div>
           )}
 
           {/* Categories List */}
           {loading ? (
             <div className="text-center py-8">
-              <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-400" />
-              <p className="text-gray-400">Loading COGS categories...</p>
+              <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-primary" />
+              <p className="text-muted-foreground">Loading COGS categories...</p>
             </div>
           ) : filteredCategories.length === 0 ? (
             <div className="text-center py-8">
-              <Package className="w-12 h-12 mx-auto mb-4 text-gray-500" />
-              <p className="text-gray-400">
+              <Package className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-muted-foreground">
                 {searchQuery ? 'No COGS categories match your search' : 'No COGS categories found'}
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredCategories.map((category) => (
-                <Card key={category.id} className="bg-gray-700 border-gray-600 flex flex-col">
+                <Card key={category.id} className="bg-muted border-border flex flex-col">
                   <CardContent className="p-4 flex flex-col h-full">
                     <div className="space-y-3 flex-1">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h4 className="text-white font-medium">{category.category_name}</h4>
-                          <p className="text-blue-400 text-sm font-mono">{category.category_code}</p>
+                          <h4 className="text-foreground font-medium">{category.category_name}</h4>
+                          <p className="text-primary text-sm font-mono">{category.category_code}</p>
                           {category.description && (
-                            <p className="text-gray-400 text-sm mt-1">{category.description}</p>
+                            <p className="text-muted-foreground text-sm mt-1">{category.description}</p>
                           )}
                         </div>
                         <div className="flex gap-1">
                           {!category.is_active && (
-                            <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                            <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground border border-border">Inactive</Badge>
                           )}
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <div className={`text-xs ${category.cost_type === 'direct' ? 'text-green-400' : 'text-yellow-400'}`}>
+                        <div className={`text-xs ${category.cost_type === 'direct' ? 'text-action-view' : 'text-action-view'}`}>
                           Cost Type: {category.cost_type.charAt(0).toUpperCase() + category.cost_type.slice(1)}
                         </div>
 
                         {category.ai_keywords.length > 0 && (
-                          <div className="text-xs text-gray-400">
+                          <div className="text-xs text-muted-foreground">
                             Keywords: {category.ai_keywords.slice(0, 3).join(', ')}
                             {category.ai_keywords.length > 3 && '...'}
                           </div>
                         )}
 
                         {category.vendor_patterns.length > 0 && (
-                          <div className="text-xs text-purple-400">
+                          <div className="text-xs text-primary">
                             Vendor Patterns: {category.vendor_patterns.slice(0, 2).join(', ')}
                             {category.vendor_patterns.length > 2 && '...'}
                           </div>
@@ -312,11 +312,11 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
                       </div>
                     </div>
 
-                    <div className="flex gap-2 pt-4 border-t border-gray-600 mt-4">
+                    <div className="flex gap-2 pt-4 border-t border-border mt-4">
                       <Button
                         size="sm"
                         onClick={() => handleEdit(category)}
-                        className="flex-1 bg-blue-600 text-white hover:bg-blue-700 border-0"
+                        className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 border-0"
                       >
                         <Edit className="w-3 h-3 mr-1" />
                         Edit
@@ -324,7 +324,7 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
                       <Button
                         size="sm"
                         onClick={() => handleDelete(category)}
-                        className="bg-red-600 text-white hover:bg-red-700 border-0"
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90 border-0"
                       >
                         <Trash2 className="w-3 h-3" />
                       </Button>

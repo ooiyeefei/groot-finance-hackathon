@@ -83,47 +83,47 @@ const ExtractedInfoTags = ({ extractedData, className = '' }: ExtractedInfoTagsP
     <div className={`flex flex-wrap gap-2 ${className}`}>
       {/* Primary Information - Always show if available */}
       {vendor && (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-blue-600/20 text-blue-300 border border-blue-500/30">
+        <div className="badge-info-metadata inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
           <span className="font-medium">Vendor:</span>
           <span className="ml-1 truncate max-w-32" title={vendor}>{vendor}</span>
-        </span>
+        </div>
       )}
 
       {totalAmount && (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-green-600/20 text-green-300 border border-green-500/30">
+        <div className="badge-info-metadata inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
           <span className="font-medium">Amount:</span>
           <span className="ml-1">{totalAmount} {currency}</span>
-        </span>
+        </div>
       )}
 
       {/* Secondary Information - Show if available */}
       {documentNumber && (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-purple-600/20 text-purple-300 border border-purple-500/30">
+        <div className="badge-info-metadata inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
           <span className="font-medium">Invoice:</span>
           <span className="ml-1 font-mono text-xs" title={documentNumber}>{documentNumber}</span>
-        </span>
+        </div>
       )}
 
       {lineItemsCount > 0 && (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-orange-600/20 text-orange-300 border border-orange-500/30">
+        <div className="badge-info-metadata inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
           <span className="font-medium">Items:</span>
           <span className="ml-1">{lineItemsCount}</span>
-        </span>
+        </div>
       )}
 
       {/* Tertiary Information - Show if available */}
       {paymentTerms && (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-yellow-600/20 text-yellow-300 border border-yellow-500/30">
+        <div className="badge-info-metadata inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
           <span className="font-medium">Terms:</span>
           <span className="ml-1">{paymentTerms}</span>
-        </span>
+        </div>
       )}
 
       {documentDate && (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-600/20 text-gray-300 border border-gray-500/30">
+        <div className="badge-info-metadata inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
           <span className="font-medium">Date:</span>
           <span className="ml-1">{new Date(documentDate).toLocaleDateString()}</span>
-        </span>
+        </div>
       )}
     </div>
   )

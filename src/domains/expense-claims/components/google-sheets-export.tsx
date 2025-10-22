@@ -67,10 +67,10 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
 
   if (!canExport) {
     return (
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardContent className="p-6 text-center">
-          <FileSpreadsheet className="w-12 h-12 mx-auto mb-4 text-gray-500" />
-          <p className="text-gray-400">Export functionality is available for managers and finance users only.</p>
+          <FileSpreadsheet className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground">Export functionality is available for managers and finance users only.</p>
         </CardContent>
       </Card>
     )
@@ -161,32 +161,32 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
 
   return (
     <div className="space-y-6">
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-foreground flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5" />
             Export Expense Report
           </CardTitle>
-          <CardDescription className="text-gray-400">
+          <CardDescription className="text-muted-foreground">
             Generate comprehensive expense reports for {userRole.admin ? 'company-wide' : 'team'} analysis
           </CardDescription>
         </CardHeader>
-        
+
         <CardContent className="space-y-6">
           {/* Export Format Selection */}
           <div className="space-y-3">
-            <Label className="text-white">Export Format</Label>
+            <Label className="text-foreground">Export Format</Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button
                 onClick={() => setExportConfig(prev => ({ ...prev, format: 'csv' }))}
-                className={`justify-start ${exportConfig.format === 'csv' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'border-gray-600 text-gray-300 hover:bg-gray-700'}`}
+                variant={exportConfig.format === 'csv' ? 'primary' : 'outline'}
               >
                 <Download className="w-4 h-4 mr-2" />
                 Download CSV
               </Button>
               <Button
                 onClick={() => setExportConfig(prev => ({ ...prev, format: 'google_sheets' }))}
-                className={`justify-start ${exportConfig.format === 'google_sheets' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'border-gray-600 text-gray-300 hover:bg-gray-700'}`}
+                variant={exportConfig.format === 'google_sheets' ? 'primary' : 'outline'}
               >
                 <FileSpreadsheet className="w-4 h-4 mr-2" />
                 Google Sheets Format
@@ -196,13 +196,13 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
 
           {/* Date Range Selection */}
           <div className="space-y-3">
-            <Label className="text-white flex items-center gap-2">
+            <Label className="text-foreground flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               Date Range
             </Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label className="text-gray-400 text-sm">Start Date</Label>
+                <Label className="text-muted-foreground text-sm">Start Date</Label>
                 <Input
                   type="date"
                   value={exportConfig.date_range.start_date}
@@ -210,11 +210,11 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
                     ...prev,
                     date_range: { ...prev.date_range, start_date: e.target.value }
                   }))}
-                  className="bg-gray-700 border-gray-600 text-white"
+                  className="bg-input border-input text-foreground"
                 />
               </div>
               <div>
-                <Label className="text-gray-400 text-sm">End Date</Label>
+                <Label className="text-muted-foreground text-sm">End Date</Label>
                 <Input
                   type="date"
                   value={exportConfig.date_range.end_date}
@@ -222,7 +222,7 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
                     ...prev,
                     date_range: { ...prev.date_range, end_date: e.target.value }
                   }))}
-                  className="bg-gray-700 border-gray-600 text-white"
+                  className="bg-input border-input text-foreground"
                 />
               </div>
             </div>
@@ -230,7 +230,7 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
 
           {/* Status Filter */}
           <div className="space-y-3">
-            <Label className="text-white flex items-center gap-2">
+            <Label className="text-foreground flex items-center gap-2">
               <Filter className="w-4 h-4" />
               Status Filter
             </Label>
@@ -242,20 +242,20 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
                     checked={exportConfig.status_filter.includes(status)}
                     onCheckedChange={(checked) => handleStatusFilterChange(status, !!checked)}
                   />
-                  <Label htmlFor={`status-${status}`} className="text-gray-300 capitalize">
+                  <Label htmlFor={`status-${status}`} className="text-foreground capitalize">
                     {status}
                   </Label>
                 </div>
               ))}
             </div>
             {exportConfig.status_filter.length === 0 && (
-              <p className="text-gray-500 text-sm">No filter selected - all statuses will be included</p>
+              <p className="text-muted-foreground text-sm">No filter selected - all statuses will be included</p>
             )}
           </div>
 
           {/* Additional Options */}
           <div className="space-y-3">
-            <Label className="text-white">Additional Options</Label>
+            <Label className="text-foreground">Additional Options</Label>
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="include-line-items"
@@ -265,7 +265,7 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
                   include_line_items: !!checked
                 }))}
               />
-              <Label htmlFor="include-line-items" className="text-gray-300">
+              <Label htmlFor="include-line-items" className="text-foreground">
                 Include detailed line items
               </Label>
             </div>
@@ -275,7 +275,8 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
           <Button
             onClick={handleExport}
             disabled={isExporting}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+            variant="primary"
+            className="w-full"
           >
             {isExporting ? (
               <>
@@ -294,30 +295,30 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
 
       {/* Export Results */}
       {exportResult && (
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="bg-record-layer-1 border-record-border">
           <CardContent className="p-6">
             {exportResult.success ? (
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-green-400">
+                <div className="flex items-center gap-2 text-success">
                   <CheckCircle className="w-5 h-5" />
                   <span className="font-medium">Export Generated Successfully</span>
                 </div>
-                
+
                 {exportResult.data && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-white">{exportResult.data.row_count}</div>
-                      <div className="text-gray-400 text-sm">Total Records</div>
+                      <div className="text-2xl font-bold text-foreground">{exportResult.data.row_count}</div>
+                      <div className="text-muted-foreground text-sm">Total Records</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-white">{exportResult.data.export_format.toUpperCase()}</div>
-                      <div className="text-gray-400 text-sm">Format</div>
+                      <div className="text-2xl font-bold text-foreground">{exportResult.data.export_format.toUpperCase()}</div>
+                      <div className="text-muted-foreground text-sm">Format</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-white">
+                      <div className="text-2xl font-bold text-foreground">
                         {new Date(exportResult.data.metadata?.generated_at).toLocaleDateString()}
                       </div>
-                      <div className="text-gray-400 text-sm">Generated</div>
+                      <div className="text-muted-foreground text-sm">Generated</div>
                     </div>
                   </div>
                 )}
@@ -325,14 +326,14 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
                 {previewData && (
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <h4 className="text-white font-medium">Preview Data</h4>
-                      <Button onClick={copyToGoogleSheets} size="sm" className="bg-blue-600 hover:bg-blue-700">
+                      <h4 className="text-foreground font-medium">Preview Data</h4>
+                      <Button onClick={copyToGoogleSheets} size="sm" variant="primary">
                         Copy for Google Sheets
                       </Button>
                     </div>
-                    
-                    <div className="bg-gray-900 p-4 rounded-lg overflow-x-auto">
-                      <div className="text-xs text-gray-300 font-mono">
+
+                    <div className="bg-record-layer-2 p-4 rounded-lg overflow-x-auto">
+                      <div className="text-xs text-foreground font-mono">
                         <div className="grid grid-cols-5 gap-4 mb-2 font-bold">
                           {previewData.headers.slice(0, 5).map((header: string, index: number) => (
                             <div key={index}>{header}</div>
@@ -347,12 +348,12 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
                         ))}
                       </div>
                       {previewData.rows.length > 3 && (
-                        <p className="text-gray-500 text-sm mt-2">
+                        <p className="text-muted-foreground text-sm mt-2">
                           ... and {previewData.rows.length - 3} more rows
                         </p>
                       )}
                     </div>
-                    
+
                     {/* Summary */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <Badge variant="secondary">
@@ -372,8 +373,8 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
                 )}
               </div>
             ) : (
-              <Alert className="bg-red-900/20 border-red-700">
-                <AlertDescription className="text-red-400">
+              <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700">
+                <AlertDescription className="text-red-900 dark:text-red-400">
                   {exportResult.error}
                 </AlertDescription>
               </Alert>

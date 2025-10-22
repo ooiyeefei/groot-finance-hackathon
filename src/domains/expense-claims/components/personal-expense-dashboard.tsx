@@ -357,11 +357,11 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   }
 
   if (!dashboardData) {
-    return <div className="text-center text-gray-400 p-8">Failed to load dashboard data</div>
+    return <div className="text-center text-muted-foreground p-card-padding">Failed to load dashboard data</div>
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-section-gap">
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -400,14 +400,14 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         setShowDetailsModal(false)
         setDetailsClaimId(null)
       }} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 bg-gray-800 border border-gray-700">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+        <TabsList className="grid w-full grid-cols-3 bg-muted border border-border">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Overview
           </TabsTrigger>
-          <TabsTrigger value="history" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
+          <TabsTrigger value="history" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             History
           </TabsTrigger>
-          <TabsTrigger value="reports" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+          <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             My Reports
           </TabsTrigger>
         </TabsList>
@@ -593,11 +593,11 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-4 right-4 z-50 max-w-md">
-          <div className={`${toastType === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-6 py-4 rounded-lg shadow-lg flex items-center justify-between`}>
+          <div className={`${toastType === 'success' ? 'bg-success text-success-foreground' : 'bg-danger text-danger-foreground'} px-6 py-4 rounded-lg shadow-lg flex items-center justify-between`}>
             <span className="text-sm font-medium">{toastMessage}</span>
             <button
               onClick={() => setToastMessage(null)}
-              className={`ml-4 ${toastType === 'success' ? 'text-green-100 hover:text-white' : 'text-red-100 hover:text-white'}`}
+              className={`ml-4 ${toastType === 'success' ? 'text-success-foreground/80 hover:text-success-foreground' : 'text-danger-foreground/80 hover:text-danger-foreground'}`}
             >
               ×
             </button>
@@ -628,15 +628,15 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Quick Actions */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-white">Quick Actions</CardTitle>
+          <CardTitle className="text-foreground">Quick Actions</CardTitle>
           <CardDescription>Submit new expense claims</CardDescription>
         </CardHeader>
         <CardContent>
           {/* File Upload Zone - Above the buttons */}
           <div className="mb-6">
-            <Suspense fallback={<div className="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center"><Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /></div>}>
+            <Suspense fallback={<div className="border-2 border-dashed border-border rounded-lg p-card-padding text-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto" /></div>}>
               <FileUploadZone
                 domain="expense-claims"
                 allowMultiple={true}
@@ -660,14 +660,16 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Button
               onClick={() => onNewClaim('camera')}
-              className="bg-blue-600 hover:bg-blue-700 text-white justify-center"
+              variant="primary"
+              className="justify-center"
             >
               <Camera className="w-4 h-4 mr-2" />
               Capture or Upload
             </Button>
             <Button
               onClick={() => onNewClaim('manual')}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-900 justify-center"
+              variant="secondary"
+              className="justify-center"
             >
               <Plus className="w-4 h-4 mr-2" />
               Manual Entry
@@ -677,9 +679,9 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
       </Card>
 
       {/* Recent Claims Status */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-foreground flex items-center gap-2">
             <FileText className="w-5 h-5" />
             Recent Claims
           </CardTitle>
@@ -687,7 +689,7 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
         </CardHeader>
         <CardContent>
           {data.recent_claims.length === 0 ? (
-            <div className="text-center text-gray-400 py-8">
+            <div className="text-center text-muted-foreground py-8">
               <FileText className="w-12 h-12 mx-auto mb-4" />
               <p>No expense claims yet</p>
               <p className="text-sm">Submit your first expense claim to get started</p>
@@ -714,9 +716,9 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
               ))}
               
               {data.recent_claims.length > 5 && (
-                <Button 
-                  variant="ghost" 
-                  className="w-full text-blue-400 hover:bg-gray-100 hover:text-blue-600"
+                <Button
+                  variant="ghost"
+                  className="w-full"
                   onClick={() => setActiveTab('history')}
                 >
                   <FileText className="w-4 h-4 mr-2" />
@@ -748,26 +750,26 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
   reprocessingClaims: Set<string>
 }) {
   return (
-    <div key={`${context}-${claim.id}-${index}`} className={`p-${context === 'overview' ? '3' : '4'} bg-gray-700 rounded-lg border border-gray-600 ${context === 'history' ? 'hover:border-gray-500 transition-colors' : ''}`}>
+    <div key={`${context}-${claim.id}-${index}`} className={`p-${context === 'overview' ? '3' : '4'} bg-muted/50 rounded-lg border border-border ${context === 'history' ? 'hover:border-muted-foreground transition-colors' : ''}`}>
       {/* Claim Header */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
-          <p className="text-white font-medium text-sm">
+          <p className="text-foreground font-medium text-sm">
             {claim.transaction?.description || claim.description || 'Expense Claim'}
           </p>
-          <p className="text-gray-400 text-xs">
+          <p className="text-muted-foreground text-xs">
             {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} •
             {new Date(claim.transaction?.transaction_date || claim.created_at).toLocaleDateString()}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-white font-semibold text-sm">
+          <p className="text-foreground font-semibold text-sm">
             {claim.display_currency || claim.currency || 'SGD'} {parseFloat(claim.display_amount || claim.total_amount || '0').toFixed(2)}
           </p>
           {claim.home_currency_amount &&
            claim.display_currency !== claim.home_currency &&
            parseFloat(claim.home_currency_amount) !== parseFloat(claim.display_amount || claim.total_amount || '0') && (
-            <p className="text-gray-400 text-xs">
+            <p className="text-muted-foreground text-xs">
               ≈ {claim.home_currency} {parseFloat(claim.home_currency_amount).toFixed(2)}
             </p>
           )}
@@ -780,20 +782,21 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           {/* Primary Status Badge */}
           <div className="flex items-center gap-2">
             <Badge
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                // UPDATED: Custom status-based colors per user request
-                claim.status === 'submitted' ? 'bg-green-900/20 text-green-300 border-green-700/50' :
-                claim.status === 'approved' ? 'bg-green-900/20 text-green-300 border-green-700/50' :
-                claim.status === 'rejected' ? 'bg-red-900/20 text-red-300 border-red-700/50' :
-                // UNIFIED LOGIC: Dark theme pattern matching invoices/applications (fallback)
-                claim.status_display?.color === 'green' ? 'bg-green-900/20 text-green-300 border-green-700/50' :
-                claim.status_display?.color === 'blue' ? 'bg-blue-900/20 text-blue-300 border-blue-700/50' :
-                claim.status_display?.color === 'yellow' ? 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50' :
-                claim.status_display?.color === 'red' ? 'bg-red-900/20 text-red-300 border-red-700/50' :
-                claim.status_display?.color === 'purple' ? 'bg-purple-900/20 text-purple-300 border-purple-700/50' :
-                claim.status === 'draft' ? 'bg-blue-900/20 text-blue-300 border-blue-700/50' :
-                'bg-gray-900/20 text-gray-300 border-gray-700/50'
-              }`}
+              variant={
+                // Use proper CVA variants for semantic design system
+                claim.status === 'submitted' ? 'success' :
+                claim.status === 'approved' ? 'success' :
+                claim.status === 'rejected' ? 'error' :
+                claim.status === 'reimbursed' ? 'success' :
+                // Unified logic with semantic colors based on status_display
+                claim.status_display?.color === 'green' ? 'success' :
+                claim.status_display?.color === 'blue' ? 'primary' :
+                claim.status_display?.color === 'yellow' ? 'warning' :
+                claim.status_display?.color === 'red' ? 'error' :
+                claim.status_display?.color === 'purple' ? 'secondary' :
+                claim.status === 'draft' ? 'primary' :
+                'default'
+              }
             >
               {/* Show appropriate processing icon based on status */}
               {claim.status === 'analyzing' ? (
@@ -812,23 +815,23 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           </div>
 
           {claim.current_approver_name && ['submitted'].includes(claim.status) && (
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-muted-foreground">
               With: {claim.current_approver_name}
             </span>
           )}
         </div>
 
         {/* Workflow Progress Bar */}
-        <div className="w-full bg-gray-600 rounded-full h-2">
+        <div className="w-full bg-muted rounded-full h-2">
           <div
             className={`h-2 rounded-full transition-all duration-300 ${
-              claim.status === 'rejected' ? 'bg-red-500' : 'bg-blue-500'
+              claim.status === 'rejected' ? 'bg-danger' : 'bg-primary'
             }`}
             style={{ width: `${claim.workflow_progress || 0}%` }}
           />
         </div>
 
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-muted-foreground">
           {/* UNIFIED PRIORITY: API status_display > unified status */}
           {claim.status_display?.description ||
             (claim.status === 'draft'
@@ -843,24 +846,26 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
         {/* Draft claim actions */}
         {claim.status === 'draft' && (
           <>
-            <button
+            <Button
               onClick={() => {
                 setEditingClaimId(claim.id)
                 setShowEditModal(true)
               }}
-              className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 hover:text-gray-800 text-sm font-medium rounded-md transition-colors"
+              variant="primary"
+              size="sm"
             >
               <Edit3 className="w-4 h-4 mr-1.5" />
               Edit
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => deleteClaim(claim.id)}
-              className="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors"
+              variant="destructive"
+              size="sm"
             >
               <Trash2 className="w-4 h-4 mr-1.5" />
               Delete
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={async () => {
                 try {
                   const response = await fetch(`/api/v1/expense-claims/${claim.id}`, {
@@ -882,20 +887,22 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
                   alert('Failed to submit claim. Please try again.')
                 }
               }}
-              className="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
+              variant="primary"
+              size="sm"
             >
               <CheckCircle className="w-4 h-4 mr-1.5" />
               Submit
-            </button>
+            </Button>
           </>
         )}
 
         {/* Re-extract button for draft claims with receipts - Triggers actual AI processing */}
         {claim.status === 'draft' && claim.storage_path && (
-          <button
+          <Button
             onClick={() => handleReprocessClick(claim.id, claim.storage_path)}
             disabled={reprocessingClaims.has(claim.id)}
-            className="inline-flex items-center px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors"
+            variant="primary"
+            size="sm"
           >
             {reprocessingClaims.has(claim.id) ? (
               <Brain className="w-4 h-4 mr-1.5 animate-spin" />
@@ -903,15 +910,16 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
               <RotateCcw className="w-4 h-4 mr-1.5" />
             )}
             {reprocessingClaims.has(claim.id) ? 'AI Analyzing...' : 'Re-extract'}
-          </button>
+          </Button>
         )}
 
         {/* Reprocess button for failed claims - Retry AI extraction */}
         {claim.status === 'failed' && claim.storage_path && (
-          <button
+          <Button
             onClick={() => handleReprocessClick(claim.id, claim.storage_path)}
             disabled={reprocessingClaims.has(claim.id)}
-            className="inline-flex items-center px-3 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors"
+            variant="primary"
+            size="sm"
           >
             {reprocessingClaims.has(claim.id) ? (
               <Brain className="w-4 h-4 mr-1.5 animate-spin" />
@@ -919,7 +927,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
               <RotateCcw className="w-4 h-4 mr-1.5" />
             )}
             {reprocessingClaims.has(claim.id) ? 'AI Analyzing...' : 'Reprocess'}
-          </button>
+          </Button>
         )}
 
         {/* View Details button for all non-draft claims (except when processing or failed with reprocess option) */}
@@ -927,16 +935,17 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
          claim.status !== 'analyzing' &&
          claim.status !== 'uploading' &&
          !(claim.status === 'failed' && claim.storage_path) && (
-          <button
+          <Button
             onClick={() => {
               setDetailsClaimId(claim.id)
               setShowDetailsModal(true)
             }}
-            className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
+            variant="view"
+            size="sm"
           >
             <Eye className="w-4 h-4 mr-1.5" />
             View Details
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -958,14 +967,14 @@ function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, set
   reprocessingClaims: Set<string>
 }) {
   return (
-    <Card className="bg-gray-800 border-gray-700">
+    <Card className="bg-card border-border">
       <CardHeader>
-        <CardTitle className="text-white">Expense History</CardTitle>
+        <CardTitle className="text-foreground">Expense History</CardTitle>
         <CardDescription>All your expense claims over time</CardDescription>
       </CardHeader>
       <CardContent>
         {data.recent_claims.length === 0 ? (
-          <div className="text-center text-gray-400 py-12">
+          <div className="text-center text-muted-foreground py-12">
             <FileText className="w-12 h-12 mx-auto mb-4" />
             <p>No expense history yet</p>
             <p className="text-sm">Your submitted claims will appear here</p>
@@ -1000,16 +1009,16 @@ function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, set
 // Personal Reports Content - "My Reports" functionality
 function PersonalReportsContent() {
   return (
-    <Card className="bg-gray-800 border-gray-700">
+    <Card className="bg-record-layer-1 border-record-border">
       <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
+        <CardTitle className="text-record-title flex items-center gap-2">
           <BarChart3 className="w-5 h-5" />
           My Reports
         </CardTitle>
-        <CardDescription>Generate personal expense reports</CardDescription>
+        <CardDescription className="text-record-supporting">Generate personal expense reports</CardDescription>
       </CardHeader>
       <CardContent>
-        <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+        <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
           <MonthlyReportGenerator personalOnly={true} />
         </Suspense>
       </CardContent>
@@ -1017,7 +1026,7 @@ function PersonalReportsContent() {
   )
 }
 
-// Summary card component
+// Summary card component with layer1-2-3 semantic design system
 function SummaryCard({ title, value, icon, variant }: {
   title: string
   value: string
@@ -1025,17 +1034,38 @@ function SummaryCard({ title, value, icon, variant }: {
   variant: 'default' | 'success' | 'warning' | 'error'
 }) {
   const variantStyles = {
-    default: 'bg-gray-800 border-gray-700',
-    success: 'bg-green-900/20 border-green-700',
-    warning: 'bg-yellow-900/20 border-yellow-700',
-    error: 'bg-red-900/20 border-red-700'
+    // Total Claims - Blue translucent (both light and dark modes)
+    default: 'bg-blue-50 dark:bg-gray-800 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50',
+    // Approved Amount - Green translucent (both light and dark modes)
+    success: 'bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50',
+    // Pending Approval - Yellow/Orange translucent (both light and dark modes)
+    warning: 'bg-yellow-50 dark:bg-gray-800 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-700/50',
+    // Rejected - Red translucent (both light and dark modes)
+    error: 'bg-red-50 dark:bg-gray-800 dark:bg-red-900/10 border border-red-200 dark:border-red-700/50'
   }
 
   const textStyles = {
-    default: 'text-white',
-    success: 'text-green-400',
-    warning: 'text-yellow-400',
-    error: 'text-red-400'
+    // Light mode: dark text, Dark mode: white text
+    default: 'text-blue-900 dark:text-white',
+    success: 'text-green-900 dark:text-white',
+    warning: 'text-yellow-900 dark:text-white',
+    error: 'text-red-900 dark:text-white'
+  }
+
+  const labelStyles = {
+    // Light mode: medium colored text, Dark mode: light gray text
+    default: 'text-blue-700 dark:text-gray-300',
+    success: 'text-green-700 dark:text-gray-300',
+    warning: 'text-yellow-700 dark:text-gray-300',
+    error: 'text-red-700 dark:text-gray-300'
+  }
+
+  const iconStyles = {
+    // Light mode: darker colored icons, Dark mode: light gray icons
+    default: 'text-blue-700 dark:text-gray-400',
+    success: 'text-green-700 dark:text-gray-400',
+    warning: 'text-yellow-700 dark:text-gray-400',
+    error: 'text-red-700 dark:text-gray-400'
   }
 
   return (
@@ -1043,10 +1073,10 @@ function SummaryCard({ title, value, icon, variant }: {
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-gray-400 text-sm font-medium">{title}</p>
+            <p className={`text-sm font-medium ${labelStyles[variant]}`}>{title}</p>
             <p className={`text-2xl font-bold ${textStyles[variant]}`}>{value}</p>
           </div>
-          <div className={`${textStyles[variant]}`}>
+          <div className={iconStyles[variant]}>
             {icon}
           </div>
         </div>
@@ -1060,21 +1090,21 @@ function PersonalDashboardSkeleton() {
   return (
     <div className="space-y-6">
       <div className="animate-pulse">
-        <div className="h-8 bg-gray-700 rounded-lg w-1/3 mb-2"></div>
-        <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+        <div className="h-8 bg-record-layer-2 rounded-lg w-1/3 mb-2"></div>
+        <div className="h-4 bg-record-layer-2 rounded w-1/2"></div>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-gray-800 rounded-lg p-6 animate-pulse">
-            <div className="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
-            <div className="h-8 bg-gray-700 rounded w-1/3"></div>
+          <div key={i} className="bg-record-layer-1 border border-record-border rounded-lg p-6 animate-pulse">
+            <div className="h-4 bg-record-layer-2 rounded w-1/2 mb-2"></div>
+            <div className="h-8 bg-record-layer-2 rounded w-1/3"></div>
           </div>
         ))}
       </div>
 
-      <div className="bg-gray-800 rounded-lg p-6 animate-pulse">
-        <div className="h-64 bg-gray-700 rounded"></div>
+      <div className="bg-record-layer-1 border border-record-border rounded-lg p-6 animate-pulse">
+        <div className="h-64 bg-record-layer-2 rounded"></div>
       </div>
     </div>
   )

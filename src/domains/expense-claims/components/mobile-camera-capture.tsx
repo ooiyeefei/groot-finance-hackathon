@@ -261,17 +261,17 @@ export default function MobileCameraCapture({
   // Error state
   if (error) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-        <Card className="bg-gray-800 border-gray-700 max-w-sm w-full">
+      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+        <Card className="bg-card border-border max-w-sm w-full m-4">
           <CardContent className="p-6 text-center">
-            <Alert className="bg-red-900/20 border-red-700 mb-4">
-              <AlertDescription className="text-red-400">{error}</AlertDescription>
+            <Alert className="bg-destructive/10 border-destructive/30 mb-4">
+              <AlertDescription className="text-destructive">{error}</AlertDescription>
             </Alert>
             <div className="space-y-3">
-              <Button onClick={initializeCamera} className="w-full bg-blue-600 hover:bg-blue-700">
+              <Button onClick={initializeCamera} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                 Try Again
               </Button>
-              <Button onClick={onClose} className="w-full bg-gray-700 text-white hover:bg-gray-800">
+              <Button onClick={onClose} variant="secondary" className="w-full">
                 Cancel
               </Button>
             </div>
@@ -284,8 +284,8 @@ export default function MobileCameraCapture({
   // Captured photo preview
   if (capturedImage) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-        <div className="w-full max-w-md">
+      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+        <div className="w-full max-w-md m-4">
           <div className="relative mb-4 bg-black rounded-lg overflow-hidden">
             <img 
               src={capturedImage} 

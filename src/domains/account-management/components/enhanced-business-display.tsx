@@ -37,11 +37,11 @@ interface RoleBadgeProps {
 
 function RoleBadge({ role, isOwner, className, size = 'xs' }: RoleBadgeProps) {
   const getRoleColors = (role: string, isOwner: boolean) => {
-    if (isOwner) return 'bg-yellow-900/30 text-yellow-400 border-yellow-500/30'
+    if (isOwner) return 'bg-warning/20 text-warning-foreground border-warning/30'
     switch (role) {
-      case 'admin': return 'bg-purple-900/30 text-purple-400 border-purple-500/30'
-      case 'manager': return 'bg-blue-900/30 text-blue-400 border-blue-500/30'
-      default: return 'bg-gray-700/50 text-gray-300 border-gray-600/50'
+      case 'admin': return 'bg-primary/20 text-primary-foreground border-primary/30'
+      case 'manager': return 'bg-secondary/20 text-secondary-foreground border-secondary/30'
+      default: return 'bg-muted text-muted-foreground border-border'
     }
   }
 
@@ -169,8 +169,8 @@ export default function EnhancedBusinessDisplay({
             />
             {isExpanded && (
               <div className="flex flex-col">
-                <div className="h-4 bg-gray-600 rounded w-24 animate-pulse"></div>
-                <div className="h-3 bg-gray-600 rounded w-16 mt-1 animate-pulse"></div>
+                <div className="h-4 bg-record-layer-2 rounded w-24 animate-pulse"></div>
+                <div className="h-3 bg-record-layer-2 rounded w-16 mt-1 animate-pulse"></div>
               </div>
             )}
           </div>
@@ -209,8 +209,8 @@ export default function EnhancedBusinessDisplay({
             />
             {isExpanded && (
               <div className="flex flex-col">
-                <div className="h-4 bg-gray-600 rounded w-24 animate-pulse"></div>
-                <div className="h-3 bg-gray-600 rounded w-16 mt-1 animate-pulse"></div>
+                <div className="h-4 bg-record-layer-2 rounded w-24 animate-pulse"></div>
+                <div className="h-3 bg-record-layer-2 rounded w-16 mt-1 animate-pulse"></div>
               </div>
             )}
           </div>
@@ -233,8 +233,8 @@ export default function EnhancedBusinessDisplay({
             />
             {isExpanded && (
               <div className="flex flex-col">
-                <div className="h-4 bg-gray-600 rounded w-24 animate-pulse"></div>
-                <div className="h-3 bg-gray-600 rounded w-16 mt-1 animate-pulse"></div>
+                <div className="h-4 bg-record-layer-2 rounded w-24 animate-pulse"></div>
+                <div className="h-3 bg-record-layer-2 rounded w-16 mt-1 animate-pulse"></div>
               </div>
             )}
           </div>
@@ -252,15 +252,15 @@ export default function EnhancedBusinessDisplay({
       <div className={cn('transition-all duration-300 ease-in-out')}>
         {isExpanded ? (
           // Brainwave-style: Clean expanded workspace header
-          <div className="p-3 border-b border-gray-700/50 relative">
+          <div className="p-3 relative">
             <button
               onClick={onToggleSidebar}
-              className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+              className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               aria-label="Collapse sidebar"
             >
               <PanelLeftClose className="w-5 h-5" />
             </button>
-            <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-gray-700/30 p-3 transition-colors mr-12">
+            <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-accent p-3 transition-colors mr-12">
               <div className="relative">
                 <WorkspaceLogo
                   businessProfile={businessProfile}
@@ -270,33 +270,27 @@ export default function EnhancedBusinessDisplay({
                 {/* Dropdown indicator for multiple businesses - only show if multiple */}
                 {memberships.length > 1 && (
                   <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
-                    <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-gray-600/50 bg-gray-600 hover:bg-gray-500 rounded-full flex items-center justify-center focus:ring-1 focus:ring-blue-500 focus:ring-offset-0 transition-colors [&>svg]:hidden">
-                      <ChevronDown className="w-3 h-3 text-white" />
+                    <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg]:hidden">
+                      <ChevronDown className="w-3 h-3 text-foreground" />
                     </SelectTrigger>
-                    <SelectContent className="w-80 bg-gray-800 border border-gray-600/50 shadow-2xl backdrop-blur-sm"
-                      style={{
-                        boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3), 0px 0px 0px 1px rgba(255, 255, 255, 0.1)'
-                      }}>
+                    <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                       {memberships.map((membership) => {
                         const isSelected = membership.id === business?.businessId
                         return (
                           <SelectItem
                             key={membership.id}
                             value={membership.id}
-                            className={cn(
-                              "focus:bg-gray-700 focus:text-gray-100 py-3 cursor-pointer",
-                              isSelected && "bg-gray-100/10 backdrop-blur-sm"
-                            )}
+                            className="py-3 cursor-pointer hover:bg-accent/50 focus:bg-accent/50"
                           >
                             <div className="flex items-center gap-3 w-full">
-                              <Building2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                              <Building2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                               <div className="flex flex-col min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium text-gray-100 truncate">
+                                  <span className="font-medium truncate text-foreground">
                                     {membership.name}
                                   </span>
                                 </div>
-                                <span className="text-xs text-gray-400 truncate mt-1">
+                                <span className="text-xs text-muted-foreground truncate mt-1">
                                   {membership.country_code} • {membership.home_currency}
                                 </span>
                               </div>
@@ -307,7 +301,7 @@ export default function EnhancedBusinessDisplay({
                                   size="xs"
                                 />
                                 {/* MANAGE link placeholder for future implementation */}
-                                <span className="text-xs text-blue-400 opacity-0">MANAGE</span>
+                                <span className="text-xs text-primary opacity-0">MANAGE</span>
                               </div>
                             </div>
                           </SelectItem>
@@ -321,7 +315,7 @@ export default function EnhancedBusinessDisplay({
                 {/* Brainwave-style: Clean business name with better typography */}
                 <div className="flex items-center gap-2">
                   <h2
-                    className="text-base font-bold text-white leading-tight group-hover:text-blue-300 transition-colors truncate"
+                    className="text-base font-bold text-foreground leading-tight group-hover:text-primary transition-colors truncate"
                     suppressHydrationWarning={true}
                   >
                     {business.businessName}
@@ -340,7 +334,7 @@ export default function EnhancedBusinessDisplay({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Link href={`/${locale}`} className="flex-shrink-0 rounded-lg hover:bg-gray-700/30 p-2 transition-colors">
+                  <Link href={`/${locale}`} className="flex-shrink-0 rounded-lg hover:bg-accent p-2 transition-colors">
                     <WorkspaceLogo
                       businessProfile={businessProfile}
                       isHydrated={isHydrated}
@@ -350,7 +344,7 @@ export default function EnhancedBusinessDisplay({
                 </TooltipTrigger>
                 <TooltipContent
                   side="right"
-                  className="bg-gray-900 border-gray-700 text-white px-3 py-2 ml-2 max-w-xs"
+                  className="px-3 py-2 ml-2 max-w-xs"
                 >
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
@@ -363,7 +357,7 @@ export default function EnhancedBusinessDisplay({
             </TooltipProvider>
             <button
               onClick={onToggleSidebar}
-              className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               aria-label="Expand sidebar"
             >
               <PanelLeftOpen className="w-5 h-5" />
@@ -382,15 +376,15 @@ export default function EnhancedBusinessDisplay({
     <div className={cn('transition-all duration-300 ease-in-out')}>
       {isExpanded ? (
         // Brainwave-style: Clean expanded workspace header with logo overlay dropdown
-        <div className="p-3 border-b border-gray-700/50 relative">
+        <div className="p-3 relative">
           <button
             onClick={onToggleSidebar}
-            className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+            className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             aria-label="Collapse sidebar"
           >
             <PanelLeftClose className="w-5 h-5" />
           </button>
-          <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-gray-700/30 p-3 transition-colors mr-2">
+          <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-accent p-3 transition-colors mr-2">
             <div className="relative">
               <WorkspaceLogo
                 businessProfile={businessProfile}
@@ -400,33 +394,27 @@ export default function EnhancedBusinessDisplay({
               {/* Dropdown indicator for multiple businesses - only show if multiple */}
               {memberships.length > 1 && (
                 <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
-                  <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-gray-600/50 bg-gray-600 hover:bg-gray-500 rounded-full flex items-center justify-center focus:ring-1 focus:ring-blue-500 focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
-                    <ChevronDown className="w-3 h-3 text-white" />
+                  <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
+                    <ChevronDown className="w-3 h-3 text-foreground" />
                   </SelectTrigger>
-                  <SelectContent className="w-80 bg-gray-800 border border-gray-600/50 shadow-2xl backdrop-blur-sm"
-                    style={{
-                      boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3), 0px 0px 0px 1px rgba(255, 255, 255, 0.1)'
-                    }}>
+                  <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                     {memberships.map((membership) => {
                       const isSelected = membership.id === business?.businessId
                       return (
                         <SelectItem
                           key={membership.id}
                           value={membership.id}
-                          className={cn(
-                            "focus:bg-gray-700 focus:text-gray-100 py-3 cursor-pointer",
-                            isSelected && "bg-gray-100/10 backdrop-blur-sm"
-                          )}
+                          className="py-3 cursor-pointer hover:bg-accent/50 focus:bg-accent/50"
                         >
                           <div className="flex items-center gap-3 w-full">
-                            <Building2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                            <Building2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                             <div className="flex flex-col min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="font-medium text-gray-100 truncate">
+                                <span className="font-medium truncate text-foreground">
                                   {membership.name}
                                 </span>
                               </div>
-                              <span className="text-xs text-gray-400 truncate mt-1">
+                              <span className="text-xs text-muted-foreground truncate mt-1">
                                 {membership.country_code} • {membership.home_currency}
                               </span>
                             </div>
@@ -437,7 +425,7 @@ export default function EnhancedBusinessDisplay({
                                 size="xs"
                               />
                               {/* MANAGE link placeholder for future implementation */}
-                              <span className="text-xs text-blue-400 opacity-0">MANAGE</span>
+                              <span className="text-xs text-primary opacity-0">MANAGE</span>
                             </div>
                           </div>
                         </SelectItem>
@@ -451,7 +439,7 @@ export default function EnhancedBusinessDisplay({
               {/* Brainwave-style: Clean business name with better typography */}
               <div className="flex items-center gap-2">
                 <h2
-                  className="text-base font-bold text-white leading-tight group-hover:text-blue-300 transition-colors truncate"
+                  className="text-base font-bold text-foreground leading-tight group-hover:text-primary transition-colors truncate"
                   suppressHydrationWarning={true}
                 >
                   {business.businessName}
@@ -471,7 +459,7 @@ export default function EnhancedBusinessDisplay({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="relative">
-                  <Link href={`/${locale}`} className="flex-shrink-0 rounded-lg hover:bg-gray-700/30 p-2 transition-colors block">
+                  <Link href={`/${locale}`} className="flex-shrink-0 rounded-lg hover:bg-accent p-2 transition-colors block">
                     <WorkspaceLogo
                       businessProfile={businessProfile}
                       isHydrated={isHydrated}
@@ -481,33 +469,27 @@ export default function EnhancedBusinessDisplay({
                   {/* Dropdown indicator for multiple businesses in collapsed state */}
                   {memberships.length > 1 && (
                     <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
-                      <SelectTrigger className="absolute -bottom-1 -right-1 w-5 h-5 p-0 border-2 border-gray-600/50 bg-gray-600 hover:bg-gray-500 rounded-full flex items-center justify-center focus:ring-1 focus:ring-blue-500 focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
-                        <ChevronDown className="w-2.5 h-2.5 text-white" />
+                      <SelectTrigger className="absolute -bottom-1 -right-1 w-5 h-5 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
+                        <ChevronDown className="w-2.5 h-2.5 text-foreground" />
                       </SelectTrigger>
-                      <SelectContent className="w-80 bg-gray-800 border border-gray-600/50 shadow-2xl backdrop-blur-sm"
-                        style={{
-                          boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3), 0px 0px 0px 1px rgba(255, 255, 255, 0.1)'
-                        }}>
+                      <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                         {memberships.map((membership) => {
                           const isSelected = membership.id === business?.businessId
                           return (
                             <SelectItem
                               key={membership.id}
                               value={membership.id}
-                              className={cn(
-                                "focus:bg-gray-700 focus:text-gray-100 py-3 cursor-pointer",
-                                isSelected && "bg-gray-100/10 backdrop-blur-sm"
-                              )}
+                              className="py-3 cursor-pointer hover:bg-accent/50 focus:bg-accent/50"
                             >
                               <div className="flex items-center gap-3 w-full">
-                                <Building2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                <Building2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                                 <div className="flex flex-col min-w-0 flex-1">
                                   <div className="flex items-center gap-2">
-                                    <span className="font-medium text-gray-100 truncate">
+                                    <span className="font-medium truncate text-foreground">
                                       {membership.name}
                                     </span>
                                   </div>
-                                  <span className="text-xs text-gray-400 truncate mt-1">
+                                  <span className="text-xs text-muted-foreground truncate mt-1">
                                     {membership.country_code} • {membership.home_currency}
                                   </span>
                                 </div>
@@ -518,7 +500,7 @@ export default function EnhancedBusinessDisplay({
                                     size="xs"
                                   />
                                   {/* MANAGE link placeholder for future implementation */}
-                                  <span className="text-xs text-blue-400 opacity-0">MANAGE</span>
+                                  <span className="text-xs text-primary opacity-0">MANAGE</span>
                                 </div>
                               </div>
                             </SelectItem>
@@ -531,14 +513,14 @@ export default function EnhancedBusinessDisplay({
               </TooltipTrigger>
               <TooltipContent
                 side="right"
-                className="bg-gray-900 border-gray-700 text-white px-3 py-2 ml-2 max-w-xs"
+                className="px-3 py-2 ml-2 max-w-xs"
               >
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
                     <span className="font-medium truncate">{business.businessName}</span>
                   </div>
                   <RoleBadge role={business.role} isOwner={business.isOwner} size="xs" />
-                  <div className="text-xs text-gray-400">
+                  <div className="text-xs text-muted-foreground">
                     {memberships.length} workspace{memberships.length > 1 ? 's' : ''}
                   </div>
                 </div>
@@ -547,7 +529,7 @@ export default function EnhancedBusinessDisplay({
           </TooltipProvider>
           <button
             onClick={onToggleSidebar}
-            className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             aria-label="Expand sidebar"
           >
             <PanelLeftOpen className="w-5 h-5" />

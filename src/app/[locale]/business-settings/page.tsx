@@ -36,7 +36,7 @@ export default async function BusinessSettingsPage() {
 
   return (
     <ClientProviders>
-      <div className="flex h-screen bg-gray-900">
+      <div className="flex h-screen bg-background">
         {/* Sidebar */}
         <Sidebar />
 
@@ -53,8 +53,8 @@ export default async function BusinessSettingsPage() {
             <div className="w-full max-w-none">
               <Suspense fallback={
                 <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-                  <span className="ml-2 text-gray-400">Loading business settings...</span>
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">Loading business settings...</span>
                 </div>
               }>
                 <TabbedBusinessSettings />

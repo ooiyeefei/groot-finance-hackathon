@@ -296,12 +296,12 @@ export default function BusinessProfileSettings() {
 
   if (isLoading) {
     return (
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+      <div className="bg-card rounded-lg border border-border p-6">
         <div className="animate-pulse">
-          <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
+          <div className="h-6 bg-muted rounded w-48 mb-4"></div>
           <div className="space-y-4">
-            <div className="h-20 bg-gray-700 rounded"></div>
-            <div className="h-10 bg-gray-700 rounded"></div>
+            <div className="h-20 bg-muted rounded"></div>
+            <div className="h-10 bg-muted rounded"></div>
           </div>
         </div>
       </div>
@@ -309,16 +309,16 @@ export default function BusinessProfileSettings() {
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+    <div className="bg-card rounded-lg border border-border p-6">
       <div className="flex items-center space-x-3 mb-6">
-        <Building2 className="w-6 h-6 text-blue-400" />
-        <h2 className="text-xl font-semibold text-white">Business Profile</h2>
+        <Building2 className="w-6 h-6 text-primary" />
+        <h2 className="text-xl font-semibold text-foreground">Business Profile</h2>
       </div>
 
       <div className="space-y-6">
         {/* Business Logo */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-3">
+          <label className="block text-sm font-medium text-foreground mb-3">
             Business Logo
           </label>
 
@@ -326,7 +326,7 @@ export default function BusinessProfileSettings() {
             {/* Logo Display */}
             <div className="relative">
               {profile?.logo_url ? (
-                <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-700 border-2 border-gray-600">
+                <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted border-2 border-border">
                   <Image
                     src={profile.logo_url}
                     alt="Business Logo"
@@ -337,7 +337,7 @@ export default function BusinessProfileSettings() {
                 </div>
               ) : (
                 <div
-                  className="w-20 h-20 rounded-lg flex items-center justify-center text-white font-bold text-2xl border-2 border-gray-600"
+                  className="w-20 h-20 rounded-lg flex items-center justify-center text-primary-foreground font-bold text-2xl border-2 border-border"
                   style={{ backgroundColor: profile?.logo_fallback_color || '#3b82f6' }}
                 >
                   {getBusinessInitial()}
@@ -349,7 +349,7 @@ export default function BusinessProfileSettings() {
                 <button
                   onClick={removeLogo}
                   disabled={isUploading}
-                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white transition-colors disabled:opacity-50"
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-destructive hover:bg-destructive/90 rounded-full flex items-center justify-center text-destructive-foreground transition-colors disabled:opacity-50"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -361,11 +361,11 @@ export default function BusinessProfileSettings() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUploading ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2"></div>
                     Uploading...
                   </>
                 ) : (
@@ -376,7 +376,7 @@ export default function BusinessProfileSettings() {
                 )}
               </button>
 
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 JPG, PNG or WebP. Max 5MB.
               </p>
             </div>
@@ -394,7 +394,7 @@ export default function BusinessProfileSettings() {
 
         {/* Business Name */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-sm font-medium text-foreground mb-2">
             Business Name
           </label>
           <div className="flex space-x-3">
@@ -403,21 +403,21 @@ export default function BusinessProfileSettings() {
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
               placeholder="Enter your business name"
-              className="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="flex-1 bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
             />
             <button
               onClick={updateBusinessName}
               disabled={isUpdating || businessName.trim() === profile?.name || !businessName.trim()}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-md font-medium transition-colors"
+              className="px-4 py-2 bg-action-view hover:bg-action-view/90 disabled:bg-muted disabled:cursor-not-allowed text-action-view-foreground rounded-md font-medium transition-colors"
             >
               {isUpdating ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-action-view-foreground border-t-transparent rounded-full animate-spin"></div>
               ) : (
                 'Update'
               )}
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             This name will appear in the sidebar and throughout the application.
           </p>
         </div>
@@ -425,27 +425,27 @@ export default function BusinessProfileSettings() {
         {/* Currency Preferences */}
         <div>
           <div className="flex items-center space-x-3 mb-4">
-            <DollarSign className="w-5 h-5 text-green-400" />
-            <h3 className="text-lg font-medium text-white">Currency Preferences</h3>
+            <DollarSign className="w-5 h-5 text-action-view" />
+            <h3 className="text-lg font-medium text-foreground">Currency Preferences</h3>
             {lastCurrencySaved && (
-              <span className="text-xs text-green-400">
+              <span className="text-xs text-action-view">
                 Saved {lastCurrencySaved.toLocaleTimeString()}
               </span>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               Home Currency
             </label>
-            <p className="text-xs text-gray-400 mb-3">
+            <p className="text-xs text-muted-foreground mb-3">
               This currency will be used for dashboard summaries and conversions throughout the app.
             </p>
             <select
               value={homeCurrency}
               onChange={(e) => handleCurrencyChange(e.target.value as SupportedCurrency)}
               disabled={isCurrencyLoading || isCurrencySaving}
-              className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
             >
               {SUPPORTED_CURRENCIES.map(currency => (
                 <option key={currency.code} value={currency.code}>
@@ -455,22 +455,22 @@ export default function BusinessProfileSettings() {
             </select>
 
             {isCurrencySaving && (
-              <p className="text-xs text-blue-400 mt-2 flex items-center gap-2">
-                <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+              <p className="text-xs text-primary mt-2 flex items-center gap-2">
+                <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
                 Saving preferences...
               </p>
             )}
 
-            <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 mt-4">
+            <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mt-4">
               <div className="flex items-start gap-3">
-                <div className="w-5 h-5 text-blue-400 mt-0.5">
+                <div className="w-5 h-5 text-primary mt-0.5">
                   <svg fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                   </svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-blue-300 mb-1">Currency Conversion</h4>
-                  <p className="text-sm text-blue-200">
+                  <h4 className="text-sm font-medium text-foreground mb-1">Currency Conversion</h4>
+                  <p className="text-sm text-muted-foreground">
                     Transactions in other currencies will be converted to {homeCurrency} for dashboard summaries.
                     Original amounts and currencies are always preserved.
                   </p>

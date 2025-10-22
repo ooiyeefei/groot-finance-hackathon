@@ -94,8 +94,8 @@ export function LanguageSwitcher({
             className={`
               px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200
               ${locale === language.code
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-accent-foreground hover:bg-accent'
               }
             `}
             aria-label={`Switch to ${language.name}`}
@@ -114,7 +114,7 @@ export function LanguageSwitcher({
       <button
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleKeyDown}
-        className="flex items-center space-x-1 px-2 py-1 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-700 rounded transition-colors duration-200 focus:outline-none"
+        className="flex items-center space-x-1 px-2 py-1 text-sm font-medium text-foreground hover:text-accent-foreground hover:bg-accent rounded transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring"
         aria-label={`Current language: ${currentLanguage.name}. Click to change language.`}
         aria-expanded={isOpen}
         aria-haspopup="true"
@@ -134,7 +134,7 @@ export function LanguageSwitcher({
       {isOpen && (
         <div
           className="
-            absolute top-full right-0 mt-2 w-56 bg-gray-800 border border-gray-700
+            absolute top-full right-0 mt-2 w-56 bg-popover border border-border
             rounded-md shadow-lg z-50 py-1
           "
           role="menu"
@@ -148,8 +148,8 @@ export function LanguageSwitcher({
               className={`
                 w-full flex items-center space-x-3 px-4 py-3 text-sm transition-colors duration-200
                 ${locale === language.code
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-popover-foreground hover:bg-accent hover:text-accent-foreground'
                 }
               `}
               role="menuitem"
@@ -158,13 +158,13 @@ export function LanguageSwitcher({
               <span className="text-lg">{language.flag}</span>
               <div className="flex flex-col items-start">
                 <span className="font-medium">{language.nativeName}</span>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-muted-foreground">
                   {language.name} • {language.region}
                 </span>
               </div>
               {locale === language.code && (
                 <div className="ml-auto">
-                  <div className="h-2 w-2 bg-green-400 rounded-full"></div>
+                  <div className="h-2 w-2 bg-green-500 rounded-full"></div>
                 </div>
               )}
             </button>

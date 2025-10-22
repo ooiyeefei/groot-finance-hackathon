@@ -273,30 +273,30 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
   const getIncomeTrendIcon = (trend: string) => {
     switch (trend) {
       case 'increasing':
-        return <TrendingUp className="w-4 h-4 text-green-400" />
+        return <TrendingUp className="w-4 h-4 text-success" />
       case 'decreasing':
-        return <TrendingDown className="w-4 h-4 text-red-400" />
+        return <TrendingDown className="w-4 h-4 text-danger" />
       case 'volatile':
-        return <Activity className="w-4 h-4 text-yellow-400" />
+        return <Activity className="w-4 h-4 text-warning" />
       default:
-        return <Minus className="w-4 h-4 text-gray-400" />
+        return <Minus className="w-4 h-4 text-muted-foreground" />
     }
   }
 
   const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.9) return 'text-green-400'
-    if (confidence >= 0.7) return 'text-yellow-400'
-    return 'text-red-400'
+    if (confidence >= 0.9) return 'text-success'
+    if (confidence >= 0.7) return 'text-warning'
+    return 'text-danger'
   }
 
   if (loading) {
     return (
       <div className="space-y-6">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-700 rounded w-1/3 mb-4"></div>
+          <div className="h-8 bg-record-layer-2 rounded w-1/3 mb-4"></div>
           <div className="grid grid-cols-1 gap-6">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-40 bg-gray-700 rounded"></div>
+              <div key={i} className="h-40 bg-record-layer-2 rounded"></div>
             ))}
           </div>
         </div>
@@ -307,16 +307,16 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
   if (error || !summaryData) {
     return (
       <div className="text-center py-12">
-        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-        <p className="text-red-400 mb-4">{error || 'No data available'}</p>
+        <AlertCircle className="w-12 h-12 text-danger mx-auto mb-4" />
+        <p className="text-danger mb-4">{error || 'No data available'}</p>
         <div className="flex gap-4 justify-center">
           <Link href={`/${locale}/applications`}>
-            <Button variant="outline" className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600 hover:border-gray-500">
+            <Button variant="outline">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Applications
             </Button>
           </Link>
-          <Button onClick={() => fetchSummaryData()} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button onClick={() => fetchSummaryData()} variant="default">
             Try Again
           </Button>
         </div>
@@ -328,40 +328,40 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
     <div className="space-y-6">
 
       {/* Application Info Header */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
-              <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+              <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                 Reference No.
               </label>
-              <div className="text-lg font-mono text-white">
+              <div className="text-lg font-mono text-record-title">
                 {summaryData.application.id.toUpperCase()}
               </div>
             </div>
             <div>
-              <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+              <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                 Application Date
               </label>
-              <div className="text-lg text-white">
+              <div className="text-lg text-record-title">
                 {formatDate(summaryData.application.created_at)}
               </div>
             </div>
             <div>
-              <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+              <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                 Application Type
               </label>
-              <div className="text-lg text-white">
+              <div className="text-lg text-record-title">
                 {summaryData.application.type_display}
               </div>
             </div>
             <div>
-              <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+              <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                 AI Processing Status
               </label>
               <Badge className={`${summaryData.processing.completion_status === 'complete'
-                ? 'bg-green-900/20 text-green-300 border-green-700/50'
-                : 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50'
+                ? 'bg-success/20 text-success-foreground border-success/30'
+                : 'bg-warning/20 text-warning-foreground border-warning/30'
               }`}>
                 <CheckCircle className="w-3 h-3 mr-1" />
                 {Math.round(summaryData.processing.average_confidence * 100)}% Confidence
@@ -373,11 +373,11 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Applicant Details */}
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="bg-record-layer-1 border-record-border">
           <CardHeader>
-            <CardTitle className="text-white flex items-center justify-between">
+            <CardTitle className="text-record-title flex items-center justify-between">
               <div className="flex items-center">
-                <User className="w-5 h-5 mr-2 text-blue-400" />
+                <User className="w-5 h-5 mr-2 text-primary" />
                 Applicant Details
               </div>
               <div className="flex gap-2">
@@ -387,7 +387,7 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                       size="sm"
                       onClick={() => saveChanges('applicant')}
                       disabled={savingSection === 'applicant'}
-                      className="bg-green-600 hover:bg-green-700 text-white border-0"
+                      variant="default"
                     >
                       {savingSection === 'applicant' ? (
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -399,7 +399,7 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                       size="sm"
                       onClick={cancelEditing}
                       disabled={savingSection === 'applicant'}
-                      className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                      variant="secondary"
                     >
                       <XCircle className="w-4 h-4" />
                     </Button>
@@ -408,7 +408,7 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                   <Button
                     size="sm"
                     onClick={() => startEditing('applicant')}
-                    className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+                    variant="primary"
                     title="Edit applicant details"
                   >
                     <Edit3 className="w-4 h-4" />
@@ -422,53 +422,53 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
               <>
                 <div className="grid grid-cols-1 gap-4">
                   <div>
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Full Name
                     </label>
                     {editingSection === 'applicant' ? (
                       <Input
                         value={editedApplicant.full_name || ''}
                         onChange={(e) => setEditedApplicant((prev: any) => ({ ...prev, full_name: e.target.value }))}
-                        className="text-white bg-gray-700 border-gray-600 focus:border-blue-500"
+                        className="text-foreground bg-input border-border focus:border-primary"
                         placeholder="Enter full name"
                       />
                     ) : (
-                      <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                      <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                         {summaryData.applicant.full_name || 'N/A'}
                       </div>
                     )}
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       IC Number
                     </label>
                     {editingSection === 'applicant' ? (
                       <Input
                         value={editedApplicant.ic_number || ''}
                         onChange={(e) => setEditedApplicant((prev: any) => ({ ...prev, ic_number: e.target.value }))}
-                        className="text-white bg-gray-700 border-gray-600 focus:border-blue-500 font-mono"
+                        className="text-foreground bg-input border-border focus:border-primary font-mono"
                         placeholder="Enter IC number"
                       />
                     ) : (
-                      <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 font-mono">
+                      <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono">
                         {summaryData.applicant.ic_number || 'N/A'}
                       </div>
                     )}
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Date of Birth
                     </label>
-                    <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                    <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                       {formatDate(summaryData.applicant.date_of_birth)}
                     </div>
                   </div>
                   {summaryData.applicant.gender && (
                     <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                      <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                         Gender
                       </label>
-                      <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                      <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                         {summaryData.applicant.gender === 'LELAKI' ? 'Male' :
                          summaryData.applicant.gender === 'PEREMPUAN' ? 'Female' :
                          summaryData.applicant.gender}
@@ -477,19 +477,19 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                   )}
                   {(summaryData.applicant.address || editingSection === 'applicant') && (
                     <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                      <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                         Residential Address
                       </label>
                       {editingSection === 'applicant' ? (
                         <Textarea
                           value={editedApplicant.address || ''}
                           onChange={(e) => setEditedApplicant((prev: any) => ({ ...prev, address: e.target.value }))}
-                          className="text-white bg-gray-700 border-gray-600 focus:border-blue-500 min-h-[60px]"
+                          className="text-foreground bg-input border-border focus:border-primary min-h-[60px]"
                           placeholder="Enter residential address"
                           rows={3}
                         />
                       ) : (
-                        <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 min-h-[60px]">
+                        <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border min-h-[60px]">
                           {summaryData.applicant.address}
                         </div>
                       )}
@@ -498,18 +498,18 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(summaryData.applicant.phone || editingSection === 'applicant') && (
                       <div>
-                        <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                        <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                           Mobile No.
                         </label>
                         {editingSection === 'applicant' ? (
                           <Input
                             value={editedApplicant.phone || ''}
                             onChange={(e) => setEditedApplicant((prev: any) => ({ ...prev, phone: e.target.value }))}
-                            className="text-white bg-gray-700 border-gray-600 focus:border-blue-500 font-mono"
+                            className="text-foreground bg-input border-border focus:border-primary font-mono"
                             placeholder="Enter mobile number"
                           />
                         ) : (
-                          <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 font-mono">
+                          <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono">
                             {summaryData.applicant.phone}
                           </div>
                         )}
@@ -517,19 +517,19 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                     )}
                     {(summaryData.applicant.email || editingSection === 'applicant') && (
                       <div>
-                        <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                        <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                           Email
                         </label>
                         {editingSection === 'applicant' ? (
                           <Input
                             value={editedApplicant.email || ''}
                             onChange={(e) => setEditedApplicant((prev: any) => ({ ...prev, email: e.target.value }))}
-                            className="text-white bg-gray-700 border-gray-600 focus:border-blue-500"
+                            className="text-foreground bg-input border-border focus:border-primary"
                             placeholder="Enter email address"
                             type="email"
                           />
                         ) : (
-                          <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                          <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                             {summaryData.applicant.email}
                           </div>
                         )}
@@ -539,7 +539,7 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                 </div>
               </>
             ) : (
-              <div className="text-center text-gray-400 py-8">
+              <div className="text-center text-muted-foreground py-8">
                 <User className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p>Applicant information not extracted</p>
               </div>
@@ -548,10 +548,10 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
         </Card>
 
         {/* Employment Details */}
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="bg-record-layer-1 border-record-border">
           <CardHeader>
-            <CardTitle className="text-white flex items-center">
-              <Briefcase className="w-5 h-5 mr-2 text-green-400" />
+            <CardTitle className="text-record-title flex items-center">
+              <Briefcase className="w-5 h-5 mr-2 text-success" />
               Employment Details
             </CardTitle>
           </CardHeader>
@@ -560,35 +560,35 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
               <>
                 <div className="grid grid-cols-1 gap-4">
                   <div>
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Employer Name
                     </label>
-                    <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                    <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                       {summaryData.employment.employer_name || 'N/A'}
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Job Title
                     </label>
-                    <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                    <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                       {summaryData.employment.job_title || 'N/A'}
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                      <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                         Employment Type
                       </label>
-                      <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                      <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                         {summaryData.employment.employment_type || 'N/A'}
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                      <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                         Years of Service
                       </label>
-                      <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                      <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                         {summaryData.employment.years_of_service ?
                           `${summaryData.employment.years_of_service} years` : 'N/A'}
                       </div>
@@ -596,20 +596,20 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                   </div>
                   {summaryData.employment.employer_address && (
                     <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                      <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                         Employer Address
                       </label>
-                      <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 min-h-[60px]">
+                      <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border min-h-[60px]">
                         {summaryData.employment.employer_address}
                       </div>
                     </div>
                   )}
                   {summaryData.employment.office_phone && (
                     <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                      <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                         Office Phone
                       </label>
-                      <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 font-mono">
+                      <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono">
                         {summaryData.employment.office_phone}
                       </div>
                     </div>
@@ -617,7 +617,7 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                 </div>
               </>
             ) : (
-              <div className="text-center text-gray-400 py-8">
+              <div className="text-center text-muted-foreground py-8">
                 <Briefcase className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p>Employment information not extracted</p>
               </div>
@@ -628,10 +628,10 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
 
       {/* Financial Analysis */}
       {summaryData.financial && (
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="bg-record-layer-1 border-record-border">
           <CardHeader>
-            <CardTitle className="text-white flex items-center">
-              <DollarSign className="w-5 h-5 mr-2 text-amber-400" />
+            <CardTitle className="text-record-title flex items-center">
+              <DollarSign className="w-5 h-5 mr-2 text-warning" />
               Financial Analysis ({summaryData.financial.payslip_count} months)
             </CardTitle>
           </CardHeader>
@@ -640,44 +640,44 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
               {/* Financial Summary */}
               <div className="lg:col-span-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Average Net Income
                     </label>
-                    <div className="text-xl font-bold text-white font-mono">
+                    <div className="text-xl font-bold text-record-title font-mono">
                       {formatCurrency(summaryData.financial.average_net_income)}
                     </div>
                   </div>
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Latest Net Income
                     </label>
-                    <div className="text-xl font-bold text-white font-mono">
+                    <div className="text-xl font-bold text-record-title font-mono">
                       {formatCurrency(summaryData.financial.latest_net_income)}
                     </div>
                   </div>
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Income Trend
                     </label>
                     <div className="flex items-center gap-2">
                       {getIncomeTrendIcon(summaryData.financial.income_trend)}
-                      <span className="text-white capitalize">
+                      <span className="text-record-title capitalize">
                         {summaryData.financial.income_trend}
                       </span>
                     </div>
                   </div>
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Employer Consistency
                     </label>
                     <div className="flex items-center gap-2">
                       {summaryData.financial.employer_consistency ? (
-                        <CheckCircle className="w-4 h-4 text-green-400" />
+                        <CheckCircle className="w-4 h-4 text-success" />
                       ) : (
-                        <AlertCircle className="w-4 h-4 text-yellow-400" />
+                        <AlertCircle className="w-4 h-4 text-warning" />
                       )}
-                      <span className="text-white">
+                      <span className="text-record-title">
                         {summaryData.financial.employer_consistency ? 'Consistent' : 'Varied'}
                       </span>
                     </div>
@@ -686,26 +686,26 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
 
                 {/* Monthly Breakdown */}
                 <div>
-                  <h4 className="text-sm font-medium text-gray-300 mb-3">Monthly Income History</h4>
-                  <div className="bg-gray-700 rounded-lg overflow-hidden">
+                  <h4 className="text-sm font-medium text-record-title mb-3">Monthly Income History</h4>
+                  <div className="bg-record-layer-2 rounded-lg overflow-hidden">
                     <table className="w-full">
                       <thead>
-                        <tr className="bg-gray-600">
-                          <th className="text-left text-xs text-gray-300 px-4 py-3 font-medium">Month</th>
-                          <th className="text-right text-xs text-gray-300 px-4 py-3 font-medium">Net Income</th>
-                          <th className="text-right text-xs text-gray-300 px-4 py-3 font-medium">Gross Income</th>
+                        <tr className="bg-record-layer-1">
+                          <th className="text-left text-xs text-record-supporting px-4 py-3 font-medium">Month</th>
+                          <th className="text-right text-xs text-record-supporting px-4 py-3 font-medium">Net Income</th>
+                          <th className="text-right text-xs text-record-supporting px-4 py-3 font-medium">Gross Income</th>
                         </tr>
                       </thead>
                       <tbody>
                         {summaryData.financial.payslip_months.map((month, index) => (
-                          <tr key={index} className="border-b border-gray-600 last:border-b-0">
-                            <td className="px-4 py-3 text-white">
+                          <tr key={index} className="border-b border-record-border last:border-b-0">
+                            <td className="px-4 py-3 text-record-title">
                               {month.period || `Month ${index + 1}`}
                             </td>
-                            <td className="px-4 py-3 text-white font-mono text-right">
+                            <td className="px-4 py-3 text-record-title font-mono text-right">
                               {formatCurrency(month.net_wages)}
                             </td>
-                            <td className="px-4 py-3 text-white font-mono text-right">
+                            <td className="px-4 py-3 text-record-title font-mono text-right">
                               {formatCurrency(month.gross_wages)}
                             </td>
                           </tr>
@@ -718,29 +718,29 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
 
               {/* Income Range */}
               <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-3">Income Range Analysis</h4>
+                <h4 className="text-sm font-medium text-record-title mb-3">Income Range Analysis</h4>
                 <div className="space-y-4">
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Highest Net Income
                     </label>
-                    <div className="text-lg font-bold text-green-400 font-mono">
+                    <div className="text-lg font-bold text-success font-mono">
                       {formatCurrency(summaryData.financial.max_net_income)}
                     </div>
                   </div>
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Lowest Net Income
                     </label>
-                    <div className="text-lg font-bold text-red-400 font-mono">
+                    <div className="text-lg font-bold text-danger font-mono">
                       {formatCurrency(summaryData.financial.min_net_income)}
                     </div>
                   </div>
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Income Variance
                     </label>
-                    <div className="text-lg font-bold text-white font-mono">
+                    <div className="text-lg font-bold text-record-title font-mono">
                       {formatCurrency(summaryData.financial.max_net_income - summaryData.financial.min_net_income)}
                     </div>
                   </div>
@@ -753,52 +753,52 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
 
       {/* Financing Details */}
       {summaryData.financing && (
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="bg-record-layer-1 border-record-border">
           <CardHeader>
-            <CardTitle className="text-white flex items-center">
-              <CreditCard className="w-5 h-5 mr-2 text-purple-400" />
+            <CardTitle className="text-record-title flex items-center">
+              <CreditCard className="w-5 h-5 mr-2 text-secondary" />
               Financing Details
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Type of Financing
                 </label>
-                <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                   {summaryData.financing.type_of_financing || 'N/A'}
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Amount Requested
                 </label>
-                <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600 font-mono font-bold">
+                <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono font-bold">
                   {formatCurrency(summaryData.financing.amount_requested)}
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Tenure (Years)
                 </label>
-                <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                   {summaryData.financing.tenor ? `${summaryData.financing.tenor} years` : 'N/A'}
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Application Type
                 </label>
-                <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                   {summaryData.financing.application_type || 'N/A'}
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Purpose of Financing
                 </label>
-                <div className="text-white bg-gray-700 px-3 py-2 rounded border border-gray-600">
+                <div className="text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                   {summaryData.financing.purpose_of_financing || 'N/A'}
                 </div>
               </div>
@@ -806,14 +806,14 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
 
             {/* Enhanced DSR Financial Calculations */}
             {summaryData.financial && summaryData.financing.amount_requested && (
-              <div className="mt-6 pt-6 border-t border-gray-600">
-                <h4 className="text-sm font-medium text-gray-300 mb-4">Debt Service Ratio (DSR) Assessment</h4>
+              <div className="mt-6 pt-6 border-t border-record-border">
+                <h4 className="text-sm font-medium text-record-title mb-4">Debt Service Ratio (DSR) Assessment</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Projected DSR*
                     </label>
-                    <div className="text-lg font-bold text-white">
+                    <div className="text-lg font-bold text-record-title">
                       {summaryData.financial.average_gross_income > 0 ?
                         (() => {
                           // Calculate with 6.5% interest rate (typical Malaysian personal loan rate)
@@ -829,11 +829,11 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                       }
                     </div>
                   </div>
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Monthly Payment (Est.)
                     </label>
-                    <div className="text-lg font-bold text-white font-mono">
+                    <div className="text-lg font-bold text-record-title font-mono">
                       {summaryData.financing.tenor ?
                         (() => {
                           const principal = summaryData.financing.amount_requested;
@@ -847,8 +847,8 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                       }
                     </div>
                   </div>
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       DSR Compliance
                     </label>
                     <div className="text-lg font-bold">
@@ -861,20 +861,20 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                           const monthlyPayment = principal * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1);
                           const dsr = (monthlyPayment / summaryData.financial.average_gross_income) * 100;
 
-                          if (dsr <= 40) return <span className="text-green-400">Excellent</span>;
-                          if (dsr <= 60) return <span className="text-yellow-400">Moderate</span>;
-                          if (dsr <= 70) return <span className="text-orange-400">High Risk</span>;
-                          return <span className="text-red-400">Exceeds Limit</span>;
+                          if (dsr <= 40) return <span className="text-success">Excellent</span>;
+                          if (dsr <= 60) return <span className="text-warning">Moderate</span>;
+                          if (dsr <= 70) return <span className="text-warning">High Risk</span>;
+                          return <span className="text-danger">Exceeds Limit</span>;
                         })()
                         : 'N/A'
                       }
                     </div>
                   </div>
-                  <div className="bg-gray-700 p-4 rounded-lg">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                  <div className="bg-record-layer-2 p-4 rounded-lg">
+                    <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                       Max Serviceable (60%)
                     </label>
-                    <div className="text-lg font-bold text-white font-mono">
+                    <div className="text-lg font-bold text-record-title font-mono">
                       {summaryData.financial.average_gross_income > 0 ?
                         formatCurrency(summaryData.financial.average_gross_income * 0.60)
                         : 'N/A'
@@ -884,8 +884,8 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
                 </div>
 
                 {/* DSR Guidelines Notice */}
-                <div className="mt-4 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg">
-                  <div className="text-xs text-blue-300">
+                <div className="mt-4 p-3 bg-primary/20 border border-primary/30 rounded-lg">
+                  <div className="text-xs text-primary-foreground">
                     <strong>*DSR Guidelines (Bank Negara Malaysia):</strong><br/>
                     • Excellent: ≤40% | Moderate: 41-60% | High Risk: 61-70% | Above 70%: Likely rejection<br/>
                     • Calculation assumes 6.5% interest rate and no existing debt obligations<br/>
@@ -899,45 +899,45 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
       )}
 
       {/* AI Processing Summary */}
-      <Card className="bg-gray-800 border-gray-700">
+      <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
-          <CardTitle className="text-white flex items-center">
-            <Shield className="w-5 h-5 mr-2 text-indigo-400" />
+          <CardTitle className="text-record-title flex items-center">
+            <Shield className="w-5 h-5 mr-2 text-primary" />
             AI Processing Summary
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gray-700 p-4 rounded-lg">
-              <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <div className="bg-record-layer-2 p-4 rounded-lg">
+              <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                 Documents Processed
               </label>
-              <div className="text-2xl font-bold text-white">
+              <div className="text-2xl font-bold text-record-title">
                 {summaryData.processing.total_documents}
               </div>
             </div>
-            <div className="bg-gray-700 p-4 rounded-lg">
-              <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <div className="bg-record-layer-2 p-4 rounded-lg">
+              <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                 Average Confidence
               </label>
               <div className={`text-2xl font-bold ${getConfidenceColor(summaryData.processing.average_confidence)}`}>
                 {Math.round(summaryData.processing.average_confidence * 100)}%
               </div>
             </div>
-            <div className="bg-gray-700 p-4 rounded-lg">
-              <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <div className="bg-record-layer-2 p-4 rounded-lg">
+              <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                 Processing Status
               </label>
-              <div className={`text-lg font-bold ${summaryData.processing.completion_status === 'complete' ? 'text-green-400' : 'text-yellow-400'}`}>
+              <div className={`text-lg font-bold ${summaryData.processing.completion_status === 'complete' ? 'text-success' : 'text-warning'}`}>
                 {summaryData.processing.completion_status === 'complete' ? 'Complete' : 'Incomplete'}
               </div>
             </div>
-            <div className="bg-gray-700 p-4 rounded-lg">
-              <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <div className="bg-record-layer-2 p-4 rounded-lg">
+              <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                 Data Quality
               </label>
-              <div className={`text-lg font-bold ${summaryData.processing.average_confidence >= 0.9 ? 'text-green-400' :
-                summaryData.processing.average_confidence >= 0.7 ? 'text-yellow-400' : 'text-red-400'}`}>
+              <div className={`text-lg font-bold ${summaryData.processing.average_confidence >= 0.9 ? 'text-success' :
+                summaryData.processing.average_confidence >= 0.7 ? 'text-warning' : 'text-danger'}`}>
                 {summaryData.processing.average_confidence >= 0.9 ? 'Excellent' :
                  summaryData.processing.average_confidence >= 0.7 ? 'Good' : 'Fair'}
               </div>
@@ -946,12 +946,12 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
 
           {/* Document Confidence Breakdown */}
           <div className="mt-6">
-            <h4 className="text-sm font-medium text-gray-300 mb-3">Document Extraction Confidence</h4>
+            <h4 className="text-sm font-medium text-record-title mb-3">Document Extraction Confidence</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {summaryData.processing.confidence_scores.map((score, index) => (
-                <div key={index} className="bg-gray-700 p-3 rounded-lg">
+                <div key={index} className="bg-record-layer-2 p-3 rounded-lg">
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-300 capitalize text-sm">
+                    <span className="text-record-title capitalize text-sm">
                       {score.document_type.replace('_', ' ')}
                     </span>
                     <span className={`font-bold ${getConfidenceColor(score.confidence)}`}>
@@ -966,9 +966,9 @@ export default function ApplicationSummaryContainer({ applicationId }: Applicati
       </Card>
 
       {/* AI Extraction Warning */}
-      <div className="flex items-center gap-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
-        <span className="text-amber-400">⚠️</span>
-        <span className="text-sm text-amber-300 font-medium">
+      <div className="flex items-center gap-2 p-4 bg-warning/20 border border-warning/30 rounded-lg">
+        <span className="text-warning">⚠️</span>
+        <span className="text-sm text-warning-foreground font-medium">
           AI Extraction - Please verify accuracy. This summary is generated from AI-processed documents and should be reviewed before making lending decisions.
         </span>
       </div>

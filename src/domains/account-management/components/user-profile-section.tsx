@@ -74,12 +74,12 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
 
   if (isLoadingProfile) {
     return (
-      <div className={`bg-gray-800 rounded-lg border border-gray-700 p-6 ${className}`}>
+      <div className={`bg-card rounded-lg border border-border p-6 ${className}`}>
         <div className="animate-pulse">
-          <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
+          <div className="h-6 bg-muted rounded w-48 mb-4"></div>
           <div className="space-y-4">
-            <div className="h-4 bg-gray-700 rounded w-32"></div>
-            <div className="h-10 bg-gray-700 rounded w-full"></div>
+            <div className="h-4 bg-muted rounded w-32"></div>
+            <div className="h-10 bg-muted rounded w-full"></div>
           </div>
         </div>
       </div>
@@ -89,26 +89,26 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
   return (
     <div className={`space-y-6 ${className}`}>
       {/* User Profile & Currency Preferences */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+      <div className="bg-card rounded-lg border border-border p-6">
         <div className="flex items-center gap-3 mb-6">
-          <DollarSign className="w-5 h-5 text-gray-400" />
+          <DollarSign className="w-5 h-5 text-muted-foreground" />
           <div>
-            <h3 className="text-lg font-semibold text-white">Currency Preferences</h3>
-            <p className="text-sm text-gray-400">Choose how financial data is displayed for you</p>
+            <h3 className="text-lg font-semibold text-foreground">Currency Preferences</h3>
+            <p className="text-sm text-muted-foreground">Choose how financial data is displayed for you</p>
           </div>
         </div>
 
         {/* User Info Display */}
-        <div className="mb-6 p-4 bg-gray-700/50 rounded-lg">
+        <div className="mb-6 p-4 bg-muted/50 rounded-lg">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
-              <User className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-success rounded-full flex items-center justify-center">
+              <User className="w-5 h-5 text-success-foreground" />
             </div>
             <div>
-              <p className="text-white font-medium">
+              <p className="text-foreground font-medium">
                 {user?.fullName || user?.firstName + ' ' + user?.lastName || 'User'}
               </p>
-              <p className="text-gray-400 text-sm">
+              <p className="text-muted-foreground text-sm">
                 {user?.primaryEmailAddress?.emailAddress}
               </p>
             </div>
@@ -117,7 +117,7 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
 
         {/* Preferred Currency */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-sm font-medium text-foreground mb-2">
             <div className="flex items-center gap-2">
               <DollarSign className="w-4 h-4" />
               Preferred Display Currency
@@ -126,7 +126,7 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
           <select
             value={preferredCurrency}
             onChange={(e) => setPreferredCurrency(e.target.value as SupportedCurrency)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           >
             {allowedCurrencies.map(currency => (
               <option key={currency} value={currency}>
@@ -134,12 +134,12 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
               </option>
             ))}
           </select>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             All amounts will be converted and displayed in this currency for your personal dashboard
           </p>
 
           {/* Business Currency Context */}
-          <div className="mt-2 p-2 bg-blue-600/10 border border-blue-600/20 rounded text-xs text-blue-300">
+          <div className="mt-2 p-2 bg-primary/10 border border-primary/20 rounded text-xs text-primary">
             <AlertCircle className="w-3 h-3 inline mr-1" />
             Business reports use the configured functional currency for consolidation
           </div>
@@ -147,10 +147,10 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
 
         {/* Currency Restrictions Info */}
         {allowedCurrencies.length < 9 && (
-          <div className="mb-6 p-3 bg-yellow-600/10 border border-yellow-600/20 rounded">
+          <div className="mb-6 p-3 bg-warning/10 border border-warning/20 rounded">
             <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-              <div className="text-xs text-yellow-300">
+              <AlertCircle className="w-4 h-4 text-warning-foreground mt-0.5 flex-shrink-0" />
+              <div className="text-xs text-warning-foreground">
                 <strong>Available currencies:</strong> Your business administrator has configured specific currencies for operations.
                 Contact your admin if you need access to additional currencies.
               </div>
@@ -159,10 +159,10 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
         )}
 
         {/* Save Button and Status */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-700">
+        <div className="flex items-center justify-between pt-4 border-t border-border">
           <div className="flex items-center gap-2">
             {successMessage && (
-              <div className="flex items-center gap-2 text-green-400 text-sm">
+              <div className="flex items-center gap-2 text-success-foreground text-sm">
                 <CheckCircle className="w-4 h-4" />
                 {successMessage}
               </div>
@@ -171,11 +171,11 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-md font-medium transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-success hover:bg-success/90 disabled:bg-muted disabled:cursor-not-allowed text-success-foreground rounded-md font-medium transition-colors flex items-center gap-2"
           >
             {saving ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-success-foreground border-t-transparent rounded-full animate-spin"></div>
                 Saving...
               </>
             ) : (
@@ -186,20 +186,20 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
       </div>
 
       {/* Profile Management (Future Enhancement) */}
-      <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-6">
+      <div className="bg-card/50 rounded-lg border border-border p-6">
         <div className="flex items-center gap-3 mb-4">
-          <User className="w-5 h-5 text-gray-400" />
+          <User className="w-5 h-5 text-muted-foreground" />
           <div>
-            <h3 className="text-lg font-semibold text-white">Profile Management</h3>
-            <p className="text-sm text-gray-400">Additional profile settings and preferences</p>
+            <h3 className="text-lg font-semibold text-foreground">Profile Management</h3>
+            <p className="text-sm text-muted-foreground">Additional profile settings and preferences</p>
           </div>
         </div>
         <div className="text-center py-6">
-          <AlertCircle className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-          <p className="text-gray-400 text-sm">
+          <AlertCircle className="w-8 h-8 text-warning-foreground mx-auto mb-2" />
+          <p className="text-muted-foreground text-sm">
             Extended profile management will be available in a future update
           </p>
-          <p className="text-gray-500 text-xs mt-1">
+          <p className="text-muted-foreground text-xs mt-1">
             Current profile information is managed through Clerk authentication
           </p>
         </div>

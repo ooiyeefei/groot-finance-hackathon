@@ -15,11 +15,11 @@ const AgedPayablesWidget = lazy(() => import('./AgedPayablesWidget'));
 
 // Loading component for Suspense fallbacks
 const ComponentLoader = ({ title }: { title: string }) => (
-  <div className="bg-gray-800 border-gray-700 border rounded-lg p-6">
+  <div className="bg-card text-card-foreground border rounded-lg p-card-padding">
     <div className="flex items-center justify-center h-32">
       <div className="text-center">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-400 mx-auto mb-2" />
-        <p className="text-sm text-gray-400">Loading {title}...</p>
+        <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto mb-2" />
+        <p className="text-sm text-muted-foreground">Loading {title}...</p>
       </div>
     </div>
   </div>
@@ -65,30 +65,30 @@ export default function CompleteDashboard() {
 
   const getTrendIcon = (trend?: number, metricType?: string) => {
     if (trend === undefined || trend === 0) return null;
-    
+
     // For expenses, up is bad (red), down is good (green)
     if (metricType === 'expenses') {
-      return trend > 0 
-        ? <TrendingUp className="w-3 h-3 text-red-400" />
-        : <TrendingDown className="w-3 h-3 text-green-400" />;
+      return trend > 0
+        ? <TrendingUp className="w-3 h-3 text-destructive" />
+        : <TrendingDown className="w-3 h-3 text-green-600 dark:text-green-400" />;
     }
-    
+
     // For income/profit, up is good (green), down is bad (red)
-    return trend > 0 
-      ? <TrendingUp className="w-3 h-3 text-green-400" />
-      : <TrendingDown className="w-3 h-3 text-red-400" />;
+    return trend > 0
+      ? <TrendingUp className="w-3 h-3 text-green-600 dark:text-green-400" />
+      : <TrendingDown className="w-3 h-3 text-destructive" />;
   };
 
   const getTrendColor = (trend?: number, metricType?: string) => {
-    if (trend === undefined || trend === 0) return 'text-gray-400';
-    
+    if (trend === undefined || trend === 0) return 'text-muted-foreground';
+
     // For expenses, up is bad (red), down is good (green)
     if (metricType === 'expenses') {
-      return trend > 0 ? 'text-red-400' : 'text-green-400';
+      return trend > 0 ? 'text-destructive' : 'text-green-600 dark:text-green-400';
     }
-    
+
     // For income/profit, up is good (green), down is bad (red)
-    return trend > 0 ? 'text-green-400' : 'text-red-400';
+    return trend > 0 ? 'text-green-600 dark:text-green-400' : 'text-destructive';
   };
 
   const getTrendText = (trend?: number) => {
@@ -122,16 +122,16 @@ export default function CompleteDashboard() {
 
   if (error) {
     return (
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+      <div className="bg-card text-card-foreground rounded-lg border p-card-padding">
         <div className="text-center">
-          <div className="w-12 h-12 bg-red-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
+          <div className="w-12 h-12 bg-destructive/20 rounded-full flex items-center justify-center mx-auto mb-3">
             <span className="text-xl">⚠️</span>
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">Error Loading Financial Data</h3>
-          <p className="text-gray-400 text-sm mb-4">{error}</p>
+          <h3 className="text-lg font-medium text-foreground mb-2">Error Loading Financial Data</h3>
+          <p className="text-muted-foreground text-sm mb-4">{error}</p>
           <button
             onClick={refresh}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />
             Retry
@@ -142,25 +142,25 @@ export default function CompleteDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-section-gap">
       {/* Header with Period Selector */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Financial Dashboard</h2>
-          <p className="text-sm text-gray-400">
+          <h2 className="text-xl font-semibold text-foreground">Financial Dashboard</h2>
+          <p className="text-sm text-muted-foreground">
             {getPeriodDisplayName(selectedPeriod)} • Converted to {homeCurrency}
             {lastUpdated && (
               <span className="ml-2">• Updated {lastUpdated.toLocaleTimeString()}</span>
             )}
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           {/* Period Selector */}
           <select
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value as 'month' | 'quarter' | 'year')}
-            className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-1.5 bg-muted text-foreground border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="month">Last 60 Days</option>
             <option value="quarter">Current Quarter</option>
@@ -171,7 +171,7 @@ export default function CompleteDashboard() {
           <button
             onClick={refresh}
             disabled={loading}
-            className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50"
+            className="p-2 bg-muted hover:bg-accent text-foreground rounded-lg transition-colors disabled:opacity-50"
             title="Refresh data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -180,20 +180,20 @@ export default function CompleteDashboard() {
       </div>
 
       {/* KPI Metrics - 3+2 Grid Layout */}
-      <div className="space-y-4">
+      <div className="space-y-card-gap">
         {/* Top Row: Primary Financial Health Metrics (3 cards) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        {/* Total Income Card */}
-        <div className="bg-gray-800 border border-green-700/50 bg-green-900/10 rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-card-gap">
+        {/* Total Income Card - Translucent green for both light and dark modes */}
+        <div className="bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50 rounded-lg p-card-padding transition-all shadow-sm min-h-[120px]">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-gray-300">Total Income</p>
-            <PiggyBank className="w-4 h-4 text-gray-400" />
+            <p className="text-sm font-medium text-green-900 dark:text-gray-300">Total Income</p>
+            <PiggyBank className="w-4 h-4 text-green-700 dark:text-gray-400" />
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-green-900 dark:text-white">
                 {analytics ? formatCurrency(analytics.total_income, homeCurrency) : '-'}
               </p>
             )}
@@ -208,24 +208,24 @@ export default function CompleteDashboard() {
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-green-700 dark:text-gray-500">No trend</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-green-700 dark:text-gray-500">vs. prev period</span>
           </div>
         </div>
 
-        {/* Total Expenses Card */}
-        <div className="bg-gray-800 border border-red-700/50 bg-red-900/10 rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px]">
+        {/* Total Expenses Card - Translucent red for both light and dark modes */}
+        <div className="bg-red-50 dark:bg-gray-800 dark:bg-red-900/10 border border-red-200 dark:border-red-700/50 rounded-lg p-card-padding transition-all shadow-sm min-h-[120px]">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-gray-300">Total Expenses</p>
-            <CreditCard className="w-4 h-4 text-gray-400" />
+            <p className="text-sm font-medium text-red-900 dark:text-gray-300">Total Expenses</p>
+            <CreditCard className="w-4 h-4 text-red-700 dark:text-gray-400" />
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-red-900 dark:text-white">
                 {analytics ? formatCurrency(analytics.total_expenses, homeCurrency) : '-'}
               </p>
             )}
@@ -240,28 +240,40 @@ export default function CompleteDashboard() {
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-red-700 dark:text-gray-500">No trend</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-red-700 dark:text-gray-500">vs. prev period</span>
           </div>
         </div>
 
-          {/* Net Profit Card */}
-        <div className={`bg-gray-800 border rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px] ${
-          analytics && analytics.net_profit >= 0 
-            ? 'border-green-700/50 bg-green-900/10' 
-            : 'border-red-700/50 bg-red-900/10'
+          {/* Net Profit Card - Dynamic translucent background based on positive/negative */}
+        <div className={`border rounded-lg p-card-padding transition-all shadow-sm min-h-[120px] ${
+          analytics && analytics.net_profit >= 0
+            ? 'bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border-green-200 dark:border-green-700/50'
+            : 'bg-red-50 dark:bg-gray-800 dark:bg-red-900/10 border-red-200 dark:border-red-700/50'
         }`}>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-gray-300">Net Profit</p>
-            <DollarSign className="w-4 h-4 text-gray-400" />
+            <p className={`text-sm font-medium ${
+              analytics && analytics.net_profit >= 0
+                ? 'text-green-900 dark:text-gray-300'
+                : 'text-red-900 dark:text-gray-300'
+            }`}>Net Profit</p>
+            <DollarSign className={`w-4 h-4 ${
+              analytics && analytics.net_profit >= 0
+                ? 'text-green-700 dark:text-gray-400'
+                : 'text-red-700 dark:text-gray-400'
+            }`} />
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className={`text-2xl font-bold ${
+                analytics && analytics.net_profit >= 0
+                  ? 'text-green-900 dark:text-white'
+                  : 'text-red-900 dark:text-white'
+              }`}>
                 {analytics ? formatCurrency(analytics.net_profit, homeCurrency) : '-'}
               </p>
             )}
@@ -276,54 +288,62 @@ export default function CompleteDashboard() {
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className={`text-xs ${
+                  analytics && analytics.net_profit >= 0
+                    ? 'text-green-700 dark:text-gray-500'
+                    : 'text-red-700 dark:text-gray-500'
+                }`}>No trend</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className={`text-xs ${
+              analytics && analytics.net_profit >= 0
+                ? 'text-green-700 dark:text-gray-500'
+                : 'text-red-700 dark:text-gray-500'
+            }`}>vs. prev period</span>
           </div>
         </div>
         </div>
         
         {/* Bottom Row: Operational Metrics (2 cards) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 max-w-2xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-card-gap max-w-2xl">
         {/* Transaction Count Card */}
-        <div className="bg-gray-800 border border-blue-700/50 bg-blue-900/10 rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px]">
+        <div className="bg-card text-card-foreground border rounded-lg p-card-padding transition-all shadow-sm min-h-[120px]">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-gray-300">Transactions</p>
-            <Activity className="w-4 h-4 text-gray-400" />
+            <p className="text-sm font-medium opacity-80">Transactions</p>
+            <Activity className="w-4 h-4 opacity-60" />
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold">
                 {analytics ? analytics.transaction_count : '-'}
               </p>
             )}
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-1">
-              <span className="text-xs text-gray-500">Total count</span>
+              <span className="text-xs opacity-60">Total count</span>
             </div>
-            <span className="text-xs text-gray-500">{getPeriodDisplayName(selectedPeriod)}</span>
+            <span className="text-xs opacity-60">{getPeriodDisplayName(selectedPeriod)}</span>
           </div>
         </div>
 
         {/* Profit Margin Card */}
-        <div className={`bg-gray-800 border rounded-lg p-6 transition-all hover:bg-gray-750 shadow-sm min-h-[120px] ${
-          analytics && analytics.net_profit >= 0 
-            ? 'border-blue-700/50 bg-blue-900/10'
-            : 'border-orange-700/50 bg-orange-900/10'
+        <div className={`border rounded-lg p-card-padding transition-all shadow-sm min-h-[120px] ${
+          analytics && analytics.net_profit >= 0
+            ? 'bg-card text-card-foreground'
+            : 'bg-warning text-warning-foreground dark:bg-[var(--warning-translucent)] dark:border-yellow-700/30'
         }`}>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-gray-300">Profit Margin</p>
-            <TrendingUp className="w-4 h-4 text-gray-400" />
+            <p className="text-sm font-medium opacity-80">Profit Margin</p>
+            <TrendingUp className="w-4 h-4 opacity-60" />
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold">
                 {formatCurrency(profitMargin, homeCurrency, true)}
               </p>
             )}
@@ -338,17 +358,17 @@ export default function CompleteDashboard() {
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs opacity-60">No trend</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs opacity-60">vs. prev period</span>
           </div>
         </div>
         </div>
       </div>
 
       {/* Charts and Analysis Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-card-gap">
         {/* Aged Receivables - Priority placement for critical business metric */}
         <Suspense fallback={<ComponentLoader title="Aged Receivables" />}>
           <AgedReceivablesWidget

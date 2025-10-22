@@ -21,7 +21,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
   return (
     <ClientProviders>
       
-        <div className="flex h-screen bg-gray-900">
+        <div className="flex h-screen bg-background">
           <Sidebar />
 
           <div className="flex-1 flex flex-col">

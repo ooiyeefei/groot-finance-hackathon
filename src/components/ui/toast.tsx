@@ -80,45 +80,45 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
   const getIcon = () => {
     switch (toast.type) {
       case 'success':
-        return <CheckCircle className="w-5 h-5 !text-green-400" />
+        return <CheckCircle className="w-5 h-5 text-success-foreground" />
       case 'error':
-        return <XCircle className="w-5 h-5 !text-red-400" />
+        return <XCircle className="w-5 h-5 text-danger-foreground" />
       case 'warning':
-        return <AlertCircle className="w-5 h-5 !text-yellow-400" />
+        return <AlertCircle className="w-5 h-5 text-warning-foreground" />
       case 'info':
-        return <Info className="w-5 h-5 !text-blue-400" />
+        return <Info className="w-5 h-5 text-primary-foreground" />
       default:
-        return <Info className="w-5 h-5 !text-blue-400" />
+        return <Info className="w-5 h-5 text-primary-foreground" />
     }
   }
 
   const getBgColor = () => {
     switch (toast.type) {
       case 'success':
-        return 'bg-green-900 border-green-700'
+        return 'bg-success border-success'
       case 'error':
-        return 'bg-red-900 border-red-700'
+        return 'bg-danger border-danger'
       case 'warning':
-        return 'bg-yellow-900 border-yellow-700'
+        return 'bg-warning border-warning'
       case 'info':
-        return 'bg-blue-900 border-blue-700'
+        return 'bg-primary border-primary'
       default:
-        return 'bg-gray-900 border-gray-700'
+        return 'bg-card border-border'
     }
   }
 
   const getTextColor = () => {
     switch (toast.type) {
       case 'success':
-        return '!text-green-400'
+        return 'text-success-foreground'
       case 'error':
-        return '!text-red-400'
+        return 'text-danger-foreground'
       case 'warning':
-        return '!text-yellow-400'
+        return 'text-warning-foreground'
       case 'info':
-        return '!text-blue-400'
+        return 'text-primary-foreground'
       default:
-        return '!text-white'
+        return 'text-foreground'
     }
   }
 
@@ -140,14 +140,14 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
             {toast.title}
           </p>
           {toast.description && (
-            <p className="mt-1 text-sm text-gray-300">
+            <p className="mt-1 text-sm text-muted-foreground">
               {toast.description}
             </p>
           )}
         </div>
         <button
           onClick={onRemove}
-          className="flex-shrink-0 rounded-md p-1.5 text-gray-400 hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-600"
+          className="flex-shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <X className="w-4 h-4" />
         </button>

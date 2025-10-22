@@ -22,14 +22,14 @@ export default function DocumentStatusBadge({
         return {
           icon: Upload,
           text: 'Uploading',
-          className: 'bg-blue-900/20 text-blue-300 border-blue-700/50',
+          variant: 'info' as const,
           animate: true
         }
       case 'pending':
         return {
           icon: Clock,
           text: 'Pending',
-          className: 'bg-yellow-900/20 text-yellow-300 border-yellow-700/50',
+          variant: 'warning' as const,
           animate: false
         }
       case 'processing':
@@ -40,63 +40,63 @@ export default function DocumentStatusBadge({
           icon: processingStage === 'extracting' ? Upload :
                 processingStage === 'analyzing' ? Cog : Loader2,
           text: stageText,
-          className: 'bg-blue-900/20 text-blue-300 border-blue-700/50',
+          variant: 'info' as const,
           animate: true
         }
       case 'ocr_processing':
         return {
           icon: Eye,
           text: 'OCR Processing',
-          className: 'bg-purple-900/20 text-purple-300 border-purple-700/50',
+          variant: 'info' as const,
           animate: true
         }
       case 'classifying':
         return {
           icon: Brain,
           text: 'Classifying Document',
-          className: 'bg-indigo-900/20 text-indigo-300 border-indigo-700/50',
+          variant: 'info' as const,
           animate: true
         }
       case 'classification_failed':
         return {
           icon: XCircle,
           text: 'Classification Failed',
-          className: 'bg-red-900/20 text-red-300 border-red-700/50',
+          variant: 'error' as const,
           animate: false
         }
       case 'pending_extraction':
         return {
           icon: Brain,
           text: 'Processing',
-          className: 'bg-blue-900/20 text-blue-300 border-blue-700/50',
+          variant: 'info' as const,
           animate: true
         }
       case 'extracting':
         return {
           icon: FileText,
           text: 'Extracting Data',
-          className: 'bg-cyan-900/20 text-cyan-300 border-cyan-700/50',
+          variant: 'info' as const,
           animate: true
         }
       case 'completed':
         return {
           icon: CheckCircle,
           text: 'Completed',
-          className: 'bg-green-900/20 text-green-300 border-green-700/50',
+          variant: 'success' as const,
           animate: false
         }
       case 'failed':
         return {
           icon: XCircle,
           text: 'Failed',
-          className: 'bg-red-900/20 text-red-300 border-red-700/50',
+          variant: 'error' as const,
           animate: false
         }
       default:
         return {
           icon: Clock,
           text: 'Unknown',
-          className: 'bg-gray-900/20 text-gray-300 border-gray-700/50',
+          variant: 'default' as const,
           animate: false
         }
     }
@@ -105,24 +105,39 @@ export default function DocumentStatusBadge({
   const config = getStatusConfig()
   const Icon = config.icon
 
+  // Map variant to CSS class
+  const getCSSClass = () => {
+    switch (config.variant) {
+      case 'success':
+        return 'badge-success-status'
+      case 'warning':
+        return 'badge-warning-status'
+      case 'error':
+        return 'badge-error-status'
+      case 'info':
+      default:
+        return 'badge-info-metadata'
+    }
+  }
+
   return (
-    <span 
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.className} ${
+    <div
+      className={`${getCSSClass()} inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
         (status === 'failed' || status === 'classification_failed') && errorMessage ? 'cursor-help' : ''
       }`}
       title={status === 'failed' && errorMessage ? errorMessage : undefined}
     >
-      <Icon 
+      <Icon
         className={`w-3 h-3 mr-1 ${
           config.animate && animated ? 'animate-spin' : ''
-        }`} 
+        }`}
       />
       {config.text}
-      
+
       {/* Processing stage indicator */}
       {status === 'processing' && processingStage && (
         <span className="ml-1 w-1 h-1 bg-current rounded-full animate-pulse" />
       )}
-    </span>
+    </div>
   )
 }

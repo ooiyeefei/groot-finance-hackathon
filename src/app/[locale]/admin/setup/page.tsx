@@ -56,8 +56,8 @@ export default function AdminSetupPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-border">
           <CardHeader>
             <CardTitle className="text-white">Please sign in first</CardTitle>
           </CardHeader>
@@ -67,8 +67,8 @@ export default function AdminSetupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-gray-800 border-border">
         <CardHeader>
           <CardTitle className="text-white">Business Admin Assignment</CardTitle>
           <CardDescription className="text-gray-400">

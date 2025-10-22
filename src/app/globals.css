@@ -2,61 +2,847 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  /* FinanSEAL Dark Theme */
-  --primary-color: #0066CC;        /* Trust blue */
-  --bg-primary: #1A1A1A;           /* Main background */
-  --bg-secondary: #2D2D2D;         /* Card/panel background */
-  --bg-tertiary: #3A3A3A;          /* Hover states */
-  --text-primary: #FFFFFF;         /* Primary text */
-  --text-secondary: #B0B0B0;       /* Secondary text */
-  --text-muted: #808080;           /* Muted text */
-  --border-color: #404040;         /* Border color */
+@layer base {
+  :root {
+    /* ========================================================
+       CORE DESIGN SYSTEM TOKENS - LIGHT THEME
+       ======================================================== */
 
-  /* Legacy variables for compatibility */
-  --background: 210 40% 98%;
-  --foreground: 222.2 84% 4.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
-  --chart-1: 12 76% 61%;
-  --chart-2: 173 58% 39%;
-  --chart-3: 197 37% 24%;
-  --chart-4: 43 74% 66%;
-  --chart-5: 27 87% 67%;
-  --radius: 0.5rem;
+    /* Base Colors - Material Design 3 Inspired (WCAG AA compliant) */
+    --background: 0 0% 98%;           /* Off-white background (Google-style) */
+    --foreground: 222 47% 11%;        /* Dark gray-blue text for readability */
+    --surface: 0 0% 100%;             /* Pure white surfaces */
+    --surface-variant: 220 14% 96%;   /* Light gray surfaces */
+
+    /* Card System */
+    --card: 0 0% 100%;                /* Pure white cards for elevation */
+    --card-foreground: 222 47% 11%;   /* Dark text on cards */
+    --card-hover: 220 14% 98%;        /* Subtle hover state */
+
+    /* Interactive Elements */
+    --popover: 0 0% 100%;             /* White popovers */
+    --popover-foreground: 222 47% 11%; /* Dark text in popovers */
+
+    /* Primary Brand Colors */
+    --primary: 221 83% 53%;           /* Blue primary (Material Blue 500) */
+    --primary-foreground: 0 0% 100%;  /* White text on primary */
+    --primary-hover: 221 83% 48%;     /* Darker blue for hover */
+    --primary-muted: 221 83% 95%;     /* Very light blue for subtle states */
+
+    /* Action Button Semantic Colors */
+    --action-primary: 221 83% 53%;    /* Blue for create/submit actions */
+    --action-primary-foreground: 0 0% 100%; /* White text on blue */
+    --action-primary-hover: 221 83% 48%; /* Darker blue hover */
+
+    --action-view: 142 76% 36%;       /* Green for view/analyze actions */
+    --action-view-foreground: 0 0% 100%; /* White text on green */
+    --action-view-hover: 142 76% 32%; /* Darker green hover */
+
+    --action-secondary: 220 14% 96%; /* Light gray for secondary actions */
+    --action-secondary-foreground: 222 47% 11%; /* Dark text on light gray */
+    --action-secondary-hover: 220 14% 93%; /* Darker gray hover */
+
+    /* Badge Semantic Colors */
+    --badge-invoice: 142 76% 36%;     /* Green for invoice badges */
+    --badge-invoice-foreground: 0 0% 100%; /* White text on green */
+
+    --badge-expense: 221 83% 53%;     /* Blue for expense badges */
+    --badge-expense-foreground: 0 0% 100%; /* White text on blue */
+
+    /* Secondary Colors */
+    --secondary: 220 14% 96%;         /* Light gray for secondary surfaces */
+    --secondary-foreground: 222 47% 11%; /* Dark text on secondary */
+    --secondary-hover: 220 14% 93%;   /* Darker secondary for hover */
+
+    /* Muted/Disabled States */
+    --muted: 220 14% 96%;             /* Muted background */
+    --muted-foreground: 220 9% 46%;   /* Medium gray for secondary text (WCAG AA) */
+    --muted-hover: 220 14% 93%;       /* Muted hover state */
+
+    /* Accent Colors */
+    --accent: 221 83% 95%;            /* Light blue accent */
+    --accent-foreground: 222 47% 11%; /* Dark text on accent */
+    --accent-hover: 221 83% 90%;      /* Accent hover state */
+
+    /* System Status Colors */
+    --success: 142 76% 96%;           /* Light green background */
+    --success-foreground: 142 90% 25%; /* Dark green text */
+    --success-hover: 142 76% 93%;     /* Success hover state */
+
+    --warning: 32 95% 96%;            /* Light yellow background */
+    --warning-foreground: 32 90% 30%; /* Dark yellow text */
+    --warning-hover: 32 95% 93%;      /* Warning hover state */
+
+    --danger: 0 84% 96%;              /* Light red background */
+    --danger-foreground: 0 90% 35%;   /* Dark red text */
+    --danger-hover: 0 84% 93%;        /* Danger hover state */
+
+    --info: 221 83% 95%;              /* Light blue info */
+    --info-foreground: 221 83% 30%;   /* Dark blue text */
+    --info-hover: 221 83% 90%;        /* Info hover state */
+
+    /* Destructive Actions */
+    --destructive: 0 84% 60%;         /* Red for errors/destructive */
+    --destructive-foreground: 0 0% 100%; /* White text on destructive */
+    --destructive-hover: 0 84% 55%;   /* Destructive hover state */
+
+    /* Borders & Inputs */
+    --border: 220 13% 91%;            /* Light gray borders */
+    --border-hover: 220 13% 85%;      /* Darker borders on hover */
+    --input: 220 13% 91%;             /* Input borders */
+    --input-focus: 221 83% 53%;       /* Blue input focus border */
+    --ring: 221 83% 53%;              /* Focus ring (primary) */
+
+    /* Component Design Tokens */
+    --radius: 0.75rem;                /* Material Design rounded corners */
+    --radius-sm: 0.375rem;            /* Small radius */
+    --radius-lg: 1rem;                /* Large radius */
+    --radius-full: 9999px;            /* Full radius (pills) */
+
+    /* Typography Scale (10% smaller for sidebar optimization) */
+    --font-size-xs: 0.675rem;          /* 10.8px - was 12px */
+    --font-size-sm: 0.765rem;          /* 12.24px - was 13.6px */
+    --font-size-base: 0.9rem;          /* 14.4px - was 16px */
+    --font-size-lg: 1.035rem;          /* 16.56px - was 18px */
+    --font-size-xl: 1.125rem;          /* 18px - was 20px */
+    --font-size-2xl: 1.35rem;          /* 21.6px - was 24px */
+    --font-size-3xl: 1.71rem;          /* 27.36px - was 30px */
+    --font-size-4xl: 2.025rem;         /* 32.4px - was 36px */
+
+    /* Spacing Scale (10% smaller for sidebar optimization) */
+    --space-1: 0.225rem;               /* 3.6px - was 4px */
+    --space-2: 0.45rem;                /* 7.2px - was 8px */
+    --space-3: 0.675rem;               /* 10.8px - was 12px */
+    --space-4: 0.9rem;                 /* 14.4px - was 16px */
+    --space-5: 1.125rem;               /* 18px - was 20px */
+    --space-6: 1.35rem;                /* 21.6px - was 24px */
+    --space-8: 1.8rem;                 /* 28.8px - was 32px */
+    --space-10: 2.25rem;               /* 36px - was 40px */
+    --space-12: 2.7rem;                /* 43.2px - was 48px */
+    --space-16: 3.6rem;                /* 57.6px - was 64px */
+    --space-20: 4.5rem;                /* 72px - was 80px */
+    --space-24: 5.4rem;                /* 86.4px - was 96px */
+
+    /* Layout Dimensions (10% smaller for sidebar optimization) */
+    --sidebar-width: 13.5rem;          /* 216px - was 240px */
+    --sidebar-width-collapsed: 3.6rem; /* 57.6px - was 64px */
+    --header-height: 3.6rem;           /* 57.6px - was 64px */
+    --content-max-width: 108rem;       /* 1728px - was 1920px */
+
+    /* Component Sizes (10% smaller) */
+    --button-height-sm: 1.8rem;        /* 28.8px - was 32px */
+    --button-height-md: 2.25rem;       /* 36px - was 40px */
+    --button-height-lg: 2.7rem;        /* 43.2px - was 48px */
+    --input-height: 2.25rem;           /* 36px - was 40px */
+    --avatar-sm: 1.8rem;               /* 28.8px - was 32px */
+    --avatar-md: 2.25rem;              /* 36px - was 40px */
+    --avatar-lg: 2.7rem;               /* 43.2px - was 48px */
+
+    /* Card & Component Spacing (10% smaller) */
+    --card-padding: 1.35rem;           /* 21.6px - was 24px */
+    --card-gap: 1.35rem;               /* 21.6px - was 24px */
+    --section-gap: 2.7rem;             /* 43.2px - was 48px */
+
+    /* Chart colors - Material Design palette */
+    --chart-1: 221 83% 53%;           /* Blue */
+    --chart-2: 142 76% 36%;           /* Green */
+    --chart-3: 262 83% 58%;           /* Purple */
+    --chart-4: 32 95% 44%;            /* Orange */
+    --chart-5: 340 82% 52%;           /* Pink */
+
+    /* Tab System */
+    --tab-active: var(--primary);         /* Active tab color */
+    --tab-active-foreground: var(--primary-foreground); /* Active tab text */
+    --tab-inactive: var(--muted);         /* Inactive tab background */
+    --tab-inactive-foreground: var(--muted-foreground); /* Inactive tab text */
+    --tab-hover: var(--accent-hover);     /* Tab hover state */
+
+    /* Loading States - Light Mode */
+    --loading-spinner: 221 83% 53%;       /* Blue spinner for light mode */
+    --loading-background: 220 14% 98%;    /* Very light gray background */
+    --loading-foreground: 220 9% 46%;     /* Medium gray text */
+    --loading-skeleton: 220 14% 95%;      /* Light gray skeleton */
+    --loading-skeleton-shimmer: 0 0% 100%; /* White shimmer effect */
+
+    /* ========================================================
+       SEMANTIC RECORD/CARD SYSTEM - LIGHT MODE
+       ======================================================== */
+
+    /* Record Card Backgrounds (Layer 1, 2, 3) */
+    --record-layer-1: 0 0% 100%;          /* Pure white for primary cards */
+    --record-layer-2: 220 14% 98%;        /* Very light gray for secondary cards */
+    --record-layer-3: 220 14% 96%;        /* Light gray for tertiary cards */
+    --record-hover: 220 14% 96%;          /* Hover state for cards */
+
+    /* Record Text Hierarchy */
+    --record-title: 222 47% 11%;          /* Dark gray-blue for primary titles */
+    --record-title-hover: 222 47% 8%;     /* Darker on hover */
+    --record-supporting: 220 9% 46%;      /* Medium gray for supporting text */
+    --record-supporting-light: 220 9% 60%; /* Lighter gray for secondary supporting text */
+    --record-meta: 220 9% 65%;            /* Light gray for metadata */
+
+    /* Record Borders */
+    --record-border: 220 13% 91%;         /* Light borders for records */
+    --record-border-hover: 220 13% 85%;   /* Darker border on hover */
+  }
+
+  .dark {
+    /* ========================================================
+       CORE DESIGN SYSTEM TOKENS - DARK THEME
+       ======================================================== */
+
+    /* Base Colors - Material Design 3 Dark Theme */
+    --background: 222 84% 5%;         /* Very dark blue-gray */
+    --foreground: 210 40% 98%;        /* Off-white text */
+    --surface: 222 47% 11%;           /* Dark elevated surfaces */
+    --surface-variant: 217 33% 17%;   /* Darker gray surfaces */
+
+    /* Card System */
+    --card: 222 47% 11%;              /* Dark elevated cards */
+    --card-foreground: 210 40% 98%;   /* Light text on cards */
+    --card-hover: 222 47% 13%;        /* Lighter cards on hover */
+
+    /* Interactive Elements */
+    --popover: 222 47% 11%;           /* Dark popovers */
+    --popover-foreground: 210 40% 98%; /* Light text in popovers */
+
+    /* Primary Brand Colors */
+    --primary: 221 83% 53%;           /* Blue primary (same as light) */
+    --primary-foreground: 0 0% 100%;  /* White text on primary */
+    --primary-hover: 221 83% 58%;     /* Lighter blue for hover */
+    --primary-muted: 221 83% 15%;     /* Very dark blue for subtle states */
+
+    /* Action Button Semantic Colors - Dark Mode */
+    --action-primary: 221 83% 58%;    /* Slightly brighter blue for dark mode */
+    --action-primary-foreground: 0 0% 100%; /* White text on blue */
+    --action-primary-hover: 221 83% 63%; /* Even brighter blue hover */
+
+    --action-view: 142 76% 42%;       /* Slightly brighter green for dark mode */
+    --action-view-foreground: 0 0% 100%; /* White text on green */
+    --action-view-hover: 142 76% 47%; /* Brighter green hover */
+
+    --action-secondary: 217 33% 17%; /* Dark gray for secondary actions */
+    --action-secondary-foreground: 210 40% 98%; /* Light text on dark gray */
+    --action-secondary-hover: 217 33% 20%; /* Lighter gray hover */
+
+    /* Badge Semantic Colors - Dark Mode */
+    --badge-invoice: 142 76% 42%;     /* Slightly brighter green for dark mode */
+    --badge-invoice-foreground: 0 0% 100%; /* White text on green */
+
+    --badge-expense: 221 83% 58%;     /* Slightly brighter blue for dark mode */
+    --badge-expense-foreground: 0 0% 100%; /* White text on blue */
+
+    /* Secondary Colors */
+    --secondary: 217 33% 17%;         /* Dark gray for secondary */
+    --secondary-foreground: 210 40% 98%; /* Light text on secondary */
+    --secondary-hover: 217 33% 20%;   /* Lighter secondary for hover */
+
+    /* Muted/Disabled States */
+    --muted: 217 33% 17%;             /* Muted background */
+    --muted-foreground: 215 20% 65%;  /* Medium gray for secondary text */
+    --muted-hover: 217 33% 20%;       /* Muted hover state */
+
+    /* Accent Colors */
+    --accent: 217 33% 17%;            /* Dark accent */
+    --accent-foreground: 210 40% 98%; /* Light text on accent */
+    --accent-hover: 217 33% 20%;      /* Accent hover state */
+
+    /* System Status Colors */
+    --success: 142 76% 10%;           /* Dark green background */
+    --success-foreground: 142 80% 70%; /* Light green text */
+    --success-hover: 142 76% 12%;     /* Success hover state */
+
+    --warning: 32 95% 10%;            /* Dark yellow background */
+    --warning-foreground: 32 80% 70%; /* Light yellow text */
+    --warning-hover: 32 95% 12%;      /* Warning hover state */
+
+    --danger: 0 84% 10%;              /* Dark red background */
+    --danger-foreground: 0 80% 70%;   /* Light red text */
+    --danger-hover: 0 84% 12%;        /* Danger hover state */
+
+    --info: 221 83% 15%;              /* Dark blue info */
+    --info-foreground: 221 83% 70%;   /* Light blue text */
+    --info-hover: 221 83% 17%;        /* Info hover state */
+
+    /* Destructive Actions */
+    --destructive: 0 63% 31%;         /* Dark red */
+    --destructive-foreground: 210 40% 98%; /* Light text on destructive */
+    --destructive-hover: 0 63% 35%;   /* Destructive hover state */
+
+    /* Borders & Inputs */
+    --border: 217 33% 17%;            /* Dark borders */
+    --border-hover: 217 33% 22%;      /* Lighter borders on hover */
+    --input: 217 33% 17%;             /* Dark input borders */
+    --input-focus: 221 83% 53%;       /* Blue input focus border */
+    --ring: 221 83% 53%;              /* Focus ring (primary) */
+
+    /* Translucent backgrounds for subtle color accents in dark mode */
+    --success-translucent: rgb(74 222 128 / 0.1);
+    --warning-translucent: rgb(251 191 36 / 0.1);
+    --danger-translucent: rgb(248 113 113 / 0.1);
+    --info-translucent: rgb(59 130 246 / 0.1);
+
+    /* Tab System */
+    --tab-active: var(--primary);         /* Active tab color */
+    --tab-active-foreground: var(--primary-foreground); /* Active tab text */
+    --tab-inactive: var(--muted);         /* Inactive tab background */
+    --tab-inactive-foreground: var(--muted-foreground); /* Inactive tab text */
+    --tab-hover: var(--accent-hover);     /* Tab hover state */
+
+    /* Loading States - Dark Mode */
+    --loading-spinner: 221 83% 53%;       /* Blue spinner for dark mode */
+    --loading-background: 222 47% 11%;    /* Dark background */
+    --loading-foreground: 215 20% 65%;    /* Light gray text */
+    --loading-skeleton: 217 33% 17%;      /* Dark gray skeleton */
+    --loading-skeleton-shimmer: 217 33% 22%; /* Lighter gray shimmer */
+
+    /* ========================================================
+       SEMANTIC RECORD/CARD SYSTEM - DARK MODE
+       ======================================================== */
+
+    /* Record Card Backgrounds (Layer 1, 2, 3) */
+    --record-layer-1: 222 47% 11%;        /* Dark elevated surface for primary cards */
+    --record-layer-2: 217 33% 17%;        /* Darker surface for secondary cards */
+    --record-layer-3: 217 33% 14%;        /* Darkest surface for tertiary cards */
+    --record-hover: 222 47% 13%;          /* Lighter surface for hover */
+
+    /* Record Text Hierarchy */
+    --record-title: 210 40% 98%;          /* Off-white for primary titles */
+    --record-title-hover: 0 0% 100%;      /* Pure white on hover */
+    --record-supporting: 215 20% 65%;     /* Light gray for supporting text */
+    --record-supporting-light: 215 20% 55%; /* Medium gray for secondary supporting text */
+    --record-meta: 215 20% 45%;           /* Darker gray for metadata */
+
+    /* Record Borders */
+    --record-border: 217 33% 17%;         /* Dark borders for records */
+    --record-border-hover: 217 33% 22%;   /* Lighter border on hover */
+  }
 }
 
-body {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+/* ========================================================
+   .LIGHT AND .DARK CLASS-BASED STYLING SYSTEM
+   ======================================================== */
+
+/* Light Mode Badge Styles */
+.light .badge-info-metadata {
+  @apply border border-blue-200 bg-blue-50 text-blue-800;
 }
 
-/* Custom scrollbar for dark theme */
+.light .badge-success-status {
+  @apply border border-green-200 bg-green-50 text-green-800;
+}
+
+.light .badge-warning-status {
+  @apply border border-yellow-200 bg-yellow-50 text-yellow-800;
+}
+
+.light .badge-error-status {
+  @apply border border-red-200 bg-red-50 text-red-800;
+}
+
+/* Dark Mode Badge Styles */
+.dark .badge-info-metadata {
+  @apply border border-blue-700/30 bg-blue-900/20 text-blue-300 backdrop-blur-sm;
+}
+
+.dark .badge-success-status {
+  @apply border border-green-700/30 bg-green-900/20 text-green-300 backdrop-blur-sm;
+}
+
+.dark .badge-warning-status {
+  @apply border border-yellow-700/30 bg-yellow-900/20 text-yellow-300 backdrop-blur-sm;
+}
+
+.dark .badge-error-status {
+  @apply border border-red-700/30 bg-red-900/20 text-red-300 backdrop-blur-sm;
+}
+
+/* ========================================================
+   BUTTON STANDARDIZATION - VIEW/ACTION/DELETE TYPES
+   ======================================================== */
+
+/* View Type Buttons - Green background with white text */
+.light .btn-view {
+  @apply bg-green-600 text-white border border-green-700 hover:bg-green-700 shadow-sm hover:shadow-md transition-all duration-200;
+}
+
+.dark .btn-view {
+  @apply bg-green-600 text-white border border-green-700 hover:bg-green-700 backdrop-blur-sm transition-all duration-200;
+}
+
+/* Action Type Buttons - Blue background with white text */
+.light .btn-action {
+  @apply bg-blue-600 text-white border border-blue-700 hover:bg-blue-700 shadow-sm hover:shadow-md transition-all duration-200;
+}
+
+.dark .btn-action {
+  @apply bg-blue-600 text-white border border-blue-700 hover:bg-blue-700 backdrop-blur-sm transition-all duration-200;
+}
+
+/* Delete Type Buttons - Red background with white text */
+.light .btn-delete {
+  @apply bg-red-600 text-white border border-red-700 hover:bg-red-700 shadow-sm hover:shadow-md transition-all duration-200;
+}
+
+.dark .btn-delete {
+  @apply bg-red-600 text-white border border-red-700 hover:bg-red-700 backdrop-blur-sm transition-all duration-200;
+}
+
+/* Secondary/Default Buttons - Consistent with existing design */
+.light .btn-secondary {
+  @apply bg-gray-100 text-gray-800 border border-gray-300 hover:bg-gray-200 shadow-sm hover:shadow-md transition-all duration-200;
+}
+
+.dark .btn-secondary {
+  @apply bg-gray-700/20 text-gray-300 border border-gray-600/30 hover:bg-gray-600/30 backdrop-blur-sm transition-all duration-200;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-size: var(--font-size-base);
+  }
+
+  /* ============================================
+     SEMANTIC UTILITY CLASSES
+     ============================================ */
+
+  /* Typography Utilities */
+  .text-size-xs { font-size: var(--font-size-xs); }
+  .text-size-sm { font-size: var(--font-size-sm); }
+  .text-size-base { font-size: var(--font-size-base); }
+  .text-size-lg { font-size: var(--font-size-lg); }
+  .text-size-xl { font-size: var(--font-size-xl); }
+  .text-size-2xl { font-size: var(--font-size-2xl); }
+  .text-size-3xl { font-size: var(--font-size-3xl); }
+  .text-size-4xl { font-size: var(--font-size-4xl); }
+
+  /* Spacing Utilities */
+  .space-1 { --tw-space-y-reverse: 0; margin-top: calc(var(--space-1) * calc(1 - var(--tw-space-y-reverse))); margin-bottom: calc(var(--space-1) * var(--tw-space-y-reverse)); }
+  .space-2 { --tw-space-y-reverse: 0; margin-top: calc(var(--space-2) * calc(1 - var(--tw-space-y-reverse))); margin-bottom: calc(var(--space-2) * var(--tw-space-y-reverse)); }
+  .space-3 { --tw-space-y-reverse: 0; margin-top: calc(var(--space-3) * calc(1 - var(--tw-space-y-reverse))); margin-bottom: calc(var(--space-3) * var(--tw-space-y-reverse)); }
+  .space-4 { --tw-space-y-reverse: 0; margin-top: calc(var(--space-4) * calc(1 - var(--tw-space-y-reverse))); margin-bottom: calc(var(--space-4) * var(--tw-space-y-reverse)); }
+
+  /* Component Size Utilities */
+  .btn-sm { height: var(--button-height-sm); }
+  .btn-md { height: var(--button-height-md); }
+  .btn-lg { height: var(--button-height-lg); }
+
+  /* Layout Utilities */
+  .sidebar-width { width: var(--sidebar-width); }
+  .sidebar-collapsed { width: var(--sidebar-width-collapsed); }
+  .header-height { height: var(--header-height); }
+
+  /* Surface Utilities */
+  .bg-surface { background-color: hsl(var(--surface)); }
+  .bg-surface-variant { background-color: hsl(var(--surface-variant)); }
+  .bg-card-hover { background-color: hsl(var(--card-hover)); }
+
+  /* Status Utilities */
+  .bg-success-hover { background-color: hsl(var(--success-hover)); }
+  .bg-warning-hover { background-color: hsl(var(--warning-hover)); }
+  .bg-danger-hover { background-color: hsl(var(--danger-hover)); }
+  .bg-info-hover { background-color: hsl(var(--info-hover)); }
+
+  /* Border Utilities */
+  .border-hover { border-color: hsl(var(--border-hover)); }
+  .border-input-focus { border-color: hsl(var(--input-focus)); }
+
+  /* Interactive State Utilities */
+  .primary-hover { background-color: hsl(var(--primary-hover)); }
+  .secondary-hover { background-color: hsl(var(--secondary-hover)); }
+  .destructive-hover { background-color: hsl(var(--destructive-hover)); }
+
+  /* Loading State Utilities */
+  .loading-spinner { color: hsl(var(--loading-spinner)); }
+  .loading-background { background-color: hsl(var(--loading-background)); }
+  .loading-foreground { color: hsl(var(--loading-foreground)); }
+  .loading-skeleton { background-color: hsl(var(--loading-skeleton)); }
+  .loading-skeleton-shimmer { background-color: hsl(var(--loading-skeleton-shimmer)); }
+
+  /* ============================================
+     SEMANTIC RECORD SYSTEM UTILITIES
+     ============================================ */
+
+  /* Record Background Utilities */
+  .bg-record-layer-1 { background-color: hsl(var(--record-layer-1)); }
+  .bg-record-layer-2 { background-color: hsl(var(--record-layer-2)); }
+  .bg-record-layer-3 { background-color: hsl(var(--record-layer-3)); }
+  .bg-record-hover { background-color: hsl(var(--record-hover)); }
+
+  /* Record Text Utilities */
+  .text-record-title { color: hsl(var(--record-title)); }
+  .text-record-title-hover { color: hsl(var(--record-title-hover)); }
+  .text-record-supporting { color: hsl(var(--record-supporting)); }
+  .text-record-supporting-light { color: hsl(var(--record-supporting-light)); }
+  .text-record-meta { color: hsl(var(--record-meta)); }
+
+  /* Record Border Utilities */
+  .border-record { border-color: hsl(var(--record-border)); }
+  .border-record-hover { border-color: hsl(var(--record-border-hover)); }
+
+  /* Combined Record Card Classes */
+  .record-card {
+    background-color: hsl(var(--record-layer-1));
+    border: 1px solid hsl(var(--record-border));
+    transition: all 0.2s ease;
+  }
+
+  .record-card:hover {
+    background-color: hsl(var(--record-hover));
+    border-color: hsl(var(--record-border-hover));
+  }
+
+  .record-card-secondary {
+    background-color: hsl(var(--record-layer-2));
+    border: 1px solid hsl(var(--record-border));
+    transition: all 0.2s ease;
+  }
+
+  .record-card-tertiary {
+    background-color: hsl(var(--record-layer-3));
+    border: 1px solid hsl(var(--record-border));
+    transition: all 0.2s ease;
+  }
+}
+
+/* Custom scrollbar - responsive to theme */
 ::-webkit-scrollbar {
   width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+  @apply bg-secondary;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-tertiary);
-  border-radius: 4px;
+  @apply bg-muted-foreground rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-accent-foreground;
+}
+
+/* =====================================================
+   DUAL DESIGN SYSTEM - THEME-SPECIFIC COMPONENTS
+   ===================================================== */
+
+/* ===================
+   TAG DESIGN SYSTEM
+   =================== */
+
+/* Dark Mode Tags - Blue Translucent (Clean & Minimal) */
+.dark .tag-dark-primary {
+  @apply inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium;
+  background: rgba(59, 130, 246, 0.15);
+  color: rgba(147, 197, 253, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.dark .tag-dark-secondary {
+  @apply inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium;
+  background: rgba(99, 102, 241, 0.12);
+  color: rgba(165, 180, 252, 0.9);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+.dark .tag-dark-success {
+  @apply inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium;
+  background: rgba(34, 197, 94, 0.12);
+  color: rgba(134, 239, 172, 0.9);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+.dark .tag-dark-warning {
+  @apply inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium;
+  background: rgba(251, 191, 36, 0.12);
+  color: rgba(254, 240, 138, 0.9);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+.dark .tag-dark-neutral {
+  @apply inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium;
+  background: rgba(148, 163, 184, 0.1);
+  color: rgba(203, 213, 225, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  backdrop-filter: blur(8px);
+}
+
+/* Light Mode Tags - ALL USE DARK GREEN TEXT ON TRANSLUCENT GREEN BACKGROUND */
+:not(.dark) .tag-light-primary,
+:not(.dark) .tag-light-secondary,
+:not(.dark) .tag-light-success,
+:not(.dark) .tag-light-warning,
+:not(.dark) .tag-light-neutral {
+  @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium;
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #065f46 !important;
+  border: 1px solid rgba(34, 197, 94, 0.4) !important;
+  transition: all 0.15s ease;
+}
+
+:not(.dark) .tag-light-primary:hover,
+:not(.dark) .tag-light-secondary:hover,
+:not(.dark) .tag-light-success:hover,
+:not(.dark) .tag-light-warning:hover,
+:not(.dark) .tag-light-neutral:hover {
+  background: rgba(34, 197, 94, 0.2) !important;
+  border-color: rgba(34, 197, 94, 0.5) !important;
+}
+
+/* ===================
+   BUTTON DESIGN SYSTEM
+   =================== */
+
+/* Dark Mode Buttons - More visible with stronger borders */
+.dark .btn-dark-primary {
+  @apply inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+  background: rgba(59, 130, 246, 0.2);
+  color: rgba(147, 197, 253, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.dark .btn-dark-primary:hover {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: rgba(59, 130, 246, 0.6);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.dark .btn-dark-secondary {
+  @apply inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+  background: rgba(148, 163, 184, 0.12);
+  color: rgba(203, 213, 225, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.dark .btn-dark-secondary:hover {
+  background: rgba(148, 163, 184, 0.2);
+  border-color: rgba(148, 163, 184, 0.45);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+/* Light Mode Buttons - More visible Google-style with stronger borders - Higher specificity */
+:not(.dark) .btn-light-primary {
+  @apply inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+  background: #ffffff !important;
+  color: #1f2937 !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06) !important;
+}
+
+:not(.dark) .btn-light-primary:hover {
+  background: #f8f9fa !important;
+  border-color: #9ca3af !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  transform: translateY(-1px);
+}
+
+:not(.dark) .btn-light-secondary {
+  @apply inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+  background: #f9fafb !important;
+  color: #6b7280 !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+:not(.dark) .btn-light-secondary:hover {
+  background: #f3f4f6 !important;
+  color: #374151 !important;
+  border-color: #d1d5db !important;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.08) !important;
+  transform: translateY(-1px);
+}
+
+/* Danger Buttons - Dark Mode */
+.dark .btn-dark-danger {
+  @apply inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+  background: rgba(239, 68, 68, 0.15);
+  color: rgba(248, 113, 113, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.dark .btn-dark-danger:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+/* Danger Buttons - Light Mode - Higher specificity */
+:not(.dark) .btn-light-danger {
+  @apply inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+  background: #ffffff !important;
+  color: #dc2626 !important;
+  border: 1px solid #fca5a5 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06) !important;
+}
+
+:not(.dark) .btn-light-danger:hover {
+  background: #fef2f2 !important;
+  border-color: #f87171 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  transform: translateY(-1px);
+}
+
+/* ===================
+   STATUS BADGE DESIGN SYSTEM
+   =================== */
+
+/* Dark Mode Status Badges - Blue translucent design */
+.dark .badge-dark-success {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border;
+  background: rgba(34, 197, 94, 0.15);
+  color: rgba(134, 239, 172, 0.9);
+  border-color: rgba(34, 197, 94, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.dark .badge-dark-warning {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border;
+  background: rgba(251, 191, 36, 0.15);
+  color: rgba(254, 240, 138, 0.9);
+  border-color: rgba(251, 191, 36, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.dark .badge-dark-error {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border;
+  background: rgba(239, 68, 68, 0.15);
+  color: rgba(248, 113, 113, 0.9);
+  border-color: rgba(239, 68, 68, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.dark .badge-dark-info {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border;
+  background: rgba(59, 130, 246, 0.15);
+  color: rgba(147, 197, 253, 0.9);
+  border-color: rgba(59, 130, 246, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.dark .badge-dark-neutral {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border;
+  background: rgba(148, 163, 184, 0.12);
+  color: rgba(203, 213, 225, 0.85);
+  border-color: rgba(148, 163, 184, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+/* Light Mode Status Badges - Dark green text on translucent green background */
+:not(.dark) .badge-light-success,
+:not(.dark) .badge-light-warning,
+:not(.dark) .badge-light-error,
+:not(.dark) .badge-light-info,
+:not(.dark) .badge-light-neutral {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border;
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #065f46 !important;
+  border: 1px solid rgba(34, 197, 94, 0.4) !important;
+  transition: all 0.15s ease;
+}
+
+/* ===================
+   CARD DESIGN SYSTEM
+   =================== */
+
+/* Dark Mode Cards - Subtle translucent design */
+.dark .card-dark {
+  @apply rounded-xl border backdrop-blur-sm;
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(148, 163, 184, 0.1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.dark .card-dark-hover {
+  transition: all 0.2s ease;
+}
+
+.dark .card-dark-hover:hover {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(148, 163, 184, 0.15);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Light Mode Cards - Google-style clean - Higher specificity */
+:not(.dark) .card-light {
+  @apply rounded-lg border bg-white;
+  border-color: #e5e7eb !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+:not(.dark) .card-light-hover {
+  transition: all 0.15s ease;
+}
+
+:not(.dark) .card-light-hover:hover {
+  background: #fafafa !important;
+  border-color: #d1d5db !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ===================
+   SUPPORTED FILE TYPES SECTION
+   =================== */
+
+/* Dark Mode - Cleaner translucent design */
+.dark .file-types-dark {
+  @apply rounded-xl p-4;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.dark .file-types-dark h3 {
+  @apply text-sm font-medium flex items-center;
+  color: rgba(203, 213, 225, 0.95);
+}
+
+.dark .file-types-dark .grid {
+  @apply text-xs;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.dark .file-types-dark .grid strong {
+  color: rgba(203, 213, 225, 0.9);
+}
+
+/* Light Mode - Google-style minimal */
+.light .file-types-light {
+  @apply rounded-lg p-4 bg-gray-50 border border-gray-200;
+}
+
+.light .file-types-light h3 {
+  @apply text-sm font-medium text-gray-700 flex items-center;
+}
+
+.light .file-types-light .grid {
+  @apply text-xs text-gray-600;
+}
+
+.light .file-types-light .grid strong {
+  @apply text-gray-700;
 }

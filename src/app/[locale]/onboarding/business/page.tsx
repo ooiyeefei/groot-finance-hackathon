@@ -165,8 +165,8 @@ export default function BusinessOnboarding() {
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-border">
           <CardContent className="p-8 text-center">
             <div className="mx-auto mb-6 p-3 bg-green-900/20 rounded-full w-fit">
               <CheckCircle className="h-8 w-8 text-green-400" />
@@ -188,8 +188,8 @@ export default function BusinessOnboarding() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <Card className="w-full max-w-lg bg-gray-800 border-gray-700">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-lg bg-gray-800 border-border">
         <CardHeader>
           <div className="flex items-center gap-3">
             <Button
@@ -304,7 +304,7 @@ export default function BusinessOnboarding() {
             </Button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-700">
+          <div className="mt-6 pt-6 border-t border-border">
             <p className="text-xs text-gray-400 text-center">
               By creating a business, you agree to our Terms of Service and Privacy Policy.
               You will be set as the business owner with full administrative privileges.

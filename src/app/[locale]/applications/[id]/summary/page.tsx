@@ -25,7 +25,7 @@ export default async function ApplicationSummaryPage({ params }: ApplicationSumm
 
   return (
     <ClientProviders>
-      <div className="flex h-screen bg-gray-900">
+      <div className="flex h-screen bg-background">
         <Sidebar />
 
         <div className="flex-1 flex flex-col">
@@ -38,7 +38,7 @@ export default async function ApplicationSummaryPage({ params }: ApplicationSumm
             {/* Back Button */}
             <div className="mb-6">
               <Link href={`/${locale}/applications/${id}`}>
-                <Button variant="outline" size="sm" className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600 hover:border-gray-500">
+                <Button variant="outline" size="sm">
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back to Details
                 </Button>

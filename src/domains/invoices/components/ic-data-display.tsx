@@ -42,16 +42,16 @@ export default function ICDataDisplay({ data }: ICDataDisplayProps) {
   const hasData = (value: any) => value !== null && value !== undefined && value !== ''
 
   return (
-    <div className="mt-4 p-4 bg-gray-700 rounded-lg">
+    <div className="mt-4 p-4 bg-record-layer-1 rounded-lg">
       {/* Key Information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         {/* Full Name */}
         {hasData(data.full_name) && (
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
               Full Name
             </label>
-            <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600">
+            <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
               {data.full_name}
             </div>
           </div>
@@ -60,10 +60,10 @@ export default function ICDataDisplay({ data }: ICDataDisplayProps) {
         {/* IC Number */}
         {hasData(data.ic_number) && (
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+            <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
               IC Number
             </label>
-            <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600 font-mono">
+            <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border font-mono">
               {data.ic_number}
             </div>
           </div>
@@ -73,14 +73,14 @@ export default function ICDataDisplay({ data }: ICDataDisplayProps) {
       {/* Personal Information */}
       <div className="space-y-6">
         <div>
-          <h6 className="text-sm font-medium text-gray-300 mb-3">Personal Information</h6>
+          <h6 className="text-sm font-medium text-record-title mb-3">Personal Information</h6>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {hasData(data.date_of_birth) && (
               <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Date of Birth
                 </label>
-                <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600">
+                <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                   {formatDateOfBirth(data.date_of_birth)}
                 </div>
               </div>
@@ -88,10 +88,10 @@ export default function ICDataDisplay({ data }: ICDataDisplayProps) {
 
             {hasData(data.gender) && (
               <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                   Gender
                 </label>
-                <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600">
+                <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border">
                   {formatGender(data.gender)}
                 </div>
               </div>
@@ -102,12 +102,12 @@ export default function ICDataDisplay({ data }: ICDataDisplayProps) {
         {/* Address Information */}
         {hasData(data.address) && (
           <div>
-            <h6 className="text-sm font-medium text-gray-300 mb-3">Address Information</h6>
+            <h6 className="text-sm font-medium text-record-title mb-3">Address Information</h6>
             <div>
-              <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">
+              <label className="text-xs text-record-supporting uppercase tracking-wider font-medium mb-1 block">
                 Registered Address
               </label>
-              <div className="text-sm text-white bg-gray-800 px-3 py-2 rounded border border-gray-600 min-h-[60px]">
+              <div className="text-sm text-record-title bg-record-layer-2 px-3 py-2 rounded border border-record-border min-h-[60px]">
                 {data.address}
               </div>
             </div>

@@ -9,6 +9,7 @@ import { useHomeCurrency } from '@/domains/account-management/components/busines
 import { useExpenseCategories, DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories'
 import { useCOGSCategories, DynamicCOGSCategory } from '@/lib/hooks/accounting/use-cogs-categories'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { TRANSACTION_STATUSES } from '@/domains/accounting-entries/constants/transaction-status'
 
 interface AccountingEntryFormModalProps {
@@ -290,33 +291,33 @@ export default function AccountingEntryFormModal({
 
   return (
     <div
-      className="fixed inset-0 bg-gray-800 z-50 flex flex-col"
+      className="fixed inset-0 bg-background z-50 flex flex-col"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
       aria-describedby="modal-description"
     >
       <div className="w-full h-full flex flex-col max-w-full overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-900 flex-shrink-0">
+        <div className="flex items-center justify-between p-4 border-b border-border bg-card flex-shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <DollarSign className="w-5 h-5 text-white" />
+            <div className="p-2 bg-primary rounded-lg">
+              <DollarSign className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h3 className="text-lg font-medium text-white" id="modal-title">
+              <h3 className="text-lg font-medium text-foreground" id="modal-title">
                 {transaction ? 'Edit Record' : prefilledData ? 'Create Account Record from Document' : 'Create New Record'}
               </h3>
-              <p className="text-sm text-gray-400 mt-1" id="modal-description">
+              <p className="text-sm text-muted-foreground mt-1" id="modal-description">
                 {prefilledData?.source_record_id ? 'Pre-filled from document extraction' : 'Manual transaction entry'}
               </p>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
             {(transaction?.source_record_id || prefilledData?.source_record_id) && (
-              <button
+              <Button
                 type="button"
                 onClick={() => setIsPreviewVisible(!isPreviewVisible)}
-                className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+                variant="default"
                 title={isPreviewVisible ? 'Hide Document' : 'Show Document'}
                 aria-expanded={isPreviewVisible}
                 aria-controls="document-preview-pane"
@@ -325,20 +326,21 @@ export default function AccountingEntryFormModal({
                 {isPreviewVisible ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                 <span className="hidden sm:inline">{isPreviewVisible ? 'Hide Document' : 'Show Document'}</span>
                 <span className="sm:hidden">{isPreviewVisible ? 'Hide' : 'Show'}</span>
-              </button>
+              </Button>
             )}
             <div className="flex items-center gap-2 sm:gap-3">
-              <button
+              <Button
                 type="submit"
                 form="transaction-form"
                 disabled={isLoading}
-                className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 text-sm sm:text-base"
+                variant="primary"
+                size="default"
               >
                 {isLoading ? 'Saving...' : (transaction ? 'Update Record' : 'Create Record')}
-              </button>
+              </Button>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-white transition-colors p-1"
+                className="text-muted-foreground hover:text-foreground transition-colors p-1"
               >
                 <X className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
@@ -351,7 +353,7 @@ export default function AccountingEntryFormModal({
           {isPreviewVisible && (transaction?.source_record_id || prefilledData?.source_record_id) && (
             <div
               id="document-preview-pane"
-              className="w-full lg:w-1/2 lg:border-r lg:border-gray-700 flex flex-col min-h-0 mt-4 lg:mt-0"
+              className="w-full lg:w-1/2 lg:border-r lg:border-border flex flex-col min-h-0 mt-4 lg:mt-0"
               aria-label="Document preview"
             >
               <MultiPageDocumentPreview
@@ -367,18 +369,18 @@ export default function AccountingEntryFormModal({
             <div className={`flex ${isPreviewVisible && (transaction?.source_record_id || prefilledData?.source_record_id) ? 'flex-col' : 'flex-col xl:flex-row'} min-h-0 h-full`}>
 
               {/* Form Section */}
-              <div className={`${isPreviewVisible && (transaction?.source_record_id || prefilledData?.source_record_id) ? 'w-full' : 'w-full xl:w-1/2'} overflow-y-auto ${isPreviewVisible && (transaction?.source_record_id || prefilledData?.source_record_id) ? '' : 'xl:border-r xl:border-gray-700'}`}>
+              <div className={`${isPreviewVisible && (transaction?.source_record_id || prefilledData?.source_record_id) ? 'w-full' : 'w-full xl:w-1/2'} overflow-y-auto ${isPreviewVisible && (transaction?.source_record_id || prefilledData?.source_record_id) ? '' : 'xl:border-r xl:border-border'}`}>
                 <form id="transaction-form" onSubmit={handleSubmit} className="p-4 sm:p-6 h-full">
                   <div className="space-y-4">
                     {error && (
-                      <Alert className="bg-red-900 bg-opacity-20 border-red-700">
+                      <Alert className="bg-destructive/10 border-destructive/20">
                         <AlertCircle className="w-4 h-4" />
-                        <AlertDescription className="text-red-400">{error}</AlertDescription>
+                        <AlertDescription className="text-destructive">{error}</AlertDescription>
                       </Alert>
                     )}
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Transaction Type *
                       </label>
                       <select
@@ -394,7 +396,7 @@ export default function AccountingEntryFormModal({
                             category: currentCategoryValid ? formData.category : (availableCategories[0] || '')
                           })
                         }}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         required
                       >
                         {TRANSACTION_TYPES.map(type => (
@@ -406,27 +408,27 @@ export default function AccountingEntryFormModal({
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Description *
                       </label>
                       <input
                         type="text"
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         placeholder="Enter transaction description"
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Category *
                       </label>
                       <select
                         value={formData.category}
                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         required
                         disabled={
                           (formData.transaction_type === 'Cost of Goods Sold' && cogsCategoriesLoading) ||
@@ -447,7 +449,7 @@ export default function AccountingEntryFormModal({
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         <Calendar className="w-4 h-4 inline mr-1" />
                         Transaction Date *
                       </label>
@@ -455,13 +457,13 @@ export default function AccountingEntryFormModal({
                         type="date"
                         value={formData.transaction_date}
                         onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         <DollarSign className="w-4 h-4 inline mr-1" />
                         Amount *
                       </label>
@@ -472,14 +474,14 @@ export default function AccountingEntryFormModal({
                           min="0"
                           value={formData.original_amount}
                           onChange={(e) => setFormData({ ...formData, original_amount: parseFloat(e.target.value) || 0 })}
-                          className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="flex-1 px-3 py-2 bg-input border border-input rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                           placeholder="0.00"
                           required
                         />
                         <select
                           value={formData.original_currency}
                           onChange={(e) => setFormData({ ...formData, original_currency: e.target.value as SupportedCurrency })}
-                          className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                           {[userHomeCurrency, ...SUPPORTED_CURRENCIES]
                             .filter((currency, index, array) => currency && array.indexOf(currency) === index)
@@ -493,13 +495,13 @@ export default function AccountingEntryFormModal({
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Home Currency
                       </label>
                       <select
                         value={formData.home_currency}
                         onChange={(e) => setFormData({ ...formData, home_currency: e.target.value as SupportedCurrency })}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         {[userHomeCurrency, ...SUPPORTED_CURRENCIES]
                           .filter((currency, index, array) => currency && array.indexOf(currency) === index)
@@ -512,19 +514,19 @@ export default function AccountingEntryFormModal({
                     </div>
 
                     {previewAmount !== null && exchangeRate !== null && (
-                      <div className="bg-blue-900 bg-opacity-20 border border-blue-700 rounded-lg p-3">
-                        <div className="text-sm text-blue-300 mb-1">Currency Conversion Preview:</div>
-                        <div className="text-white font-medium">
+                      <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
+                        <div className="text-sm text-primary mb-1">Currency Conversion Preview:</div>
+                        <div className="text-foreground font-medium">
                           {formatCurrency(previewAmount, formData.home_currency)}
                         </div>
-                        <div className="text-xs text-blue-400">
+                        <div className="text-xs text-primary/80">
                           Rate: 1 {formData.original_currency} = {exchangeRate.toFixed(6)} {formData.home_currency}
                         </div>
                       </div>
                     )}
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         <Building className="w-4 h-4 inline mr-1" />
                         Vendor Name
                       </label>
@@ -532,13 +534,13 @@ export default function AccountingEntryFormModal({
                         type="text"
                         value={formData.vendor_name}
                         onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         placeholder="Company or vendor name"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         <Hash className="w-4 h-4 inline mr-1" />
                         Document Number
                       </label>
@@ -546,20 +548,20 @@ export default function AccountingEntryFormModal({
                         type="text"
                         value={formData.document_number}
                         onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         placeholder="Document number, reference ID, etc."
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         <Clock className="w-4 h-4 inline mr-1" />
                         Transaction Status
                       </label>
                       <select
                         value={formData.status}
                         onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         {TRANSACTION_STATUSES.map(status => (
                           <option key={status.value} value={status.value}>
@@ -571,7 +573,7 @@ export default function AccountingEntryFormModal({
 
                     {formData.status === 'overdue' && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                           <Calendar className="w-4 h-4 inline mr-1" />
                           Due Date
                         </label>
@@ -579,7 +581,7 @@ export default function AccountingEntryFormModal({
                           type="date"
                           value={formData.due_date}
                           onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
                     )}
@@ -587,7 +589,7 @@ export default function AccountingEntryFormModal({
                     {formData.status === 'paid' && (
                       <>
                         <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                          <label className="block text-sm font-medium text-foreground mb-2">
                             <Calendar className="w-4 h-4 inline mr-1" />
                             Payment Date
                           </label>
@@ -595,19 +597,19 @@ export default function AccountingEntryFormModal({
                             type="date"
                             value={formData.payment_date}
                             onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                          <label className="block text-sm font-medium text-foreground mb-2">
                             Payment Method
                           </label>
                           <input
                             type="text"
                             value={formData.payment_method}
                             onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                             placeholder="Cash, Card, Transfer, etc."
                           />
                         </div>
@@ -615,13 +617,13 @@ export default function AccountingEntryFormModal({
                     )}
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Notes
                       </label>
                       <textarea
                         value={formData.notes}
                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         placeholder="Additional notes or details..."
                         rows={3}
                       />
@@ -634,46 +636,47 @@ export default function AccountingEntryFormModal({
               <div className={`${isPreviewVisible && (transaction?.source_record_id || prefilledData?.source_record_id) ? 'w-full' : 'w-full xl:w-1/2'} overflow-y-auto p-4 sm:p-6`}>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-white flex items-center">
+                    <h4 className="text-sm font-medium text-foreground flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       Line Items ({lineItems.length})
                     </h4>
-                    <button
+                    <Button
                       type="button"
                       onClick={addLineItem}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-2"
+                      variant="primary"
+                      size="sm"
                     >
                       <Plus className="w-4 h-4" />
                       Add Item
-                    </button>
+                    </Button>
                   </div>
 
                   {lineItems.length > 0 ? (
-                    <div className="bg-gray-900 rounded-lg overflow-hidden">
+                    <div className="bg-card rounded-lg overflow-hidden border border-border">
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
-                          <thead className="bg-gray-800">
+                          <thead className="bg-muted">
                             <tr>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">#</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Description</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Item Code</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Qty</th>
-                              <th className="px-3 py-2 text-left text-gray-400 font-medium">Unit</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Unit Price</th>
-                              <th className="px-3 py-2 text-right text-gray-400 font-medium">Total</th>
-                              <th className="px-3 py-2 text-center text-gray-400 font-medium">Actions</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">#</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">Description</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">Item Code</th>
+                              <th className="px-3 py-2 text-right text-muted-foreground font-medium">Qty</th>
+                              <th className="px-3 py-2 text-left text-muted-foreground font-medium">Unit</th>
+                              <th className="px-3 py-2 text-right text-muted-foreground font-medium">Unit Price</th>
+                              <th className="px-3 py-2 text-right text-muted-foreground font-medium">Total</th>
+                              <th className="px-3 py-2 text-center text-muted-foreground font-medium">Actions</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-700">
+                          <tbody className="divide-y divide-border">
                             {lineItems.map((item, index) => (
-                              <tr key={index} className="hover:bg-gray-800">
-                                <td className="px-3 py-2 text-gray-400">{index + 1}</td>
+                              <tr key={index} className="hover:bg-muted/50">
+                                <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
                                 <td className="px-3 py-2">
                                   <input
                                     type="text"
                                     value={item.item_description || ''}
                                     onChange={(e) => updateLineItem(index, 'item_description', e.target.value)}
-                                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="w-full px-2 py-1 bg-input border border-input rounded text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                                     placeholder="Item description"
                                   />
                                 </td>
@@ -682,7 +685,7 @@ export default function AccountingEntryFormModal({
                                     type="text"
                                     value={item.item_code || ''}
                                     onChange={(e) => updateLineItem(index, 'item_code', e.target.value)}
-                                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="w-full px-2 py-1 bg-input border border-input rounded text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                                     placeholder="SKU"
                                   />
                                 </td>
@@ -693,7 +696,7 @@ export default function AccountingEntryFormModal({
                                     step="0.01"
                                     value={item.quantity || ''}
                                     onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="w-full px-2 py-1 bg-input border border-input rounded text-foreground text-xs text-right focus:outline-none focus:ring-1 focus:ring-ring"
                                   />
                                 </td>
                                 <td className="px-3 py-2">
@@ -701,7 +704,7 @@ export default function AccountingEntryFormModal({
                                     type="text"
                                     value={item.unit_measurement || ''}
                                     onChange={(e) => updateLineItem(index, 'unit_measurement', e.target.value)}
-                                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="w-full px-2 py-1 bg-input border border-input rounded text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                                     placeholder="kg, pkt"
                                   />
                                 </td>
@@ -712,17 +715,17 @@ export default function AccountingEntryFormModal({
                                     step="0.01"
                                     value={item.unit_price || ''}
                                     onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="w-full px-2 py-1 bg-input border border-input rounded text-foreground text-xs text-right focus:outline-none focus:ring-1 focus:ring-ring"
                                   />
                                 </td>
-                                <td className="px-3 py-2 text-right text-green-400 font-medium">
+                                <td className="px-3 py-2 text-right text-green-600 dark:text-green-400 font-medium">
                                   {formatCurrency((item.quantity || 0) * (item.unit_price || 0), formData.original_currency)}
                                 </td>
                                 <td className="px-3 py-2 text-center">
                                   <button
                                     type="button"
                                     onClick={() => removeLineItem(index)}
-                                    className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded transition-colors"
+                                    className="p-1 text-muted-foreground hover:text-destructive hover:bg-muted rounded transition-colors"
                                     title="Remove item"
                                   >
                                     <Trash2 className="w-3 h-3" />
@@ -735,7 +738,7 @@ export default function AccountingEntryFormModal({
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-gray-400">
+                    <div className="text-center py-8 text-muted-foreground">
                       <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
                       <p>No line items added yet</p>
                       <p className="text-xs mt-1">Click "Add Item" to start adding line items</p>
@@ -743,25 +746,25 @@ export default function AccountingEntryFormModal({
                   )}
 
                   {lineItems.length > 0 && (
-                    <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
-                      <h5 className="text-sm font-medium text-white mb-3">Summary</h5>
+                    <div className="bg-card rounded-lg p-4 border border-border">
+                      <h5 className="text-sm font-medium text-foreground mb-3">Summary</h5>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-400">Items Count:</span>
-                          <span className="text-white">{lineItems.length}</span>
+                          <span className="text-muted-foreground">Items Count:</span>
+                          <span className="text-foreground">{lineItems.length}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-400">Subtotal:</span>
-                          <span className="text-white">
+                          <span className="text-muted-foreground">Subtotal:</span>
+                          <span className="text-foreground">
                             {formatCurrency(
                               lineItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0),
                               formData.original_currency
                             )}
                           </span>
                         </div>
-                        <div className="flex justify-between border-t border-gray-700 pt-2">
-                          <span className="text-gray-300 font-medium">Total Amount:</span>
-                          <span className="text-green-400 font-medium">
+                        <div className="flex justify-between border-t border-border pt-2">
+                          <span className="text-foreground font-medium">Total Amount:</span>
+                          <span className="text-green-600 dark:text-green-400 font-medium">
                             {formatCurrency(formData.original_amount, formData.original_currency)}
                           </span>
                         </div>
@@ -770,12 +773,12 @@ export default function AccountingEntryFormModal({
                   )}
 
                   {transaction?.id && (
-                    <div className="flex flex-col items-end pt-4 border-t border-gray-600 space-y-2">
-                      <div className="flex items-center gap-2 bg-gray-700 bg-opacity-90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
-                        <span className="text-gray-300 text-xs font-mono">Record ID: {transaction.id}</span>
+                    <div className="flex flex-col items-end pt-4 border-t border-border space-y-2">
+                      <div className="flex items-center gap-2 bg-muted/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-border">
+                        <span className="text-muted-foreground text-xs font-mono">Record ID: {transaction.id}</span>
                         <button
                           onClick={() => navigator.clipboard.writeText(transaction.id)}
-                          className="text-gray-400 hover:text-gray-200 transition-colors"
+                          className="text-muted-foreground hover:text-foreground transition-colors"
                           title="Copy Record ID"
                         >
                           <Copy className="w-3 h-3" />
@@ -783,15 +786,15 @@ export default function AccountingEntryFormModal({
                       </div>
 
                       {transaction.source_record_id && (
-                        <div className="flex items-center gap-2 bg-gray-700 bg-opacity-20 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600 border-opacity-30">
-                          <span className="text-gray-300 text-xs font-mono">
+                        <div className="flex items-center gap-2 bg-muted/20 backdrop-blur-sm px-3 py-1.5 rounded-md border border-border/30">
+                          <span className="text-muted-foreground text-xs font-mono">
                             {transaction.source_document_type === 'invoice' ? 'Invoice ID' :
                              transaction.source_document_type === 'expense_claim' ? 'Expense ID' :
                              'Source ID'}: {transaction.source_record_id}
                           </span>
                           <button
                             onClick={() => navigator.clipboard.writeText(transaction.source_record_id!)}
-                            className="text-gray-400 hover:text-gray-200 transition-colors"
+                            className="text-muted-foreground hover:text-foreground transition-colors"
                             title={`Copy ${transaction.source_document_type === 'invoice' ? 'Invoice ID' :
                                           transaction.source_document_type === 'expense_claim' ? 'Expense ID' :
                                           'Source ID'}`}

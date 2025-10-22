@@ -55,17 +55,17 @@ export default function ApplicationsContainer() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft':
-        return 'bg-gray-500'
+        return 'bg-record-layer-2 text-record-supporting dark:bg-gray-800/50 dark:text-gray-300'
       case 'processing':
-        return 'bg-yellow-500'
+        return 'bg-warning/20 text-warning-foreground dark:bg-yellow-900/30 dark:text-yellow-300'
       case 'completed':
-        return 'bg-green-500'
+        return 'bg-success/20 text-success-foreground dark:bg-green-900/30 dark:text-green-300'
       case 'failed':
-        return 'bg-red-500'
+        return 'bg-danger/20 text-danger-foreground dark:bg-red-900/30 dark:text-red-300'
       case 'needs_review':
-        return 'bg-orange-500'
+        return 'bg-warning/20 text-warning-foreground dark:bg-orange-900/30 dark:text-orange-300'
       default:
-        return 'bg-gray-500'
+        return 'bg-record-layer-2 text-record-supporting dark:bg-gray-800/50 dark:text-gray-300'
     }
   }
 
@@ -109,12 +109,12 @@ export default function ApplicationsContainer() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6" data-testid="applications-loading">
+      <div className="space-y-section-gap" data-testid="applications-loading">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-700 rounded w-1/3 mb-4"></div>
+          <div className="h-8 bg-record-layer-2 rounded w-1/3 mb-4"></div>
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-gray-700 rounded"></div>
+              <div key={i} className="h-32 bg-record-layer-2 rounded"></div>
             ))}
           </div>
         </div>
@@ -125,9 +125,9 @@ export default function ApplicationsContainer() {
   if (isError) {
     return (
       <div className="text-center py-12" data-testid="applications-error">
-        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-        <p className="text-red-400 mb-4">{error instanceof Error ? error.message : 'Failed to load applications'}</p>
-        <Button onClick={() => refetch()} variant="outline" className="text-gray-300 border-gray-600">
+        <AlertCircle className="w-12 h-12 text-danger-foreground dark:text-red-400 mx-auto mb-4" />
+        <p className="text-record-title mb-4">{error instanceof Error ? error.message : 'Failed to load applications'}</p>
+        <Button onClick={() => refetch()} variant="outline">
           Try Again
         </Button>
       </div>
@@ -135,14 +135,14 @@ export default function ApplicationsContainer() {
   }
 
   return (
-    <div className="space-y-6" data-testid="applications-list">
+    <div className="space-y-section-gap" data-testid="applications-list">
       {/* Header with Create Button */}
       <div className="flex justify-between items-center">
         <div>{/* Intentionally left blank to push the button to the right */}</div>
         <Button
           onClick={handleCreateNewApplication}
           disabled={createMutation.isPending}
-          className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          variant="primary"
         >
           {createMutation.isPending ? (
             <>
@@ -160,18 +160,18 @@ export default function ApplicationsContainer() {
 
       {/* Applications List */}
       {applications.length === 0 ? (
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="bg-record-layer-1 border-record-border">
           <CardContent className="py-12 text-center">
-            <ClipboardList className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-300 mb-2">No Applications Yet</h3>
-            <p className="text-gray-500 mb-6 max-w-md mx-auto">
+            <ClipboardList className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-foreground mb-2">No Applications Yet</h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
               Get started by creating your first personal loan application.
               Upload required documents and track your progress.
             </p>
             <Button
               onClick={handleCreateNewApplication}
               disabled={createMutation.isPending}
-              className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="primary"
             >
               {createMutation.isPending ? (
                 <>
@@ -190,18 +190,18 @@ export default function ApplicationsContainer() {
       ) : (
         <div className="grid gap-3">
           {applications.map((application: Application) => (
-            <Card key={application.id} className="bg-gray-800 border-gray-700 hover:border-gray-600 transition-colors">
-              <CardContent className="p-4">
+            <Card key={application.id} className="bg-record-layer-1 border-record-border hover:border-record-border-hover transition-colors">
+              <CardContent className="p-6">
                 {/* Header Row */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3 flex-1">
-                    <h3 className="text-base font-semibold text-white">
-                      <Link href={`/${locale}/applications/${application.id}`} className="hover:text-blue-400 transition-colors">
+                    <h3 className="text-base font-semibold text-foreground">
+                      <Link href={`/${locale}/applications/${application.id}`} className="hover:text-primary transition-colors">
                         {application.title}
                       </Link>
                     </h3>
                     <Badge
-                      className={`${getStatusColor(application.status)} text-white flex items-center gap-1 text-xs`}
+                      className={`${getStatusColor(application.status)} flex items-center gap-1 text-xs`}
                     >
                       {getStatusIcon(application.status)}
                       {application.status}
@@ -209,7 +209,7 @@ export default function ApplicationsContainer() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Link href={`/${locale}/applications/${application.id}`}>
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white border-0">
+                      <Button size="sm" variant="primary">
                         View Details
                       </Button>
                     </Link>
@@ -217,7 +217,7 @@ export default function ApplicationsContainer() {
                       <Button
                         size="sm"
                         onClick={() => confirmDelete(application.id, application.title)}
-                        className="bg-red-600 hover:bg-red-700 text-white border-0"
+                        variant="destructive"
                         disabled={deleteMutation.isPending}
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
@@ -228,7 +228,7 @@ export default function ApplicationsContainer() {
                 </div>
 
                 {/* Info Row */}
-                <div className="flex items-center justify-between text-sm text-gray-400 mb-3">
+                <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
                   <span>{application.application_types.display_name}</span>
                   <span>Created {formatDate(application.created_at)}</span>
                 </div>
@@ -236,8 +236,8 @@ export default function ApplicationsContainer() {
                 {/* Progress Section */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-400">Progress</span>
-                    <span className="text-gray-300">
+                    <span className="text-muted-foreground">Progress</span>
+                    <span className="text-foreground">
                       {application.slots_filled} of {application.slots_total} documents
                     </span>
                   </div>
@@ -245,7 +245,7 @@ export default function ApplicationsContainer() {
                     value={application.progress_percentage}
                     className="h-2"
                   />
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted-foreground">
                     {application.progress_percentage}% complete
                   </div>
                 </div>
@@ -257,27 +257,27 @@ export default function ApplicationsContainer() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-record-layer-1 border border-record-border rounded-lg p-6 max-w-md w-full mx-4">
             <div className="flex items-center mb-4">
-              <AlertCircle className="w-6 h-6 text-red-500 mr-3" />
-              <h3 className="text-lg font-semibold text-white">Delete Application</h3>
+              <AlertCircle className="w-6 h-6 text-danger-foreground dark:text-red-400 mr-3" />
+              <h3 className="text-lg font-semibold text-record-title">Delete Application</h3>
             </div>
-            <p className="text-gray-300 mb-6">
-              Are you sure you want to delete "<strong>{deleteConfirmation.title}</strong>"?
+            <p className="text-record-supporting mb-6">
+              Are you sure you want to delete "<strong className="text-record-title">{deleteConfirmation.title}</strong>"?
               This action cannot be undone and will also delete all associated documents.
             </p>
             <div className="flex justify-end gap-3">
               <Button
                 onClick={() => setDeleteConfirmation(null)}
-                className="bg-gray-600 hover:bg-gray-700 text-white border-0"
+                variant="secondary"
                 disabled={deleteMutation.isPending}
               >
                 Cancel
               </Button>
               <Button
                 onClick={() => handleDeleteApplication(deleteConfirmation.applicationId)}
-                className="bg-red-600 hover:bg-red-700 text-white"
+                variant="destructive"
                 disabled={deleteMutation.isPending}
               >
                 {deleteMutation.isPending ? (

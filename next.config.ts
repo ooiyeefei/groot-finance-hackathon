@@ -73,6 +73,13 @@ const nextConfig = {
             priority: 10,
             chunks: 'all',
           },
+          // Separate translation files for better caching
+          translations: {
+            test: /[\\/]src[\\/]messages[\\/].*\.json$/,
+            name: 'translations',
+            priority: 15,
+            chunks: 'all',
+          },
         },
       };
     }
@@ -90,9 +97,11 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
+  // Typed routes configuration (moved from experimental in Next.js 15.5+)
+  typedRoutes: false,
+
   // Performance and experimental features
   experimental: {
-    typedRoutes: false,
     // Increase Server Actions body size limit for file uploads (5MB to match business profile validation)
     serverActions: {
       bodySizeLimit: 5 * 1024 * 1024, // 5MB in bytes to match business profile component limit

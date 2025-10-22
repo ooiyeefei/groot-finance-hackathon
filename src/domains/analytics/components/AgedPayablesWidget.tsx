@@ -103,9 +103,9 @@ export default function AgedPayablesWidget({
       const data = payload[0];
       const fullName = data.payload.fullName || label;
       return (
-        <div className="bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 shadow-xl">
-          <p className="text-gray-200 font-medium text-sm">{fullName}</p>
-          <p className="text-red-300 font-semibold text-base">
+        <div className="bg-popover border border-border rounded-md px-2 py-1.5 shadow-xl">
+          <p className="text-popover-foreground font-medium text-sm">{fullName}</p>
+          <p className="text-destructive font-semibold text-base">
             {formatCurrency(data.value)}
           </p>
           {data.payload.risk && (
@@ -121,11 +121,11 @@ export default function AgedPayablesWidget({
 
   const getRiskColor = (risk: string) => {
     switch (risk) {
-      case 'low': return 'text-green-400';
-      case 'medium': return 'text-yellow-400';
-      case 'high': return 'text-orange-400';
-      case 'critical': return 'text-red-400';
-      default: return 'text-gray-400';
+      case 'low': return 'text-success-foreground';
+      case 'medium': return 'text-warning-foreground';
+      case 'high': return 'text-orange-600 dark:text-orange-400';
+      case 'critical': return 'text-danger-foreground';
+      default: return 'text-muted-foreground';
     }
   };
 
@@ -133,21 +133,21 @@ export default function AgedPayablesWidget({
     const totalOutstanding = agedPayables.total_outstanding;
     const averageRiskScore = agedPayables.average_risk_score;
     const highRiskTransactions = agedPayables.high_risk_transactions;
-    
-    if (totalOutstanding === 0) return <CreditCard className="w-5 h-5 text-gray-400" />;
-    if (averageRiskScore > 75 || highRiskTransactions > 0) return <AlertTriangle className="w-5 h-5 text-red-400" />;
-    if (averageRiskScore > 50) return <TrendingDown className="w-5 h-5 text-yellow-400" />;
-    return <Clock className="w-5 h-5 text-green-400" />;
+
+    if (totalOutstanding === 0) return <CreditCard className="w-5 h-5 text-muted-foreground" />;
+    if (averageRiskScore > 75 || highRiskTransactions > 0) return <AlertTriangle className="w-5 h-5 text-danger-foreground" />;
+    if (averageRiskScore > 50) return <TrendingDown className="w-5 h-5 text-warning-foreground" />;
+    return <Clock className="w-5 h-5 text-success-foreground" />;
   };
 
   if (loading) {
     return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+      <div className="bg-card border border-border rounded-lg p-card-padding">
         <div className="flex items-center justify-between mb-4">
-          <div className="h-6 bg-gray-700 rounded w-32 animate-pulse"></div>
-          <div className="h-5 w-5 bg-gray-700 rounded animate-pulse"></div>
+          <div className="h-6 bg-record-layer-2 rounded w-32 animate-pulse"></div>
+          <div className="h-5 w-5 bg-record-layer-2 rounded animate-pulse"></div>
         </div>
-        <div className="h-64 bg-gray-700/50 rounded-lg animate-pulse"></div>
+        <div className="h-64 bg-record-layer-2/50 rounded-lg animate-pulse"></div>
       </div>
     );
   }
@@ -156,21 +156,21 @@ export default function AgedPayablesWidget({
   const hasPayables = totalOutstanding > 0;
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+    <div className="bg-card border border-border rounded-lg p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center">
           {getRiskIcon()}
-          <h3 className="text-lg font-semibold text-white ml-2">
+          <h3 className="text-lg font-semibold text-foreground ml-2">
             Aged Payables
           </h3>
         </div>
         <div className="text-right">
-          <div className="text-sm text-gray-400">Total Outstanding</div>
-          <div className="text-lg font-bold text-white">
+          <div className="text-sm text-muted-foreground">Total Outstanding</div>
+          <div className="text-lg font-bold text-foreground">
             {formatCurrency(totalOutstanding)}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-muted-foreground">
             {homeCurrency} equivalent
           </div>
         </div>
@@ -194,27 +194,30 @@ export default function AgedPayablesWidget({
                   </linearGradient>
                 ))}
               </defs>
-              <CartesianGrid 
-                strokeDasharray="3 3" 
-                stroke={DARK_THEME_COLORS.chart.grid}
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="currentColor"
+                className="text-border"
                 horizontal={true}
                 vertical={false}
               />
-              <XAxis 
+              <XAxis
                 type="number"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: DARK_THEME_COLORS.chart.text, fontSize: 12 }}
+                tick={{ fill: 'currentColor', fontSize: 12 }}
+                className="text-muted-foreground"
                 tickFormatter={formatCurrency}
                 domain={[0, maxValue > 0 ? maxValue : 100]}
                 interval={0}
               />
-              <YAxis 
+              <YAxis
                 type="category"
                 dataKey="name"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: DARK_THEME_COLORS.chart.text, fontSize: 12 }}
+                tick={{ fill: 'currentColor', fontSize: 12 }}
+                className="text-muted-foreground"
                 width={80}
               />
               <Tooltip content={<CustomTooltip />} cursor={false} />
@@ -236,7 +239,7 @@ export default function AgedPayablesWidget({
         </div>
       ) : (
         <div className="h-64 flex items-center justify-center">
-          <div className="text-center text-gray-400">
+          <div className="text-center text-muted-foreground">
             <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p className="text-sm">No outstanding payables</p>
             <p className="text-xs mt-1">All bills are paid or no expense transactions pending</p>
@@ -246,38 +249,38 @@ export default function AgedPayablesWidget({
 
       {/* Enhanced Risk Summary */}
       {hasPayables && (
-        <div className="mt-6 pt-4 border-t border-gray-700 space-y-4">
+        <div className="mt-6 pt-4 border-t border-border space-y-4">
           {/* Traditional Summary */}
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
-              <span className="text-gray-400">Current (healthy):</span>
-              <span className="ml-2 text-green-400 font-medium">
+              <span className="text-muted-foreground">Current (healthy):</span>
+              <span className="ml-2 text-success-foreground font-medium">
                 {formatCurrency(agedPayables.current)}
               </span>
             </div>
             <div>
-              <span className="text-gray-400">At risk (60+ days):</span>
-              <span className="ml-2 text-red-400 font-medium">
+              <span className="text-muted-foreground">At risk (60+ days):</span>
+              <span className="ml-2 text-danger-foreground font-medium">
                 {formatCurrency(agedPayables.late_61_90 + agedPayables.late_90_plus)}
               </span>
             </div>
           </div>
-          
+
           {/* Dynamic Risk Insights */}
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
-              <span className="text-gray-400">Avg Risk Score:</span>
+              <span className="text-muted-foreground">Avg Risk Score:</span>
               <span className={`ml-2 font-medium ${
-                agedPayables.average_risk_score > 75 ? 'text-red-400' :
-                agedPayables.average_risk_score > 50 ? 'text-yellow-400' :
-                agedPayables.average_risk_score > 25 ? 'text-orange-400' : 'text-green-400'
+                agedPayables.average_risk_score > 75 ? 'text-danger-foreground' :
+                agedPayables.average_risk_score > 50 ? 'text-warning-foreground' :
+                agedPayables.average_risk_score > 25 ? 'text-orange-600 dark:text-orange-400' : 'text-success-foreground'
               }`}>
                 {Math.round(agedPayables.average_risk_score)}/100
               </span>
             </div>
             <div>
-              <span className="text-gray-400">High-Risk Items:</span>
-              <span className="ml-2 text-red-400 font-medium">
+              <span className="text-muted-foreground">High-Risk Items:</span>
+              <span className="ml-2 text-danger-foreground font-medium">
                 {agedPayables.high_risk_transactions}
               </span>
             </div>

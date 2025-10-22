@@ -193,7 +193,7 @@ export default function ChatInterfaceClient({ initialConversations }: ChatInterf
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header Actions */}
-        <div className="flex items-center gap-2 p-4 border-b border-gray-700">
+        <div className="flex items-center gap-2 p-4 border-b border-record-border">
           <ActionButton
             onClick={startNewChat}
             variant="primary"
@@ -204,8 +204,8 @@ export default function ChatInterfaceClient({ initialConversations }: ChatInterf
           <button
             onClick={() => setIsChatSidebarOpen(!isChatSidebarOpen)}
             className={`relative group inline-flex items-center justify-center px-3 py-2 rounded-md transition-all duration-200 ease-in-out ${isChatSidebarOpen
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               }`}
             aria-label={isChatSidebarOpen ? "Close Chat History" : "Open Chat History"}
             title={isChatSidebarOpen ? "Close Chat History" : "Open Chat History"}
@@ -213,9 +213,9 @@ export default function ChatInterfaceClient({ initialConversations }: ChatInterf
             <Menu className="w-4 h-4" />
 
             {/* Tooltip */}
-            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-300 pointer-events-none whitespace-nowrap z-10">
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-record-layer-2 text-foreground text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-300 pointer-events-none whitespace-nowrap z-10">
               {isChatSidebarOpen ? "Close Chat History" : "Chat History"}
-              <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-record-layer-2"></div>
             </div>
           </button>
         </div>
