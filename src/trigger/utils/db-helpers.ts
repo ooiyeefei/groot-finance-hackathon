@@ -47,7 +47,7 @@ export interface ExtractionResult {
 export async function updateDocumentStatus(
   documentId: string,
   status: string,
-  errorMessage?: string,
+  errorMessage?: string | { message: string; suggestions?: string[]; error_type?: string; detected_type?: string; confidence?: number },
   tableName: string = 'documents'  // ✅ PHASE 4B-1: Dynamic table routing with safe default
 ): Promise<void> {
   const updateData: any = {
@@ -59,9 +59,9 @@ export async function updateDocumentStatus(
     updateData.processing_started_at = new Date().toISOString();
   }
 
-  // Add error message if provided
+  // Add error message if provided (handles both legacy strings and new jsonb objects)
   if (errorMessage) {
-    updateData.error_message = errorMessage;
+    updateData.error_message = errorMessage;  // Supabase handles jsonb serialization automatically
   }
 
   // Set completion/failure timestamps

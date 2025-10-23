@@ -8,7 +8,7 @@ interface Document {
   file_name: string;
   file_type: string;
   file_size: number;
-  processing_status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed';
+  processing_status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed' | 'classification_failed';
   created_at: string;
   processed_at?: string;
   error_message?: string;
@@ -230,13 +230,13 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
       return lastPage.data.nextCursor || undefined;
     },
 
-    // Cache configuration optimized for documents (following useAccountingEntries gold standard)
-    staleTime: 30 * 1000, // 30 seconds - documents change frequently with processing
-    gcTime: 5 * 60 * 1000, // 5 minutes - shorter than analytics since processing status changes often
+    // ⚡ OPTIMIZATION: Extended cache configuration to reduce redundant API calls
+    staleTime: 5 * 60 * 1000, // 5 minutes (was 30s) - keep data fresh for longer, reduce API calls
+    gcTime: 30 * 60 * 1000, // 30 minutes (was 5m) - keep in cache longer for better UX on tab switches
 
     // Refetch configuration
     refetchOnWindowFocus: false, // Prevent unnecessary refetches on window focus
-    refetchOnReconnect: true, // Refetch when network reconnects
+    refetchOnReconnect: false, // Don't refetch on network reconnect (rely on staleTime instead)
 
     // Smart refetch for processing documents - auto-refetch every 3 seconds if processing documents exist
     refetchInterval: (query) => {

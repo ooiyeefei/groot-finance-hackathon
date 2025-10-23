@@ -9,7 +9,7 @@ interface Document {
   file_name: string
   file_type: string
   file_size: number
-  processing_status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed'
+  processing_status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed' | 'classification_failed'
   document_type?: string
   created_at: string
   processed_at?: string

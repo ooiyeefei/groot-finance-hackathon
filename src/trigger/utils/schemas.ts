@@ -24,6 +24,7 @@ export const ClassificationResultSchema = z.object({
   reasoning: z.string().optional(),
   is_supported: z.boolean().optional(),
   user_message: z.string().optional(),
+  suggestions: z.array(z.string()).optional(), // LLM-generated actionable suggestions
   detected_elements: z.array(z.string()).optional(),
   context_metadata: z.any().optional(), // Basic routing context only, no detailed extraction
   error: z.string().optional(),

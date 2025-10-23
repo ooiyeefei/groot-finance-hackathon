@@ -32,6 +32,10 @@ class DocumentClassification(BaseModel):
         default="",
         description="User-friendly message about the classification result"
     )
+    suggestions: List[str] = Field(
+        default_factory=list,
+        description="1-3 specific, actionable suggestions for the user when document is not supported or mismatched. Empty list for successful classifications."
+    )
     detected_elements: List[str] = Field(
         default_factory=list,
         description="Key visual elements that indicate this document type (layout indicators like 'header format', 'logo position' - NO personal content)"
@@ -97,6 +101,18 @@ class DocumentClassificationSignature(dspy.Signature):
           * SLOT MISMATCH: "Wrong file uploaded. Expected [expected_friendly_name], but received [detected_friendly_name]. Please upload the correct document."
           * UNSUPPORTED: "Document type not supported yet. Please contact support for assistance."
           * Use friendly names: 'ic'→'identity card', 'payslip'→'payslip', 'application_form'→'application form'
+        - suggestions: Generate 1-3 specific, actionable suggestions ONLY when classification fails or document type mismatches:
+          * WHEN TO GENERATE: is_supported=false OR slot validation fails (detected type ≠ expected type)
+          * WHEN TO LEAVE EMPTY: Classification succeeds (is_supported=true AND no slot mismatch) → suggestions=[]
+          * CONTENT GUIDELINES:
+            - Tell user where to upload this document type instead (e.g., "Receipts should be uploaded in the Expense Claims section")
+            - Explain key differences between detected type and expected type (e.g., "Invoices typically include: vendor details, invoice number, line items")
+            - Guide user to correct workflow/domain/section
+          * EXAMPLES:
+            - Receipt detected in invoice section: ["Receipts should be uploaded in the Expense Claims section", "Invoices typically include: vendor details, invoice number, line items with descriptions", "This appears to be a customer receipt rather than a vendor invoice"]
+            - Identity card detected: ["Identity cards should be uploaded in the Employee Onboarding section", "This section is specifically for vendor invoices", "Verify you're uploading to the correct document type"]
+            - Payslip detected: ["Payslips should be uploaded in the Payroll section", "This section is for vendor invoices only", "Check that you're using the correct upload form"]
+            - Unknown document: ["Ensure the document is a valid vendor invoice", "Check that the document image is clear and readable", "Verify the document includes: vendor name, invoice number, line items, and total amount"]
         - detected_elements: List visual/layout indicators that justify classification (e.g., "invoice header format", "ID card layout", "salary table structure" - NO personal content)
         - context_metadata: Basic context only (country, currency format, document format) - NO detailed extraction:
           * identity_card: {"country": "Malaysia/Singapore/etc", "id_format": "MyKad/NRIC/etc"}

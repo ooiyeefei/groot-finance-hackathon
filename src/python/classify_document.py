@@ -56,6 +56,30 @@ def process_image_input(image_input: str) -> Image.Image:
         if image_pil.mode != 'RGB':
             image_pil = image_pil.convert('RGB')
 
+        # ⚡ OPTIMIZATION: Resize large images to reduce API payload size
+        # This speeds up API requests and reduces costs
+        MAX_DIMENSION = 1920  # Max width or height in pixels
+        width, height = image_pil.size
+
+        if width > MAX_DIMENSION or height > MAX_DIMENSION:
+            # Calculate aspect ratio and resize proportionally
+            if width > height:
+                new_width = MAX_DIMENSION
+                new_height = int((height / width) * MAX_DIMENSION)
+            else:
+                new_height = MAX_DIMENSION
+                new_width = int((width / height) * MAX_DIMENSION)
+
+            original_size = len(image_bytes)
+            print(f"[Python] Resizing image from {width}x{height} to {new_width}x{new_height} (original: {original_size/1024/1024:.2f}MB)", file=sys.stderr)
+
+            # Resize with high-quality Lanczos filter
+            image_pil = image_pil.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+            print(f"[Python] Image resized successfully", file=sys.stderr)
+        else:
+            print(f"[Python] Image size {width}x{height} is within limits, no resizing needed", file=sys.stderr)
+
         return image_pil
     except Exception as e:
         error_msg = truncate_error_message(str(e))

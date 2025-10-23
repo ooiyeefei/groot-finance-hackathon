@@ -401,7 +401,7 @@ export default function FileUploadZone({
       )}
 
       {uploadState.success && (
-        <div className="flex items-center space-x-2 p-4 bg-success/10 border border-success rounded-lg">
+        <div className="flex items-center space-x-2 p-4 bg-success border border-success rounded-lg">
           <CheckCircle className="w-5 h-5 text-success-foreground" />
           <p className="text-success-foreground">{uploadState.success}</p>
         </div>

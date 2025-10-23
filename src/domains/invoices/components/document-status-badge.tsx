@@ -1,10 +1,11 @@
 'use client'
 
 import { Clock, CheckCircle, XCircle, Loader2, Upload, Cog, Eye, Brain, FileText } from 'lucide-react'
+import { ErrorDetails } from '@/domains/invoices/lib/data-access'
 
 interface DocumentStatusBadgeProps {
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'uploading' | 'classifying' | 'classification_failed' | 'pending_extraction' | 'extracting' | 'ocr_processing'
-  errorMessage?: string
+  errorMessage?: ErrorDetails | string | null
   processingStage?: 'extracting' | 'analyzing' | 'finalizing'
   animated?: boolean
 }
@@ -120,12 +121,24 @@ export default function DocumentStatusBadge({
     }
   }
 
+  // Extract error message string from ErrorDetails or use string directly
+  const getErrorMessage = (): string | undefined => {
+    if (!errorMessage) return undefined
+    if (typeof errorMessage === 'object' && errorMessage !== null && 'message' in errorMessage) {
+      return errorMessage.message
+    }
+    if (typeof errorMessage === 'string') {
+      return errorMessage
+    }
+    return undefined
+  }
+
   return (
     <div
       className={`${getCSSClass()} inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
         (status === 'failed' || status === 'classification_failed') && errorMessage ? 'cursor-help' : ''
       }`}
-      title={status === 'failed' && errorMessage ? errorMessage : undefined}
+      title={status === 'failed' && errorMessage ? getErrorMessage() : undefined}
     >
       <Icon
         className={`w-3 h-3 mr-1 ${

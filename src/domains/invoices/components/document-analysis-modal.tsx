@@ -14,7 +14,7 @@ interface Document {
   converted_image_path?: string
   converted_image_width?: number
   converted_image_height?: number
-  processing_status: 'pending' | 'processing' | 'completed' | 'failed' | 'ocr_processing'
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed' | 'ocr_processing' | 'classification_failed'
   created_at: string
   processed_at?: string
   error_message?: string
