@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useState, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient, useMutation, useQueries } from '@tanstack/react-query';
 
 interface PersonalDashboardData {
   summary: {
@@ -27,7 +27,9 @@ interface ExpenseClaimResponse {
 
 interface UseExpenseClaimsReturn {
   dashboardData: PersonalDashboardData | null;
+  categories: any[] | null;
   loading: boolean;
+  categoriesLoading: boolean;
   error: string | null;
   refreshDashboard: () => Promise<void>;
   deleteClaim: (claimId: string) => Promise<boolean>;
@@ -91,47 +93,53 @@ export function useExpenseClaims(): UseExpenseClaimsReturn {
   const [submitting, setSubmitting] = useState(new Set<string>());
   const [reprocessing, setReprocessing] = useState(new Set<string>());
 
-  // TanStack Query for dashboard fetching with smart caching and polling
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch
-  } = useQuery({
-    // Simple query key for dashboard data
-    queryKey: ['expenseClaimsDashboard'],
-
-    // The function that fetches the data
-    queryFn: fetchDashboardData,
-
-    // Cache configuration optimized for expense claims (following gold standard)
-    staleTime: 1 * 60 * 1000, // 1 minute - expense claims change frequently due to processing
-    gcTime: 10 * 60 * 1000, // 10 minutes - standard cache garbage collection
-
-    // Smart refetch for processing claims - auto-refetch every 3 seconds if processing claims exist
-    refetchInterval: (query) => {
-      const dashboardData = query.state.data?.data;
-      const hasProcessingClaims = dashboardData?.recent_claims?.some((claim: any) =>
-        claim.processing_status === 'processing'
-      );
-      return hasProcessingClaims ? 3000 : false; // 3 seconds polling for processing claims
-    },
-
-    // Refetch configuration
-    refetchOnWindowFocus: false, // Prevent unnecessary refetches on window focus
-    refetchOnReconnect: true, // Refetch when network reconnects
-
-    // Retry configuration (following useFinancialAnalytics pattern)
-    retry: (failureCount, error) => {
-      // Don't retry on 4xx errors (client errors)
-      if (error instanceof Error && error.message.includes('Dashboard request failed: 4')) {
-        return false;
-      }
-      // Retry up to 3 times for network/server errors
-      return failureCount < 3;
-    },
+  // Parallel queries for better performance - fetch dashboard and categories simultaneously
+  const queries = useQueries({
+    queries: [
+      // Dashboard data query
+      {
+        queryKey: ['expenseClaimsDashboard'],
+        queryFn: fetchDashboardData,
+        staleTime: 1 * 60 * 1000, // 1 minute - expense claims change frequently
+        gcTime: 10 * 60 * 1000, // 10 minutes - standard cache garbage collection
+        refetchInterval: (query: any) => {
+          const dashboardData = query.state.data?.data;
+          const hasProcessingClaims = dashboardData?.recent_claims?.some((claim: any) =>
+            claim.processing_status === 'processing'
+          );
+          return hasProcessingClaims ? 3000 : false; // 3 seconds polling for processing claims
+        },
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: true,
+        retry: (failureCount: number, error: any) => {
+          if (error instanceof Error && error.message.includes('Dashboard request failed: 4')) {
+            return false;
+          }
+          return failureCount < 3;
+        },
+      },
+      // Categories query - static data with longer cache
+      {
+        queryKey: ['expenseCategories'],
+        queryFn: async () => {
+          const response = await fetch('/api/v1/expense-claims/categories', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (!response.ok) {
+            throw new Error(`Categories request failed: ${response.status}`);
+          }
+          return response.json();
+        },
+        staleTime: 30 * 60 * 1000, // 30 minutes - categories rarely change
+        gcTime: 60 * 60 * 1000, // 1 hour - keep in cache longer
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false, // Categories don't need immediate refresh
+      },
+    ],
   });
+
+  const [dashboardQuery, categoriesQuery] = queries;
 
   // Delete claim mutation with optimistic updates
   const deleteMutation = useMutation({
@@ -173,7 +181,7 @@ export function useExpenseClaims(): UseExpenseClaimsReturn {
     },
     onSuccess: () => {
       // Refetch to get accurate counts and any updated related data
-      refetch();
+      dashboardQuery.refetch();
     },
     onSettled: (_, __, claimId) => {
       setDeleting(prev => {
@@ -185,7 +193,7 @@ export function useExpenseClaims(): UseExpenseClaimsReturn {
     onError: (error, claimId) => {
       console.error('Error deleting claim:', error);
       // Refetch to restore correct state on error
-      refetch();
+      dashboardQuery.refetch();
     }
   });
 
@@ -227,7 +235,7 @@ export function useExpenseClaims(): UseExpenseClaimsReturn {
     },
     onSuccess: () => {
       // Refetch to get accurate server state
-      refetch();
+      dashboardQuery.refetch();
     },
     onSettled: (_, __, claimId) => {
       setSubmitting(prev => {
@@ -239,7 +247,7 @@ export function useExpenseClaims(): UseExpenseClaimsReturn {
     onError: (error, claimId) => {
       console.error('Error submitting claim:', error);
       // Refetch to restore correct state on error
-      refetch();
+      dashboardQuery.refetch();
     }
   });
 
@@ -271,7 +279,7 @@ export function useExpenseClaims(): UseExpenseClaimsReturn {
     },
     onSuccess: () => {
       // Refetch to get accurate server state
-      refetch();
+      dashboardQuery.refetch();
     },
     onSettled: (_, __, claimId) => {
       setReprocessing(prev => {
@@ -283,14 +291,17 @@ export function useExpenseClaims(): UseExpenseClaimsReturn {
     onError: (error, claimId) => {
       console.error('Error reprocessing claim:', error);
       // Refetch to restore correct state on error
-      refetch();
+      dashboardQuery.refetch();
     }
   });
 
-  // Manual refresh function
+  // Manual refresh function - refresh both queries
   const refreshDashboard = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
+    await Promise.all([
+      dashboardQuery.refetch(),
+      categoriesQuery.refetch()
+    ]);
+  }, [dashboardQuery, categoriesQuery]);
 
   // Operation wrapper functions
   const deleteClaim = useCallback(async (claimId: string): Promise<boolean> => {
@@ -320,13 +331,25 @@ export function useExpenseClaims(): UseExpenseClaimsReturn {
     }
   }, [reprocessMutation]);
 
-  // Extract data with fallbacks
-  const dashboardData = data?.data || null;
+  // Extract and memoize data with fallbacks
+  const dashboardData = useMemo(() =>
+    dashboardQuery.data?.data || null,
+    [dashboardQuery.data]
+  );
+
+  const categories = useMemo(() =>
+    categoriesQuery.data?.data || null,
+    [categoriesQuery.data]
+  );
 
   return {
     dashboardData,
-    loading: isLoading,
-    error: isError ? (error instanceof Error ? error.message : 'Failed to fetch dashboard data') : null,
+    categories,
+    loading: dashboardQuery.isLoading,
+    categoriesLoading: categoriesQuery.isLoading,
+    error: dashboardQuery.isError
+      ? (dashboardQuery.error instanceof Error ? dashboardQuery.error.message : 'Failed to fetch dashboard data')
+      : null,
     refreshDashboard,
     deleteClaim,
     submitClaim,

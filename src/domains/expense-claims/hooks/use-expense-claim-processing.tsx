@@ -7,7 +7,7 @@ interface ProcessingExpenseClaim {
   documentId?: string
   fileName: string
   fileType: string
-  status: 'uploading' | 'processing' | 'analyzing' | 'completed' | 'failed'
+  status: 'uploading' | 'processing' | 'analyzing' | 'classifying' | 'completed' | 'failed' | 'classification_failed'
   progress: number
   startTime: Date
   expectedDuration: number // in seconds
@@ -73,7 +73,7 @@ export function useExpenseClaimProcessing(): UseExpenseClaimProcessingReturn {
 
   // Check if there are any active processing claims
   const hasActiveProcessing = processingClaims.some(claim =>
-    claim.status === 'uploading' || claim.status === 'processing' || claim.status === 'analyzing'
+    claim.status === 'uploading' || claim.status === 'processing' || claim.status === 'analyzing' || claim.status === 'classifying'
   )
 
   // Simulate realistic progress for expense claim processing
@@ -87,7 +87,9 @@ export function useExpenseClaimProcessing(): UseExpenseClaimProcessingReturn {
 
         // Update status based on progress
         let newStatus = claim.status
-        if (currentProgress >= 20 && claim.status === 'uploading') {
+        if (currentProgress >= 15 && claim.status === 'uploading') {
+          newStatus = 'classifying'
+        } else if (currentProgress >= 35 && claim.status === 'classifying') {
           newStatus = 'processing'
         } else if (currentProgress >= 60 && claim.status === 'processing') {
           newStatus = 'analyzing'

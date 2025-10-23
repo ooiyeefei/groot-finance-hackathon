@@ -135,6 +135,7 @@ class DocumentClassifier:
             # Parse supported types and create structured list with generic descriptions
             type_descriptions = {
                 "invoice": "Business invoice with itemized list, vendor details, total amount, and payment terms. Extract vendor info, amounts, dates, and items.",
+                "receipt": "Purchase receipt, restaurant bill, taxi receipt, or retail transaction receipt. Extract vendor name, amount, date, and purchased items. Includes both printed and digital receipts.",
                 "ic": "Government-issued identity card with ID number, name, address, and photo. Extract personal details, ID numbers, addresses, and country/region info.",
                 "payslip": "Employee payslip with salary details, deductions, and employer information. Extract salary components, employer details, and regional tax/deduction info.",
                 "application_form": "Application form for services, loans, or accounts. Extract applicant details, form type, institution, and specific application context."

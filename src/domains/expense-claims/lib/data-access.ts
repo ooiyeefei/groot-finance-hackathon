@@ -8,7 +8,7 @@ import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profil
 import { currencyService } from '@/lib/services/currency-service'
 import { StoragePathBuilder, generateUniqueFilename, type DocumentType } from '@/lib/storage-paths'
 import { tasks } from '@trigger.dev/sdk/v3'
-import type { extractReceiptData } from '@/trigger/extract-receipt-data'
+import type { classifyDocument } from '@/trigger/classify-document'
 import type { convertPdfToImage } from '@/trigger/convert-pdf-to-image'
 import {
   ExpenseClaim,
@@ -462,39 +462,31 @@ export async function createExpenseClaim(
             console.log(`[PDF Processing] PDF conversion job triggered: ${triggerResult.id}`)
 
           } else {
-            // Image files: Direct AI processing
-            console.log(`[Image Processing] Triggering direct AI processing for expense claim: ${expenseClaim.id}`)
+            // Image files: Trigger classification first, which will then route to receipt extraction
+            console.log(`[Image Processing] Triggering document classification for expense claim: ${expenseClaim.id}`)
 
-            const { data: urlData } = await supabase.storage
+            triggerResult = await tasks.trigger<typeof classifyDocument>(
+              "classify-document",
+              {
+                documentId: expenseClaim.id,
+                documentDomain: 'expense_claims'
+              }
+            )
+
+            await supabase
               .from('expense_claims')
-              .createSignedUrl(standardizedFilePath, 600)
-
-            if (urlData) {
-              triggerResult = await tasks.trigger<typeof extractReceiptData>(
-                "extract-receipt-data",
-                {
-                  expenseClaimId: expenseClaim.id,
-                  documentId: documentId,
-                  userId: userData.id,
-                  documentDomain: 'expense_claims',
-                  receiptImageUrl: urlData.signedUrl
+              .update({
+                status: 'classifying', // Update status to indicate classification in progress
+                processing_metadata: {
+                  ...expenseClaim.processing_metadata,
+                  classification_job_id: triggerResult.id,
+                  classification_timestamp: new Date().toISOString(),
+                  processing_stage: 'classification'
                 }
-              )
+              })
+              .eq('id', expenseClaim.id)
 
-              await supabase
-                .from('expense_claims')
-                .update({
-                  processing_metadata: {
-                    ...expenseClaim.processing_metadata,
-                    ai_extraction_job_id: triggerResult.id,
-                    ai_extraction_timestamp: new Date().toISOString(),
-                    processing_stage: 'ai_extraction'
-                  }
-                })
-                .eq('id', expenseClaim.id)
-
-              console.log(`[Image Processing] AI extraction job triggered: ${triggerResult.id}`)
-            }
+            console.log(`[Image Processing] Classification job triggered: ${triggerResult.id}`)
           }
         } catch (triggerError) {
           console.error('Failed to trigger processing:', triggerError)

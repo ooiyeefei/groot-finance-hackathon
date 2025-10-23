@@ -312,13 +312,22 @@ export default function ProcessingStep({
         const mainStatus = claimData.status
 
         // Update progress indication during polling
-        if (processingStatus === 'analyzing' || processingStatus === 'upload_pending' || mainStatus === 'analyzing') {
+        if (processingStatus === 'analyzing' || processingStatus === 'classifying' || processingStatus === 'upload_pending' ||
+            mainStatus === 'analyzing' || mainStatus === 'classifying' || mainStatus === 'converting') {
           console.log(`[AI Processing] Expense claim ${expenseClaimId} still processing (${processingStatus || mainStatus})... (${attempts * 2}s elapsed)`)
           attempts++
           continue
         }
 
-        // Check for failures in either processing metadata or main status
+        // Check for classification failures (document type rejection)
+        if (mainStatus === 'classification_failed' || processingStatus === 'classification_failed') {
+          const errorMessage = processingMetadata.error_message ||
+            'This document type is not supported for expense claims. Please upload a receipt or invoice.'
+          console.log(`[AI Processing] Document classification failed for expense claim ${expenseClaimId}: ${errorMessage}`)
+          throw new Error(errorMessage)
+        }
+
+        // Check for other failures in either processing metadata or main status
         if (processingStatus === 'failed' || mainStatus === 'failed') {
           const errorMessage = processingMetadata.error_message || 'Receipt processing failed due to timeout or processing error'
           console.log(`[AI Processing] Expense claim ${expenseClaimId} failed: ${errorMessage}`)

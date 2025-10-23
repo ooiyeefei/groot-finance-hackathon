@@ -146,7 +146,7 @@ export default function ExpenseSubmissionFlow({
     if (!claim) return
 
     // Update background processing state
-    const isActivelyProcessing = ['uploading', 'processing', 'analyzing'].includes(claim.status)
+    const isActivelyProcessing = ['uploading', 'classifying', 'processing', 'analyzing'].includes(claim.status)
     if (flowState.isBackgroundProcessing !== isActivelyProcessing) {
       setFlowState(prev => ({
         ...prev,

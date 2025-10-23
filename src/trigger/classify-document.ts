@@ -71,6 +71,7 @@ import type { processDocumentOCR } from './process-document-ocr';
 import type { extractIcData } from './extract-ic-data';
 import type { extractPayslipData } from './extract-payslip-data';
 import type { extractApplicationFormData } from './extract-application-form-data';
+import type { extractReceiptData } from './extract-receipt-data';
 
 // ✅ PHASE 4B-3: Domain-to-table mapping for multi-domain architecture
 const DOMAIN_TABLE_MAP = {
@@ -312,18 +313,62 @@ export const classifyDocument = task({
     console.log(`[Classify] Using image path for extraction: ${imagePath}`);
 
     switch (docType) {
-      case 'invoice':
-        console.log(`[Classify] Triggering legacy OCR for invoice`);
+      case 'receipt':
+        // Receipts are only valid for expense_claims domain
+        if (documentDomain !== 'expense_claims') {
+          const errorMsg = 'Receipt document type is only supported for expense claims.';
+          console.log(`[Classify] Rejecting receipt for non-expense_claims domain: ${documentDomain}`);
+          await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);
+          throw new Error(errorMsg);
+        }
 
-        const invoiceRun = await tasks.trigger<typeof processDocumentOCR>("process-document-ocr", {
+        console.log(`[Classify] Triggering receipt extraction for expense claim`);
+
+        // Receipt documents go to extract-receipt-data task
+        const receiptRun = await tasks.trigger<typeof extractReceiptData>("extract-receipt-data", {
+          expenseClaimId: documentId,  // For expense_claims domain, documentId is the expense claim ID
           documentId: documentId,
-          imageStoragePath: imagePath,  // Pass the actual path
-          documentDomain: documentDomain  // ✅ PHASE 4B-3: Pass domain to extraction task
+          userId: undefined,  // Will be fetched from expense claim record
+          documentDomain: 'expense_claims' as const,  // Explicitly set to expense_claims
+          receiptImageUrl: imagePath  // Will be converted to signed URL in the task
         });
-        extractionTaskId = invoiceRun.id;
+        extractionTaskId = receiptRun.id;
+        break;
+
+      case 'invoice':
+        console.log(`[Classify] Processing invoice document`);
+
+        // For expense_claims domain, invoices are treated as receipts
+        if (documentDomain === 'expense_claims') {
+          console.log(`[Classify] Invoice in expense_claims domain - routing to receipt extraction`);
+          const expenseInvoiceRun = await tasks.trigger<typeof extractReceiptData>("extract-receipt-data", {
+            expenseClaimId: documentId,
+            documentId: documentId,
+            userId: undefined,
+            documentDomain: 'expense_claims' as const,  // Explicitly set to expense_claims
+            receiptImageUrl: imagePath
+          });
+          extractionTaskId = expenseInvoiceRun.id;
+        } else {
+          console.log(`[Classify] Triggering legacy OCR for invoice`);
+          const invoiceRun = await tasks.trigger<typeof processDocumentOCR>("process-document-ocr", {
+            documentId: documentId,
+            imageStoragePath: imagePath,
+            documentDomain: documentDomain
+          });
+          extractionTaskId = invoiceRun.id;
+        }
         break;
 
       case 'ic':
+        // For expense_claims domain, reject ID cards
+        if (documentDomain === 'expense_claims') {
+          const errorMsg = 'This appears to be an identity card. Please upload a receipt or invoice for expense claims.';
+          console.log(`[Classify] Rejecting IC document for expense_claims domain`);
+          await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);
+          throw new Error(errorMsg);
+        }
+
         console.log(`[Classify] Triggering IC extraction`);
         const icRun = await tasks.trigger<typeof extractIcData>("extract-ic-data", {
           documentId: documentId,
@@ -334,6 +379,14 @@ export const classifyDocument = task({
         break;
 
       case 'payslip':
+        // For expense_claims domain, reject payslips
+        if (documentDomain === 'expense_claims') {
+          const errorMsg = 'This appears to be a payslip. Please upload a receipt or invoice for expense claims.';
+          console.log(`[Classify] Rejecting payslip document for expense_claims domain`);
+          await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);
+          throw new Error(errorMsg);
+        }
+
         console.log(`[Classify] Triggering payslip extraction`);
         const payslipRun = await tasks.trigger<typeof extractPayslipData>("extract-payslip-data", {
           documentId: documentId,
@@ -344,6 +397,14 @@ export const classifyDocument = task({
         break;
 
       case 'application_form':
+        // For expense_claims domain, reject application forms
+        if (documentDomain === 'expense_claims') {
+          const errorMsg = 'This appears to be an application form. Please upload a receipt or invoice for expense claims.';
+          console.log(`[Classify] Rejecting application form for expense_claims domain`);
+          await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);
+          throw new Error(errorMsg);
+        }
+
         console.log(`[Classify] Triggering application form extraction`);
         const appRun = await tasks.trigger<typeof extractApplicationFormData>("extract-application-form-data", {
           documentId: documentId,
@@ -355,6 +416,14 @@ export const classifyDocument = task({
 
       // Gracefully handle other document types that are not yet supported
       case 'other':
+        // For expense_claims domain, reject unrecognized documents
+        if (documentDomain === 'expense_claims') {
+          const errorMsg = 'This document type is not supported for expense claims. Please upload a receipt or invoice.';
+          console.log(`[Classify] Rejecting unrecognized document for expense_claims domain`);
+          await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);
+          throw new Error(errorMsg);
+        }
+
         console.log(`[Classify] Document type is 'other' - not currently supported for extraction. Stopping pipeline gracefully.`);
         // Update status to 'completed' as the classification process is done successfully.
         // The UI can show the user-friendly message from the classification metadata.
