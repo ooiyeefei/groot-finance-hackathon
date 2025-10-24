@@ -46,11 +46,11 @@ async function fetchCSRFToken(): Promise<string | null> {
     }
 
     const data = await response.json()
-    if (data.success && data.data && data.data.token) {
-      csrfToken = data.data.token
+    if (data.success && data.data && data.data.csrfToken) {
+      csrfToken = data.data.csrfToken
       csrfTokenExpires = Date.now() + (60 * 60 * 1000) - 60000 // 1 hour minus 1 min buffer
       console.log('[API Client] CSRF token obtained successfully')
-      return data.data.token
+      return data.data.csrfToken
     }
 
     console.error('[API Client] Invalid CSRF token response:', data)

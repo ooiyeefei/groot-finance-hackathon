@@ -22,7 +22,8 @@ const isPublicRoute = createRouteMatcher([
   '/manifest(.*)', // Any manifest-related requests
   '/(en|th|id|zh)?/invitations/accept(.*)', // Invitation acceptance pages (public)
   '/invitations/accept(.*)', // Invitation acceptance (fallback without locale)
-  '/api/invitations/accept(.*)', // Invitation acceptance API (public)
+  '/api/invitations/accept(.*)', // Legacy invitation acceptance API (public)
+  '/api/v1/account-management/invitations/accept(.*)', // V1 invitation acceptance API (public)
 ])
 
 // Routes that need authentication but NOT business context (onboarding flow)

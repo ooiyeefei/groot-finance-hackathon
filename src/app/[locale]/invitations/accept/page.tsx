@@ -58,6 +58,16 @@ function AcceptInvitationContent() {
         })
       })
 
+      // Check if response is JSON before trying to parse
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        // If not JSON, it might be an HTML redirect to login page
+        if (response.status === 401 || response.status === 302) {
+          throw new Error('Authentication required. Please sign in to continue.')
+        }
+        throw new Error('Invalid response from server. Please try again later.')
+      }
+
       const result = await response.json()
 
       if (!response.ok || !result.success) {
@@ -74,7 +84,12 @@ function AcceptInvitationContent() {
 
     } catch (err) {
       console.error('Invitation acceptance error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to accept invitation')
+      // Handle JSON parse errors specifically
+      if (err instanceof SyntaxError && err.message.includes('JSON')) {
+        setError('Server returned an invalid response. This might happen if you need to sign in first.')
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to accept invitation')
+      }
     } finally {
       setAccepting(false)
     }
@@ -91,6 +106,20 @@ function AcceptInvitationContent() {
     const validateInvitation = async () => {
       try {
         const response = await fetch(`/api/v1/account-management/invitations/accept?token=${token}`)
+
+        // Check if response is JSON before trying to parse
+        const contentType = response.headers.get('content-type')
+        if (!contentType || !contentType.includes('application/json')) {
+          // If not JSON, it might be an HTML redirect to login page
+          if (response.status === 401 || response.status === 302) {
+            throw new Error('Authentication required. Please sign in to continue.')
+          }
+          // Try to get text content for debugging
+          const text = await response.text()
+          console.error('Non-JSON response received:', text.substring(0, 200))
+          throw new Error('Invalid response from server. Please try again later.')
+        }
+
         const result = await response.json()
 
         if (!response.ok || !result.success) {
@@ -100,7 +129,12 @@ function AcceptInvitationContent() {
         setInvitation(result.invitation)
       } catch (err) {
         console.error('Invitation validation error:', err)
-        setError(err instanceof Error ? err.message : 'Failed to validate invitation')
+        // Handle JSON parse errors specifically
+        if (err instanceof SyntaxError && err.message.includes('JSON')) {
+          setError('Server returned an invalid response. This might happen if you need to sign in first.')
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to validate invitation')
+        }
       } finally {
         setLoading(false)
       }

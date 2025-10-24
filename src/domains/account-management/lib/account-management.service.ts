@@ -569,10 +569,29 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
     .single()
 
   if (error) {
-    throw new Error('Failed to fetch business profile')
+    console.error('[Business Profile] Database error:', error)
+
+    // If it's a no rows error, return a minimal profile with defaults
+    if (error.code === 'PGRST116') {
+      console.log('[Business Profile] No profile found, returning defaults for business:', user.business_id)
+      return {
+        id: user.business_id,
+        name: 'Business',
+        logo_url: null,
+        logo_fallback_color: '#3b82f6'
+      } as BusinessProfile
+    }
+
+    throw new Error(`Failed to fetch business profile: ${error.message}`)
   }
 
-  return businessProfile as BusinessProfile
+  // Ensure all fields have defaults if null
+  return {
+    id: businessProfile.id,
+    name: businessProfile.name || 'Business',
+    logo_url: businessProfile.logo_url || null,
+    logo_fallback_color: businessProfile.logo_fallback_color || '#3b82f6'
+  } as BusinessProfile
 }
 
 /**

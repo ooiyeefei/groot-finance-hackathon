@@ -184,11 +184,25 @@ async function handleTaskFailure(
       failure_level: 'system' // Indicates this was a system-level failure
     };
 
+    // Create JSONB error structure
+    const errorJsonb = {
+      message: userFriendlyError,
+      suggestions: [
+        'Ensure your Python environment is properly configured',
+        'Contact support if the issue persists',
+        'Try uploading a different image format'
+      ],
+      error_type: errorCategory,
+      error_code: errorCode,
+      timestamp: new Date().toISOString()
+    };
+
     await supabase
       .from('expense_claims')
       .update({
         status: 'failed',
         processing_metadata: failureMetadata,
+        error_message: errorJsonb,
         updated_at: new Date().toISOString()
       })
       .eq('id', expenseClaimId);
@@ -479,11 +493,25 @@ export const extractReceiptData = task({
             timeout_duration: errorCategory === 'timeout' ? '180 seconds' : undefined
           };
 
+          // Create JSONB error structure
+          const errorJsonb = {
+            message: userFriendlyError,
+            suggestions: [
+              'Try uploading the receipt again',
+              'Ensure the image is clear and readable',
+              'If the issue persists, contact support'
+            ],
+            error_type: errorCategory,
+            error_code: pythonError.code || (errorCategory === 'timeout' ? 'TIMEOUT_ERROR' : 'UNKNOWN'),
+            timestamp: new Date().toISOString()
+          };
+
           await supabase
             .from('expense_claims')
             .update({
               status: 'failed',
               processing_metadata: failureMetadata,
+              error_message: errorJsonb,
               updated_at: new Date().toISOString()
             })
             .eq('id', payload.expenseClaimId);
@@ -538,11 +566,25 @@ export const extractReceiptData = task({
               raw_stdout: (result as any).stdout?.substring(0, 1000) // First 1000 chars for debugging
             };
 
+            // Create JSONB error structure
+            const parseErrorJsonb = {
+              message: userFriendlyMapping.userMessage,
+              suggestions: userFriendlyMapping.actionableSteps || [
+                'Try uploading the receipt again',
+                'Ensure the receipt image is clear and complete',
+                'Contact support if this issue persists'
+              ],
+              error_type: 'parsing_error',
+              error_code: 'JSON_PARSE_FAILED',
+              timestamp: new Date().toISOString()
+            };
+
             await supabase
               .from('expense_claims')
               .update({
                 status: 'failed',
                 processing_metadata: parseFailureMetadata,
+                error_message: parseErrorJsonb,
                 updated_at: new Date().toISOString()
               })
               .eq('id', payload.expenseClaimId);
@@ -559,15 +601,47 @@ export const extractReceiptData = task({
       // Check if Python script returned an error
       if (pythonResult && pythonResult.success === false && pythonResult.error) {
         let userFriendlyError = 'Unable to extract data from this receipt. ';
+        let suggestions: string[] = [];
 
-        if (pythonResult.error.includes('API') || pythonResult.error.includes('overload')) {
-          userFriendlyError += 'Our processing service is temporarily busy. Please try again in a few moments.';
-        } else if (pythonResult.error.includes('timeout') || pythonResult.error.includes('hang')) {
-          userFriendlyError += 'The receipt took too long to process. Please try uploading a clearer image.';
-        } else if (pythonResult.error.includes('image') || pythonResult.error.includes('download')) {
-          userFriendlyError += 'There was an issue accessing your receipt. Please try uploading it again.';
+        // Check if Python script provided user_message and suggestions
+        if (pythonResult.data?.user_message) {
+          userFriendlyError = pythonResult.data.user_message;
+          suggestions = pythonResult.data.suggestions || [];
         } else {
-          userFriendlyError += 'Please try uploading the receipt again or contact support if the issue persists.';
+          // Fallback to error categorization
+          if (pythonResult.error.includes('API') || pythonResult.error.includes('overload')) {
+            userFriendlyError += 'Our processing service is temporarily busy. Please try again in a few moments.';
+            suggestions = ['Wait a few moments and try again', 'If the issue persists, contact support'];
+          } else if (pythonResult.error.includes('timeout') || pythonResult.error.includes('hang')) {
+            userFriendlyError += 'The receipt took too long to process. Please try uploading a clearer image.';
+            suggestions = ['Take a clearer photo with better lighting', 'Ensure the entire receipt is visible', 'Try a different camera angle'];
+          } else if (pythonResult.error.includes('image') || pythonResult.error.includes('download')) {
+            userFriendlyError += 'There was an issue accessing your receipt. Please try uploading it again.';
+            suggestions = ['Try uploading the image again', 'Ensure the file is not corrupted', 'Use a different image format (JPG or PNG)'];
+          } else {
+            userFriendlyError += 'Please try uploading the receipt again or contact support if the issue persists.';
+            suggestions = ['Upload a clearer image', 'Ensure all text is readable', 'Contact support if issues continue'];
+          }
+        }
+
+        // Update expense claim with JSONB error structure
+        if (payload.expenseClaimId) {
+          const errorJsonb = {
+            message: userFriendlyError,
+            suggestions: suggestions,
+            error_type: 'extraction_failed',
+            error_code: pythonResult.error_code || 'PYTHON_EXTRACTION_ERROR',
+            timestamp: new Date().toISOString()
+          };
+
+          await supabase
+            .from('expense_claims')
+            .update({
+              status: 'failed',
+              error_message: errorJsonb,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', payload.expenseClaimId);
         }
 
         console.error(`❌ Technical error details:`, pythonResult.error);
@@ -611,6 +685,14 @@ export const extractReceiptData = task({
 
         if (!expenseClaim) {
           throw new Error(`Expense claim not found - was not fetched in Step 1: ${payload.expenseClaimId}`);
+        }
+
+        // Check if LLM provided a user message (for low quality receipts)
+        if (extractionResult.user_message) {
+          console.log(`⚠️ LLM provided user message: ${extractionResult.user_message}`);
+          if (extractionResult.suggestions?.length > 0) {
+            console.log(`💡 LLM suggestions: ${extractionResult.suggestions.join(', ')}`);
+          }
         }
 
         // Auto-categorize based on AI suggestion, then vendor patterns
@@ -675,6 +757,10 @@ export const extractReceiptData = task({
           processing_time_ms: pythonResult.processing_time_ms,
           model_used: extractionResult.model_used || 'gemini-2.0-flash-exp',
           backend_used: extractionResult.backend_used || 'gemini_dspy',
+
+          // LLM-generated user feedback
+          user_message: extractionResult.user_message || null,
+          suggestions: extractionResult.suggestions || null,
 
           financial_data: {
             description: extractionResult.vendor_name,
@@ -876,11 +962,26 @@ export const extractReceiptData = task({
         }
 
         try {
+          // Create JSONB error structure
+          const generalErrorJsonb = {
+            message: userFriendlyError,
+            suggestions: userFriendlyMapping.actionableSteps || [
+              'Try uploading a clearer image of the receipt',
+              'Ensure all text on the receipt is readable',
+              'Check that the file is not corrupted',
+              'Contact support if issues persist'
+            ],
+            error_type: errorCategory,
+            error_code: errorCode,
+            timestamp: new Date().toISOString()
+          };
+
           await supabase
             .from('expense_claims')
             .update({
               status: targetStatus,
               processing_metadata: failureMetadata,
+              error_message: generalErrorJsonb,
               updated_at: new Date().toISOString()
             })
             .eq('id', payload.expenseClaimId);

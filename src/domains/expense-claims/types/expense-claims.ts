@@ -5,6 +5,15 @@
 
 import { SupportedCurrency, AccountingEntry } from '@/domains/accounting-entries/types'
 
+// JSONB error message structure for structured error handling
+export interface ExpenseClaimErrorMessage {
+  message: string              // User-friendly error message
+  suggestions?: string[]       // Actionable suggestions for resolution
+  error_type?: string         // Category of error (e.g., 'classification_failed', 'extraction_failed')
+  error_code?: string         // Specific error code for debugging
+  timestamp?: string          // When the error occurred
+}
+
 // ✅ Simplified linear workflow status
 export type ExpenseClaimStatus =
   | 'draft'                    // Ready for editing (OCR completed or manual entry)
@@ -93,7 +102,10 @@ export interface ExpenseClaim {
   transaction?: AccountingEntry
   employee?: EmployeeProfile
   current_approver?: EmployeeProfile // Legacy field - use reviewed_by with status for logic
-  
+
+  // Error handling (JSONB in database)
+  error_message?: ExpenseClaimErrorMessage | null
+
   created_at: string
   updated_at: string
 }

@@ -49,6 +49,8 @@ class ExtractedReceiptData(BaseModel):
     processing_method: Literal['dspy', 'manual_entry'] = Field(default='dspy')
     model_used: Optional[str] = Field(None, description="AI model used for extraction")
     backend_used: Optional[str] = Field(None, description="Backend used: gemini_dspy or vllm_dspy")
+    user_message: Optional[str] = Field(None, description="User-friendly message explaining the extraction results or issues")
+    suggestions: Optional[List[str]] = Field(None, description="Actionable suggestions for improving extraction quality")
 
 
 class ScriptResponse(BaseModel):
@@ -61,10 +63,14 @@ class ScriptResponse(BaseModel):
 
 # DSPy Signature for receipt extraction
 class SimpleReceiptSignature(dspy.Signature):
-    """Fast structured extraction for receipts"""
+    """Fast structured extraction for receipts with user-friendly error handling.
+    IMPORTANT: If the image quality is poor or critical information is missing, provide:
+    1. A clear user_message explaining the issue
+    2. Actionable suggestions for improvement (e.g., 'Take a clearer photo', 'Ensure entire receipt is visible')
+    """
     receipt_image: dspy.Image = dspy.InputField(desc="Receipt image for analysis")
     available_categories: str = dspy.InputField(desc="JSON list of available expense categories")
-    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with selected category")
+    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with selected category, user_message for issues, and suggestions for improvement")
 
 
 class ReceiptExtractor(dspy.Module):
@@ -235,7 +241,9 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
             "processing_time_ms": processing_time,
             "extraction_quality": extracted_data.extraction_quality,
             "model_used": extracted_data.model_used,
-            "backend_used": extracted_data.backend_used
+            "backend_used": extracted_data.backend_used,
+            "user_message": extracted_data.user_message,
+            "suggestions": extracted_data.suggestions
         }
 
         return {

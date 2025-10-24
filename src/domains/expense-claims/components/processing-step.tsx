@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { ErrorMessageCard } from '@/components/ui/error-message-card'
 // Removed direct import - now using server-side API
 import { AIExtractionResult, ExtractionReasoning } from '@/domains/expense-claims/types/expense-extraction'
 
@@ -61,6 +62,7 @@ export default function ProcessingStep({
   const [isProcessing, setIsProcessing] = useState(false)
   const [extractionResult, setExtractionResult] = useState<AIExtractionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [errorSuggestions, setErrorSuggestions] = useState<string[]>([])
   const [currentStep, setCurrentStep] = useState(0)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState(13) // 13 seconds total for AI processing
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([
@@ -321,17 +323,48 @@ export default function ProcessingStep({
 
         // Check for classification failures (document type rejection)
         if (mainStatus === 'classification_failed' || processingStatus === 'classification_failed') {
-          const errorMessage = processingMetadata.error_message ||
-            'This document type is not supported for expense claims. Please upload a receipt or invoice.'
+          // Handle both JSONB and legacy text error messages
+          let errorMessage: string
+          let errorSuggestions: string[] = []
+
+          if (typeof processingMetadata.error_message === 'object' && processingMetadata.error_message) {
+            errorMessage = processingMetadata.error_message.message ||
+              'This document type is not supported for expense claims. Please upload a receipt or invoice.'
+            errorSuggestions = processingMetadata.error_message.suggestions || []
+          } else {
+            errorMessage = processingMetadata.error_message ||
+              'This document type is not supported for expense claims. Please upload a receipt or invoice.'
+          }
+
           console.log(`[AI Processing] Document classification failed for expense claim ${expenseClaimId}: ${errorMessage}`)
-          throw new Error(errorMessage)
+
+          // Create custom error with suggestions
+          const error = new Error(errorMessage) as any
+          error.suggestions = errorSuggestions
+          throw error
         }
 
         // Check for other failures in either processing metadata or main status
         if (processingStatus === 'failed' || mainStatus === 'failed') {
-          const errorMessage = processingMetadata.error_message || 'Receipt processing failed due to timeout or processing error'
+          // Handle both JSONB and legacy text error messages
+          let errorMessage: string
+          let errorSuggestions: string[] = []
+
+          if (typeof processingMetadata.error_message === 'object' && processingMetadata.error_message) {
+            errorMessage = processingMetadata.error_message.message ||
+              'Receipt processing failed due to timeout or processing error'
+            errorSuggestions = processingMetadata.error_message.suggestions || []
+          } else {
+            errorMessage = processingMetadata.error_message ||
+              'Receipt processing failed due to timeout or processing error'
+          }
+
           console.log(`[AI Processing] Expense claim ${expenseClaimId} failed: ${errorMessage}`)
-          throw new Error(errorMessage)
+
+          // Create custom error with suggestions
+          const error = new Error(errorMessage) as any
+          error.suggestions = errorSuggestions
+          throw error
         }
 
         // Processing completed successfully
@@ -530,31 +563,30 @@ export default function ProcessingStep({
 
       {/* Error State */}
       {error && (
-        <Alert className="bg-red-900/20 border-red-700">
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription className="text-red-400">
-            <div className="space-y-3">
-              <div>Receipt processing failed: {error}</div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleRetry}
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  Retry Processing
-                </Button>
-                <Button
-                  onClick={onSkip}
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  Enter Manually
-                </Button>
-              </div>
-            </div>
-          </AlertDescription>
-        </Alert>
+        <div className="space-y-4">
+          <ErrorMessageCard
+            message={error}
+            suggestions={errorSuggestions}
+          />
+          <div className="flex gap-2">
+            <Button
+              onClick={handleRetry}
+              size="sm"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              <RefreshCw className="w-3 h-3 mr-1" />
+              Retry Processing
+            </Button>
+            <Button
+              onClick={onSkip}
+              size="sm"
+              variant="secondary"
+              className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+            >
+              Enter Manually
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Chain-of-Thought Steps */}

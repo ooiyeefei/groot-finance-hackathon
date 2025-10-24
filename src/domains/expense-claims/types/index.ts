@@ -5,6 +5,15 @@
 
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 
+// JSONB error message structure for structured error handling
+export interface ExpenseClaimErrorMessage {
+  message: string              // User-friendly error message
+  suggestions?: string[]       // Actionable suggestions for resolution
+  error_type?: string         // Category of error (e.g., 'classification_failed', 'extraction_failed')
+  error_code?: string         // Specific error code for debugging
+  timestamp?: string          // When the error occurred
+}
+
 export type ExpenseClaimStatus =
   | 'draft'
   | 'uploading'
@@ -138,6 +147,9 @@ export interface ExpenseClaim {
   // File handling
   storage_path?: string | null
   processing_metadata?: any
+
+  // Error handling (JSONB in database)
+  error_message?: ExpenseClaimErrorMessage | null
 
   // Compliance (keep existing fields)
   risk_score?: number
