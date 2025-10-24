@@ -158,7 +158,7 @@ export default function ProcessingStep({
         formData.append('description', 'Receipt Processing - AI Extraction')
         formData.append('business_purpose', 'Business Expense - Receipt Upload')
         // No expense_category - let trigger.dev AI job determine it
-        formData.append('original_amount', '1') // Temporary amount, will be updated by AI
+        formData.append('original_amount', '0') // Temporary amount (zero), will be updated by AI
         formData.append('original_currency', 'SGD')
         formData.append('transaction_date', new Date().toISOString().split('T')[0])
         formData.append('vendor_name', 'Processing...')

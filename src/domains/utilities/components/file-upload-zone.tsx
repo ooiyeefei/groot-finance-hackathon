@@ -95,7 +95,7 @@ export default function FileUploadZone({
         // Add required form fields for unified API - use placeholder values, AI will update
         formData.append('description', 'Receipt Processing - AI Extraction')
         formData.append('business_purpose', 'Business Expense - Receipt Upload')
-        formData.append('original_amount', '1') // Temporary amount, will be updated by AI
+        formData.append('original_amount', '0') // Temporary amount (zero), will be updated by AI
         formData.append('original_currency', 'SGD') // Default currency
         formData.append('transaction_date', new Date().toISOString().split('T')[0]) // Today's date
         formData.append('vendor_name', 'Processing...') // Placeholder vendor name

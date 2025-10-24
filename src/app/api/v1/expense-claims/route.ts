@@ -185,11 +185,12 @@ export async function POST(request: NextRequest) {
       const supabase = await createBusinessContextSupabaseClient()
 
       // Single query with JOIN to fetch user and business data together
+      // Using !users_business_id_fkey to specify the relationship via users.business_id -> businesses.id
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select(`
           business_id,
-          businesses (
+          businesses!users_business_id_fkey (
             home_currency,
             allowed_currencies
           )
@@ -205,7 +206,11 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const businessData = Array.isArray(userData.businesses) ? userData.businesses[0] : userData.businesses
+      // When using the specific foreign key relationship, businesses is always a single object (many-to-one)
+      // Handle both array and single object cases for TypeScript
+      const businessData = Array.isArray(userData.businesses)
+        ? userData.businesses[0]
+        : userData.businesses as { home_currency: string; allowed_currencies?: string[] } | null
 
       if (!businessData) {
         console.error('[Currency Validation] No business data found for user')

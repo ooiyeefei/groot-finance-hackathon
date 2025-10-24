@@ -272,39 +272,81 @@ except Exception as e:
       console.log(`🔍 Analyzing storage path: ${pdfStoragePath}`);
 
       // Get the document record for context
-      const { data: document, error: docError } = await supabase
-        .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
-        .select('file_name, business_id, user_id, document_type, document_metadata')
-        .eq('id', payload.documentId)
-        .single();
+      // We only need file_name, business_id, user_id for path construction
+      // Document type classification happens AFTER conversion in classify-document.ts
+
+      // Fetch document based on table type (expense_claims doesn't have document_metadata)
+      let document: any;
+      let docError: any;
+
+      if (tableName === 'expense_claims') {
+        const result = await supabase
+          .from(tableName)
+          .select('file_name, business_id, user_id, processing_metadata')
+          .eq('id', payload.documentId)
+          .single();
+        document = result.data;
+        docError = result.error;
+      } else {
+        const result = await supabase
+          .from(tableName)
+          .select('file_name, business_id, user_id, document_metadata')
+          .eq('id', payload.documentId)
+          .single();
+        document = result.data;
+        docError = result.error;
+      }
 
       if (docError || !document) {
         throw new Error(`Failed to fetch document context: ${docError?.message}`);
       }
 
-      const originalFilename = document.file_name;
-      console.log(`📁 Document context: ${originalFilename}, type: ${document.document_type}`);
-
-      // Always try to use standardized paths when possible
-      const hasRequiredContext = document.business_id && document.user_id;
-
-      // ✅ PHASE 4K: Use domain-aware parameters for storage path determination
-      // Priority: classified type > expectedDocumentType (domain param) > slot mapping (last resort)
-      const mapSlotToDocumentType = (slot: string | undefined): string => {
-        if (!slot) return 'application_form';
-        if (slot === 'identity_card') return 'ic';
-        if (slot.startsWith('payslip_')) return 'payslip';
-        if (slot === 'application_form') return 'application_form';
-        return 'application_form';
+      // Type assertion for consistent access
+      const typedDocument = document as {
+        file_name: string;
+        business_id: string | null;
+        user_id: string;
+        document_metadata?: any;
+        processing_metadata?: any;
       };
 
-      // Determine document type using domain-aware parameters
-      const documentType = document.document_type ||
-                          payload.expectedDocumentType ||
-                          mapSlotToDocumentType(payload.documentSlot) ||
-                          'application_form';
+      const originalFilename = typedDocument.file_name;
+      console.log(`📁 Document context: ${originalFilename}`);
 
-      console.log(`📊 Context analysis: business_id=${!!document.business_id}, user_id=${!!document.user_id}, domain=${payload.documentDomain}, expectedType=${payload.expectedDocumentType}, determined_type=${documentType}`);
+      // Always try to use standardized paths when possible
+      const hasRequiredContext = typedDocument.business_id && typedDocument.user_id;
+
+      // ✅ PHASE 4K: Determine storage path type based on domain and context
+      // Since actual document type is determined AFTER conversion in classify-document.ts,
+      // we use domain defaults or application-specific hints for storage path construction
+      const getStorageDocumentType = (): string => {
+        // Use expectedDocumentType if provided (applications workflow)
+        if (payload.expectedDocumentType) {
+          return payload.expectedDocumentType;
+        }
+
+        // Map document slot to type for applications
+        if (payload.documentSlot) {
+          if (payload.documentSlot === 'identity_card') return 'ic';
+          if (payload.documentSlot.startsWith('payslip_')) return 'payslip';
+          if (payload.documentSlot === 'application_form') return 'application_form';
+        }
+
+        // Default by domain
+        switch (payload.documentDomain) {
+          case 'expense_claims':
+            return 'receipt';  // Default for expense claims
+          case 'invoices':
+            return 'invoice';  // Default for invoices
+          case 'applications':
+            return 'application_form';  // Default for applications
+          default:
+            return 'document';  // Generic fallback
+        }
+      };
+
+      const storageDocType = getStorageDocumentType();
+      console.log(`📊 Context: business_id=${!!typedDocument.business_id}, user_id=${!!typedDocument.user_id}, domain=${payload.documentDomain}, storage_type=${storageDocType}`);
 
       let imagePaths: string[];
       let approach: string;
@@ -312,8 +354,9 @@ except Exception as e:
 
       if (hasRequiredContext) {
         // Use standardized paths with documentId for unique folder structure
-        const storageBuilder = new StoragePathBuilder(document.business_id, document.user_id, payload.applicationId, payload.documentId);
-        const docType = documentType as DocumentType;
+        // TypeScript: business_id is guaranteed non-null here due to hasRequiredContext check
+        const storageBuilder = new StoragePathBuilder(typedDocument.business_id!, typedDocument.user_id, payload.applicationId, payload.documentId);
+        const docType = storageDocType as DocumentType;
         console.log(`📤 Using standardized storage structure for ${docType} documents with unique documentId folder`);
 
         // Use timestamp folder to separate reprocessing runs
@@ -322,7 +365,7 @@ except Exception as e:
 
         imagePaths = conversionResult.pages.map((page: any) => {
           // Create filename with timestamp prefix inside timestamp folder
-          const originalFilenamePart = document.file_name.replace(/\.[^/.]+$/, ""); // Remove extension
+          const originalFilenamePart = typedDocument.file_name.replace(/\.[^/.]+$/, ""); // Remove extension
           const pageFilename = `${shortTimestamp}_${originalFilenamePart}_page_${page.page_number}.png`;
           const baseConvertedPath = storageBuilder.forDocument(docType).converted(pageFilename);
 
@@ -342,7 +385,7 @@ except Exception as e:
       } else {
         // Fallback only when business_id/user_id are genuinely missing
         console.log(`⚠️ Missing context fields - using fallback folder structure with documentId`);
-        console.log(`📊 Missing: business_id=${!document.business_id}, user_id=${!document.user_id}`);
+        console.log(`📊 Missing: business_id=${!typedDocument.business_id}, user_id=${!typedDocument.user_id}`);
 
         // Create converted folder structure from legacy path with unique documentId + timestamp folder
         const pathParts = pdfStoragePath.split('/');
@@ -352,7 +395,7 @@ except Exception as e:
 
         imagePaths = conversionResult.pages.map((page: any) => {
           // Create filename with timestamp prefix inside timestamp folder (fallback)
-          const originalFilenamePart = document.file_name.replace(/\.[^/.]+$/, ""); // Remove extension
+          const originalFilenamePart = typedDocument.file_name.replace(/\.[^/.]+$/, ""); // Remove extension
           const pageFilename = `${shortTimestamp}_${originalFilenamePart}_page_${page.page_number}.png`;
           return `${convertedFolderPath}/${pageFilename}`;
         });
@@ -405,16 +448,31 @@ except Exception as e:
         height: page.height
       }));
 
+      // Build update data based on table type
       const updateData: any = {
-        converted_image_path: convertedFolderPath, // Store converted folder path without overwriting storage_path
-        converted_image_width: uploadedPages[0]?.width || null, // First page dimensions for compatibility
-        converted_image_height: uploadedPages[0]?.height || null,
-        document_metadata: {
-          ...document.document_metadata,
+        converted_image_path: convertedFolderPath // Store converted folder path without overwriting storage_path
+      };
+
+      // Only add width/height columns for tables that have them (not expense_claims)
+      if (tableName !== 'expense_claims') {
+        updateData.converted_image_width = uploadedPages[0]?.width || null; // First page dimensions for compatibility
+        updateData.converted_image_height = uploadedPages[0]?.height || null;
+        updateData.document_metadata = {
+          ...typedDocument.document_metadata,
           pages: pageMetadata, // Detailed page metadata
           total_pages: uploadedPages.length
-        }
-      };
+        };
+      } else {
+        // For expense_claims, store page metadata in processing_metadata instead
+        updateData.processing_metadata = {
+          ...typedDocument.processing_metadata,
+          pages: pageMetadata,
+          total_pages: uploadedPages.length,
+          // Store dimensions in metadata for expense_claims
+          converted_image_width: uploadedPages[0]?.width || null,
+          converted_image_height: uploadedPages[0]?.height || null
+        };
+      }
 
       const { error: updateError } = await supabase
         .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
@@ -449,10 +507,14 @@ except Exception as e:
       }
 
       // Note: converted_image_path already updated above, just update status
+      // Use different column name for expense_claims (status) vs others (processing_status)
+      const statusColumn = tableName === 'expense_claims' ? 'status' : 'processing_status';
+      const statusValue = tableName === 'expense_claims' ? 'analyzing' : 'classifying';
+
       const { error: statusUpdateError } = await supabase
         .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
         .update({
-          processing_status: 'classifying' // Update status as it moves to classification
+          [statusColumn]: statusValue // Update status as it moves to classification
         })
         .eq('id', payload.documentId);
 
@@ -480,15 +542,39 @@ except Exception as e:
       // ✅ PHASE 4B-2: Route error update to correct table
       const errorTableName = DOMAIN_TABLE_MAP[payload.documentDomain];
 
+      // Build error details for JSONB format (for expense_claims)
+      const errorDetails = {
+        message: error instanceof Error ? error.message : 'PDF conversion failed',
+        suggestions: [
+          'Ensure the PDF file is not corrupted',
+          'Try uploading a different PDF file',
+          'Contact support if the issue persists'
+        ],
+        error_type: 'conversion_failed',
+        stage: 'pdf_to_image_conversion'
+      };
+
       // Update document status to failed
-      await supabase
-        .from(errorTableName)  // ✅ PHASE 4B-2: Routed based on domain
-        .update({
-          processing_status: 'failed',
-          error_message: error instanceof Error ? error.message : 'PDF conversion failed',
-          processed_at: new Date().toISOString()
-        })
-        .eq('id', payload.documentId);
+      // Use different column names for expense_claims
+      if (errorTableName === 'expense_claims') {
+        await supabase
+          .from(errorTableName)
+          .update({
+            status: 'failed',
+            error_message: errorDetails,  // JSONB format
+            failed_at: new Date().toISOString()
+          })
+          .eq('id', payload.documentId);
+      } else {
+        await supabase
+          .from(errorTableName)
+          .update({
+            processing_status: 'failed',
+            error_message: error instanceof Error ? error.message : 'PDF conversion failed',
+            processed_at: new Date().toISOString()
+          })
+          .eq('id', payload.documentId);
+      }
 
       throw error;
     }

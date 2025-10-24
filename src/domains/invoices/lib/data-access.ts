@@ -445,8 +445,8 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
       storage_path: storagePath, // Include storage_path in initial insert
       processing_status: 'pending',
       user_id: userData.id,
-      business_id: businessId,
-      document_type: 'invoice' // Fixed: Use 'invoice' for invoices table
+      business_id: businessId
+      // Removed document_type - column being dropped, value stored in document_metadata instead
     })
     .select()
     .single()

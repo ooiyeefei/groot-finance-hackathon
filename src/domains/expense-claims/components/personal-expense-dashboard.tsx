@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain } from 'lucide-react'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -787,6 +787,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
                 claim.status === 'submitted' ? 'success' :
                 claim.status === 'approved' ? 'success' :
                 claim.status === 'rejected' ? 'error' :
+                claim.status === 'failed' ? 'error' :  // Add explicit failed status handling
                 claim.status === 'reimbursed' ? 'success' :
                 // Unified logic with semantic colors based on status_display
                 claim.status_display?.color === 'green' ? 'success' :
@@ -840,6 +841,76 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           }
         </p>
       </div>
+
+      {/* Error Message Display for Failed Claims */}
+      {claim.status === 'failed' && (claim.error_message || claim.processing_metadata?.error_message) && (
+        <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/30 rounded-lg">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-800 dark:text-red-300 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 space-y-2">
+              <p className="text-sm text-red-800 dark:text-red-300 font-medium">
+                {/* Handle error_message as either string or object */}
+                {typeof claim.error_message === 'string'
+                  ? claim.error_message
+                  : claim.error_message?.message ||
+                    (typeof claim.processing_metadata?.error_message === 'string'
+                      ? claim.processing_metadata?.error_message
+                      : claim.processing_metadata?.error_message?.message || 'Processing failed')
+                }
+              </p>
+
+              {/* Suggestions - can come from error_message object or processing_metadata */}
+              {(() => {
+                // Collect suggestions from various sources
+                const suggestions: string[] = []
+
+                // From error_message object
+                if (typeof claim.error_message === 'object' && claim.error_message?.suggestions) {
+                  if (Array.isArray(claim.error_message.suggestions)) {
+                    suggestions.push(...claim.error_message.suggestions)
+                  } else if (typeof claim.error_message.suggestions === 'string') {
+                    suggestions.push(claim.error_message.suggestions)
+                  }
+                }
+
+                // From processing_metadata.error_message object
+                if (typeof claim.processing_metadata?.error_message === 'object' && claim.processing_metadata.error_message?.suggestions) {
+                  if (Array.isArray(claim.processing_metadata.error_message.suggestions)) {
+                    suggestions.push(...claim.processing_metadata.error_message.suggestions)
+                  } else if (typeof claim.processing_metadata.error_message.suggestions === 'string') {
+                    suggestions.push(claim.processing_metadata.error_message.suggestions)
+                  }
+                }
+
+                // From processing_metadata.suggestions directly
+                if (claim.processing_metadata?.suggestions && Array.isArray(claim.processing_metadata.suggestions)) {
+                  suggestions.push(...claim.processing_metadata.suggestions)
+                }
+
+                // Remove duplicates
+                const uniqueSuggestions = [...new Set(suggestions)]
+
+                if (uniqueSuggestions.length > 0) {
+                  return (
+                    <div className="space-y-1">
+                      <p className="text-xs text-red-800 dark:text-red-300 font-medium">Suggestions:</p>
+                      <ul className="space-y-1">
+                        {uniqueSuggestions.map((suggestion: string, idx: number) => (
+                          <li key={idx} className="text-xs text-red-800 dark:text-red-300 flex items-start gap-1">
+                            <span className="text-red-800 dark:text-red-300 mt-0.5">•</span>
+                            <span>{suggestion}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action buttons - Unified row for all claim states */}
       <div className="mt-3 flex items-center space-x-2">

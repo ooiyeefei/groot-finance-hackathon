@@ -192,7 +192,8 @@ export async function createExpenseClaim(
     } = request
 
     if (!description || !business_purpose ||
-        !original_amount || !original_currency || !transaction_date) {
+        (original_amount === null || original_amount === undefined) ||
+        !original_currency || !transaction_date) {
       return { success: false, error: 'Missing required fields' }
     }
 

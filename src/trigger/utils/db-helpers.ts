@@ -50,8 +50,28 @@ export async function updateDocumentStatus(
   errorMessage?: string | { message: string; suggestions?: string[]; error_type?: string; detected_type?: string; confidence?: number },
   tableName: string = 'documents'  // ✅ PHASE 4B-1: Dynamic table routing with safe default
 ): Promise<void> {
+  // Handle different column names for expense_claims vs other tables
+  const isExpenseClaims = tableName === 'expense_claims';
+  const statusColumn = isExpenseClaims ? 'status' : 'processing_status';
+
+  // Map invalid statuses to valid ones for expense_claims
+  let mappedStatus = status;
+  if (isExpenseClaims) {
+    // Map document processing statuses to valid expense_claims statuses
+    const statusMap: { [key: string]: string } = {
+      'classification_failed': 'failed',
+      'extraction_failed': 'failed',
+      'processing': 'analyzing',
+      'classifying': 'analyzing',
+      'extracting': 'analyzing',
+      'pending_extraction': 'analyzing',
+      'completed': 'draft'  // After extraction, it becomes a draft expense claim
+    };
+    mappedStatus = statusMap[status] || status;
+  }
+
   const updateData: any = {
-    processing_status: status
+    [statusColumn]: mappedStatus
   };
 
   // Only update processing_started_at for initial status changes
@@ -65,16 +85,23 @@ export async function updateDocumentStatus(
   }
 
   // Set completion/failure timestamps
-  if (status === 'completed' || status === 'failed' || status === 'classification_failed') {
-    updateData.processed_at = new Date().toISOString();
+  // expense_claims uses different timestamp columns
+  // Use the mapped status for checking
+  if (mappedStatus === 'draft' || mappedStatus === 'failed' || status === 'completed' || status === 'failed' || status === 'classification_failed' || status === 'extraction_failed') {
+    if (isExpenseClaims) {
+      updateData.processed_at = new Date().toISOString();
+      if (mappedStatus === 'failed') {
+        updateData.failed_at = new Date().toISOString();
+      }
+    } else {
+      updateData.processed_at = new Date().toISOString();
+      if (status === 'failed' || status === 'classification_failed') {
+        updateData.failed_at = new Date().toISOString();
+      }
+    }
   }
 
-  // Set failed_at timestamp for failure statuses
-  if (status === 'failed' || status === 'classification_failed') {
-    updateData.failed_at = new Date().toISOString();
-  }
-
-  console.log(`[DB] Updating ${tableName}.${documentId} status to: ${status}`, updateData);
+  console.log(`[DB] Updating ${tableName}.${documentId} status to: ${mappedStatus}`, updateData);
 
   const { error } = await supabase
     .from(tableName)  // ✅ PHASE 4B-1: Route to correct table based on domain
@@ -166,15 +193,38 @@ export async function updateDocumentClassification(
 ): Promise<void> {
   // Handle unsupported document types by setting appropriate status
   const status = classification.is_supported === false ? 'classification_failed' : 'pending_extraction';
+  const isExpenseClaims = tableName === 'expense_claims';
 
-  const updateData: any = {
-    processing_status: status,
-    document_type: classification.document_type,
-    document_classification_confidence: classification.confidence_score,
-    classification_method: classification.classification_method,
-    classification_task_id: taskId,
+  const updateData: any = {};
+
+  // Use correct status column based on table
+  if (isExpenseClaims) {
+    updateData.status = status === 'pending_extraction' ? 'analyzing' : 'failed';
+
+    // For expense_claims, classification info goes into processing_metadata
+    updateData.processing_metadata = {
+      ...(classification.context_metadata || {}),
+      classification: {
+        is_supported: classification.is_supported,
+        user_message: classification.user_message,
+        reasoning: classification.reasoning,
+        detected_elements: classification.detected_elements,
+        classification_method: classification.classification_method,
+        model_used: classification.model_used,
+        confidence_score: classification.confidence_score,
+        document_type: classification.document_type
+      }
+    };
+    updateData.confidence_score = classification.confidence_score;
+  } else {
+    // For other tables (invoices, application_documents)
+    updateData.processing_status = status;
+    updateData.document_classification_confidence = classification.confidence_score;
+    updateData.classification_method = classification.classification_method;
+    updateData.classification_task_id = taskId;
+
     // Store rich classification metadata including reasoning and detected_elements
-    document_metadata: {
+    updateData.document_metadata = {
       ...(classification.context_metadata || {}),
       is_supported: classification.is_supported,
       user_message: classification.user_message,
@@ -182,9 +232,17 @@ export async function updateDocumentClassification(
       detected_elements: classification.detected_elements,
       classification_method: classification.classification_method,
       model_used: classification.model_used,
-      confidence_score: classification.confidence_score
+      confidence_score: classification.confidence_score,
+      // Store document_type in metadata for all tables
+      document_type: classification.document_type
+    };
+
+    // Only include document_type column for tables that have it (not invoices after migration)
+    if (tableName === 'application_documents') {
+      updateData.document_type = classification.document_type;
     }
-  };
+    // Note: 'invoices' table no longer has document_type column - it's stored in document_metadata
+  }
 
   console.log(`[DB] Updating ${tableName}.${documentId} classification (type: ${classification.document_type})`);
 

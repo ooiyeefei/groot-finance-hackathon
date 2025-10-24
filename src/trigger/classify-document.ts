@@ -121,15 +121,24 @@ export const classifyDocument = task({
 
   try {
     // ⚡ OPTIMIZATION: Combine status update + fetch in single query (saves 200-500ms)
+    // Handle different column names for expense_claims vs other tables
+    const isExpenseClaims = tableName === 'expense_claims';
+    const statusColumn = isExpenseClaims ? 'status' : 'processing_status';
+    const metadataColumn = isExpenseClaims ? 'processing_metadata' : 'document_metadata';
+
+    const updateData: any = {
+      [statusColumn]: isExpenseClaims ? 'analyzing' : 'classifying', // expense_claims uses 'analyzing' status
+      error_message: null,
+      updated_at: new Date().toISOString()
+    };
+
+    const selectColumns = `storage_path, converted_image_path, file_type, ${metadataColumn}`;
+
     const { data: document, error: fetchError } = await supabase
       .from(tableName)
-      .update({
-        processing_status: 'classifying',
-        error_message: null,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', documentId)
-      .select('storage_path, converted_image_path, file_type, document_metadata')
+      .select(selectColumns)
       .single();
 
     if (fetchError || !document) {
@@ -137,18 +146,18 @@ export const classifyDocument = task({
     }
 
     // GRACEFUL PATH HANDLING: Different approaches for images vs converted PDFs
-    console.log(`[Classify] Document type: ${document.file_type}, has converted path: ${!!document.converted_image_path}`);
+    console.log(`[Classify] Document type: ${(document as any).file_type}, has converted path: ${!!(document as any).converted_image_path}`);
 
     let classifyImagePath: string;
 
-    if (document.converted_image_path) {
+    if ((document as any).converted_image_path) {
       // PDF CASE: converted_image_path is a folder containing multiple images
-      console.log(`[Classify] PDF workflow - using converted image folder: ${document.converted_image_path}`);
+      console.log(`[Classify] PDF workflow - using converted image folder: ${(document as any).converted_image_path}`);
 
       // ⚡ OPTIMIZATION: Only fetch 1 file since we only use the first (saves 100-200ms + 90% data transfer)
       const { data: fileList, error: listError } = await supabase.storage
         .from(bucketName)  // ✅ PHASE 4J: Route to correct bucket
-        .list(document.converted_image_path, {
+        .list((document as any).converted_image_path, {
           limit: 1,
           sortBy: { column: 'name', order: 'asc' }
         });
@@ -158,19 +167,19 @@ export const classifyDocument = task({
       }
 
       if (!fileList || fileList.length === 0) {
-        throw new Error(`No converted images found in folder: ${document.converted_image_path}`);
+        throw new Error(`No converted images found in folder: ${(document as any).converted_image_path}`);
       }
 
       console.log(`[Classify] Found ${fileList.length} converted image(s), using first for classification`);
 
       // Use first converted image for classification
       const firstFile = fileList[0];
-      classifyImagePath = `${document.converted_image_path}/${firstFile.name}`;
+      classifyImagePath = `${(document as any).converted_image_path}/${firstFile.name}`;
 
     } else {
       // IMAGE CASE: storage_path is the direct file path
-      console.log(`[Classify] Image workflow - using direct file path: ${document.storage_path}`);
-      classifyImagePath = document.storage_path;
+      console.log(`[Classify] Image workflow - using direct file path: ${(document as any).storage_path}`);
+      classifyImagePath = (document as any).storage_path;
     }
 
     console.log(`[Classify] Final classification image path: ${classifyImagePath}`);
@@ -309,7 +318,7 @@ export const classifyDocument = task({
     let extractionTaskId: string | null = null; // Can be null for unsupported docs
 
     // Use converted_image_path if available (for PDFs), otherwise use storage_path (for direct images)
-    const imagePath = document.converted_image_path || document.storage_path;
+    const imagePath = (document as any).converted_image_path || (document as any).storage_path;
     console.log(`[Classify] Using image path for extraction: ${imagePath}`);
 
     switch (docType) {
@@ -365,7 +374,20 @@ export const classifyDocument = task({
         if (documentDomain === 'expense_claims') {
           const errorMsg = 'This appears to be an identity card. Please upload a receipt or invoice for expense claims.';
           console.log(`[Classify] Rejecting IC document for expense_claims domain`);
-          await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);
+
+          // Use JSONB error format for expense_claims
+          const errorDetails = {
+            message: errorMsg,
+            suggestions: [
+              'Upload a receipt or invoice for expense reimbursement',
+              'Identity cards should be uploaded in the Employee Onboarding section',
+              'Ensure the document shows purchase details and amount'
+            ],
+            error_type: 'classification_failed',
+            detected_type: 'ic'
+          };
+
+          await updateDocumentStatus(documentId, 'extraction_failed', errorDetails, tableName);
           throw new Error(errorMsg);
         }
 
@@ -383,7 +405,20 @@ export const classifyDocument = task({
         if (documentDomain === 'expense_claims') {
           const errorMsg = 'This appears to be a payslip. Please upload a receipt or invoice for expense claims.';
           console.log(`[Classify] Rejecting payslip document for expense_claims domain`);
-          await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);
+
+          // Use JSONB error format for expense_claims
+          const errorDetails = {
+            message: errorMsg,
+            suggestions: [
+              'Upload a receipt or invoice for expense reimbursement',
+              'Payslips should be uploaded in the HR/Payroll section',
+              'Ensure the document shows purchase transaction details'
+            ],
+            error_type: 'classification_failed',
+            detected_type: 'payslip'
+          };
+
+          await updateDocumentStatus(documentId, 'extraction_failed', errorDetails, tableName);
           throw new Error(errorMsg);
         }
 
@@ -401,7 +436,20 @@ export const classifyDocument = task({
         if (documentDomain === 'expense_claims') {
           const errorMsg = 'This appears to be an application form. Please upload a receipt or invoice for expense claims.';
           console.log(`[Classify] Rejecting application form for expense_claims domain`);
-          await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);
+
+          // Use JSONB error format for expense_claims
+          const errorDetails = {
+            message: errorMsg,
+            suggestions: [
+              'Upload a receipt or invoice for expense reimbursement',
+              'Application forms should be uploaded in the Applications section',
+              'Ensure the document shows a purchase transaction'
+            ],
+            error_type: 'classification_failed',
+            detected_type: 'application_form'
+          };
+
+          await updateDocumentStatus(documentId, 'extraction_failed', errorDetails, tableName);
           throw new Error(errorMsg);
         }
 
@@ -420,7 +468,20 @@ export const classifyDocument = task({
         if (documentDomain === 'expense_claims') {
           const errorMsg = 'This document type is not supported for expense claims. Please upload a receipt or invoice.';
           console.log(`[Classify] Rejecting unrecognized document for expense_claims domain`);
-          await updateDocumentStatus(documentId, 'classification_failed', errorMsg, tableName);
+
+          // Use JSONB error format for expense_claims
+          const errorDetails = {
+            message: errorMsg,
+            suggestions: [
+              'Upload a receipt or invoice that shows purchase details',
+              'Ensure the document is clear and readable',
+              'Check that you are uploading the correct document type'
+            ],
+            error_type: 'classification_failed',
+            detected_type: 'other'
+          };
+
+          await updateDocumentStatus(documentId, 'extraction_failed', errorDetails, tableName);
           throw new Error(errorMsg);
         }
 

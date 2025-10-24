@@ -32,10 +32,10 @@ class BusinessContextCache {
       return null
     }
 
-    // Check if entry is expired
+    // Check if entry is expired (use >= to handle boundary case when remaining is exactly 0)
     const now = Date.now()
     const ageMs = now - entry.timestamp
-    if (ageMs > entry.ttl) {
+    if (ageMs >= entry.ttl) {
       console.log(`[BusinessContextCache] Cache miss - entry expired for user: ${clerkUserId} (age: ${Math.round(ageMs/1000)}s, ttl: ${Math.round(entry.ttl/1000)}s)`)
       this.cache.delete(clerkUserId)
       return null
@@ -164,7 +164,8 @@ interface JWTCacheEntry {
 
 class JWTTokenCache {
   private cache = new Map<string, JWTCacheEntry>()
-  private readonly DEFAULT_TTL = 5 * 60 * 1000 // 5 minutes
+  private readonly DEFAULT_TTL = 3 * 60 * 1000 // 3 minutes (match Clerk JWT expiration)
+  private readonly REFRESH_BUFFER = 30 * 1000 // 30 seconds buffer before expiry
   private readonly MAX_ENTRIES = 500 // Prevent memory bloat
 
   /**
@@ -178,16 +179,19 @@ class JWTTokenCache {
       return null
     }
 
-    // Check if entry is expired
+    // Check if entry is expired or needs refresh (with buffer)
     const now = Date.now()
     const ageMs = now - entry.timestamp
-    if (ageMs > entry.ttl) {
-      console.log(`[JWTTokenCache] Cache miss - entry expired for user: ${clerkUserId} (age: ${Math.round(ageMs/1000)}s, ttl: ${Math.round(entry.ttl/1000)}s)`)
+    const remainingMs = entry.ttl - ageMs
+
+    // Invalidate if expired OR within refresh buffer time
+    if (ageMs >= entry.ttl || remainingMs <= this.REFRESH_BUFFER) {
+      console.log(`[JWTTokenCache] Cache miss - entry expired or needs refresh for user: ${clerkUserId} (age: ${Math.round(ageMs/1000)}s, ttl: ${Math.round(entry.ttl/1000)}s, remaining: ${Math.round(remainingMs/1000)}s)`)
       this.cache.delete(clerkUserId)
       return null
     }
 
-    console.log(`[JWTTokenCache] Cache hit for user: ${clerkUserId} (age: ${Math.round(ageMs/1000)}s, remaining: ${Math.round((entry.ttl - ageMs)/1000)}s)`)
+    console.log(`[JWTTokenCache] Cache hit for user: ${clerkUserId} (age: ${Math.round(ageMs/1000)}s, remaining: ${Math.round(remainingMs/1000)}s)`)
     return entry.token
   }
 

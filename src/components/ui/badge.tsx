@@ -34,10 +34,10 @@ const badgeVariants = cva(
 
         // Error/Red badges - for failed/rejected states
         error: [
-          // Light mode: translucent red background with dark red text
-          "border border-red-300 bg-red-100 text-red-900",
+          // Light mode: light red background with dark red text
+          "border border-red-200 bg-red-50 text-red-800",
           // Dark mode: translucent red background with light red text
-          "dark:border-red-700/50 dark:bg-red-900/20 dark:text-red-400 dark:backdrop-blur-sm"
+          "dark:border-red-700/30 dark:bg-red-900/20 dark:text-red-300 dark:backdrop-blur-sm"
         ],
 
         // Info/Blue badges - for informational states
