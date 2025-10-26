@@ -6,7 +6,6 @@ import { useLocale } from 'next-intl'
 import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus, Loader2 } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocuments } from '@/domains/invoices/hooks/use-documents'
-import { useDocumentPolling } from '@/domains/invoices/hooks/use-document-polling'
 import DocumentStatusBadge from './document-status-badge'
 import ConfidenceScoreMeter from './confidence-score-meter'
 import { mapDocumentToAccountingEntry, canCreateAccountingEntryFromDocument } from '@/domains/invoices/lib/document-to-accounting-entry-mapper'
@@ -53,6 +52,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   const locale = useLocale()
   const userHomeCurrency = useHomeCurrency()
   const { businessId } = useActiveBusiness()
+
+  // Helper function to check if document is completed and has extractable data
+  const isCompletedDocument = (status: string) => {
+    return status === 'paid' || status === 'overdue' || status === 'disputed'
+  }
   const { addToast } = useToast()
   // Use the unified documents hook for data fetching
   const {
@@ -66,8 +70,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     deletingDocuments
   } = useDocuments()
 
-  // Initialize polling with documents from unified hook
-  const { isPolling } = useDocumentPolling({ documents, enabled: true })
+  // Note: useDocumentPolling removed - use-documents hook handles polling for invoices
 
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
@@ -282,6 +285,47 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     }
   }, [editTransactionData, refreshDocuments])
 
+  // Handle saving invoice data directly (without creating accounting entries)
+  const handleSaveInvoice = useCallback(async (data: Partial<CreateAccountingEntryRequest>) => {
+    if (!transactionFormDocument) return
+
+    try {
+      // Update invoice record directly
+      const response = await fetch(`/api/v1/invoices/${transactionFormDocument}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // Map form data to invoice update fields
+          vendor_name: data.vendor_name,
+          status: data.status,
+          // Add other relevant fields that should be updated on the invoice
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save invoice data')
+      }
+
+      // Close the form and refresh documents
+      setTransactionFormDocument(null)
+      await refreshDocuments()
+
+      // Show success message
+      addToast({
+        type: 'success',
+        title: 'Invoice saved',
+        description: 'Invoice data has been updated successfully'
+      })
+    } catch (error) {
+      console.error('Save invoice error:', error)
+      addToast({
+        type: 'error',
+        title: 'Save failed',
+        description: error instanceof Error ? error.message : 'Unable to save invoice data'
+      })
+    }
+  }, [transactionFormDocument, refreshDocuments, addToast])
+
   // Get document by ID for modal display
   const getDocumentById = (id: string) => {
     return documents.find(doc => doc.id === id)
@@ -387,8 +431,8 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
               <div className="flex flex-col items-end space-y-2">
                 <div className="flex items-center space-x-3">
-                  <DocumentStatusBadge 
-                    status={document.processing_status}
+                  <DocumentStatusBadge
+                    status={document.status}
                     errorMessage={document.error_message}
                   />
                   
@@ -407,7 +451,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   )}
                   
                   {/* Show confidence score for completed documents */}
-                  {document.processing_status === 'completed' && document.confidence_score && (
+                  {isCompletedDocument(document.status) && document.confidence_score && (
                     <ConfidenceScoreMeter 
                       score={document.confidence_score} 
                       entityCount={document.extracted_data?.entities?.length}
@@ -418,7 +462,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                 
                 <div className="flex items-center space-x-2">
                   {/* Process button for pending documents */}
-                  {document.processing_status === 'pending' && (
+                  {document.status === 'pending' && (
                     <button
                       onClick={() => processDocument(document.id)}
                       disabled={processingDocuments.has(document.id)}
@@ -430,7 +474,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   )}
 
                   {/* Analyze Document button for completed documents */}
-                  {document.processing_status === 'completed' && document.extracted_data && (
+                  {isCompletedDocument(document.status) && document.extracted_data && (
                     <Button
                       onClick={() => viewExtractedData(document.id)}
                       onMouseEnter={preloadDocumentAnalysisModal}
@@ -444,7 +488,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   )}
 
                   {/* Add/View/Update Transaction button for completed documents with extractable data */}
-                  {document.processing_status === 'completed' && document.extracted_data && canCreateAccountingEntryFromDocument(document as any) && (
+                  {isCompletedDocument(document.status) && document.extracted_data && canCreateAccountingEntryFromDocument(document as any) && (
                     document.linked_transaction ? (
                       reprocessedDocuments.has(document.id) ? (
                         // Show Update Transaction for reprocessed documents
@@ -486,7 +530,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   )}
 
                   {/* Reprocess button for completed documents */}
-                  {document.processing_status === 'completed' && (
+                  {isCompletedDocument(document.status) && (
                     <Button
                       onClick={() => reprocessDocument(document.id)}
                       disabled={processingDocuments.has(document.id)}
@@ -504,7 +548,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   )}
                   
                   {/* Retry button for failed documents */}
-                  {document.processing_status === 'failed' && (
+                  {document.status === 'failed' && (
                     <Button
                       onClick={() => retryProcessing(document.id)}
                       disabled={processingDocuments.has(document.id)}
@@ -534,7 +578,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
             </div>
 
             {/* Show extracted information for completed documents using cleaner ExtractedInfoTags component */}
-            {document.processing_status === 'completed' && document.extracted_data && (
+            {isCompletedDocument(document.status) && document.extracted_data && (
               <div className="mt-4 pt-4 border-t border-border">
                 <h5 className="text-sm font-medium text-muted-foreground mb-2">Extracted Information</h5>
                 <ExtractedInfoTags extractedData={document.extracted_data} />
@@ -542,7 +586,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
             )}
 
             {/* Show error details for classification failed documents */}
-            {document.processing_status === 'classification_failed' && document.error_message && (() => {
+            {document.status === 'classification_failed' && document.error_message && (() => {
               const errorMsg = document.error_message
               const message = isErrorDetails(errorMsg)
                 ? errorMsg.message
@@ -575,6 +619,8 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
           <AccountingEntryFormModal
             onClose={closeTransactionForm}
             onSubmit={handleCreateTransaction}
+            onSave={handleSaveInvoice}
+            showSaveOption={true}
             prefilledData={{
               ...mapDocumentToAccountingEntry(getDocumentById(transactionFormDocument)! as any),
               // ✅ POLYMORPHIC: Link to invoice record with discriminator

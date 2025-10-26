@@ -326,7 +326,7 @@ export default function ApplicationFormDataDisplay({ data }: ApplicationFormData
           <div className="p-4 border-b border-record-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-green-400" />
+                <Briefcase className="w-4 h-4 text-success-foreground" />
                 <h6 className="text-sm font-medium text-record-title">Employment Details</h6>
               </div>
               <Button

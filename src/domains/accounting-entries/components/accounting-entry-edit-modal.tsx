@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock, AlertCircle, Copy, Eye, EyeOff } from 'lucide-react'
+import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock, AlertCircle, Copy, Eye, EyeOff, Loader2 } from 'lucide-react'
 import MultiPageDocumentPreview from './multi-page-document-preview'
 import { AccountingEntry, CreateAccountingEntryRequest, LineItem, SupportedCurrency, TRANSACTION_CATEGORIES, TransactionType } from '@/domains/accounting-entries/types'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
@@ -17,6 +17,8 @@ interface AccountingEntryFormModalProps {
   prefilledData?: Partial<CreateAccountingEntryRequest>
   onClose: () => void
   onSubmit: (data: CreateAccountingEntryRequest) => Promise<void>
+  onSave?: (data: Partial<CreateAccountingEntryRequest>) => Promise<void>
+  showSaveOption?: boolean
 }
 
 const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
@@ -42,7 +44,9 @@ export default function AccountingEntryFormModal({
   transaction,
   prefilledData,
   onClose,
-  onSubmit
+  onSubmit,
+  onSave,
+  showSaveOption = false
 }: AccountingEntryFormModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -234,6 +238,28 @@ export default function AccountingEntryFormModal({
       await onSubmit(submitData)
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to create transaction. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!onSave) return
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const saveData = {
+        ...formData,
+        reference_number: formData.document_number,
+        source_record_id: prefilledData?.source_record_id || formData.source_record_id,
+        source_document_type: (prefilledData?.source_document_type || 'invoice') as 'invoice' | 'expense_claim'
+      }
+
+      await onSave(saveData)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to save data. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -556,7 +582,7 @@ export default function AccountingEntryFormModal({
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
                         <Clock className="w-4 h-4 inline mr-1" />
-                        Transaction Status
+                        Status
                       </label>
                       <select
                         value={formData.status}
@@ -808,6 +834,50 @@ export default function AccountingEntryFormModal({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Modal Footer with Buttons */}
+          <div className="flex items-center justify-end gap-3 p-6 border-t border-border bg-card">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onClose}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+            {showSaveOption && onSave && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSave}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
+              </Button>
+            )}
+            <Button
+              type="submit"
+              form="transaction-form"
+              variant="default"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {transaction ? 'Updating...' : 'Creating...'}
+                </>
+              ) : (
+                transaction ? 'Update Record' : 'Create Record'
+              )}
+            </Button>
           </div>
         </div>
       </div>

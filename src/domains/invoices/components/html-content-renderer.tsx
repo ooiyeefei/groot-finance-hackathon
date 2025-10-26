@@ -186,7 +186,7 @@ export default function HtmlContentRenderer({ content, className = '' }: HtmlCon
         title="Copy content"
       >
         {copied ? (
-          <Check className="w-4 h-4 text-green-400" />
+          <Check className="w-4 h-4 text-success-foreground" />
         ) : (
           <Copy className="w-4 h-4 text-gray-400" />
         )}

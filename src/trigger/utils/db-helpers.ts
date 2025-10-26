@@ -50,22 +50,25 @@ export async function updateDocumentStatus(
   errorMessage?: string | { message: string; suggestions?: string[]; error_type?: string; detected_type?: string; confidence?: number },
   tableName: string = 'documents'  // ✅ PHASE 4B-1: Dynamic table routing with safe default
 ): Promise<void> {
-  // Handle different column names for expense_claims vs other tables
+  // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
+  const usesStatusColumn = tableName === 'expense_claims' || tableName === 'invoices';
+  const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
   const isExpenseClaims = tableName === 'expense_claims';
-  const statusColumn = isExpenseClaims ? 'status' : 'processing_status';
 
-  // Map invalid statuses to valid ones for expense_claims
+  // Map invalid statuses to valid ones for different table types
   let mappedStatus = status;
   if (isExpenseClaims) {
-    // Map document processing statuses to valid expense_claims statuses
+    // Map legacy status values to valid expense_claims statuses
+    // Note: Modern trigger functions use constraint-compliant statuses directly
     const statusMap: { [key: string]: string } = {
       'classification_failed': 'failed',
       'extraction_failed': 'failed',
-      'processing': 'analyzing',
-      'classifying': 'analyzing',
-      'extracting': 'analyzing',
-      'pending_extraction': 'analyzing',
-      'completed': 'draft'  // After extraction, it becomes a draft expense claim
+    };
+    mappedStatus = statusMap[status] || status;
+  } else if (tableName === 'invoices') {
+    // Map document processing statuses to valid invoices statuses
+    const statusMap: { [key: string]: string } = {
+      'completed': 'paid'  // For invoices, 'completed' processing maps to 'paid' status
     };
     mappedStatus = statusMap[status] || status;
   }
@@ -121,8 +124,12 @@ export async function updateExtractionResults(
   result: ExtractionResult,
   tableName: string = 'documents'  // ✅ PHASE 4B-1: Dynamic table routing with safe default
 ): Promise<void> {
+  // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
+  const usesStatusColumn = tableName === 'expense_claims' || tableName === 'invoices';
+  const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
+
   const updateData: any = {
-    processing_status: 'completed',
+    [statusColumn]: usesStatusColumn ? 'paid' : 'completed', // invoices use 'paid' for completed status
     extracted_data: result.extracted_data,
     confidence_score: result.confidence_score,
     processed_at: new Date().toISOString()
@@ -218,7 +225,10 @@ export async function updateDocumentClassification(
     updateData.confidence_score = classification.confidence_score;
   } else {
     // For other tables (invoices, application_documents)
-    updateData.processing_status = status;
+    const usesStatusColumn = tableName === 'invoices';
+    const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
+
+    updateData[statusColumn] = status;
     updateData.document_classification_confidence = classification.confidence_score;
     updateData.classification_method = classification.classification_method;
     updateData.classification_task_id = taskId;

@@ -361,7 +361,7 @@ export default function COGSCategoryFormModal({
                         }`}
                       />
                     </button>
-                    <span className={`text-sm font-medium ${formData.is_active ? 'text-green-400' : 'text-gray-400'}`}>
+                    <span className={`text-sm font-medium ${formData.is_active ? 'text-success-foreground' : 'text-gray-400'}`}>
                       {formData.is_active ? 'Enabled' : 'Disabled'}
                     </span>
                   </div>

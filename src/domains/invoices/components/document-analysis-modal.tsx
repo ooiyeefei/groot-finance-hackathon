@@ -14,7 +14,7 @@ interface Document {
   converted_image_path?: string
   converted_image_width?: number
   converted_image_height?: number
-  processing_status: 'pending' | 'processing' | 'completed' | 'failed' | 'ocr_processing' | 'classification_failed'
+  status: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed'
   created_at: string
   processed_at?: string
   error_message?: string
@@ -943,7 +943,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <span className="text-muted-foreground">Status:</span>
-                  <span className="ml-2 text-success capitalize">{document.processing_status}</span>
+                  <span className="ml-2 text-foreground capitalize">{document.status}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">AI Confidence:</span>
@@ -973,9 +973,9 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
               <div className="space-y-6">
                 {/* Processing Status & Errors */}
                 {document.extracted_data?.text && (document.extracted_data.text.includes('error') || document.extracted_data.text.includes('failed')) && (
-                  <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-red-400 mb-2">Processing Issue</h4>
-                    <p className="text-sm text-red-300 whitespace-pre-wrap">{document.extracted_data.text}</p>
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                    <h4 className="text-sm font-medium text-destructive mb-2">Processing Issue</h4>
+                    <p className="text-sm text-destructive/80 whitespace-pre-wrap">{document.extracted_data.text}</p>
                   </div>
                 )}
 
@@ -1026,7 +1026,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           onMouseLeave={() => setHoveredEntity(null)}
                         >
                           <div className="text-xs text-muted-foreground mb-1">Amount</div>
-                          <div className="text-sm text-success font-medium">
+                          <div className="text-sm text-foreground font-medium">
                             {getFieldValue('currency') || 'SGD'} {getFieldValue('total_amount')}
                           </div>
                         </div>
@@ -1267,7 +1267,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-muted-foreground mb-1">Tax Amount</div>
-                        <div className="text-sm text-warning font-medium">
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('tax_amount') || (
                             <span className="text-muted-foreground italic">Not extracted</span>
                           )}
@@ -1280,7 +1280,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         onMouseLeave={() => setHoveredEntity(null)}
                       >
                         <div className="text-xs text-muted-foreground mb-1">Discount</div>
-                        <div className="text-sm text-info font-medium">
+                        <div className="text-sm text-foreground font-medium">
                           {getFieldValue('discount_amount') || (
                             <span className="text-muted-foreground italic">Not extracted</span>
                           )}
@@ -1302,7 +1302,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       {/* Invoice Data */}
                       {document.extracted_data.document_specific_data.invoice_data && (
                         <div className="bg-card rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-info mb-2">Invoice Details</h5>
+                          <h5 className="text-sm font-medium text-foreground mb-2">Invoice Details</h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             {document.extracted_data.document_specific_data.invoice_data.invoice_number && (
                               <div>
@@ -1343,7 +1343,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       {/* Receipt Data */}
                       {document.extracted_data.document_specific_data.receipt_data && (
                         <div className="bg-card rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-success mb-2">Receipt Details</h5>
+                          <h5 className="text-sm font-medium text-foreground mb-2">Receipt Details</h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             {document.extracted_data.document_specific_data.receipt_data.receipt_number && (
                               <div>
@@ -1376,7 +1376,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                       {/* Transport Data */}
                       {document.extracted_data.document_specific_data.transport_data && (
                         <div className="bg-card rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-warning mb-2">Transport Details</h5>
+                          <h5 className="text-sm font-medium text-foreground mb-2">Transport Details</h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             {document.extracted_data.document_specific_data.transport_data.trip_id && (
                               <div>
@@ -1532,7 +1532,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                                   })()}
                                 </td>
                                 <td
-                                  className="px-3 py-2 text-right text-success font-medium cursor-pointer hover:bg-primary/20 rounded"
+                                  className="px-3 py-2 text-right text-foreground font-medium cursor-pointer hover:bg-primary/20 rounded"
                                   onMouseEnter={() => setHoveredEntity(`line_item_${index}_line_total`)}
                                   onMouseLeave={() => setHoveredEntity(null)}
                                 >

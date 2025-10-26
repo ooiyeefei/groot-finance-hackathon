@@ -1,6 +1,46 @@
-# FinanSEAL Post-Refactor Todo List
+# Fix Invoice Status Display Issue - Authentication Root Cause
 
-## Current Task: Document Preview Integration for Accounting Forms
+## Problem Analysis
+After schema changes, all invoice statuses are showing as "unknown" and invoices page not rendering properly. Investigation revealed the root cause is authentication failure, not status field mapping issues.
+
+## Root Cause: Supabase Authentication Failure
+- API calls failing with 500 Internal Server Error and 401 Unauthorized
+- Supabase error: `"x_sb_error_code": "refresh_token_not_found"`
+- This prevents any document data from loading, causing status badges to receive undefined values
+
+## Todo Items
+
+### 1. Investigate Authentication Issue
+- [ ] Check Supabase client configuration in API routes
+- [ ] Verify Clerk-Supabase integration setup
+- [ ] Review how JWT tokens are being passed to Supabase
+- [ ] Check if session refresh is working properly
+
+### 2. Fix Authentication Configuration
+- [ ] Fix Supabase client initialization in API routes
+- [ ] Ensure proper token passing from Clerk to Supabase
+- [ ] Fix session refresh mechanism if needed
+- [ ] Test API endpoints return proper data
+
+### 3. Verify Status Badge Display
+- [ ] Remove debug logging added earlier
+- [ ] Test that status badges show correct values after auth fix
+- [ ] Verify invoices page renders properly
+
+### 4. Validate Build
+- [ ] Run `npm run build` to ensure no build errors
+- [ ] Test end-to-end flow works correctly
+
+## Notes
+- Database and RPC function verified working correctly when tested directly
+- DocumentStatusBadge component logic is correct
+- Issue is purely authentication-related preventing API data loading
+
+---
+
+# Previous Tasks (Reference Only)
+
+## Document Preview Integration for Accounting Forms
 
 ### Overview
 Integrate side-by-side document preview functionality into accounting record Create/Edit/View modals to allow users to reference source invoices/receipts without disrupting their workflow.
@@ -1507,3 +1547,55 @@ Based on the implemented optimizations, expected improvements:
 - ✅ Production build optimizations active
 - ✅ Performance analysis scripts ready for ongoing monitoring
 >>>>>>> 5205409 (feat: comprehensive performance optimization and CLS fix)
+
+---
+
+# Document Hooks Consolidation Analysis
+
+## Current State
+- **use-documents.tsx**: Invoice domain with TanStack Query + infinite scroll
+- **useDocumentPolling.tsx**: Applications domain with custom polling
+
+## Decision: Keep Separate + Shared Utilities
+
+### Rationale
+1. Different business domains with different API structures
+2. Different field names (`status` vs `processing_status`)
+3. Different processing states and workflows
+4. Different feature requirements (comprehensive vs focused)
+
+### Proposed Solution
+
+#### Phase 1: Create Shared Utilities (Recommended - Future)
+- [ ] Create `src/lib/hooks/usePollingInterval.ts` - Generic polling logic
+- [ ] Create `src/lib/hooks/useVisibilityPolling.ts` - Visibility API management
+- [ ] Create `src/lib/utils/polling-helpers.ts` - Common polling utilities
+
+#### Phase 2: Extract Common Patterns
+- [ ] Extract debouncing logic to shared utility
+- [ ] Extract status checking patterns to domain-specific validators
+- [ ] Standardize error handling across both hooks
+
+#### Phase 3: Documentation
+- [ ] Document when to use each hook
+- [ ] Create guidelines for domain-specific document management
+
+## Benefits of This Approach
+- ✅ Domain separation maintained
+- ✅ Code reuse through shared utilities
+- ✅ Easier maintenance and testing
+- ✅ Clear ownership and responsibility
+- ✅ Type safety preserved
+
+## Implementation Priority
+**Priority 1**: Keep existing hooks as-is (they work well)
+**Priority 2**: Create shared utilities when time allows
+**Priority 3**: Consider optimization based on usage patterns
+
+---
+
+## Current Tasks Status
+- [x] Analyze both document hooks
+- [x] Identify differences and similarities
+- [x] Make architectural recommendation
+- [ ] (Optional) Create shared utilities if needed

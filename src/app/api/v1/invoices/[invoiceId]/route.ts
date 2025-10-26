@@ -61,7 +61,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     console.log('[API v1] PUT /invoices/:id - Invoice ID:', invoiceId, 'Updates:', body)
 
     // Validate request body
-    const allowedFields = ['processing_status', 'extracted_data', 'error_message', 'confidence_score']
+    const allowedFields = ['status', 'extracted_data', 'error_message', 'confidence_score']
     const updates = Object.keys(body)
       .filter(key => allowedFields.includes(key))
       .reduce((obj: any, key) => {

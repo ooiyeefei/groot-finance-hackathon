@@ -39,7 +39,7 @@ export interface Invoice {
   converted_image_path?: string;
   converted_image_width?: number;
   converted_image_height?: number;
-  processing_status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed' | 'classification_failed';
+  status: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed';
   created_at: string;
   processed_at?: string;
   error_message?: ErrorDetails | null;
@@ -158,7 +158,7 @@ export interface CreateInvoiceRequest {
 }
 
 export interface UpdateDocumentRequest {
-  processing_status?: 'pending' | 'processing' | 'completed' | 'failed' | 'ocr_processing' | 'classification_failed'
+  status?: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed'
   extracted_data?: any
   error_message?: ErrorDetails | null
   confidence_score?: number
@@ -443,7 +443,7 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
       file_type: file.type,
       file_size: file.size,
       storage_path: storagePath, // Include storage_path in initial insert
-      processing_status: 'pending',
+      status: 'pending',
       user_id: userData.id,
       business_id: businessId
       // Removed document_type - column being dropped, value stored in document_metadata instead
@@ -551,7 +551,7 @@ export async function updateDocument(documentId: string, updates: UpdateDocument
     .from('invoices')
     .update({
       ...updates,
-      processed_at: updates.processing_status === 'completed' ? new Date().toISOString() : undefined
+      processed_at: updates.status === 'paid' ? new Date().toISOString() : undefined
     })
     .eq('id', documentId)
     .eq('user_id', userData.id)
@@ -648,13 +648,13 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
     throw new Error('Document not found or access denied')
   }
 
-  if (document.processing_status === 'processing' || document.processing_status === 'ocr_processing') {
+  if (document.status === 'analyzing') {
     throw new Error('Document is already being processed')
   }
 
-  // Update status to processing
+  // Update status to analyzing
   await updateDocument(documentId, {
-    processing_status: 'processing',
+    status: 'analyzing',
     error_message: null
   })
 
@@ -694,7 +694,7 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
 
     // Reset status on failure
     await updateDocument(documentId, {
-      processing_status: 'pending',
+      status: 'pending',
       error_message: {
         message: 'Failed to start processing',
         suggestions: ['Please try again', 'If the problem persists, contact support'],

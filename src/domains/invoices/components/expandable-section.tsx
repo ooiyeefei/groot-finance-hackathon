@@ -57,7 +57,7 @@ export default function ExpandableSection({
     if (completion.percentage === 100) {
       return {
         icon: <CheckCircle className="w-4 h-4" />,
-        color: 'text-green-400',
+        color: 'text-success-foreground',
         text: 'Complete'
       }
     } else if (completion.percentage > 0) {
@@ -127,7 +127,7 @@ export default function ExpandableSection({
               <div
                 className={`h-full transition-all duration-300 ${
                   completion.percentage === 100
-                    ? 'bg-green-500'
+                    ? 'bg-success-foreground'
                     : completion.percentage > 0
                     ? 'bg-amber-500'
                     : 'bg-red-500'

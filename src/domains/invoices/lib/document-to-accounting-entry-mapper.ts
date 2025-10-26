@@ -47,6 +47,7 @@ interface StructuredLineItem {
 interface DocumentData {
   id: string
   file_name: string
+  status?: string
   extracted_data?: {
     // AI direct fields (new format)
     text?: string
@@ -245,8 +246,12 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
     // Handle AI structure directly (new format)
     console.log(`[Accounting Entry Mapper] Processing AI structure`);
 
-    // Set default accounting entry status for invoices (supplier documents)
-    mappedData.status = 'pending'
+    // Use document's actual status instead of hardcoded 'pending'
+    // This allows invoices marked as 'paid' to show the correct status
+    const validStatuses = ['pending', 'paid', 'overdue', 'cancelled', 'disputed'] as const
+    mappedData.status = validStatuses.includes(document.status as any)
+      ? (document.status as 'pending' | 'paid' | 'overdue' | 'cancelled' | 'disputed')
+      : 'pending'
 
     // Extract vendor name
     if (extractedData.vendor_name) {
@@ -284,8 +289,12 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
               document.extracted_data.metadata?.layoutElements?.document_summary
 
     if (summary) {
-    // Set default accounting entry status for invoices (supplier documents)
-    mappedData.status = 'pending'
+    // Use document's actual status instead of hardcoded 'pending'
+    // This allows invoices marked as 'paid' to show the correct status
+    const validStatuses = ['pending', 'paid', 'overdue', 'cancelled', 'disputed'] as const
+    mappedData.status = validStatuses.includes(document.status as any)
+      ? (document.status as 'pending' | 'paid' | 'overdue' | 'cancelled' | 'disputed')
+      : 'pending'
 
     // Extract vendor name
     if (summary.vendor_name?.value) {

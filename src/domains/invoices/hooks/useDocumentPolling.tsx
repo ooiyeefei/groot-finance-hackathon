@@ -13,7 +13,7 @@ interface UseDocumentPollingOptions {
 interface DocumentSlot {
   status: string
   document?: {
-    processing_status: string
+    processing_status: string // Keep for application_documents which still uses processing_status
   } | null
 }
 

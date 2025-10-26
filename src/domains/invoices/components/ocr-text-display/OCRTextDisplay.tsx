@@ -363,7 +363,7 @@ export default function OCRTextDisplay({
             className="p-2 text-gray-400 hover:text-white transition-colors"
             title="Copy text"
           >
-            {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+            {copied ? <Check className="w-4 h-4 text-success-foreground" /> : <Copy className="w-4 h-4" />}
           </button>
         </div>
       </div>

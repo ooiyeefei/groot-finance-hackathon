@@ -486,9 +486,10 @@ export const classifyDocument = task({
         }
 
         console.log(`[Classify] Document type is 'other' - not currently supported for extraction. Stopping pipeline gracefully.`);
-        // Update status to 'completed' as the classification process is done successfully.
+        // Update status to 'paid' for invoices, 'completed' for other documents
         // The UI can show the user-friendly message from the classification metadata.
-        await updateDocumentStatus(documentId, 'completed', undefined, tableName);  // ✅ PHASE 4B-3: Pass tableName
+        const finalStatus = tableName === 'invoices' ? 'paid' : 'completed';
+        await updateDocumentStatus(documentId, finalStatus, undefined, tableName);  // ✅ PHASE 4B-3: Pass tableName
         break; // Stop processing
 
       default:

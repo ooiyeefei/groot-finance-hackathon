@@ -1354,7 +1354,7 @@ print(json.dumps(result))
 
       // Prepare database update object
       const updateData: any = {
-        processing_status: 'completed',
+        status: 'paid', // invoices use 'status' column with 'paid' value for completed processing
         extracted_data: finalAIResult, // Store raw AI structure directly
         confidence_score: finalExtractionData.confidence_score,
         processed_at: new Date().toISOString(),
@@ -1730,7 +1730,7 @@ print(json.dumps(result))
 
           // Prepare vLLM database update object (note: vLLM fallback typically uses IFRS categories)
           const vllmUpdateData: any = {
-            processing_status: 'completed',
+            status: 'paid', // invoices use 'status' column with 'paid' value for completed processing
             extracted_data: finalVllmAiResult, // Store raw AI structure directly
             confidence_score: vllmExtractionData.confidence_score,
             processed_at: new Date().toISOString(),

@@ -4,19 +4,19 @@ import { Clock, CheckCircle, XCircle, Loader2, Upload, Cog, Eye, Brain, FileText
 import { ErrorDetails } from '@/domains/invoices/lib/data-access'
 
 interface DocumentStatusBadgeProps {
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'uploading' | 'classifying' | 'classification_failed' | 'pending_extraction' | 'extracting' | 'ocr_processing'
+  status: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed'
   errorMessage?: ErrorDetails | string | null
   processingStage?: 'extracting' | 'analyzing' | 'finalizing'
   animated?: boolean
 }
 
-export default function DocumentStatusBadge({ 
-  status, 
-  errorMessage, 
+export default function DocumentStatusBadge({
+  status,
+  errorMessage,
   processingStage,
-  animated = true 
+  animated = true
 }: DocumentStatusBadgeProps) {
-  
+
   const getStatusConfig = () => {
     switch (status) {
       case 'uploading':
@@ -33,21 +33,14 @@ export default function DocumentStatusBadge({
           variant: 'warning' as const,
           animate: false
         }
-      case 'processing':
+      case 'analyzing':
         const stageText = processingStage
-          ? `Processing (${processingStage})`
-          : 'Processing'
+          ? `Analyzing (${processingStage})`
+          : 'Analyzing'
         return {
           icon: processingStage === 'extracting' ? Upload :
                 processingStage === 'analyzing' ? Cog : Loader2,
           text: stageText,
-          variant: 'info' as const,
-          animate: true
-        }
-      case 'ocr_processing':
-        return {
-          icon: Eye,
-          text: 'OCR Processing',
           variant: 'info' as const,
           animate: true
         }
@@ -65,25 +58,32 @@ export default function DocumentStatusBadge({
           variant: 'error' as const,
           animate: false
         }
-      case 'pending_extraction':
-        return {
-          icon: Brain,
-          text: 'Processing',
-          variant: 'info' as const,
-          animate: true
-        }
-      case 'extracting':
-        return {
-          icon: FileText,
-          text: 'Extracting Data',
-          variant: 'info' as const,
-          animate: true
-        }
-      case 'completed':
+      case 'paid':
         return {
           icon: CheckCircle,
-          text: 'Completed',
+          text: 'Paid',
           variant: 'success' as const,
+          animate: false
+        }
+      case 'overdue':
+        return {
+          icon: Clock,
+          text: 'Overdue',
+          variant: 'error' as const,
+          animate: false
+        }
+      case 'disputed':
+        return {
+          icon: XCircle,
+          text: 'Disputed',
+          variant: 'warning' as const,
+          animate: false
+        }
+      case 'cancelled':
+        return {
+          icon: XCircle,
+          text: 'Cancelled',
+          variant: 'default' as const,
           animate: false
         }
       case 'failed':
@@ -148,7 +148,7 @@ export default function DocumentStatusBadge({
       {config.text}
 
       {/* Processing stage indicator */}
-      {status === 'processing' && processingStage && (
+      {(status === 'analyzing' || status === 'classifying') && processingStage && (
         <span className="ml-1 w-1 h-1 bg-current rounded-full animate-pulse" />
       )}
     </div>

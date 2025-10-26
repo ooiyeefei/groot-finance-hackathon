@@ -8,7 +8,7 @@ interface Document {
   file_name: string;
   file_type: string;
   file_size: number;
-  processing_status: 'pending' | 'processing' | 'ocr_processing' | 'completed' | 'failed' | 'classification_failed';
+  status: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed';
   created_at: string;
   processed_at?: string;
   error_message?: string;
@@ -191,6 +191,7 @@ const fetchDocuments = async ({ queryKey, pageParam }: { queryKey: any[]; pagePa
 
   const data: DocumentsListResponse = await response.json();
 
+
   if (!data.success) {
     throw new Error(data.error || 'Documents fetch failed');
   }
@@ -242,7 +243,7 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
     refetchInterval: (query) => {
       const allDocuments = query.state.data?.pages?.flatMap(page => page.data.documents) || [];
       const hasProcessingDocuments = allDocuments.some((doc: Document) =>
-        doc.processing_status === 'processing' || doc.processing_status === 'ocr_processing'
+        doc.status === 'analyzing' || doc.status === 'classifying'
       );
       return hasProcessingDocuments ? 3000 : false; // 3 seconds polling for processing documents
     },
@@ -291,7 +292,7 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
               doc.id === documentId
                 ? {
                     ...doc,
-                    processing_status: 'processing' as const,
+                    status: 'analyzing' as const,
                     error_message: undefined // Clear any previous error messages
                   }
                 : doc
@@ -324,7 +325,7 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
               doc.id === documentId
                 ? {
                     ...doc,
-                    processing_status: 'failed',
+                    status: 'failed',
                     error_message: error instanceof Error ? error.message : 'Network error occurred while processing'
                   }
                 : doc
@@ -437,7 +438,7 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
     setProcessingDocuments(prev => {
       const newSet = new Set(prev);
       documents.forEach((doc: Document) => {
-        if (doc.processing_status !== 'processing' && doc.processing_status !== 'ocr_processing') {
+        if (doc.status !== 'analyzing' && doc.status !== 'classifying') {
           newSet.delete(doc.id);
         }
       });

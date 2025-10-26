@@ -193,7 +193,7 @@ export default function FieldComponent({
                   </details>
                 ) : (
                   <span className={
-                    field.dataType === 'currency' ? 'text-green-400' :
+                    field.dataType === 'currency' ? 'text-success-foreground' :
                     field.dataType === 'date' ? 'text-blue-400' :
                     field.dataType === 'number' ? 'text-yellow-400' :
                     'text-white'
@@ -230,7 +230,7 @@ export default function FieldComponent({
           <div className="flex items-center justify-between text-xs">
             <span className="text-gray-400">AI Confidence</span>
             <span className={`font-medium ${
-              value >= 0.8 ? 'text-green-400' :
+              value >= 0.8 ? 'text-success-foreground' :
               value >= 0.6 ? 'text-amber-400' :
               'text-red-400'
             }`}>
@@ -240,7 +240,7 @@ export default function FieldComponent({
           <div className="mt-1 w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
             <div
               className={`h-full transition-all duration-300 ${
-                value >= 0.8 ? 'bg-green-500' :
+                value >= 0.8 ? 'bg-success-foreground' :
                 value >= 0.6 ? 'bg-amber-500' :
                 'bg-red-500'
               }`}
