@@ -595,6 +595,11 @@ except Exception as e:
         approach: approach
       };
 
+      } catch (pythonError) {
+        console.error(`🚨 Python PDF conversion failed:`, pythonError);
+        throw pythonError;
+      }
+
     } catch (error) {
       console.error("❌ PDF conversion failed:", error);
 
@@ -637,5 +642,5 @@ except Exception as e:
 
       throw error;
     }
-  },
+  }
 });
