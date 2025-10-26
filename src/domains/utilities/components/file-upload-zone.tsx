@@ -120,7 +120,13 @@ export default function FileUploadZone({
               fileType: file.type,
               status: result.data?.expense_claim?.status || 'processing'
             }
-          : result.data
+          : {
+              id: result.data?.id,
+              fileName: result.data?.file_name || file.name, // Map file_name to fileName, fallback to original file name
+              fileSize: result.data?.file_size || file.size,
+              fileType: result.data?.file_type || file.type,
+              status: result.data?.status || 'pending'
+            }
 
         // Auto-process the document if enabled
         if (autoProcess && domain === 'invoices') {
