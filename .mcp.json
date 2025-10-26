@@ -1,20 +1,20 @@
 {
   "mcpServers": {
     "supabase-finanseal-prod": {
-          "command": "npx",
-          "args": [
-            "-y",
-            "@supabase/mcp-server-supabase@latest",
-            "--project-ref=ohxwghdgsuyabgsndfzc"
-          ],
-          "env": {
-            "SUPABASE_ACCESS_TOKEN": "sbp_07131cbc6c4e5eb82648b94123fb3f0477ecbecf"
-          }
-        },
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--project-ref=ohxwghdgsuyabgsndfzc"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "sbp_07131cbc6c4e5eb82648b94123fb3f0477ecbecf"
+      }
+    },
     "trigger": {
       "command": "npx",
       "args": [
-        "trigger.dev@4.0.2",
+        "trigger.dev@4.0.4",
         "mcp"
       ]
     }

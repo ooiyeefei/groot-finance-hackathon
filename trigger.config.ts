@@ -24,7 +24,13 @@ export default defineConfig({
   build: {
     extensions: [
       // Install system packages required for pdf2image
-      aptGet({ packages: ["poppler-utils"] }),
+      aptGet({
+        packages: [
+          "poppler-utils",  // Provides pdftoppm for pdf2image
+          "python3-dev",   // Python development headers
+          "build-essential" // Compilation tools for native packages
+        ]
+      }),
       pythonExtension({
         // Path to requirements.txt file
         requirementsFile: "./requirements.txt",

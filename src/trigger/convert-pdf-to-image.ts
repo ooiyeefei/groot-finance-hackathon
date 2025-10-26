@@ -113,14 +113,66 @@ export const convertPdfToImage = task({
       const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
       console.log(`📄 PDF downloaded successfully: ${pdfBuffer.length} bytes`);
 
+      // Validate PDF format
+      if (pdfBuffer.length === 0) {
+        throw new Error('PDF buffer is empty');
+      }
+
+      if (!pdfBuffer.subarray(0, 4).toString('ascii').includes('%PDF')) {
+        console.error(`🚨 Invalid PDF header. First 10 bytes:`, pdfBuffer.subarray(0, 10).toString('hex'));
+        throw new Error('Invalid PDF format - missing PDF header');
+      }
+
+      console.log(`✅ PDF validation passed: ${pdfBuffer.length} bytes, header OK`);
+
       // Step 3: Convert PDF to PNG using Python pdf2image
       console.log(`🐍 Converting PDF to image using Python pdf2image`);
       console.log(`📊 PDF Buffer size: ${pdfBuffer.length} bytes`);
-      
+
+      // First, validate Python environment
+      console.log(`🔍 Validating Python environment...`);
+      try {
+        const envCheck = await python.runInline(`
+import sys
+import subprocess
+print(f"Python version: {sys.version}")
+print(f"Python executable: {sys.executable}")
+
+# Check for required packages
+try:
+    import pdf2image
+    print("✅ pdf2image available")
+except ImportError as e:
+    print(f"❌ pdf2image not available: {e}")
+
+try:
+    from PIL import Image
+    print("✅ PIL available")
+except ImportError as e:
+    print(f"❌ PIL not available: {e}")
+
+# Check system dependencies
+try:
+    result = subprocess.run(['which', 'pdftoppm'], capture_output=True, text=True)
+    if result.returncode == 0:
+        print(f"✅ pdftoppm found at: {result.stdout.strip()}")
+    else:
+        print("❌ pdftoppm not found")
+except Exception as e:
+    print(f"❌ Error checking pdftoppm: {e}")
+`);
+        console.log(`🔍 Environment check result:`, envCheck.stdout);
+      } catch (envError) {
+        console.error(`🚨 Environment validation failed:`, envError);
+      }
+
       // For large PDFs, we might hit limits with inline scripts
       // Using runInline with improved error handling and validation
-      
-      const result = await python.runInline(`
+
+      let result;
+      try {
+        console.log(`🚀 Attempting PDF conversion with pdf2image...`);
+        result = await python.runInline(`
 import base64
 import io
 import sys
@@ -228,9 +280,16 @@ except Exception as e:
     sys.exit(1)
 `);
 
-      console.log(`✅ Python PDF conversion completed`);
+      console.log(`🐍 Python PDF conversion result - Exit code: ${result.exitCode}`);
       console.log(`📝 Python stdout:`, result.stdout);
       console.log(`❌ Python stderr:`, result.stderr);
+
+      if (result.exitCode !== 0) {
+        console.error(`🚨 Python script failed with exit code ${result.exitCode}`);
+        console.error(`📝 Full stdout output:`, result.stdout);
+        console.error(`❌ Full stderr output:`, result.stderr);
+        throw new Error(`Python PDF conversion failed with exit code ${result.exitCode}. Check logs for details.`);
+      }
 
       // Extract JSON result between markers
       const stdout = result.stdout;
