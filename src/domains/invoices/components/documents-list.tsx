@@ -55,7 +55,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
   // Helper function to check if document is completed and has extractable data
   const isCompletedDocument = (status: string) => {
-    return status === 'paid' || status === 'overdue' || status === 'disputed'
+    return status === 'pending' || status === 'paid' || status === 'overdue' || status === 'disputed'
   }
   const { addToast } = useToast()
   // Use the unified documents hook for data fetching
@@ -461,17 +461,6 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                 </div>
                 
                 <div className="flex items-center space-x-2">
-                  {/* Process button for pending documents */}
-                  {document.status === 'pending' && (
-                    <button
-                      onClick={() => processDocument(document.id)}
-                      disabled={processingDocuments.has(document.id)}
-                      className="btn-action inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 disabled:opacity-50"
-                    >
-                      <Play className="w-4 h-4 mr-1.5" />
-                      Process
-                    </button>
-                  )}
 
                   {/* Analyze Document button for completed documents */}
                   {isCompletedDocument(document.status) && document.extracted_data && (

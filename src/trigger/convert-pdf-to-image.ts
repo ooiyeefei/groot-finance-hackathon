@@ -566,9 +566,11 @@ except Exception as e:
       }
 
       // Note: converted_image_path already updated above, just update status
-      // Use different column name for expense_claims (status) vs others (processing_status)
-      const statusColumn = tableName === 'expense_claims' ? 'status' : 'processing_status';
-      const statusValue = tableName === 'expense_claims' ? 'analyzing' : 'classifying';
+      // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
+      const usesStatusColumn = tableName === 'expense_claims' || tableName === 'invoices';
+      const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
+      const statusValue = tableName === 'expense_claims' ? 'analyzing' :
+                        tableName === 'invoices' ? 'uploading' : 'classifying';
 
       const { error: statusUpdateError } = await supabase
         .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
@@ -606,39 +608,37 @@ except Exception as e:
       // ✅ PHASE 4B-2: Route error update to correct table
       const errorTableName = DOMAIN_TABLE_MAP[payload.documentDomain];
 
-      // Build error details for JSONB format (for expense_claims)
+      // Build error details in consistent format
       const errorDetails = {
         message: error instanceof Error ? error.message : 'PDF conversion failed',
-        suggestions: [
-          'Ensure the PDF file is not corrupted',
-          'Try uploading a different PDF file',
-          'Contact support if the issue persists'
-        ],
-        error_type: 'conversion_failed',
-        stage: 'pdf_to_image_conversion'
+        error_type: 'conversion_failed'
       };
 
-      // Update document status to failed
-      // Use different column names for expense_claims
+      // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
+      const usesStatusColumn = errorTableName === 'expense_claims' || errorTableName === 'invoices';
+      const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
+      const timestampColumn = errorTableName === 'expense_claims' ? 'failed_at' : 'processed_at';
+
+      console.log(`🔄 Updating ${errorTableName}.${statusColumn} to 'failed' for document ${payload.documentId}`);
+
+      const updateData: any = {
+        [statusColumn]: 'failed',
+        [timestampColumn]: new Date().toISOString()
+      };
+
+      // Use JSONB format for expense_claims, string for others
       if (errorTableName === 'expense_claims') {
-        await supabase
-          .from(errorTableName)
-          .update({
-            status: 'failed',
-            error_message: errorDetails,  // JSONB format
-            failed_at: new Date().toISOString()
-          })
-          .eq('id', payload.documentId);
+        updateData.error_message = errorDetails;  // JSONB format
       } else {
-        await supabase
-          .from(errorTableName)
-          .update({
-            processing_status: 'failed',
-            error_message: error instanceof Error ? error.message : 'PDF conversion failed',
-            processed_at: new Date().toISOString()
-          })
-          .eq('id', payload.documentId);
+        updateData.error_message = errorDetails.message;  // String format
       }
+
+      await supabase
+        .from(errorTableName)
+        .update(updateData)
+        .eq('id', payload.documentId);
+
+      console.log(`✅ Updated ${errorTableName} status to 'failed' for document ${payload.documentId}`);
 
       throw error;
     }

@@ -48,8 +48,12 @@ export default function AccountingEntryFormModal({
   onSave,
   showSaveOption = false
 }: AccountingEntryFormModalProps) {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Combined loading state for disabling both buttons
+  const isLoading = isSaving || isSubmitting
   const userHomeCurrency = useHomeCurrency()
 
   const { categories: expenseCategories, loading: expenseCategoriesLoading } = useExpenseCategories()
@@ -209,7 +213,7 @@ export default function AccountingEntryFormModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
+    setIsSubmitting(true)
     setError(null)
 
     try {
@@ -239,14 +243,14 @@ export default function AccountingEntryFormModal({
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to create transaction. Please try again.')
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
 
   const handleSave = async () => {
     if (!onSave) return
 
-    setIsLoading(true)
+    setIsSaving(true)
     setError(null)
 
     try {
@@ -261,7 +265,7 @@ export default function AccountingEntryFormModal({
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to save data. Please try again.')
     } finally {
-      setIsLoading(false)
+      setIsSaving(false)
     }
   }
 
@@ -355,6 +359,24 @@ export default function AccountingEntryFormModal({
               </Button>
             )}
             <div className="flex items-center gap-2 sm:gap-3">
+              {showSaveOption && onSave && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handleSave}
+                  disabled={isLoading}
+                  size="default"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </Button>
+              )}
               <Button
                 type="submit"
                 form="transaction-form"
@@ -362,7 +384,14 @@ export default function AccountingEntryFormModal({
                 variant="primary"
                 size="default"
               >
-                {isLoading ? 'Saving...' : (transaction ? 'Update Record' : 'Create Record')}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {transaction ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  transaction ? 'Update Record' : 'Create Record'
+                )}
               </Button>
               <button
                 onClick={onClose}
@@ -836,49 +865,6 @@ export default function AccountingEntryFormModal({
             </div>
           </div>
 
-          {/* Modal Footer with Buttons */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-border bg-card">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            {showSaveOption && onSave && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSave}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save'
-                )}
-              </Button>
-            )}
-            <Button
-              type="submit"
-              form="transaction-form"
-              variant="default"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {transaction ? 'Updating...' : 'Creating...'}
-                </>
-              ) : (
-                transaction ? 'Update Record' : 'Create Record'
-              )}
-            </Button>
-          </div>
         </div>
       </div>
     </div>

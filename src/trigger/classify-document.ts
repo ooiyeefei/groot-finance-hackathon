@@ -67,7 +67,7 @@ async function getOrCreateSignedUrl(
 }
 
 // Import task types for routing
-import type { processDocumentOCR } from './process-document-ocr';
+import type { extractInvoiceData } from './extract-invoice-data';
 import type { extractIcData } from './extract-ic-data';
 import type { extractPayslipData } from './extract-payslip-data';
 import type { extractApplicationFormData } from './extract-application-form-data';
@@ -121,9 +121,10 @@ export const classifyDocument = task({
 
   try {
     // ⚡ OPTIMIZATION: Combine status update + fetch in single query (saves 200-500ms)
-    // Handle different column names for expense_claims vs other tables
+    // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
     const isExpenseClaims = tableName === 'expense_claims';
-    const statusColumn = isExpenseClaims ? 'status' : 'processing_status';
+    const usesStatusColumn = tableName === 'expense_claims' || tableName === 'invoices';
+    const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
     const metadataColumn = isExpenseClaims ? 'processing_metadata' : 'document_metadata';
 
     const updateData: any = {
@@ -359,8 +360,8 @@ export const classifyDocument = task({
           });
           extractionTaskId = expenseInvoiceRun.id;
         } else {
-          console.log(`[Classify] Triggering legacy OCR for invoice`);
-          const invoiceRun = await tasks.trigger<typeof processDocumentOCR>("process-document-ocr", {
+          console.log(`[Classify] Triggering invoice data extraction`);
+          const invoiceRun = await tasks.trigger<typeof extractInvoiceData>("extract-invoice-data", {
             documentId: documentId,
             imageStoragePath: imagePath,
             documentDomain: documentDomain
@@ -486,9 +487,9 @@ export const classifyDocument = task({
         }
 
         console.log(`[Classify] Document type is 'other' - not currently supported for extraction. Stopping pipeline gracefully.`);
-        // Update status to 'paid' for invoices, 'completed' for other documents
+        // Update status to 'pending' for invoices, 'completed' for other documents
         // The UI can show the user-friendly message from the classification metadata.
-        const finalStatus = tableName === 'invoices' ? 'paid' : 'completed';
+        const finalStatus = tableName === 'invoices' ? 'pending' : 'completed';
         await updateDocumentStatus(documentId, finalStatus, undefined, tableName);  // ✅ PHASE 4B-3: Pass tableName
         break; // Stop processing
 
@@ -527,10 +528,6 @@ export const classifyDocument = task({
   } catch (error) {
     console.error(`[Classify] Classification failed for ${documentId}:`, error);
 
-    // ✅ Don't overwrite error_message if it was already set with detailed jsonb object
-    // The error handler in the main flow (lines 283-288) already updated the database
-    // with structured error messages. Re-updating here would overwrite with plain string.
-
     // Check if this is a user error (wrong document type) that shouldn't retry
     const isUserError = error instanceof Error && (error as any).skipRetry === true;
 
@@ -538,6 +535,32 @@ export const classifyDocument = task({
       // For user errors (wrong document type), don't retry - just fail immediately
       // Note: Database already updated with detailed error before throwing
       console.log(`[Classify] User error detected - will not retry: ${error.message}`);
+    } else {
+      // For system errors and unexpected failures, ensure database status is updated
+      // Only update if not already handled by specific error cases
+      try {
+        const errorMessage = error instanceof Error ? error.message : 'Classification failed due to unexpected error';
+
+        // Create structured error for expense_claims (JSONB format)
+        const errorDetails = tableName === 'expense_claims'
+          ? {
+              message: errorMessage,
+              suggestions: [
+                'Please try uploading the document again',
+                'Ensure the document image is clear and readable',
+                'Contact support if the issue persists'
+              ],
+              error_type: 'classification_failed',
+              technical_error: error instanceof Error ? error.stack : String(error)
+            }
+          : errorMessage; // String format for other tables
+
+        console.log(`[Classify] Updating document status to failed due to unexpected error`);
+        await updateDocumentStatus(documentId, 'classification_failed', errorDetails, tableName);
+      } catch (updateError) {
+        console.error(`[Classify] Failed to update document status during error handling:`, updateError);
+        // Don't throw here to avoid masking the original error
+      }
     }
 
     // Re-throw for Trigger.dev error handling

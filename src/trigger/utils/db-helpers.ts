@@ -68,7 +68,10 @@ export async function updateDocumentStatus(
   } else if (tableName === 'invoices') {
     // Map document processing statuses to valid invoices statuses
     const statusMap: { [key: string]: string } = {
-      'completed': 'paid'  // For invoices, 'completed' processing maps to 'paid' status
+      'completed': 'pending',  // For invoices, 'completed' processing maps to 'pending' status
+      'pending_extraction': 'analyzing',  // Map pending_extraction to valid analyzing status
+      'extracting': 'analyzing',  // Map extracting to analyzing for invoices
+      'processing': 'analyzing'  // Map processing to analyzing for invoices
     };
     mappedStatus = statusMap[status] || status;
   }
@@ -129,7 +132,7 @@ export async function updateExtractionResults(
   const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
 
   const updateData: any = {
-    [statusColumn]: usesStatusColumn ? 'paid' : 'completed', // invoices use 'paid' for completed status
+    [statusColumn]: tableName === 'invoices' ? 'pending' : (usesStatusColumn ? 'paid' : 'completed'), // invoices use 'pending' for completed status
     extracted_data: result.extracted_data,
     confidence_score: result.confidence_score,
     processed_at: new Date().toISOString()
@@ -228,7 +231,14 @@ export async function updateDocumentClassification(
     const usesStatusColumn = tableName === 'invoices';
     const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
 
-    updateData[statusColumn] = status;
+    // Map status values to valid ones for invoices table
+    let mappedStatus = status;
+    if (tableName === 'invoices') {
+      mappedStatus = status === 'pending_extraction' ? 'analyzing' :
+                    status === 'classification_failed' ? 'classification_failed' : status;
+    }
+
+    updateData[statusColumn] = mappedStatus;
     updateData.document_classification_confidence = classification.confidence_score;
     updateData.classification_method = classification.classification_method;
     updateData.classification_task_id = taskId;

@@ -333,11 +333,16 @@ async function handleInvoiceTaskFailure(
       failure_level: 'system' // Indicates this was a system-level failure
     };
 
+    // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
+    const usesStatusColumn = tableName === 'expense_claims' || tableName === 'invoices';
+    const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
+    const metadataColumn = tableName === 'expense_claims' ? 'processing_metadata' : 'document_metadata';
+
     await supabase
       .from(tableName)
       .update({
-        processing_status: 'failed',
-        processing_metadata: failureMetadata,
+        [statusColumn]: 'failed',
+        [metadataColumn]: failureMetadata,
         processed_at: new Date().toISOString()
       })
       .eq('id', documentId);
@@ -350,8 +355,8 @@ async function handleInvoiceTaskFailure(
   }
 }
 
-export const processDocumentOCR = task({
-  id: "process-document-ocr",
+export const extractInvoiceData = task({
+  id: "extract-invoice-data",
   run: async (payload: { documentId: string; imageStoragePath?: string; expenseCategory?: string; documentDomain: 'invoices' | 'expense_claims' | 'applications' }) => {  // ✅ PHASE 4C: Add domain parameter
     // 🚨 GLOBAL TASK WRAPPER - Catches ALL failures including system failures
     // ✅ PHASE 4C: Route to correct table based on domain (declare at outer scope)
@@ -1354,7 +1359,7 @@ print(json.dumps(result))
 
       // Prepare database update object
       const updateData: any = {
-        status: 'paid', // invoices use 'status' column with 'paid' value for completed processing
+        status: 'pending', // invoices use 'pending' status after successful processing completion
         extracted_data: finalAIResult, // Store raw AI structure directly
         confidence_score: finalExtractionData.confidence_score,
         processed_at: new Date().toISOString(),
@@ -1730,7 +1735,7 @@ print(json.dumps(result))
 
           // Prepare vLLM database update object (note: vLLM fallback typically uses IFRS categories)
           const vllmUpdateData: any = {
-            status: 'paid', // invoices use 'status' column with 'paid' value for completed processing
+            status: 'pending', // invoices use 'pending' status after successful processing completion
             extracted_data: finalVllmAiResult, // Store raw AI structure directly
             confidence_score: vllmExtractionData.confidence_score,
             processed_at: new Date().toISOString(),
@@ -1778,10 +1783,14 @@ print(json.dumps(result))
           console.error("❌ vLLM fallback also failed:", fallbackError);
           
           // Both DSPy and vLLM failed - mark as failed
+          // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
+          const usesStatusColumn1 = tableName === 'expense_claims' || tableName === 'invoices';
+          const statusColumn1 = usesStatusColumn1 ? 'status' : 'processing_status';
+
           await supabase
             .from(tableName)  // ✅ PHASE 4C: Routed based on domain
             .update({
-              processing_status: 'failed',
+              [statusColumn1]: 'failed',
             error_message: `Primary AI processing failed: ${aiError instanceof Error ? aiError.message : 'Unknown error'}. vLLM fallback failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`,
             processed_at: new Date().toISOString(),
             processing_method: 'both_methods_failed'
@@ -1793,10 +1802,14 @@ print(json.dumps(result))
         console.warn("⚠️ No OCR_ENDPOINT_URL configured for vLLM fallback");
         
         // No fallback available - mark as failed
+        // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
+        const usesStatusColumn2 = tableName === 'expense_claims' || tableName === 'invoices';
+        const statusColumn2 = usesStatusColumn2 ? 'status' : 'processing_status';
+
         await supabase
           .from(tableName)  // ✅ PHASE 4C: Routed based on domain
           .update({
-            processing_status: 'failed',
+            [statusColumn2]: 'failed',
           error_message: `AI processing failed: ${aiError instanceof Error ? aiError.message : 'Processing failed'}. No vLLM fallback configured.`,
           processed_at: new Date().toISOString(),
           processing_method: 'ai_only_failed'
