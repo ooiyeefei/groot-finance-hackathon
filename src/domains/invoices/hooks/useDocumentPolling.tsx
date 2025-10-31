@@ -54,7 +54,7 @@ export function useDocumentPolling({
     }
 
     try {
-      const response = await fetch(`/api/applications/${applicationId}`)
+      const response = await fetch(`/api/v1/applications/${applicationId}`)
       const result = await response.json()
 
       if (!mountedRef.current) return // Component unmounted during request

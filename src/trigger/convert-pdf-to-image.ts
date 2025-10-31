@@ -210,12 +210,12 @@ try:
     if not pdf_bytes.startswith(b'%PDF'):
         raise Exception("Invalid PDF format - missing PDF header")
 
-    # Convert PDF to images (ALL pages)
+    # Convert PDF to images (ALL pages) - optimized for OCR token efficiency
     print("[Python] Starting multi-page PDF conversion...")
     images = convert_from_bytes(
         pdf_bytes,
-        dpi=150,  # Good balance of quality and file size
-        fmt='PNG'
+        dpi=120,  # Optimized for OCR and token efficiency (was 150)
+        fmt='JPEG'  # JPEG for smaller file sizes (was PNG)
     )
 
     if not images:
@@ -230,27 +230,64 @@ try:
         image_width, image_height = image.size
         print(f"[Python] Processing page {page_num}: {image_width}x{image_height} pixels")
 
-        # Convert to PNG bytes
-        img_buffer = io.BytesIO()
-        image.save(img_buffer, format='PNG', optimize=True)
-        png_bytes = img_buffer.getvalue()
+        # ✅ Optimize image for OCR and token efficiency
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
 
-        # Validate PNG output
-        if len(png_bytes) == 0:
-            raise Exception(f"Generated PNG for page {page_num} is empty")
+        # Iteratively optimize image size to target ~1MB
+        target_size_bytes = 1024 * 1024  # 1MB target
+        quality = 85
+        optimized_image = image.copy()
+        attempts = 0
+        max_attempts = 10
+
+        while attempts < max_attempts:
+            img_buffer = io.BytesIO()
+            optimized_image.save(img_buffer, format='JPEG', quality=quality, optimize=True)
+            jpeg_bytes = img_buffer.getvalue()
+
+            print(f"[Python] Page {page_num} optimization attempt {attempts+1}: {optimized_image.width}x{optimized_image.height}, quality={quality}, size={len(jpeg_bytes)/1024:.1f}KB")
+
+            if len(jpeg_bytes) <= target_size_bytes:
+                print(f"[Python] Page {page_num} optimized successfully: {len(jpeg_bytes)/1024:.1f}KB")
+                break
+
+            # Try reducing quality first
+            if quality > 60:
+                quality -= 10
+            else:
+                # If quality is already low, resize image
+                new_width = int(optimized_image.width * 0.85)
+                new_height = int(optimized_image.height * 0.85)
+                optimized_image = optimized_image.resize((new_width, new_height))
+                quality = 75  # Reset quality after resize
+
+            attempts += 1
+
+        if attempts >= max_attempts:
+            print(f"[Python] Warning: Page {page_num} could not be optimized to target size, using best attempt")
+
+        # Use the optimized image
+        img_buffer = io.BytesIO()
+        optimized_image.save(img_buffer, format='JPEG', quality=quality, optimize=True)
+        jpeg_bytes = img_buffer.getvalue()
+
+        # Validate JPEG output
+        if len(jpeg_bytes) == 0:
+            raise Exception(f"Generated JPEG for page {page_num} is empty")
 
         # Convert to base64
-        base64_image = base64.b64encode(png_bytes).decode('utf-8')
+        base64_image = base64.b64encode(jpeg_bytes).decode('utf-8')
 
         # Add to pages array
         pages_data.append({
             "page_number": page_num,
             "base64_image": base64_image,
-            "width": image_width,
-            "height": image_height
+            "width": optimized_image.width,
+            "height": optimized_image.height
         })
 
-        print(f"[Python] Page {page_num} processed: {len(png_bytes)} bytes, base64 length: {len(base64_image)}")
+        print(f"[Python] Page {page_num} processed: {len(jpeg_bytes)} bytes, base64 length: {len(base64_image)}")
 
     # Output final JSON result
     result_json = {
@@ -425,7 +462,7 @@ except Exception as e:
         imagePaths = conversionResult.pages.map((page: any) => {
           // Create filename with timestamp prefix inside timestamp folder
           const originalFilenamePart = typedDocument.file_name.replace(/\.[^/.]+$/, ""); // Remove extension
-          const pageFilename = `${shortTimestamp}_${originalFilenamePart}_page_${page.page_number}.png`;
+          const pageFilename = `${shortTimestamp}_${originalFilenamePart}_page_${page.page_number}.jpg`;
           const baseConvertedPath = storageBuilder.forDocument(docType).converted(pageFilename);
 
           // Insert timestamp folder between converted/ and filename: converted/1234567890/file.png
@@ -455,7 +492,7 @@ except Exception as e:
         imagePaths = conversionResult.pages.map((page: any) => {
           // Create filename with timestamp prefix inside timestamp folder (fallback)
           const originalFilenamePart = typedDocument.file_name.replace(/\.[^/.]+$/, ""); // Remove extension
-          const pageFilename = `${shortTimestamp}_${originalFilenamePart}_page_${page.page_number}.png`;
+          const pageFilename = `${shortTimestamp}_${originalFilenamePart}_page_${page.page_number}.jpg`;
           return `${convertedFolderPath}/${pageFilename}`;
         });
         approach = 'fallback';
@@ -475,7 +512,7 @@ except Exception as e:
         const { error: uploadError } = await supabase.storage
           .from(bucketName)  // ✅ PHASE 4J: Routed to correct bucket
           .upload(imagePath, imageBuffer, {
-            contentType: 'image/png',
+            contentType: 'image/jpeg',
             upsert: true
           });
 

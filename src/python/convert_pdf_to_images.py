@@ -33,6 +33,67 @@ except ImportError:
     print(f"[ConvertPDF] Supabase client not available", file=sys.stderr)
     SUPABASE_AVAILABLE = False
 
+def optimize_images_for_ocr(images: List[Image.Image], target_size_mb: float = 1.0) -> List[Image.Image]:
+    """
+    Optimize images for OCR processing and token efficiency
+
+    Args:
+        images: List of PIL Images
+        target_size_mb: Target file size in MB (default 1MB)
+
+    Returns:
+        List of optimized PIL Images
+    """
+    optimized_images = []
+    target_size_bytes = int(target_size_mb * 1024 * 1024)
+
+    for i, image in enumerate(images):
+        print(f"[ConvertPDF] Optimizing image {i+1}: {image.width}x{image.height}", file=sys.stderr)
+
+        # Convert to RGB if needed (for JPEG compatibility)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+
+        # Start with original image
+        optimized_image = image.copy()
+        quality = 85  # Start with high quality
+
+        # Iteratively reduce quality and/or size until target is met
+        attempts = 0
+        max_attempts = 10
+
+        while attempts < max_attempts:
+            # Test current image size
+            from io import BytesIO
+            test_buffer = BytesIO()
+            optimized_image.save(test_buffer, format='JPEG', quality=quality, optimize=True)
+            current_size = len(test_buffer.getvalue())
+
+            print(f"[ConvertPDF] Image {i+1} attempt {attempts+1}: {optimized_image.width}x{optimized_image.height}, quality={quality}, size={current_size/1024:.1f}KB", file=sys.stderr)
+
+            if current_size <= target_size_bytes:
+                print(f"[ConvertPDF] Image {i+1} optimized successfully: {current_size/1024:.1f}KB", file=sys.stderr)
+                break
+
+            # Try reducing quality first
+            if quality > 60:
+                quality -= 10
+            else:
+                # If quality is already low, resize image
+                new_width = int(optimized_image.width * 0.85)
+                new_height = int(optimized_image.height * 0.85)
+                optimized_image = optimized_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                quality = 75  # Reset quality after resize
+
+            attempts += 1
+
+        if attempts >= max_attempts:
+            print(f"[ConvertPDF] Warning: Image {i+1} could not be optimized to target size, using best attempt", file=sys.stderr)
+
+        optimized_images.append(optimized_image)
+
+    return optimized_images
+
 def setup_supabase_client() -> Client:
     """Initialize Supabase client for storage operations"""
     supabase_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
@@ -61,7 +122,7 @@ def download_pdf_from_signed_url(pdf_signed_url: str) -> bytes:
         print(f"[ConvertPDF] Error downloading PDF: {str(e)}", file=sys.stderr)
         raise
 
-def convert_pdf_to_page_images(pdf_bytes: bytes, dpi: int = 150) -> List[Image.Image]:
+def convert_pdf_to_page_images(pdf_bytes: bytes, dpi: int = 120) -> List[Image.Image]:
     """Convert PDF bytes to list of PIL Images using pdf2image with PyMuPDF fallback"""
     try:
         if not PDF_LIBRARIES_AVAILABLE:
@@ -74,11 +135,14 @@ def convert_pdf_to_page_images(pdf_bytes: bytes, dpi: int = 150) -> List[Image.I
             images = convert_from_bytes(
                 pdf_bytes,
                 dpi=dpi,
-                fmt='PNG',  # Use PNG for better quality
+                fmt='JPEG',  # Use JPEG for smaller file sizes
                 thread_count=2  # Limit threads for stability
             )
             print(f"[ConvertPDF] Successfully converted {len(images)} pages using pdf2image", file=sys.stderr)
-            return images
+
+            # ✅ Optimize images for OCR and token efficiency
+            optimized_images = optimize_images_for_ocr(images)
+            return optimized_images
 
         except Exception as pdf2image_error:
             print(f"[ConvertPDF] pdf2image failed, trying PyMuPDF: {pdf2image_error}", file=sys.stderr)
@@ -106,7 +170,10 @@ def convert_pdf_to_page_images(pdf_bytes: bytes, dpi: int = 150) -> List[Image.I
 
                 pdf_doc.close()
                 print(f"[ConvertPDF] Successfully converted {len(images)} pages using PyMuPDF", file=sys.stderr)
-                return images
+
+                # ✅ Optimize images for OCR and token efficiency (PyMuPDF path)
+                optimized_images = optimize_images_for_ocr(images)
+                return optimized_images
 
             finally:
                 # Clean up temp file
@@ -127,14 +194,14 @@ def upload_page_images_to_folder(page_images: List[Image.Image], target_folder: 
         page_info = []
 
         for page_num, image in enumerate(page_images, start=1):
-            # Convert PIL Image to PNG bytes
+            # Convert PIL Image to JPEG bytes (optimized for OCR)
             from io import BytesIO
             img_buffer = BytesIO()
-            image.save(img_buffer, format='PNG', optimize=True)
+            image.save(img_buffer, format='JPEG', quality=85, optimize=True)
             img_bytes = img_buffer.getvalue()
 
             # Generate storage path for this page
-            page_filename = f"{document_id[:8]}_page_{page_num}.png"
+            page_filename = f"{document_id[:8]}_page_{page_num}.jpg"
             storage_path = f"{target_folder}/{page_filename}"
 
             print(f"[ConvertPDF] Uploading page {page_num} to: {storage_path}", file=sys.stderr)
@@ -144,7 +211,7 @@ def upload_page_images_to_folder(page_images: List[Image.Image], target_folder: 
                 storage_path,
                 img_bytes,
                 file_options={
-                    'content-type': 'image/png',
+                    'content-type': 'image/jpeg',
                     'upsert': True  # Replace if exists
                 }
             )

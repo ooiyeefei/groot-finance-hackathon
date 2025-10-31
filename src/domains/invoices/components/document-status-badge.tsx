@@ -4,7 +4,7 @@ import { Clock, CheckCircle, XCircle, Loader2, Upload, Cog, Eye, Brain, FileText
 import { ErrorDetails } from '@/domains/invoices/lib/data-access'
 
 interface DocumentStatusBadgeProps {
-  status: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed'
+  status: 'pending' | 'uploading' | 'analyzing' | 'processing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed'
   errorMessage?: ErrorDetails | string | null
   processingStage?: 'extracting' | 'analyzing' | 'finalizing'
   animated?: boolean
@@ -41,6 +41,13 @@ export default function DocumentStatusBadge({
           icon: processingStage === 'extracting' ? Upload :
                 processingStage === 'analyzing' ? Cog : Loader2,
           text: stageText,
+          variant: 'info' as const,
+          animate: true
+        }
+      case 'processing':
+        return {
+          icon: Loader2,
+          text: 'Processing',
           variant: 'info' as const,
           animate: true
         }
@@ -148,7 +155,7 @@ export default function DocumentStatusBadge({
       {config.text}
 
       {/* Processing stage indicator */}
-      {(status === 'analyzing' || status === 'classifying') && processingStage && (
+      {(status === 'analyzing' || status === 'processing' || status === 'classifying') && processingStage && (
         <span className="ml-1 w-1 h-1 bg-current rounded-full animate-pulse" />
       )}
     </div>

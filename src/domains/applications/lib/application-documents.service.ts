@@ -121,7 +121,7 @@ export async function uploadDocument(
         storage_path: 'temp_pending_upload',
         file_size: file.size,
         file_type: file.type,
-        processing_status: 'pending',
+        processing_status: 'uploading',  // ✅ FIX: Use 'uploading' for application_documents constraint
         document_type: null,
         document_classification_confidence: null,
         error_message: null,
@@ -156,7 +156,7 @@ export async function uploadDocument(
         storage_path: 'temp_pending_upload',
         file_size: file.size,
         file_type: file.type,
-        processing_status: 'pending'
+        processing_status: 'uploading'  // ✅ FIX: Use 'uploading' for application_documents constraint
       })
       .select()
       .single()
@@ -202,7 +202,7 @@ export async function uploadDocument(
     .from('application_documents')
     .update({
       storage_path: storagePath,
-      processing_status: 'pending'
+      processing_status: 'uploading'  // ✅ FIX: Keep 'uploading' status, will change to 'classifying' when background task starts
     })
     .eq('id', document.id)
 
@@ -543,11 +543,11 @@ export async function reprocessDocument(applicationId: string, documentId: strin
 
   const expectedDocumentType = slotConfig?.document_type
 
-  // Update document status to pending
+  // Update document status to classifying (reprocessing starts with classification)
   const { error: updateError } = await supabase
     .from('application_documents')
     .update({
-      processing_status: 'pending',
+      processing_status: 'classifying',
       error_message: null,
       processed_at: null,
       updated_at: new Date().toISOString()

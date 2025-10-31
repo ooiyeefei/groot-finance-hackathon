@@ -90,7 +90,7 @@ interface SmartPayslipUploaderProps {
  * Handles both single payslip and multi-payslip document structures
  */
 function validatePayslipDateClientSide(document: PayslipFile['document']): ClientValidationResult {
-  if (!document || document.processing_status !== 'completed') {
+  if (!document || (document.processing_status !== 'completed' && document.processing_status !== 'draft')) {
     return { isValid: false, message: 'Processing...', type: 'warning' }
   }
 
@@ -221,7 +221,7 @@ export default function SmartPayslipUploader({
   // Calculate upload stats
   const uploadedFiles = payslipSlots.filter(slot => slot.document)
   const completedFiles = payslipSlots.filter(slot =>
-    slot.document?.processing_status === 'completed'
+    slot.document?.processing_status === 'completed' || slot.document?.processing_status === 'draft'
   )
   const processingFiles = payslipSlots.filter(slot =>
     slot.document && ['pending', 'classifying', 'pending_extraction', 'extracting'].includes(slot.document.processing_status)
@@ -305,8 +305,8 @@ export default function SmartPayslipUploader({
     const doc = slot.document
     if (!doc) return 'empty'
 
-    // If completed, check for validation errors first
-    if (doc.processing_status === 'completed') {
+    // If completed or draft, check for validation errors first
+    if (doc.processing_status === 'completed' || doc.processing_status === 'draft') {
       const validation = validationResults?.details?.find(d => d.slot === slot.slot)
       const clientValidation = validatePayslipDateClientSide(doc)
 
@@ -322,18 +322,19 @@ export default function SmartPayslipUploader({
   const getStatusColor = (status: string, isCritical: boolean) => {
     switch (status) {
       case 'completed':
-        return 'bg-success/20 text-success border-success/30'
+      case 'draft':
+        return 'bg-green-900/20 text-green-300 border-green-700/50'
       case 'processing':
-        return 'bg-primary/20 text-primary border-primary/30'
+        return 'bg-blue-900/20 text-blue-300 border-blue-700/50'
       case 'classifying':
-        return 'bg-primary/20 text-primary border-primary/30'
+        return 'bg-indigo-900/20 text-indigo-300 border-indigo-700/50'
       case 'pending_extraction':
-        return 'bg-warning/20 text-warning border-warning/30'
+        return 'bg-amber-900/20 text-amber-300 border-amber-700/50'
       case 'extracting':
-        return 'bg-primary/20 text-primary border-primary/30'
+        return 'bg-cyan-900/20 text-cyan-300 border-cyan-700/50'
       case 'failed':
       case 'validation_failed':
-        return 'bg-danger/20 text-danger border-danger/30'
+        return 'bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30'
       default:
         return 'bg-muted/20 text-muted-foreground border-muted/30'
     }
@@ -373,8 +374,8 @@ export default function SmartPayslipUploader({
   }
 
   const getStatusText = (status: string, errorMessage?: string | null | undefined, slot?: PayslipFile) => {
-    // Priority 1: Check for validation failures even if processing is completed
-    if (status === 'completed' && slot) {
+    // Priority 1: Check for validation failures even if processing is completed or draft
+    if ((status === 'completed' || status === 'draft') && slot) {
       const validation = validationResults?.details?.find(d => d.slot === slot.slot)
       const clientValidation = validatePayslipDateClientSide(slot.document)
 
@@ -389,6 +390,7 @@ export default function SmartPayslipUploader({
 
     switch (status) {
       case 'completed':
+      case 'draft':
         return 'Completed'
       case 'classifying':
         return 'Classifying'
@@ -557,7 +559,7 @@ export default function SmartPayslipUploader({
                       </span>
 
                       {/* Show success validation badge only for valid payslips */}
-                      {doc.processing_status === 'completed' &&
+                      {(doc.processing_status === 'completed' || doc.processing_status === 'draft') &&
                        ((validation && validation.isValid) || (clientValidation && clientValidation.isValid)) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-success/20 text-success border-success/30">
                           ✅
@@ -574,7 +576,7 @@ export default function SmartPayslipUploader({
                       >
                         <Eye className="w-4 h-4" />
                       </Button>
-                      {doc.processing_status === 'completed' && (
+                      {(doc.processing_status === 'completed' || doc.processing_status === 'draft') && (
                         <>
                           <Button
                             size="sm"
@@ -587,7 +589,7 @@ export default function SmartPayslipUploader({
                         </>
                       )}
                       {/* ✅ PHASE 4K: Always show reprocess button for all statuses, not just failed */}
-                      {(doc.processing_status === 'completed' || doc.processing_status === 'failed' || doc.processing_status === 'classification_failed') && (
+                      {(doc.processing_status === 'completed' || doc.processing_status === 'draft' || doc.processing_status === 'failed' || doc.processing_status === 'classification_failed') && (
                         <Button
                           size="sm"
                           variant="primary"
@@ -622,21 +624,12 @@ export default function SmartPayslipUploader({
 
                   <div className="text-sm text-muted-foreground space-y-1">
                     <div>Uploaded: {formatDate(doc.uploaded_at)}</div>
-                    {/* Show errors for failed documents OR completed documents with validation failures */}
+                    {/* Show suggestions for failed documents OR completed/draft documents with validation failures */}
                     {((doc.processing_status === 'failed' || doc.processing_status === 'classification_failed') ||
-                      (doc.processing_status === 'completed' && validation && !validation.isValid) ||
-                      (doc.processing_status === 'completed' && clientValidation && !clientValidation.isValid)) && (
+                      ((doc.processing_status === 'completed' || doc.processing_status === 'draft') && validation && !validation.isValid) ||
+                      ((doc.processing_status === 'completed' || doc.processing_status === 'draft') && clientValidation && !clientValidation.isValid)) && (
                       <div className="space-y-2">
-                        <div className="text-danger flex items-start gap-2">
-                          <span className="text-danger mt-0.5">🚫</span>
-                          <div>
-                            {/* Priority: classification error > validation error */}
-                            {doc.error_message ||
-                             (validation && !validation.isValid ? validation.validationMessage : '') ||
-                             (clientValidation && !clientValidation.isValid ? clientValidation.message : '') ||
-                             'Document processing failed. Please try uploading again.'}
-                          </div>
-                        </div>
+                        {/* Only show suggestions, error message is already in the badge above */}
                         {(() => {
                           // Enhanced contextual suggestions based on error type
                           const getContextualSuggestions = (errorMsg: string | null, slotName: string) => {
@@ -695,8 +688,8 @@ export default function SmartPayslipUploader({
 
                   {/* Processing Status Display */}
                   {(['classifying', 'pending_extraction', 'extracting'].includes(doc.processing_status)) && (
-                    <div className="mt-3 p-3 bg-primary/20 border border-primary/30 rounded-lg">
-                      <div className="flex items-center gap-2 text-primary">
+                    <div className="mt-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg">
+                      <div className="flex items-center gap-2 text-blue-300">
                         <Brain className="w-4 h-4 animate-spin" />
                         <span className="text-sm font-medium">
                           {doc.processing_status === 'classifying' && 'Analyzing document type...'}
@@ -708,7 +701,7 @@ export default function SmartPayslipUploader({
                   )}
 
                   {/* Show extracted data for completed payslips */}
-                  {doc.processing_status === 'completed' && doc.extracted_data && (
+                  {(doc.processing_status === 'completed' || doc.processing_status === 'draft') && doc.extracted_data && (
                     <>
                       {/* Check if this document contains multiple payslips */}
                       {(() => {
@@ -726,27 +719,27 @@ export default function SmartPayslipUploader({
                           // Render individual collapsible containers for each payslip using consistent pattern
                           return (
                             <div className="mt-4 space-y-3">
-                              <div className="text-sm text-success mb-3 flex items-center">
+                              <div className="text-sm text-green-700 dark:text-green-300 mb-3 flex items-center">
                                 <CheckCircle className="w-4 h-4 mr-2" />
                                 {doc.extracted_data.payslips.length} Payslips Extracted
                               </div>
                               {doc.extracted_data.payslips.map((payslip: any, index: number) => (
-                                <div key={`${doc.id}-payslip-${index}`} className="bg-record-layer-2 border border-border rounded-lg">
+                                <div key={`${doc.id}-payslip-${index}`} className="bg-record-layer-2 border border-record-border rounded-lg">
                                   {/* Collapsible Header */}
                                   <div
-                                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent transition-colors"
+                                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-record-hover transition-colors"
                                     onClick={() => toggleContainer(`${doc.id}-payslip-${index}`)}
                                   >
                                     <div className="flex flex-col gap-2">
                                       <div className="flex items-center gap-2">
                                         <FileText className="w-4 h-4 text-muted-foreground" />
-                                        <span className="text-foreground font-medium">
+                                        <span className="text-record-title font-medium">
                                           Payslip #{index + 1} - {payslip.pay_period || `Month ${index + 1}`}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        <CheckCircle className="w-4 h-4 text-success" />
-                                        <span className="text-sm font-medium text-success">
+                                        <CheckCircle className="w-4 h-4 text-green-700 dark:text-green-300" />
+                                        <span className="text-sm font-medium text-green-700 dark:text-green-300">
                                           Net: {payslip.net_wages ? `MYR ${payslip.net_wages.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A'}
                                         </span>
                                       </div>
@@ -765,7 +758,7 @@ export default function SmartPayslipUploader({
 
                                   {/* Collapsible Content */}
                                   {expandedContainers.has(`${doc.id}-payslip-${index}`) && (
-                                    <div className="border-t border-border">
+                                    <div className="border-t border-record-border">
                                       <div className="p-4">
                                         <PayslipDataDisplay data={payslip} />
                                       </div>

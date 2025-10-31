@@ -98,7 +98,30 @@ function extractPythonResult(rawResult: any): any {
   if (rawResult && typeof rawResult === 'object' && 'stdout' in rawResult) {
     try {
       const stdout = (rawResult as any).stdout.trim();
-      return JSON.parse(stdout);
+      const pythonResult = JSON.parse(stdout);
+
+      // ✅ Extract and log robust Gemini API usage tracking from JSON output
+      if (pythonResult.usage) {
+        const usage = pythonResult.usage;
+        console.log(`[ExtractPayslip] 💰 ROBUST USAGE TRACKING:`);
+        console.log(`[ExtractPayslip] 💰 Total API Calls: ${usage.total_calls}`);
+        console.log(`[ExtractPayslip] 💰 Total Images: ${usage.total_images}`);
+        console.log(`[ExtractPayslip] 💰 Total Input Tokens: ${usage.total_input_tokens}`);
+        console.log(`[ExtractPayslip] 💰 Total Output Tokens: ${usage.total_output_tokens}`);
+        console.log(`[ExtractPayslip] 💰 Total Tokens: ${usage.total_tokens}`);
+
+        // Log individual page breakdowns if available
+        if (usage.entries && usage.entries.length > 0) {
+          console.log(`[ExtractPayslip] 💰 Per-page breakdown:`);
+          usage.entries.forEach((entry: any, index: number) => {
+            console.log(`[ExtractPayslip] 💰 Page ${index + 1}: ${entry.model}, Images: ${entry.images}, Input: ${entry.input_tokens}, Output: ${entry.output_tokens}, Total: ${entry.total_tokens}`);
+          });
+        }
+      } else {
+        console.log(`[ExtractPayslip] ⚠️ No usage data found in JSON output - Python script may not be tracking usage properly`);
+      }
+
+      return pythonResult;
     } catch (parseError) {
       console.error(`[ExtractPayslip] Failed to parse Python JSON output:`, parseError);
       return {
@@ -216,6 +239,45 @@ export const extractPayslipData = task({
     // Debug: Log what Python script returned
     console.log(`[ExtractPayslip] Python script result type: ${typeof rawResult}`);
     console.log(`[ExtractPayslip] Python script result preview:`, JSON.stringify(rawResult).substring(0, 300));
+
+    // ✅ Extract and log Gemini API usage tracking from stderr
+    if (rawResult && typeof rawResult === 'object' && 'stderr' in rawResult) {
+      const stderr = (rawResult as any).stderr || '';
+
+      // Extract usage logs from Python stderr - capture ALL usage lines
+      if (stderr) {
+        const usageLines = stderr.match(/\[Usage\] Model: .*?, Images: \d+, Input Tokens: \d+, Output Tokens: \d+, Total Tokens: \d+/g);
+        if (usageLines && usageLines.length > 0) {
+          console.log(`[ExtractPayslip] 💰 Found ${usageLines.length} Gemini API usage entries:`);
+          let totalInputTokens = 0;
+          let totalOutputTokens = 0;
+          let totalImages = 0;
+
+          usageLines.forEach((line: string, index: number) => {
+            const match = line.match(/\[Usage\] Model: (.*), Images: (\d+), Input Tokens: (\d+), Output Tokens: (\d+), Total Tokens: (\d+)/);
+            if (match) {
+              const [, model, images, inputTokens, outputTokens, totalTokens] = match;
+              console.log(`[ExtractPayslip] 💰 Page ${index + 1}: Model: ${model}, Images: ${images}, Input: ${inputTokens} tokens, Output: ${outputTokens} tokens, Total: ${totalTokens} tokens`);
+              totalInputTokens += parseInt(inputTokens);
+              totalOutputTokens += parseInt(outputTokens);
+              totalImages += parseInt(images);
+            }
+          });
+
+          console.log(`[ExtractPayslip] 💰 TOTAL USAGE - Images: ${totalImages}, Input: ${totalInputTokens} tokens, Output: ${totalOutputTokens} tokens, Total: ${totalInputTokens + totalOutputTokens} tokens`);
+        } else {
+          console.log(`[ExtractPayslip] ⚠️ WARNING: Usage logs expected but no complete usage lines found in stderr`);
+          // Show partial stderr for debugging when regex fails
+          if (stderr.length <= 2000) {
+            console.log(`[ExtractPayslip] 🔍 DEBUG: Full stderr for debugging:`, stderr);
+          } else {
+            console.log(`[ExtractPayslip] 🔍 DEBUG: stderr content (last 1500 chars): ${stderr.substring(Math.max(0, stderr.length - 1500))}`);
+          }
+        }
+      } else {
+        console.log(`[ExtractPayslip] ⚠️ WARNING: stderr is empty - Python script may not be logging usage`);
+      }
+    }
 
     // Extract actual result from python.runScript response
     const pythonResult = extractPythonResult(rawResult);

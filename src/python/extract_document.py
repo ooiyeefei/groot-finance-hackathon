@@ -26,6 +26,81 @@ def truncate_error_message(message: str, max_length: int = 500) -> str:
         return message
     return message[:max_length] + f"... [truncated, original length: {len(message)}]"
 
+class UsageCollector:
+    """Global collector for Gemini API usage data across all pages"""
+    def __init__(self):
+        self.usage_entries = []
+
+    def add_usage(self, model_name: str, image_count: int, input_tokens: int, output_tokens: int):
+        """Add a usage entry for a single API call"""
+        entry = {
+            'model': model_name,
+            'images': image_count,
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'total_tokens': input_tokens + output_tokens
+        }
+        self.usage_entries.append(entry)
+        print(f"[Usage] Model: {model_name}, Images: {image_count}, Input Tokens: {input_tokens}, Output Tokens: {output_tokens}, Total Tokens: {input_tokens + output_tokens}", file=sys.stderr)
+
+    def get_aggregated_usage(self) -> Dict[str, Any]:
+        """Get total aggregated usage across all API calls"""
+        if not self.usage_entries:
+            return {
+                'total_calls': 0,
+                'total_images': 0,
+                'total_input_tokens': 0,
+                'total_output_tokens': 0,
+                'total_tokens': 0,
+                'entries': []
+            }
+
+        total_images = sum(entry['images'] for entry in self.usage_entries)
+        total_input = sum(entry['input_tokens'] for entry in self.usage_entries)
+        total_output = sum(entry['output_tokens'] for entry in self.usage_entries)
+
+        return {
+            'total_calls': len(self.usage_entries),
+            'total_images': total_images,
+            'total_input_tokens': total_input,
+            'total_output_tokens': total_output,
+            'total_tokens': total_input + total_output,
+            'entries': self.usage_entries
+        }
+
+# Global usage collector instance
+usage_collector = UsageCollector()
+
+def log_gemini_usage(lm, model_name: str, image_count: int = 0):
+    """
+    Log Gemini API usage for cost tracking using global collector.
+
+    Args:
+        lm: The configured dspy.LM object
+        model_name: Name of the Gemini model being used
+        image_count: Number of images sent in the API call
+    """
+    try:
+        if hasattr(lm, 'history') and lm.history:
+            # Get the most recent API call from history
+            last_call = lm.history[-1]
+
+            # Extract usage data from the last call
+            usage = last_call.get('usage', {}) if isinstance(last_call, dict) else {}
+
+            if usage:
+                prompt_tokens = usage.get('prompt_tokens', usage.get('input_tokens', 0))
+                completion_tokens = usage.get('completion_tokens', usage.get('output_tokens', 0))
+
+                # Add to global collector instead of just printing to stderr
+                usage_collector.add_usage(model_name, image_count, prompt_tokens, completion_tokens)
+            else:
+                print(f"[Usage] Model: {model_name}, Images: {image_count}, No usage data available in history", file=sys.stderr)
+        else:
+            print(f"[Usage] Model: {model_name}, Images: {image_count}, LM history not available", file=sys.stderr)
+    except Exception as e:
+        print(f"[Usage] Failed to log usage: {str(e)}", file=sys.stderr)
+
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder to handle datetime objects"""
     def default(self, obj):
@@ -61,6 +136,12 @@ def financing_tool(image: dspy.Image) -> dict:
     try:
         extractor = dspy.ChainOfThought(FinancingDetailsSignature)
         prediction = extractor(image=image)
+
+        # Log API usage for cost tracking
+        # Get the configured LM from dspy settings
+        if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
+            log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
+
         result = prediction.financing_details
         print(f"[FinancingTool] Successfully extracted financing details", file=sys.stderr)
 
@@ -81,6 +162,11 @@ def personal_details_tool(image: dspy.Image) -> dict:
     try:
         extractor = dspy.ChainOfThought(PersonalDetailsSignature)
         prediction = extractor(image=image)
+
+        # Log API usage for cost tracking
+        if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
+            log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
+
         result = prediction.personal_details
         print(f"[PersonalDetailsTool] Successfully extracted personal details", file=sys.stderr)
 
@@ -101,6 +187,11 @@ def employment_details_tool(image: dspy.Image) -> dict:
     try:
         extractor = dspy.ChainOfThought(EmploymentDetailsSignature)
         prediction = extractor(image=image)
+
+        # Log API usage for cost tracking
+        if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
+            log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
+
         result = prediction.employment_details
         print(f"[EmploymentDetailsTool] Successfully extracted employment details", file=sys.stderr)
 
@@ -364,7 +455,13 @@ class ApplicationFormExtractor(dspy.Module):
         """Ultimate fallback to single-pass extraction."""
         print(f"[ReAct Agent] Using ultimate fallback: single-pass ChainOfThought extraction", file=sys.stderr)
         fallback_extractor = dspy.ChainOfThought(ApplicationFormExtractionSignature)
-        return fallback_extractor(image=image)
+        prediction = fallback_extractor(image=image)
+
+        # Log API usage for cost tracking
+        if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
+            log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
+
+        return prediction
 
 # NEW: Multi-Payslip Extractor for handling PDF pages with intelligent grouping
 class MultiPayslipExtractor(dspy.Module):
@@ -400,6 +497,10 @@ class MultiPayslipExtractor(dspy.Module):
 
                 # Extract payslip from this page
                 prediction = self.payslip_extractor(image=image)
+
+                # Log API usage for cost tracking
+                if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
+                    log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
 
                 # Get the payslip data from prediction
                 payslip_data = prediction.payslip_data
@@ -522,7 +623,8 @@ def setup_dspy_model():
             max_tokens=8192
         )
 
-        dspy.settings.configure(lm=gemini_model, adapter=dspy.JSONAdapter())
+        # ✅ Enable usage tracking for cost monitoring
+        dspy.settings.configure(lm=gemini_model, adapter=dspy.JSONAdapter(), track_usage=True)
         setup_time = __import__('time').time() - start_time
         print(f"[Python] DSPy model setup completed in {setup_time:.2f}s", file=sys.stderr)
         return gemini_model
@@ -530,7 +632,7 @@ def setup_dspy_model():
         print(f"[Python] DSPy model setup failed: {str(e)}", file=sys.stderr)
         raise
 
-def retry_dspy_extraction(extractor_module: TypedDocumentExtractor, dspy_image, max_retries=3, delay=5):
+def retry_dspy_extraction(extractor_module: TypedDocumentExtractor, dspy_image, image_count=1, max_retries=3, delay=5):
     """Retry DSPy extraction with exponential backoff for 503 errors"""
     import time
 
@@ -544,6 +646,19 @@ def retry_dspy_extraction(extractor_module: TypedDocumentExtractor, dspy_image, 
 
             prediction_time = time.time() - start_time
             print(f"[Extract] DSPy prediction completed in {prediction_time:.2f}s", file=sys.stderr)
+
+            # ✅ CRITICAL FIX: Log usage data to global collector after successful prediction
+            try:
+                # Get the current DSPy language model for usage tracking
+                current_lm = dspy.settings.lm
+                if current_lm:
+                    print(f"[Extract] Logging usage data to global collector", file=sys.stderr)
+                    log_gemini_usage(current_lm, "gemini-2.5-flash", image_count)
+                else:
+                    print(f"[Extract] Warning: No language model available for usage tracking", file=sys.stderr)
+            except Exception as usage_error:
+                print(f"[Extract] Warning: Failed to log usage data: {str(usage_error)}", file=sys.stderr)
+
             return result
         except Exception as e:
             error_str = str(e).lower()
@@ -712,7 +827,7 @@ def extract_document_data(document_type: str, image_input: str) -> Dict[str, Any
 
         # Run DSPy extraction with retry logic for 503 errors
         print(f"[Extract] Calling retry_dspy_extraction...", file=sys.stderr)
-        prediction = retry_dspy_extraction(extractor_module, dspy_image)
+        prediction = retry_dspy_extraction(extractor_module, dspy_image, 1)  # IC/payslip processes 1 image (first page)
         print(f"[Extract] retry_dspy_extraction returned successfully", file=sys.stderr)
 
         # --- START CRITICAL FIX (Supporting both extractor types) ---
@@ -934,7 +1049,16 @@ def extract_multi_payslip_data(image_inputs: List[str]) -> Dict[str, Any]:
         # Run DSPy extraction with retry logic - NOTE: Passing list of images to MultiPayslipExtractor
         print(f"[Extract] Calling retry_dspy_extraction for multi-payslip...", file=sys.stderr)
         # For multi-payslip, we need to modify retry logic to handle list of images
-        prediction = extractor_module(images=dspy_images)  # Direct call, skip retry for now
+        try:
+            prediction = extractor_module(images=dspy_images)  # Direct call, skip retry for now
+
+            # Note: Individual page usage is already tracked by MultiPayslipExtractor
+            # No need to log aggregate usage here to avoid double counting
+
+        except Exception as e:
+            print(f"[Extract] Multi-payslip extraction failed: {str(e)}", file=sys.stderr)
+            raise e
+
         print(f"[Extract] Multi-payslip extraction returned successfully", file=sys.stderr)
 
         # Get the MultiPayslipExtractionResult from prediction
@@ -1006,6 +1130,11 @@ def extract_and_merge_application_form_data(page_images: List[dspy.Image]) -> di
         print(f"[Map-Reduce] Extracting data from page {i}/{len(page_images)}...", file=sys.stderr)
         try:
             prediction = extractor(page_image=page_image)
+
+            # Log API usage for cost tracking
+            if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
+                log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
+
             page_data = prediction.form_data.model_dump()
             page_results.append({'page': i, 'data': page_data})
             confidences.append(page_data['confidence_score'])
@@ -1067,6 +1196,11 @@ def main():
             print(f"[Python] Unified extraction for {document_type}: {image_input[:100]}..." if len(image_input) > 100 else f"[Python] Unified extraction for {document_type}: {image_input}", file=sys.stderr)
             result = extract_document_data(document_type, image_input)
 
+        # Add usage data to result before outputting
+        if isinstance(result, dict):
+            result['usage'] = usage_collector.get_aggregated_usage()
+            print(f"[Python] Added usage data: {usage_collector.get_aggregated_usage()['total_calls']} API calls, {usage_collector.get_aggregated_usage()['total_tokens']} total tokens", file=sys.stderr)
+
         # ONLY print the final JSON result to stdout (no file=sys.stderr here)
         print(json.dumps(result, indent=2, cls=DateTimeEncoder))
 
@@ -1074,7 +1208,8 @@ def main():
         error_result = {
             'success': False,
             'error': f"Main function error: {str(e)}",
-            'error_type': type(e).__name__
+            'error_type': type(e).__name__,
+            'usage': usage_collector.get_aggregated_usage()  # Include usage even in error cases
         }
         print(json.dumps(error_result, indent=2, cls=DateTimeEncoder))
         sys.exit(1)

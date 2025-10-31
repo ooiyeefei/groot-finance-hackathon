@@ -228,7 +228,8 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
   const hasProcessingDocuments = application?.slot_details?.some(slot => {
     if (!slot.document) return false
     const status = slot.document.processing_status
-    return status === 'pending' || status === 'classifying' || status === 'pending_extraction' || status === 'extracting'
+    // Only these statuses are truly "processing" - draft/completed mean done
+    return status === 'pending' || status === 'classifying' || status === 'pending_extraction' || status === 'extracting' || status === 'analyzing'
   }) || false
 
   // Helper to get document processing status for slot
@@ -238,6 +239,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
     const status = slot.document.processing_status
     switch (status) {
       case 'completed':
+        return 'completed'
+      case 'draft':
+        // ✅ FIX: Draft status means extraction completed successfully, show as completed
         return 'completed'
       case 'failed':
       case 'classification_failed':
@@ -249,6 +253,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
       case 'pending_extraction':
         return 'pending_extraction'
       case 'extracting':
+        return 'extracting'
+      case 'analyzing':
+        // Analyzing status used during extraction phase
         return 'extracting'
       default:
         // ✅ PHASE 4K: Trust processing_status field - don't check extracted_data
@@ -574,9 +581,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
   const getSlotStatusColor = (status: string, isCritical: boolean) => {
     switch (status) {
       case 'completed':
-        return 'bg-green-900/20 text-green-300 border-green-700/50'
+        return 'bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/30'
       case 'processing':
-        return 'bg-blue-900/20 text-blue-300 border-blue-700/50'
+        return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
       case 'classifying':
         return 'bg-indigo-900/20 text-indigo-300 border-indigo-700/50'
       case 'pending_extraction':
@@ -588,7 +595,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
       case 'failed':
         return 'bg-red-900/20 text-red-300 border-red-700/50'
       case 'empty':
-        return isCritical ? 'bg-warning/20 text-warning border-warning/30' : 'bg-muted/20 text-muted-foreground border-muted/30'
+        return isCritical ? 'bg-red-900/20 text-red-600 dark:text-red-300 border-red-700/50' : 'bg-muted/20 text-muted-foreground border-muted/30'
       default:
         return 'bg-muted/20 text-muted-foreground border-muted/30'
     }
@@ -1085,7 +1092,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                         </div>
                       ))}
                     </div>
-                  ) : slot.document.processing_status === 'completed' && slot.document.extracted_data ? (
+                  ) : (slot.document.processing_status === 'completed' || slot.document.processing_status === 'draft') && slot.document.extracted_data ? (
                     <div className="bg-record-layer-2 border border-record-border rounded-lg">
                       {/* Combined Header with Filename and Actions */}
                       <div
@@ -1099,7 +1106,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                           </div>
                           {/* Extracted Status - Show above collapsible region */}
                           <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 px-2 py-1 bg-success/20 text-success border border-success/30 rounded-md">
+                            <div className="flex items-center gap-2 px-2 py-1 bg-green-500/10 text-green-700 dark:text-green-300 border border-green-500/30 rounded-md">
                               <CheckCircle className="w-4 h-4" />
                               <span className="text-sm font-medium">
                                 {slot.document.document_type === 'ic' && 'Identity Card Data Extracted'}
@@ -1203,7 +1210,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          {slot.document.processing_status === 'completed' && (
+                          {(slot.document.processing_status === 'completed' || slot.document.processing_status === 'draft') && (
                             <>
                               <Button
                                 size="sm"
@@ -1239,9 +1246,9 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                         <div>Uploaded: {formatDate(slot.document.uploaded_at)}</div>
                         {(slot.document.processing_status === 'failed' || slot.document.processing_status === 'classification_failed') && (
                           <div className="space-y-2">
-                            <div className="flex items-start gap-2 px-2 py-1 bg-danger/20 text-danger border border-danger/30 rounded-md">
+                            <div className="flex items-start gap-2 px-2 py-1 bg-red-900/20 border border-red-700/50 rounded-md">
                               <span className="mt-0.5">🚫</span>
-                              <div>
+                              <div className="text-red-600 dark:text-red-300">
                                 {slot.document.error_message || 'Document processing failed. Please try uploading again.'}
                               </div>
                             </div>
@@ -1299,8 +1306,8 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
 
                       {/* Processing Status Display */}
                       {(['classifying', 'pending_extraction', 'extracting'].includes(slot.document.processing_status)) && (
-                        <div className="mt-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg">
-                          <div className="flex items-center gap-2 text-blue-300">
+                        <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                          <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
                             {slot.document.processing_status === 'classifying' && (
                               <>
                                 <Brain className="w-4 h-4 animate-spin" />
@@ -1321,7 +1328,7 @@ export default function ApplicationDetailContainer({ applicationId }: Applicatio
                             )}
                           </div>
                           <div className="mt-2">
-                            <div className="flex justify-between text-xs text-blue-400 mb-1">
+                            <div className="flex justify-between text-xs text-blue-600 dark:text-blue-400 mb-1">
                               <span>Processing</span>
                               <span>{isPolling ? 'Live updates enabled' : 'Refreshing...'}</span>
                             </div>

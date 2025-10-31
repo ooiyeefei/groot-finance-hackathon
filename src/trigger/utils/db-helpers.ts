@@ -65,6 +65,17 @@ export async function updateDocumentStatus(
       'extraction_failed': 'failed',
     };
     mappedStatus = statusMap[status] || status;
+  } else if (tableName === 'application_documents') {
+    // Map document processing statuses to valid application_documents statuses
+    // Allowed: draft, uploading, analyzing, submitted, approved, rejected, failed, classifying, classification_failed, cancelled
+    const statusMap: { [key: string]: string } = {
+      'pending_extraction': 'analyzing',  // Map pending_extraction to analyzing
+      'extracting': 'analyzing',  // Map extracting to analyzing
+      'processing': 'analyzing',  // Map processing to analyzing
+      'extraction_failed': 'failed',  // Map extraction_failed to failed
+      'completed': 'draft'  // Map completed to draft (successfully processed, ready for submission)
+    };
+    mappedStatus = statusMap[status] || status;
   } else if (tableName === 'invoices') {
     // Map document processing statuses to valid invoices statuses
     const statusMap: { [key: string]: string } = {
@@ -131,13 +142,28 @@ export async function updateExtractionResults(
   const usesStatusColumn = tableName === 'expense_claims' || tableName === 'invoices';
   const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
 
+  // Map final status based on table domain
+  let finalStatus: string;
+  if (tableName === 'invoices') {
+    finalStatus = 'pending'; // invoices use 'pending' for completed extraction
+  } else if (tableName === 'expense_claims') {
+    finalStatus = 'paid'; // expense_claims use 'paid' for completed extraction
+  } else if (tableName === 'application_documents') {
+    finalStatus = 'completed'; // ✅ Use 'completed' for proper workflow (was 'draft')
+  } else {
+    finalStatus = 'completed'; // fallback for other tables
+  }
+
   const updateData: any = {
-    [statusColumn]: tableName === 'invoices' ? 'pending' : (usesStatusColumn ? 'paid' : 'completed'), // invoices use 'pending' for completed status
+    [statusColumn]: finalStatus,
     extracted_data: result.extracted_data,
     confidence_score: result.confidence_score,
     processed_at: new Date().toISOString()
   };
 
+  console.log(`[DB] 🔍 DEBUG: updateExtractionResults called for ${tableName}.${documentId}`);
+  console.log(`[DB] 🔍 DEBUG: statusColumn: ${statusColumn}, finalStatus: ${finalStatus}`);
+  console.log(`[DB] 🔍 DEBUG: updateData:`, JSON.stringify(updateData, null, 2));
   console.log(`[DB] Updating ${tableName}.${documentId} extraction results`);
 
   const { error } = await supabase
@@ -146,11 +172,13 @@ export async function updateExtractionResults(
     .eq('id', documentId);
 
   if (error) {
-    console.error(`[DB] Failed to update extraction results in ${tableName}:`, error);
+    console.error(`[DB] ❌ Failed to update extraction results in ${tableName}:`, error);
+    console.error(`[DB] ❌ Error code: ${error.code}, Message: ${error.message}`);
     throw new Error(`Failed to update extraction results: ${error.message}`);
   }
 
-  console.log(`[DB] Successfully updated ${tableName}.${documentId} extraction results`);
+  console.log(`[DB] ✅ Successfully updated ${tableName}.${documentId} extraction results`);
+  console.log(`[DB] ✅ Document should now have status: ${finalStatus}`);
 }
 
 export async function fetchDocumentImage(
@@ -231,9 +259,13 @@ export async function updateDocumentClassification(
     const usesStatusColumn = tableName === 'invoices';
     const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
 
-    // Map status values to valid ones for invoices table
+    // Map status values to valid ones for invoices and application_documents tables
     let mappedStatus = status;
     if (tableName === 'invoices') {
+      mappedStatus = status === 'pending_extraction' ? 'analyzing' :
+                    status === 'classification_failed' ? 'classification_failed' : status;
+    } else if (tableName === 'application_documents') {
+      // Map to valid application_documents statuses
       mappedStatus = status === 'pending_extraction' ? 'analyzing' :
                     status === 'classification_failed' ? 'classification_failed' : status;
     }

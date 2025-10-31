@@ -265,9 +265,9 @@
     --info-hover: 221 83% 17%;        /* Info hover state */
 
     /* Destructive Actions */
-    --destructive: 0 63% 31%;         /* Dark red */
-    --destructive-foreground: 210 40% 98%; /* Light text on destructive */
-    --destructive-hover: 0 63% 35%;   /* Destructive hover state */
+    --destructive: 0 84% 60%;         /* Red background (same as light mode) */
+    --destructive-foreground: 0 0% 100%; /* White text on red background */
+    --destructive-hover: 0 84% 55%;   /* Destructive hover state */
 
     /* Borders & Inputs */
     --border: 217 33% 17%;            /* Dark borders */
@@ -325,7 +325,7 @@
 
 /* Light Mode Badge Styles */
 .light .badge-info-metadata {
-  @apply border border-blue-200 bg-blue-50 text-blue-800;
+  @apply border border-blue-500/30 bg-blue-500/10 text-blue-600;
 }
 
 .light .badge-success-status {
@@ -342,7 +342,7 @@
 
 /* Dark Mode Badge Styles */
 .dark .badge-info-metadata {
-  @apply border border-blue-700/30 bg-blue-900/20 text-blue-300 backdrop-blur-sm;
+  @apply border border-blue-500/30 bg-blue-500/10 text-blue-400 backdrop-blur-sm;
 }
 
 .dark .badge-success-status {

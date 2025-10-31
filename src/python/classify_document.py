@@ -27,6 +27,120 @@ def truncate_error_message(message: str, max_length: int = 500) -> str:
         return message
     return message[:max_length] + f"... [truncated, original length: {len(message)}]"
 
+def log_gemini_usage(lm, model_name: str, image_count: int = 0):
+    """
+    Log Gemini API usage for cost tracking with robust 4-tier fallback system.
+
+    Args:
+        lm: The configured dspy.LM object
+        model_name: Name of the Gemini model being used
+        image_count: Number of images sent in the API call
+
+    Note: Requires dspy.settings.configure(track_usage=True) to populate lm.history with usage data
+    """
+    try:
+        # Debug: Check if track_usage is enabled
+        import dspy
+        track_usage_enabled = getattr(dspy.settings, 'track_usage', False)
+        if not track_usage_enabled:
+            print(f"[Usage] WARNING: track_usage is disabled - usage data will NOT be available. Enable with dspy.settings.configure(track_usage=True)", file=sys.stderr)
+            return
+
+        if not (hasattr(lm, 'history') and lm.history):
+            print(f"[Usage] WARNING: LM history is empty or not available - model may not have been called yet", file=sys.stderr)
+            return
+
+        # Get the most recent API call from history
+        last_call = lm.history[-1]
+        print(f"[Usage] DEBUG: last_call type: {type(last_call)}, keys: {last_call.keys() if isinstance(last_call, dict) else 'N/A'}", file=sys.stderr)
+
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        fallback_used = None
+
+        # ============ TIER 1: Standard 'usage' dictionary ============
+        usage = last_call.get('usage') if isinstance(last_call, dict) else None
+        if usage and isinstance(usage, dict) and usage:  # Check it's not None or empty dict
+            prompt_tokens = usage.get('prompt_tokens', usage.get('input_tokens', 0))
+            completion_tokens = usage.get('completion_tokens', usage.get('output_tokens', 0))
+            total_tokens = usage.get('total_tokens', prompt_tokens + completion_tokens)
+            if total_tokens > 0:
+                fallback_used = "Tier 1: Standard usage dict"
+                print(f"[Usage] {fallback_used}", file=sys.stderr)
+
+        # ============ TIER 2: Check 'cost' field ============
+        if total_tokens == 0 and isinstance(last_call, dict):
+            cost_data = last_call.get('cost')
+            if cost_data:
+                print(f"[Usage] Tier 2: Found cost field but no token extraction method implemented", file=sys.stderr)
+                fallback_used = "Tier 2: Cost field (no tokens)"
+
+        # ============ TIER 3: Raw response 'usage_metadata' (Gemini API) ============
+        if total_tokens == 0 and isinstance(last_call, dict):
+            response = last_call.get('response')
+            if response:
+                # Try accessing as object attribute
+                if hasattr(response, 'usage_metadata'):
+                    try:
+                        metadata = response.usage_metadata
+                        # Google Gemini uses these field names
+                        prompt_tokens = getattr(metadata, 'prompt_token_count', 0)
+                        completion_tokens = getattr(metadata, 'candidates_token_count', 0)
+                        total_tokens = getattr(metadata, 'total_token_count', prompt_tokens + completion_tokens)
+                        if total_tokens > 0:
+                            fallback_used = "Tier 3: response.usage_metadata (object)"
+                            print(f"[Usage] {fallback_used}", file=sys.stderr)
+                    except Exception as e:
+                        print(f"[Usage] Tier 3 object access failed: {e}", file=sys.stderr)
+
+                # Try accessing as dict
+                if total_tokens == 0 and isinstance(response, dict):
+                    metadata = response.get('usage_metadata', {})
+                    if metadata:
+                        prompt_tokens = metadata.get('prompt_token_count', 0)
+                        completion_tokens = metadata.get('candidates_token_count', 0)
+                        total_tokens = metadata.get('total_token_count', prompt_tokens + completion_tokens)
+                        if total_tokens > 0:
+                            fallback_used = "Tier 3: response.usage_metadata (dict)"
+                            print(f"[Usage] {fallback_used}", file=sys.stderr)
+
+        # ============ TIER 4: Estimation as last resort ============
+        if total_tokens == 0:
+            print(f"[Usage] Tier 4: Estimating tokens based on content length", file=sys.stderr)
+            # Estimate from prompt/response content
+            prompt_content = ""
+            response_content = ""
+
+            if isinstance(last_call, dict):
+                # Get prompt from messages
+                messages = last_call.get('messages', [])
+                if messages:
+                    prompt_content = str(messages)
+
+                # Get response outputs
+                outputs = last_call.get('outputs')
+                if outputs:
+                    response_content = str(outputs)
+
+            # Heuristic: 1 token ≈ 4 characters, plus ~258 tokens per image
+            prompt_tokens = len(prompt_content) // 4 + (image_count * 258)
+            completion_tokens = len(response_content) // 4
+            total_tokens = prompt_tokens + completion_tokens
+            fallback_used = "Tier 4: Estimated (content length)"
+
+        # Log the final usage data
+        if total_tokens > 0:
+            print(f"[Usage] Model: {model_name}, Images: {image_count}, Input Tokens: {prompt_tokens}, Output Tokens: {completion_tokens}, Total Tokens: {total_tokens} [{fallback_used}]", file=sys.stderr)
+        else:
+            print(f"[Usage] WARNING: All fallback tiers failed - could not extract or estimate token usage", file=sys.stderr)
+            print(f"[Usage] DEBUG: last_call content: {str(last_call)[:500]}...", file=sys.stderr)
+
+    except Exception as e:
+        print(f"[Usage] ERROR: Failed to log usage - {type(e).__name__}: {str(e)}", file=sys.stderr)
+        import traceback
+        print(f"[Usage] DEBUG: Traceback: {traceback.format_exc()}", file=sys.stderr)
+
 def download_image_from_url(url: str) -> bytes:
     """Download image from URL with timeout and error handling"""
     try:
@@ -101,8 +215,9 @@ class DocumentClassifier:
             temperature=0.0,
             max_tokens=8192
         )
-        # Use JSONAdapter without structured output to avoid warnings
-        dspy.settings.configure(lm=self.model)
+        # ✅ CRITICAL FIX: Enable usage tracking to populate lm.history with token usage
+        # Without track_usage=True, lm.history will NOT contain usage data
+        dspy.settings.configure(lm=self.model, track_usage=True)
 
         # Import the classification signature
         from signatures.classify_signature import DocumentClassificationSignature
@@ -166,6 +281,9 @@ class DocumentClassifier:
                 expected_type=expected_type,
                 slot_context=slot_context
             )
+
+            # Log API usage for cost tracking
+            log_gemini_usage(self.model, "gemini-2.5-flash", image_count=1)
 
             # Extract classification result (already a Pydantic object)
             classification = prediction.classification

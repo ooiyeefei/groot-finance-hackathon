@@ -34,14 +34,13 @@ export const extractApplicationFormData = task({
   console.log(`[ExtractApplication] Image storage path: ${imageStoragePath}`);
 
   try {
-    // Step 1: Update status to pending_extraction (consistent with payslip flow)
-    await updateDocumentStatus(documentId, 'pending_extraction', undefined, tableName);
+    // Step 1: Update status to analyzing (starts extraction process)
+    // Note: For application_documents table, we use 'analyzing' instead of 'pending_extraction'
+    // because the constraint only allows: pending, uploading, analyzing, paid, overdue, disputed, failed, cancelled, classifying, classification_failed
+    await updateDocumentStatus(documentId, 'analyzing', undefined, tableName);
 
     // Brief delay to allow UI to show the status update
     await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Step 2: Update status to extracting
-    await updateDocumentStatus(documentId, 'extracting', undefined, tableName);
 
     // Fetch document metadata to determine path handling approach
     const { data: document, error: fetchError } = await supabase
@@ -130,13 +129,23 @@ export const extractApplicationFormData = task({
     console.log(`[ExtractApplication] Python script result type: ${typeof rawResult}`);
     console.log(`[ExtractApplication] Python script result preview:`, JSON.stringify(rawResult).substring(0, 300));
 
-    // Enhanced debugging for extraction quality analysis
+    // ✅ Extract and log Gemini API usage tracking from stderr
     if (rawResult && typeof rawResult === 'object' && 'stderr' in rawResult) {
       const stderr = (rawResult as any).stderr || '';
       const stdout = (rawResult as any).stdout || '';
 
       console.log(`[ExtractApplication] Python stderr length: ${stderr.length}`);
       console.log(`[ExtractApplication] Python stdout length: ${stdout.length}`);
+
+      // ✅ Keep stderr usage logs for debugging (but primary tracking is now in JSON)
+      if (stderr) {
+        const usageLines = stderr.match(/\[Usage\] Model: .*?, Images: \d+, Input Tokens: \d+, Output Tokens: \d+, Total Tokens: \d+/g);
+        if (usageLines && usageLines.length > 0) {
+          console.log(`[ExtractApplication] 🔍 Found ${usageLines.length} usage entries in stderr (debug tracking)`);
+        } else {
+          console.log(`[ExtractApplication] 🔍 No usage data found in stderr - will use JSON output instead`);
+        }
+      }
 
       // Log key parts of stderr for debugging
       const stderrLines = stderr.split('\n');
@@ -164,6 +173,27 @@ export const extractApplicationFormData = task({
         const stdout = (rawResult as any).stdout.trim();
         pythonResult = JSON.parse(stdout);
         console.log(`[ExtractApplication] Successfully parsed Python JSON output`);
+
+        // ✅ Extract and log robust Gemini API usage tracking from JSON output
+        if (pythonResult.usage) {
+          const usage = pythonResult.usage;
+          console.log(`[ExtractApplication] 💰 ROBUST USAGE TRACKING:`);
+          console.log(`[ExtractApplication] 💰 Total API Calls: ${usage.total_calls}`);
+          console.log(`[ExtractApplication] 💰 Total Images: ${usage.total_images}`);
+          console.log(`[ExtractApplication] 💰 Total Input Tokens: ${usage.total_input_tokens}`);
+          console.log(`[ExtractApplication] 💰 Total Output Tokens: ${usage.total_output_tokens}`);
+          console.log(`[ExtractApplication] 💰 Total Tokens: ${usage.total_tokens}`);
+
+          // Log individual page breakdowns if available
+          if (usage.entries && usage.entries.length > 0) {
+            console.log(`[ExtractApplication] 💰 Per-page breakdown:`);
+            usage.entries.forEach((entry: any, index: number) => {
+              console.log(`[ExtractApplication] 💰 Page ${index + 1}: ${entry.model}, Images: ${entry.images}, Input: ${entry.input_tokens}, Output: ${entry.output_tokens}, Total: ${entry.total_tokens}`);
+            });
+          }
+        } else {
+          console.log(`[ExtractApplication] ⚠️ No usage data found in JSON output - Python script may not be tracking usage properly`);
+        }
       } catch (parseError) {
         console.error(`[ExtractApplication] Failed to parse Python JSON output:`, parseError);
         console.log(`[ExtractApplication] Raw stdout for debugging:`, (rawResult as any).stdout);

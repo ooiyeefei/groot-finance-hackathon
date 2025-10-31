@@ -53,7 +53,8 @@ class PayslipDateValidator:
             temperature=0.1,  # Low temperature for consistent parsing
             max_tokens=4096
         )
-        dspy.settings.configure(lm=self.model)
+        # ✅ Enable usage tracking for cost monitoring
+        dspy.settings.configure(lm=self.model, track_usage=True)
 
         # Create the validator using ChainOfThought for better reasoning
         self.validator = dspy.ChainOfThought(DateValidationSignature)

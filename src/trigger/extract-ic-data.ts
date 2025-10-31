@@ -34,14 +34,13 @@ export const extractIcData = task({
   console.log(`[ExtractIC] Image storage path: ${imageStoragePath}`);
 
   try {
-    // Step 1: Update status to pending_extraction (consistent with payslip flow)
-    await updateDocumentStatus(documentId, 'pending_extraction', undefined, tableName);
+    // Step 1: Update status to analyzing (starts extraction process)
+    // Note: For application_documents table, we use 'analyzing' instead of 'pending_extraction'
+    // because the constraint only allows: pending, uploading, analyzing, paid, overdue, disputed, failed, cancelled, classifying, classification_failed
+    await updateDocumentStatus(documentId, 'analyzing', undefined, tableName);
 
     // Brief delay to allow UI to show the status update
     await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Step 2: Update status to extracting
-    await updateDocumentStatus(documentId, 'extracting', undefined, tableName);
 
     // Fetch document metadata to determine path handling approach
     const { data: document, error: fetchError } = await supabase
@@ -129,6 +128,46 @@ export const extractIcData = task({
     // Debug: Log what Python script returned (detailed like process-document-ocr)
     console.log(`[ExtractIC] Python script result type: ${typeof rawResult}`);
     console.log(`[ExtractIC] Python script result preview:`, JSON.stringify(rawResult).substring(0, 300));
+
+    // ✅ Extract and log Gemini API usage tracking from stderr
+    if (rawResult && typeof rawResult === 'object' && 'stderr' in rawResult) {
+      const stderr = (rawResult as any).stderr || '';
+
+      // Extract usage logs from Python stderr - capture ALL usage lines
+      if (stderr) {
+        const usageLines = stderr.match(/\[Usage\] Model: .*?, Images: \d+, Input Tokens: \d+, Output Tokens: \d+, Total Tokens: \d+/g);
+        if (usageLines && usageLines.length > 0) {
+          console.log(`[ExtractIC] 💰 Found ${usageLines.length} Gemini API usage entries:`);
+          let totalInputTokens = 0;
+          let totalOutputTokens = 0;
+          let totalImages = 0;
+
+          usageLines.forEach((line: string, index: number) => {
+            const match = line.match(/\[Usage\] Model: (.*), Images: (\d+), Input Tokens: (\d+), Output Tokens: (\d+), Total Tokens: (\d+)/);
+            if (match) {
+              const [, model, images, inputTokens, outputTokens, totalTokens] = match;
+              console.log(`[ExtractIC] 💰 Page ${index + 1}: Model: ${model}, Images: ${images}, Input: ${inputTokens} tokens, Output: ${outputTokens} tokens, Total: ${totalTokens} tokens`);
+              totalInputTokens += parseInt(inputTokens);
+              totalOutputTokens += parseInt(outputTokens);
+              totalImages += parseInt(images);
+            }
+          });
+
+          console.log(`[ExtractIC] 💰 TOTAL USAGE - Images: ${totalImages}, Input: ${totalInputTokens} tokens, Output: ${totalOutputTokens} tokens, Total: ${totalInputTokens + totalOutputTokens} tokens`);
+        } else {
+          console.log(`[ExtractIC] ⚠️ WARNING: Usage logs expected but no complete usage lines found in stderr`);
+          // Show partial stderr for debugging when regex fails
+          if (stderr.length <= 2000) {
+            console.log(`[ExtractIC] 🔍 DEBUG: Full stderr for debugging:`, stderr);
+          } else {
+            console.log(`[ExtractIC] 🔍 DEBUG: stderr content (last 1500 chars): ${stderr.substring(Math.max(0, stderr.length - 1500))}`);
+          }
+        }
+      } else {
+        console.log(`[ExtractIC] ⚠️ WARNING: stderr is empty - Python script may not be logging usage`);
+      }
+    }
+
     console.log(`[ExtractIC] Python script raw result (full):`, JSON.stringify(rawResult, null, 2));
 
     // Extract actual result from python.runScript response
@@ -139,6 +178,27 @@ export const extractIcData = task({
         const stdout = (rawResult as any).stdout.trim();
         pythonResult = JSON.parse(stdout);
         console.log(`[ExtractIC] Successfully parsed Python JSON output`);
+
+        // ✅ Extract and log robust Gemini API usage tracking from JSON output
+        if (pythonResult.usage) {
+          const usage = pythonResult.usage;
+          console.log(`[ExtractIC] 💰 ROBUST USAGE TRACKING:`);
+          console.log(`[ExtractIC] 💰 Total API Calls: ${usage.total_calls}`);
+          console.log(`[ExtractIC] 💰 Total Images: ${usage.total_images}`);
+          console.log(`[ExtractIC] 💰 Total Input Tokens: ${usage.total_input_tokens}`);
+          console.log(`[ExtractIC] 💰 Total Output Tokens: ${usage.total_output_tokens}`);
+          console.log(`[ExtractIC] 💰 Total Tokens: ${usage.total_tokens}`);
+
+          // Log individual page breakdowns if available
+          if (usage.entries && usage.entries.length > 0) {
+            console.log(`[ExtractIC] 💰 Per-page breakdown:`);
+            usage.entries.forEach((entry: any, index: number) => {
+              console.log(`[ExtractIC] 💰 Page ${index + 1}: ${entry.model}, Images: ${entry.images}, Input: ${entry.input_tokens}, Output: ${entry.output_tokens}, Total: ${entry.total_tokens}`);
+            });
+          }
+        } else {
+          console.log(`[ExtractIC] ⚠️ No usage data found in JSON output - Python script may not be tracking usage properly`);
+        }
       } catch (parseError) {
         console.error(`[ExtractIC] Failed to parse Python JSON output:`, parseError);
         console.log(`[ExtractIC] Raw stdout for debugging:`, (rawResult as any).stdout);
@@ -190,8 +250,12 @@ export const extractIcData = task({
     }
 
     // Update database with extraction results
+    console.log(`[ExtractIC] 🔍 DEBUG: About to call updateExtractionResults`);
+    console.log(`[ExtractIC] 🔍 DEBUG: documentId: ${documentId}, tableName: ${tableName}`);
+    console.log(`[ExtractIC] 🔍 DEBUG: extractionResult.success: ${extractionResult.success}`);
     console.log(`[ExtractIC] Updating database with extracted data`);
     await updateExtractionResults(documentId, extractionResult, tableName);  // ✅ PHASE 4C: Pass tableName
+    console.log(`[ExtractIC] ✅ updateExtractionResults call completed successfully`);
 
     // Trigger downstream image annotation if bounding boxes exist
     if (extractionResult.extracted_data?.metadata?.boundingBoxes) {

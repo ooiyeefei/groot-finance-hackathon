@@ -115,9 +115,9 @@ export default function ICDataDisplay({ data }: ICDataDisplayProps) {
         )}
 
         {/* AI Extraction Warning - Bottom Left Corner */}
-        <div className="flex items-center gap-2 mt-4 p-2 bg-amber-900/20 border border-amber-700/50 rounded">
-          <span className="text-amber-400">⚠️</span>
-          <span className="text-xs text-amber-300 font-medium">AI Extraction - Please verify accuracy</span>
+        <div className="flex items-center gap-2 mt-4 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">
+          <span className="text-yellow-700 dark:text-yellow-400">⚠️</span>
+          <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">AI Extraction - Please verify accuracy</span>
         </div>
       </div>
     </div>

@@ -25,6 +25,38 @@ from pydantic import BaseModel, Field
 from typing import Literal
 
 
+def log_gemini_usage(lm, model_name: str, image_count: int = 0):
+    """
+    Log Gemini API usage for cost tracking.
+
+    Args:
+        lm: The configured dspy.LM object
+        model_name: Name of the Gemini model being used
+        image_count: Number of images sent in the API call
+    """
+    try:
+        if hasattr(lm, 'history') and lm.history:
+            # Get the most recent API call from history
+            last_call = lm.history[-1]
+
+            # Extract usage data from the last call
+            usage = last_call.get('usage', {}) if isinstance(last_call, dict) else {}
+
+            if usage:
+                prompt_tokens = usage.get('prompt_tokens', usage.get('input_tokens', 0))
+                completion_tokens = usage.get('completion_tokens', usage.get('output_tokens', 0))
+                total_tokens = usage.get('total_tokens', prompt_tokens + completion_tokens)
+
+                # Print usage log to stderr for Trigger.dev logs
+                print(f"[Usage] Model: {model_name}, Images: {image_count}, Input Tokens: {prompt_tokens}, Output Tokens: {completion_tokens}, Total Tokens: {total_tokens}", file=sys.stderr)
+            else:
+                print(f"[Usage] Model: {model_name}, Images: {image_count}, No usage data available in history", file=sys.stderr)
+        else:
+            print(f"[Usage] Model: {model_name}, Images: {image_count}, LM history not available", file=sys.stderr)
+    except Exception as e:
+        print(f"[Usage] Failed to log usage: {str(e)}", file=sys.stderr)
+
+
 class ExtractedLineItem(BaseModel):
     description: str = Field(..., description="Item description/name")
     quantity: Optional[float] = Field(None, description="Quantity purchased")
@@ -106,6 +138,10 @@ class ReceiptExtractor(dspy.Module):
             receipt_image=dspy_image,
             available_categories=categories_json
         )
+
+        # Log API usage for cost tracking
+        if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
+            log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
 
         return prediction.extracted_data
 
@@ -197,7 +233,8 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
             temperature=0.1,
             max_tokens=4000
         )
-        dspy.settings.configure(lm=gemini_lm, adapter=dspy.JSONAdapter())
+        # ✅ Enable usage tracking for cost monitoring
+        dspy.settings.configure(lm=gemini_lm, adapter=dspy.JSONAdapter(), track_usage=True)
 
         # Run extraction
         print("🧠 Running DSPy receipt extraction...", file=sys.stderr)
