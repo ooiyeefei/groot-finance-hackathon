@@ -113,9 +113,10 @@ export async function getCachedJWTToken(clerkUserId: string): Promise<string | n
     const { auth } = await import('@clerk/nextjs/server')
     const { getToken } = await auth()
 
-    // Get Supabase-compatible JWT using Clerk's template system
-    // This generates a JWT that Supabase can validate
-    const jwtToken = await getToken({ template: 'supabase' })
+    // Get default Clerk JWT for native Supabase integration
+    // Supabase is configured to trust Clerk's JWT issuer directly
+    // See: https://clerk.com/docs/guides/development/integrations/databases/supabase
+    const jwtToken = await getToken()
 
     if (jwtToken) {
       // Validate JWT structure before caching
