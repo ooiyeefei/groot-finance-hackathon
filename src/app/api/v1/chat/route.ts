@@ -8,6 +8,7 @@
  * - Handles HTTP concerns (auth, validation, error mapping)
  * - Business logic in service layer
  * - Rate limited for AI usage (30 messages/hour per user)
+ * - ✅ Zod validation for request validation
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -15,6 +16,7 @@ import { auth } from '@clerk/nextjs/server'
 import { getUserData } from '@/lib/db/supabase-server'
 import { sendChatMessage } from '@/domains/chat/lib/chat.service'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
+import { validateBody, sendChatMessageSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting for AI chat interactions (30 messages per hour)
@@ -26,6 +28,7 @@ export async function POST(request: NextRequest) {
   if (chatRateLimit) {
     return chatRateLimit // Return rate limit error response
   }
+
   try {
     // Authenticate user
     const { userId } = await auth()
@@ -40,13 +43,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No business context found' }, { status: 400 })
     }
 
-    // Parse and validate request
-    const body = await request.json()
-    const { message, conversationId, language } = body
-
-    if (!message || message.trim() === '') {
-      return NextResponse.json({ error: 'Message is required' }, { status: 400 })
+    // ✅ Validate request body with Zod
+    const validated = await validateBody(request, sendChatMessageSchema)
+    if (!validated.success) {
+      return validated.error
     }
+
+    const { message, conversation_id, language, context } = validated.data
 
     console.log(`[Chat V1 API] Processing message for user ${userId}`)
 
@@ -57,7 +60,7 @@ export async function POST(request: NextRequest) {
       userData.business_id,
       {
         message,
-        conversationId,
+        conversationId: conversation_id,
         language
       }
     )

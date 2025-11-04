@@ -11,6 +11,7 @@ import { CreateExpenseClaimRequest, ExpenseClaimListParams } from '@/domains/exp
 import { getBusinessExpenseCategories } from '@/domains/expense-claims/lib/expense-category-mapper'
 import { getUserData, createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
+import { validateQuery, validateBody, validateFormData, listExpenseClaimsQuerySchema, createExpenseClaimSchema, createExpenseClaimFileSchema } from '@/lib/validations'
 
 /**
  * GET /api/v1/expense-claims
@@ -32,23 +33,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { searchParams } = new URL(request.url)
-
-    // Parse query parameters
-    const params: ExpenseClaimListParams = {
-      page: parseInt(searchParams.get('page') || '1'),
-      limit: Math.min(parseInt(searchParams.get('limit') || '20'), 100),
-      status: searchParams.get('status') as any,
-      expense_category: searchParams.get('expense_category') || undefined,
-      user_id: searchParams.get('user_id') || undefined,
-      date_from: searchParams.get('date_from') || undefined,
-      date_to: searchParams.get('date_to') || undefined,
-      search: searchParams.get('search') || undefined,
-      sort_by: (searchParams.get('sort_by') as any) || 'created_at',
-      sort_order: (searchParams.get('sort_order') as any) || 'desc',
-      check_duplicate: searchParams.get('check_duplicate') === 'true',
-      approver: searchParams.get('approver') as any
+    // ✅ Validate query parameters with Zod
+    const validated = validateQuery(request, listExpenseClaimsQuerySchema)
+    if (!validated.success) {
+      return validated.error
     }
+
+    const params: ExpenseClaimListParams = validated.data as any
 
     const result = await listExpenseClaims(userId, params)
 
@@ -111,72 +102,39 @@ export async function POST(request: NextRequest) {
     let createRequest: CreateExpenseClaimRequest
 
     if (isFileUpload) {
-      // File upload mode
-      const formData = await request.formData()
-      const file = formData.get('file') as File
-      const processingMode = formData.get('processing_mode') as string
-
-      if (!file) {
-        return NextResponse.json(
-          { success: false, error: 'No file provided' },
-          { status: 400 }
-        )
+      // ✅ Validate file upload with Zod
+      const validated = await validateFormData(request, createExpenseClaimFileSchema)
+      if (!validated.success) {
+        return validated.error
       }
 
-      if (!processingMode || !['ai', 'manual'].includes(processingMode)) {
-        return NextResponse.json(
-          { success: false, error: 'Invalid processing_mode. Must be "ai" or "manual"' },
-          { status: 400 }
-        )
-      }
-
-      // For AI processing, leave expense_category null - trigger.dev job will determine it
-      let expenseCategory = formData.get('expense_category') as string || null
-
-      console.log(`[AI Processing] Creating expense claim without category - trigger.dev job will determine it`)
-
-      // Extract other form fields
+      // Map validated data to CreateExpenseClaimRequest
+      const validatedData = validated.data
       createRequest = {
-        description: formData.get('description') as string || 'Receipt Upload',
-        business_purpose: formData.get('business_purpose') as string || 'Business Expense',
-        expense_category: expenseCategory, // Keep null for AI processing
-        original_amount: parseFloat(formData.get('original_amount') as string) || 0,
-        original_currency: (formData.get('original_currency') as string || 'SGD') as any,
-        transaction_date: formData.get('transaction_date') as string || new Date().toISOString().split('T')[0],
-        vendor_name: formData.get('vendor_name') as string || '',
-        vendor_id: formData.get('vendor_id') as string || undefined,
-        reference_number: formData.get('reference_number') as string || undefined,
-        notes: formData.get('notes') as string || undefined,
-        storage_path: formData.get('storage_path') as string || undefined,
+        description: validatedData.description,
+        business_purpose: validatedData.business_purpose,
+        expense_category: validatedData.expense_category ?? null, // Convert undefined to null
+        original_amount: validatedData.original_amount,
+        original_currency: validatedData.original_currency,
+        transaction_date: validatedData.transaction_date,
+        vendor_name: validatedData.vendor_name ?? '',
+        vendor_id: validatedData.vendor_id,
+        reference_number: validatedData.reference_number,
+        notes: validatedData.notes,
+        storage_path: validatedData.storage_path,
         line_items: [],
-        file: file,
-        processing_mode: processingMode as 'ai' | 'manual'
+        file: validatedData.file,
+        processing_mode: validatedData.processing_mode
       }
     } else {
-      // JSON mode - manual entry
-      createRequest = await request.json()
-    }
-
-    // Validate required fields based on processing mode
-    // For AI processing mode, be more lenient with validation since AI will fill in the data
-    const isAIProcessing = createRequest.processing_mode === 'ai'
-
-    if (!createRequest.description || !createRequest.business_purpose ||
-        (createRequest.original_amount === null || createRequest.original_amount === undefined) ||
-        !createRequest.original_currency || !createRequest.transaction_date) {
-
-      // For AI processing, provide more helpful validation
-      if (isAIProcessing) {
-        return NextResponse.json(
-          { success: false, error: 'AI processing mode requires basic form fields. Missing required fields (will be updated by AI): description, business_purpose, original_amount, original_currency, transaction_date' },
-          { status: 400 }
-        )
-      } else {
-        return NextResponse.json(
-          { success: false, error: 'Missing required fields: description, business_purpose, original_amount, original_currency, transaction_date' },
-          { status: 400 }
-        )
+      // ✅ Validate JSON body with Zod
+      const validated = await validateBody(request, createExpenseClaimSchema)
+      if (!validated.success) {
+        return validated.error
       }
+
+      // Use validated data directly without type casting
+      createRequest = validated.data as any
     }
 
     // ✅ BUSINESS CURRENCY VALIDATION (OPTIMIZED - SINGLE QUERY)

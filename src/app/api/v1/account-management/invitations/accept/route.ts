@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { acceptInvitation, validateInvitation } from '@/domains/account-management/lib/invitation.service'
+import { validateBody, acceptInvitationSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,16 +29,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Parse request body
-    const body = await request.json()
-    const { token, fullName } = body
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Invitation token is required' },
-        { status: 400 }
-      )
+    // ✅ Validate request body with Zod
+    const validated = await validateBody(request, acceptInvitationSchema)
+    if (!validated.success) {
+      return validated.error
     }
+
+    const { token, fullName } = validated.data
 
     // Call service layer
     const result = await acceptInvitation(token, userId, fullName)

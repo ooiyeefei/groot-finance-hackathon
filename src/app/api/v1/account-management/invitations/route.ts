@@ -9,6 +9,7 @@ import { auth } from '@clerk/nextjs/server'
 import { createInvitation, getInvitations } from '@/domains/account-management/lib/account-management.service'
 import { getCurrentUserContext } from '@/domains/security/lib/rbac'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
+import { validateBody, validateQuery, sendInvitationSchema, listInvitationsQuerySchema } from '@/lib/validations'
 
 /**
  * Create new business invitation
@@ -40,18 +41,14 @@ export async function POST(request: NextRequest) {
       }, { status: 403 })
     }
 
-    const body = await request.json()
-
-    // Validate required fields
-    if (!body.email || !body.role) {
-      return NextResponse.json({
-        success: false,
-        error: 'Email and role are required'
-      }, { status: 400 })
+    // ✅ Validate request body with Zod
+    const validated = await validateBody(request, sendInvitationSchema)
+    if (!validated.success) {
+      return validated.error
     }
 
     const result = await createInvitation(
-      body,
+      validated.data as any,
       userId,
       userContext.profile.business_id
     )
@@ -107,17 +104,13 @@ export async function GET(request: NextRequest) {
       }, { status: 403 })
     }
 
-    // Get query parameters
-    const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status') as 'pending' | 'accepted' | undefined
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
+    // ✅ Validate query parameters with Zod
+    const validated = validateQuery(request, listInvitationsQuerySchema)
+    if (!validated.success) {
+      return validated.error
+    }
 
-    const result = await getInvitations(userContext.profile.business_id, {
-      status,
-      limit,
-      offset
-    })
+    const result = await getInvitations(userContext.profile.business_id, validated.data as any)
 
     return NextResponse.json({
       success: true,

@@ -12,6 +12,7 @@ import {
   type CreateAccountingEntryRequest,
   type AccountingEntryListParams
 } from '@/domains/accounting-entries/lib/data-access'
+import { validateQuery, validateBody, createAccountingEntrySchema, listAccountingEntriesQuerySchema } from '@/lib/validations'
 
 /**
  * Create new accounting entry
@@ -26,11 +27,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const body: CreateAccountingEntryRequest = await request.json()
+    // ✅ Validate request body with Zod
+    const validated = await validateBody(request, createAccountingEntrySchema)
+    if (!validated.success) {
+      return validated.error
+    }
 
     console.log(`[Accounting Entries API v1] Creating entry for user ${userId}`)
 
-    const result = await createAccountingEntry(userId, body)
+    const result = await createAccountingEntry(userId, validated.data as any)
 
     if (!result.success) {
       return NextResponse.json(
@@ -63,20 +68,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { searchParams } = new URL(request.url)
-
-    // Parse query parameters
-    const params: AccountingEntryListParams = {
-      page: parseInt(searchParams.get('page') || '1'),
-      limit: Math.min(parseInt(searchParams.get('limit') || '20'), 100), // Max 100 per page
-      transaction_type: searchParams.get('transaction_type') as any,
-      category: searchParams.get('category') || undefined,
-      date_from: searchParams.get('date_from') || undefined,
-      date_to: searchParams.get('date_to') || undefined,
-      search: searchParams.get('search') || undefined,
-      sort_by: (searchParams.get('sort_by') as any) || 'transaction_date',
-      sort_order: (searchParams.get('sort_order') as any) || 'desc'
+    // ✅ Validate query parameters with Zod
+    const validated = validateQuery(request, listAccountingEntriesQuerySchema)
+    if (!validated.success) {
+      return validated.error
     }
+
+    const params: AccountingEntryListParams = validated.data as any
 
     console.log(`[Accounting Entries API v1] Listing entries for user ${userId}:`, params)
 
