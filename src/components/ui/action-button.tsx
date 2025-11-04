@@ -38,6 +38,7 @@ export default function ActionButton({
   
   return (
     <button
+      type="button"
       onClick={onClick}
       className={classes}
       disabled={disabled}

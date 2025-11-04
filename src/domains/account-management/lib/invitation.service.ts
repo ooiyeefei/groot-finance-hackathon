@@ -336,6 +336,15 @@ async function _updateUserAndMembership(
         throw new Error('Failed to reactivate membership')
       }
 
+      // Update user's business_id to restore business context
+      await supabase
+        .from('users')
+        .update({
+          business_id: tokenData.businessId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingUserRecord.id)
+
       // Clean up invitation records
       await supabase.from('business_memberships').delete()
         .eq('user_id', invitation.id)

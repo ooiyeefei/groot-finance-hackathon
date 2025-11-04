@@ -1173,9 +1173,10 @@ export async function deleteExpenseClaim(
       return { success: false, error: 'Expense claim not found or access denied' }
     }
 
-    // Only allow deleting draft claims
-    if (existingClaim.status !== 'draft') {
-      return { success: false, error: 'Only draft expense claims can be deleted' }
+    // Allow deleting draft, failed, and classification_failed claims
+    const deletableStatuses = ['draft', 'failed', 'classification_failed']
+    if (!deletableStatuses.includes(existingClaim.status)) {
+      return { success: false, error: 'Only draft or failed expense claims can be deleted' }
     }
 
     // Delete associated accounting entry first (if exists)

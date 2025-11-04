@@ -4,6 +4,9 @@
  */
 
 import { CreateAccountingEntryRequest, CreateLineItemRequest, SupportedCurrency } from '@/domains/accounting-entries/types'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('AccountingEntry:Mapper')
 
 interface ExtractedEntity {
   type: string
@@ -119,15 +122,10 @@ interface DocumentData {
  * Maps extracted document data to accounting entry form data
  */
 export function mapDocumentToAccountingEntry(document: DocumentData): Partial<CreateAccountingEntryRequest> {
-  console.log(`[Accounting Entry Mapper] Starting mapping for document:`, {
-    documentId: document.id,
-    fileName: document.file_name,
-    hasExtractedData: !!document.extracted_data,
-    extractedDataKeys: document.extracted_data ? Object.keys(document.extracted_data) : 'none'
-  });
+  // Mapping document (verbose logging removed for production readiness)
 
   if (!document.extracted_data) {
-    console.log(`[Accounting Entry Mapper] No extracted data found, returning empty mapping`);
+    log.debug('No extracted data found, returning empty mapping');
     return {}
   }
 
@@ -219,17 +217,7 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
 
   const extractedData = document.extracted_data as any
 
-  console.log(`[Accounting Entry Mapper] Extracted data structure:`, {
-    isAIFormat: !!(extractedData.vendor_name || extractedData.total_amount || extractedData.document_type),
-    hasDocumentSummary: !!extractedData.document_summary,
-    hasLegacyEntities: !!(extractedData.entities && Array.isArray(extractedData.entities)),
-    vendorName: extractedData.vendor_name || 'none',
-    totalAmount: extractedData.total_amount || 'none',
-    currency: extractedData.currency || 'none',
-    lineItems: extractedData.line_items ? `${extractedData.line_items.length} items` : 'none',
-    suggestedCategory: extractedData.suggested_category || 'none',
-    selectedCategory: extractedData.selected_category || 'none'
-  });
+  // Extracted data structure determined (verbose logging removed)
 
   // Map basic accounting entry information
   mappedData.transaction_type = 'Cost of Goods Sold' // Invoices are supplier invoices (business purchases)
@@ -244,7 +232,6 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
 
   if (isAIFormat) {
     // Handle AI structure directly (new format)
-    console.log(`[Accounting Entry Mapper] Processing AI structure`);
 
     // Use document's actual status instead of hardcoded 'pending'
     // This allows invoices marked as 'paid' to show the correct status
@@ -256,7 +243,6 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
     // Extract vendor name
     if (extractedData.vendor_name) {
       mappedData.vendor_name = extractedData.vendor_name
-      console.log(`[Accounting Entry Mapper] Mapped vendor: ${mappedData.vendor_name}`);
     }
 
     // Extract amount and currency
@@ -271,20 +257,17 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
         const currencyFromText = detectCurrency(document.extracted_data?.text || '')
         mappedData.original_currency = currencyFromText
       }
-      console.log(`[Accounting Entry Mapper] Mapped amount: ${mappedData.original_amount} ${mappedData.original_currency}`);
     }
 
     // Extract transaction date (AI uses document_date, not transaction_date)
     if (extractedData.document_date) {
       mappedData.transaction_date = parseDate(extractedData.document_date)
-      console.log(`[Accounting Entry Mapper] Mapped date: ${mappedData.transaction_date}`);
     } else if (extractedData.transaction_date) {
       // Legacy fallback
       mappedData.transaction_date = parseDate(extractedData.transaction_date)
     }
   } else {
     // Handle legacy document_summary structure
-    console.log(`[Accounting Entry Mapper] Processing legacy document_summary structure`);
     summary = document.extracted_data.document_summary ||
               document.extracted_data.metadata?.layoutElements?.document_summary
 
@@ -352,7 +335,6 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
   // First, try raw AI structure (new format)
   if (extractedData.document_number) {
     mappedData.reference_number = extractedData.document_number
-    console.log(`[Accounting Entry Mapper] Mapped reference number from AI: ${mappedData.reference_number}`);
   } else if (summary && (summary as any).document_number?.value) {
     // Fallback to nested document_summary structure
     mappedData.reference_number = (summary as any).document_number.value
@@ -379,15 +361,12 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
   if (extractedData.suggested_category) {
     // Use AI-selected category from business categories (set by process-document-ocr.ts)
     mappedData.category = extractedData.suggested_category
-    console.log(`[Accounting Entry Mapper] Using business COGS category from AI: ${mappedData.category}`);
   } else if (extractedData.selected_category) {
     // Fallback to raw AI category selection (direct from LLM)
     mappedData.category = extractedData.selected_category
-    console.log(`[Accounting Entry Mapper] Using raw AI category: ${mappedData.category}`);
   } else {
     // Ultimate fallback to default category for invoices
     mappedData.category = getDefaultCategoryForInvoice()
-    console.log(`[Accounting Entry Mapper] No AI category found, using default: ${mappedData.category}`);
   }
 
   // Note: vendor_details is not part of CreateTransactionRequest
@@ -397,44 +376,21 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
   // For legacy structure, try different locations
   let lineItemsSource = null;
 
-  console.log(`[Accounting Entry Mapper] Debug - extractedData structure:`, {
-    hasDirectLineItems: !!(extractedData.line_items && Array.isArray(extractedData.line_items)),
-    extractedDataLineItems: extractedData.line_items ? extractedData.line_items.length : 'none',
-    documentLineItems: document.extracted_data.line_items ? document.extracted_data.line_items.length : 'none',
-    metadataLineItems: document.extracted_data.metadata?.layoutElements?.line_items ? document.extracted_data.metadata?.layoutElements?.line_items.length : 'none'
-  });
-
   // Priority order for raw AI: direct line_items first, then nested paths
   if (extractedData.line_items && Array.isArray(extractedData.line_items) && extractedData.line_items.length > 0) {
     lineItemsSource = extractedData.line_items;
-    console.log(`[Accounting Entry Mapper] Using direct extractedData.line_items (${lineItemsSource.length} items)`);
   } else if (document.extracted_data.line_items && Array.isArray(document.extracted_data.line_items) && document.extracted_data.line_items.length > 0) {
     lineItemsSource = document.extracted_data.line_items;
-    console.log(`[Accounting Entry Mapper] Using document.extracted_data.line_items (${lineItemsSource.length} items)`);
   } else if (document.extracted_data.metadata?.layoutElements?.line_items && Array.isArray(document.extracted_data.metadata?.layoutElements?.line_items) && document.extracted_data.metadata.layoutElements.line_items.length > 0) {
     lineItemsSource = document.extracted_data.metadata?.layoutElements?.line_items;
-    console.log(`[Accounting Entry Mapper] Using metadata line_items (${lineItemsSource.length} items)`);
   } else {
     lineItemsSource = [];
-    console.log(`[Accounting Entry Mapper] No line items found in any location`);
   }
 
-  console.log(`[Accounting Entry Mapper] Line items detection: Found ${lineItemsSource?.length || 0} items`);
-  if (lineItemsSource && lineItemsSource.length > 0) {
-    console.log('[Accounting Entry Mapper] First line item structure:', JSON.stringify(lineItemsSource[0], null, 2));
-  }
   if (lineItemsSource && lineItemsSource.length > 0) {
     const lineItems: CreateLineItemRequest[] = []
 
     lineItemsSource.forEach((structuredItem: any, index: number) => {
-      console.log(`[Accounting Entry Mapper] Processing line item ${index + 1}:`, {
-        raw: structuredItem,
-        description_raw: structuredItem.description,
-        item_code_raw: structuredItem.item_code,
-        quantity_raw: structuredItem.quantity,
-        unit_price_raw: structuredItem.unit_price,
-        line_total_raw: structuredItem.line_total
-      });
       // Handle both raw AI format (direct values) and legacy format (nested .value)
       const description = structuredItem.description?.value || structuredItem.description || `Item ${index + 1}`
       const itemCode = structuredItem.item_code?.value || structuredItem.item_code || undefined
@@ -444,16 +400,6 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
       const lineTotal = parseAmount(structuredItem.line_total?.value || structuredItem.line_total || '0')
       // Calculate unit price from line total if unit price is 0 but line total exists
       const finalUnitPrice = unitPrice > 0 ? unitPrice : (lineTotal > 0 && quantity > 0 ? lineTotal / quantity : 0)
-
-      console.log(`[Accounting Entry Mapper] Processed line item ${index + 1}:`, {
-        description,
-        itemCode,
-        quantity,
-        unitPrice,
-        lineTotal,
-        finalUnitPrice,
-        passesValidation: !!(description && quantity > 0 && finalUnitPrice > 0)
-      });
 
       if (description && quantity > 0 && finalUnitPrice > 0) {
         const lineItem = {
@@ -466,17 +412,12 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
           item_category: mappedData.category || 'cost_of_goods_sold'
         };
         lineItems.push(lineItem);
-        console.log(`[Accounting Entry Mapper] Added line item ${index + 1} to array:`, lineItem);
-      } else {
-        console.log(`[Accounting Entry Mapper] Skipped line item ${index + 1} - failed validation`);
       }
     })
 
     mappedData.line_items = lineItems
-    console.log(`[Accounting Entry Mapper] Final mapped line items (${lineItems.length} items):`, lineItems);
   } else {
     // Fallback: create single line item from total amount if no structured line items
-    console.log(`[Accounting Entry Mapper] No line items found, creating fallback from total amount: ${mappedData.original_amount}`);
     if (mappedData.original_amount && mappedData.original_amount > 0) {
       mappedData.line_items = [{
         description: mappedData.description || 'Extracted from document',
@@ -485,17 +426,8 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
         tax_rate: 0,
         item_category: mappedData.category || 'direct_cost'
       }]
-      console.log(`[Accounting Entry Mapper] Created fallback line item:`, mappedData.line_items[0]);
     }
   }
-
-  console.log(`[Accounting Entry Mapper] Final mapped data summary:`, {
-    vendor: mappedData.vendor_name,
-    amount: mappedData.original_amount,
-    currency: mappedData.original_currency,
-    lineItemsCount: mappedData.line_items?.length || 0,
-    hasLineItems: !!(mappedData.line_items && mappedData.line_items.length > 0)
-  });
 
   return mappedData
 }
@@ -515,7 +447,6 @@ export function canCreateAccountingEntryFromDocument(document: DocumentData): bo
   const hasVendorAI = extractedData.vendor_name
 
   if (hasAmountAI || hasVendorAI) {
-    console.log('[Accounting Entry Mapper] Document can create accounting entry - AI format detected');
     return true
   }
 
@@ -524,7 +455,6 @@ export function canCreateAccountingEntryFromDocument(document: DocumentData): bo
   const hasVendorLegacy = extractedData.document_summary?.vendor_name?.value
 
   if (hasAmountLegacy || hasVendorLegacy) {
-    console.log('[Accounting Entry Mapper] Document can create accounting entry - legacy document_summary format detected');
     return true
   }
 
@@ -544,11 +474,9 @@ export function canCreateAccountingEntryFromDocument(document: DocumentData): bo
     )
 
     if (hasAmount || hasVendor) {
-      console.log('[Accounting Entry Mapper] Document can create accounting entry - legacy entities format detected');
       return true
     }
   }
 
-  console.log('[Accounting Entry Mapper] Document cannot create accounting entry - insufficient data in any format');
   return false
 }

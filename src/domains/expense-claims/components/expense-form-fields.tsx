@@ -479,10 +479,10 @@ export default function ExpenseFormFields({
               {previewAmount !== null && exchangeRate !== null && formData.original_currency !== formData.home_currency && (
                 <div className="flex-1 min-w-[200px] space-y-2">
                   <Label className="text-foreground h-6 text-xs">Conversion Preview</Label>
-                  <div className="bg-blue-500/10 border border-blue-500/30 rounded px-3 py-2 h-10 flex items-center">
-                    <div className="text-foreground font-medium text-sm">
+                  <div className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 rounded px-3 py-2 h-10 flex items-center">
+                    <div className="font-medium text-sm">
                       {formatCurrency(previewAmount, formData.home_currency as SupportedCurrency)}
-                      <span className="text-xs text-blue-600 dark:text-blue-400 ml-1">
+                      <span className="text-xs ml-1">
                         (Rate: {exchangeRate.toFixed(4)})
                       </span>
                     </div>

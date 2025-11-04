@@ -28,6 +28,7 @@ interface ConversationSidebarProps {
   onConversationSelect: (conversationId: string) => void
   onNewChat: () => void
   onConversationDeleted?: (conversationId: string) => void
+  refreshTrigger?: number
 }
 
 export default function ConversationSidebar({
@@ -36,7 +37,8 @@ export default function ConversationSidebar({
   currentConversationId,
   onConversationSelect,
   onNewChat,
-  onConversationDeleted
+  onConversationDeleted,
+  refreshTrigger
 }: ConversationSidebarProps) {
   const t = useTranslations('chat')
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -66,7 +68,7 @@ export default function ConversationSidebar({
     if (isOpen) {
       fetchConversations()
     }
-  }, [isOpen])
+  }, [isOpen, refreshTrigger])
 
   // Close menu when clicking outside
   useEffect(() => {

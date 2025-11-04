@@ -171,11 +171,11 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 bg-success hover:bg-success/90 disabled:bg-muted disabled:cursor-not-allowed text-success-foreground rounded-md font-medium transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground rounded-md font-medium transition-colors flex items-center gap-2"
           >
             {saving ? (
               <>
-                <div className="w-4 h-4 border-2 border-success-foreground border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
                 Saving...
               </>
             ) : (

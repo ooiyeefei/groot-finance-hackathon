@@ -23,6 +23,9 @@ import {
   switchBusiness
 } from '@/lib/api-client'
 import { prefetchUserRole } from '@/lib/cache-utils'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('BusinessContext')
 
 // ============================================================================
 // Context Types
@@ -83,7 +86,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         const cached = localStorage.getItem('business-profile')
         return cached ? JSON.parse(cached) : null
       } catch (error) {
-        console.warn('[BusinessContext] Failed to parse cached business profile:', error)
+        log.warn(' Failed to parse cached business profile:', error)
         return null
       }
     }
@@ -132,7 +135,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         // Handle error response
         const errorMsg = ('error' in response ? response.error : 'Failed to load business memberships') as string
         setMembershipsError(errorMsg)
-        console.error('[BusinessContext] Error loading memberships:', errorMsg)
+        log.error(' Error loading memberships:', errorMsg)
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error loading memberships'
@@ -143,7 +146,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         setMembershipsError(null) // Clear error for new users
       } else {
         setMembershipsError(errorMsg)
-        console.error('[BusinessContext] Exception loading memberships:', error)
+        log.error(' Exception loading memberships:', error)
       }
     } finally {
       setIsLoadingMemberships(false)
@@ -163,7 +166,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         // Handle error response
         const errorMsg = ('error' in response ? response.error : 'Failed to load business context') as string
         setContextError(errorMsg)
-        console.error('[BusinessContext] Error loading context:', errorMsg)
+        log.error(' Error loading context:', errorMsg)
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error loading context'
@@ -174,7 +177,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         setContextError(null) // Clear error for new users
       } else {
         setContextError(errorMsg)
-        console.error('[BusinessContext] Exception loading context:', error)
+        log.error(' Exception loading context:', error)
       }
     } finally {
       setIsLoadingContext(false)
@@ -196,7 +199,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
           try {
             localStorage.setItem('business-profile', JSON.stringify(result.data))
           } catch (error) {
-            console.warn('[BusinessContext] Failed to cache business profile:', error)
+            log.warn(' Failed to cache business profile:', error)
           }
         }
       } else {
@@ -208,7 +211,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
           setProfileError(null) // Clear error for new users
         } else {
           setProfileError(errorMsg)
-          console.error('[BusinessContext] Error loading profile:', errorMsg)
+          log.error(' Error loading profile:', errorMsg)
         }
       }
     } catch (error) {
@@ -220,7 +223,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         setProfileError(null) // Clear error for new users
       } else {
         setProfileError(errorMsg)
-        console.error('[BusinessContext] Exception loading profile:', error)
+        log.error(' Exception loading profile:', error)
       }
     } finally {
       setIsLoadingProfile(false)
@@ -250,13 +253,13 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         // Handle error response
         const errorMsg = ('error' in response ? response.error : 'Failed to switch business') as string
         setSwitchError(errorMsg)
-        console.error('[BusinessContext] Error switching business:', errorMsg)
+        log.error(' Error switching business:', errorMsg)
         return false
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error switching business'
       setSwitchError(errorMsg)
-      console.error('[BusinessContext] Exception switching business:', error)
+      log.error(' Exception switching business:', error)
       return false
     } finally {
       setIsSwitching(false)
@@ -271,7 +274,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
       try {
         localStorage.setItem('business-profile', JSON.stringify(updatedProfile))
       } catch (error) {
-        console.warn('[BusinessContext] Failed to update cached business profile:', error)
+        log.warn(' Failed to update cached business profile:', error)
       }
     }
 
@@ -302,7 +305,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     if (isAuthLoaded && isSignedIn && userId) {
       // Start prefetching immediately, don't wait for business context initialization
       prefetchUserRole().catch(error => {
-        console.warn('[BusinessContext] Ultra-early role prefetch failed:', error)
+        log.warn(' Ultra-early role prefetch failed:', error)
       })
     }
   }, [isAuthLoaded, isSignedIn, userId])
@@ -311,22 +314,21 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   useEffect(() => {
     // Only load data if Clerk is loaded and user is signed in
     if (!isAuthLoaded || !isSignedIn || !userId) {
-      console.log('[BusinessContext] Waiting for authentication...', { isAuthLoaded, isSignedIn, userId: !!userId })
       return
     }
 
     // Prevent duplicate initialization due to Clerk auth state changes
     if (hasStartedInitialLoad) {
-      console.log('[BusinessContext] Initial load already started, skipping duplicate initialization')
+      log.debug(' Initial load already started, skipping duplicate initialization')
       return
     }
 
-    console.log('[BusinessContext] Initializing business context for authenticated user')
+    log.debug(' Initializing business context for authenticated user')
     setHasStartedInitialLoad(true)
 
     // PERFORMANCE: Start prefetching user roles early (parallel to business context loading)
     prefetchUserRole().catch(error => {
-      console.warn('[BusinessContext] Early role prefetch failed:', error)
+      log.warn(' Early role prefetch failed:', error)
     })
 
     // Load initial data without artificial delays
@@ -338,17 +340,17 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
 
         // Load profile after context is established (if we have a business context)
         if (memberships.length > 0) {
-          console.log('[BusinessContext] Loading profile after business context is established')
+          log.debug(' Loading profile after business context is established')
           await refreshProfile()
         } else {
-          console.log('[BusinessContext] No memberships found - setting isLoadingProfile to false')
+          log.debug(' No memberships found - setting isLoadingProfile to false')
           setIsLoadingProfile(false)
         }
 
-        console.log('[BusinessContext] ✅ Initial data load complete')
+        log.debug(' ✅ Initial data load complete')
         setHasCompletedInitialLoad(true)
       } catch (error) {
-        console.error('[BusinessContext] Error during initial data load:', error)
+        log.error(' Error during initial data load:', error)
         // Reset the flag on error so it can retry
         setHasStartedInitialLoad(false)
       }
@@ -361,20 +363,13 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   useEffect(() => {
     // Don't run if still loading data or already switching
     if (isLoadingMemberships || isLoadingContext || isSwitching || !isAuthLoaded || !isSignedIn) {
-      console.log('[BusinessContext] ⏳ Skipping redirect logic - still loading or not authenticated:', {
-        isLoadingMemberships,
-        isLoadingContext,
-        isSwitching,
-        isAuthLoaded,
-        isSignedIn
-      })
       return
     }
 
     // CRITICAL: Don't run redirect logic until initial data load is complete
     // This prevents false "no memberships" detection during the loading phase
     if (!hasCompletedInitialLoad) {
-      console.log('[BusinessContext] 🔄 Waiting for initial data load to complete...', {
+      log.debug(' 🔄 Waiting for initial data load to complete...', {
         hasCompletedInitialLoad,
         membershipsLength: memberships?.length,
         hasActiveContext: !!activeContext
@@ -385,40 +380,30 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     const hasMemberships = memberships && memberships.length > 0
     const hasNoActiveContext = activeContext === null
 
-    console.log('[BusinessContext] Redirect logic evaluation:', {
-      hasMemberships,
-      hasNoActiveContext,
-      membershipsCount: memberships?.length || 0,
-      activeContextExists: !!activeContext,
-      membershipsError: !!membershipsError,
-      memberships: memberships,
-      activeContext: activeContext
-    })
-
     if (hasMemberships && hasNoActiveContext) {
       // Case 1: User has memberships but no active context (needs auto-switch)
-      console.log('[BusinessContext] Auto-switch detected: User has memberships but no active context')
+      log.debug(' Auto-switch detected: User has memberships but no active context')
 
       // Find the most recently accessed business (memberships are ordered by last_accessed_at DESC)
       const mostRecentBusiness = memberships[0]
 
       if (mostRecentBusiness) {
-        console.log('[BusinessContext] Auto-switching to most recent business:', mostRecentBusiness.name)
+        log.debug(' Auto-switching to most recent business:', mostRecentBusiness.name)
 
         // Auto-switch to the most recently accessed business
         switchActiveBusiness(mostRecentBusiness.id).then((success) => {
           if (success) {
-            console.log('[BusinessContext] Auto-switch successful:', mostRecentBusiness.name)
+            log.debug(' Auto-switch successful:', mostRecentBusiness.name)
           } else {
-            console.error('[BusinessContext] Auto-switch failed for business:', mostRecentBusiness.id)
+            log.error(' Auto-switch failed for business:', mostRecentBusiness.id)
           }
         }).catch((error) => {
-          console.error('[BusinessContext] Auto-switch error:', error)
+          log.error(' Auto-switch error:', error)
         })
       }
     } else if (!hasMemberships && hasNoActiveContext && !membershipsError) {
       // Case 2: User has NO memberships and NO context (could be stale JWT or truly new user)
-      console.log('[BusinessContext] ⚠️ No memberships detected, but checking conditions first...', {
+      log.debug(' ⚠️ No memberships detected, but checking conditions first...', {
         hasMemberships,
         hasNoActiveContext,
         membershipsError,
@@ -434,14 +419,14 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
 
       // Only redirect if we're on dashboard page and not already on onboarding
       if (isOnDashboardPage && !isOnOnboardingPage) {
-        console.log('[BusinessContext] 📍 No business context detected - direct redirect to onboarding')
+        log.debug(' 📍 No business context detected - direct redirect to onboarding')
         proceedToOnboarding()
       } else {
-        console.log('[BusinessContext] ✋ Already on onboarding or non-dashboard page, no action needed')
+        log.debug(' ✋ Already on onboarding or non-dashboard page, no action needed')
       }
 
       function proceedToOnboarding() {
-        console.log('[BusinessContext] 📍 Proceeding with onboarding redirect (confirmed no business)', {
+        log.debug(' 📍 Proceeding with onboarding redirect (confirmed no business)', {
           isOnOnboardingPage,
           isOnDashboardPage
         })
@@ -452,10 +437,10 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
           const locale = window.location.pathname.match(/^\/(en|th|id|zh)/)?.[1] || 'en'
           const onboardingUrl = `/${locale}/onboarding/business`
 
-          console.log(`[BusinessContext] ➡️ Redirecting to: ${onboardingUrl}`)
+          log.debug('Redirecting to onboarding', { onboardingUrl })
           window.location.href = onboardingUrl
         } else {
-          console.log('[BusinessContext] ✋ Already on onboarding page, skipping redirect')
+          log.debug(' ✋ Already on onboarding page, skipping redirect')
         }
       }
     }
@@ -465,24 +450,24 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   useEffect(() => {
     // Only load profile if we have active context and haven't loaded it yet
     if (activeContext && !isLoadingProfile && !profile) {
-      console.log('[BusinessContext] Active context available, loading business profile...')
+      log.debug(' Active context available, loading business profile...')
       refreshProfile()
     }
 
     // CRITICAL FIX: Check for business name mismatch between context and cached profile
     if (activeContext && profile && activeContext.businessName !== profile.name) {
-      console.log(`[BusinessContext] Business name mismatch detected:`)
-      console.log(`[BusinessContext] - Active context: "${activeContext.businessName}"`)
-      console.log(`[BusinessContext] - Cached profile: "${profile.name}"`)
-      console.log(`[BusinessContext] - Refreshing profile to resolve discrepancy...`)
+      log.debug('Business name mismatch detected', {
+        activeContext: activeContext.businessName,
+        cachedProfile: profile.name
+      })
 
       // Clear stale cache and reload fresh profile data
       if (typeof window !== 'undefined') {
         try {
           localStorage.removeItem('business-profile')
-          console.log('[BusinessContext] ✅ Cleared stale business-profile cache')
+          log.debug(' ✅ Cleared stale business-profile cache')
         } catch (error) {
-          console.warn('[BusinessContext] Failed to clear business-profile cache:', error)
+          log.warn(' Failed to clear business-profile cache:', error)
         }
       }
 

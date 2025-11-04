@@ -146,9 +146,6 @@ export default function ProcessingStep({
           })
         }
 
-        // UNIFIED APPROACH: Create record + upload file + trigger AI in one API call
-        // Follow standardized storage path pattern and let AI determine category
-
         // Unified API call: Create record + upload file + trigger AI processing
         const formData = new FormData()
         formData.append('file', file)
@@ -157,8 +154,7 @@ export default function ProcessingStep({
         // Add required form fields for unified API - use dummy values, AI will update
         formData.append('description', 'Receipt Processing - AI Extraction')
         formData.append('business_purpose', 'Business Expense - Receipt Upload')
-        // No expense_category - let trigger.dev AI job determine it
-        formData.append('original_amount', '0') // Temporary amount (zero), will be updated by AI
+        formData.append('original_amount', '0')
         formData.append('original_currency', 'SGD')
         formData.append('transaction_date', new Date().toISOString().split('T')[0])
         formData.append('vendor_name', 'Processing...')
@@ -170,7 +166,6 @@ export default function ProcessingStep({
             body: formData,
             signal
           }),
-          // Show realistic progress during AI processing time
           simulateRealisticProgress()
         ])
 
@@ -197,9 +192,6 @@ export default function ProcessingStep({
         const processingComplete = result.data.processing_complete
 
         if (!processingComplete && taskId) {
-          console.log(`[AI Processing] Expense claim created: ${expenseClaimId}, task_id: ${taskId}`)
-          console.log(`[AI Processing] Background processing started, polling for completion...`)
-
           // Update processing claim with task ID for tracking
           if (processingClaimId && updateClaimStatus) {
             updateClaimStatus(processingClaimId, {
@@ -217,8 +209,6 @@ export default function ProcessingStep({
 
         // If processing completed immediately (manual mode) - handle gracefully
         if (processingComplete) {
-          console.log(`[AI Processing] Processing completed immediately (manual mode)!`)
-
           // Transform the result using the expense claim function
           const extractionResult = transformClaimDataToExtractionResult(result.data.expense_claim || result.data)
 
@@ -245,8 +235,7 @@ export default function ProcessingStep({
       } catch (err) {
         // Don't set error if request was aborted
         if (signal.aborted) return
-        
-        console.error('Receipt extraction failed:', err)
+
         if (isMounted) {
           const errorMessage = err instanceof Error ? err.message : 'Processing failed'
 
@@ -316,7 +305,6 @@ export default function ProcessingStep({
         // Update progress indication during polling
         if (processingStatus === 'analyzing' || processingStatus === 'classifying' || processingStatus === 'upload_pending' ||
             mainStatus === 'analyzing' || mainStatus === 'classifying' || mainStatus === 'converting') {
-          console.log(`[AI Processing] Expense claim ${expenseClaimId} still processing (${processingStatus || mainStatus})... (${attempts * 2}s elapsed)`)
           attempts++
           continue
         }
@@ -335,8 +323,6 @@ export default function ProcessingStep({
             errorMessage = processingMetadata.error_message ||
               'This document type is not supported for expense claims. Please upload a receipt or invoice.'
           }
-
-          console.log(`[AI Processing] Document classification failed for expense claim ${expenseClaimId}: ${errorMessage}`)
 
           // Create custom error with suggestions
           const error = new Error(errorMessage) as any
@@ -359,8 +345,6 @@ export default function ProcessingStep({
               'Receipt processing failed due to timeout or processing error'
           }
 
-          console.log(`[AI Processing] Expense claim ${expenseClaimId} failed: ${errorMessage}`)
-
           // Create custom error with suggestions
           const error = new Error(errorMessage) as any
           error.suggestions = errorSuggestions
@@ -369,7 +353,6 @@ export default function ProcessingStep({
 
         // Processing completed successfully
         if (processingStatus === 'completed' || mainStatus === 'draft') {
-          console.log(`[AI Processing] Expense claim ${expenseClaimId} completed successfully!`)
 
           // Transform the result to match expected format
           const extractionResult = transformClaimDataToExtractionResult(claimData)
@@ -399,7 +382,6 @@ export default function ProcessingStep({
       } catch (pollError) {
         if (signal.aborted) return
 
-        console.error('[AI Processing] Polling error:', pollError)
         attempts++
 
         // If we've tried many times, give up
@@ -538,7 +520,7 @@ export default function ProcessingStep({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-end mb-4">
-        <Badge className="bg-purple-600 text-white flex items-center gap-2">
+        <Badge className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 flex items-center gap-2">
           <Brain className={`w-4 h-4 ${isProcessing ? 'animate-pulse' : ''}`} />
           AI {isProcessing ? 'Analyzing' : 'Extraction'}
         </Badge>
@@ -547,17 +529,17 @@ export default function ProcessingStep({
       {/* Progress Bar */}
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="text-gray-400">Processing Progress</span>
+          <span className="text-muted-foreground">Processing Progress</span>
           <div className="flex items-center gap-2">
-            <span className="text-white">{Math.round(getProgressPercentage())}%</span>
+            <span className="text-foreground font-medium">{Math.round(getProgressPercentage())}%</span>
             {isProcessing && estimatedTimeRemaining > 0 && (
-              <span className="text-gray-400">• {estimatedTimeRemaining}s remaining</span>
+              <span className="text-muted-foreground">• {estimatedTimeRemaining}s remaining</span>
             )}
           </div>
         </div>
-        <Progress 
-          value={getProgressPercentage()} 
-          className="h-2 bg-gray-700"
+        <Progress
+          value={getProgressPercentage()}
+          className="h-2 bg-muted"
         />
       </div>
 
@@ -594,23 +576,23 @@ export default function ProcessingStep({
         {processingSteps.map((step, index) => {
           const StepIcon = step.icon
           return (
-            <Card 
-              key={step.id} 
-              className={`bg-gray-700 border-gray-600 transition-all ${
-                step.status === 'processing' ? 'ring-2 ring-purple-500 bg-purple-900/20' : ''
+            <Card
+              key={step.id}
+              className={`bg-card border-border transition-all ${
+                step.status === 'processing' ? 'ring-2 ring-purple-500 bg-purple-500/10 dark:bg-purple-900/20' : ''
               } ${
-                step.status === 'completed' ? 'border-green-600 bg-green-900/20' : ''
+                step.status === 'completed' ? 'border-green-600 dark:border-green-500 bg-green-500/10 dark:bg-green-900/20' : ''
               } ${
-                step.status === 'failed' ? 'border-red-600 bg-red-900/20' : ''
+                step.status === 'failed' ? 'border-red-600 dark:border-red-500 bg-red-500/10 dark:bg-red-900/20' : ''
               }`}
             >
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   <div className={`p-2 rounded-full ${
-                    step.status === 'processing' ? 'bg-purple-600' :
-                    step.status === 'completed' ? 'bg-green-600' :
-                    step.status === 'failed' ? 'bg-red-600' :
-                    'bg-gray-600'
+                    step.status === 'processing' ? 'bg-purple-600 dark:bg-purple-500' :
+                    step.status === 'completed' ? 'bg-green-600 dark:bg-green-500' :
+                    step.status === 'failed' ? 'bg-red-600 dark:bg-red-500' :
+                    'bg-muted'
                   }`}>
                     {step.status === 'processing' ? (
                       <Loader2 className="w-4 h-4 animate-spin text-white" />
@@ -619,36 +601,36 @@ export default function ProcessingStep({
                     ) : step.status === 'failed' ? (
                       <AlertCircle className="w-4 h-4 text-white" />
                     ) : (
-                      <StepIcon className="w-4 h-4 text-white" />
+                      <StepIcon className="w-4 h-4 text-muted-foreground" />
                     )}
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h4 className="text-white font-medium">{step.title}</h4>
+                      <h4 className="text-foreground font-medium">{step.title}</h4>
                       {step.status === 'processing' && (
-                        <Badge variant="secondary" className="bg-purple-900/20 text-purple-300 border border-purple-700/50">
+                        <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30">
                           Processing...
                         </Badge>
                       )}
                       {step.status === 'completed' && (
-                        <Badge variant="secondary" className="bg-green-900/20 text-green-300 border border-green-700/50">
+                        <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30">
                           Complete
                         </Badge>
                       )}
                     </div>
-                    <p className="text-gray-400 text-sm mb-2">{step.description}</p>
-                    
+                    <p className="text-muted-foreground text-sm mb-2">{step.description}</p>
+
                     {/* Show reasoning for completed steps */}
                     {step.status === 'completed' && step.reasoning && (
-                      <div className="bg-gray-800 p-3 rounded text-sm">
-                        <div className="text-gray-300">{step.reasoning}</div>
+                      <div className="bg-muted p-3 rounded text-sm">
+                        <div className="text-foreground">{step.reasoning}</div>
                       </div>
                     )}
                   </div>
-                  
+
                   {index < processingSteps.length - 1 && step.status === 'completed' && (
-                    <ArrowRight className="w-4 h-4 text-green-400 mt-2" />
+                    <ArrowRight className="w-4 h-4 text-green-600 dark:text-green-400 mt-2" />
                   )}
                 </div>
               </CardContent>
@@ -659,9 +641,9 @@ export default function ProcessingStep({
 
       {/* Success State - Show Extraction Results */}
       {extractionResult && !error && (
-        <Card className="bg-green-900/20 border-green-700">
+        <Card className="bg-green-500/10 dark:bg-green-900/20 border-green-600 dark:border-green-500">
           <CardHeader>
-            <CardTitle className="text-green-400 flex items-center gap-2">
+            <CardTitle className="text-green-600 dark:text-green-400 flex items-center gap-2">
               <CheckCircle className="w-5 h-5" />
               AI Extraction Complete
             </CardTitle>
@@ -669,19 +651,19 @@ export default function ProcessingStep({
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-gray-400">Confidence Score:</span>
-                <div className="text-white font-medium">
+                <span className="text-muted-foreground">Confidence Score:</span>
+                <div className="text-foreground font-medium">
                   {Math.round(extractionResult.extractedData.confidenceScore * 100)}%
                 </div>
               </div>
               <div>
-                <span className="text-gray-400">Quality:</span>
-                <Badge 
-                  variant="secondary" 
+                <span className="text-muted-foreground">Quality:</span>
+                <Badge
+                  variant="secondary"
                   className={
-                    extractionResult.extractedData.extractionQuality === 'high' ? 'bg-green-600' :
-                    extractionResult.extractedData.extractionQuality === 'medium' ? 'bg-yellow-600' :
-                    'bg-red-600'
+                    extractionResult.extractedData.extractionQuality === 'high' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30' :
+                    extractionResult.extractedData.extractionQuality === 'medium' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30' :
+                    'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30'
                   }
                 >
                   {extractionResult.extractedData.extractionQuality}
@@ -690,17 +672,17 @@ export default function ProcessingStep({
             </div>
 
             {extractionResult.needsManualReview && (
-              <Alert className="bg-yellow-900/20 border-yellow-700">
-                <AlertCircle className="w-4 h-4" />
-                <AlertDescription className="text-yellow-400">
+              <Alert className="bg-yellow-500/10 dark:bg-yellow-900/20 border-yellow-600 dark:border-yellow-500">
+                <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                <AlertDescription className="text-yellow-600 dark:text-yellow-400">
                   Please review the extracted data carefully before submitting.
                 </AlertDescription>
               </Alert>
             )}
 
             <div className="text-center pt-2">
-              <Button 
-                className="bg-green-600 hover:bg-green-700"
+              <Button
+                className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
                 onClick={() => onExtractionComplete(extractionResult)}
               >
                 Continue to Pre-filled Form
@@ -714,10 +696,10 @@ export default function ProcessingStep({
       {/* Processing State Actions */}
       {isProcessing && (
         <div className="text-center">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={onSkip}
-            className="border-gray-600 text-gray-300"
+            className="border-border text-foreground hover:bg-muted"
           >
             Skip Processing & Enter Manually
           </Button>

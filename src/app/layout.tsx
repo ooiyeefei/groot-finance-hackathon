@@ -87,7 +87,7 @@ export default function RootLayout({
     >
       <html suppressHydrationWarning>
         <head>
-          <link rel="icon" href="https://storage.googleapis.com/finanseal-logo/finanseal.png" />
+          <link rel="icon" href="https://ohxwghdgsuyabgsndfzc.supabase.co/storage/v1/object/public/business-profiles/cc5fdbbc-1459-43ad-9736-3cc65649d23b/logo_1760635116031.png" />
         </head>
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
           <ThemeProvider

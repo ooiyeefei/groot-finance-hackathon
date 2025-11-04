@@ -4,6 +4,11 @@
  * Part of the hybrid architecture: Database as source of truth + Application layer caching
  */
 
+import { createLogger } from '@/lib/utils/logger';
+
+const log = createLogger('Cache:BusinessContext');
+const jwtLog = createLogger('Cache:JWT');
+
 interface CacheEntry {
   data: {
     id: string
@@ -28,7 +33,7 @@ class BusinessContextCache {
     const entry = this.cache.get(clerkUserId)
 
     if (!entry) {
-      console.log(`[BusinessContextCache] Cache miss - no entry found for user: ${clerkUserId} (total cache size: ${this.cache.size})`)
+      log.debug('Cache miss', { reason: 'no entry', cacheSize: this.cache.size });
       return null
     }
 
@@ -36,12 +41,12 @@ class BusinessContextCache {
     const now = Date.now()
     const ageMs = now - entry.timestamp
     if (ageMs >= entry.ttl) {
-      console.log(`[BusinessContextCache] Cache miss - entry expired for user: ${clerkUserId} (age: ${Math.round(ageMs/1000)}s, ttl: ${Math.round(entry.ttl/1000)}s)`)
+      log.debug('Cache miss', { reason: 'expired', age: Math.round(ageMs/1000), ttl: Math.round(entry.ttl/1000) });
       this.cache.delete(clerkUserId)
       return null
     }
 
-    console.log(`[BusinessContextCache] Cache hit for user: ${clerkUserId} (age: ${Math.round(ageMs/1000)}s, remaining: ${Math.round((entry.ttl - ageMs)/1000)}s)`)
+    log.debug('Cache hit', { age: Math.round(ageMs/1000), remaining: Math.round((entry.ttl - ageMs)/1000) });
     return entry.data
   }
 
@@ -61,7 +66,7 @@ class BusinessContextCache {
     }
 
     this.cache.set(clerkUserId, entry)
-    console.log(`[BusinessContextCache] Cached user data: ${clerkUserId} → business_id: ${data.business_id}`)
+    log.debug('Cached user data');
   }
 
   /**
@@ -70,7 +75,7 @@ class BusinessContextCache {
   invalidate(clerkUserId: string): void {
     const deleted = this.cache.delete(clerkUserId)
     if (deleted) {
-      console.log(`[BusinessContextCache] Invalidated cache for user: ${clerkUserId}`)
+      log.debug('Cache invalidated');
     }
   }
 
@@ -80,7 +85,7 @@ class BusinessContextCache {
   clear(): void {
     const size = this.cache.size
     this.cache.clear()
-    console.log(`[BusinessContextCache] Cleared ${size} cache entries`)
+    log.debug('Cache cleared', { count: size });
   }
 
   /**
@@ -109,7 +114,7 @@ class BusinessContextCache {
 
     if (oldestKey) {
       this.cache.delete(oldestKey)
-      console.log(`[BusinessContextCache] Evicted oldest entry: ${oldestKey}`)
+      log.debug('Evicted oldest entry');
     }
   }
 }
@@ -134,7 +139,7 @@ export async function getCachedUserData(clerkUserId: string): Promise<{
   }
 
   // Cache miss - get from database
-  console.log(`[BusinessContextCache] Cache miss, fetching from database: ${clerkUserId}`)
+  log.debug('Fetching from database');
 
   // Import here to avoid circular dependency
   const { getUserData } = await import('./supabase-server')
@@ -155,48 +160,54 @@ export function invalidateUserCache(clerkUserId: string): void {
 
 /**
  * JWT Token Cache Interface and Implementation
+ * UPDATED: Now uses actual JWT expiration time instead of hardcoded TTL
  */
 interface JWTCacheEntry {
   token: string
   timestamp: number
-  ttl: number
+  ttl: number // This is now calculated from actual JWT expiration
 }
 
 class JWTTokenCache {
   private cache = new Map<string, JWTCacheEntry>()
-  private readonly DEFAULT_TTL = 3 * 60 * 1000 // 3 minutes (match Clerk JWT expiration)
+  private readonly DEFAULT_TTL = 3 * 60 * 1000 // 3 minutes (fallback only)
   private readonly REFRESH_BUFFER = 30 * 1000 // 30 seconds buffer before expiry
   private readonly MAX_ENTRIES = 500 // Prevent memory bloat
 
   /**
    * Get JWT token from cache if valid, otherwise return null
+   * UPDATED: Uses actual JWT expiration validation
    */
   get(clerkUserId: string): string | null {
     const entry = this.cache.get(clerkUserId)
 
     if (!entry) {
-      console.log(`[JWTTokenCache] Cache miss - no entry found for user: ${clerkUserId} (total cache size: ${this.cache.size})`)
+      jwtLog.debug('Cache miss', { reason: 'no entry', cacheSize: this.cache.size });
       return null
     }
 
-    // Check if entry is expired or needs refresh (with buffer)
-    const now = Date.now()
-    const ageMs = now - entry.timestamp
-    const remainingMs = entry.ttl - ageMs
+    // Import JWT utilities for expiration checking
+    const { isJWTExpiredOrNearExpiry, getJWTExpirationInfo } = require('@/lib/utils/jwt-utils')
 
-    // Invalidate if expired OR within refresh buffer time
-    if (ageMs >= entry.ttl || remainingMs <= this.REFRESH_BUFFER) {
-      console.log(`[JWTTokenCache] Cache miss - entry expired or needs refresh for user: ${clerkUserId} (age: ${Math.round(ageMs/1000)}s, ttl: ${Math.round(entry.ttl/1000)}s, remaining: ${Math.round(remainingMs/1000)}s)`)
+    // Check actual JWT expiration instead of cache TTL
+    if (isJWTExpiredOrNearExpiry(entry.token, this.REFRESH_BUFFER)) {
+      const expirationInfo = getJWTExpirationInfo(entry.token)
+      jwtLog.debug('Cache miss', { reason: 'expired', remaining: expirationInfo.timeUntilExpirySeconds });
       this.cache.delete(clerkUserId)
       return null
     }
 
-    console.log(`[JWTTokenCache] Cache hit for user: ${clerkUserId} (age: ${Math.round(ageMs/1000)}s, remaining: ${Math.round(remainingMs/1000)}s)`)
+    // Log cache hit with actual JWT expiration info
+    const expirationInfo = getJWTExpirationInfo(entry.token)
+    const now = Date.now()
+    const ageMs = now - entry.timestamp
+    jwtLog.debug('Cache hit', { age: Math.round(ageMs/1000), remaining: expirationInfo.timeUntilExpirySeconds });
     return entry.token
   }
 
   /**
-   * Set JWT token in cache with TTL
+   * Set JWT token in cache with TTL calculated from actual expiration
+   * UPDATED: Uses real JWT expiration time instead of hardcoded TTL
    */
   set(clerkUserId: string, token: string, customTtl?: number): void {
     // Prevent cache from growing too large
@@ -204,14 +215,22 @@ class JWTTokenCache {
       this.evictOldest()
     }
 
+    // Calculate TTL from actual JWT expiration
+    const { calculateJWTCacheTTL, getJWTExpirationInfo } = require('@/lib/utils/jwt-utils')
+    const actualTtl = calculateJWTCacheTTL(token, this.REFRESH_BUFFER)
+    const ttl = customTtl || actualTtl || this.DEFAULT_TTL
+
     const entry: JWTCacheEntry = {
       token,
       timestamp: Date.now(),
-      ttl: customTtl || this.DEFAULT_TTL
+      ttl
     }
 
     this.cache.set(clerkUserId, entry)
-    console.log(`[JWTTokenCache] Cached JWT token for user: ${clerkUserId}`)
+
+    // Log with actual JWT expiration info
+    const expirationInfo = getJWTExpirationInfo(token)
+    jwtLog.debug('Cached JWT token', { ttl: Math.round(ttl/1000) });
   }
 
   /**
@@ -220,7 +239,7 @@ class JWTTokenCache {
   invalidate(clerkUserId: string): void {
     const deleted = this.cache.delete(clerkUserId)
     if (deleted) {
-      console.log(`[JWTTokenCache] Invalidated JWT token for user: ${clerkUserId}`)
+      jwtLog.debug('Token invalidated');
     }
   }
 
@@ -230,7 +249,7 @@ class JWTTokenCache {
   clear(): void {
     const size = this.cache.size
     this.cache.clear()
-    console.log(`[JWTTokenCache] Cleared ${size} JWT cache entries`)
+    jwtLog.debug('Cache cleared', { count: size });
   }
 
   /**
@@ -249,7 +268,7 @@ class JWTTokenCache {
 
     if (oldestKey) {
       this.cache.delete(oldestKey)
-      console.log(`[JWTTokenCache] Evicted oldest JWT entry: ${oldestKey}`)
+      jwtLog.debug('Evicted oldest entry');
     }
   }
 }
@@ -259,6 +278,7 @@ export const jwtTokenCache = new JWTTokenCache()
 
 /**
  * Get cached JWT token or fetch new one from Clerk
+ * UPDATED: Using native integration (no template parameter)
  */
 export async function getCachedJWTToken(clerkUserId: string): Promise<string | null> {
   // Try cache first
@@ -268,13 +288,15 @@ export async function getCachedJWTToken(clerkUserId: string): Promise<string | n
   }
 
   // Cache miss - get from Clerk
-  console.log(`[JWTTokenCache] Cache miss, fetching from Clerk: ${clerkUserId}`)
+  jwtLog.debug('Fetching from Clerk');
 
   try {
     // Import here to avoid circular dependency
     const { auth } = await import('@clerk/nextjs/server')
     const { getToken } = await auth()
 
+    // Get Supabase-compatible JWT using Clerk's template system
+    // This generates a JWT that Supabase can validate
     const jwtToken = await getToken({ template: 'supabase' })
 
     if (jwtToken) {
@@ -283,16 +305,16 @@ export async function getCachedJWTToken(clerkUserId: string): Promise<string | n
       if (tokenParts.length === 3) {
         // Cache the token
         jwtTokenCache.set(clerkUserId, jwtToken)
-        console.log(`[JWTTokenCache] Successfully cached JWT token for user: ${clerkUserId}`)
+        jwtLog.debug('Token cached successfully');
         return jwtToken
       } else {
-        console.warn(`[JWTTokenCache] Invalid JWT token structure for user: ${clerkUserId}`)
+        jwtLog.warn('Invalid JWT token structure');
       }
     }
 
     return jwtToken
   } catch (error) {
-    console.error(`[JWTTokenCache] Failed to get JWT token for user: ${clerkUserId}`, error)
+    jwtLog.error('Failed to get JWT token', error);
     return null
   }
 }

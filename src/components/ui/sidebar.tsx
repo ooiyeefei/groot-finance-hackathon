@@ -310,7 +310,7 @@ export default function Sidebar() {
             <div className="flex items-center justify-center space-x-2 text-muted-foreground text-sm">
               <span>Powered by</span>
               <Image
-                src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
+                src="https://ohxwghdgsuyabgsndfzc.supabase.co/storage/v1/object/public/business-profiles/cc5fdbbc-1459-43ad-9736-3cc65649d23b/logo_1760635116031.png"
                 alt="FinanSEAL"
                 width={27}
                 height={27}
@@ -322,7 +322,7 @@ export default function Sidebar() {
             <div className="flex justify-center">
               <div className="relative group">
                 <Image
-                  src="https://storage.googleapis.com/finanseal-logo/finanseal.png"
+                  src="https://ohxwghdgsuyabgsndfzc.supabase.co/storage/v1/object/public/business-profiles/cc5fdbbc-1459-43ad-9736-3cc65649d23b/logo_1760635116031.png"
                   alt="Powered by FinanSEAL"
                   width={23}
                   height={23}

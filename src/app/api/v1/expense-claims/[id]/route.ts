@@ -2,7 +2,7 @@
  * North Star Expense Claims API v1 - Individual Resource Routes
  * GET /api/v1/expense-claims/{id} - Get single expense claim
  * PUT /api/v1/expense-claims/{id} - Update expense claim (unified updates + status changes)
- * DELETE /api/v1/expense-claims/{id} - Delete expense claim (draft only)
+ * DELETE /api/v1/expense-claims/{id} - Delete expense claim (draft, failed, or classification_failed)
  */
 
 import { auth } from '@clerk/nextjs/server'
@@ -119,7 +119,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
 /**
  * DELETE /api/v1/expense-claims/{id}
- * Delete expense claim (draft claims only)
+ * Delete expense claim (draft, failed, or classification_failed claims only)
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
@@ -143,7 +143,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         )
       }
 
-      if (result.error?.includes('Only draft')) {
+      if (result.error?.includes('Only draft') || result.error?.includes('Only draft or failed')) {
         return NextResponse.json(
           { success: false, error: result.error },
           { status: 400 }

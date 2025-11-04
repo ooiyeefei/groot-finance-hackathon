@@ -287,6 +287,37 @@ export async function listConversations(
 }
 
 /**
+ * Create a new empty conversation
+ */
+export async function createConversation(
+  clerkUserId: string,
+  supabaseUserId: string,
+  businessId: string,
+  language: string = 'en'
+): Promise<{ id: string; title: string }> {
+  const supabase = await createBusinessContextSupabaseClient(clerkUserId)
+
+  const { data: newConversation, error: conversationError } = await supabase
+    .from('conversations')
+    .insert({
+      user_id: supabaseUserId,
+      business_id: businessId,
+      title: 'New Chat',
+      language: language
+    })
+    .select('id, title')
+    .single()
+
+  if (conversationError) {
+    throw new Error(`Failed to create conversation: ${conversationError.message}`)
+  }
+
+  console.log(`[Chat Service] Created new conversation: ${newConversation.id}`)
+
+  return newConversation
+}
+
+/**
  * Get conversation with all messages
  */
 export async function getConversation(

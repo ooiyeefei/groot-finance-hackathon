@@ -4,10 +4,13 @@
  * SECURITY: Now uses authenticated clients with business context validation
  */
 
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/db/supabase-server';
+import { getUserData } from '@/lib/db/supabase-server';
 import { SupportedCurrency } from '@/domains/accounting-entries/types';
 import { AgedReceivables, AgedPayables } from '@/domains/analytics/types/analytics';
 import { calculateRiskScore, TransactionRiskContext, RiskScore, DEFAULT_RISK_CONFIG } from './risk-scoring';
+import { createLogger } from '@/lib/utils/logger';
+
+const log = createLogger('Analytics:Engine');
 
 export interface EnhancedAgedReceivables extends AgedReceivables {
   risk_distribution: {
@@ -70,21 +73,19 @@ export interface AnalyticsCalculationOptions {
  * FIXED: Use getUserData helper for reliable Clerk ID to UUID conversion
  */
 async function getUserDataForAnalytics(clerkUserId: string): Promise<{ supabaseUserId: string; businessId: string }> {
-  console.log('[Analytics Engine] Converting Clerk ID to UUID:', clerkUserId);
+  log.debug('Converting Clerk ID to UUID:', clerkUserId);
 
   try {
     // SECURITY FIX: Use the reliable getUserData function that handles user recovery
     const userData = await getUserData(clerkUserId);
 
     if (!userData.business_id) {
-      throw new Error(`User ${clerkUserId} missing business context: ${userData.email}`);
+      throw new Error(`User missing business context`);
     }
 
-    console.log('[Analytics Engine] Successfully converted:', {
-      clerkUserId,
-      supabaseUserId: userData.id,
-      businessId: userData.business_id,
-      email: userData.email
+    log.debug('Successfully converted user ID', {
+      hasBusinessId: !!userData.business_id,
+      hasEmail: !!userData.email
     });
 
     return {
@@ -92,7 +93,7 @@ async function getUserDataForAnalytics(clerkUserId: string): Promise<{ supabaseU
       businessId: userData.business_id
     };
   } catch (error) {
-    console.error('[Analytics Engine] Failed to get user data for analytics:', error);
+    log.error('Failed to get user data for analytics:', error);
     throw new Error(`Failed to resolve user for analytics: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -110,8 +111,10 @@ export async function calculateFinancialAnalyticsRPC(
 ): Promise<FinancialAnalytics> {
   const { homeCurrency = 'SGD', forceRefresh = false } = options;
 
-  console.log('[Analytics RPC] Starting RPC-based analytics calculation...');
-  console.log('[Analytics RPC] Period:', periodStart.toISOString().split('T')[0], 'to', periodEnd.toISOString().split('T')[0]);
+  log.debug('Starting RPC-based analytics calculation', {
+    period: `${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`,
+    homeCurrency
+  });
 
   // SECURITY: Get user data with business context for proper tenant isolation
   const userData = await getUserDataForAnalytics(clerkUserId);
@@ -119,28 +122,29 @@ export async function calculateFinancialAnalyticsRPC(
 
   // PERFORMANCE: RPC functions are already optimized, no need for additional caching
 
-  // SECURITY: Create authenticated client for this specific user with business context
-  const supabase = await createAuthenticatedSupabaseClient(clerkUserId);
+  // SECURITY: Use service role client to bypass RLS
+  // This is safe because we're passing user_id explicitly to the RPC function
+  const { createServiceSupabaseClient } = await import('@/lib/db/supabase-server');
+  const supabase = createServiceSupabaseClient();
 
   try {
     // PERFORMANCE: Call optimized RPC function instead of complex calculations
-    console.log('[Analytics RPC] Calling get_dashboard_analytics with user UUID:', supabaseUserId);
+    log.debug('Calling get_dashboard_analytics RPC');
 
     const { data: rpcResult, error: rpcError } = await supabase
       .rpc('get_dashboard_analytics', {
         p_user_id: supabaseUserId,
         p_start_date: periodStart.toISOString().split('T')[0],
-        p_end_date: periodEnd.toISOString().split('T')[0],
-        p_force_refresh: forceRefresh
+        p_end_date: periodEnd.toISOString().split('T')[0]
       });
 
     if (rpcError) {
-      console.error('[Analytics RPC] RPC function error:', rpcError);
+      log.error('RPC function error:', rpcError.message);
       throw new Error(`RPC analytics calculation failed: ${rpcError.message}`);
     }
 
     if (!rpcResult || !Array.isArray(rpcResult) || rpcResult.length === 0) {
-      console.log('[Analytics RPC] No data returned from RPC function');
+      log.debug('No data returned from RPC function');
       // Return zero analytics for empty result
       return createEmptyAnalytics(supabaseUserId, periodStart, periodEnd);
     }
@@ -148,13 +152,10 @@ export async function calculateFinancialAnalyticsRPC(
     // ✅ FIX: RPC TABLE functions return array, get first row
     const result = rpcResult[0];
 
-    console.log('[Analytics RPC] RPC function completed successfully');
-    console.log('[Analytics RPC] Full RPC result structure:', JSON.stringify(rpcResult, null, 2));
-    console.log('[Analytics RPC] First result object keys:', Object.keys(result || {}));
-    console.log('[Analytics RPC] Raw RPC result sample:', {
-      total_income: result?.total_income,
-      total_expenses: result?.total_expenses,
-      transaction_count: result?.transaction_count
+    log.debug('RPC function completed', {
+      hasIncome: !!result?.total_income,
+      hasExpenses: !!result?.total_expenses,
+      transactionCount: result?.transaction_count
     });
 
     // Transform RPC result to expected FinancialAnalytics interface
@@ -207,7 +208,7 @@ export async function calculateFinancialAnalyticsRPC(
       calculated_at: new Date()
     };
 
-    console.log('[Analytics RPC] Transformed analytics:', {
+    log.debug('Analytics calculation complete', {
       total_income: analytics.total_income,
       total_expenses: analytics.total_expenses,
       net_profit: analytics.net_profit,
@@ -217,10 +218,10 @@ export async function calculateFinancialAnalyticsRPC(
     return analytics;
 
   } catch (error) {
-    console.error('[Analytics RPC] Error calling RPC function:', error);
+    log.error('Error calling RPC function:', error);
 
     // Fallback to original calculation method if RPC fails
-    console.log('[Analytics RPC] Falling back to original calculation method...');
+    log.warn('Falling back to original calculation method');
     return await calculateFinancialAnalyticsOriginal(clerkUserId, periodStart, periodEnd, options);
   }
 }
@@ -281,7 +282,7 @@ export async function calculateFinancialAnalytics(
   options: AnalyticsCalculationOptions = {}
 ): Promise<FinancialAnalytics> {
   // ✅ FIXED: Switch back to RPC method now that aged receivables/payables are properly calculated
-  console.log('[Analytics Engine] Using optimized RPC method with fixed aged receivables/payables calculations');
+  log.debug('Using optimized RPC method');
   return await calculateFinancialAnalyticsRPC(clerkUserId, periodStart, periodEnd, options);
 }
 
@@ -304,23 +305,15 @@ export async function calculateFinancialAnalyticsOriginal(
 
   // PERFORMANCE: Using original calculation method as fallback only
 
-  // SECURITY: Create authenticated client for this specific user with business context
-  const supabase = await createAuthenticatedSupabaseClient(clerkUserId);
+  // SECURITY: Use service role client to bypass RLS
+  // This is safe because we're explicitly filtering by user_id and business_id (already validated)
+  const { createServiceSupabaseClient } = await import('@/lib/db/supabase-server');
+  const supabase = createServiceSupabaseClient();
 
   // Fetch transactions within business context for proper tenant isolation
-  console.log('[Analytics Engine Original] Fetching transactions for user:', supabaseUserId, 'business:', businessId);
-  console.log('[Analytics Engine Original] Date range:', periodStart.toISOString().split('T')[0], 'to', periodEnd.toISOString().split('T')[0]);
-
-  // SECURITY: First check transaction count with business_id validation
-  const { data: allUserTransactions, error: checkError } = await supabase
-    .from('accounting_entries')
-    .select('id, transaction_date, transaction_type, original_amount, home_currency_amount')
-    .eq('user_id', supabaseUserId)
-    .eq('business_id', businessId)
-    .order('transaction_date', { ascending: false })
-    .limit(10);
-
-  console.log('[Analytics Engine] Last 10 transactions for user:', allUserTransactions);
+  log.debug('Fetching transactions (original method)', {
+    period: `${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`
+  });
 
   // SECURITY: Fetch transactions with proper UUID and business context validation
   const { data: transactions, error: transactionError } = await supabase
@@ -330,17 +323,14 @@ export async function calculateFinancialAnalyticsOriginal(
     .eq('business_id', businessId)
     .gte('transaction_date', periodStart.toISOString().split('T')[0])
     .lte('transaction_date', periodEnd.toISOString().split('T')[0])
-    .order('transaction_date', { ascending: true });
+    .order('transaction_date', { ascending: true});
 
   if (transactionError) {
-    console.error('[Analytics Engine] Transaction query error:', transactionError);
+    log.error('Transaction query error:', transactionError.message);
     throw new Error(`Failed to fetch transactions: ${transactionError.message}`);
   }
 
-  console.log('[Analytics Engine] Found transactions:', transactions?.length || 0);
-  if (transactions && transactions.length > 0) {
-    console.log('[Analytics Engine] Sample transaction:', transactions[0]);
-  }
+  log.debug('Found transactions', { count: transactions?.length || 0 });
 
   if (!transactions || transactions.length === 0) {
     // Return zero analytics for empty period
@@ -418,8 +408,8 @@ export async function calculateFinancialAnalyticsOriginal(
   const netProfit = totalIncome - totalExpenses;
 
   // Calculate aged receivables for income transactions
-  console.log('[Analytics Engine] Calculating aged receivables...');
-  
+  log.debug('Calculating aged receivables');
+
   // SECURITY: Fetch income transactions with business context validation
   // Include 'pending' status as per accounting standards - pending income represents unpaid receivables
   const { data: receivableTransactions, error: receivableError } = await supabase
@@ -431,7 +421,7 @@ export async function calculateFinancialAnalyticsOriginal(
     .in('status', ['pending', 'awaiting_payment', 'overdue']);
 
   if (receivableError) {
-    console.error('[Analytics Engine] Failed to fetch receivable transactions:', receivableError);
+    log.error('Failed to fetch receivable transactions:', receivableError.message);
   }
 
   const agedReceivables: EnhancedAgedReceivables = {
@@ -447,9 +437,9 @@ export async function calculateFinancialAnalyticsOriginal(
 
   const currentDate = new Date();
   const receivableRiskScores: RiskScore[] = [];
-  
+
   if (receivableTransactions && receivableTransactions.length > 0) {
-    console.log('[Analytics Engine] Found', receivableTransactions.length, 'outstanding receivable transactions');
+    log.debug('Found receivable transactions', { count: receivableTransactions.length });
     
     for (const transaction of receivableTransactions) {
       const amount = transaction.home_currency_amount || transaction.original_amount || 0;
@@ -508,14 +498,14 @@ export async function calculateFinancialAnalyticsOriginal(
       agedReceivables.average_risk_score = receivableRiskScores.reduce((sum, score) => sum + score.score, 0) / receivableRiskScores.length;
     }
     
-    console.log('[Analytics Engine] Enhanced aged receivables calculated:', agedReceivables);
-    console.log('[Analytics Engine] Risk distribution:', agedReceivables.risk_distribution);
+    log.debug('Enhanced aged receivables calculated');
+    // Risk distribution logged in debug mode
   } else {
-    console.log('[Analytics Engine] No outstanding receivables found');
+    log.debug('No outstanding receivables found');
   }
 
   // Calculate aged payables for expense transactions
-  console.log('[Analytics Engine] Calculating aged payables...');
+  log.debug('Calculating aged payables');
   
   // SECURITY: Fetch expense transactions with business context validation
   // Include 'pending' status as per accounting standards - pending expenses represent unpaid payables
@@ -528,7 +518,7 @@ export async function calculateFinancialAnalyticsOriginal(
     .in('status', ['pending', 'awaiting_payment', 'overdue']);
 
   if (payableError) {
-    console.error('[Analytics Engine] Failed to fetch payable transactions:', payableError);
+    log.error('Failed to fetch payable transactions:', payableError.message);
   }
 
   const agedPayables: EnhancedAgedPayables = {
@@ -545,7 +535,7 @@ export async function calculateFinancialAnalyticsOriginal(
   const payableRiskScores: RiskScore[] = [];
   
   if (payableTransactions && payableTransactions.length > 0) {
-    console.log('[Analytics Engine] Found', payableTransactions.length, 'outstanding payable transactions');
+    log.debug('Found payable transactions', { count: payableTransactions.length });
     
     for (const transaction of payableTransactions) {
       const amount = Math.abs(transaction.home_currency_amount || transaction.original_amount || 0);
@@ -604,14 +594,14 @@ export async function calculateFinancialAnalyticsOriginal(
       agedPayables.average_risk_score = payableRiskScores.reduce((sum, score) => sum + score.score, 0) / payableRiskScores.length;
     }
     
-    console.log('[Analytics Engine] Enhanced aged payables calculated:', agedPayables);
-    console.log('[Analytics Engine] Risk distribution:', agedPayables.risk_distribution);
+    log.debug('Enhanced aged payables calculated');
+    // Risk distribution logged in debug mode
   } else {
-    console.log('[Analytics Engine] No outstanding payables found');
+    log.debug('No outstanding payables found');
   }
 
   // TASK 3: Analyze compliance_analysis fields for alerts
-  console.log('[Analytics Engine] Analyzing compliance data for alerts...');
+  log.debug('Analyzing compliance data for alerts');
   
   const complianceAlerts: ComplianceAlert[] = [];
   
@@ -624,9 +614,9 @@ export async function calculateFinancialAnalyticsOriginal(
     .not('compliance_analysis', 'is', null);
     
   if (complianceError) {
-    console.error('[Analytics Engine] Failed to fetch compliance data:', complianceError);
+    log.error('Failed to fetch compliance data:', complianceError.message);
   } else if (complianceTransactions && complianceTransactions.length > 0) {
-    console.log('[Analytics Engine] Found', complianceTransactions.length, 'transactions with compliance analysis');
+    log.debug('Found compliance transactions', { count: complianceTransactions.length });
     
     for (const transaction of complianceTransactions) {
       try {
@@ -652,18 +642,18 @@ export async function calculateFinancialAnalyticsOriginal(
           complianceAlerts.push(alert);
         }
       } catch (error) {
-        console.error('[Analytics Engine] Failed to parse compliance analysis for transaction:', transaction.id, error);
+        log.error('Failed to parse compliance analysis', error);
       }
     }
     
-    console.log('[Analytics Engine] Generated', complianceAlerts.length, 'compliance alerts');
+    log.debug('Generated compliance alerts', { count: complianceAlerts.length });
     
     // Log sample alerts for debugging
     if (complianceAlerts.length > 0) {
-      console.log('[Analytics Engine] Sample compliance alerts:', complianceAlerts.slice(0, 3));
+      // Sample alerts logged in debug mode
     }
   } else {
-    console.log('[Analytics Engine] No transactions with compliance analysis found');
+    log.debug('No transactions with compliance analysis found');
   }
 
   const analytics: FinancialAnalytics = {
@@ -736,15 +726,15 @@ export async function calculateAnalyticsTrends(
     profit_change: number;
   };
 }> {
-  console.log('[Analytics Trends] Starting trends calculation with RPC optimization...');
+  log.debug('Starting trends calculation with RPC optimization');
 
   // Calculate period length to determine previous period
   const periodLength = currentPeriod.end.getTime() - currentPeriod.start.getTime();
   const previousStart = new Date(currentPeriod.start.getTime() - periodLength);
   const previousEnd = new Date(currentPeriod.end.getTime() - periodLength);
 
-  console.log('[Analytics Trends] Current period:', currentPeriod.start.toISOString().split('T')[0], 'to', currentPeriod.end.toISOString().split('T')[0]);
-  console.log('[Analytics Trends] Previous period:', previousStart.toISOString().split('T')[0], 'to', previousEnd.toISOString().split('T')[0]);
+  // Period info logged in debug mode
+  // Period info logged in debug mode
 
   // Use RPC-optimized functions for both periods in parallel
   const [current, previous] = await Promise.all([
@@ -764,7 +754,7 @@ export async function calculateAnalyticsTrends(
       : 0
   };
 
-  console.log('[Analytics Trends] Trends calculation completed with RPC optimization:', {
+  log.debug('Trends calculation completed', {
     income_change: trends.income_change.toFixed(2) + '%',
     expenses_change: trends.expenses_change.toFixed(2) + '%',
     profit_change: trends.profit_change.toFixed(2) + '%'

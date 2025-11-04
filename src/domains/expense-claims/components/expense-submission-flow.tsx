@@ -360,7 +360,7 @@ export default function ExpenseSubmissionFlow({
 
             {/* Show background processing indicator */}
             {hasActiveProcessing && (
-              <Badge variant="secondary" className="bg-purple-900/20 text-purple-300 border border-purple-700/50 animate-pulse">
+              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 animate-pulse">
                 {processingClaims.length} processing...
               </Badge>
             )}
@@ -372,10 +372,10 @@ export default function ExpenseSubmissionFlow({
                 variant="secondary"
                 className={
                   flowState.extractionResult.extractedData.extractionQuality === 'high'
-                    ? 'bg-green-600'
+                    ? 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30'
                     : flowState.extractionResult.extractedData.extractionQuality === 'medium'
-                    ? 'bg-yellow-600'
-                    : 'bg-red-600'
+                    ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30'
+                    : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30'
                 }
               >
                 {flowState.extractionResult.extractedData.extractionQuality} quality

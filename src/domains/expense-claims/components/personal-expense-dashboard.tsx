@@ -984,28 +984,52 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           </Button>
         )}
 
-        {/* Reprocess button for failed claims - Retry AI extraction */}
-        {claim.status === 'failed' && claim.storage_path && (
-          <Button
-            onClick={() => handleReprocessClick(claim.id, claim.storage_path)}
-            disabled={reprocessingClaims.has(claim.id)}
-            variant="primary"
-            size="sm"
-          >
-            {reprocessingClaims.has(claim.id) ? (
-              <Brain className="w-4 h-4 mr-1.5 animate-spin" />
-            ) : (
-              <RotateCcw className="w-4 h-4 mr-1.5" />
+        {/* Failed claims actions - Edit, Delete, and Reprocess */}
+        {(claim.status === 'failed' || claim.status === 'classification_failed') && (
+          <>
+            <Button
+              onClick={() => {
+                setEditingClaimId(claim.id)
+                setShowEditModal(true)
+              }}
+              variant="primary"
+              size="sm"
+            >
+              <Edit3 className="w-4 h-4 mr-1.5" />
+              Edit
+            </Button>
+            <Button
+              onClick={() => deleteClaim(claim.id)}
+              variant="destructive"
+              size="sm"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Delete
+            </Button>
+            {claim.storage_path && (
+              <Button
+                onClick={() => handleReprocessClick(claim.id, claim.storage_path)}
+                disabled={reprocessingClaims.has(claim.id)}
+                variant="primary"
+                size="sm"
+              >
+                {reprocessingClaims.has(claim.id) ? (
+                  <Brain className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 mr-1.5" />
+                )}
+                {reprocessingClaims.has(claim.id) ? 'AI Analyzing...' : 'Reprocess'}
+              </Button>
             )}
-            {reprocessingClaims.has(claim.id) ? 'AI Analyzing...' : 'Reprocess'}
-          </Button>
+          </>
         )}
 
-        {/* View Details button for all non-draft claims (except when processing or failed with reprocess option) */}
+        {/* View Details button for all non-draft claims (except processing or failed states) */}
         {claim.status !== 'draft' &&
          claim.status !== 'analyzing' &&
          claim.status !== 'uploading' &&
-         !(claim.status === 'failed' && claim.storage_path) && (
+         claim.status !== 'failed' &&
+         claim.status !== 'classification_failed' && (
           <Button
             onClick={() => {
               setDetailsClaimId(claim.id)

@@ -111,9 +111,9 @@ class ReceiptExtractor(dspy.Module):
     def __init__(self, model_name: str = "gemini-2.5-flash"):
         super().__init__()
         self.model_name = model_name
-        self.extractor = dspy.Predict(SimpleReceiptSignature)
+        self.extractor = dspy.ChainOfThought(SimpleReceiptSignature)
 
-    def forward(self, image_data: Dict[str, Any], business_categories: List[Dict] = None) -> ExtractedReceiptData:
+    def forward(self, image_data: Dict[str, Any], business_categories: List[Dict] = None):
         """Process receipt image with DSPy"""
 
         # Convert base64 to dspy.Image
@@ -143,7 +143,8 @@ class ReceiptExtractor(dspy.Module):
         if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
             log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
 
-        return prediction.extracted_data
+        # Return the full prediction object, then access extracted_data at call site
+        return prediction
 
     def _format_categories_for_llm(self, business_categories: List[Dict] = None) -> str:
         """Format business categories as JSON for LLM"""
@@ -239,11 +240,16 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
         # Run extraction
         print("🧠 Running DSPy receipt extraction...", file=sys.stderr)
         extractor = ReceiptExtractor(model_name="gemini-2.5-flash")
-        extracted_data = extractor(image_data=image_data, business_categories=business_categories)
+        prediction = extractor(image_data=image_data, business_categories=business_categories)
 
-        # Update backend info
-        extracted_data.backend_used = 'gemini_dspy'
-        extracted_data.model_used = 'gemini-2.5-flash'
+        # Extract the data from the prediction
+        extracted_data = prediction.extracted_data
+
+        # Create a new instance with updated backend info (Pydantic model is immutable)
+        extracted_data = extracted_data.model_copy(update={
+            'backend_used': 'gemini_dspy',
+            'model_used': 'gemini-2.5-flash'
+        })
 
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
 

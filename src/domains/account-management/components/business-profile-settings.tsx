@@ -408,7 +408,7 @@ export default function BusinessProfileSettings() {
             <button
               onClick={updateBusinessName}
               disabled={isUpdating || businessName.trim() === profile?.name || !businessName.trim()}
-              className="px-4 py-2 bg-action-view hover:bg-action-view/90 disabled:bg-muted disabled:cursor-not-allowed text-action-view-foreground rounded-md font-medium transition-colors"
+              className="px-4 py-2 bg-action-view hover:bg-action-view/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-action-view-foreground rounded-md font-medium transition-colors"
             >
               {isUpdating ? (
                 <div className="w-4 h-4 border-2 border-action-view-foreground border-t-transparent rounded-full animate-spin"></div>

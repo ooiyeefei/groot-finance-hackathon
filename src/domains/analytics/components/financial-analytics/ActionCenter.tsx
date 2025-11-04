@@ -29,6 +29,9 @@ export default function ActionCenter({
     awaitingPaymentCount: 0
   });
 
+  // Client-only timestamp to avoid hydration mismatch
+  const [lastUpdated, setLastUpdated] = useState<string>('');
+
   // Fetch status-based transaction data for smart alerts
   useEffect(() => {
     const fetchStatusData = async () => {
@@ -71,6 +74,11 @@ export default function ActionCenter({
 
     fetchStatusData();
   }, [analytics]); // Refetch when analytics change
+
+  // Update timestamp on client side to avoid hydration mismatch
+  useEffect(() => {
+    setLastUpdated(new Date().toLocaleTimeString());
+  }, [statusBasedData]); // Update when data changes
 
   const actionItems = useMemo(() => {
     if (!analytics) return [];
@@ -326,7 +334,7 @@ export default function ActionCenter({
           Priority items: {actionItems.filter(item => item.priority === 'high').length} high,
           {' '}{actionItems.filter(item => item.priority === 'medium').length} medium
         </span>
-        <span>Last updated: {new Date().toLocaleTimeString()}</span>
+        <span>Last updated: {lastUpdated || 'Loading...'}</span>
       </div>
     </div>
   );

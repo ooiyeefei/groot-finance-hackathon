@@ -352,14 +352,24 @@ function AcceptInvitationContent() {
 
           {!isSignedIn ? (
             <div className="space-y-3">
-              <Button 
+              <Button
                 onClick={handleSignUp}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
                 Sign Up to Accept Invitation
               </Button>
               <p className="text-xs text-gray-500 text-center">
-                Already have an account? Sign in with the invited email address.
+                Already have an account?{' '}
+                <button
+                  onClick={() => {
+                    const signInUrl = `/${locale}/sign-in?email=${encodeURIComponent(invitation?.email || '')}&redirect_url=${encodeURIComponent(window.location.href)}`
+                    window.location.href = signInUrl
+                  }}
+                  className="text-blue-500 hover:text-blue-400 underline font-medium"
+                >
+                  Sign in
+                </button>{' '}
+                with the invited email address.
               </p>
             </div>
           ) : (

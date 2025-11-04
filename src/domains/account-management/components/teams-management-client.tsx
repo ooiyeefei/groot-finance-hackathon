@@ -11,6 +11,7 @@ import { Users, Shield, Mail, Calendar, Briefcase, Loader2, ShieldAlert, AlertCi
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { RoleBadge } from '@/components/ui/role-badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
@@ -19,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import InvitationDialog, { InvitationFormData } from '@/domains/account-management/components/invitation-dialog'
 import { clearUserRoleCache, fetchUserRoleWithCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
+import { useToast } from '@/components/ui/toast'
 
 interface TeamMember {
   id: string
@@ -69,6 +71,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   const [editingNameValue, setEditingNameValue] = useState<string>('')
   const [businessOwner, setBusinessOwner] = useState<string | null>(null)
   const router = useRouter()
+  const { addToast } = useToast()
 
   // CRITICAL FIX: Listen to business context changes
   const { businessId } = useActiveBusiness()
@@ -171,15 +174,27 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess('User removed from business successfully')
+        addToast({
+          type: 'success',
+          title: 'Success',
+          description: 'User removed from business successfully'
+        })
         clearUserRoleCache()
         await fetchTeamMembers() // Refresh the list
       } else {
-        setError(result.error || 'Failed to remove user from business')
+        addToast({
+          type: 'error',
+          title: 'Error',
+          description: result.error || 'Failed to remove user from business'
+        })
       }
     } catch (error) {
       console.error('Failed to remove user from business:', error)
-      setError('Network error while removing user from business')
+      addToast({
+        type: 'error',
+        title: 'Error',
+        description: 'Network error while removing user from business'
+      })
     } finally {
       setUpdating(prev => {
         const newSet = new Set(prev)
@@ -209,14 +224,26 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(`Manager assignment updated successfully`)
+        addToast({
+          type: 'success',
+          title: 'Success',
+          description: 'Manager assignment updated successfully'
+        })
         await fetchTeamMembers() // Refresh the list
       } else {
-        setError(result.error || 'Failed to assign manager')
+        addToast({
+          type: 'error',
+          title: 'Error',
+          description: result.error || 'Failed to assign manager'
+        })
       }
     } catch (error) {
       console.error('Failed to assign manager:', error)
-      setError('Network error while assigning manager')
+      addToast({
+        type: 'error',
+        title: 'Error',
+        description: 'Network error while assigning manager'
+      })
     } finally {
       setUpdating(prev => {
         const newSet = new Set(prev)
@@ -280,20 +307,36 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       if (result.success) {
         if (result.emailFailed && result.warning) {
           // Email failed but invitation was created
-          setError(result.warning)
+          addToast({
+            type: 'warning',
+            title: 'Warning',
+            description: result.warning
+          })
         } else {
           // Success with email sent
-          setSuccess(`Invitation sent to ${data.email}`)
+          addToast({
+            type: 'success',
+            title: 'Success',
+            description: `Invitation sent to ${data.email}`
+          })
         }
         setShowInviteDialog(false)
         await fetchPendingInvitations() // Refresh invitations list
       } else {
-        setError(result.error || 'Failed to send invitation')
+        addToast({
+          type: 'error',
+          title: 'Error',
+          description: result.error || 'Failed to send invitation'
+        })
         throw new Error(result.error || 'Failed to send invitation')
       }
     } catch (error) {
       console.error('Failed to send invitation:', error)
-      setError('Network error while sending invitation')
+      addToast({
+        type: 'error',
+        title: 'Error',
+        description: 'Network error while sending invitation'
+      })
       throw error
     } finally {
       setInviteLoading(false)
@@ -326,14 +369,26 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess('Invitation resent successfully')
+        addToast({
+          type: 'success',
+          title: 'Success',
+          description: 'Invitation resent successfully'
+        })
         await fetchPendingInvitations()
       } else {
-        setError(result.error || 'Failed to resend invitation')
+        addToast({
+          type: 'error',
+          title: 'Error',
+          description: result.error || 'Failed to resend invitation'
+        })
       }
     } catch (error) {
       console.error('Failed to resend invitation:', error)
-      setError('Network error while resending invitation')
+      addToast({
+        type: 'error',
+        title: 'Error',
+        description: 'Network error while resending invitation'
+      })
     }
   }
 
@@ -363,14 +418,26 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess('Invitation deleted successfully')
+        addToast({
+          type: 'success',
+          title: 'Success',
+          description: 'Invitation deleted successfully'
+        })
         await fetchPendingInvitations()
       } else {
-        setError(result.error || 'Failed to delete invitation')
+        addToast({
+          type: 'error',
+          title: 'Error',
+          description: result.error || 'Failed to delete invitation'
+        })
       }
     } catch (error) {
       console.error('Failed to delete invitation:', error)
-      setError('Network error while deleting invitation')
+      addToast({
+        type: 'error',
+        title: 'Error',
+        description: 'Network error while deleting invitation'
+      })
     }
   }
 
@@ -425,15 +492,27 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                       updates.status === 'active' ? 'reactivated' :
                       updates.role ? 'role updated for' : 'updated'
 
-        setSuccess(`User ${action} successfully`)
+        addToast({
+          type: 'success',
+          title: 'Success',
+          description: `User ${action} successfully`
+        })
         clearUserRoleCache()
         await fetchTeamMembers() // Refresh the list
       } else {
-        setError(result.error || 'Failed to update membership')
+        addToast({
+          type: 'error',
+          title: 'Error',
+          description: result.error || 'Failed to update membership'
+        })
       }
     } catch (error) {
       console.error('Failed to update membership:', error)
-      setError('Network error while updating membership')
+      addToast({
+        type: 'error',
+        title: 'Error',
+        description: 'Network error while updating membership'
+      })
     } finally {
       setUpdating(prev => {
         const newSet = new Set(prev)
@@ -445,19 +524,25 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
   const updateUserName = async (memberId: string, isCurrentUser: boolean = false) => {
     if (!editingNameValue.trim()) {
-      setError('Please enter a valid name')
+      addToast({
+        type: 'error',
+        title: 'Validation Error',
+        description: 'Please enter a valid name'
+      })
       return
     }
 
     if (editingNameValue.trim().length < 2) {
-      setError('Name must be at least 2 characters long')
+      addToast({
+        type: 'error',
+        title: 'Validation Error',
+        description: 'Name must be at least 2 characters long'
+      })
       return
     }
 
     try {
       setUpdating(prev => new Set([...prev, memberId]))
-      setError(null)
-      setSuccess(null)
 
       // Use profile endpoint for name updates (users update their own profile)
       const response = await fetch(`/api/v1/users/profile`, {
@@ -473,15 +558,27 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const result = await response.json()
 
       if (result.success) {
-        setSuccess('Name updated successfully')
+        addToast({
+          type: 'success',
+          title: 'Success',
+          description: 'Name updated successfully'
+        })
         cancelEditingName(memberId)
         await fetchTeamMembers() // Refresh the list
       } else {
-        setError(result.error || 'Failed to update name')
+        addToast({
+          type: 'error',
+          title: 'Error',
+          description: result.error || 'Failed to update name'
+        })
       }
     } catch (error) {
       console.error('Failed to update name:', error)
-      setError('Network error while updating name')
+      addToast({
+        type: 'error',
+        title: 'Error',
+        description: 'Network error while updating name'
+      })
     } finally {
       setUpdating(prev => {
         const newSet = new Set(prev)
@@ -498,22 +595,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   }
 
   // No mapping needed - API now returns modern role names directly
-
-  const getRoleColor = (role: UserRole) => {
-    switch (role) {
-      case 'admin': return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
-      case 'manager': return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
-      default: return 'bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30'
-    }
-  }
-
-  const getRoleIcon = (role: UserRole) => {
-    switch (role) {
-      case 'admin': return Crown
-      case 'manager': return Shield
-      default: return UserCheck
-    }
-  }
 
   const getInvitationStatusColor = (status: string) => {
     switch (status) {
@@ -669,7 +750,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                 <div className="space-y-4">
                   {teamMembers.map((member) => {
                     const currentRole = getRoleDisplay(member.role_permissions)
-                    const RoleIcon = getRoleIcon(currentRole)
                     const isUpdating = updating.has(member.id)
 
                     return (
@@ -736,16 +816,10 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
                                   {/* Role and Owner Badges */}
                                   <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className={getRoleColor(currentRole)}>
-                                      <RoleIcon className="w-3 h-3 mr-1" />
-                                      {currentRole}
-                                    </Badge>
+                                    <RoleBadge roleType={currentRole} />
                                     {/* Show Owner badge for the current logged-in user (temporary) */}
                                     {member.clerk_user?.id === userId && (
-                                      <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30">
-                                        <Crown className="w-3 h-3 mr-1" />
-                                        Owner
-                                      </Badge>
+                                      <RoleBadge roleType="owner" />
                                     )}
                                   </div>
                                 </div>
@@ -891,9 +965,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="text-foreground font-medium">{invitation.email}</span>
-                                <Badge variant="outline" className={getRoleColor(invitation.role)}>
-                                  {invitation.role}
-                                </Badge>
+                                <RoleBadge roleType={invitation.role} />
                                 <Badge variant="outline" className={getInvitationStatusColor(invitation.status)}>
                                   {invitation.status}
                                 </Badge>
@@ -907,7 +979,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                           <div className="flex items-center gap-2">
                             <Button
                               size="sm"
+                              variant="default"
                               onClick={() => resendInvitation(invitation.id)}
+                              className="bg-primary hover:bg-primary/90 text-primary-foreground"
                             >
                               <Send className="w-3 h-3 mr-1" />
                               Resend

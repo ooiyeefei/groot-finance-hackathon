@@ -285,7 +285,7 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
           country_code: 'SG',
           home_currency: 'SGD',
           custom_expense_categories: getDefaultExpenseCategories(),
-          logo_url: 'https://storage.googleapis.com/finanseal-logo/finanseal.png',
+          logo_url: 'https://ohxwghdgsuyabgsndfzc.supabase.co/storage/v1/object/public/business-profiles/cc5fdbbc-1459-43ad-9736-3cc65649d23b/logo_1760635116031.png',
           logo_fallback_color: '#3b82f6',
           created_at: new Date().toISOString()
         })

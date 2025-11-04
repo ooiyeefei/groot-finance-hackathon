@@ -8,7 +8,7 @@
 import React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Crown, ChevronDown, Building2, Loader2, AlertCircle, Check, PanelLeftClose, PanelLeftOpen, MoreVertical } from 'lucide-react'
+import { ChevronDown, Building2, Loader2, AlertCircle, Check, PanelLeftClose, PanelLeftOpen, MoreVertical } from 'lucide-react'
 import {
   useActiveBusiness,
   useBusinessMemberships,
@@ -22,49 +22,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
+import { RoleBadge } from '@/components/ui/role-badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-
-// Role Badge Component
-
-interface RoleBadgeProps {
-  role: 'admin' | 'manager' | 'employee'
-  isOwner?: boolean
-  className?: string
-  size?: 'sm' | 'xs'
-}
-
-function RoleBadge({ role, isOwner, className, size = 'xs' }: RoleBadgeProps) {
-  const getRoleColors = (role: string, isOwner: boolean) => {
-    if (isOwner) return 'bg-warning/20 text-warning-foreground border-warning/30'
-    switch (role) {
-      case 'admin': return 'bg-primary/20 text-primary-foreground border-primary/30'
-      case 'manager': return 'bg-secondary/20 text-secondary-foreground border-secondary/30'
-      default: return 'bg-muted text-muted-foreground border-border'
-    }
-  }
-
-  const getRoleLabel = (role: string, isOwner: boolean) => {
-    if (isOwner) return 'Owner'
-    return role.charAt(0).toUpperCase() + role.slice(1)
-  }
-
-  return (
-    <div className={cn('flex items-center gap-1', className)}>
-      {isOwner && <Crown className={cn('text-yellow-400', size === 'xs' ? 'h-2.5 w-2.5' : 'h-3 w-3')} />}
-      <Badge
-        variant="outline"
-        className={cn(
-          getRoleColors(role, isOwner || false),
-          size === 'xs' ? 'text-[10px] px-1.5 py-0.5 h-4' : 'text-xs px-2 py-1 h-5'
-        )}
-      >
-        {getRoleLabel(role, isOwner || false)}
-      </Badge>
-    </div>
-  )
-}
 
 // Workspace Logo Component
 
@@ -296,9 +256,8 @@ export default function EnhancedBusinessDisplay({
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <RoleBadge
-                                  role={membership.membership.role}
-                                  isOwner={membership.isOwner}
-                                  size="xs"
+                                  roleType={membership.isOwner ? 'owner' : membership.membership.role}
+                                  size="sm"
                                 />
                                 {/* MANAGE link placeholder for future implementation */}
                                 <span className="text-xs text-primary opacity-0">MANAGE</span>
@@ -323,7 +282,7 @@ export default function EnhancedBusinessDisplay({
                 </div>
                 {/* Brainwave-style: Subtle role indicator */}
                 <div className="mt-2">
-                  <RoleBadge role={business.role} isOwner={business.isOwner} size="sm" />
+                  <RoleBadge roleType={business.isOwner ? 'owner' : business.role} />
                 </div>
               </div>
             </Link>
@@ -350,7 +309,7 @@ export default function EnhancedBusinessDisplay({
                     <div className="flex items-center gap-2">
                       <span className="font-medium truncate">{business.businessName}</span>
                     </div>
-                    <RoleBadge role={business.role} isOwner={business.isOwner} size="xs" />
+                    <RoleBadge roleType={business.isOwner ? 'owner' : business.role} size="sm" />
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -420,9 +379,8 @@ export default function EnhancedBusinessDisplay({
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
                               <RoleBadge
-                                role={membership.membership.role}
-                                isOwner={membership.isOwner}
-                                size="xs"
+                                roleType={membership.isOwner ? 'owner' : membership.membership.role}
+                                size="sm"
                               />
                               {/* MANAGE link placeholder for future implementation */}
                               <span className="text-xs text-primary opacity-0">MANAGE</span>
@@ -447,7 +405,7 @@ export default function EnhancedBusinessDisplay({
               </div>
               {/* Brainwave-style: Subtle role indicator */}
               <div className="mt-2">
-                <RoleBadge role={business.role} isOwner={business.isOwner} size="sm" />
+                <RoleBadge roleType={business.isOwner ? 'owner' : business.role} />
               </div>
             </div>
           </Link>
@@ -495,9 +453,8 @@ export default function EnhancedBusinessDisplay({
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                   <RoleBadge
-                                    role={membership.membership.role}
-                                    isOwner={membership.isOwner}
-                                    size="xs"
+                                    roleType={membership.isOwner ? 'owner' : membership.membership.role}
+                                    size="sm"
                                   />
                                   {/* MANAGE link placeholder for future implementation */}
                                   <span className="text-xs text-primary opacity-0">MANAGE</span>
@@ -519,7 +476,7 @@ export default function EnhancedBusinessDisplay({
                   <div className="flex items-center gap-2">
                     <span className="font-medium truncate">{business.businessName}</span>
                   </div>
-                  <RoleBadge role={business.role} isOwner={business.isOwner} size="xs" />
+                  <RoleBadge roleType={business.isOwner ? 'owner' : business.role} size="sm" />
                   <div className="text-xs text-muted-foreground">
                     {memberships.length} workspace{memberships.length > 1 ? 's' : ''}
                   </div>

@@ -248,10 +248,10 @@ export default function MobileCameraCapture({
   if (isInitializing) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
-        <Card className="bg-gray-800 border-gray-700 p-6">
+        <Card className="bg-card border-border p-6">
           <CardContent className="text-center">
-            <Camera className="w-12 h-12 mx-auto mb-4 text-blue-400 animate-pulse" />
-            <p className="text-white">Initializing camera...</p>
+            <Camera className="w-12 h-12 mx-auto mb-4 text-primary animate-pulse" />
+            <p className="text-foreground">Initializing camera...</p>
           </CardContent>
         </Card>
       </div>
@@ -298,17 +298,17 @@ export default function MobileCameraCapture({
           </div>
           
           <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              onClick={retakePhoto} 
-              className="flex-1 border-gray-600"
+            <Button
+              variant="outline"
+              onClick={retakePhoto}
+              className="flex-1 border-border text-muted-foreground hover:text-foreground"
             >
               Retake
             </Button>
-            <Button 
-              onClick={() => confirmCapture(new File([], 'temp'))} 
+            <Button
+              onClick={() => confirmCapture(new File([], 'temp'))}
               disabled={isProcessing}
-              className="flex-1 bg-green-600 hover:bg-green-700"
+              className="flex-1 bg-green-600 dark:bg-green-500 text-white hover:bg-green-700 dark:hover:bg-green-600"
             >
               {isProcessing ? 'Processing...' : 'Use Photo'}
             </Button>
@@ -322,10 +322,10 @@ export default function MobileCameraCapture({
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-gray-900/90">
-        <h3 className="text-white font-medium">Capture Receipt</h3>
+      <div className="flex items-center justify-between p-4 bg-surface/90 backdrop-blur-sm border-b border-border">
+        <h3 className="text-foreground font-medium">Capture Receipt</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>
-          <X className="w-5 h-5 text-white" />
+          <X className="w-5 h-5 text-foreground" />
         </Button>
       </div>
 
@@ -367,7 +367,7 @@ export default function MobileCameraCapture({
       </div>
 
       {/* Controls */}
-      <div className="p-6 bg-gray-900/90">
+      <div className="p-6 bg-surface/90 backdrop-blur-sm border-t border-border">
         {/* Settings Row */}
         <div className="flex justify-center items-center gap-6 mb-6">
           {/* Flash Toggle */}

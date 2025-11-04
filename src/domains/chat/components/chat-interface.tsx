@@ -353,7 +353,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
                 className={`max-w-xs lg:max-w-md rounded-lg ${
                   message.role === 'user'
                     ? 'bg-action-view text-action-view-foreground'
-                    : 'bg-record-layer-2 text-foreground'
+                    : 'bg-muted text-foreground'
                 }`}
               >
                 <div className="flex items-start justify-between px-4 py-2">
@@ -424,7 +424,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
             <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
               <Bot className="w-4 h-4 text-primary-foreground" />
             </div>
-            <div className="bg-record-layer-2 text-foreground px-4 py-2 rounded-lg">
+            <div className="bg-muted text-foreground px-4 py-2 rounded-lg">
               <div className="flex items-center space-x-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-sm">{t('thinking')}</span>
@@ -452,7 +452,7 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
           <button
             onClick={sendMessage}
             disabled={!inputValue.trim() || isLoading}
-            className="bg-primary hover:bg-primary/90 disabled:bg-muted disabled:cursor-not-allowed text-primary-foreground p-2 rounded-lg transition-colors"
+            className="bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground p-2 rounded-lg transition-colors"
             aria-label={t('send')}
           >
             <Send className="w-5 h-5" />

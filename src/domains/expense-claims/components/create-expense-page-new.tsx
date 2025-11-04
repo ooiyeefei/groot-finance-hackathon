@@ -247,7 +247,7 @@ export default function CreateExpensePageNew({
             {loadError}
           </p>
           {onBack && (
-            <Button onClick={onBack} variant="outline" className="border-gray-600 text-gray-300">
+            <Button onClick={onBack} variant="outline" className="border-border text-muted-foreground hover:text-foreground">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Go Back
             </Button>

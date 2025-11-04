@@ -4,7 +4,7 @@
  * Consolidates logic from both /api/accounting-entries and /api/transactions
  */
 
-import { createBusinessContextSupabaseClient, getUserData } from '@/lib/db/supabase-server'
+import { createServiceSupabaseClient, getUserData } from '@/lib/db/supabase-server'
 import { currencyService } from '@/lib/services/currency-service'
 import { CrossBorderTaxComplianceTool } from '@/lib/ai/tools'
 import {
@@ -189,7 +189,7 @@ export async function createAccountingEntry(
     console.log(`[Accounting Entries Data Access] Creating ${transaction_type} entry for user ${userId}`)
 
     const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient()
+    const supabase = createServiceSupabaseClient()
 
     // DUPLICATE PREVENTION: Check if accounting entry already exists for this source document
     if (source_record_id && source_document_type) {
@@ -467,7 +467,7 @@ export async function getAccountingEntries(
     console.log(`[Accounting Entries Data Access] Listing entries for user ${userId}:`, params)
 
     const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient()
+    const supabase = createServiceSupabaseClient()
 
     let query = supabase
       .from('accounting_entries')
@@ -570,7 +570,7 @@ export async function getAccountingEntryById(
     console.log(`[Accounting Entries Data Access] Getting entry ${entryId} for user ${userId}`)
 
     const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient()
+    const supabase = createServiceSupabaseClient()
 
     const { data: accountingEntry, error } = await supabase
       .from('accounting_entries')
@@ -646,7 +646,7 @@ export async function updateAccountingEntry(
     console.log(`[Accounting Entries Data Access] Updating entry ${entryId} for user ${userId}`)
 
     const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient()
+    const supabase = createServiceSupabaseClient()
 
     // First verify the entry exists and user owns it
     const { data: existingEntry, error: fetchError } = await supabase
@@ -798,7 +798,7 @@ export async function deleteAccountingEntry(
     console.log(`[Accounting Entries Data Access] Deleting entry ${entryId} for user ${userId}`)
 
     const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient()
+    const supabase = createServiceSupabaseClient()
 
     // Soft delete by setting deleted_at timestamp
     const { error } = await supabase
@@ -834,7 +834,7 @@ export async function updateAccountingEntryCategory(
     console.log(`[Accounting Entries Data Access] Updating category for entry ${entryId}`)
 
     const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient()
+    const supabase = createServiceSupabaseClient()
 
     const { data: updatedEntry, error } = await supabase
       .from('accounting_entries')
@@ -881,7 +881,7 @@ export async function updateAccountingEntryStatus(
     console.log(`[Accounting Entries Data Access] Updating status for entry ${entryId} to ${status}`)
 
     const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient()
+    const supabase = createServiceSupabaseClient()
 
     const { data: updatedEntry, error } = await supabase
       .from('accounting_entries')

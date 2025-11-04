@@ -2,7 +2,6 @@ import { createClient } from '@supabase/supabase-js'
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { getDefaultExpenseCategories } from '@/domains/expense-claims/lib/default-expense-categories'
 import { getDefaultCOGSCategories } from '@/domains/invoices/lib/default-cogs-categories'
-import { syncRoleToClerk } from '@/domains/security/lib/rbac'
 
 // Retry utility for network operations
 async function retryOperation<T>(
@@ -207,19 +206,10 @@ async function createMissingUserRecords(
         admin: invitationRole === 'admin'
       }
 
-      // Sync role permissions to Clerk metadata
-      console.log(`[User Recovery] 🔄 Syncing invitation role permissions to Clerk metadata`)
-      const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
-
-      if (!syncResult.success) {
-        console.error(`[User Recovery] ❌ Clerk sync failed: ${syncResult.error}`)
-      } else {
-        console.log(`[User Recovery] ✅ Clerk sync successful for invitation`)
-      }
-
-      // HYBRID: Database is single source of truth - no JWT metadata needed
+      // NATIVE INTEGRATION: No Clerk metadata sync needed
+      // Roles are stored in Supabase business_memberships table only
+      console.log(`[User Recovery] Using native integration - role stored in database only`)
       console.log(`[User Recovery] Business context stored in database: activeBusinessId = ${latestInvitation.business_id}`)
-      // Note: Database business_id is authoritative source, no JWT metadata required
 
       console.log(`[User Recovery] 🎉 Successfully processed invitation: ${email} → User: ${userData.id} → Business: ${latestInvitation.business_id}`)
 
@@ -623,14 +613,14 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
     }
   } catch (error) {
     console.error(`[Auth] Failed to get JWT token:`, error)
-    console.error(`[Auth] This usually means the 'supabase' JWT template is not configured in Clerk`)
-    console.error(`[Auth] Please check your Clerk dashboard JWT templates configuration`)
+    console.error(`[Auth] This may indicate an issue with Clerk authentication`)
+    console.error(`[Auth] Please ensure Clerk is properly configured`)
     throw new Error(`JWT token generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 
   if (!jwtToken) {
-    console.error(`[Auth] No JWT token available - template 'supabase' may not exist in Clerk`)
-    throw new Error('No JWT token available - please configure the supabase JWT template in Clerk')
+    console.error(`[Auth] No JWT token available - Clerk authentication may not be working`)
+    throw new Error('No JWT token available - please check Clerk authentication')
   }
 
   // Create Supabase client with Clerk JWT
@@ -704,13 +694,13 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
       }
     } catch (error) {
       console.error(`[BusinessContext] Failed to get JWT token:`, error)
-      console.error(`[BusinessContext] This usually means the 'supabase' JWT template is not configured in Clerk`)
+      console.error(`[BusinessContext] This may indicate an issue with Clerk authentication`)
       throw new Error(`JWT token generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
 
     if (!jwtToken) {
-      console.error(`[BusinessContext] No JWT token available - template 'supabase' may not exist in Clerk`)
-      throw new Error('No JWT token available - please configure the supabase JWT template in Clerk')
+      console.error(`[BusinessContext] No JWT token available - Clerk authentication may not be working`)
+      throw new Error('No JWT token available - please check Clerk authentication')
     }
 
     // Create Supabase client with Clerk JWT

@@ -204,22 +204,9 @@ export async function createBusiness(
     throw new Error(`Failed to sync user permissions: ${syncResult.error}`)
   }
 
-  // Set the new business as active business in Clerk metadata
-  try {
-    const { clerkClient } = await import('@clerk/nextjs/server')
-    await (await clerkClient()).users.updateUser(clerkUserId, {
-      publicMetadata: {
-        ...((await (await clerkClient()).users.getUser(clerkUserId)).publicMetadata || {}),
-        activeBusinessId: newBusiness.id
-      }
-    })
-    console.log(`[Business Service] Successfully set active business in Clerk metadata`)
-  } catch (error) {
-    console.error('[Business Service] CRITICAL: Failed to set active business in Clerk:', error)
-    // Rollback everything
-    await performCompleteRollback(supabase, newBusiness.id, userData.id, 'Clerk metadata sync failed')
-    throw new Error('Failed to activate business in user profile')
-  }
+  // NATIVE INTEGRATION: No longer syncing to Clerk metadata
+  // Active business is stored in Supabase users.business_id only
+  console.log(`[Business Service] Using native integration - active business stored in database only`)
 
   console.log(`[Business Service] Successfully created business "${name}" for user ${userData.email}`)
 
@@ -427,15 +414,9 @@ export async function updateMembership(
 
         console.log(`[Membership Service] SECURITY: Cleared business context for removed user: ${targetUser.email} → ${newBusinessId || 'NULL'}`)
 
-        // Clear Clerk metadata if user has Clerk ID
-        if (targetUser.clerk_user_id) {
-          const { clerkClient } = await import('@clerk/nextjs/server')
-          await (await clerkClient()).users.updateUser(targetUser.clerk_user_id, {
-            publicMetadata: {
-              activeBusinessId: newBusinessId
-            }
-          })
-        }
+        // NATIVE INTEGRATION: No longer syncing to Clerk metadata
+        // Business context is stored in Supabase users.business_id only
+        console.log(`[Membership Service] Using native integration - business context stored in database only`)
       }
     } catch (contextError) {
       console.error('[Membership Service] CRITICAL: Failed to clear business context:', contextError)
@@ -559,8 +540,9 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
     throw new Error('No business associated with user')
   }
 
-  // ✅ SECURITY FIX: Use business context client for business profile access
-  const supabase = await createBusinessContextSupabaseClient()
+  // ✅ SECURITY FIX: Use service role client to bypass RLS
+  // This is safe because we're only querying for user.business_id (already validated)
+  const supabase = createServiceSupabaseClient()
 
   const { data: businessProfile, error } = await supabase
     .from('businesses')

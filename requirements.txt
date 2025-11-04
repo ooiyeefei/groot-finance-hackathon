@@ -9,8 +9,8 @@ pdf2image>=1.17.0
 # Computer vision (optional - only needed for annotation tasks)
 # opencv-python>=4.10.0.84
 
-# DSPy framework for structured LLM programming
-dspy-ai>=2.4.0
+# DSPy framework for structured LLM programming (v3.x with ChainOfThought support)
+dspy>=3.0.3
 pydantic>=2.0.0
 
 # Google AI SDK for Gemini integration

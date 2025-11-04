@@ -82,6 +82,7 @@ export default function AIAssistantPage() {
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [initialLoadComplete, setInitialLoadComplete] = useState(false)
+  const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0)
 
   // Redirect if not authenticated
   if (isLoaded && !userId) {
@@ -146,10 +147,47 @@ export default function AIAssistantPage() {
   }
 
   // Start new chat
-  const startNewChat = () => {
-    setCurrentMessages([])
-    setCurrentConversationId(undefined)
-    setLoading(false) // Ensure loading state is reset
+  const startNewChat = async () => {
+    try {
+      setLoading(true)
+
+      // Create new conversation via API
+      const response = await fetch('/api/v1/chat/conversations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          language: 'en' // You can pass locale here if needed
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const newConversationId = data.conversation.id
+
+        console.log(`[AI Assistant] Created new conversation: ${newConversationId}`)
+
+        // Clear messages and set new conversation ID
+        setCurrentMessages([])
+        setCurrentConversationId(newConversationId)
+
+        // Trigger sidebar refresh to show new conversation
+        setSidebarRefreshTrigger(prev => prev + 1)
+      } else {
+        console.error('[AI Assistant] Failed to create conversation')
+        // Fallback to clearing UI only
+        setCurrentMessages([])
+        setCurrentConversationId(undefined)
+      }
+    } catch (error) {
+      console.error('[AI Assistant] Error creating conversation:', error)
+      // Fallback to clearing UI only
+      setCurrentMessages([])
+      setCurrentConversationId(undefined)
+    } finally {
+      setLoading(false)
+    }
   }
 
   // Handle conversation creation from chat interface
@@ -206,9 +244,9 @@ export default function AIAssistantPage() {
               onConversationSelect={loadConversation}
               onNewChat={startNewChat}
               onConversationDeleted={handleConversationDeleted}
+              refreshTrigger={sidebarRefreshTrigger}
             />
           </Suspense>
-
           {/* Main Content */}
           <div className="flex-1 flex flex-col">
             {/* Header */}

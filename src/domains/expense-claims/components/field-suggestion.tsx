@@ -64,14 +64,14 @@ export default function FieldSuggestion({
   }
 
   return (
-    <Card className="bg-blue-900/20 border-blue-700 mt-2">
+    <Card className="bg-blue-500/10 border border-blue-500/30 mt-2">
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
-          <Brain className="w-5 h-5 text-blue-400 mt-1 flex-shrink-0" />
+          <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-1 flex-shrink-0" />
 
           <div className="flex-1 space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-blue-300 font-medium text-sm">AI Suggestion for {fieldLabel}</span>
+              <span className="text-blue-600 dark:text-blue-400 font-medium text-sm">AI Suggestion for {fieldLabel}</span>
               {confidence > 0 && (
                 <Badge className={`text-white text-xs ${getConfidenceBadge(confidence).color}`}>
                   {getConfidenceBadge(confidence).label}
@@ -87,29 +87,29 @@ export default function FieldSuggestion({
             {/* Value Comparison */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
               <div>
-                <span className="text-gray-400 block mb-1">Current:</span>
-                <div className="bg-gray-600 p-2 rounded border border-gray-500">
-                  <span className="text-white">
-                    {currentValue || <span className="text-gray-400 italic">Empty</span>}
+                <span className="text-muted-foreground block mb-1">Current:</span>
+                <div className="bg-muted p-2 rounded border border-border">
+                  <span className="text-foreground">
+                    {currentValue || <span className="text-muted-foreground italic">Empty</span>}
                   </span>
                 </div>
               </div>
 
               <div className="flex items-center justify-center">
-                <ChevronRight className="w-4 h-4 text-blue-400" />
+                <ChevronRight className="w-4 h-4 text-primary" />
               </div>
 
               <div>
-                <span className="text-blue-300 block mb-1">AI Suggests:</span>
-                <div className="bg-blue-900/30 p-2 rounded border border-blue-600">
-                  <span className="text-blue-100 font-medium">{suggestedValue}</span>
+                <span className="text-blue-600 dark:text-blue-400 block mb-1">AI Suggests:</span>
+                <div className="bg-blue-500/10 p-2 rounded border border-blue-500/30">
+                  <span className="text-blue-600 dark:text-blue-400 font-medium">{suggestedValue}</span>
                 </div>
               </div>
             </div>
 
             {/* Suggestion Reason */}
             {suggestionReason && (
-              <div className="text-xs text-blue-300 bg-blue-900/20 p-2 rounded">
+              <div className="text-xs text-blue-600 dark:text-blue-400 bg-blue-500/10 p-2 rounded border border-blue-500/20">
                 <AlertCircle className="w-3 h-3 inline mr-1" />
                 {suggestionReason}
               </div>
@@ -121,7 +121,7 @@ export default function FieldSuggestion({
                 size="sm"
                 onClick={handleAccept}
                 disabled={isProcessing}
-                className="bg-green-600 hover:bg-green-700 text-white"
+                className="bg-green-600 dark:bg-green-500 text-white hover:bg-green-700 dark:hover:bg-green-600"
               >
                 {isProcessing ? (
                   <>
@@ -141,7 +141,7 @@ export default function FieldSuggestion({
                 variant="outline"
                 onClick={onReject}
                 disabled={isProcessing}
-                className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                className="border-border text-muted-foreground hover:text-foreground hover:bg-muted"
               >
                 <X className="w-3 h-3 mr-1" />
                 Keep Current
