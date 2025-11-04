@@ -32,9 +32,9 @@ export async function getTaskStatus(taskId: string, userId: string): Promise<Tas
 
   const supabase = await createAuthenticatedSupabaseClient(userId)
 
-  // Query documents by task ID in processing_metadata
+  // Query invoices by task ID in processing_metadata
   const { data: documents, error: searchError } = await supabase
-    .from('documents')
+    .from('invoices')
     .select('*')
     .eq('user_id', userId)
     .eq('processing_metadata->>task_id', taskId)

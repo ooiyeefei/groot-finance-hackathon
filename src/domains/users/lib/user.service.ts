@@ -441,10 +441,11 @@ export async function updateUserName(
 
     // Verify target user exists in same business
     const { data: targetUser, error: targetUserError } = await supabase
-      .from('employee_profiles')
+      .from('business_memberships')
       .select('user_id, business_id')
       .eq('user_id', targetUserId)
       .eq('business_id', businessId)
+      .eq('status', 'active')
       .single()
 
     if (targetUserError || !targetUser) {

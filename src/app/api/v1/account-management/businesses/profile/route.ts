@@ -219,38 +219,9 @@ async function repairBrokenUserStateProfile(clerkUserId: string): Promise<{
 
     console.log(`[Profile Repair] 🎉 SUCCESS: Created missing business membership - role=${newMembership.role}`)
 
-    // Also create employee profile if missing (best practice)
-    const { data: existingProfile } = await supabase
-      .from('employee_profiles')
-      .select('id')
-      .eq('user_id', userData.id)
-      .eq('business_id', userData.business_id)
-      .single()
-
-    if (!existingProfile) {
-      console.log(`[Profile Repair] 👔 Creating missing employee profile`)
-      const rolePermissions = {
-        employee: true,
-        manager: role === 'admin',
-        admin: role === 'admin'
-      }
-
-      const { error: profileError } = await supabase
-        .from('employee_profiles')
-        .insert({
-          user_id: userData.id,
-          business_id: userData.business_id,
-          employee_id: `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-          department: 'General',
-          job_title: role === 'admin' ? 'Administrator' : 'Employee',
-          role_permissions: rolePermissions,
-          created_at: new Date().toISOString()
-        })
-
-      if (!profileError) {
-        console.log(`[Profile Repair] ✅ Created employee profile`)
-      }
-    }
+    // REMOVED: employee_profiles table was dropped in migration 20251005085345
+    // All role/permission data is now in business_memberships table
+    // No need to create separate employee profile
 
     return { fixed: true, hasExistingBusiness: true, business }
 

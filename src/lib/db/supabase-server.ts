@@ -978,38 +978,9 @@ async function repairMissingBusinessMembership(clerkUserId: string, businessId: 
       status: newMembership.status
     })
 
-    // Also create employee profile if missing (best practice)
-    const { data: existingProfile } = await supabase
-      .from('employee_profiles')
-      .select('id')
-      .eq('user_id', userData.id)
-      .eq('business_id', businessId)
-      .single()
-
-    if (!existingProfile) {
-      console.log(`[Membership Repair] 👔 Creating missing employee profile`)
-      const rolePermissions = {
-        employee: true,
-        manager: role === 'admin',
-        admin: role === 'admin'
-      }
-
-      const { error: profileError } = await supabase
-        .from('employee_profiles')
-        .insert({
-          user_id: userData.id,
-          business_id: businessId,
-          employee_id: `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-          department: 'General',
-          job_title: role === 'admin' ? 'Administrator' : 'Employee',
-          role_permissions: rolePermissions,
-          created_at: new Date().toISOString()
-        })
-
-      if (!profileError) {
-        console.log(`[Membership Repair] ✅ Created employee profile`)
-      }
-    }
+    // REMOVED: employee_profiles table was dropped in migration 20251005085345
+    // All role/permission data is now in business_memberships table
+    // No need to create separate employee profile
 
     return { fixed: true }
 

@@ -294,15 +294,15 @@ export function calculateRiskScore(claim: EnhancedExpenseClaim): number {
 // Helper functions
 async function getAdminApprover(supabase: SupabaseClient, businessId: string): Promise<string | null> {
   const { data } = await supabase
-    .from('employee_profiles')
-    .select('id')
+    .from('business_memberships')
+    .select('user_id')
     .eq('business_id', businessId)
-    .eq('role_permissions->admin', true)
-    .eq('is_active', true)
+    .eq('role', 'admin')
+    .eq('status', 'active')
     .limit(1)
     .single()
-    
-  return data?.id || null
+
+  return data?.user_id || null
 }
 
 // Export original types for backward compatibility

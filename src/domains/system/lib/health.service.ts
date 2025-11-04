@@ -55,9 +55,9 @@ export async function checkDatabaseHealth(): Promise<HealthStatus> {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    // Test basic query - check documents table
+    // Test basic query - check invoices table
     const { data, error } = await supabase
-      .from('documents')
+      .from('invoices')
       .select('count')
       .limit(1)
 
