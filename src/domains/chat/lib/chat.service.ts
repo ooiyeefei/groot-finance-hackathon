@@ -213,7 +213,7 @@ export async function sendChatMessage(
     .from('conversations')
     .update({ updated_at: new Date().toISOString() })
     .eq('id', currentConversationId)
-    .eq('user_id', userId)
+    .eq('user_id', supabaseUserId)
 
   return {
     message: assistantResponse,
@@ -255,7 +255,7 @@ export async function listConversations(
         deleted_at
       )
     `)
-    .eq('user_id', clerkUserId)
+    .eq('user_id', supabaseUserId)
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('updated_at', { ascending: false })
@@ -340,7 +340,7 @@ export async function getConversation(
       updated_at
     `)
     .eq('id', conversationId)
-    .eq('user_id', clerkUserId)
+    .eq('user_id', supabaseUserId)
     .is('deleted_at', null)
     .single()
 
@@ -393,7 +393,7 @@ export async function deleteConversation(
     .from('conversations')
     .update({ deleted_at: now })
     .eq('id', conversationId)
-    .eq('user_id', clerkUserId)
+    .eq('user_id', supabaseUserId)
     .is('deleted_at', null)
 
   if (conversationError) {
