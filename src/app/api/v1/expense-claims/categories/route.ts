@@ -1,9 +1,10 @@
 /**
- * Expense Categories API v1
+ * Expense Categories API v1 (WITH REDIS CACHE INVALIDATION)
  * GET - Get all categories (including inactive for management)
- * POST - Create new category
- * PUT - Update existing category
- * DELETE - Delete category
+ * POST - Create new category (invalidates cache)
+ * PUT - Update existing category (invalidates cache)
+ * DELETE - Delete category (invalidates cache)
+ * UPDATED: Added cache invalidation for mutations (2025-01-13)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -14,6 +15,8 @@ import {
   deleteCategory,
   CustomExpenseCategory
 } from '@/domains/expense-claims/lib/expense-category.service'
+import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
+import { redisCategoryCache } from '@/lib/cache/redis-cache'
 
 /**
  * GET /api/v1/expense-claims/categories
@@ -52,11 +55,20 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/v1/expense-claims/categories
  * Create a new expense category
+ * UPDATED: Invalidates cache after successful creation
  */
 export async function POST(request: NextRequest) {
   try {
     const body: CustomExpenseCategory = await request.json()
     const newCategory = await createCategory(body)
+
+    // Invalidate cache for this business
+    const userContext = await getCurrentUserContextWithBusiness()
+    if (userContext && userContext.businessContext) {
+      const businessId = userContext.businessContext.businessId
+      await redisCategoryCache.invalidateBusinessCategories(businessId)
+      console.log(`[POST /expense-claims/categories] Invalidated cache for business: ${businessId}`)
+    }
 
     return NextResponse.json({
       success: true,
@@ -106,11 +118,20 @@ export async function POST(request: NextRequest) {
 /**
  * PUT /api/v1/expense-claims/categories
  * Update an existing expense category
+ * UPDATED: Invalidates cache after successful update
  */
 export async function PUT(request: NextRequest) {
   try {
     const body: CustomExpenseCategory & { id: string } = await request.json()
     const updatedCategory = await updateCategory(body)
+
+    // Invalidate cache for this business
+    const userContext = await getCurrentUserContextWithBusiness()
+    if (userContext && userContext.businessContext) {
+      const businessId = userContext.businessContext.businessId
+      await redisCategoryCache.invalidateBusinessCategories(businessId)
+      console.log(`[PUT /expense-claims/categories] Invalidated cache for business: ${businessId}`)
+    }
 
     return NextResponse.json({
       success: true,
@@ -165,11 +186,20 @@ export async function PUT(request: NextRequest) {
 /**
  * DELETE /api/v1/expense-claims/categories
  * Delete an expense category
+ * UPDATED: Invalidates cache after successful deletion
  */
 export async function DELETE(request: NextRequest) {
   try {
     const body: { id: string } = await request.json()
     const result = await deleteCategory(body.id)
+
+    // Invalidate cache for this business
+    const userContext = await getCurrentUserContextWithBusiness()
+    if (userContext && userContext.businessContext) {
+      const businessId = userContext.businessContext.businessId
+      await redisCategoryCache.invalidateBusinessCategories(businessId)
+      console.log(`[DELETE /expense-claims/categories] Invalidated cache for business: ${businessId}`)
+    }
 
     return NextResponse.json({
       success: true,

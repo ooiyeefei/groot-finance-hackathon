@@ -449,7 +449,164 @@ class RedisRoleCache {
   }
 }
 
+/**
+ * Redis-based Category Cache
+ * Caches expense and COGS categories with longer TTL (rarely change)
+ */
+class RedisCategoryCache {
+  private readonly DEFAULT_TTL = 30 * 60 * 1000 // 30 minutes (ms)
+  private readonly DEFAULT_TTL_SECONDS = 30 * 60 // 30 minutes (seconds)
+  private readonly MAX_ENTRIES = 500
+
+  // In-memory fallback cache
+  private fallbackCache = new Map<string, { data: any; timestamp: number }>()
+
+  /**
+   * Get categories from Redis (or fallback)
+   */
+  async get(cacheKey: string): Promise<any | null> {
+    const key = generateCacheKey('categories', cacheKey)
+
+    try {
+      // Try Redis first
+      const redisEntry = await redisCache.get<{ data: any; timestamp: number }>(key)
+      if (redisEntry) {
+        const now = Date.now()
+        const ageMs = now - redisEntry.timestamp
+
+        if (ageMs < this.DEFAULT_TTL) {
+          return redisEntry.data
+        } else {
+          await redisCache.del(key)
+          return null
+        }
+      }
+    } catch (error) {
+      console.warn('[RedisCategoryCache] Redis get failed, using fallback:', error)
+    }
+
+    // Fallback to in-memory
+    const fallbackEntry = this.fallbackCache.get(cacheKey)
+    if (!fallbackEntry) return null
+
+    const now = Date.now()
+    const ageMs = now - fallbackEntry.timestamp
+    if (ageMs >= this.DEFAULT_TTL) {
+      this.fallbackCache.delete(cacheKey)
+      return null
+    }
+
+    return fallbackEntry.data
+  }
+
+  /**
+   * Set categories in Redis (and fallback)
+   */
+  async set(cacheKey: string, data: any): Promise<void> {
+    const entry = {
+      data,
+      timestamp: Date.now(),
+    }
+
+    const key = generateCacheKey('categories', cacheKey)
+
+    try {
+      // Store in Redis
+      await redisCache.set(key, entry, this.DEFAULT_TTL_SECONDS)
+    } catch (error) {
+      console.warn('[RedisCategoryCache] Redis set failed, using fallback:', error)
+    }
+
+    // Always store in fallback cache
+    if (this.fallbackCache.size >= this.MAX_ENTRIES) {
+      this.evictOldestFromFallback()
+    }
+    this.fallbackCache.set(cacheKey, entry)
+  }
+
+  /**
+   * Invalidate specific category cache
+   */
+  async invalidate(cacheKey: string): Promise<void> {
+    const key = generateCacheKey('categories', cacheKey)
+
+    try {
+      await redisCache.del(key)
+    } catch (error) {
+      console.warn('[RedisCategoryCache] Redis invalidate failed:', error)
+    }
+
+    this.fallbackCache.delete(cacheKey)
+  }
+
+  /**
+   * Invalidate all category caches for a business
+   */
+  async invalidateBusinessCategories(businessId: string): Promise<void> {
+    try {
+      // Invalidate both enabled and all categories for this business
+      await Promise.all([
+        redisCache.del(generateCacheKey('categories', `expense-enabled-${businessId}`)),
+        redisCache.del(generateCacheKey('categories', `expense-all-${businessId}`)),
+        redisCache.del(generateCacheKey('categories', `cogs-enabled-${businessId}`)),
+        redisCache.del(generateCacheKey('categories', `cogs-all-${businessId}`)),
+      ])
+    } catch (error) {
+      console.warn('[RedisCategoryCache] Redis bulk invalidate failed:', error)
+    }
+
+    // Invalidate fallback cache entries
+    this.fallbackCache.delete(`expense-enabled-${businessId}`)
+    this.fallbackCache.delete(`expense-all-${businessId}`)
+    this.fallbackCache.delete(`cogs-enabled-${businessId}`)
+    this.fallbackCache.delete(`cogs-all-${businessId}`)
+  }
+
+  /**
+   * Clear all category cache
+   */
+  async clear(): Promise<void> {
+    try {
+      await redisCache.delPattern('finanseal:categories:*')
+    } catch (error) {
+      console.warn('[RedisCategoryCache] Redis clear failed:', error)
+    }
+
+    this.fallbackCache.clear()
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getStats(): { size: number; maxSize: number } {
+    return {
+      size: this.fallbackCache.size,
+      maxSize: this.MAX_ENTRIES,
+    }
+  }
+
+  /**
+   * Evict oldest entry from fallback cache (LRU)
+   */
+  private evictOldestFromFallback(): void {
+    let oldestKey: string | null = null
+    let oldestTimestamp = Date.now()
+
+    for (const [key, entry] of this.fallbackCache.entries()) {
+      if (entry.timestamp < oldestTimestamp) {
+        oldestTimestamp = entry.timestamp
+        oldestKey = key
+      }
+    }
+
+    if (oldestKey) {
+      this.fallbackCache.delete(oldestKey)
+    }
+  }
+}
+
 // Export singleton instances
 export const redisBusinessContextCache = new RedisBusinessContextCache()
 export const redisJWTTokenCache = new RedisJWTTokenCache()
 export const redisRoleCache = new RedisRoleCache()
+export const redisCategoryCache = new RedisCategoryCache()

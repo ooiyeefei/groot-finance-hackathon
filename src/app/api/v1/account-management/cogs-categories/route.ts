@@ -1,10 +1,11 @@
 /**
- * V1 COGS Categories API
+ * V1 COGS Categories API (WITH REDIS CACHE INVALIDATION)
  *
  * GET /api/v1/account-management/cogs-categories - List all COGS categories
- * POST /api/v1/account-management/cogs-categories - Create new category
- * PUT /api/v1/account-management/cogs-categories - Update existing category
- * DELETE /api/v1/account-management/cogs-categories - Delete category
+ * POST /api/v1/account-management/cogs-categories - Create new category (invalidates cache)
+ * PUT /api/v1/account-management/cogs-categories - Update existing category (invalidates cache)
+ * DELETE /api/v1/account-management/cogs-categories - Delete category (invalidates cache)
+ * UPDATED: Added cache invalidation for mutations (2025-01-13)
  *
  * Purpose:
  * - Business configuration for Cost of Goods Sold categories
@@ -29,6 +30,7 @@ import {
   type CreateCOGSCategoryRequest,
   type UpdateCOGSCategoryRequest
 } from '@/domains/account-management/lib/account-management.service'
+import { redisCategoryCache } from '@/lib/cache/redis-cache'
 
 // GET - Retrieve all COGS categories for the business
 export async function GET(request: NextRequest) {
@@ -111,6 +113,10 @@ export async function POST(request: NextRequest) {
     // Call service layer
     const newCategory = await createCOGSCategory(userData.business_id, body)
 
+    // Invalidate cache for this business
+    await redisCategoryCache.invalidateBusinessCategories(userData.business_id)
+    console.log(`[POST /cogs-categories] Invalidated cache for business: ${userData.business_id}`)
+
     return NextResponse.json({
       success: true,
       data: newCategory
@@ -177,6 +183,10 @@ export async function PUT(request: NextRequest) {
     // Call service layer
     const updatedCategory = await updateCOGSCategory(userData.business_id, body)
 
+    // Invalidate cache for this business
+    await redisCategoryCache.invalidateBusinessCategories(userData.business_id)
+    console.log(`[PUT /cogs-categories] Invalidated cache for business: ${userData.business_id}`)
+
     return NextResponse.json({
       success: true,
       data: updatedCategory
@@ -242,6 +252,10 @@ export async function DELETE(request: NextRequest) {
 
     // Call service layer
     await deleteCOGSCategory(userData.business_id, body.id)
+
+    // Invalidate cache for this business
+    await redisCategoryCache.invalidateBusinessCategories(userData.business_id)
+    console.log(`[DELETE /cogs-categories] Invalidated cache for business: ${userData.business_id}`)
 
     return NextResponse.json({
       success: true,
