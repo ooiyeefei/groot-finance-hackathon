@@ -624,6 +624,7 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
   }
 
   // Create Supabase client with Clerk JWT
+  // For native third-party auth, we only use Authorization header, NOT setSession()
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -647,11 +648,8 @@ export async function createAuthenticatedSupabaseClient(clerkUserId?: string) {
     }
   )
 
-  // Set the session with the JWT token
-  await supabase.auth.setSession({
-    access_token: jwtToken,
-    refresh_token: 'placeholder_refresh_token' // Clerk manages the actual refresh
-  })
+  // ✅ Native integration: JWT passed via Authorization header only
+  // ❌ DO NOT call setSession() - that's for Supabase Auth JWTs, not third-party JWTs
 
   return supabase
 }
@@ -704,6 +702,7 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
     }
 
     // Create Supabase client with Clerk JWT
+    // For native third-party auth, we only use Authorization header, NOT setSession()
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -727,11 +726,8 @@ export async function createBusinessContextSupabaseClient(clerkUserId?: string) 
       }
     )
 
-    // Set the session with the JWT token
-    await supabase.auth.setSession({
-      access_token: jwtToken,
-      refresh_token: 'placeholder_refresh_token' // Clerk manages the actual refresh
-    })
+    // ✅ Native integration: JWT passed via Authorization header only
+    // ❌ DO NOT call setSession() - that's for Supabase Auth JWTs, not third-party JWTs
 
     // Validate business membership (no session variables needed with direct filtering)
     // Business membership already validated by middleware context system
