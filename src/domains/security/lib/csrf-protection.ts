@@ -125,7 +125,33 @@ export async function validateCSRFToken(providedToken: string, request?: NextReq
 }
 
 /**
+ * Endpoints exempted from CSRF protection
+ *
+ * These are flows where CSRF protection would break legitimate user actions:
+ * - Sign-up/invitation flows: User is not yet authenticated
+ * - System webhooks: Server-to-server communication with signature verification
+ */
+const CSRF_EXEMPT_PATHS = [
+  '/api/v1/account-management/invitations/accept',  // User accepting invitation (pre-auth)
+  '/api/v1/system/webhooks/clerk',                  // Clerk webhook (signature verified)
+  '/api/trigger',                                    // Trigger.dev webhook (signature verified)
+]
+
+/**
+ * Check if a request path is exempted from CSRF protection
+ */
+function isCSRFExempt(pathname: string): boolean {
+  return CSRF_EXEMPT_PATHS.some(exemptPath =>
+    pathname === exemptPath || pathname.startsWith(`${exemptPath}/`)
+  )
+}
+
+/**
  * CSRF protection middleware for API routes
+ *
+ * Protects all state-changing operations (POST, PUT, DELETE, PATCH) except:
+ * - Sign-up and invitation acceptance flows (pre-authentication)
+ * - System webhooks with signature verification
  */
 export async function csrfProtection(request: NextRequest): Promise<NextResponse | null> {
   try {
@@ -134,12 +160,20 @@ export async function csrfProtection(request: NextRequest): Promise<NextResponse
       return null // Allow GET, HEAD, OPTIONS
     }
 
+    // Check if path is exempted (e.g., invitation acceptance, webhooks)
+    const { pathname } = new URL(request.url)
+    if (isCSRFExempt(pathname)) {
+      console.log(`[CSRF] Exempting path from CSRF protection: ${pathname}`)
+      return null // Allow exempted paths
+    }
+
     // Get CSRF token from headers
     const csrfToken = request.headers.get('x-csrf-token') ||
       request.headers.get('X-CSRF-Token') ||
       request.headers.get('csrf-token')
 
     if (!csrfToken) {
+      console.warn(`[CSRF] Missing token for protected path: ${pathname}`)
       return NextResponse.json({
         success: false,
         error: 'CSRF token is required',
@@ -151,6 +185,7 @@ export async function csrfProtection(request: NextRequest): Promise<NextResponse
     const validation = await validateCSRFToken(csrfToken, request)
 
     if (!validation.valid) {
+      console.warn(`[CSRF] Invalid token for path: ${pathname}`)
       return NextResponse.json({
         success: false,
         error: 'CSRF token validation failed',
