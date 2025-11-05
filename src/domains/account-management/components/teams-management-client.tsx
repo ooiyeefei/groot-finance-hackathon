@@ -296,6 +296,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         body: JSON.stringify({
           email: data.email,
           role: data.role,
+          business_id: businessId,  // ✅ FIX: Add required business_id from context
           employee_id: data.employee_id || null,
           department: data.department || null,
           job_title: data.job_title || null
