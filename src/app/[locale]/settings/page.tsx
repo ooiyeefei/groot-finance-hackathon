@@ -4,7 +4,7 @@ import { Suspense, lazy } from 'react'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { ClientProviders } from '@/components/providers/client-providers'
-import { User, Globe, Clock, Settings as SettingsIcon, Loader2 } from 'lucide-react'
+import { User, Settings as SettingsIcon, Loader2 } from 'lucide-react'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const UserProfileSection = lazy(() => import('@/domains/account-management/components/user-profile-section'))
@@ -57,38 +57,6 @@ export default async function SettingsPage() {
                 }>
                   <UserProfileSection />
                 </Suspense>
-
-                {/* Language Settings */}
-                <div className="bg-card rounded-lg border border-border p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <Globe className="w-5 h-5 text-muted-foreground" />
-                    <h3 className="text-lg font-semibold text-foreground">Language Preferences</h3>
-                  </div>
-                  <div className="grid gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Interface Language
-                      </label>
-                      <select className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
-                        <option value="en">English</option>
-                        <option value="th">ไทย (Thai)</option>
-                        <option value="id">Bahasa Indonesia</option>
-                        <option value="zh">中文 (Chinese)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        AI Assistant Language
-                      </label>
-                      <select className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
-                        <option value="en">English</option>
-                        <option value="th">ไทย (Thai)</option>
-                        <option value="id">Bahasa Indonesia</option>
-                        <option value="zh">中文 (Chinese)</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
 
                 {/* Personal Timezone */}
                 <div className="bg-card rounded-lg border border-border p-6">
