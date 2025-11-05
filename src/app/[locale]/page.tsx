@@ -2,6 +2,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { getTranslations } from 'next-intl/server'
+import Image from 'next/image'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import CompleteDashboard from '@/domains/analytics/components/complete-dashboard'
@@ -78,10 +79,21 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
             </div>
           </main>
 
-          {/* Footer Disclaimer */}
+          {/* Footer with Logo and Disclaimer */}
           <footer className="border-t border-border p-4">
-            <div className="max-w-7xl mx-auto">
-              <GeneralDisclaimer />
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Image
+                  src="https://khvjopmkzkuueacepepi.supabase.co/storage/v1/object/public/system-public-image/logo/groot_brown.jpeg"
+                  alt="Groot Logo"
+                  width={120}
+                  height={40}
+                  className="h-8 w-auto object-contain"
+                />
+              </div>
+              <div className="flex-1 sm:pl-4">
+                <GeneralDisclaimer />
+              </div>
             </div>
           </footer>
         </div>
