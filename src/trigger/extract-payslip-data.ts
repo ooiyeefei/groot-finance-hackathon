@@ -265,7 +265,7 @@ export const extractPayslipData = task({
           });
 
           console.log(`[ExtractPayslip] 💰 TOTAL USAGE - Images: ${totalImages}, Input: ${totalInputTokens} tokens, Output: ${totalOutputTokens} tokens, Total: ${totalInputTokens + totalOutputTokens} tokens`);
-        } else {
+        } else if (process.env.NODE_ENV === 'development') {
           console.log(`[ExtractPayslip] ⚠️ WARNING: Usage logs expected but no complete usage lines found in stderr`);
           // Show partial stderr for debugging when regex fails
           if (stderr.length <= 2000) {
@@ -274,7 +274,7 @@ export const extractPayslipData = task({
             console.log(`[ExtractPayslip] 🔍 DEBUG: stderr content (last 1500 chars): ${stderr.substring(Math.max(0, stderr.length - 1500))}`);
           }
         }
-      } else {
+      } else if (process.env.NODE_ENV === 'development') {
         console.log(`[ExtractPayslip] ⚠️ WARNING: stderr is empty - Python script may not be logging usage`);
       }
     }

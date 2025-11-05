@@ -49,8 +49,7 @@ export class EnhancedWorkflowEngine {
         .from('expense_claims')
         .select(`
           *,
-          transaction:transactions(*),
-          employee:employee_profiles!expense_claims_employee_id_fkey(*),
+          transaction:accounting_entries(*),
           vendor:vendors(*)
         `)
         .eq('id', claimId)

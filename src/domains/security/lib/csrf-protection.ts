@@ -8,14 +8,58 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import crypto from 'crypto'
-
-// CSRF token storage - in production, use Redis or database
-const csrfTokenStore = new Map<string, { token: string, expires: number }>()
+import { Redis } from '@upstash/redis'
 
 // Token expiration time (1 hour)
 const TOKEN_EXPIRES = 60 * 60 * 1000
+const TOKEN_EXPIRES_SECONDS = 3600 // Redis TTL in seconds
 
-// Cleanup expired tokens every 30 minutes
+// Redis client (singleton pattern with lazy initialization)
+let redisClient: Redis | null = null
+let redisInitialized = false
+
+/**
+ * Initialize Redis client with environment variables
+ */
+function initializeRedis(): Redis | null {
+  try {
+    const redisUrl = process.env.UPSTASH_REDIS_REST_URL
+    const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN
+
+    if (!redisUrl || !redisToken) {
+      console.warn('[CSRF] ⚠️ Redis credentials not configured, using in-memory fallback')
+      console.warn('[CSRF] Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN for distributed CSRF protection')
+      return null
+    }
+
+    const client = new Redis({
+      url: redisUrl,
+      token: redisToken
+    })
+
+    console.log('[CSRF] ✅ Redis client initialized successfully (distributed mode)')
+    return client
+  } catch (error) {
+    console.error('[CSRF] ❌ Failed to initialize Redis, falling back to in-memory:', error)
+    return null
+  }
+}
+
+/**
+ * Get Redis client (lazy initialization, cached for performance)
+ */
+function getRedisClient(): Redis | null {
+  if (!redisInitialized) {
+    redisClient = initializeRedis()
+    redisInitialized = true
+  }
+  return redisClient
+}
+
+// In-memory fallback storage (when Redis is not available)
+const csrfTokenStore = new Map<string, { token: string, expires: number }>()
+
+// Cleanup expired tokens every 30 minutes (only for in-memory fallback)
 setInterval(() => {
   const now = Date.now()
   for (const [key, value] of csrfTokenStore.entries()) {
@@ -62,6 +106,7 @@ async function getUserKey(request?: NextRequest): Promise<string | null> {
 
 /**
  * Generate and store a new CSRF token for the authenticated user or session
+ * Uses Redis for distributed storage with automatic in-memory fallback
  */
 export async function generateCSRFTokenForUser(request?: NextRequest): Promise<{ token: string | null, error?: string }> {
   try {
@@ -72,8 +117,22 @@ export async function generateCSRFTokenForUser(request?: NextRequest): Promise<{
 
     const token = generateCSRFToken()
     const expires = Date.now() + TOKEN_EXPIRES
+    const redis = getRedisClient()
 
-    csrfTokenStore.set(userKey, { token, expires })
+    // Try Redis first, fallback to in-memory
+    if (redis) {
+      try {
+        const redisKey = `csrf:${userKey}`
+        await redis.setex(redisKey, TOKEN_EXPIRES_SECONDS, token)
+        console.log(`[CSRF] Token stored in Redis for key: ${redisKey}`)
+      } catch (redisError) {
+        console.error('[CSRF] Redis storage failed, using in-memory fallback:', redisError)
+        csrfTokenStore.set(userKey, { token, expires })
+      }
+    } else {
+      // Use in-memory fallback
+      csrfTokenStore.set(userKey, { token, expires })
+    }
 
     return { token }
   } catch (error) {
@@ -84,6 +143,7 @@ export async function generateCSRFTokenForUser(request?: NextRequest): Promise<{
 
 /**
  * Validate CSRF token for the authenticated user or session
+ * Uses Redis for distributed validation with automatic in-memory fallback
  */
 export async function validateCSRFToken(providedToken: string, request?: NextRequest): Promise<{ valid: boolean, error?: string }> {
   try {
@@ -92,19 +152,52 @@ export async function validateCSRFToken(providedToken: string, request?: NextReq
       return { valid: false, error: 'Unable to create session key' }
     }
 
-    const storedData = csrfTokenStore.get(userKey)
-    if (!storedData) {
+    const redis = getRedisClient()
+    let storedToken: string | null = null
+
+    // Try Redis first, fallback to in-memory
+    if (redis) {
+      try {
+        const redisKey = `csrf:${userKey}`
+        storedToken = await redis.get<string>(redisKey)
+
+        if (!storedToken) {
+          // Check in-memory fallback
+          const memoryData = csrfTokenStore.get(userKey)
+          if (memoryData && Date.now() <= memoryData.expires) {
+            storedToken = memoryData.token
+          }
+        }
+      } catch (redisError) {
+        console.error('[CSRF] Redis retrieval failed, using in-memory fallback:', redisError)
+        const memoryData = csrfTokenStore.get(userKey)
+        if (memoryData && Date.now() <= memoryData.expires) {
+          storedToken = memoryData.token
+        }
+      }
+    } else {
+      // Use in-memory fallback
+      const storedData = csrfTokenStore.get(userKey)
+
+      if (!storedData) {
+        return { valid: false, error: 'No CSRF token found for session' }
+      }
+
+      // Check if token has expired
+      if (Date.now() > storedData.expires) {
+        csrfTokenStore.delete(userKey)
+        return { valid: false, error: 'CSRF token has expired' }
+      }
+
+      storedToken = storedData.token
+    }
+
+    if (!storedToken) {
       return { valid: false, error: 'No CSRF token found for session' }
     }
 
-    // Check if token has expired
-    if (Date.now() > storedData.expires) {
-      csrfTokenStore.delete(userKey)
-      return { valid: false, error: 'CSRF token has expired' }
-    }
-
     // Constant-time comparison to prevent timing attacks
-    const expectedBuffer = Buffer.from(storedData.token)
+    const expectedBuffer = Buffer.from(storedToken)
     const providedBuffer = Buffer.from(providedToken)
 
     if (expectedBuffer.length !== providedBuffer.length) {

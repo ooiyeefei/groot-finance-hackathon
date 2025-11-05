@@ -196,33 +196,39 @@ export const classifyDocument = task({
       [signedUrl, expectedDocumentType || "", documentSlot || ""]
     );
 
-    // Debug: Log what Python script actually returned
-    console.log(`[Classify] Python script raw result:`, JSON.stringify(rawResult, null, 2));
+    // Debug: Log what Python script actually returned (development only)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Classify] Python script raw result:`, JSON.stringify(rawResult, null, 2));
 
-    // Extract and log Gemini API usage for cost tracking
-    console.log(`[Classify] 🔍 DEBUG: Checking stderr for usage logs...`);
-    console.log(`[Classify] 🔍 DEBUG: stderr exists: ${!!rawResult.stderr}`);
-    console.log(`[Classify] 🔍 DEBUG: stderr length: ${rawResult.stderr?.length || 0}`);
-    console.log(`[Classify] 🔍 DEBUG: stderr content (first 500 chars): ${rawResult.stderr?.substring(0, 500) || 'EMPTY'}`);
+      // Extract and log Gemini API usage for cost tracking
+      console.log(`[Classify] 🔍 DEBUG: Checking stderr for usage logs...`);
+      console.log(`[Classify] 🔍 DEBUG: stderr exists: ${!!rawResult.stderr}`);
+      console.log(`[Classify] 🔍 DEBUG: stderr length: ${rawResult.stderr?.length || 0}`);
+      console.log(`[Classify] 🔍 DEBUG: stderr content (first 500 chars): ${rawResult.stderr?.substring(0, 500) || 'EMPTY'}`);
 
-    // Show the last 800 chars where usage logs should be
-    if (rawResult.stderr && rawResult.stderr.length > 500) {
-      console.log(`[Classify] 🔍 DEBUG: stderr content (last 800 chars): ${rawResult.stderr?.substring(Math.max(0, rawResult.stderr.length - 800)) || 'EMPTY'}`);
+      // Show the last 800 chars where usage logs should be
+      if (rawResult.stderr && rawResult.stderr.length > 500) {
+        console.log(`[Classify] 🔍 DEBUG: stderr content (last 800 chars): ${rawResult.stderr?.substring(Math.max(0, rawResult.stderr.length - 800)) || 'EMPTY'}`);
+      }
     }
 
     if (rawResult.stderr) {
       const usageMatch = rawResult.stderr.match(/\[Usage\] Model: (.*), Images: (\d+), Input Tokens: (\d+), Output Tokens: (\d+), Total Tokens: (\d+)/);
-      console.log(`[Classify] 🔍 DEBUG: Regex match result: ${!!usageMatch}`);
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Classify] 🔍 DEBUG: Regex match result: ${!!usageMatch}`);
+      }
+
       if (usageMatch) {
         console.log(`[Classify] 💰 Gemini API Usage - Model: ${usageMatch[1]}, Images: ${usageMatch[2]}, Input: ${usageMatch[3]} tokens, Output: ${usageMatch[4]} tokens, Total: ${usageMatch[5]} tokens`);
-      } else {
+      } else if (process.env.NODE_ENV === 'development') {
         console.log(`[Classify] ⚠️ WARNING: Usage logs expected but regex did not match stderr content`);
         // Show full stderr for debugging when regex fails
         if (rawResult.stderr.length <= 2000) {
           console.log(`[Classify] 🔍 DEBUG: Full stderr for debugging:`, rawResult.stderr);
         }
       }
-    } else {
+    } else if (process.env.NODE_ENV === 'development') {
       console.log(`[Classify] ⚠️ WARNING: stderr is empty - Python script may not be logging usage`);
     }
 

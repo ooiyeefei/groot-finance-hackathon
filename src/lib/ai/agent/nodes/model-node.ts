@@ -13,7 +13,10 @@ import { AgentState } from '../types';
 
 export async function callModel(state: AgentState): Promise<Partial<AgentState>> {
   console.log('[CallModel] Processing request with security validation');
-  console.log(`[CallModel] DEBUG: State has ${state.messages.length} messages`);
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[CallModel] DEBUG: State has ${state.messages.length} messages`);
+  }
 
   // Message count logging only (content removed to prevent conversation dumping)
   console.log(`[CallModel] Processing ${state.messages.length} messages (types: ${state.messages.map(msg => {
@@ -41,13 +44,15 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
 
   console.log(`[CallModel] Using ${modelType} approach for this request`);
 
-  // DEBUG: Check if this looks like a regulatory question
-  const lastMessage = state.messages[state.messages.length - 1];
-  if (lastMessage && typeof lastMessage.content === 'string') {
-    const query = lastMessage.content.toLowerCase();
-    const regulatoryKeywords = ['gst', 'tax', 'regulation', 'compliance', 'registration', 'ovr', 'overseas vendor', 'requirements'];
-    const isRegulatoryQuestion = regulatoryKeywords.some(keyword => query.includes(keyword));
-    console.log(`[CallModel] Query classification - Regulatory keywords detected: ${isRegulatoryQuestion}`);
+  // DEBUG: Check if this looks like a regulatory question (development only)
+  if (process.env.NODE_ENV === 'development') {
+    const lastMessage = state.messages[state.messages.length - 1];
+    if (lastMessage && typeof lastMessage.content === 'string') {
+      const query = lastMessage.content.toLowerCase();
+      const regulatoryKeywords = ['gst', 'tax', 'regulation', 'compliance', 'registration', 'ovr', 'overseas vendor', 'requirements'];
+      const isRegulatoryQuestion = regulatoryKeywords.some(keyword => query.includes(keyword));
+      console.log(`[CallModel] Query classification - Regulatory keywords detected: ${isRegulatoryQuestion}`);
+    }
   }
 
   // --- CONDITIONAL SANITIZATION (GEMINI ONLY) ---
@@ -246,12 +251,14 @@ async function getValidatedTools(modelType: ModelType): Promise<any[]> {
   // Use model-specific schemas for clean architectural separation
   const rawTools = ToolFactory.getToolSchemas(modelType);
 
-  console.log(`[CallModel] DEBUG: ToolFactory returned ${rawTools.length} raw tools`);
-  console.log(`[CallModel] DEBUG: Available tool names: ${rawTools.map(t => t.function?.name).join(', ')}`);
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[CallModel] DEBUG: ToolFactory returned ${rawTools.length} raw tools`);
+    console.log(`[CallModel] DEBUG: Available tool names: ${rawTools.map(t => t.function?.name).join(', ')}`);
 
-  // Check specifically for regulatory tool
-  const hasRegulatoryTool = rawTools.some(tool => tool.function?.name === 'searchRegulatoryKnowledgeBase');
-  console.log(`[CallModel] DEBUG: Regulatory tool present: ${hasRegulatoryTool}`);
+    // Check specifically for regulatory tool
+    const hasRegulatoryTool = rawTools.some(tool => tool.function?.name === 'searchRegulatoryKnowledgeBase');
+    console.log(`[CallModel] DEBUG: Regulatory tool present: ${hasRegulatoryTool}`);
+  }
 
   // ADDITIONAL VALIDATION: Ensure each tool has a function.name before sending to API
   const tools = rawTools.filter(tool => {
@@ -266,7 +273,7 @@ async function getValidatedTools(modelType: ModelType): Promise<any[]> {
   // If no valid tools after filtering, proceed without tools
   if (tools.length === 0) {
     console.warn(`[CallModel] No valid tools available, proceeding without function calling`);
-  } else {
+  } else if (process.env.NODE_ENV === 'development') {
     console.log(`[CallModel] DEBUG: ${tools.length} valid tools loaded for LLM`);
   }
 

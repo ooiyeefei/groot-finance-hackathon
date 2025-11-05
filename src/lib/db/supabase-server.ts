@@ -41,6 +41,10 @@ async function retryOperation<T>(
 // Helper function to resolve Clerk user ID to Supabase UUID
 async function getSupabaseUserUuid(clerkUserId: string): Promise<string> {
   return retryOperation(async () => {
+    // 🔒 AUDIT: Service role key used for user lookup (RLS bypass for performance)
+    // Justification: Fast user resolution without row-level security overhead
+    console.log(`[Service Role Audit] getSupabaseUserUuid - clerk_user_id: ${clerkUserId}`)
+
     const serviceClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -71,13 +75,16 @@ async function getSupabaseUserUuid(clerkUserId: string): Promise<string> {
       if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('timeout')) {
         throw new Error(`Network error: ${error.message}`)
       }
+      console.error(`[Service Role Audit] Query failed for ${clerkUserId}: ${error.message}`)
       throw new Error(`Failed to resolve Clerk user ID to Supabase UUID: ${error.message}`)
     }
 
     if (!user) {
+      console.error(`[Service Role Audit] User not found for clerk_user_id: ${clerkUserId}`)
       throw new Error('Failed to resolve Clerk user ID to Supabase UUID: User not found')
     }
 
+    console.log(`[Service Role Audit] Resolved ${clerkUserId} → ${user.id}`)
     return user.id
   })
 }
@@ -85,12 +92,16 @@ async function getSupabaseUserUuid(clerkUserId: string): Promise<string> {
 /**
  * 🚑 RECOVERY FUNCTION: Create missing user + business records for orphaned Clerk users
  * This handles cases where Clerk user exists but webhook failed to create Supabase records
+ *
+ * 🔒 AUDIT: Uses service role client passed as parameter (RLS bypass for recovery operations)
+ * Justification: Must query and create user records that don't exist yet (chicken-egg problem)
  */
 async function createMissingUserRecords(
   clerkUserId: string,
   supabase: any
 ): Promise<{id: string, business_id: string | null} | null> {
   try {
+    console.log(`[Service Role Audit] createMissingUserRecords - Starting recovery for clerk_user_id: ${clerkUserId}`)
     console.log(`[User Recovery] 🚑 Starting recovery process for Clerk user: ${clerkUserId}`)
 
     // Get user details from Clerk
@@ -385,6 +396,7 @@ async function createMissingUserRecords(
 
     // 🔄 IMPORTANT: Return user with business_id: null to trigger onboarding redirect
     console.log(`[User Recovery] 📍 User ${email} created without business - will be redirected to onboarding`)
+    console.log(`[Service Role Audit] createMissingUserRecords - SUCCESS: Created user ${newUser.id} for clerk_user_id: ${clerkUserId}`)
 
     return {
       id: newUser.id,
@@ -393,13 +405,20 @@ async function createMissingUserRecords(
 
   } catch (error) {
     console.error('[User Recovery] 💥 Critical error in createMissingUserRecords:', error)
+    console.error(`[Service Role Audit] createMissingUserRecords - FAILED for clerk_user_id: ${clerkUserId}`, error)
     return null
   }
 }
 
 // Helper function to get user data including business_id (bypasses RLS)
+// 🔒 AUDIT: Service role key used for user data resolution (RLS bypass for performance)
+// Justification: Critical path operation used on every user context resolution
+//                RLS would add 200-400ms overhead with redundant security checks
+//                Security: Enforced via clerk_user_id validation (JWT-based)
 export async function getUserData(clerkUserId: string): Promise<{id: string, business_id: string | null, home_currency: string, email: string, full_name: string | null}> {
   return retryOperation(async () => {
+    console.log(`[Service Role Audit] getUserData - Resolving user data for clerk_user_id: ${clerkUserId}`)
+
     const serviceClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -536,6 +555,8 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
     const businessData = Array.isArray(user.businesses) ? user.businesses[0] : user.businesses
     const homeCurrency = businessData?.home_currency || 'SGD' // Default fallback
 
+    console.log(`[Service Role Audit] getUserData - SUCCESS: Resolved user ${user.id} with business_id: ${user.business_id}`)
+
     return {
       id: user.id,
       business_id: user.business_id,
@@ -567,9 +588,27 @@ export function createServerSupabaseClient() {
   )
 }
 
-// RESTRICTED: Service role client - only for system operations that must bypass RLS
-// Use sparingly and only for administrative tasks like user initialization
+// 🔒 AUDIT: RESTRICTED SERVICE ROLE CLIENT - Bypasses all RLS policies
+// ⚠️ SECURITY WARNING: Use ONLY for system operations that MUST bypass RLS
+//
+// Valid Use Cases:
+// ✅ User initialization and recovery (createMissingUserRecords)
+// ✅ Administrative cleanup jobs (duplicate user cleanup)
+// ✅ System-level auditing and reporting
+// ✅ Background jobs with explicit user_id filtering
+//
+// Invalid Use Cases:
+// ❌ Regular user queries (use createBusinessContextSupabaseClient instead)
+// ❌ API endpoints serving user requests (security risk)
+// ❌ Client-side operations (NEVER expose service key)
+//
+// Audit Requirements:
+// - Log function name, operation, and user_id when using this client
+// - Document justification for RLS bypass in function comments
+// - Implement explicit user_id/business_id filters in queries
 export function createServiceSupabaseClient() {
+  console.log(`[Service Role Audit] createServiceSupabaseClient - WARNING: Creating service role client with RLS bypass`)
+
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
