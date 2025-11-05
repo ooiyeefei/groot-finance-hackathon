@@ -117,8 +117,9 @@ const nextConfig = {
   // Enable React StrictMode to catch potential issues early
   reactStrictMode: true,
 
-  // Generate static pages where possible
-  output: 'standalone' as const,
+  // IMPORTANT: 'standalone' output mode is incompatible with Vercel's Edge Runtime
+  // Removing this allows Vercel to properly detect and execute middleware
+  // output: 'standalone' as const,  // Commented out for Vercel deployment
 };
 
 export default withBundleAnalyzer(withNextIntl(nextConfig));
