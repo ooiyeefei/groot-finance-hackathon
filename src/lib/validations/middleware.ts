@@ -250,11 +250,14 @@ export async function validateFormData<T extends z.ZodTypeAny>(
   | { success: true; data: z.infer<T> }
   | { success: false; error: NextResponse }
 > {
+  // Declare data outside try block so it's accessible in catch block
+  let data: Record<string, any> = {}
+
   try {
     const formData = await request.formData()
 
     // Convert FormData to plain object
-    const data: Record<string, any> = {}
+    data = {}
     formData.forEach((value, key) => {
       // Keep File objects as-is for file uploads
       if (value instanceof File) {
@@ -278,13 +281,15 @@ export async function validateFormData<T extends z.ZodTypeAny>(
     return { success: true, data: validated }
   } catch (error) {
     if (error instanceof ZodError) {
+      const formattedErrors = formatZodErrors(error)
+
       return {
         success: false,
         error: NextResponse.json(
           {
             success: false,
             error: 'Invalid form data',
-            details: formatZodErrors(error)
+            details: formattedErrors
           } as ValidationErrorResponse,
           { status: 400 }
         )
@@ -293,6 +298,7 @@ export async function validateFormData<T extends z.ZodTypeAny>(
 
     // Unexpected error
     console.error('[Validation] Unexpected error during form data validation:', error)
+    console.error('[Validation] Error stack:', error instanceof Error ? error.stack : 'N/A')
     return {
       success: false,
       error: NextResponse.json(

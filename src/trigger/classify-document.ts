@@ -193,7 +193,13 @@ export const classifyDocument = task({
     console.log(`[Classify] Running structured AI classification with slot validation via python.runScript`);
     const rawResult = await python.runScript(
       "./src/python/classify_document.py",
-      [signedUrl, expectedDocumentType || "", documentSlot || ""]
+      [signedUrl, expectedDocumentType || "", documentSlot || ""],
+      {
+        env: {
+          GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+          SUPPORTED_OCR_DOC_TYPE: process.env.SUPPORTED_OCR_DOC_TYPE
+        }
+      }
     );
 
     // Debug: Log what Python script actually returned (development only)
@@ -372,8 +378,8 @@ export const classifyDocument = task({
           expenseClaimId: documentId,  // For expense_claims domain, documentId is the expense claim ID
           documentId: documentId,
           userId: undefined,  // Will be fetched from expense claim record
-          documentDomain: 'expense_claims' as const,  // Explicitly set to expense_claims
-          receiptImageUrl: imagePath  // Will be converted to signed URL in the task
+          documentDomain: 'expense_claims' as const  // Explicitly set to expense_claims
+          // Don't pass receiptImageUrl - let the task fetch storage_path from DB and create signed URL
         });
         extractionTaskId = receiptRun.id;
         break;
@@ -388,8 +394,8 @@ export const classifyDocument = task({
             expenseClaimId: documentId,
             documentId: documentId,
             userId: undefined,
-            documentDomain: 'expense_claims' as const,  // Explicitly set to expense_claims
-            receiptImageUrl: imagePath
+            documentDomain: 'expense_claims' as const  // Explicitly set to expense_claims
+            // Don't pass receiptImageUrl - let the task fetch storage_path from DB and create signed URL
           });
           extractionTaskId = expenseInvoiceRun.id;
         } else {

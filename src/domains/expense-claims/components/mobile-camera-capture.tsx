@@ -50,6 +50,7 @@ export default function MobileCameraCapture({
   const [error, setError] = useState<string | null>(null)
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([])
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
+  const [capturedFile, setCapturedFile] = useState<File | null>(null)
   const [isCapturing, setIsCapturing] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -206,13 +207,9 @@ export default function MobileCameraCapture({
         // Show preview
         const previewUrl = URL.createObjectURL(blob)
         setCapturedImage(previewUrl)
+        setCapturedFile(file) // Store the file for manual confirmation
 
-        // Auto-confirm after 2 seconds or wait for user confirmation
-        setTimeout(() => {
-          if (capturedImage === previewUrl) {
-            confirmCapture(file)
-          }
-        }, 2000)
+        // Removed auto-confirm to allow user to decide
 
       }, 'image/jpeg', quality)
 
@@ -231,6 +228,7 @@ export default function MobileCameraCapture({
 
   const retakePhoto = () => {
     setCapturedImage(null)
+    setCapturedFile(null)
     if (capturedImage) {
       URL.revokeObjectURL(capturedImage)
     }
@@ -306,8 +304,8 @@ export default function MobileCameraCapture({
               Retake
             </Button>
             <Button
-              onClick={() => confirmCapture(new File([], 'temp'))}
-              disabled={isProcessing}
+              onClick={() => capturedFile && confirmCapture(capturedFile)}
+              disabled={isProcessing || !capturedFile}
               className="flex-1 bg-green-600 dark:bg-green-500 text-white hover:bg-green-700 dark:hover:bg-green-600"
             >
               {isProcessing ? 'Processing...' : 'Use Photo'}

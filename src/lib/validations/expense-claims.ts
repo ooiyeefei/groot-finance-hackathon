@@ -119,7 +119,7 @@ export const createExpenseClaimFileSchema = z.object({
 
   expense_category: z.string().optional().nullable(),
 
-  original_amount: z.coerce.number().positive().default(0),
+  original_amount: z.coerce.number().nonnegative().default(0),
 
   original_currency: currencySchema.default('SGD'),
 
@@ -133,7 +133,10 @@ export const createExpenseClaimFileSchema = z.object({
 
   notes: z.string().max(2000).optional(),
 
-  storage_path: z.string().optional()
+  storage_path: z.string().optional(),
+
+  // Business context (provided by client but ignored - uses authenticated user's context instead)
+  businessId: z.string().optional()
 })
 
 /**

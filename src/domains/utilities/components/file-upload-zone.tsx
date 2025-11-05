@@ -86,6 +86,8 @@ export default function FileUploadZone({
     try {
       const formData = new FormData()
       formData.append('file', file)
+
+      // Add businessId for invoice compatibility (expense-claims ignores this and uses user context instead)
       formData.append('businessId', businessId)
 
       // Add domain-specific fields for expense claims
