@@ -108,12 +108,12 @@ export default function BusinessProfileSettings() {
     try {
       setIsCurrencyLoading(true)
 
-      // Load user's home currency from Supabase profile
+      // Load user's preferred currency from Supabase profile
       const response = await fetch('/api/v1/users/profile')
       if (response.ok) {
         const data = await response.json()
-        if (data.success && data.data?.home_currency) {
-          const currency = data.data.home_currency as SupportedCurrency
+        if (data.success && data.data?.preferred_currency) {
+          const currency = data.data.preferred_currency as SupportedCurrency
           if (SUPPORTED_CURRENCIES.some(c => c.code === currency)) {
             setHomeCurrency(currency)
             // Sync to localStorage for immediate access in other components
@@ -148,7 +148,7 @@ export default function BusinessProfileSettings() {
       const response = await fetch('/api/v1/users/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ home_currency: currency })
+        body: JSON.stringify({ preferred_currency: currency })
       })
 
       if (!response.ok) {
@@ -495,8 +495,8 @@ export function useHomeCurrency(): SupportedCurrency {
         const response = await fetch('/api/v1/users/profile')
         if (response.ok) {
           const data = await response.json()
-          if (data.success && data.data?.home_currency) {
-            const currency = data.data.home_currency as SupportedCurrency
+          if (data.success && data.data?.preferred_currency) {
+            const currency = data.data.preferred_currency as SupportedCurrency
             if (SUPPORTED_CURRENCIES.some(c => c.code === currency)) {
               setHomeCurrency(currency)
               // Sync to localStorage for consistency

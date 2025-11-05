@@ -21,7 +21,7 @@ export interface UserProfile {
   id: string
   email: string
   full_name: string | null
-  home_currency: SupportedCurrency
+  preferred_currency: SupportedCurrency
   language_preference: string
   timezone: string
   created_at: string | null
@@ -73,7 +73,7 @@ export interface UserRoleInfo {
 }
 
 /**
- * Get user profile data including home currency
+ * Get user profile data including preferred currency
  */
 export async function getUserProfile(clerkUserId: string): Promise<UserProfile> {
   const userData = await getUserData(clerkUserId)
@@ -82,7 +82,7 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile> 
     id: userData.id,
     email: userData.email,
     full_name: userData.full_name,
-    home_currency: userData.home_currency as SupportedCurrency,
+    preferred_currency: userData.preferred_currency as SupportedCurrency,
     language_preference: (userData as any).language_preference || 'en',
     timezone: (userData as any).timezone || 'Asia/Singapore',
     created_at: (userData as any).created_at || null,
@@ -97,16 +97,16 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile> 
  */
 export async function updateUserProfile(
   clerkUserId: string,
-  updates: Partial<Pick<UserProfile, 'home_currency' | 'full_name' | 'language_preference' | 'timezone'>>
+  updates: Partial<Pick<UserProfile, 'preferred_currency' | 'full_name' | 'language_preference' | 'timezone'>>
 ): Promise<UserProfile> {
   const userData = await getUserData(clerkUserId)
   const supabase = createServiceSupabaseClient()
 
-  // Validate home_currency if provided
-  if (updates.home_currency) {
+  // Validate preferred_currency if provided
+  if (updates.preferred_currency) {
     const supportedCurrencies: SupportedCurrency[] = ['THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP', 'INR']
-    if (!supportedCurrencies.includes(updates.home_currency)) {
-      throw new Error(`Unsupported currency: ${updates.home_currency}`)
+    if (!supportedCurrencies.includes(updates.preferred_currency)) {
+      throw new Error(`Unsupported currency: ${updates.preferred_currency}`)
     }
   }
 
@@ -124,7 +124,7 @@ export async function updateUserProfile(
     .from('users')
     .update(updateData)
     .eq('id', userData.id)
-    .select('id, email, full_name, home_currency, language_preference, timezone, created_at, updated_at')
+    .select('id, email, full_name, preferred_currency, language_preference, timezone, created_at, updated_at')
     .single()
 
   if (error) {

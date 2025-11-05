@@ -415,7 +415,7 @@ async function createMissingUserRecords(
 // Justification: Critical path operation used on every user context resolution
 //                RLS would add 200-400ms overhead with redundant security checks
 //                Security: Enforced via clerk_user_id validation (JWT-based)
-export async function getUserData(clerkUserId: string): Promise<{id: string, business_id: string | null, home_currency: string, email: string, full_name: string | null}> {
+export async function getUserData(clerkUserId: string): Promise<{id: string, business_id: string | null, home_currency: string, preferred_currency: string, email: string, full_name: string | null}> {
   return retryOperation(async () => {
     console.log(`[Service Role Audit] getUserData - Resolving user data for clerk_user_id: ${clerkUserId}`)
 
@@ -448,6 +448,7 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
         business_id,
         email,
         full_name,
+        preferred_currency,
         created_at,
         businesses!users_business_id_fkey (
           home_currency
@@ -481,6 +482,7 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
             business_id,
             email,
             full_name,
+            preferred_currency,
             created_at,
             businesses!users_business_id_fkey (
               home_currency
@@ -501,6 +503,7 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
           id: completeUserData.id,
           business_id: completeUserData.business_id,
           home_currency: recoveryHomeCurrency,
+          preferred_currency: (completeUserData as any).preferred_currency || 'SGD',
           email: completeUserData.email,
           full_name: completeUserData.full_name
         }
@@ -561,6 +564,7 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
       id: user.id,
       business_id: user.business_id,
       home_currency: homeCurrency,
+      preferred_currency: (user as any).preferred_currency || 'SGD',
       email: user.email,
       full_name: user.full_name
     }
