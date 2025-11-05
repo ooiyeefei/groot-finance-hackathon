@@ -158,8 +158,11 @@ export default function FileUploadZone({
         // Handle rate limit errors with user-friendly messages
         if (response.status === 429 || result.error?.includes('Rate limit exceeded')) {
           const retryAfter = response.headers.get('Retry-After')
-          const waitTime = retryAfter ? `${retryAfter} seconds` : 'a moment'
-          throw new Error(`Upload limit reached. Please wait ${waitTime} before uploading again.`)
+          const waitTime = retryAfter ? parseInt(retryAfter) : null
+          const waitMessage = waitTime
+            ? `${waitTime} second${waitTime !== 1 ? 's' : ''}`
+            : 'a moment'
+          throw new Error(`Upload limit reached. Please wait ${waitMessage} before uploading again.`)
         }
 
         throw new Error(result.error || 'Upload failed')

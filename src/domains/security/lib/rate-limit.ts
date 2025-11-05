@@ -111,7 +111,7 @@ export const RATE_LIMIT_CONFIGS = {
   // Strict limits for expensive operations (document processing, etc.)
   EXPENSIVE: {
     windowMs: 60 * 1000, // 1 minute
-    maxRequests: 10 // 10 requests per minute
+    maxRequests: 20 // 20 requests per minute
   },
 
   // Very strict for admin operations
@@ -123,7 +123,7 @@ export const RATE_LIMIT_CONFIGS = {
   // Document upload limits
   UPLOAD: {
     windowMs: 60 * 60 * 1000, // 1 hour
-    maxRequests: 10 // 10 uploads per hour
+    maxRequests: 120 // 120 uploads per hour
   },
 
   // AI chat limits
