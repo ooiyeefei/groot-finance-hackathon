@@ -5,6 +5,7 @@ import { User, DollarSign, CheckCircle, AlertCircle } from 'lucide-react'
 import { useBusinessContext } from '@/contexts/business-context'
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types'
 import { useUser } from '@clerk/nextjs'
+import { useToast } from '@/components/ui/toast'
 
 interface UserProfileSectionProps {
   className?: string
@@ -13,9 +14,10 @@ interface UserProfileSectionProps {
 export default function UserProfileSection({ className }: UserProfileSectionProps) {
   const { user } = useUser()
   const { profile, isLoadingProfile } = useBusinessContext()
+  const { addToast } = useToast()
   const [preferredCurrency, setPreferredCurrency] = useState<SupportedCurrency>('USD')
-  const [saving, setSaving] = useState(false)
-  const [successMessage, setSuccessMessage] = useState('')
+  const [isCurrencySaving, setIsCurrencySaving] = useState(false)
+  const [lastCurrencySaved, setLastCurrencySaved] = useState<Date | null>(null)
   const [allowedCurrencies, setAllowedCurrencies] = useState<SupportedCurrency[]>([])
 
   // Load user preferences and business allowed currencies
@@ -42,34 +44,48 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
     loadUserPreferences()
   }, [profile])
 
-  const handleSave = async () => {
+  const saveCurrencyPreference = async (currency: SupportedCurrency) => {
     try {
-      setSaving(true)
-      setSuccessMessage('')
+      setIsCurrencySaving(true)
 
       const response = await fetch('/api/v1/users/profile', {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          preferred_currency: preferredCurrency
+          preferred_currency: currency
         })
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update user preferences')
+        throw new Error('Failed to save currency preference to database')
       }
 
-      setSuccessMessage('Personal preferences saved successfully!')
-      setTimeout(() => setSuccessMessage(''), 3000)
+      setLastCurrencySaved(new Date())
+      addToast({
+        type: 'success',
+        title: 'Currency updated',
+        description: `Preference changed to ${currency}`
+      })
 
     } catch (error) {
-      console.error('Error saving user preferences:', error)
-      alert('Failed to save preferences. Please try again.')
+      console.error('Failed to save currency preference:', error)
+      addToast({
+        type: 'error',
+        title: 'Failed to update currency',
+        description: 'Unable to save currency preference. Please try again.'
+      })
     } finally {
-      setSaving(false)
+      setIsCurrencySaving(false)
     }
+  }
+
+  const handleCurrencyChange = async (newCurrency: SupportedCurrency) => {
+    if (newCurrency === preferredCurrency) return
+
+    setPreferredCurrency(newCurrency)
+    await saveCurrencyPreference(newCurrency)
   }
 
   if (isLoadingProfile) {
@@ -125,8 +141,9 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
           </label>
           <select
             value={preferredCurrency}
-            onChange={(e) => setPreferredCurrency(e.target.value as SupportedCurrency)}
-            className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            onChange={(e) => handleCurrencyChange(e.target.value as SupportedCurrency)}
+            disabled={isCurrencySaving}
+            className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           >
             {allowedCurrencies.map(currency => (
               <option key={currency} value={currency}>
@@ -137,6 +154,20 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
           <p className="text-xs text-muted-foreground mt-1">
             All amounts will be converted and displayed in this currency for your personal dashboard
           </p>
+
+          {isCurrencySaving && (
+            <p className="text-xs text-primary mt-2 flex items-center gap-2">
+              <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+              Saving preferences...
+            </p>
+          )}
+
+          {lastCurrencySaved && !isCurrencySaving && (
+            <p className="text-xs text-success mt-2 flex items-center gap-2">
+              <CheckCircle className="w-3 h-3" />
+              Saved {lastCurrencySaved.toLocaleTimeString()}
+            </p>
+          )}
 
           {/* Business Currency Context */}
           <div className="mt-2 p-2 bg-primary/10 border border-primary/20 rounded text-xs text-primary">
@@ -157,32 +188,6 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
             </div>
           </div>
         )}
-
-        {/* Save Button and Status */}
-        <div className="flex items-center justify-between pt-4 border-t border-border">
-          <div className="flex items-center gap-2">
-            {successMessage && (
-              <div className="flex items-center gap-2 text-success-foreground text-sm">
-                <CheckCircle className="w-4 h-4" />
-                {successMessage}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground rounded-md font-medium transition-colors flex items-center gap-2"
-          >
-            {saving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
-                Saving...
-              </>
-            ) : (
-              'Save Preferences'
-            )}
-          </button>
-        </div>
       </div>
 
       {/* Profile Management (Future Enhancement) */}

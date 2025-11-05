@@ -41,6 +41,26 @@ function AcceptInvitationContent() {
 
   const token = searchParams.get('token')
 
+  // Helper function to retry API calls with exponential backoff on auth errors
+  const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3): Promise<Response> => {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const response = await fetch(url, options)
+
+      // If 401 and not last attempt, retry with exponential backoff
+      if (response.status === 401 && attempt < maxRetries - 1) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 4000) // Max 4 seconds
+        console.log(`[Invitation Accept] Auth not ready, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+
+      return response
+    }
+
+    // This should never be reached but TypeScript needs it
+    return fetch(url, options)
+  }
+
   const handleAcceptInvitation = async (name?: string) => {
     if (!token) return
 
@@ -49,7 +69,7 @@ function AcceptInvitationContent() {
     setNameError(null)
 
     try {
-      const response = await fetch('/api/v1/account-management/invitations/accept', {
+      const response = await fetchWithRetry('/api/v1/account-management/invitations/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -144,6 +164,7 @@ function AcceptInvitationContent() {
   }, [token])
 
   // Auto-accept invitation if user is already signed in and email matches
+  // Add delay to allow Clerk session to fully propagate to prevent 401 errors
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user || !invitation || accepting || success || showNameForm) return
 
@@ -155,8 +176,13 @@ function AcceptInvitationContent() {
       const clerkFullName = hasName ? `${user.firstName} ${user.lastName}` : ''
 
       if (hasName) {
-        // User has name in Clerk, proceed with invitation acceptance
-        handleAcceptInvitation(clerkFullName)
+        // Add 1.5 second delay to allow Clerk JWT to propagate to server
+        // This prevents race condition where client thinks auth is ready but server hasn't received JWT yet
+        const timer = setTimeout(() => {
+          handleAcceptInvitation(clerkFullName)
+        }, 1500)
+
+        return () => clearTimeout(timer)
       } else {
         // User needs to provide their name first
         setShowNameForm(true)

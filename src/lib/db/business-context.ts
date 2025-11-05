@@ -212,7 +212,11 @@ export async function getCurrentBusinessContext(userId?: string): Promise<Busine
       .single()
 
     if (error || !businessData) {
-      console.warn('[BusinessContext] User has invalid businessId in database:', businessId)
+      console.warn('[BusinessContext] Business context not available - possible auth propagation delay or expired membership:', {
+        businessId,
+        userId: userData.id,
+        error: error?.message || 'No active membership found'
+      })
       return null
     }
 
