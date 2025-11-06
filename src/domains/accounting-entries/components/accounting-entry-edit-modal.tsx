@@ -238,15 +238,11 @@ export default function AccountingEntryFormModal({
       const submitData: CreateAccountingEntryRequest = {
         ...cleanFormData,
         line_items: validLineItems.map(item => ({
-          item_description: item.item_description!,
+          description: item.item_description!,
           quantity: item.quantity!,
           unit_price: item.unit_price!,
-          total_amount: (item.quantity! * item.unit_price!),
-          currency: formData.original_currency,
-          tax_amount: item.tax_amount || 0,
           tax_rate: item.tax_rate || 0,
-          item_category: item.item_category || '',
-          line_order: lineItems.indexOf(item) + 1
+          item_category: item.item_category || ''
         }))
       }
 
