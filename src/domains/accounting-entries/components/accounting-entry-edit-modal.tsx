@@ -77,8 +77,8 @@ export default function AccountingEntryFormModal({
     vendor_name: transaction?.vendor_name || prefilledData?.vendor_name || '',
     document_number: transaction?.reference_number || prefilledData?.reference_number || '',
     status: transaction?.status || prefilledData?.status || 'pending',
-    due_date: transaction?.due_date?.split('T')[0] || '',
-    payment_date: transaction?.payment_date?.split('T')[0] || '',
+    due_date: transaction?.due_date?.split('T')[0] || undefined,
+    payment_date: transaction?.payment_date?.split('T')[0] || undefined,
     payment_method: transaction?.payment_method || '',
     notes: transaction?.notes || '',
     vendor_details: transaction?.vendor_details || {},
@@ -225,17 +225,28 @@ export default function AccountingEntryFormModal({
                item.unit_price > 0
       })
 
-      const submitData: CreateAccountingEntryRequest = {
+      // Clean up date fields - convert empty strings to undefined for optional fields
+      const cleanFormData = {
         ...formData,
         reference_number: formData.document_number,
+        payment_date: formData.payment_date || undefined,
+        due_date: formData.due_date || undefined,
+        payment_method: formData.payment_method || undefined,
+        notes: formData.notes || undefined
+      }
+
+      const submitData: CreateAccountingEntryRequest = {
+        ...cleanFormData,
         line_items: validLineItems.map(item => ({
-          description: item.item_description!,
-          item_code: item.item_code || '',
+          item_description: item.item_description!,
           quantity: item.quantity!,
-          unit_measurement: item.unit_measurement || '',
           unit_price: item.unit_price!,
+          total_amount: (item.quantity! * item.unit_price!),
+          currency: formData.original_currency,
+          tax_amount: item.tax_amount || 0,
           tax_rate: item.tax_rate || 0,
-          item_category: item.item_category || ''
+          item_category: item.item_category || '',
+          line_order: lineItems.indexOf(item) + 1
         }))
       }
 
@@ -634,8 +645,8 @@ export default function AccountingEntryFormModal({
                         </label>
                         <input
                           type="date"
-                          value={formData.due_date}
-                          onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                          value={formData.due_date || ''}
+                          onChange={(e) => setFormData({ ...formData, due_date: e.target.value || undefined })}
                           className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
@@ -650,8 +661,8 @@ export default function AccountingEntryFormModal({
                           </label>
                           <input
                             type="date"
-                            value={formData.payment_date}
-                            onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+                            value={formData.payment_date || ''}
+                            onChange={(e) => setFormData({ ...formData, payment_date: e.target.value || undefined })}
                             className="w-full px-3 py-2 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                           />
                         </div>
