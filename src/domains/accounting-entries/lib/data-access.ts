@@ -335,20 +335,20 @@ export async function createAccountingEntry(
         const lineTotal = lineItem.quantity * lineItem.unit_price
 
         // Validate line item data before insertion
-        if (!lineItem.description || !lineItem.quantity || !lineItem.unit_price) {
+        if (!lineItem.item_description || !lineItem.quantity || !lineItem.unit_price) {
           console.error('[Accounting Entries Data Access] Invalid line item data:', {
             index: i,
-            description: lineItem.description,
+            item_description: lineItem.item_description,
             quantity: lineItem.quantity,
             unit_price: lineItem.unit_price,
-            issue: !lineItem.description ? 'missing description' :
+            issue: !lineItem.item_description ? 'missing item_description' :
                    !lineItem.quantity ? 'missing quantity' : 'missing unit_price'
           })
           continue // Skip invalid line items
         }
 
         console.log(`[Accounting Entries Data Access] Creating line item ${i + 1}:`, {
-          description: lineItem.description,
+          item_description: lineItem.item_description,
           item_code: lineItem.item_code,
           quantity: lineItem.quantity,
           unit_price: lineItem.unit_price,
@@ -359,7 +359,7 @@ export async function createAccountingEntry(
           .from('line_items')
           .insert({
             accounting_entry_id: accountingEntry.id,
-            item_description: lineItem.description,
+            item_description: lineItem.item_description,
             item_code: lineItem.item_code || null,
             quantity: lineItem.quantity,
             unit_measurement: lineItem.unit_measurement || null,
@@ -706,20 +706,20 @@ export async function updateAccountingEntry(
         const lineTotal = lineItem.quantity * lineItem.unit_price
 
         // Validate line item data before insertion
-        if (!lineItem.description || !lineItem.quantity || !lineItem.unit_price) {
+        if (!lineItem.item_description || !lineItem.quantity || !lineItem.unit_price) {
           console.error('[Accounting Entries Data Access] Invalid line item data in update:', {
             index: i,
-            description: lineItem.description,
+            item_description: lineItem.item_description,
             quantity: lineItem.quantity,
             unit_price: lineItem.unit_price,
-            issue: !lineItem.description ? 'missing description' :
+            issue: !lineItem.item_description ? 'missing item_description' :
                    !lineItem.quantity ? 'missing quantity' : 'missing unit_price'
           })
           continue // Skip invalid line items
         }
 
         console.log(`[Accounting Entries Data Access] Creating updated line item ${i + 1}:`, {
-          description: lineItem.description,
+          item_description: lineItem.item_description,
           item_code: lineItem.item_code,
           quantity: lineItem.quantity,
           unit_price: lineItem.unit_price,
@@ -730,7 +730,7 @@ export async function updateAccountingEntry(
           .from('line_items')
           .insert({
             accounting_entry_id: entryId,
-            item_description: lineItem.description,
+            item_description: lineItem.item_description,
             item_code: lineItem.item_code || null,
             quantity: lineItem.quantity,
             unit_measurement: lineItem.unit_measurement || null,

@@ -164,13 +164,17 @@ export interface CreateAccountingEntryRequest {
 }
 
 export interface CreateLineItemRequest {
-  description: string  // This will map to item_description in database
-  item_code?: string   // Product/stock/item code from invoice
-  quantity: number
-  unit_measurement?: string  // Unit of measurement (kg, pkt, can, etc.)
-  unit_price: number
-  tax_rate?: number
-  item_category?: string
+  item_description: string  // Matches validation schema requirement
+  quantity: number          // Required field
+  unit_price: number        // Required field
+  total_amount: number      // Required field (quantity * unit_price)
+  currency: string          // Required field
+  item_code?: string        // Product/stock/item code from invoice
+  unit_measurement?: string // Unit of measurement (kg, pkt, can, etc.)
+  tax_rate?: number         // Optional field
+  tax_amount?: number       // Optional field
+  item_category?: string    // Optional field
+  line_order?: number       // Optional field
 }
 
 export interface UpdateAccountingEntryRequest extends Partial<CreateAccountingEntryRequest> {

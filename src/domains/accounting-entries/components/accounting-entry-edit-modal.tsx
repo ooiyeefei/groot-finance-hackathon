@@ -112,7 +112,7 @@ export default function AccountingEntryFormModal({
 
       const existingItems = transaction.line_items.map((item, index) => {
         const matchingPrefilledItem = prefilledItems.find(prefilled =>
-          prefilled.description?.toLowerCase().trim() === item.item_description.toLowerCase().trim()
+          prefilled.item_description?.toLowerCase().trim() === item.item_description.toLowerCase().trim()
         )
 
         return {
@@ -129,7 +129,7 @@ export default function AccountingEntryFormModal({
       const itemsWithTotals = prefilledData.line_items.map((item, index) => {
         return {
           ...item,
-          item_description: item.description || '',
+          item_description: item.item_description || '',
           tax_amount: 0,
           tax_rate: item.tax_rate || 0
         };
@@ -237,12 +237,18 @@ export default function AccountingEntryFormModal({
 
       const submitData: CreateAccountingEntryRequest = {
         ...cleanFormData,
-        line_items: validLineItems.map(item => ({
-          description: item.item_description!,
+        line_items: validLineItems.map((item, index) => ({
+          item_description: item.item_description!,
           quantity: item.quantity!,
           unit_price: item.unit_price!,
+          total_amount: (item.quantity! * item.unit_price!),
+          currency: formData.original_currency,
+          item_code: item.item_code,
+          unit_measurement: item.unit_measurement,
           tax_rate: item.tax_rate || 0,
-          item_category: item.item_category || ''
+          tax_amount: item.tax_amount || 0,
+          item_category: item.item_category || '',
+          line_order: index + 1
         }))
       }
 

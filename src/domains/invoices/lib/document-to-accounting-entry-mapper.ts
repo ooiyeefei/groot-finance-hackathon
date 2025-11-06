@@ -403,11 +403,13 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
 
       if (description && quantity > 0 && finalUnitPrice > 0) {
         const lineItem = {
-          description: description.trim(),
+          item_description: description.trim(),
           item_code: itemCode,
           quantity: quantity,
           unit_measurement: unitMeasurement,
           unit_price: finalUnitPrice,
+          total_amount: quantity * finalUnitPrice, // Required field: calculated total
+          currency: mappedData.original_currency || 'USD', // Required field: use document currency
           tax_rate: 0, // TODO: Extract tax rate from OCR if available
           item_category: mappedData.category || 'cost_of_goods_sold'
         };
@@ -420,9 +422,11 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
     // Fallback: create single line item from total amount if no structured line items
     if (mappedData.original_amount && mappedData.original_amount > 0) {
       mappedData.line_items = [{
-        description: mappedData.description || 'Extracted from document',
+        item_description: mappedData.description || 'Extracted from document',
         quantity: 1,
         unit_price: mappedData.original_amount,
+        total_amount: mappedData.original_amount, // Required field: same as unit_price when quantity=1
+        currency: mappedData.original_currency || 'USD', // Required field: use document currency
         tax_rate: 0,
         item_category: mappedData.category || 'direct_cost'
       }]
