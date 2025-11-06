@@ -17,6 +17,10 @@
         "trigger.dev@4.0.4",
         "mcp"
       ]
+    },
+    "supabase-finanseal": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=ohxwghdgsuyabgsndfzc"
     }
   }
 }

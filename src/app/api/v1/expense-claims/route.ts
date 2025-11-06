@@ -12,6 +12,7 @@ import { getBusinessExpenseCategories } from '@/domains/expense-claims/lib/expen
 import { getUserData, createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { validateQuery, validateBody, validateFormData, listExpenseClaimsQuerySchema, createExpenseClaimSchema, createExpenseClaimFileSchema } from '@/lib/validations'
+import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
 
 /**
  * GET /api/v1/expense-claims
@@ -41,7 +42,17 @@ export async function GET(request: NextRequest) {
 
     const params: ExpenseClaimListParams = validated.data as any
 
-    const result = await listExpenseClaims(userId, params)
+    // ✅ PERFORMANCE: Cache expense claims with 2-minute TTL
+    const result = await withCache(
+      userId,
+      'expense-claims',
+      () => listExpenseClaims(userId, params),
+      {
+        params,
+        ttlMs: CACHE_TTL.EXPENSE_CLAIMS,
+        skipCache: false
+      }
+    )
 
     if (!result.success) {
       return NextResponse.json(
@@ -222,6 +233,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Invalidate expense claims cache after successful creation
+    apiCache.invalidate(userId, 'expense-claims')
 
     const responseData: any = {
       expense_claim: result.data,
