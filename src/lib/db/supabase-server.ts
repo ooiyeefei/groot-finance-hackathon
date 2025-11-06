@@ -543,10 +543,8 @@ export async function getUserData(clerkUserId: string): Promise<{id: string, bus
       const recordsWithBusiness = users.filter(u => u.business_id)
       if (recordsWithBusiness.length > 0) {
         console.log(`[User Data] Using most recent record with business context: ${recordsWithBusiness[0].id}`)
-        // TODO: URGENT - Set up automated cleanup job for duplicates
       } else {
         console.log(`[User Data] Using most recent record: ${users[0].id}`)
-        // TODO: URGENT - Set up automated cleanup job for duplicates
       }
     }
 
@@ -597,7 +595,6 @@ export function createServerSupabaseClient() {
 //
 // Valid Use Cases:
 // ✅ User initialization and recovery (createMissingUserRecords)
-// ✅ Administrative cleanup jobs (duplicate user cleanup)
 // ✅ System-level auditing and reporting
 // ✅ Background jobs with explicit user_id filtering
 //
