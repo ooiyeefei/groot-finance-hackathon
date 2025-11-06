@@ -104,7 +104,8 @@ export const createAccountingEntrySchema = z.object({
   line_items: z.array(lineItemSchema).default([]),
 
   // Source document linking
-  source_document_id: uuidSchema.optional(),
+  source_record_id: uuidSchema.optional(),
+  source_document_type: documentTypeSchema.optional(),
 
   // Exchange rate information
   exchange_rate: z.number().positive().optional(),
