@@ -198,7 +198,7 @@ export async function createAccountingEntry(
         .select('id, description, original_amount, original_currency')
         .eq('source_record_id', source_record_id)
         .eq('source_document_type', source_document_type)
-        .eq('user_id', userData.id)
+        .eq('business_id', userData.business_id)
         .is('deleted_at', null)
         .single()
 
@@ -475,7 +475,7 @@ export async function getAccountingEntries(
         *,
         line_items!left (*)
       `)
-      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
       .is('deleted_at', null)
       .or('deleted_at.is.null', { foreignTable: 'line_items' })
 
@@ -530,11 +530,11 @@ export async function getAccountingEntries(
       return { success: false, error: 'Failed to fetch accounting entries' }
     }
 
-    // Get total count with proper UUID filtering (excluding soft-deleted entries)
+    // Get total count with proper business filtering (excluding soft-deleted entries)
     const { count: totalCount } = await supabase
       .from('accounting_entries')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
       .is('deleted_at', null)
 
     const hasMore = offset + params.limit! < (totalCount || 0)
@@ -579,7 +579,7 @@ export async function getAccountingEntryById(
         line_items!left (*)
       `)
       .eq('id', entryId)
-      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
       .is('deleted_at', null)
       .single()
 
@@ -598,7 +598,7 @@ export async function getAccountingEntryById(
         created_at
       `)
       .eq('accounting_entry_id', entryId)
-      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
 
     // Attach expense claims to the accounting entry (should be at most one)
     if (!expenseClaimError && expenseClaims && expenseClaims.length > 0) {
@@ -648,12 +648,12 @@ export async function updateAccountingEntry(
     const userData = await getUserData(userId)
     const supabase = createServiceSupabaseClient()
 
-    // First verify the entry exists and user owns it
+    // First verify the entry exists and user has access to it
     const { data: existingEntry, error: fetchError } = await supabase
       .from('accounting_entries')
       .select('id, user_id, transaction_type, business_id')
       .eq('id', entryId)
-      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
       .is('deleted_at', null)
       .single()
 
@@ -679,7 +679,7 @@ export async function updateAccountingEntry(
       .from('accounting_entries')
       .update(updateData)
       .eq('id', entryId)
-      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
       .select()
       .single()
 
@@ -805,7 +805,7 @@ export async function deleteAccountingEntry(
       .from('accounting_entries')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', entryId)
-      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
       .is('deleted_at', null)
 
     if (error) {
@@ -843,7 +843,7 @@ export async function updateAccountingEntryCategory(
         subcategory: subcategory || null
       })
       .eq('id', entryId)
-      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
       .is('deleted_at', null)
       .select(`
         *,
@@ -887,7 +887,7 @@ export async function updateAccountingEntryStatus(
       .from('accounting_entries')
       .update({ status })
       .eq('id', entryId)
-      .eq('user_id', userData.id)
+      .eq('business_id', userData.business_id)
       .is('deleted_at', null)
       .select(`
         *,
