@@ -356,7 +356,7 @@ async function createMissingUserRecords(
       email: email,
       full_name: fullName,
       business_id: null, // NO business - user will create via onboarding
-      home_currency: 'SGD',
+      preferred_currency: 'SGD',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
