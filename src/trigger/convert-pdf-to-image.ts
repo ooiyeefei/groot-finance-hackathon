@@ -7,10 +7,9 @@
  * Flow: PDF → Python conversion → Upload image → Trigger classification task
  */
 
-import { task } from "@trigger.dev/sdk/v3";
+import { task, tasks } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
 import { createClient } from '@supabase/supabase-js';
-import { classifyDocument } from './classify-document';
 import { analyzeStoragePath, generateProcessedPath, StoragePathBuilder, type DocumentType } from '@/lib/storage-paths';
 
 
@@ -621,7 +620,7 @@ except Exception as e:
         // Don't throw - continue with classification as conversion succeeded
       }
 
-      await classifyDocument.trigger(classificationPayload);
+      await tasks.trigger("classify-document", classificationPayload);
 
       console.log(`✅ Multi-page PDF conversion pipeline completed for document: ${payload.documentId}`);
 
