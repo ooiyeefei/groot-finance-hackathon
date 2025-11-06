@@ -1,8 +1,6 @@
 import { createBusinessContextSupabaseClient, getUserData } from '@/lib/db/supabase-server'
 import { auth } from '@clerk/nextjs/server'
 import { tasks } from "@trigger.dev/sdk/v3"
-import { convertPdfToImage } from "@/trigger/convert-pdf-to-image"
-import { classifyDocument } from "@/trigger/classify-document"
 import { randomUUID } from 'crypto'
 import { generateStoragePath, type DocumentType } from '@/lib/storage-paths'
 import {
@@ -488,7 +486,7 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
     // If uploaded file is PDF, trigger PDF to image conversion
     if (file.type === 'application/pdf') {
       try {
-        await tasks.trigger<typeof convertPdfToImage>("convert-pdf-to-image", {
+        await tasks.trigger("convert-pdf-to-image", {
           documentId: invoice.id,
           pdfStoragePath: storagePath,
           documentDomain: 'invoices'
@@ -665,7 +663,7 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
     // Check file type to determine appropriate processing workflow
     if (document.file_type === 'application/pdf') {
       // PDF files need conversion first, then classification -> OCR
-      const handle = await tasks.trigger<typeof convertPdfToImage>("convert-pdf-to-image", {
+      const handle = await tasks.trigger("convert-pdf-to-image", {
         documentId: document.id,
         pdfStoragePath: document.storage_path!,
         documentDomain: 'invoices'
@@ -675,7 +673,7 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
 
     } else {
       // Image files go through classification first for document type validation
-      const handle = await tasks.trigger<typeof classifyDocument>("classify-document", {
+      const handle = await tasks.trigger("classify-document", {
         documentId: document.id,
         documentDomain: 'invoices',
         expectedDocumentType: 'invoice', // Validation: reject non-invoice documents
