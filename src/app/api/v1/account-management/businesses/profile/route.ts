@@ -10,6 +10,7 @@ import { getBusinessProfile, updateBusinessProfile } from '@/domains/account-man
 import { csrfProtection } from '@/domains/security/lib/csrf-protection'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { getUserData, createServiceSupabaseClient } from '@/lib/db/supabase-server'
+import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
 
 /**
  * Get business profile for current user
@@ -32,7 +33,17 @@ export async function GET(request: NextRequest) {
 
     // 🔧 REPAIR LOGIC: Check for broken user state before fetching profile
     try {
-      const profile = await getBusinessProfile(userId)
+      // ✅ PERFORMANCE: Cache business profile with 30-minute TTL
+      const profile = await withCache(
+        userId,
+        'business-profile',
+        () => getBusinessProfile(userId),
+        {
+          ttlMs: CACHE_TTL.BUSINESS_SETTINGS,
+          skipCache: false
+        }
+      )
+
       return NextResponse.json({
         success: true,
         data: profile
@@ -99,6 +110,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
 
     const updatedProfile = await updateBusinessProfile(userId, body)
+
+    // Invalidate business profile cache after successful update
+    apiCache.invalidate(userId, 'business-profile')
 
     return NextResponse.json({
       success: true,

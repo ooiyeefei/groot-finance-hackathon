@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getUserProfile, updateUserProfile } from '@/domains/users/lib/user.service'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
+import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
 
 // GET /api/v1/users/profile - Fetch user profile
 export async function GET(request: NextRequest) {
@@ -26,7 +27,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const profile = await getUserProfile(userId)
+    // ✅ PERFORMANCE: Cache user profile with 15-minute TTL
+    const profile = await withCache(
+      userId,
+      'user-profile',
+      () => getUserProfile(userId),
+      {
+        ttlMs: CACHE_TTL.USER_SETTINGS,
+        skipCache: false
+      }
+    )
 
     return NextResponse.json({
       success: true,
@@ -82,7 +92,8 @@ export async function PATCH(request: NextRequest) {
     try {
       const updatedProfile = await updateUserProfile(userId, body)
 
-      console.log(`[User Profile V1 API] Updated profile for user ${userId}`)
+      // Invalidate user profile cache after successful update
+      apiCache.invalidate(userId, 'user-profile')
 
       return NextResponse.json({
         success: true,

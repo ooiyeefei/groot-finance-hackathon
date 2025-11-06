@@ -22,6 +22,7 @@ import {
   AnalyticsCalculationOptions
 } from '@/domains/analytics/lib/engine'
 import { calculateRiskScore, TransactionRiskContext, DEFAULT_RISK_CONFIG } from '@/domains/analytics/lib/risk-scoring'
+import { withCache, CACHE_TTL } from '@/lib/cache/api-cache'
 
 // ==========================================
 // Type Definitions
@@ -83,10 +84,21 @@ export async function calculateFinancialAnalytics(
   periodEnd: Date,
   options: AnalyticsCalculationOptions = {}
 ): Promise<FinancialAnalytics> {
-  console.log('[Analytics Service] calculateFinancialAnalytics called')
-  console.log('[Analytics Service] Period:', periodStart.toISOString().split('T')[0], 'to', periodEnd.toISOString().split('T')[0])
-
-  return await calculateAnalyticsEngine(clerkUserId, periodStart, periodEnd, options)
+  // Cache analytics results since they're expensive to calculate
+  return await withCache(
+    clerkUserId,
+    'dashboard-analytics',
+    async () => await calculateAnalyticsEngine(clerkUserId, periodStart, periodEnd, options),
+    {
+      params: {
+        periodStart: periodStart.toISOString().split('T')[0],
+        periodEnd: periodEnd.toISOString().split('T')[0],
+        homeCurrency: options.homeCurrency || 'SGD'
+      },
+      ttlMs: CACHE_TTL.DASHBOARD_ANALYTICS,
+      skipCache: options.forceRefresh || false
+    }
+  );
 }
 
 /**
@@ -105,8 +117,6 @@ export async function calculateAnalyticsTrends(
     profit_change: number
   }
 }> {
-  console.log('[Analytics Service] calculateAnalyticsTrends called')
-
   return await calculateTrendsEngine(clerkUserId, currentPeriod, options)
 }
 
@@ -135,9 +145,6 @@ export async function runCashFlowMonitoring(
     next_critical_date?: string
   }
 }> {
-  console.log('[Analytics Service] runCashFlowMonitoring called')
-  console.log('[Analytics Service] Config:', config)
-
   const alerts: CashFlowAlert[] = []
   const projections: CashFlowProjection[] = []
 
@@ -189,8 +196,6 @@ export async function runCashFlowMonitoring(
     next_critical_date: nextCriticalDate
   }
 
-  console.log('[Analytics Service] Cash flow monitoring completed:', summary)
-
   return {
     alerts,
     projections,
@@ -209,8 +214,6 @@ async function checkOverdueReceivables(
 ): Promise<CashFlowAlert[]> {
   const alerts: CashFlowAlert[] = []
 
-  console.log('[Analytics Service] Checking overdue receivables...')
-
   // Fetch income transactions that are overdue
   const { data: receivables, error } = await supabase
     .from('accounting_entries')
@@ -226,7 +229,6 @@ async function checkOverdueReceivables(
   }
 
   if (!receivables || receivables.length === 0) {
-    console.log('[Analytics Service] No overdue receivables found')
     return alerts
   }
 
@@ -270,7 +272,6 @@ async function checkOverdueReceivables(
     }
   }
 
-  console.log('[Analytics Service] Found', alerts.length, 'overdue receivable alerts')
   return alerts
 }
 
@@ -284,8 +285,6 @@ async function checkPaymentDeadlines(
   userProfile: any
 ): Promise<CashFlowAlert[]> {
   const alerts: CashFlowAlert[] = []
-
-  console.log('[Analytics Service] Checking payment deadlines...')
 
   // Fetch expense transactions with upcoming due dates
   const { data: payables, error } = await supabase
@@ -302,7 +301,6 @@ async function checkPaymentDeadlines(
   }
 
   if (!payables || payables.length === 0) {
-    console.log('[Analytics Service] No upcoming payment deadlines found')
     return alerts
   }
 
@@ -334,7 +332,6 @@ async function checkPaymentDeadlines(
     }
   }
 
-  console.log('[Analytics Service] Found', alerts.length, 'payment deadline alerts')
   return alerts
 }
 
@@ -348,8 +345,6 @@ async function checkCurrencyExposure(
   userProfile: any
 ): Promise<CashFlowAlert[]> {
   const alerts: CashFlowAlert[] = []
-
-  console.log('[Analytics Service] Checking currency exposure...')
 
   // Fetch all active transactions
   const { data: transactions, error } = await supabase
@@ -403,7 +398,6 @@ async function checkCurrencyExposure(
     }
   }
 
-  console.log('[Analytics Service] Found', alerts.length, 'currency exposure alerts')
   return alerts
 }
 
@@ -416,8 +410,6 @@ async function generateCashFlowProjections(
   userProfile: any
 ): Promise<CashFlowProjection[]> {
   const projections: CashFlowProjection[] = []
-
-  console.log('[Analytics Service] Generating cash flow projections...')
 
   const currentDate = new Date()
   const periods = [
@@ -471,7 +463,6 @@ async function generateCashFlowProjections(
     })
   }
 
-  console.log('[Analytics Service] Generated', projections.length, 'projections')
   return projections
 }
 
@@ -484,8 +475,6 @@ async function checkCashShortageRisk(
   config: MonitoringConfig
 ): Promise<CashFlowAlert[]> {
   const alerts: CashFlowAlert[] = []
-
-  console.log('[Analytics Service] Checking cash shortage risk...')
 
   // Check each projection for negative cash flow
   for (const projection of projections) {
@@ -507,6 +496,5 @@ async function checkCashShortageRisk(
     }
   }
 
-  console.log('[Analytics Service] Found', alerts.length, 'cash shortage alerts')
   return alerts
 }

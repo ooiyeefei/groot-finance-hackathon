@@ -31,6 +31,7 @@ import {
   type UpdateCOGSCategoryRequest
 } from '@/domains/account-management/lib/account-management.service'
 import { redisCategoryCache } from '@/lib/cache/redis-cache'
+import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
 
 // GET - Retrieve all COGS categories for the business
 export async function GET(request: NextRequest) {
@@ -46,7 +47,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
     }
 
-    console.log(`[COGS Categories V1 API] Fetching categories for business: ${userData.business_id}`)
 
     // Get user profile with role permissions from database
     const userProfile = await ensureUserProfile(userId)
@@ -54,8 +54,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to get user profile' }, { status: 400 })
     }
 
-    // Call service layer
-    const categories = await getCOGSCategories(userData.business_id)
+    // ✅ PERFORMANCE: Cache COGS categories with in-memory cache + existing Redis cache
+    const categories = await withCache(
+      userId,
+      'cogs-categories',
+      () => getCOGSCategories(userData.business_id!),
+      {
+        params: { business_id: userData.business_id! },
+        ttlMs: CACHE_TTL.BUSINESS_SETTINGS,
+        skipCache: false
+      }
+    )
 
     // Check management permissions from database (consistent with expense-claims API)
     const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.admin
@@ -108,14 +117,13 @@ export async function POST(request: NextRequest) {
 
     const body: CreateCOGSCategoryRequest = await request.json()
 
-    console.log(`[COGS Categories V1 API] Creating category: ${body.category_name}`)
 
     // Call service layer
-    const newCategory = await createCOGSCategory(userData.business_id, body)
+    const newCategory = await createCOGSCategory(userData.business_id!, body)
 
-    // Invalidate cache for this business
-    await redisCategoryCache.invalidateBusinessCategories(userData.business_id)
-    console.log(`[POST /cogs-categories] Invalidated cache for business: ${userData.business_id}`)
+    // Invalidate both in-memory and Redis cache for this business
+    apiCache.invalidate(userId, 'cogs-categories')
+    await redisCategoryCache.invalidateBusinessCategories(userData.business_id!)
 
     return NextResponse.json({
       success: true,
@@ -178,14 +186,12 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`[COGS Categories V1 API] Updating category: ${body.id}`)
-
     // Call service layer
-    const updatedCategory = await updateCOGSCategory(userData.business_id, body)
+    const updatedCategory = await updateCOGSCategory(userData.business_id!, body)
 
-    // Invalidate cache for this business
-    await redisCategoryCache.invalidateBusinessCategories(userData.business_id)
-    console.log(`[PUT /cogs-categories] Invalidated cache for business: ${userData.business_id}`)
+    // Invalidate both in-memory and Redis cache for this business
+    apiCache.invalidate(userId, 'cogs-categories')
+    await redisCategoryCache.invalidateBusinessCategories(userData.business_id!)
 
     return NextResponse.json({
       success: true,
@@ -248,14 +254,12 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`[COGS Categories V1 API] Deleting category: ${body.id}`)
-
     // Call service layer
-    await deleteCOGSCategory(userData.business_id, body.id)
+    await deleteCOGSCategory(userData.business_id!, body.id)
 
-    // Invalidate cache for this business
-    await redisCategoryCache.invalidateBusinessCategories(userData.business_id)
-    console.log(`[DELETE /cogs-categories] Invalidated cache for business: ${userData.business_id}`)
+    // Invalidate both in-memory and Redis cache for this business
+    apiCache.invalidate(userId, 'cogs-categories')
+    await redisCategoryCache.invalidateBusinessCategories(userData.business_id!)
 
     return NextResponse.json({
       success: true,

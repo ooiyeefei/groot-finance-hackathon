@@ -10,6 +10,7 @@ import {
   createSafeILikePattern,
   logSuspiciousSearch
 } from '@/lib/security/search-validator'
+import { withCache, CACHE_TTL } from '@/lib/cache/api-cache'
 
 // Error details structure for LLM-generated error messages
 export interface ErrorDetails {
@@ -85,9 +86,7 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
   const userData = await getUserData(userId)
   const supabase = await createBusinessContextSupabaseClient()
 
-  console.log('[Data Access] Get invoices - User ID:', userData.id, 'Filters:', filters)
-
-  // ⚡ OPTIMIZATION: Use RPC function to perform JOIN at database level (eliminates N+1 query)
+  // Use RPC function to perform JOIN at database level (eliminates N+1 query)
   // This reduces 2 database round-trips to 1, saving 300-800ms per list fetch
 
   // Validate search parameter before passing to RPC
@@ -108,8 +107,8 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
   // Apply pagination
   const limit = filters.limit || 20
 
-  // Call RPC function with all filters
-  const { data: rpcResult, error: rpcError } = await supabase.rpc('get_invoices_with_linked_transactions', {
+  // ⚡ PERFORMANCE: Cache the RPC result to avoid repeated database calls
+  const rpcParams = {
     p_user_id: userData.id,
     p_status: filters.status || null,
     p_file_type: filters.file_type || null,
@@ -118,12 +117,26 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
     p_search: sanitizedSearch,
     p_limit: limit,
     p_cursor: filters.cursor || null
-  })
+  };
 
-  if (rpcError) {
-    console.error('Database RPC error:', rpcError)
-    throw new Error('Failed to fetch invoices')
-  }
+  const rpcResult = await withCache(
+    userId,
+    'invoices',
+    async () => {
+      const { data, error } = await supabase.rpc('get_invoices_with_linked_transactions', rpcParams);
+      if (error) {
+        console.error('Database RPC error:', error);
+        throw new Error('Failed to fetch invoices');
+      }
+      return data;
+    },
+    {
+      params: rpcParams,
+      ttlMs: CACHE_TTL.INVOICES_LIST,
+      // Skip cache for searches or when cursor pagination is used
+      skipCache: !!(filters.search || filters.cursor)
+    }
+  );
 
   // Parse RPC result (returns JSON with documents and total_count)
   const { documents: processedInvoices, total_count: totalCount } = rpcResult || { documents: [], total_count: 0 }
@@ -404,7 +417,6 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
     .single()
 
   if (businessError || !businessAccess) {
-    console.error('[Business] User not authorized for business:', businessError)
     throw new Error('Unauthorized access to business')
   }
 
@@ -473,18 +485,14 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
       throw new Error(`Storage upload failed: ${uploadError.message}`)
     }
 
-    console.log(`[Invoice] Successfully created: ${invoice.id} at ${storagePath}`)
-
     // If uploaded file is PDF, trigger PDF to image conversion
     if (file.type === 'application/pdf') {
       try {
-        console.log(`[PDF Conversion] Triggering PDF to image conversion for: ${invoice.id}`)
         await tasks.trigger<typeof convertPdfToImage>("convert-pdf-to-image", {
           documentId: invoice.id,
           pdfStoragePath: storagePath,
           documentDomain: 'invoices'
         })
-        console.log(`[PDF Conversion] Successfully triggered conversion job for: ${invoice.id}`)
       } catch (conversionError) {
         console.error('[PDF Conversion] Failed to trigger conversion:', conversionError)
         // Don't throw error - invoice creation was successful, conversion can be retried later
@@ -602,12 +610,8 @@ export async function deleteDocument(documentId: string): Promise<boolean> {
     .is('deleted_at', null)
 
   if (linkedEntries && linkedEntries.length > 0) {
-    console.warn('[Document] Cannot delete document with active linked transactions:', documentId)
-    console.warn('[Document] Active transaction IDs:', linkedEntries.map((e: any) => e.id))
     throw new Error('Cannot delete document that has linked transactions. Please delete the transaction first.')
   }
-
-  console.log(`[Document] No active linked transactions found - proceeding with soft delete for: ${documentId}`)
 
   // Perform soft delete by setting deleted_at timestamp
   const { error: deleteError } = await supabase
@@ -625,7 +629,6 @@ export async function deleteDocument(documentId: string): Promise<boolean> {
 
   // Note: We keep the file in storage for audit purposes
   // This follows the pattern from the original implementation
-  console.log(`[Document] Successfully soft-deleted: ${documentId}`)
   return true
 }
 
@@ -662,21 +665,16 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
     // Check file type to determine appropriate processing workflow
     if (document.file_type === 'application/pdf') {
       // PDF files need conversion first, then classification -> OCR
-      console.log(`[Document] PDF detected - triggering PDF to image conversion for: ${documentId}`)
-
       const handle = await tasks.trigger<typeof convertPdfToImage>("convert-pdf-to-image", {
         documentId: document.id,
         pdfStoragePath: document.storage_path!,
         documentDomain: 'invoices'
       })
 
-      console.log(`[Document] Triggered PDF conversion for ${documentId}, job: ${handle.id}`)
       return { jobId: handle.id }
 
     } else {
       // Image files go through classification first for document type validation
-      console.log(`[Document] Image detected - triggering classification with invoice validation for: ${documentId}`)
-
       const handle = await tasks.trigger<typeof classifyDocument>("classify-document", {
         documentId: document.id,
         documentDomain: 'invoices',
@@ -685,7 +683,6 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
         documentSlot: undefined // Not needed for invoices domain
       })
 
-      console.log(`[Document] Triggered classification for ${documentId}, job: ${handle.id}`)
       return { jobId: handle.id }
     }
 

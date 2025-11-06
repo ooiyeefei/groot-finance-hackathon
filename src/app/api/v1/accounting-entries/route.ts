@@ -13,6 +13,7 @@ import {
   type AccountingEntryListParams
 } from '@/domains/accounting-entries/lib/data-access'
 import { validateQuery, validateBody, createAccountingEntrySchema, listAccountingEntriesQuerySchema } from '@/lib/validations'
+import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
 
 /**
  * Create new accounting entry
@@ -33,8 +34,6 @@ export async function POST(request: NextRequest) {
       return validated.error
     }
 
-    console.log(`[Accounting Entries API v1] Creating entry for user ${userId}`)
-
     const result = await createAccountingEntry(userId, validated.data as any)
 
     if (!result.success) {
@@ -43,6 +42,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Invalidate accounting entries cache after successful creation
+    apiCache.invalidate(userId, 'accounting-entries')
 
     return NextResponse.json(result, { status: 201 })
 
@@ -76,9 +78,17 @@ export async function GET(request: NextRequest) {
 
     const params: AccountingEntryListParams = validated.data as any
 
-    console.log(`[Accounting Entries API v1] Listing entries for user ${userId}:`, params)
-
-    const result = await getAccountingEntries(userId, params)
+    // Cache accounting entries with 3-minute TTL
+    const result = await withCache(
+      userId,
+      'accounting-entries',
+      () => getAccountingEntries(userId, params),
+      {
+        params,
+        ttlMs: CACHE_TTL.ACCOUNTING_ENTRIES,
+        skipCache: false
+      }
+    )
 
     if (!result.success) {
       return NextResponse.json(
