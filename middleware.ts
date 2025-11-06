@@ -5,6 +5,7 @@
 
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
 // Public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
@@ -81,7 +82,7 @@ const isAdminOnlyForUpdates = createRouteMatcher([
   '/api/user/role(.*)'
 ])
 
-export default clerkMiddleware(async (auth, req) => {
+const middleware = clerkMiddleware(async (auth, req) => {
   // Handle public routes (includes legitimate public API routes)
   if (isPublicRoute(req)) {
     return NextResponse.next()
@@ -133,6 +134,8 @@ export default clerkMiddleware(async (auth, req) => {
 
   return NextResponse.next()
 })
+
+export default middleware
 
 export const config = {
   matcher: [
