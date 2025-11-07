@@ -36,7 +36,7 @@ WHERE deleted_at IS NULL AND expense_category IS NOT NULL;
 
 -- ✅ PROCESSING STATUS INDEX: For background job monitoring
 CREATE INDEX IF NOT EXISTS idx_expense_claims_processing_status
-ON expense_claims (status, extraction_task_id)
+ON expense_claims (status, created_at)
 WHERE deleted_at IS NULL AND status IN ('analyzing', 'processing', 'uploading');
 
 -- ✅ COMPOSITE INDEX: For complex manager queries (business + user OR reviewer logic)
