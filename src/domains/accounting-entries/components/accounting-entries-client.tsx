@@ -11,12 +11,47 @@ import AccountingEntryFormModal from '@/domains/accounting-entries/components/ac
 import AccountingEntryDetailModal from '@/domains/accounting-entries/components/accounting-entry-view-modal'
 import DocumentAnalysisModal from '@/domains/invoices/components/document-analysis-modal'
 import { useAccountingEntries } from '@/domains/accounting-entries/hooks/use-accounting-entries'
-import { AccountingEntry } from '@/domains/accounting-entries/types'
+import type { AccountingEntry } from '@/domains/accounting-entries/lib/data-access'
 import { Plus } from 'lucide-react'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { useActiveBusiness } from '@/contexts/business-context'
 
-export default function AccountingEntriesClient() {
+/**
+ * Props for AccountingEntriesClient
+ * Accepts server-fetched initial data to eliminate client-side fetch waterfall
+ */
+interface AccountingEntriesClientProps {
+  initialData?: {
+    transactions: AccountingEntry[]
+    pagination: {
+      page: number
+      limit: number
+      total: number
+      has_more: boolean
+      total_pages: number
+    }
+  } | null
+  businessContext?: {
+    business_id: string
+    business_name: string
+    home_currency: string
+    role: 'owner' | 'admin' | 'manager' | 'employee'
+  } | null
+  categories?: Array<{
+    id: string
+    category_name: string
+    category_code: string
+    is_custom: boolean
+  }>
+  userId: string
+}
+
+export default function AccountingEntriesClient({
+  initialData,
+  businessContext,
+  categories,
+  userId
+}: AccountingEntriesClientProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const locale = useLocale()
@@ -30,6 +65,8 @@ export default function AccountingEntriesClient() {
   // Memoize empty filters to prevent unnecessary re-renders and API calls
   const accountingFilters = useMemo(() => ({}), [])
 
+  // ⚡ PERFORMANCE: Use server-fetched initial data to seed React Query cache
+  // This eliminates the initial client-side fetch, providing instant data display
   const {
     accountingEntries,
     loading,
@@ -38,7 +75,7 @@ export default function AccountingEntriesClient() {
     updateAccountingEntry,
     deleteAccountingEntry,
     getAccountingEntryById
-  } = useAccountingEntries(accountingFilters)
+  } = useAccountingEntries(accountingFilters, initialData)
 
   // Extract highlightId as a separate memoized value to prevent useEffect from running unnecessarily
   const highlightId = useMemo(() => searchParams.get('highlight'), [searchParams])

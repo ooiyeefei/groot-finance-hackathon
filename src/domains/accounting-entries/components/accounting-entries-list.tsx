@@ -7,7 +7,9 @@ import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import StatusSelector from './StatusSelector'
-import { AccountingEntry, TransactionType } from '@/domains/accounting-entries/types'
+import type { AccountingEntry } from '@/domains/accounting-entries/lib/data-access'
+import type { TransactionType, SupportedCurrency } from '@/domains/accounting-entries/types'
+import type { TransactionStatus } from '@/domains/accounting-entries/constants/transaction-status'
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { useExpenseCategories } from '@/domains/expense-claims/hooks/use-expense-categories'
 import { useCOGSCategories } from '@/lib/hooks/accounting/use-cogs-categories'
@@ -201,7 +203,7 @@ export default function AccountingEntriesList({
       // Find a transaction with this category to get its type for proper formatting
       const sampleTransaction = transactions.find(t => t.category === selectedCategory)
       const categoryLabel = sampleTransaction ?
-        formatCategoryName(selectedCategory, sampleTransaction.transaction_type) :
+        formatCategoryName(selectedCategory, sampleTransaction.transaction_type as TransactionType) :
         formatCategoryName(selectedCategory)
 
       filters.push({
@@ -492,7 +494,7 @@ export default function AccountingEntriesList({
                       </div>
                       <StatusSelector
                         accountingEntryId={transaction.id}
-                        currentStatus={transaction.status || 'pending'}
+                        currentStatus={(transaction.status || 'pending') as TransactionStatus}
                         onStatusUpdate={() => {
                           // Optimistically update the transaction in the parent component
                           onRefresh()
@@ -526,7 +528,7 @@ export default function AccountingEntriesList({
                       
                       <span className="flex items-center gap-1">
                         <span className="text-record-supporting-light text-xs">
-                          {formatCategoryName(transaction.category, transaction.transaction_type)}
+                          {formatCategoryName(transaction.category, transaction.transaction_type as TransactionType)}
                         </span>
                       </span>
                     </div>
@@ -538,13 +540,13 @@ export default function AccountingEntriesList({
                   <div className="text-right">
                     <div className="text-lg font-bold text-record-title">
                       {transaction.transaction_type === 'Expense' && '-'}
-                      {formatCurrency(transaction.original_amount, transaction.original_currency)}
+                      {formatCurrency(transaction.original_amount, transaction.original_currency as SupportedCurrency)}
                     </div>
                     {transaction.home_currency_amount &&
                      transaction.original_currency !== transaction.home_currency &&
                      parseFloat(transaction.home_currency_amount.toString()) !== parseFloat(transaction.original_amount.toString()) && (
                       <div className="text-sm text-record-supporting">
-                        ≈ {formatCurrency(transaction.home_currency_amount, transaction.home_currency)}
+                        ≈ {formatCurrency(transaction.home_currency_amount, transaction.home_currency as SupportedCurrency)}
                       </div>
                     )}
                   </div>

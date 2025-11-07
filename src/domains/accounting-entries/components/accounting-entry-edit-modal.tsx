@@ -3,14 +3,16 @@
 import { useState, useEffect } from 'react'
 import { X, Plus, Trash2, Calendar, Building, Hash, DollarSign, FileText, Clock, AlertCircle, Copy, Eye, EyeOff, Loader2 } from 'lucide-react'
 import MultiPageDocumentPreview from './multi-page-document-preview'
-import { AccountingEntry, CreateAccountingEntryRequest, LineItem, SupportedCurrency, TRANSACTION_CATEGORIES, TransactionType } from '@/domains/accounting-entries/types'
+import type { AccountingEntry, CreateAccountingEntryRequest, LineItem } from '@/domains/accounting-entries/lib/data-access'
+import type { SupportedCurrency, TransactionType } from '@/domains/accounting-entries/types'
+import { TRANSACTION_CATEGORIES } from '@/domains/accounting-entries/types'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
 import { useExpenseCategories, DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories'
 import { useCOGSCategories, DynamicCOGSCategory } from '@/lib/hooks/accounting/use-cogs-categories'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { TRANSACTION_STATUSES } from '@/domains/accounting-entries/constants/transaction-status'
+import { TRANSACTION_STATUSES, type TransactionStatus } from '@/domains/accounting-entries/constants/transaction-status'
 
 interface AccountingEntryFormModalProps {
   transaction?: AccountingEntry
@@ -64,7 +66,7 @@ export default function AccountingEntryFormModal({
     return availableCategories[0] || ''
   }
 
-  const initialTransactionType = transaction?.transaction_type || prefilledData?.transaction_type || 'Expense' as const
+  const initialTransactionType = (transaction?.transaction_type || prefilledData?.transaction_type || 'Expense') as TransactionType
 
   const [formData, setFormData] = useState({
     transaction_type: initialTransactionType,
@@ -229,6 +231,9 @@ export default function AccountingEntryFormModal({
       const cleanFormData = {
         ...formData,
         reference_number: formData.document_number,
+        original_currency: formData.original_currency as SupportedCurrency,
+        home_currency: formData.home_currency as SupportedCurrency,
+        status: formData.status as TransactionStatus | undefined,
         payment_date: formData.payment_date || undefined,
         due_date: formData.due_date || undefined,
         payment_method: formData.payment_method || undefined,
@@ -242,7 +247,7 @@ export default function AccountingEntryFormModal({
           quantity: item.quantity!,
           unit_price: item.unit_price!,
           total_amount: (item.quantity! * item.unit_price!),
-          currency: formData.original_currency,
+          currency: formData.original_currency as SupportedCurrency,
           item_code: item.item_code,
           unit_measurement: item.unit_measurement,
           tax_rate: item.tax_rate || 0,
@@ -270,6 +275,9 @@ export default function AccountingEntryFormModal({
       const saveData = {
         ...formData,
         reference_number: formData.document_number,
+        original_currency: formData.original_currency as SupportedCurrency,
+        home_currency: formData.home_currency as SupportedCurrency,
+        status: formData.status as TransactionStatus | undefined,
         source_record_id: prefilledData?.source_record_id || formData.source_record_id,
         source_document_type: (prefilledData?.source_document_type || 'invoice') as 'invoice' | 'expense_claim'
       }
@@ -585,7 +593,7 @@ export default function AccountingEntryFormModal({
                       <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
                         <div className="text-sm text-primary mb-1">Currency Conversion Preview:</div>
                         <div className="text-foreground font-medium">
-                          {formatCurrency(previewAmount, formData.home_currency)}
+                          {formatCurrency(previewAmount, formData.home_currency as SupportedCurrency)}
                         </div>
                         <div className="text-xs text-primary/80">
                           Rate: 1 {formData.original_currency} = {exchangeRate.toFixed(6)} {formData.home_currency}
@@ -787,7 +795,7 @@ export default function AccountingEntryFormModal({
                                   />
                                 </td>
                                 <td className="px-3 py-2 text-right text-green-600 dark:text-green-400 font-medium">
-                                  {formatCurrency((item.quantity || 0) * (item.unit_price || 0), formData.original_currency)}
+                                  {formatCurrency((item.quantity || 0) * (item.unit_price || 0), formData.original_currency as SupportedCurrency)}
                                 </td>
                                 <td className="px-3 py-2 text-center">
                                   <button
@@ -826,14 +834,14 @@ export default function AccountingEntryFormModal({
                           <span className="text-foreground">
                             {formatCurrency(
                               lineItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0),
-                              formData.original_currency
+                              formData.original_currency as SupportedCurrency
                             )}
                           </span>
                         </div>
                         <div className="flex justify-between border-t border-border pt-2">
                           <span className="text-foreground font-medium">Total Amount:</span>
                           <span className="text-green-600 dark:text-green-400 font-medium">
-                            {formatCurrency(formData.original_amount, formData.original_currency)}
+                            {formatCurrency(formData.original_amount, formData.original_currency as SupportedCurrency)}
                           </span>
                         </div>
                       </div>

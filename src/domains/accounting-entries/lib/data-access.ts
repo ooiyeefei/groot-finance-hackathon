@@ -20,6 +20,7 @@ export interface AccountingEntry {
   user_id: string
   business_id?: string
   source_record_id?: string
+  source_document_type?: string
   transaction_type: string
   category: string
   category_name?: string // Resolved human-readable category name from business categories
@@ -34,9 +35,14 @@ export interface AccountingEntry {
   exchange_rate_date: string
   transaction_date: string
   vendor_name?: string
+  vendor_details?: Record<string, any>
   created_by_method?: string
   processing_metadata?: any
   status?: string
+  due_date?: string
+  payment_date?: string
+  payment_method?: string
+  notes?: string
   created_at: string
   updated_at: string
   deleted_at?: string

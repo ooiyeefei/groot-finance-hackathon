@@ -13,7 +13,7 @@ import {
   type AccountingEntryListParams
 } from '@/domains/accounting-entries/lib/data-access'
 import { validateQuery, validateBody, createAccountingEntrySchema, listAccountingEntriesQuerySchema } from '@/lib/validations'
-import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
+import { withEnhancedCache, enhancedApiCache, ENHANCED_CACHE_TTL } from '@/lib/cache/enhanced-api-cache'
 
 /**
  * Create new accounting entry
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Invalidate accounting entries cache after successful creation
-    apiCache.invalidate(userId, 'accounting-entries')
+    await enhancedApiCache.invalidate(userId, 'accounting-entries')
 
     return NextResponse.json(result, { status: 201 })
 
@@ -84,16 +84,17 @@ export async function GET(request: NextRequest) {
     const params: AccountingEntryListParams = validated.data as any
     console.log(`[Accounting Entries API v1] 📝 Query params validated:`, JSON.stringify(params, null, 2))
 
-    // Cache accounting entries with 3-minute TTL
-    console.log(`[Accounting Entries API v1] 🔄 Calling getAccountingEntries with cache...`)
-    const result = await withCache(
+    // Cache accounting entries with enhanced Redis cache + stale-while-revalidate
+    console.log(`[Accounting Entries API v1] 🔄 Calling getAccountingEntries with enhanced cache...`)
+    const result = await withEnhancedCache(
       userId,
       'accounting-entries',
       () => getAccountingEntries(userId, params),
       {
         params,
-        ttlMs: CACHE_TTL.ACCOUNTING_ENTRIES,
-        skipCache: false
+        ttlMs: ENHANCED_CACHE_TTL.ACCOUNTING_ENTRIES,
+        skipCache: false,
+        staleWhileRevalidate: true // Return cached data while refreshing in background
       }
     )
 

@@ -1,7 +1,8 @@
 'use client'
 
 import { X, Edit, Trash2, Calendar, Building, FileText, DollarSign, Hash, Eye, Copy, EyeOff } from 'lucide-react'
-import { AccountingEntry } from '@/domains/accounting-entries/types'
+import type { AccountingEntry } from '@/domains/accounting-entries/lib/data-access'
+import type { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import MultiPageDocumentPreview from './multi-page-document-preview'
@@ -72,7 +73,8 @@ export default function AccountingEntryDetailModal({
     return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 
-  const formatCreationMethod = (method: string) => {
+  const formatCreationMethod = (method?: string) => {
+    if (!method) return 'Unknown'
     switch (method) {
       case 'manual':
         return 'Manual Entry'
@@ -240,7 +242,7 @@ export default function AccountingEntryDetailModal({
                       <span className="text-muted-foreground">Original Amount:</span>
                       <span className={`text-xl font-bold ${getAccountingEntryTypeColor(transaction.transaction_type)}`}>
                         {transaction.transaction_type === 'Expense' && '-'}
-                        {formatCurrency(transaction.original_amount, transaction.original_currency)}
+                        {formatCurrency(transaction.original_amount, transaction.original_currency as SupportedCurrency)}
                       </span>
                     </div>
 
@@ -249,7 +251,7 @@ export default function AccountingEntryDetailModal({
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground">Home Currency:</span>
                           <span className="text-foreground font-semibold">
-                            {formatCurrency(transaction.home_currency_amount, transaction.home_currency)}
+                            {formatCurrency(transaction.home_currency_amount, transaction.home_currency as SupportedCurrency)}
                           </span>
                         </div>
 
@@ -359,10 +361,10 @@ export default function AccountingEntryDetailModal({
                                 <td className="px-3 py-2 text-right text-foreground">{item.quantity}</td>
                                 <td className="px-3 py-2 text-foreground">{item.unit_measurement || '-'}</td>
                                 <td className="px-3 py-2 text-right text-foreground">
-                                  {formatCurrency(item.unit_price, transaction.original_currency)}
+                                  {formatCurrency(item.unit_price, transaction.original_currency as SupportedCurrency)}
                                 </td>
                                 <td className="px-3 py-2 text-right text-foreground font-medium">
-                                  {formatCurrency(item.total_amount || 0, transaction.original_currency)}
+                                  {formatCurrency(item.total_amount || 0, transaction.original_currency as SupportedCurrency)}
                                 </td>
                               </tr>
                             ))}
@@ -390,13 +392,13 @@ export default function AccountingEntryDetailModal({
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Subtotal:</span>
                           <span className="text-foreground">
-                            {formatCurrency(calculateLineItemsTotal(), transaction.original_currency)}
+                            {formatCurrency(calculateLineItemsTotal(), transaction.original_currency as SupportedCurrency)}
                           </span>
                         </div>
                         <div className="flex justify-between border-t border-border pt-2">
                           <span className="text-foreground font-medium">Total Amount:</span>
                           <span className="text-foreground font-medium">
-                            {formatCurrency(transaction.original_amount, transaction.original_currency)}
+                            {formatCurrency(transaction.original_amount, transaction.original_currency as SupportedCurrency)}
                           </span>
                         </div>
 

@@ -2,13 +2,13 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useInfiniteQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import {
+import type {
   AccountingEntry,
   CreateAccountingEntryRequest,
   UpdateAccountingEntryRequest,
-  AccountingEntryListParams,
-  SupportedCurrency
-} from '@/domains/accounting-entries/types';
+  AccountingEntryListParams
+} from '@/domains/accounting-entries/lib/data-access';
+import type { SupportedCurrency } from '@/domains/accounting-entries/types';
 
 interface AccountingEntryListResponse {
   success: boolean;
@@ -122,7 +122,19 @@ const fetchAccountingEntries = async ({ queryKey, pageParam }: { queryKey: any[]
   return data;
 };
 
-export function useAccountingEntries(filters: AccountingEntryFilters = {}): UseAccountingEntriesReturn {
+export function useAccountingEntries(
+  filters: AccountingEntryFilters = {},
+  initialData?: {
+    transactions: AccountingEntry[]
+    pagination: {
+      page: number
+      limit: number
+      total: number
+      has_more: boolean
+      total_pages: number
+    }
+  } | null
+): UseAccountingEntriesReturn {
   const queryClient = useQueryClient();
 
   // State for tracking operations
@@ -135,6 +147,23 @@ export function useAccountingEntries(filters: AccountingEntryFilters = {}): UseA
     ...DEFAULT_FILTERS,
     ...filters
   }), [filters]);
+
+  // ⚡ PERFORMANCE: Transform initial data into React Query format
+  const queryInitialData = useMemo(() => {
+    if (!initialData) return undefined;
+
+    return {
+      pages: [{
+        success: true,
+        data: {
+          transactions: initialData.transactions,
+          pagination: initialData.pagination,
+          nextCursor: initialData.pagination.has_more ? `page-${initialData.pagination.page + 1}` : null
+        }
+      }],
+      pageParams: [undefined]
+    };
+  }, [initialData]);
 
   // TanStack Query useInfiniteQuery for transactions with server-side filtering
   const {
@@ -155,6 +184,10 @@ export function useAccountingEntries(filters: AccountingEntryFilters = {}): UseA
 
     // Initial page parameter (no cursor for first page)
     initialPageParam: undefined as string | undefined,
+
+    // ⚡ PERFORMANCE: Seed React Query with server-fetched data
+    // This eliminates initial loading state and provides instant data display
+    initialData: queryInitialData,
 
     // Function to determine the next page parameter (cursor)
     getNextPageParam: (lastPage) => {

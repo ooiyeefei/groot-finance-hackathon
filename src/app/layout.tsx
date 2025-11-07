@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from '@clerk/nextjs';
 import { ToastProvider } from '@/components/ui/toast';
 import { ThemeProvider } from '@/domains/utilities/components/theme-provider';
+import { WebVitalsReporter } from '@/components/monitoring/web-vitals';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -181,6 +182,7 @@ export default function RootLayout({
           <link rel="icon" href="https://ohxwghdgsuyabgsndfzc.supabase.co/storage/v1/object/public/business-profiles/cc5fdbbc-1459-43ad-9736-3cc65649d23b/logo_1760635116031.png" />
         </head>
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
+          <WebVitalsReporter />
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"

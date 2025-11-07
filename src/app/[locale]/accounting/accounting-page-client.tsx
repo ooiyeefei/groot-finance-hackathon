@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/nextjs'
 import AccountingEntriesList from '@/domains/accounting-entries/components/accounting-entries-list'
-import { AccountingEntry } from '@/domains/accounting-entries/types'
+import type { AccountingEntry } from '@/domains/accounting-entries/lib/data-access'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { ClientProviders } from '@/components/providers/client-providers'
