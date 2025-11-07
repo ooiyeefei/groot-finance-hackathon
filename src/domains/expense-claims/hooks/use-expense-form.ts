@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useExpenseCategories, validateCategorySelection } from './use-expense-categories'
-import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
+import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { AIExtractionResult } from '@/domains/expense-claims/types/expense-extraction'
@@ -143,7 +143,7 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   const { categories, loading: categoriesLoading, error: categoriesError } = useExpenseCategories({
     includeDisabled: props.mode === 'edit'
   })
-  const userHomeCurrency = useHomeCurrency()
+  const { currency: userHomeCurrency } = useHomeCurrency()
 
   // Determine processing method based on mode
   const [processingMethod, setProcessingMethod] = useState<'ai' | 'manual_entry'>('ai')

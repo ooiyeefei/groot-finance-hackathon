@@ -7,7 +7,7 @@ import type { AccountingEntry, CreateAccountingEntryRequest, LineItem } from '@/
 import type { SupportedCurrency, TransactionType } from '@/domains/accounting-entries/types'
 import { TRANSACTION_CATEGORIES } from '@/domains/accounting-entries/types'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
-import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
+import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import { useExpenseCategories, DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories'
 import { useCOGSCategories, DynamicCOGSCategory } from '@/lib/hooks/accounting/use-cogs-categories'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -56,7 +56,7 @@ export default function AccountingEntryFormModal({
 
   // Combined loading state for disabling both buttons
   const isLoading = isSaving || isSubmitting
-  const userHomeCurrency = useHomeCurrency()
+  const { currency: userHomeCurrency } = useHomeCurrency()
 
   const { categories: expenseCategories, loading: expenseCategoriesLoading } = useExpenseCategories()
   const { categories: cogsCategories, loading: cogsCategoriesLoading } = useCOGSCategories()

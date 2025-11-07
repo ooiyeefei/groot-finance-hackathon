@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw, PiggyBank, CreditCard } from 'lucide-react';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
-import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings';
+import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
 
 interface UnifiedFinancialDashboardProps {
@@ -12,8 +12,8 @@ interface UnifiedFinancialDashboardProps {
 
 export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFinancialDashboardProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
-  const homeCurrency = useHomeCurrency();
-  
+  const { currency: homeCurrency } = useHomeCurrency();
+
   const { analytics, trends, loading, error, refresh, lastUpdated } = useFinancialAnalytics({
     period: selectedPeriod,
     homeCurrency,

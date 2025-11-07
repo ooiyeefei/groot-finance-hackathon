@@ -1,8 +1,3 @@
-/**
- * Teams Management Client Component
- * Enhanced team management with user invitation functionality using Resend API
- */
-
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -14,13 +9,13 @@ import { Badge } from '@/components/ui/badge'
 import { RoleBadge } from '@/components/ui/role-badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import InvitationDialog, { InvitationFormData } from '@/domains/account-management/components/invitation-dialog'
 import { clearUserRoleCache, fetchUserRoleWithCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useToast } from '@/components/ui/toast'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 interface TeamMember {
   id: string
@@ -37,17 +32,17 @@ interface TeamMember {
   }
   created_at: string
   clerk_user?: any
-  manager_id?: string // For employee-manager association (now users.id)
-  manager_name?: string // Display name of assigned manager
-  manager_user_id_field?: string // Manager's Clerk user_id for Select component
+  manager_id?: string
+  manager_name?: string
+  manager_user_id_field?: string
 }
 
 interface PendingInvitation {
   id: string
   email: string
-  role: 'employee' | 'manager' | 'admin' // Updated to match modern role values from API
+  role: 'employee' | 'manager' | 'admin'
   invited_by: string
-  invited_at: string // Changed from created_at to match API response
+  invited_at: string
   status: 'pending' | 'accepted'
 }
 
@@ -58,231 +53,215 @@ interface TeamsManagementClientProps {
 }
 
 export default function TeamsManagementClient({ userId }: TeamsManagementClientProps) {
+  const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<'members' | 'invitations'>('members')
   const [userRole, setUserRole] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
-  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
   const [updating, setUpdating] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showInviteDialog, setShowInviteDialog] = useState(false)
-  const [inviteLoading, setInviteLoading] = useState(false)
   const [editingName, setEditingName] = useState<Set<string>>(new Set())
   const [editingNameValue, setEditingNameValue] = useState<string>('')
-  const [businessOwner, setBusinessOwner] = useState<string | null>(null)
   const router = useRouter()
   const { addToast } = useToast()
-
-  // CRITICAL FIX: Listen to business context changes
   const { businessId } = useActiveBusiness()
 
+  const {
+    data: teamMembers = [],
+    isLoading: teamMembersLoading,
+    error: teamMembersError
+  } = useQuery({
+    queryKey: ['team-members', businessId],
+    queryFn: async () => {
+      const response = await fetch('/api/v1/users/team')
+      if (!response.ok) {
+        throw new Error('Failed to fetch team members')
+      }
+      const result = await response.json()
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch team members')
+      }
+      return result.data.users as TeamMember[]
+    },
+    staleTime: 1000 * 60,
+    enabled: !!businessId && activeTab === 'members',
+  })
+
+  const {
+    data: pendingInvitations = [],
+    isLoading: invitationsLoading
+  } = useQuery({
+    queryKey: ['pending-invitations', businessId],
+    queryFn: async () => {
+      const response = await fetch('/api/v1/account-management/invitations?status=pending')
+      if (!response.ok) {
+        throw new Error('Failed to fetch invitations')
+      }
+      const result = await response.json()
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch invitations')
+      }
+      return result.invitations || [] as PendingInvitation[]
+    },
+    staleTime: 1000 * 30,
+    enabled: !!businessId && activeTab === 'invitations',
+  })
 
   useEffect(() => {
     const initializePage = async () => {
-      await checkPermissions()
-      await fetchTeamMembers()
-      await fetchPendingInvitations()
-    }
+      try {
+        setLoading(true)
+        const roleData = await fetchUserRoleWithCache()
 
-    initializePage()
-  }, [])
+        if (roleData && roleData.permissions) {
+          setUserRole(roleData.permissions)
 
-  // CRITICAL FIX: Re-check permissions when business context changes
-  useEffect(() => {
-    if (businessId) {
-      // Business context changed, re-checking permissions
-      checkPermissions()
-    }
-  }, [businessId])
-
-  const checkPermissions = async () => {
-    try {
-      const roleData = await fetchUserRoleWithCache()
-
-      if (roleData && roleData.permissions) {
-        setUserRole(roleData.permissions)
-
-        // Only admin users can manage team roles
-        if (!roleData.permissions.admin) {
+          if (!roleData.permissions.admin) {
+            router.push('/')
+            return
+          }
+        } else {
           router.push('/')
           return
         }
-      } else {
+      } catch (error) {
+        console.error('Failed to check permissions:', error)
         router.push('/')
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error('Failed to check permissions:', error)
-      router.push('/')
-    } finally {
-      setLoading(false)
     }
-  }
 
-  const fetchTeamMembers = async () => {
-    try {
-      const response = await fetch('/api/v1/users/team')
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          setTeamMembers(result.data.users)
-        } else {
-          setError(result.error || 'Failed to fetch team members')
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch team members:', error)
-      setError('Network error while fetching team members')
+    if (businessId) {
+      initializePage()
     }
-  }
+  }, [businessId, router])
 
-  const fetchPendingInvitations = async () => {
-    try {
-      const response = await fetch('/api/v1/account-management/invitations?status=pending')
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          setPendingInvitations(result.invitations || [])
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch pending invitations:', error)
+  useEffect(() => {
+    if (teamMembersError) {
+      setError(teamMembersError instanceof Error ? teamMembersError.message : 'Failed to fetch team members')
     }
-  }
-
-  const updateUserRole = async (membershipId: string, newRole: UserRole) => {
-    // Use the simplified CRUD endpoint
-    await updateMembership(membershipId, { role: newRole })
-  }
-
-  const removeUserFromBusiness = async (userId: string) => {
-    try {
-      setUpdating(prev => new Set([...prev, userId]))
-      setError(null)
-      setSuccess(null)
-
-      // No CSRF token needed - roles endpoint is public (same pattern as assignManager)
+  }, [teamMembersError])
+  const removeUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
       const response = await fetch(`/api/v1/users/${userId}/roles`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          remove_from_business: true
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remove_from_business: true })
       })
 
       const result = await response.json()
-
-      if (result.success) {
-        addToast({
-          type: 'success',
-          title: 'Success',
-          description: 'User removed from business successfully'
-        })
-        clearUserRoleCache()
-        await fetchTeamMembers() // Refresh the list
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Error',
-          description: result.error || 'Failed to remove user from business'
-        })
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to remove user from business')
       }
-    } catch (error) {
+      return result
+    },
+    onMutate: (userId) => {
+      setUpdating(prev => new Set([...prev, userId]))
+      setError(null)
+      setSuccess(null)
+    },
+    onSuccess: () => {
+      addToast({
+        type: 'success',
+        title: 'Success',
+        description: 'User removed from business successfully'
+      })
+      clearUserRoleCache()
+      queryClient.invalidateQueries({ queryKey: ['team-members', businessId] })
+    },
+    onError: (error: Error) => {
       console.error('Failed to remove user from business:', error)
       addToast({
         type: 'error',
         title: 'Error',
-        description: 'Network error while removing user from business'
+        description: error.message || 'Network error while removing user from business'
       })
-    } finally {
+    },
+    onSettled: (_, __, userId) => {
       setUpdating(prev => {
         const newSet = new Set(prev)
         newSet.delete(userId)
         return newSet
       })
     }
+  })
+
+  const updateUserRole = async (membershipId: string, newRole: UserRole) => {
+    await updateMembershipMutation.mutateAsync({ membershipId, updates: { role: newRole } })
   }
 
-  const assignManager = async (employeeId: string, managerId: string) => {
-    try {
-      setUpdating(prev => new Set([...prev, employeeId]))
-      setError(null)
-      setSuccess(null)
-
-      // No CSRF token needed - roles endpoint is public
+  const removeUserFromBusiness = async (userId: string) => {
+    await removeUserMutation.mutateAsync(userId)
+  }
+  const assignManagerMutation = useMutation({
+    mutationFn: async ({ employeeId, managerId }: { employeeId: string; managerId: string }) => {
       const response = await fetch(`/api/v1/users/${employeeId}/roles`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          manager_id: managerId === 'none' ? null : managerId
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_id: managerId === 'none' ? null : managerId })
       })
 
       const result = await response.json()
-
-      if (result.success) {
-        addToast({
-          type: 'success',
-          title: 'Success',
-          description: 'Manager assignment updated successfully'
-        })
-        await fetchTeamMembers() // Refresh the list
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Error',
-          description: result.error || 'Failed to assign manager'
-        })
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to assign manager')
       }
-    } catch (error) {
+      return result
+    },
+    onMutate: ({ employeeId }) => {
+      setUpdating(prev => new Set([...prev, employeeId]))
+      setError(null)
+      setSuccess(null)
+    },
+    onSuccess: () => {
+      addToast({
+        type: 'success',
+        title: 'Success',
+        description: 'Manager assignment updated successfully'
+      })
+      queryClient.invalidateQueries({ queryKey: ['team-members', businessId] })
+    },
+    onError: (error: Error) => {
       console.error('Failed to assign manager:', error)
       addToast({
         type: 'error',
         title: 'Error',
-        description: 'Network error while assigning manager'
+        description: error.message || 'Network error while assigning manager'
       })
-    } finally {
+    },
+    onSettled: (_, __, { employeeId }) => {
       setUpdating(prev => {
         const newSet = new Set(prev)
         newSet.delete(employeeId)
         return newSet
       })
     }
+  })
+
+  const assignManager = async (employeeId: string, managerId: string) => {
+    await assignManagerMutation.mutateAsync({ employeeId, managerId })
   }
 
-  // Get list of managers and admins for assignment dropdown
   const getAvailableManagers = () => {
     return teamMembers.filter(member =>
       member.role_permissions.manager || member.role_permissions.admin
     )
   }
 
-  // Helper function to find the current manager's user_id for the dropdown value
   const getCurrentManagerUserId = (member: TeamMember) => {
     if (!member.manager_id) return 'none'
-
-    // manager_id is the manager's users.id, so we need to find which team member has that user_id
     const manager = teamMembers.find(m => m.user_id === member.manager_id)
-    // Manager dropdown assignment tracking
     return manager ? manager.user_id : 'none'
   }
 
-  const sendInvitation = async (data: InvitationFormData) => {
-    try {
-      setInviteLoading(true)
-      setError(null)
-      setSuccess(null)
-
-      // Get CSRF token first
+  const sendInvitationMutation = useMutation({
+    mutationFn: async (data: InvitationFormData) => {
       const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
       if (!csrfResponse.ok) {
         throw new Error('Failed to get CSRF token')
       }
       const csrfData = await csrfResponse.json()
-
       if (!csrfData.success) {
         throw new Error(csrfData.error || 'Failed to get CSRF token')
       }
@@ -296,7 +275,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         body: JSON.stringify({
           email: data.email,
           role: data.role,
-          business_id: businessId,  // ✅ FIX: Add required business_id from context
+          business_id: businessId,
           employee_id: data.employee_id || null,
           department: data.department || null,
           job_title: data.job_title || null
@@ -304,142 +283,128 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       })
 
       const result = await response.json()
-
-      if (result.success) {
-        if (result.emailFailed && result.warning) {
-          // Email failed but invitation was created
-          addToast({
-            type: 'warning',
-            title: 'Warning',
-            description: result.warning
-          })
-        } else {
-          // Success with email sent
-          addToast({
-            type: 'success',
-            title: 'Success',
-            description: `Invitation sent to ${data.email}`
-          })
-        }
-        setShowInviteDialog(false)
-        await fetchPendingInvitations() // Refresh invitations list
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Error',
-          description: result.error || 'Failed to send invitation'
-        })
+      if (!result.success) {
         throw new Error(result.error || 'Failed to send invitation')
       }
-    } catch (error) {
+      return result
+    },
+    onSuccess: (result, data) => {
+      if (result.emailFailed && result.warning) {
+        addToast({
+          type: 'warning',
+          title: 'Warning',
+          description: result.warning
+        })
+      } else {
+        addToast({
+          type: 'success',
+          title: 'Success',
+          description: `Invitation sent to ${data.email}`
+        })
+      }
+      setShowInviteDialog(false)
+      queryClient.invalidateQueries({ queryKey: ['pending-invitations', businessId] })
+    },
+    onError: (error: Error) => {
       console.error('Failed to send invitation:', error)
       addToast({
         type: 'error',
         title: 'Error',
-        description: 'Network error while sending invitation'
+        description: error.message || 'Network error while sending invitation'
       })
-      throw error
-    } finally {
-      setInviteLoading(false)
     }
+  })
+
+  const sendInvitation = async (data: InvitationFormData) => {
+    await sendInvitationMutation.mutateAsync(data)
   }
 
-  const resendInvitation = async (invitationId: string) => {
-    try {
-      setError(null)
-      setSuccess(null)
-
-      // Get CSRF token first
+  const resendInvitationMutation = useMutation({
+    mutationFn: async (invitationId: string) => {
       const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
       if (!csrfResponse.ok) {
         throw new Error('Failed to get CSRF token')
       }
       const csrfData = await csrfResponse.json()
-
       if (!csrfData.success) {
         throw new Error(csrfData.error || 'Failed to get CSRF token')
       }
 
       const response = await fetch(`/api/v1/account-management/invitations/${invitationId}/resend`, {
         method: 'POST',
-        headers: {
-          'X-CSRF-Token': csrfData.data.token
-        }
+        headers: { 'X-CSRF-Token': csrfData.data.token }
       })
 
       const result = await response.json()
-
-      if (result.success) {
-        addToast({
-          type: 'success',
-          title: 'Success',
-          description: 'Invitation resent successfully'
-        })
-        await fetchPendingInvitations()
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Error',
-          description: result.error || 'Failed to resend invitation'
-        })
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to resend invitation')
       }
-    } catch (error) {
+      return result
+    },
+    onSuccess: () => {
+      addToast({
+        type: 'success',
+        title: 'Success',
+        description: 'Invitation resent successfully'
+      })
+      queryClient.invalidateQueries({ queryKey: ['pending-invitations', businessId] })
+    },
+    onError: (error: Error) => {
       console.error('Failed to resend invitation:', error)
       addToast({
         type: 'error',
         title: 'Error',
-        description: 'Network error while resending invitation'
+        description: error.message || 'Network error while resending invitation'
       })
     }
-  }
+  })
 
-  const deleteInvitation = async (invitationId: string) => {
-    try {
-      setError(null)
-      setSuccess(null)
-
-      // Get CSRF token first
+  const deleteInvitationMutation = useMutation({
+    mutationFn: async (invitationId: string) => {
       const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
       if (!csrfResponse.ok) {
         throw new Error('Failed to get CSRF token')
       }
       const csrfData = await csrfResponse.json()
-
       if (!csrfData.success) {
         throw new Error(csrfData.error || 'Failed to get CSRF token')
       }
 
       const response = await fetch(`/api/v1/account-management/invitations/${invitationId}`, {
         method: 'DELETE',
-        headers: {
-          'X-CSRF-Token': csrfData.data.token
-        }
+        headers: { 'X-CSRF-Token': csrfData.data.token }
       })
 
       const result = await response.json()
-
-      if (result.success) {
-        addToast({
-          type: 'success',
-          title: 'Success',
-          description: 'Invitation deleted successfully'
-        })
-        await fetchPendingInvitations()
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Error',
-          description: result.error || 'Failed to delete invitation'
-        })
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete invitation')
       }
-    } catch (error) {
+      return result
+    },
+    onSuccess: () => {
+      addToast({
+        type: 'success',
+        title: 'Success',
+        description: 'Invitation deleted successfully'
+      })
+      queryClient.invalidateQueries({ queryKey: ['pending-invitations', businessId] })
+    },
+    onError: (error: Error) => {
       console.error('Failed to delete invitation:', error)
       addToast({
         type: 'error',
         title: 'Error',
-        description: 'Network error while deleting invitation'
+        description: error.message || 'Network error while deleting invitation'
       })
     }
+  })
+
+  const resendInvitation = async (invitationId: string) => {
+    await resendInvitationMutation.mutateAsync(invitationId)
+  }
+
+  const deleteInvitation = async (invitationId: string) => {
+    await deleteInvitationMutation.mutateAsync(invitationId)
   }
 
   const startEditingName = (memberId: string, currentName: string) => {
@@ -456,23 +421,16 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     setEditingNameValue('')
   }
 
-  // Simplified CRUD operation for membership management
-  const updateMembership = async (
-    membershipId: string,
-    updates: { status?: 'active' | 'inactive' | 'suspended'; role?: UserRole; reason?: string }
-  ) => {
-    try {
-      setUpdating(prev => new Set([...prev, membershipId]))
-      setError(null)
-      setSuccess(null)
-
-      // Get CSRF token first
+  const updateMembershipMutation = useMutation({
+    mutationFn: async ({ membershipId, updates }: {
+      membershipId: string;
+      updates: { status?: 'active' | 'inactive' | 'suspended'; role?: UserRole; reason?: string }
+    }) => {
       const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
       if (!csrfResponse.ok) {
         throw new Error('Failed to get CSRF token')
       }
       const csrfData = await csrfResponse.json()
-
       if (!csrfData.success) {
         throw new Error(csrfData.error || 'Failed to get CSRF token')
       }
@@ -487,106 +445,100 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       })
 
       const result = await response.json()
-
-      if (result.success) {
-        const action = updates.status === 'inactive' ? 'removed' :
-                      updates.status === 'active' ? 'reactivated' :
-                      updates.role ? 'role updated for' : 'updated'
-
-        addToast({
-          type: 'success',
-          title: 'Success',
-          description: `User ${action} successfully`
-        })
-        clearUserRoleCache()
-        await fetchTeamMembers() // Refresh the list
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Error',
-          description: result.error || 'Failed to update membership'
-        })
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update membership')
       }
-    } catch (error) {
+      return { result, updates }
+    },
+    onMutate: ({ membershipId }) => {
+      setUpdating(prev => new Set([...prev, membershipId]))
+      setError(null)
+      setSuccess(null)
+    },
+    onSuccess: ({ updates }) => {
+      const action = updates.status === 'inactive' ? 'removed' :
+                    updates.status === 'active' ? 'reactivated' :
+                    updates.role ? 'role updated for' : 'updated'
+
+      addToast({
+        type: 'success',
+        title: 'Success',
+        description: `User ${action} successfully`
+      })
+      clearUserRoleCache()
+      queryClient.invalidateQueries({ queryKey: ['team-members', businessId] })
+    },
+    onError: (error: Error) => {
       console.error('Failed to update membership:', error)
       addToast({
         type: 'error',
         title: 'Error',
-        description: 'Network error while updating membership'
+        description: error.message || 'Network error while updating membership'
       })
-    } finally {
+    },
+    onSettled: (_, __, { membershipId }) => {
       setUpdating(prev => {
         const newSet = new Set(prev)
         newSet.delete(membershipId)
         return newSet
       })
     }
-  }
+  })
 
-  const updateUserName = async (memberId: string, isCurrentUser: boolean = false) => {
-    if (!editingNameValue.trim()) {
-      addToast({
-        type: 'error',
-        title: 'Validation Error',
-        description: 'Please enter a valid name'
-      })
-      return
-    }
+  const updateUserNameMutation = useMutation({
+    mutationFn: async ({ memberId, name }: { memberId: string; name: string }) => {
+      if (!name.trim()) {
+        throw new Error('Please enter a valid name')
+      }
+      if (name.trim().length < 2) {
+        throw new Error('Name must be at least 2 characters long')
+      }
 
-    if (editingNameValue.trim().length < 2) {
-      addToast({
-        type: 'error',
-        title: 'Validation Error',
-        description: 'Name must be at least 2 characters long'
-      })
-      return
-    }
-
-    try {
-      setUpdating(prev => new Set([...prev, memberId]))
-
-      // Use profile endpoint for name updates (users update their own profile)
       const response = await fetch(`/api/v1/users/profile`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          full_name: editingNameValue.trim()
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_name: name.trim() })
       })
 
       const result = await response.json()
-
-      if (result.success) {
-        addToast({
-          type: 'success',
-          title: 'Success',
-          description: 'Name updated successfully'
-        })
-        cancelEditingName(memberId)
-        await fetchTeamMembers() // Refresh the list
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Error',
-          description: result.error || 'Failed to update name'
-        })
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update name')
       }
-    } catch (error) {
+      return { result, memberId }
+    },
+    onMutate: ({ memberId }) => {
+      setUpdating(prev => new Set([...prev, memberId]))
+    },
+    onSuccess: ({ memberId }) => {
+      addToast({
+        type: 'success',
+        title: 'Success',
+        description: 'Name updated successfully'
+      })
+      cancelEditingName(memberId)
+      queryClient.invalidateQueries({ queryKey: ['team-members', businessId] })
+    },
+    onError: (error: Error) => {
       console.error('Failed to update name:', error)
       addToast({
         type: 'error',
         title: 'Error',
-        description: 'Network error while updating name'
+        description: error.message || 'Network error while updating name'
       })
-    } finally {
-      setUpdating(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(memberId)
-        return newSet
-      })
+    },
+    onSettled: (data) => {
+      if (data) {
+        setUpdating(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(data.memberId)
+          return newSet
+        })
+      }
     }
+  })
+
+  const updateUserName = async (memberId: string) => {
+    await updateUserNameMutation.mutateAsync({ memberId, name: editingNameValue })
   }
 
   const getRoleDisplay = (permissions: any): UserRole => {
@@ -594,8 +546,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     if (permissions.manager) return 'manager'
     return 'employee'
   }
-
-  // No mapping needed - API now returns modern role names directly
 
   const getInvitationStatusColor = (status: string) => {
     switch (status) {
@@ -630,7 +580,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
   return (
     <div className="space-y-6">
-      {/* Status Messages */}
       {error && (
         <Alert className="bg-destructive/10 border-destructive/30">
           <AlertCircle className="w-4 h-4 text-destructive" />
@@ -645,8 +594,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         </Alert>
       )}
 
-
-      {/* Role Information */}
       <Card className="bg-card border-border">
         <CardHeader>
           <div className="flex justify-between items-start">
@@ -711,16 +658,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         </CardContent>
       </Card>
 
-      {/* Invitation Dialog */}
       <InvitationDialog
         isOpen={showInviteDialog}
         onClose={() => setShowInviteDialog(false)}
         onInvite={sendInvitation}
-        isLoading={inviteLoading}
+        isLoading={sendInvitationMutation.isPending}
       />
 
-      {/* Teams and Invitations Tabs */}
-      <Tabs defaultValue="members" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as 'members' | 'invitations')} className="space-y-4">
         <TabsList className="grid w-full grid-cols-2 bg-muted border border-border">
           <TabsTrigger value="members" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Team Members ({teamMembers.length})
@@ -730,7 +675,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="members" className="space-y-4">
+        {activeTab === 'members' && (
+          <TabsContent value="members" className="space-y-4">
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
@@ -771,7 +717,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                       />
                                       <Button
                                         size="sm"
-                                        onClick={() => updateUserName(member.user_id, member.clerk_user?.id === userId)}
+                                        onClick={() => updateUserName(member.user_id)}
                                         disabled={updating.has(member.id)}
                                         className="h-8 px-2 bg-action-view hover:bg-action-view/90 text-action-view-foreground"
                                       >
@@ -815,10 +761,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                     </div>
                                   )}
 
-                                  {/* Role and Owner Badges */}
                                   <div className="flex items-center gap-2">
                                     <RoleBadge roleType={currentRole} />
-                                    {/* Show Owner badge for the current logged-in user (temporary) */}
                                     {member.clerk_user?.id === userId && (
                                       <RoleBadge roleType="owner" />
                                     )}
@@ -848,9 +792,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                               </div>
                             </div>
 
-                            {/* Controls Section - Clean layout without column headers */}
                             <div className="flex items-end gap-4">
-                              {/* Role Selection */}
                               <div className="flex flex-col">
                                 <span className="text-xs text-muted-foreground mb-1.5">Role</span>
                                 <Select
@@ -875,7 +817,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                 </Select>
                               </div>
 
-                              {/* Manager Assignment - All roles can have managers */}
                               <div className="flex flex-col">
                                 <span className="text-xs text-muted-foreground mb-1.5">
                                   {currentRole === 'employee' ? 'Manager' : 'Manager (Optional)'}
@@ -893,7 +834,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                       {currentRole === 'employee' ? 'No Manager' : 'No Assignment'}
                                     </SelectItem>
                                     {getAvailableManagers()
-                                      .filter(manager => manager.user_id !== member.user_id) // Don't let user be their own manager
+                                      .filter(manager => manager.user_id !== member.user_id)
                                       .map((manager) => (
                                         <SelectItem
                                           key={manager.user_id}
@@ -912,7 +853,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                 </Select>
                               </div>
 
-                              {/* Remove User Button */}
                               <Button
                                 size="sm"
                                 variant="destructive"
@@ -936,9 +876,11 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+          </TabsContent>
+        )}
 
-        <TabsContent value="invitations" className="space-y-4">
+        {activeTab === 'invitations' && (
+          <TabsContent value="invitations" className="space-y-4">
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
@@ -957,7 +899,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {pendingInvitations.map((invitation) => (
+                  {pendingInvitations.map((invitation: PendingInvitation) => (
                     <Card key={invitation.id} className="bg-muted border-border">
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
@@ -1003,7 +945,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

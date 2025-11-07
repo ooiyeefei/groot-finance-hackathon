@@ -1,53 +1,30 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Upload, X, Camera, Building2, DollarSign } from 'lucide-react'
+import { X, Camera, Building2, DollarSign } from 'lucide-react'
 import Image from 'next/image'
 import { useToast } from '@/components/ui/toast'
 import { useBusinessProfile } from '@/contexts/business-context'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
-
-const SUPPORTED_CURRENCIES: { code: SupportedCurrency; name: string }[] = [
-  { code: 'USD', name: 'US Dollar (USD)' },
-  { code: 'SGD', name: 'Singapore Dollar (SGD)' },
-  { code: 'MYR', name: 'Malaysian Ringgit (MYR)' },
-  { code: 'THB', name: 'Thai Baht (THB)' },
-  { code: 'IDR', name: 'Indonesian Rupiah (IDR)' },
-  { code: 'VND', name: 'Vietnamese Dong (VND)' },
-  { code: 'PHP', name: 'Philippine Peso (PHP)' },
-  { code: 'CNY', name: 'Chinese Yuan (CNY)' },
-  { code: 'EUR', name: 'Euro (EUR)' }
-]
-
-interface BusinessProfile {
-  id: string
-  name: string
-  logo_url?: string
-  logo_fallback_color?: string
-}
+import { useHomeCurrency, updateHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 
 export default function BusinessProfileSettings() {
   const { profile, isLoading, updateProfile } = useBusinessProfile()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [businessName, setBusinessName] = useState('')
-  const [homeCurrency, setHomeCurrency] = useState<SupportedCurrency>('USD')
-  const [isCurrencyLoading, setIsCurrencyLoading] = useState(false)
   const [isCurrencySaving, setIsCurrencySaving] = useState(false)
   const [lastCurrencySaved, setLastCurrencySaved] = useState<Date | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
+
+  const { currency: homeCurrency, isLoading: isCurrencyLoading, supportedCurrencies } = useHomeCurrency()
 
   useEffect(() => {
     if (profile) {
       setBusinessName(profile.name || '')
     }
   }, [profile])
-
-  // Load user's currency preference on mount
-  useEffect(() => {
-    loadCurrencyPreference()
-  }, [])
 
 
   const updateBusinessName = async () => {
@@ -56,7 +33,6 @@ export default function BusinessProfileSettings() {
     try {
       setIsUpdating(true)
 
-      // Get CSRF token first
       const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
       if (!csrfResponse.ok) {
         throw new Error('Failed to get CSRF token')
@@ -93,7 +69,7 @@ export default function BusinessProfileSettings() {
           description: result.error || 'Unable to update business name'
         })
       }
-    } catch (error) {
+    } catch {
       addToast({
         type: 'error',
         title: 'Error updating name',
@@ -104,69 +80,26 @@ export default function BusinessProfileSettings() {
     }
   }
 
-  const loadCurrencyPreference = async () => {
-    try {
-      setIsCurrencyLoading(true)
+  const handleCurrencyChange = async (newCurrency: SupportedCurrency) => {
+    if (newCurrency === homeCurrency) return
 
-      // Load user's preferred currency from Supabase profile
-      const response = await fetch('/api/v1/users/profile')
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success && data.data?.preferred_currency) {
-          const currency = data.data.preferred_currency as SupportedCurrency
-          if (SUPPORTED_CURRENCIES.some(c => c.code === currency)) {
-            setHomeCurrency(currency)
-            // Sync to localStorage for immediate access in other components
-            localStorage.setItem('homeCurrency', currency)
-          }
-        }
-      } else {
-        // Fallback to localStorage if API fails
-        const stored = localStorage.getItem('homeCurrency')
-        if (stored && SUPPORTED_CURRENCIES.some(c => c.code === stored)) {
-          setHomeCurrency(stored as SupportedCurrency)
-        }
-      }
-
-    } catch (error) {
-      console.error('Failed to load currency preference:', error)
-      // Fallback to localStorage on error
-      const stored = localStorage.getItem('homeCurrency')
-      if (stored && SUPPORTED_CURRENCIES.some(c => c.code === stored)) {
-        setHomeCurrency(stored as SupportedCurrency)
-      }
-    } finally {
-      setIsCurrencyLoading(false)
-    }
-  }
-
-  const saveCurrencyPreference = async (currency: SupportedCurrency) => {
     try {
       setIsCurrencySaving(true)
 
-      // Save to Supabase database first
-      const response = await fetch('/api/v1/users/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preferred_currency: currency })
-      })
+      const success = await updateHomeCurrency(newCurrency)
 
-      if (!response.ok) {
-        throw new Error('Failed to save currency preference to database')
+      if (success) {
+        setLastCurrencySaved(new Date())
+        addToast({
+          type: 'success',
+          title: 'Currency updated',
+          description: `Home currency changed to ${newCurrency}`
+        })
+      } else {
+        throw new Error('Failed to update currency')
       }
-
-      // Save to localStorage for immediate access
-      localStorage.setItem('homeCurrency', currency)
-
-      setLastCurrencySaved(new Date())
-      addToast({
-        type: 'success',
-        title: 'Currency updated',
-        description: `Home currency changed to ${currency}`
-      })
-
     } catch (error) {
-      console.error('Failed to save currency preference:', error)
+      console.error('[Business Settings] Failed to update currency:', error)
       addToast({
         type: 'error',
         title: 'Failed to update currency',
@@ -177,18 +110,10 @@ export default function BusinessProfileSettings() {
     }
   }
 
-  const handleCurrencyChange = async (newCurrency: SupportedCurrency) => {
-    if (newCurrency === homeCurrency) return
-
-    setHomeCurrency(newCurrency)
-    await saveCurrencyPreference(newCurrency)
-  }
-
   const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file || !profile) return
 
-    // Validate file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
       addToast({
@@ -199,7 +124,6 @@ export default function BusinessProfileSettings() {
       return
     }
 
-    // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       addToast({
         type: 'error',
@@ -237,7 +161,7 @@ export default function BusinessProfileSettings() {
           description: result.error || 'Failed to upload logo'
         })
       }
-    } catch (error) {
+    } catch {
       addToast({
         type: 'error',
         title: 'Error uploading logo',
@@ -245,7 +169,6 @@ export default function BusinessProfileSettings() {
       })
     } finally {
       setIsUploading(false)
-      // Clear file input
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -279,7 +202,7 @@ export default function BusinessProfileSettings() {
           description: result.error || 'Failed to remove logo'
         })
       }
-    } catch (error) {
+    } catch {
       addToast({
         type: 'error',
         title: 'Error removing logo',
@@ -447,7 +370,7 @@ export default function BusinessProfileSettings() {
               disabled={isCurrencyLoading || isCurrencySaving}
               className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
             >
-              {SUPPORTED_CURRENCIES.map(currency => (
+              {supportedCurrencies.map(currency => (
                 <option key={currency.code} value={currency.code}>
                   {currency.name}
                 </option>
@@ -482,60 +405,4 @@ export default function BusinessProfileSettings() {
       </div>
     </div>
   )
-}
-
-// Hook to get current user's home currency preference
-export function useHomeCurrency(): SupportedCurrency {
-  const [homeCurrency, setHomeCurrency] = useState<SupportedCurrency>('SGD') // Default to SGD to match database default
-
-  useEffect(() => {
-    const loadUserCurrency = async () => {
-      try {
-        // Try to load from API first
-        const response = await fetch('/api/v1/users/profile')
-        if (response.ok) {
-          const data = await response.json()
-          if (data.success && data.data?.preferred_currency) {
-            const currency = data.data.preferred_currency as SupportedCurrency
-            if (SUPPORTED_CURRENCIES.some(c => c.code === currency)) {
-              setHomeCurrency(currency)
-              // Sync to localStorage for consistency
-              localStorage.setItem('homeCurrency', currency)
-              return
-            }
-          }
-        }
-
-        // Fallback to localStorage if API fails
-        const stored = localStorage.getItem('homeCurrency')
-        if (stored && SUPPORTED_CURRENCIES.some(c => c.code === stored)) {
-          setHomeCurrency(stored as SupportedCurrency)
-        }
-      } catch (error) {
-        console.error('Failed to load user currency:', error)
-        // Fallback to localStorage on error
-        const stored = localStorage.getItem('homeCurrency')
-        if (stored && SUPPORTED_CURRENCIES.some(c => c.code === stored)) {
-          setHomeCurrency(stored as SupportedCurrency)
-        }
-      }
-    }
-
-    loadUserCurrency()
-
-    // Listen for changes to localStorage (from other tabs or settings page)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'homeCurrency' && e.newValue) {
-        const newCurrency = e.newValue as SupportedCurrency
-        if (SUPPORTED_CURRENCIES.some(c => c.code === newCurrency)) {
-          setHomeCurrency(newCurrency)
-        }
-      }
-    }
-
-    window.addEventListener('storage', handleStorageChange)
-    return () => window.removeEventListener('storage', handleStorageChange)
-  }, [])
-
-  return homeCurrency
 }

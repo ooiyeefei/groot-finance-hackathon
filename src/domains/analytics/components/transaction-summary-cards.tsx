@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw } from 'lucide-react'
 import { useTransactionSummary, getPeriodDisplayName } from '@/domains/accounting-entries/hooks/use-transaction-summary'
-import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
+import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 
 interface TransactionSummaryCardsProps {
@@ -14,7 +14,7 @@ export default function TransactionSummaryCards({
   period = '60days'
 }: TransactionSummaryCardsProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | '60days' | '90days' | '6months' | 'year'>(period)
-  const homeCurrency = useHomeCurrency() // Get user's preferred currency
+  const { currency: homeCurrency } = useHomeCurrency() // Get user's preferred currency
   const { summary, isLoading, error, refreshSummary } = useTransactionSummary(selectedPeriod, homeCurrency)
 
   const formatCurrency = (amount: number, currency: SupportedCurrency) => {

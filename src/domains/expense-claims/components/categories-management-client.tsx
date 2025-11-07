@@ -1,8 +1,3 @@
-/**
- * Categories Management Client Component
- * Exact replica of Expense Approvals > Categories tab with both expense and COGS categories
- */
-
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -16,6 +11,7 @@ import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import CategoryFormModal, { CategoryFormData } from '@/domains/expense-claims/components/category-form-modal'
 import COGSCategoryManagement from '@/domains/invoices/components/cogs-category-management'
 import { fetchUserRoleWithCache } from '@/lib/cache-utils'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 interface ExpenseCategory {
   id: string
@@ -51,7 +47,6 @@ export default function CategoriesManagementClient({ userId }: CategoriesManagem
   const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch user role information using centralized caching
   useEffect(() => {
     const fetchUserRole = async () => {
       try {
@@ -60,12 +55,10 @@ export default function CategoriesManagementClient({ userId }: CategoriesManagem
         if (roleData && roleData.permissions) {
           setUserRole(roleData.permissions)
         } else {
-          // Fallback role if API fails
           setUserRole({ employee: true, manager: false, admin: false })
         }
       } catch (error) {
         console.error('Failed to fetch user role:', error)
-        // Fallback role if API fails
         setUserRole({ employee: true, manager: false, admin: false })
       } finally {
         setLoading(false)
@@ -97,7 +90,6 @@ export default function CategoriesManagementClient({ userId }: CategoriesManagem
     )
   }
 
-  // Check permissions
   const canManage = userRole.manager || userRole.admin
 
   if (!canManage) {
@@ -123,26 +115,28 @@ export default function CategoriesManagementClient({ userId }: CategoriesManagem
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="expense" className="space-y-4">
-          <ExpenseCategoryManagement userRole={userRole} />
-        </TabsContent>
+        {/* PERFORMANCE: Conditionally render tabs for true lazy loading */}
+        {activeTab === 'expense' && (
+          <TabsContent value="expense" className="space-y-4">
+            <ExpenseCategoryManagement userRole={userRole} />
+          </TabsContent>
+        )}
 
-        <TabsContent value="cogs" className="space-y-4">
-          <COGSCategoryManagement userRole={userRole} />
-        </TabsContent>
+        {activeTab === 'cogs' && (
+          <TabsContent value="cogs" className="space-y-4">
+            <COGSCategoryManagement userRole={userRole} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )
 }
 
-// Expense Categories Management (exact copy of CategoryManagement component)
 function ExpenseCategoryManagement({ userRole }: { userRole: UserRole }) {
-  const [categories, setCategories] = useState<ExpenseCategory[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editingCategory, setEditingCategory] = useState<ExpenseCategory | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
@@ -155,39 +149,36 @@ function ExpenseCategoryManagement({ userRole }: { userRole: UserRole }) {
     category: null
   })
 
-  // Check permissions
   const canManage = userRole.manager || userRole.admin
 
-  useEffect(() => {
-    if (canManage) {
-      fetchCategories()
-    }
-  }, [canManage])
-
-  const fetchCategories = async () => {
-    try {
-      setLoading(true)
+  const {
+    data: categories = [],
+    isLoading: loading,
+    error: queryError
+  } = useQuery({
+    queryKey: ['expense-categories'],
+    queryFn: async () => {
       const response = await fetch('/api/v1/expense-claims/categories')
       const result = await response.json()
 
-      if (result.success) {
-        setCategories(result.data.categories)
-      } else {
-        setError(result.error || 'Failed to fetch categories')
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch categories')
       }
-    } catch (error) {
-      console.error('Failed to fetch categories:', error)
-      setError('Network error while fetching categories')
-    } finally {
-      setLoading(false)
+
+      return result.data.categories as ExpenseCategory[]
+    },
+    staleTime: 1000 * 60 * 30,
+    enabled: canManage,
+  })
+
+  useEffect(() => {
+    if (queryError) {
+      setError(queryError instanceof Error ? queryError.message : 'Failed to fetch categories')
     }
-  }
+  }, [queryError])
 
-  const handleFormSubmit = async (formData: CategoryFormData) => {
-    setSaving(true)
-    setError(null)
-
-    try {
+  const saveCategoryMutation = useMutation({
+    mutationFn: async (formData: CategoryFormData) => {
       const submitData = {
         ...formData,
         id: editingCategory?.id,
@@ -199,29 +190,35 @@ function ExpenseCategoryManagement({ userRole }: { userRole: UserRole }) {
       const method = editingCategory ? 'PUT' : 'POST'
       const response = await fetch('/api/v1/expense-claims/categories', {
         method,
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submitData)
       })
 
       const result = await response.json()
-
-      if (result.success) {
-        setSuccess(editingCategory ? 'Category updated successfully' : 'Category created successfully')
-        setShowForm(false)
-        setEditingCategory(null)
-        fetchCategories()
-      } else {
-        setError(result.error || 'Failed to save category')
+      if (!result.success) {
         throw new Error(result.error || 'Failed to save category')
       }
-    } catch (error) {
+
+      return result
+    },
+    onSuccess: () => {
+      setSuccess(editingCategory ? 'Category updated successfully' : 'Category created successfully')
+      setShowForm(false)
+      setEditingCategory(null)
+      queryClient.invalidateQueries({ queryKey: ['expense-categories'] })
+    },
+    onError: (error: Error) => {
       console.error('Failed to save category:', error)
-      setError('Network error while saving category')
-      throw error // Re-throw to let modal handle the error state
-    } finally {
-      setSaving(false)
+      setError(error.message || 'Network error while saving category')
+    }
+  })
+
+  const handleFormSubmit = async (formData: CategoryFormData) => {
+    setError(null)
+    try {
+      await saveCategoryMutation.mutateAsync(formData)
+    } catch (err) {
+      throw err
     }
   }
 
@@ -240,40 +237,46 @@ function ExpenseCategoryManagement({ userRole }: { userRole: UserRole }) {
     })
   }
 
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (categoryId: string) => {
+      const response = await fetch('/api/v1/expense-claims/categories', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: categoryId })
+      })
+
+      const result = await response.json()
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete category')
+      }
+
+      return result
+    },
+    onSuccess: () => {
+      setSuccess('Category deleted successfully')
+      queryClient.invalidateQueries({ queryKey: ['expense-categories'] })
+      setDeleteConfirmation({
+        isOpen: false,
+        isLoading: false,
+        category: null
+      })
+    },
+    onError: (error: Error) => {
+      console.error('Failed to delete category:', error)
+      setError(error.message || 'Network error while deleting category')
+      setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
+    }
+  })
+
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmation.category) return
 
     setDeleteConfirmation(prev => ({ ...prev, isLoading: true }))
+    setError(null)
 
     try {
-      setError(null)
-
-      const response = await fetch('/api/v1/expense-claims/categories', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ id: deleteConfirmation.category.id })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        setSuccess('Category deleted successfully')
-        fetchCategories()
-        setDeleteConfirmation({
-          isOpen: false,
-          isLoading: false,
-          category: null
-        })
-      } else {
-        setError(result.error || 'Failed to delete category')
-        setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
-      }
-    } catch (error) {
-      console.error('Failed to delete category:', error)
-      setError('Network error while deleting category')
-      setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
+      await deleteCategoryMutation.mutateAsync(deleteConfirmation.category.id)
+    } catch {
     }
   }
 
@@ -461,7 +464,7 @@ function ExpenseCategoryManagement({ userRole }: { userRole: UserRole }) {
         }}
         onSubmit={handleFormSubmit}
         editingCategory={editingCategory}
-        isLoading={saving}
+        isLoading={saveCategoryMutation.isPending}
         error={error}
       />
     </div>

@@ -3,7 +3,7 @@
 import { useState, Suspense, lazy } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw, PiggyBank, CreditCard, Loader2 } from 'lucide-react';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
-import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings';
+import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
 
 // Lazy load heavy components to improve initial page load
@@ -27,8 +27,8 @@ const ComponentLoader = ({ title }: { title: string }) => (
 
 export default function CompleteDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
-  const homeCurrency = useHomeCurrency();
-  
+  const { currency: homeCurrency } = useHomeCurrency();
+
   const { analytics, trends, loading, error, refresh, lastUpdated } = useFinancialAnalytics({
     period: selectedPeriod,
     homeCurrency,

@@ -10,7 +10,7 @@ import DocumentStatusBadge from './document-status-badge'
 import ConfidenceScoreMeter from './confidence-score-meter'
 import { mapDocumentToAccountingEntry, canCreateAccountingEntryFromDocument } from '@/domains/invoices/lib/document-to-accounting-entry-mapper'
 import { CreateAccountingEntryRequest } from '@/domains/accounting-entries/types'
-import { useHomeCurrency } from '@/domains/account-management/components/business-profile-settings'
+import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import ExtractedInfoTags from './ExtractedInfoTags'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useToast } from '@/components/ui/toast'
@@ -50,7 +50,7 @@ interface DocumentsListRef {
 const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefresh }, ref) => {
   const router = useRouter()
   const locale = useLocale()
-  const userHomeCurrency = useHomeCurrency()
+  const { currency: userHomeCurrency } = useHomeCurrency()
   const { businessId } = useActiveBusiness()
 
   // Helper function to check if document is completed and has extractable data
