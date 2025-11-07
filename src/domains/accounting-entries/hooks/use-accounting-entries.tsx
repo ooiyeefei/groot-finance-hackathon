@@ -82,16 +82,20 @@ const fetchAccountingEntries = async ({ queryKey, pageParam }: { queryKey: any[]
   const searchParams = new URLSearchParams();
 
   // Add pagination parameters
-  searchParams.append('limit', '20'); // Default page size for infinite scroll
+  searchParams.append('limit', String(filters.limit || 20)); // Default page size for infinite scroll
+  searchParams.append('page', String(filters.page || 1)); // Default to page 1
 
   // Add cursor parameter for infinite scroll
   if (pageParam) {
     searchParams.append('cursor', pageParam);
   }
 
-  // Add filter parameters for server-side filtering
+  // Add filter parameters for server-side filtering (exclude pagination params to prevent duplication)
   if (filters && typeof filters === 'object') {
     Object.entries(filters).forEach(([key, value]) => {
+      // Skip pagination parameters that are handled separately
+      if (key === 'limit' || key === 'page') return;
+
       if (value !== undefined && value !== null && value !== '') {
         searchParams.append(key, String(value));
       }
