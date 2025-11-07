@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageSquare, Plus, Clock, Search, X, Trash2, MoreVertical } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
@@ -41,34 +42,34 @@ export default function ConversationSidebar({
   refreshTrigger
 }: ConversationSidebarProps) {
   const t = useTranslations('chat')
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
-  // Fetch conversations
-  useEffect(() => {
-    const fetchConversations = async () => {
-      try {
-        const response = await fetch('/api/v1/chat/conversations')
-        if (response.ok) {
-          const data = await response.json()
-          setConversations(data.conversations)
-        }
-      } catch (error) {
-        console.error('Failed to fetch conversations:', error)
-      } finally {
-        setLoading(false)
+  // OPTIMIZED: Use React Query for automatic caching and deduplication
+  const { data: conversations = [], isLoading: loading } = useQuery({
+    queryKey: ['conversations'],
+    queryFn: async () => {
+      const response = await fetch('/api/v1/chat/conversations')
+      if (!response.ok) {
+        throw new Error('Failed to fetch conversations')
       }
-    }
+      const data = await response.json()
+      return data.conversations
+    },
+    enabled: isOpen, // Only fetch when sidebar is open
+    staleTime: 30000, // Cache for 30 seconds
+  })
 
-    if (isOpen) {
-      fetchConversations()
+  // Invalidate cache when refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger) {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
     }
-  }, [isOpen, refreshTrigger])
+  }, [refreshTrigger, queryClient])
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -83,9 +84,9 @@ export default function ConversationSidebar({
   }, [openMenuId])
 
   // Filter conversations based on search query
-  const filteredConversations = conversations.filter(conv =>
+  const filteredConversations = conversations.filter((conv: Conversation) =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (conv.latest_message?.content && 
+    (conv.latest_message?.content &&
      conv.latest_message.content.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
@@ -117,7 +118,7 @@ export default function ConversationSidebar({
     return text.substring(0, maxLength) + '...'
   }
 
-  // Handle delete conversation
+  // Handle delete conversation with cache invalidation
   const handleDeleteConversation = async () => {
     if (!conversationToDelete) return
 
@@ -128,14 +129,14 @@ export default function ConversationSidebar({
       })
 
       if (response.ok) {
-        // Remove from local state
-        setConversations(prev => prev.filter(conv => conv.id !== conversationToDelete))
-        
+        // Invalidate React Query cache to refetch conversations
+        queryClient.invalidateQueries({ queryKey: ['conversations'] })
+
         // Notify parent component if the deleted conversation is currently active
         if (conversationToDelete === currentConversationId) {
           onConversationDeleted?.(conversationToDelete)
         }
-        
+
         setDeleteDialogOpen(false)
         setConversationToDelete(null)
         setOpenMenuId(null)
@@ -275,7 +276,7 @@ export default function ConversationSidebar({
             </div>
           ) : (
             <div className="space-y-1 p-2">
-              {filteredConversations.map((conversation) => (
+              {filteredConversations.map((conversation: Conversation) => (
                 <div
                   key={conversation.id}
                   className={`

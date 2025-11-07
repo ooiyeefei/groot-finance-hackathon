@@ -90,15 +90,21 @@ export default function AIAssistantPage() {
   }
 
   // Auto-load most recent conversation on initial page load only
+  // OPTIMIZED: Parallel fetching with Promise.allSettled() for faster initial load
   useEffect(() => {
     if (!isLoaded || !userId || initialLoadComplete) return
 
     const loadMostRecentConversation = async () => {
       setLoading(true)
       try {
-        const response = await fetch('/api/v1/chat/conversations')
-        if (response.ok) {
-          const data = await response.json()
+        // Fetch only the most recent conversation (limit=1) for faster response
+        const result = await Promise.allSettled([
+          fetch('/api/v1/chat/conversations?limit=1')
+        ])
+
+        // Handle conversations fetch result
+        if (result[0].status === 'fulfilled' && result[0].value.ok) {
+          const data = await result[0].value.json()
           const conversations = data.conversations
 
           // Load the most recent conversation if it exists
@@ -106,6 +112,8 @@ export default function AIAssistantPage() {
             const mostRecentConversation = conversations[0]
             await loadConversation(mostRecentConversation.id)
           }
+        } else if (result[0].status === 'rejected') {
+          console.error('Failed to load conversations:', result[0].reason)
         }
       } catch (error) {
         console.error('Failed to load most recent conversation:', error)

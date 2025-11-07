@@ -25,17 +25,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No business context found' }, { status: 400 })
     }
 
-    console.log(`[Conversations V1 API] Fetching conversations for user: ${userId}, business: ${userData.business_id}`)
+    // Parse pagination parameters (backward compatible)
+    const searchParams = request.nextUrl.searchParams
+    const limit = Math.min(
+      parseInt(searchParams.get('limit') || '50'),
+      100 // Max 100 conversations per page
+    )
 
-    // Call service layer to get conversations
+    console.log(`[Conversations V1 API] Fetching conversations for user: ${userId}, business: ${userData.business_id}, limit: ${limit}`)
+
+    // Call service layer to get conversations with pagination
     const conversations = await listConversations(
       userId,
       userData.id,
-      userData.business_id
+      userData.business_id,
+      limit
     )
 
     return NextResponse.json({
-      conversations
+      conversations,
+      pagination: {
+        limit,
+        count: conversations.length,
+        has_more: conversations.length === limit
+      }
     })
 
   } catch (error) {
