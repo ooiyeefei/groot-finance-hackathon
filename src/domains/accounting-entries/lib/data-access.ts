@@ -464,10 +464,49 @@ export async function getAccountingEntries(
   error?: string
 }> {
   try {
-    console.log(`[Accounting Entries Data Access] Listing entries for user ${userId}:`, params)
+    console.log(`[Accounting Entries Data Access] 🚀 Starting getAccountingEntries for user ${userId}`)
+    console.log(`[Accounting Entries Data Access] 📋 Query params:`, JSON.stringify(params, null, 2))
 
+    console.log(`[Accounting Entries Data Access] 🔄 Getting user data...`)
     const userData = await getUserData(userId)
+    console.log(`[Accounting Entries Data Access] 👤 User data resolved:`, {
+      id: userData.id,
+      business_id: userData.business_id,
+      email: userData.email,
+      home_currency: userData.home_currency
+    })
+
+    if (!userData.business_id) {
+      console.log(`[Accounting Entries Data Access] ❌ No business_id found for user ${userId}`)
+      return { success: false, error: 'No business context found' }
+    }
+
+    console.log(`[Accounting Entries Data Access] 🔗 Creating business context Supabase client...`)
     const supabase = await createBusinessContextSupabaseClient(userId)
+    console.log(`[Accounting Entries Data Access] ✅ Supabase client created successfully`)
+
+    // DIAGNOSTIC: Check if ANY data exists for this business_id
+    console.log(`[Accounting Entries Data Access] 🔍 DIAGNOSTIC: Checking if ANY entries exist for business_id: ${userData.business_id}`)
+    const { count: totalEntriesForBusiness, error: diagError } = await supabase
+      .from('accounting_entries')
+      .select('*', { count: 'exact', head: true })
+      .eq('business_id', userData.business_id)
+
+    if (diagError) {
+      console.error('[Accounting Entries Data Access] ❌ DIAGNOSTIC: Failed to check entries count:', diagError)
+    } else {
+      console.log(`[Accounting Entries Data Access] 📊 DIAGNOSTIC: Found ${totalEntriesForBusiness} total entries for business_id: ${userData.business_id}`)
+
+      // Also check deleted entries
+      const { count: deletedEntries } = await supabase
+        .from('accounting_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('business_id', userData.business_id)
+        .not('deleted_at', 'is', null)
+
+      console.log(`[Accounting Entries Data Access] 📊 DIAGNOSTIC: Found ${deletedEntries} soft-deleted entries for business_id: ${userData.business_id}`)
+      console.log(`[Accounting Entries Data Access] 📊 DIAGNOSTIC: Active entries (non-deleted): ${(totalEntriesForBusiness || 0) - (deletedEntries || 0)}`)
+    }
 
     let query = supabase
       .from('accounting_entries')
@@ -523,23 +562,52 @@ export async function getAccountingEntries(
     const offset = (params.page! - 1) * params.limit!
     query = query.range(offset, offset + params.limit! - 1)
 
+    console.log(`[Accounting Entries Data Access] 📍 Final query filters applied:`)
+    console.log(`[Accounting Entries Data Access] - business_id: ${userData.business_id}`)
+    console.log(`[Accounting Entries Data Access] - deleted_at: null`)
+    console.log(`[Accounting Entries Data Access] - pagination: offset=${offset}, limit=${params.limit}`)
+    console.log(`[Accounting Entries Data Access] - sort: ${params.sort_by || 'transaction_date'} ${params.sort_order || 'desc'}`)
+    if (params.transaction_type) console.log(`[Accounting Entries Data Access] - transaction_type: ${params.transaction_type}`)
+    if (params.category) console.log(`[Accounting Entries Data Access] - category: ${params.category}`)
+    if (params.search) console.log(`[Accounting Entries Data Access] - search: ${params.search}`)
+
+    console.log(`[Accounting Entries Data Access] 🔍 Executing main query...`)
     const { data: accountingEntries, error } = await query
 
     if (error) {
-      console.error('[Accounting Entries Data Access] Failed to fetch entries:', error)
+      console.error('[Accounting Entries Data Access] ❌ Database query failed:', error)
+      console.error('[Accounting Entries Data Access] ❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      })
       return { success: false, error: 'Failed to fetch accounting entries' }
     }
 
+    console.log(`[Accounting Entries Data Access] 📊 Main query result:`, {
+      entriesReturned: accountingEntries?.length || 0,
+      firstEntryId: accountingEntries?.[0]?.id || 'N/A',
+      lastEntryId: accountingEntries?.[accountingEntries?.length - 1]?.id || 'N/A'
+    })
+
     // Get total count with proper business filtering (excluding soft-deleted entries)
-    const { count: totalCount } = await supabase
+    console.log(`[Accounting Entries Data Access] 🔢 Getting total count...`)
+    const { count: totalCount, error: countError } = await supabase
       .from('accounting_entries')
       .select('*', { count: 'exact', head: true })
       .eq('business_id', userData.business_id)
       .is('deleted_at', null)
 
+    if (countError) {
+      console.error('[Accounting Entries Data Access] ❌ Count query failed:', countError)
+    } else {
+      console.log(`[Accounting Entries Data Access] 🔢 Total count in database: ${totalCount}`)
+    }
+
     const hasMore = offset + params.limit! < (totalCount || 0)
 
-    return {
+    const result = {
       success: true,
       data: {
         transactions: accountingEntries || [], // Keep "transactions" key for backwards compatibility
@@ -552,6 +620,15 @@ export async function getAccountingEntries(
         }
       }
     }
+
+    console.log(`[Accounting Entries Data Access] ✅ Final result summary:`, {
+      success: result.success,
+      transactionsCount: result.data.transactions.length,
+      pagination: result.data.pagination,
+      businessId: userData.business_id
+    })
+
+    return result
 
   } catch (error) {
     console.error('[Accounting Entries Data Access] Unexpected error:', error)

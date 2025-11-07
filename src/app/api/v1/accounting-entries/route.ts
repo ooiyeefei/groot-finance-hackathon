@@ -64,21 +64,28 @@ export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth()
     if (!userId) {
+      console.log('[Accounting Entries API v1] No userId from auth()')
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       )
     }
 
+    console.log(`[Accounting Entries API v1] 🔍 GET request from userId: ${userId}`)
+    console.log(`[Accounting Entries API v1] Request URL: ${request.url}`)
+
     // ✅ Validate query parameters with Zod
     const validated = validateQuery(request, listAccountingEntriesQuerySchema)
     if (!validated.success) {
+      console.log('[Accounting Entries API v1] ❌ Query validation failed:', validated.error)
       return validated.error
     }
 
     const params: AccountingEntryListParams = validated.data as any
+    console.log(`[Accounting Entries API v1] 📝 Query params validated:`, JSON.stringify(params, null, 2))
 
     // Cache accounting entries with 3-minute TTL
+    console.log(`[Accounting Entries API v1] 🔄 Calling getAccountingEntries with cache...`)
     const result = await withCache(
       userId,
       'accounting-entries',
@@ -90,13 +97,22 @@ export async function GET(request: NextRequest) {
       }
     )
 
+    console.log(`[Accounting Entries API v1] 📊 Query result:`, {
+      success: result.success,
+      entriesCount: result.success ? result.data?.transactions?.length : 0,
+      error: !result.success ? result.error : null,
+      hasPagination: result.success ? !!result.data?.pagination : false
+    })
+
     if (!result.success) {
+      console.log(`[Accounting Entries API v1] ❌ getAccountingEntries failed:`, result.error)
       return NextResponse.json(
         { success: false, error: result.error },
         { status: 500 }
       )
     }
 
+    console.log(`[Accounting Entries API v1] ✅ Returning ${result.data?.transactions?.length || 0} entries to client`)
     return NextResponse.json(result)
 
   } catch (error) {
