@@ -39,15 +39,22 @@ const nextConfig = {
       ignored: ['**/supabase/functions/**'],
     };
 
-    // Performance optimizations
+    // ✅ PERFORMANCE OPTIMIZATION: Enhanced production optimizations
     if (!dev && !isServer) {
       // Enable tree shaking for better bundle optimization
       config.optimization.usedExports = true;
       config.optimization.sideEffects = false;
 
+      // ✅ PERFORMANCE FIX: Force minification for all JS files (addresses 167 KiB unminified JS issue)
+      config.optimization.minimize = true;
+
+      // Note: SWC minifier is enabled by default in Next.js 15.5+ - no additional config needed
+
       // Split chunks for better caching
       config.optimization.splitChunks = {
         chunks: 'all',
+        minSize: 20000, // Minimum chunk size (20KB)
+        maxSize: 244000, // Maximum chunk size (244KB)
         cacheGroups: {
           default: {
             minChunks: 2,
@@ -73,6 +80,13 @@ const nextConfig = {
             priority: 10,
             chunks: 'all',
           },
+          // ✅ PERFORMANCE OPTIMIZATION: Separate large UI components
+          clerk: {
+            test: /[\\/]node_modules[\\/]@clerk[\\/]/,
+            name: 'clerk',
+            priority: 15,
+            chunks: 'all',
+          },
           // Separate translation files for better caching
           translations: {
             test: /[\\/]src[\\/]messages[\\/].*\.json$/,
@@ -82,6 +96,9 @@ const nextConfig = {
           },
         },
       };
+
+      // ✅ PERFORMANCE OPTIMIZATION: Remove legacy browser support for smaller bundles
+      config.target = ['web', 'es2017']; // Modern browsers only (reduces polyfill overhead)
     }
 
     return config;
@@ -106,6 +123,8 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: 5 * 1024 * 1024, // 5MB in bytes to match business profile component limit
     },
+    // ✅ PERFORMANCE OPTIMIZATION: Enable advanced optimizations
+    optimizePackageImports: ['lucide-react', '@clerk/nextjs'], // Tree shake large packages
     // Note: optimizeCss removed due to critters dependency issues
   },
 
@@ -113,6 +132,9 @@ const nextConfig = {
   productionBrowserSourceMaps: false, // Disable source maps in production for smaller builds
   poweredByHeader: false, // Remove X-Powered-By header
   compress: true, // Enable gzip compression
+
+  // ✅ PERFORMANCE OPTIMIZATION: SWC minifier enabled by default in Next.js 15.5+
+  // Note: swcMinify option is deprecated - SWC is the default minifier
 
   // Enable React StrictMode to catch potential issues early
   reactStrictMode: true,

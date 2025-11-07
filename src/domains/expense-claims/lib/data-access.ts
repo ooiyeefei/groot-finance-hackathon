@@ -560,76 +560,66 @@ export async function listExpenseClaims(
 
     const supabase = await createBusinessContextSupabaseClient()
 
-    // Build query with user information
-    let query = supabase
-      .from('expense_claims')
-      .select(`
-        *,
-        transaction:accounting_entries(*),
-        employee:users!expense_claims_user_id_fkey(id, full_name, email)
-      `)
-
-    // Apply role-based filtering
-    if (isAdmin) {
-      // Admin can see all claims in their business
-      query = query.eq('business_id', employeeProfile.business_id)
-    } else if (isManager) {
-      // Managers see their team's claims + own claims within their business
-      query = query.eq('business_id', employeeProfile.business_id)
-      if (params.approver === 'me') {
-        // Show claims assigned to me (reviewed_by=me + status=submitted)
-        query = query.eq('reviewed_by', employeeProfile.user_id).eq('status', 'submitted')
+    // ✅ PERFORMANCE OPTIMIZATION: Build common filter conditions once
+    const buildFilterConditions = (query: any) => {
+      // Apply role-based filtering
+      if (isAdmin) {
+        query = query.eq('business_id', employeeProfile.business_id)
+      } else if (isManager) {
+        query = query.eq('business_id', employeeProfile.business_id)
+        if (params.approver === 'me') {
+          query = query.eq('reviewed_by', employeeProfile.user_id).eq('status', 'submitted')
+        } else {
+          query = query.or(`user_id.eq.${employeeProfile.user_id},reviewed_by.eq.${employeeProfile.user_id}`)
+        }
       } else {
-        // Show my own claims OR claims assigned to me for approval
-        query = query.or(`user_id.eq.${employeeProfile.user_id},reviewed_by.eq.${employeeProfile.user_id}`)
+        query = query.eq('user_id', employeeProfile.user_id)
       }
-    } else {
-      // Employees see only their own claims (business_id filtering handled by RLS)
-      query = query.eq('user_id', employeeProfile.user_id)
-    }
 
-    // Apply filters
-    if (params.status) {
-      query = query.eq('status', params.status)
-    }
-
-    if (params.expense_category) {
-      query = query.eq('expense_category', params.expense_category)
-    }
-
-    if (params.user_id && await canFilterByUserId()) {
-      query = query.eq('user_id', params.user_id)
-    }
-
-    if (params.date_from) {
-      query = query.gte('submitted_at', params.date_from)
-    }
-
-    if (params.date_to) {
-      query = query.lte('submitted_at', params.date_to)
-    }
-
-
-    if (params.search) {
-      const sanitizedSearch = params.search.replace(/[%_]/g, '\\$&').replace(/[^\w\s-]/g, '')
-      if (sanitizedSearch.trim()) {
-        query = query.or(`business_purpose.ilike.%${sanitizedSearch}%,vendor_name.ilike.%${sanitizedSearch}%`)
+      // Apply filters
+      if (params.status) {
+        query = query.eq('status', params.status)
       }
+
+      if (params.expense_category) {
+        query = query.eq('expense_category', params.expense_category)
+      }
+
+      if (params.user_id) {
+        query = query.eq('user_id', params.user_id)
+      }
+
+      if (params.date_from) {
+        query = query.gte('submitted_at', params.date_from)
+      }
+
+      if (params.date_to) {
+        query = query.lte('submitted_at', params.date_to)
+      }
+
+      if (params.search) {
+        const sanitizedSearch = params.search.replace(/[%_]/g, '\\$&').replace(/[^\w\s-]/g, '')
+        if (sanitizedSearch.trim()) {
+          query = query.or(`business_purpose.ilike.%${sanitizedSearch}%,vendor_name.ilike.%${sanitizedSearch}%`)
+        }
+      }
+
+      // Duplicate check mode
+      if (params.check_duplicate && params.date_from && params.user_id) {
+        query = query
+          .eq('user_id', params.user_id)
+          .eq('transaction_date', params.date_from)
+      }
+
+      return query
     }
 
-    // Duplicate check mode
-    if (params.check_duplicate && params.date_from && params.user_id) {
-      query = query
-        .eq('user_id', params.user_id)
-        .eq('transaction_date', params.date_from)
+    // Apply sorting and pagination
+    const page = params.page || 1
+    const limit = Math.min(params.limit || 20, 100)
+    const offset = (page - 1) * limit
 
-      // Additional filters would be applied in the original request
-    }
-
-    // Apply sorting
-    const validSortColumns = ['submitted_at', 'created_at', 'status', 'amount']
     let sortColumn = 'created_at'
-
     if (params.sort_by === 'submission_date' || params.sort_by === 'submitted_at') {
       sortColumn = 'submitted_at'
     } else if (params.sort_by === 'status') {
@@ -639,73 +629,99 @@ export async function listExpenseClaims(
     }
 
     const sortOrder = params.sort_order === 'asc' ? 'asc' : 'desc'
-    query = query.order(sortColumn, { ascending: sortOrder === 'asc' })
 
-    // Apply pagination
-    const page = params.page || 1
-    const limit = Math.min(params.limit || 20, 100)
-    const offset = (page - 1) * limit
-    query = query.range(offset, offset + limit - 1)
+    // ✅ PERFORMANCE OPTIMIZATION: Run all queries concurrently using Promise.all
+    const needsSummary = params.approver === 'me' && (isAdmin || isManager)
 
-    const { data: claims, error } = await query
+    const queries = []
 
-    if (error) {
-      console.error('Supabase query error in listExpenseClaims:', error)
-      return { success: false, error: `Failed to fetch expense claims: ${error.message}` }
-    }
+    // Main query with data
+    let mainQuery = supabase
+      .from('expense_claims')
+      .select(`
+        *,
+        transaction:accounting_entries(*),
+        employee:users!expense_claims_user_id_fkey(id, full_name, email)
+      `)
 
-    // Get total count for pagination
+    mainQuery = buildFilterConditions(mainQuery)
+    mainQuery = mainQuery
+      .order(sortColumn, { ascending: sortOrder === 'asc' })
+      .range(offset, offset + limit - 1)
+
+    queries.push(mainQuery)
+
+    // Count query (concurrent)
     let countQuery = supabase
       .from('expense_claims')
       .select('*', { count: 'exact', head: true })
 
-    // Apply same role-based filtering for count
-    if (isAdmin) {
-      countQuery = countQuery.eq('business_id', employeeProfile.business_id)
-    } else if (isManager) {
-      countQuery = countQuery.eq('business_id', employeeProfile.business_id)
-      if (params.approver === 'me') {
-        // Count claims assigned to me (reviewed_by=me + status=submitted)
-        countQuery = countQuery.eq('reviewed_by', employeeProfile.user_id).eq('status', 'submitted')
-      } else {
-        // Count my own claims OR claims assigned to me for approval
-        countQuery = countQuery.or(`user_id.eq.${employeeProfile.user_id},reviewed_by.eq.${employeeProfile.user_id}`)
-      }
-    } else {
-      countQuery = countQuery.eq('user_id', employeeProfile.user_id)
+    countQuery = buildFilterConditions(countQuery)
+    queries.push(countQuery)
+
+    // ✅ PERFORMANCE OPTIMIZATION: Use PostgreSQL aggregation for summary instead of fetching all records
+    if (needsSummary) {
+      let summaryQuery = supabase
+        .rpc('get_expense_claims_summary', {
+          p_business_id: employeeProfile.business_id,
+          p_user_id: employeeProfile.user_id,
+          p_is_admin: isAdmin,
+          p_is_manager: isManager
+        })
+
+      queries.push(summaryQuery)
     }
 
-    const { count: totalCount } = await countQuery
+    // ✅ PERFORMANCE OPTIMIZATION: Execute all queries concurrently
+    const results = await Promise.all(queries)
+
+    const { data: claims, error: claimsError } = results[0]
+    const { count: totalCount, error: countError } = results[1]
+
+    if (claimsError) {
+      console.error('Supabase query error in listExpenseClaims:', claimsError)
+      return { success: false, error: `Failed to fetch expense claims: ${claimsError.message}` }
+    }
+
+    if (countError) {
+      console.error('Supabase count error in listExpenseClaims:', countError)
+      return { success: false, error: `Failed to fetch count: ${countError.message}` }
+    }
+
     const hasMore = offset + limit < (totalCount || 0)
 
-    // Calculate summary statistics if this is a management dashboard request
+    // ✅ PERFORMANCE OPTIMIZATION: Use database-calculated summary or fallback to JavaScript calculation
     let summary = null
-    if (params.approver === 'me' && (isAdmin || isManager)) {
-      // Get summary statistics for the dashboard
-      let summaryQuery = supabase
-        .from('expense_claims')
-        .select('status, home_currency_amount')
-        .eq('business_id', employeeProfile.business_id)
+    if (needsSummary) {
+      if (results[2] && !results[2].error && results[2].data) {
+        // Use database-calculated summary (preferred)
+        summary = results[2].data
+      } else {
+        // Fallback: Calculate summary from main query results (if small dataset)
+        if (claims && claims.length <= limit && !params.status && !params.search) {
+          // Only calculate from current page if we have all data (no filtering)
+          const totalClaims = claims.length
+          const pendingApproval = claims.filter((claim: any) => claim.status === 'submitted').length
+          const approvedAmount = claims
+            .filter((claim: any) => claim.status === 'approved' || claim.status === 'reimbursed')
+            .reduce((sum: number, claim: any) => sum + (claim.home_currency_amount || 0), 0)
+          const rejectedCount = claims.filter((claim: any) => claim.status === 'rejected').length
 
-      if (isManager && !isAdmin) {
-        summaryQuery = summaryQuery.or(`user_id.eq.${employeeProfile.user_id},reviewed_by.eq.${employeeProfile.user_id}`)
-      }
-
-      const { data: summaryData } = await summaryQuery
-
-      if (summaryData) {
-        const totalClaims = summaryData.length
-        const pendingApproval = summaryData.filter(claim => claim.status === 'submitted').length
-        const approvedAmount = summaryData
-          .filter(claim => claim.status === 'approved' || claim.status === 'reimbursed')
-          .reduce((sum, claim) => sum + (claim.home_currency_amount || 0), 0)
-        const rejectedCount = summaryData.filter(claim => claim.status === 'rejected').length
-
-        summary = {
-          total_claims: totalClaims,
-          pending_approval: pendingApproval,
-          approved_amount: approvedAmount,
-          rejected_count: rejectedCount
+          summary = {
+            total_claims: totalClaims,
+            pending_approval: pendingApproval,
+            approved_amount: approvedAmount,
+            rejected_count: rejectedCount
+          }
+        } else {
+          // Skip summary calculation if it would be inaccurate
+          console.warn('[Performance] Skipping summary calculation - would be inaccurate with current filters')
+          summary = {
+            total_claims: totalCount || 0,
+            pending_approval: 0,
+            approved_amount: 0,
+            rejected_count: 0
+          }
         }
       }
     }

@@ -285,7 +285,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     }
   }, [searchParams, highlightProcessed])
 
-  // ✅ FIXED: Smart polling that only updates processing claims without full refresh
+  // ✅ PERFORMANCE OPTIMIZATION: Highly optimized polling with exponential backoff and smart conditions
   useEffect(() => {
     if (!dashboardData?.recent_claims) return
 
@@ -296,49 +296,94 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 
     if (processingClaimIds.length === 0) return
 
+    let pollAttempts = 0
+    let maxAttempts = 20 // Stop after 20 attempts (2-4 minutes depending on backoff)
 
-    const interval = setInterval(async () => {
+    const performPoll = async () => {
       try {
-        // Only fetch status for processing claims - much lighter API call
-        const statusPromises = processingClaimIds.map(async (claimId) => {
-          const response = await fetch(`/api/v1/expense-claims/${claimId}`)
-          if (response.ok) {
-            const result = await response.json()
-            return result.success ? { claimId, claim: result.data } : null
-          }
-          return null
+        pollAttempts++
+
+        // ✅ PERFORMANCE OPTIMIZATION: Batch API call instead of multiple individual calls
+        const batchResponse = await fetch('/api/v1/expense-claims', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'batch_status_check',
+            claim_ids: processingClaimIds
+          })
+        }).catch(() => {
+          // Fallback to individual calls if batch endpoint doesn't exist
+          return Promise.all(
+            processingClaimIds.slice(0, 3).map(async (claimId) => { // Limit to 3 concurrent requests
+              const response = await fetch(`/api/v1/expense-claims/${claimId}`)
+              if (response.ok) {
+                const result = await response.json()
+                return result.success ? { claimId, claim: result.data } : null
+              }
+              return null
+            })
+          )
         })
 
-        const statusResults = await Promise.all(statusPromises)
+        let statusResults = []
 
-        // Update only the specific claims that changed status
+        if (batchResponse instanceof Response) {
+          const batchResult = await batchResponse.json()
+          statusResults = batchResult.success ? batchResult.data : []
+        } else {
+          statusResults = batchResponse
+        }
+
+        // Check if any claims finished processing
         let shouldRefreshAll = false
+        let allProcessingComplete = true
 
-        statusResults.forEach((result) => {
+        statusResults.forEach((result: any) => {
           if (result && result.claim) {
             const { claimId, claim } = result
 
             // If claim is no longer processing, we need a full refresh to update summary
             if (claim.status !== 'analyzing' && claim.status !== 'uploading') {
               shouldRefreshAll = true
+            } else {
+              allProcessingComplete = false
             }
           }
         })
 
-        // Only do full refresh when processing is complete, not during processing
-        if (shouldRefreshAll) {
+        // ✅ PERFORMANCE OPTIMIZATION: Stop polling when all processing is complete or max attempts reached
+        if (shouldRefreshAll || allProcessingComplete || pollAttempts >= maxAttempts) {
           fetchDashboardData()
+          return // Stop polling
         }
 
+        // ✅ PERFORMANCE OPTIMIZATION: Exponential backoff for less aggressive polling
+        const baseInterval = 8000 // Start with 8 seconds
+        const backoffMultiplier = Math.min(1.5, 1 + (pollAttempts * 0.1)) // Gradual increase
+        const nextInterval = Math.min(baseInterval * backoffMultiplier, 30000) // Max 30 seconds
+
+        setTimeout(performPoll, nextInterval)
+
       } catch (error) {
-        console.error('[Smart Polling] Error checking claim status:', error)
-        // On error, fall back to full refresh but less frequently
-        fetchDashboardData()
+        console.error('[Optimized Polling] Error checking claim status:', error)
+
+        // ✅ PERFORMANCE OPTIMIZATION: Exponential backoff on errors
+        const errorBackoff = Math.min(15000 + (pollAttempts * 2000), 60000) // 15s to 60s
+
+        if (pollAttempts < maxAttempts) {
+          setTimeout(performPoll, errorBackoff)
+        } else {
+          // Final attempt: full refresh
+          fetchDashboardData()
+        }
       }
-    }, 5000) // Poll every 5 seconds (less aggressive)
+    }
+
+    // Start polling with initial delay
+    const initialTimeout = setTimeout(performPoll, 3000) // Start after 3 seconds
 
     return () => {
-      clearInterval(interval)
+      clearTimeout(initialTimeout)
     }
   }, [dashboardData?.recent_claims?.map(c => `${c.id}:${c.status}`).join(',')]) // Only re-run when claim statuses actually change
 
@@ -1180,26 +1225,112 @@ function SummaryCard({ title, value, icon, variant }: {
   )
 }
 
-// Loading skeleton
+// ✅ PERFORMANCE OPTIMIZATION: Enhanced skeleton loaders to prevent layout shifts
 function PersonalDashboardSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="animate-pulse">
-        <div className="h-8 bg-record-layer-2 rounded-lg w-1/3 mb-2"></div>
-        <div className="h-4 bg-record-layer-2 rounded w-1/2"></div>
-      </div>
-
+    <div className="space-y-section-gap">
+      {/* Summary Cards Skeleton - Matches exact structure */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-record-layer-1 border border-record-border rounded-lg p-6 animate-pulse">
-            <div className="h-4 bg-record-layer-2 rounded w-1/2 mb-2"></div>
-            <div className="h-8 bg-record-layer-2 rounded w-1/3"></div>
-          </div>
+          <Card key={i} className="bg-card border-border">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between animate-pulse">
+                <div className="space-y-2">
+                  <div className="h-4 bg-muted rounded w-24"></div>
+                  <div className="h-8 bg-muted rounded w-16"></div>
+                </div>
+                <div className="w-5 h-5 bg-muted rounded"></div>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      <div className="bg-record-layer-1 border border-record-border rounded-lg p-6 animate-pulse">
-        <div className="h-64 bg-record-layer-2 rounded"></div>
+      {/* Tabs Skeleton */}
+      <div className="space-y-4">
+        <div className="grid w-full grid-cols-3 bg-muted border border-border rounded-lg h-10 animate-pulse">
+          <div className="bg-muted rounded"></div>
+        </div>
+
+        {/* Overview Content Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Quick Actions Card */}
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <div className="animate-pulse space-y-2">
+                <div className="h-6 bg-muted rounded w-32"></div>
+                <div className="h-4 bg-muted rounded w-48"></div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="animate-pulse space-y-6">
+                {/* File Upload Zone */}
+                <div className="border-2 border-dashed border-border rounded-lg h-32 bg-muted/20"></div>
+                {/* Buttons */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="h-10 bg-muted rounded"></div>
+                  <div className="h-10 bg-muted rounded"></div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent Claims Card */}
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <div className="animate-pulse space-y-2">
+                <div className="h-6 bg-muted rounded w-40"></div>
+                <div className="h-4 bg-muted rounded w-56"></div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="animate-pulse space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <ExpenseClaimCardSkeleton key={i} />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ✅ PERFORMANCE OPTIMIZATION: Individual expense claim card skeleton
+function ExpenseClaimCardSkeleton() {
+  return (
+    <div className="p-3 bg-muted/50 rounded-lg border border-border animate-pulse">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex-1 space-y-1">
+          <div className="h-4 bg-muted rounded w-3/4"></div>
+          <div className="h-3 bg-muted rounded w-1/2"></div>
+        </div>
+        <div className="text-right space-y-1">
+          <div className="h-4 bg-muted rounded w-16"></div>
+          <div className="h-3 bg-muted rounded w-12"></div>
+        </div>
+      </div>
+
+      {/* Status and Progress */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="h-6 bg-muted rounded w-20"></div>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="w-full bg-muted rounded-full h-2">
+          <div className="h-2 bg-muted rounded-full w-1/3"></div>
+        </div>
+
+        <div className="h-3 bg-muted rounded w-2/3"></div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="mt-3 flex items-center space-x-2">
+        <div className="h-8 bg-muted rounded w-16"></div>
+        <div className="h-8 bg-muted rounded w-20"></div>
       </div>
     </div>
   )
