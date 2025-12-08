@@ -19,7 +19,6 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 const DOMAIN_BUCKET_MAP: Record<string, string> = {
   'invoices': 'invoices',
   'expense_claims': 'expense_claims',
-  'application_documents': 'application_documents',
   'documents': 'documents'  // Fallback for legacy references
 };
 
@@ -63,17 +62,6 @@ export async function updateDocumentStatus(
     const statusMap: { [key: string]: string } = {
       'classification_failed': 'failed',
       'extraction_failed': 'failed',
-    };
-    mappedStatus = statusMap[status] || status;
-  } else if (tableName === 'application_documents') {
-    // Map document processing statuses to valid application_documents statuses
-    // Allowed: draft, uploading, analyzing, submitted, approved, rejected, failed, classifying, classification_failed, cancelled
-    const statusMap: { [key: string]: string } = {
-      'pending_extraction': 'analyzing',  // Map pending_extraction to analyzing
-      'extracting': 'analyzing',  // Map extracting to analyzing
-      'processing': 'analyzing',  // Map processing to analyzing
-      'extraction_failed': 'failed',  // Map extraction_failed to failed
-      'completed': 'draft'  // Map completed to draft (successfully processed, ready for submission)
     };
     mappedStatus = statusMap[status] || status;
   } else if (tableName === 'invoices') {
@@ -148,8 +136,6 @@ export async function updateExtractionResults(
     finalStatus = 'pending'; // invoices use 'pending' for completed extraction
   } else if (tableName === 'expense_claims') {
     finalStatus = 'paid'; // expense_claims use 'paid' for completed extraction
-  } else if (tableName === 'application_documents') {
-    finalStatus = 'completed'; // ✅ Use 'completed' for proper workflow (was 'draft')
   } else {
     finalStatus = 'completed'; // fallback for other tables
   }
@@ -255,17 +241,13 @@ export async function updateDocumentClassification(
     };
     updateData.confidence_score = classification.confidence_score;
   } else {
-    // For other tables (invoices, application_documents)
+    // For other tables (invoices)
     const usesStatusColumn = tableName === 'invoices';
     const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
 
-    // Map status values to valid ones for invoices and application_documents tables
+    // Map status values to valid ones for invoices table
     let mappedStatus = status;
     if (tableName === 'invoices') {
-      mappedStatus = status === 'pending_extraction' ? 'analyzing' :
-                    status === 'classification_failed' ? 'classification_failed' : status;
-    } else if (tableName === 'application_documents') {
-      // Map to valid application_documents statuses
       mappedStatus = status === 'pending_extraction' ? 'analyzing' :
                     status === 'classification_failed' ? 'classification_failed' : status;
     }
@@ -285,14 +267,9 @@ export async function updateDocumentClassification(
       classification_method: classification.classification_method,
       model_used: classification.model_used,
       confidence_score: classification.confidence_score,
-      // Store document_type in metadata for all tables
+      // Store document_type in metadata for invoices table
       document_type: classification.document_type
     };
-
-    // Only include document_type column for tables that have it (not invoices after migration)
-    if (tableName === 'application_documents') {
-      updateData.document_type = classification.document_type;
-    }
     // Note: 'invoices' table no longer has document_type column - it's stored in document_metadata
   }
 
