@@ -50,7 +50,7 @@ const fetcher = async (url: string): Promise<DocumentSchema> => {
 
 /**
  * Custom SWR hook for fetching document schemas
- * @param documentType - The type of document (ic, payslip, application_form, etc.)
+ * @param documentType - The type of document (invoice, receipt, etc.)
  * @returns SWR response object with schema data, loading state, and error
  */
 export function useDocumentSchema(documentType: string | null) {

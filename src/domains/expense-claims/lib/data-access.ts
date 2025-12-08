@@ -384,7 +384,6 @@ export async function createExpenseClaim(
       const storageBuilder = new StoragePathBuilder(
         employeeProfile.business_id,
         employeeProfile.user_id,
-        undefined,
         expenseClaim.id
       )
       const uniqueFilename = generateUniqueFilename(request.file.name)

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, ClipboardList, Tag, Building2, FileCheck } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, Building2, FileCheck } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/domains/account-management/components/enhanced-business-display'
@@ -41,7 +41,6 @@ export default function Sidebar() {
     { name: t('dashboard'), href: localizedHref('/'), icon: Home },
     { name: t('invoices'), href: localizedHref('/invoices'), icon: FileText },
     { name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard },
-    { name: t('applications'), href: localizedHref('/applications'), icon: ClipboardList },
     { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
   ]
 

@@ -38,8 +38,7 @@ const supabase = createSupabaseClient();
 // Domain-to-table mapping for multi-domain architecture
 const DOMAIN_TABLE_MAP = {
   'invoices': 'invoices',
-  'expense_claims': 'expense_claims',
-  'applications': 'application_documents'
+  'expense_claims': 'expense_claims'
 } as const;
 
 // Security validation functions

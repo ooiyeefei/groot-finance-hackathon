@@ -57,12 +57,12 @@ class DocumentClassificationSignature(dspy.Signature):
     )
 
     expected_type: str = dspy.InputField(
-        desc="Expected document type for slot validation (e.g., 'ic', 'payslip') - empty string if no validation needed",
+        desc="Expected document type for slot validation (e.g., 'invoice', 'receipt') - empty string if no validation needed",
         default=""
     )
 
     slot_context: str = dspy.InputField(
-        desc="Document slot context for user-friendly messaging (e.g., 'identity_card', 'payslip_recent') - empty string if not applicable",
+        desc="Document slot context for user-friendly messaging - empty string if not applicable",
         default=""
     )
 
@@ -85,7 +85,7 @@ class DocumentClassificationSignature(dspy.Signature):
 
         SLOT VALIDATION (when expected_type is provided):
         7. If expected_type is not empty, compare the detected document_type with expected_type
-        8. Normalize types for comparison: 'identity_card'↔'ic', 'payslip'↔'payslip', etc.
+        8. Normalize types for comparison (e.g., 'invoice'↔'invoice', 'receipt'↔'receipt')
         9. Generate appropriate user_message based on validation result:
            - MATCH: Success message with friendly type name
            - MISMATCH: Clear explanation with expected vs detected types using friendly names
@@ -100,7 +100,7 @@ class DocumentClassificationSignature(dspy.Signature):
           * SUCCESS: "Document successfully classified as [friendly_type_name]"
           * SLOT MISMATCH: "Wrong file uploaded. Expected [expected_friendly_name], but received [detected_friendly_name]. Please upload the correct document."
           * UNSUPPORTED: "Document type not supported yet. Please contact support for assistance."
-          * Use friendly names: 'ic'→'identity card', 'payslip'→'payslip', 'application_form'→'application form'
+          * Use friendly names: 'invoice'→'invoice', 'receipt'→'receipt'
         - suggestions: Generate 1-3 specific, actionable suggestions ONLY when classification fails or document type mismatches:
           * WHEN TO GENERATE: is_supported=false OR slot validation fails (detected type ≠ expected type)
           * WHEN TO LEAVE EMPTY: Classification succeeds (is_supported=true AND no slot mismatch) → suggestions=[]
@@ -110,15 +110,12 @@ class DocumentClassificationSignature(dspy.Signature):
             - Guide user to correct workflow/domain/section
           * EXAMPLES:
             - Receipt detected in invoice section: ["Receipts should be uploaded in the Expense Claims section", "Invoices typically include: vendor details, invoice number, line items with descriptions", "This appears to be a customer receipt rather than a vendor invoice"]
-            - Identity card detected: ["Identity cards should be uploaded in the Employee Onboarding section", "This section is specifically for vendor invoices", "Verify you're uploading to the correct document type"]
-            - Payslip detected: ["Payslips should be uploaded in the Payroll section", "This section is for vendor invoices only", "Check that you're using the correct upload form"]
-            - Unknown document: ["Ensure the document is a valid vendor invoice", "Check that the document image is clear and readable", "Verify the document includes: vendor name, invoice number, line items, and total amount"]
-        - detected_elements: List visual/layout indicators that justify classification (e.g., "invoice header format", "ID card layout", "salary table structure" - NO personal content)
+            - Invoice detected in receipt section: ["Vendor invoices should be uploaded in the Invoices section", "This section is for expense receipts only", "Check that you're using the correct upload form"]
+            - Unknown document: ["Ensure the document is a valid vendor invoice or receipt", "Check that the document image is clear and readable", "Verify the document includes required details like vendor name, amount, and date"]
+        - detected_elements: List visual/layout indicators that justify classification (e.g., "invoice header format", "itemized table", "receipt format" - NO personal content)
         - context_metadata: Basic context only (country, currency format, document format) - NO detailed extraction:
-          * identity_card: {"country": "Malaysia/Singapore/etc", "id_format": "MyKad/NRIC/etc"}
-          * payslip: {"country": "...", "currency": "MYR/SGD/etc"}
-          * application_form: {"country": "...", "form_type": "loan/account/etc"}
           * invoice: {"country": "...", "currency": "MYR/USD/etc"}
+          * receipt: {"country": "...", "currency": "MYR/USD/etc"}
 
         CRITICAL: Provide rich classification justification WITHOUT extracting specific personal/business data
 

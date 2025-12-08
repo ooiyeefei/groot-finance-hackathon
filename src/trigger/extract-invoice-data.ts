@@ -27,8 +27,7 @@ const supabase = createClient(
 // ✅ PHASE 4C: Domain-to-table mapping for multi-domain architecture
 const DOMAIN_TABLE_MAP = {
   'invoices': 'invoices',
-  'expense_claims': 'expense_claims',
-  'applications': 'application_documents'
+  'expense_claims': 'expense_claims'
 } as const;
 
 // Helper function to fetch enabled expense categories directly from database
@@ -357,7 +356,7 @@ async function handleInvoiceTaskFailure(
 
 export const extractInvoiceData = task({
   id: "extract-invoice-data",
-  run: async (payload: { documentId: string; imageStoragePath?: string; expenseCategory?: string; documentDomain: 'invoices' | 'expense_claims' | 'applications' }) => {  // ✅ PHASE 4C: Add domain parameter
+  run: async (payload: { documentId: string; imageStoragePath?: string; expenseCategory?: string; documentDomain: 'invoices' | 'expense_claims' }) => {  // ✅ PHASE 4C: Add domain parameter
     // 🚨 GLOBAL TASK WRAPPER - Catches ALL failures including system failures
     // ✅ PHASE 4C: Route to correct table based on domain (declare at outer scope)
     const tableName = DOMAIN_TABLE_MAP[payload.documentDomain];

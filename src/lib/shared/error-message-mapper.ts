@@ -2,7 +2,7 @@
  * Domain-Agnostic Error Message Mapper
  *
  * Provides comprehensive error message mapping for ALL Trigger.dev document processing failures
- * Supports: invoices, expense-claims, applications, and any future document processing domains
+ * Supports: invoices, expense-claims, and any future document processing domains
  */
 
 export interface ErrorMapping {
@@ -20,8 +20,8 @@ export interface ErrorContext {
   processingStage?: string;
   timeoutDuration?: string;
   retryAttempts?: number;
-  domain?: 'invoices' | 'expense_claims' | 'applications'; // Domain context
-  documentType?: string; // invoice, receipt, IC, payslip, application_form, etc.
+  domain?: 'invoices' | 'expense_claims'; // Domain context
+  documentType?: string; // invoice, receipt, etc.
 }
 
 /**
@@ -313,12 +313,6 @@ function customizeMessageForDomain(mapping: ErrorMapping, context: ErrorContext)
       documentCapitalized: 'Receipt',
       processing: 'receipt processing',
       uploadAction: 'uploading your receipt'
-    },
-    applications: {
-      document: 'document',
-      documentCapitalized: 'Document',
-      processing: 'document processing',
-      uploadAction: 'uploading the document'
     }
   };
 
@@ -408,8 +402,7 @@ function getErrorTitle(category: string, domain?: string): string {
   if (category === 'missing_image' && domain) {
     const domainDocuments: Record<string, string> = {
       invoices: 'Missing Invoice',
-      expense_claims: 'Missing Receipt',
-      applications: 'Missing Document'
+      expense_claims: 'Missing Receipt'
     };
     return domainDocuments[domain] || baseTitleMappings[category];
   }

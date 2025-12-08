@@ -22,15 +22,13 @@ const supabase = createClient(
 // ✅ PHASE 4B-2: Domain-to-table mapping for multi-domain architecture
 const DOMAIN_TABLE_MAP = {
   'invoices': 'invoices',
-  'expense_claims': 'expense_claims',
-  'applications': 'application_documents'
+  'expense_claims': 'expense_claims'
 } as const;
 
 // ✅ PHASE 4J: Domain-to-bucket mapping for multi-bucket architecture
 const DOMAIN_BUCKET_MAP = {
   'invoices': 'invoices',
-  'expense_claims': 'expense_claims',
-  'applications': 'application_documents'
+  'expense_claims': 'expense_claims'
 } as const;
 
 export const convertPdfToImage = task({
@@ -38,10 +36,8 @@ export const convertPdfToImage = task({
   run: async (payload: {
     documentId: string;
     pdfStoragePath?: string;
-    documentDomain: 'invoices' | 'expense_claims' | 'applications'; // ✅ PHASE 4B-2: Domain routing parameter
+    documentDomain: 'invoices' | 'expense_claims'; // ✅ PHASE 4B-2: Domain routing parameter
     expectedDocumentType?: string;
-    applicationId?: string;
-    documentSlot?: string;
   }) => {
     console.log(`✅ Starting PDF to image conversion for document: ${payload.documentId}`);
 
@@ -413,18 +409,11 @@ except Exception as e:
 
       // ✅ PHASE 4K: Determine storage path type based on domain and context
       // Since actual document type is determined AFTER conversion in classify-document.ts,
-      // we use domain defaults or application-specific hints for storage path construction
+      // we use domain defaults for storage path construction
       const getStorageDocumentType = (): string => {
-        // Use expectedDocumentType if provided (applications workflow)
+        // Use expectedDocumentType if provided
         if (payload.expectedDocumentType) {
           return payload.expectedDocumentType;
-        }
-
-        // Map document slot to type for applications
-        if (payload.documentSlot) {
-          if (payload.documentSlot === 'identity_card') return 'ic';
-          if (payload.documentSlot.startsWith('payslip_')) return 'payslip';
-          if (payload.documentSlot === 'application_form') return 'application_form';
         }
 
         // Default by domain
@@ -433,8 +422,6 @@ except Exception as e:
             return 'receipt';  // Default for expense claims
           case 'invoices':
             return 'invoice';  // Default for invoices
-          case 'applications':
-            return 'application_form';  // Default for applications
           default:
             return 'document';  // Generic fallback
         }
@@ -450,7 +437,7 @@ except Exception as e:
       if (hasRequiredContext) {
         // Use standardized paths with documentId for unique folder structure
         // TypeScript: business_id is guaranteed non-null here due to hasRequiredContext check
-        const storageBuilder = new StoragePathBuilder(typedDocument.business_id!, typedDocument.user_id, payload.applicationId, payload.documentId);
+        const storageBuilder = new StoragePathBuilder(typedDocument.business_id!, typedDocument.user_id, payload.documentId);
         const docType = storageDocType as DocumentType;
         console.log(`📤 Using standardized storage structure for ${docType} documents with unique documentId folder`);
 
@@ -584,22 +571,11 @@ except Exception as e:
       // Step 6: Trigger classification task for the converted image
       console.log(`🔗 Triggering document classification for converted image`);
 
-      // Create classification payload, preserving Applications workflow context
+      // Create classification payload
       const classificationPayload: any = {
         documentId: payload.documentId,
         documentDomain: payload.documentDomain  // ✅ PHASE 4B-2: Pass domain to next task
       };
-
-      // Pass along Applications workflow context if present
-      if (payload.expectedDocumentType) {
-        classificationPayload.expectedDocumentType = payload.expectedDocumentType;
-      }
-      if (payload.applicationId) {
-        classificationPayload.applicationId = payload.applicationId;
-      }
-      if (payload.documentSlot) {
-        classificationPayload.documentSlot = payload.documentSlot;
-      }
 
       // Note: converted_image_path already updated above, just update status
       // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'

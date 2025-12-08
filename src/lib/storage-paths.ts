@@ -12,9 +12,6 @@
 
 export type DocumentType =
   | 'invoice'
-  | 'ic'
-  | 'payslip'
-  | 'application_form'
   | 'receipt'
   | 'other'
   | 'expense_receipts'  // Legacy compatibility
@@ -39,22 +36,13 @@ export interface LegacyPathInfo {
 /**
  * Generate standardized storage path for new documents
  */
-export function generateStoragePath(config: StoragePathConfig & { applicationId?: string; documentId?: string }): string {
-  const { businessId, userId, documentType, stage, filename, applicationId, documentId } = config
+export function generateStoragePath(config: StoragePathConfig & { documentId?: string }): string {
+  const { businessId, userId, documentType, stage, filename, documentId } = config
 
   // Sanitize components
   const cleanBusinessId = sanitizePathComponent(businessId)
   const cleanUserId = sanitizePathComponent(userId)
   const cleanFilename = sanitizeFilename(filename)
-
-  // For application_form documents, add application ID folder for compatibility
-  if (documentType === 'application_form' && applicationId) {
-    // If documentId is also provided, use it for unique document folders
-    if (documentId) {
-      return `${cleanBusinessId}/${cleanUserId}/${documentType}/${applicationId}/${documentId}/${stage}/${cleanFilename}`
-    }
-    return `${cleanBusinessId}/${cleanUserId}/${documentType}/${applicationId}/${stage}/${cleanFilename}`
-  }
 
   // For all documents, if documentId is provided, create unique document folder
   if (documentId) {
@@ -91,17 +79,6 @@ export function analyzeStoragePath(path: string): LegacyPathInfo {
   }
 
   // Legacy patterns
-  if (path.startsWith('applications/')) {
-    // Legacy: applications/filename.pdf
-    const filename = path.split('/')[1]
-    return {
-      isLegacy: true,
-      originalPath: path,
-      documentType: 'application_form',
-      migratedPath: generateLegacyMigrationPath(path, 'application_form')
-    }
-  }
-
   if (path.startsWith('expense-receipts/')) {
     // Legacy: expense-receipts/{user_id}/filename
     return {
@@ -143,11 +120,6 @@ export function analyzeStoragePath(path: string): LegacyPathInfo {
 function generateLegacyMigrationPath(legacyPath: string, documentType: DocumentType): string {
   const parts = legacyPath.split('/')
 
-  if (legacyPath.startsWith('applications/')) {
-    // applications/filename.pdf → need businessId and userId from context
-    throw new Error('Cannot migrate applications path without business/user context')
-  }
-
   if (legacyPath.startsWith('expense-receipts/')) {
     // expense-receipts/{user_id}/filename → need businessId from context
     const userId = parts[1]
@@ -178,9 +150,6 @@ function detectDocumentTypeFromPath(path: string): DocumentType | undefined {
 
   if (lowerPath.includes('invoice')) return 'invoice'
   if (lowerPath.includes('receipt')) return 'receipt'
-  if (lowerPath.includes('application') || lowerPath.includes('form')) return 'application_form'
-  if (lowerPath.includes('payslip') || lowerPath.includes('salary')) return 'payslip'
-  if (lowerPath.includes('identity') || lowerPath.includes('ic') || lowerPath.includes('mykad')) return 'ic'
 
   return undefined
 }
@@ -277,16 +246,7 @@ export class StorageMigrator {
       let targetPath: string
 
       try {
-        if (legacyPath.startsWith('applications/')) {
-          const filename = legacyPath.split('/')[1]
-          targetPath = generateStoragePath({
-            businessId,
-            userId,
-            documentType: 'application_form',
-            stage: 'raw',
-            filename
-          })
-        } else if (legacyPath.startsWith('expense-receipts/')) {
+        if (legacyPath.startsWith('expense-receipts/')) {
           const pathParts = legacyPath.split('/')
           const legacyUserId = pathParts[1]
           const filename = pathParts[2]
@@ -329,7 +289,6 @@ export class StoragePathBuilder {
   constructor(
     private businessId: string,
     private userId: string,
-    private applicationId?: string,
     private documentId?: string
   ) {}
 
@@ -344,7 +303,6 @@ export class StoragePathBuilder {
         documentType,
         stage: 'raw',
         filename,
-        applicationId: this.applicationId,
         documentId: activeDocumentId
       }),
       converted: (filename: string) => generateStoragePath({
@@ -353,7 +311,6 @@ export class StoragePathBuilder {
         documentType,
         stage: 'converted',
         filename,
-        applicationId: this.applicationId,
         documentId: activeDocumentId
       }),
       processed: (filename: string, artifactType?: string) => {
@@ -367,7 +324,6 @@ export class StoragePathBuilder {
           documentType,
           stage: 'processed',
           filename: processedFilename,
-          applicationId: this.applicationId,
           documentId: activeDocumentId
         })
       }

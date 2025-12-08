@@ -2,7 +2,7 @@
  * Domain-Agnostic Error Display Components
  *
  * Provides consistent error messaging UI across all document processing domains
- * Supports: invoices, expense-claims, applications, and any future domains
+ * Supports: invoices, expense-claims, and any future domains
  */
 
 'use client'
@@ -21,7 +21,7 @@ interface ErrorDisplayProps {
 
 /**
  * Main error display component with user-friendly messaging and actionable steps
- * Works across all document processing domains (invoices, expense-claims, applications)
+ * Works across all document processing domains (invoices, expense-claims)
  */
 export function ErrorDisplay({
   errorContext,
@@ -270,19 +270,17 @@ export function ProcessingStatusIndicator({
   status: 'processing' | 'success' | 'error'
   errorContext?: ErrorContext
   onRetry?: () => void
-  domain?: 'invoices' | 'expense_claims' | 'applications'
+  domain?: 'invoices' | 'expense_claims'
 }) {
   // Domain-specific processing messages
   const processingMessages = {
     invoices: 'Processing invoice...',
-    expense_claims: 'Processing receipt...',
-    applications: 'Processing document...'
+    expense_claims: 'Processing receipt...'
   };
 
   const successMessages = {
     invoices: 'Invoice processing complete',
-    expense_claims: 'Receipt processing complete',
-    applications: 'Document processing complete'
+    expense_claims: 'Receipt processing complete'
   };
 
   if (status === 'processing') {
@@ -337,7 +335,7 @@ export function DocumentUploadError({
   errorContext: ErrorContext
   onRetry?: () => void
   onCancel?: () => void
-  domain?: 'invoices' | 'expense_claims' | 'applications'
+  domain?: 'invoices' | 'expense_claims'
 }) {
   const contextWithDomain = {
     ...errorContext,
@@ -346,8 +344,7 @@ export function DocumentUploadError({
 
   const domainLabels = {
     invoices: 'Invoice Upload Failed',
-    expense_claims: 'Receipt Upload Failed',
-    applications: 'Document Upload Failed'
+    expense_claims: 'Receipt Upload Failed'
   };
 
   return (

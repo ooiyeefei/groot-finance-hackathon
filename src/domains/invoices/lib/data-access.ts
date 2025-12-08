@@ -675,10 +675,7 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
       // Image files go through classification first for document type validation
       const handle = await tasks.trigger("classify-document", {
         documentId: document.id,
-        documentDomain: 'invoices',
-        expectedDocumentType: 'invoice', // Validation: reject non-invoice documents
-        applicationId: undefined, // Not needed for invoices domain
-        documentSlot: undefined // Not needed for invoices domain
+        documentDomain: 'invoices'
       })
 
       return { jobId: handle.id }

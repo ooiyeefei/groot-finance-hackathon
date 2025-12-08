@@ -434,7 +434,7 @@ export default function AccountingEntryFormModal({
             >
               <MultiPageDocumentPreview
                 sourceRecordId={transaction?.source_record_id || prefilledData?.source_record_id!}
-                documentType={transaction?.source_document_type as 'invoice' | 'expense_claim' | 'application' || 'invoice'}
+                documentType={transaction?.source_document_type as 'invoice' | 'expense_claim' || 'invoice'}
                 className="flex-1 min-h-[400px] lg:min-h-0"
               />
             </div>

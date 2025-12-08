@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize2, Eye, E
 
 interface MultiPageDocumentPreviewProps {
   sourceRecordId: string
-  documentType?: 'invoice' | 'expense_claim' | 'application'
+  documentType?: 'invoice' | 'expense_claim'
   className?: string
 }
 
@@ -43,8 +43,6 @@ function MultiPageDocumentPreview({
           switch (documentType) {
             case 'expense_claim':
               return `/api/v1/expense-claims/${sourceRecordId}/image-url`
-            case 'application':
-              return `/api/v1/applications/${sourceRecordId}/image-url`
             case 'invoice':
             default:
               return `/api/v1/invoices/${sourceRecordId}/image-url`

@@ -4,7 +4,6 @@
  * Monitors and fixes stuck records across ALL domains using Trigger.dev processing:
  * - invoices (process-document-ocr)
  * - expense_claims (extract-receipt-data)
- * - applications (extract application documents)
  */
 
 import { auth } from '@clerk/nextjs/server'
@@ -38,13 +37,6 @@ const DOMAIN_CONFIGS: Record<string, DomainConfig> = {
     stuckStatus: ['analyzing'],
     processingStartedField: 'processing_started_at',
     displayName: 'Receipt Processing'
-  },
-  'applications': {
-    tableName: 'application_documents',
-    statusField: 'processing_status',
-    stuckStatus: ['processing', 'analyzing'],
-    processingStartedField: 'processing_started_at',
-    displayName: 'Application Document Processing'
   }
 };
 
