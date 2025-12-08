@@ -26,28 +26,25 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
   }
 
   // CRITICAL FIX: Check business context before rendering dashboard
+  const { locale } = await params
+
   try {
     const userData = await getUserData(userId)
 
-    // If user has no business_id, redirect to onboarding immediately
+    // If user exists but has no business_id, redirect to onboarding
     if (!userData.business_id) {
       console.log(`[Dashboard] User ${userData.email} has no business context, redirecting to onboarding`)
-      const { locale } = await params
       redirect(`/${locale}/onboarding/business`)
     }
 
     console.log(`[Dashboard] User ${userData.email} has business context: ${userData.business_id}`)
   } catch (error) {
     console.error('[Dashboard] Error checking business context:', error)
-    // If user doesn't exist in our system, redirect to onboarding
-    const { locale } = await params
-    redirect(`/${locale}/onboarding/business`)
+    // If user doesn't exist in our Supabase (e.g., signed up on staff app), show access denied
+    redirect(`/${locale}/access-denied`)
   }
 
   const user = await currentUser()
-
-  // Await params in Next.js 15
-  const { locale } = await params
 
   // Get translations for server component with explicit locale
   const t = await getTranslations({locale, namespace: 'dashboard'})

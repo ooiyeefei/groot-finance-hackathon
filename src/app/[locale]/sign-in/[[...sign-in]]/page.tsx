@@ -1,4 +1,4 @@
-import { SignIn } from '@clerk/nextjs'
+import { redirect } from 'next/navigation'
 
 interface SignInPageProps {
   params: Promise<{
@@ -6,42 +6,20 @@ interface SignInPageProps {
   }>
 }
 
+/**
+ * Sign-in page that redirects to centralized Clerk Account Portal
+ * Using Satellite Domain architecture: accounts.hellogroot.com
+ *
+ * After authentication, Clerk automatically redirects back to finance.hellogroot.com
+ */
 export default async function SignInPage({ params }: SignInPageProps) {
   const { locale } = await params
 
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            FinanSEAL
-          </h1>
-          <p className="text-gray-400">
-            Your Financial Co-Pilot for Southeast Asia
-          </p>
-        </div>
-        <SignIn
-          afterSignInUrl={`/${locale}`}
-          afterSignUpUrl={`/${locale}`}
-          signUpUrl={`/${locale}/sign-up`}
-          appearance={{
-            elements: {
-              rootBox: "mx-auto",
-              card: "bg-gray-800 border border-border",
-              headerTitle: "text-white",
-              headerSubtitle: "text-gray-400",
-              socialButtonsBlockButton: "bg-gray-700 border-gray-600 text-white hover:bg-gray-600",
-              socialButtonsBlockButtonText: "text-white",
-              formButtonPrimary: "bg-blue-600 hover:bg-blue-700",
-              formFieldInput: "bg-gray-700 border-gray-600 text-white",
-              formFieldLabel: "text-gray-300",
-              dividerLine: "bg-gray-600",
-              dividerText: "text-gray-400",
-              footerActionLink: "text-blue-400 hover:text-blue-300",
-            }
-          }}
-        />
-      </div>
-    </div>
+  // Build return URL for post-authentication redirect
+  const returnUrl = `https://finance.hellogroot.com/${locale}`
+
+  // Redirect to centralized Account Portal with return URL
+  redirect(
+    `https://accounts.hellogroot.com/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`
   )
 }
