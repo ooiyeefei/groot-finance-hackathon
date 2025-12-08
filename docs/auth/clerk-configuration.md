@@ -1,15 +1,24 @@
-# Clerk Satellite Domain Configuration - Finance App
+# Clerk Subdomain Authentication - Finance App
 
-## ✅ Changes Applied (finance.hellogroot.com)
+## ✅ Architecture: Centralized Account Portal with Automatic Subdomain Sessions
+
+### Key Principle:
+**Clerk automatically shares authentication across all subdomains when root domain is configured in Dashboard.**
+
+- **Root Domain**: `hellogroot.com` (configured in Clerk Dashboard)
+- **Subdomains**: `finance.hellogroot.com`, `staff.hellogroot.com`, `accounts.hellogroot.com`
+- **Session Sharing**: Automatic - no Satellite Domain configuration needed
+- **Account Portal**: Centralized authentication UI at `accounts.hellogroot.com`
 
 ### Updated Files:
 1. `src/app/[locale]/sign-in/[[...sign-in]]/page.tsx`
 2. `src/app/[locale]/sign-up/[[...sign-up]]/page.tsx`
+3. `src/middleware.ts`
 
 ### What Changed:
-- **Removed**: Embedded `<SignIn>` and `<SignUp>` Clerk components
-- **Added**: Server-side redirects to centralized Account Portal (`accounts.hellogroot.com`)
-- **Pattern**: Users now authenticate on `accounts.hellogroot.com` and automatically return to `finance.hellogroot.com/[locale]`
+- **Removed**: Satellite Domain configuration (domain, isSatellite flags)
+- **Simplified**: Middleware now only sets signInUrl
+- **Pattern**: Users authenticate on `accounts.hellogroot.com` and automatically return to `finance.hellogroot.com/[locale]`
 
 ### How It Works:
 
@@ -29,20 +38,14 @@ User visits: finance.hellogroot.com/en
 Add these to your Vercel project environment variables:
 
 ```env
-# Clerk Authentication (Satellite Domain Setup)
+# Clerk Authentication
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_xxx
 CLERK_SECRET_KEY=sk_live_xxx
 
-# ⚠️ IMPORTANT: Must have NEXT_PUBLIC_ prefix (required by Clerk)
+# Centralized Account Portal (shared across all *.hellogroot.com subdomains)
 NEXT_PUBLIC_CLERK_SIGN_IN_URL=https://accounts.hellogroot.com/sign-in
 NEXT_PUBLIC_CLERK_SIGN_UP_URL=https://accounts.hellogroot.com/sign-up
-NEXT_PUBLIC_CLERK_IS_SATELLITE=true
 ```
-
-**⚠️ CRITICAL: Do NOT set `NEXT_PUBLIC_CLERK_DOMAIN`**
-- When using Satellite Domains, Clerk automatically detects the Frontend API domain from your Dashboard configuration
-- Setting `NEXT_PUBLIC_CLERK_DOMAIN` causes Clerk to prepend "clerk." again, resulting in `clerk.clerk.hellogroot.com` (wrong!)
-- Clerk uses the **Frontend API** domain configured in your Dashboard (e.g., `clerk.hellogroot.com`)
 
 **Why NEXT_PUBLIC_ prefix is required:**
 - Clerk's Next.js SDK expects these variables to be client-accessible
@@ -51,30 +54,34 @@ NEXT_PUBLIC_CLERK_IS_SATELLITE=true
   ```javascript
   const SIGN_IN_URL = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || "";
   const SIGN_UP_URL = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || "";
-  const IS_SATELLITE = isTruthy(process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE) || false;
-  // DOMAIN is auto-detected from Clerk Dashboard, don't override!
   ```
+
+**⚠️ What NOT to set:**
+- `NEXT_PUBLIC_CLERK_DOMAIN` - Not needed for subdomain authentication
+- `NEXT_PUBLIC_CLERK_IS_SATELLITE` - Not needed for subdomain authentication
+- These variables are only required for cross-domain authentication (e.g., example-site.com and example-admin.io)
 
 ## Clerk Dashboard Configuration Checklist
 
-### ✅ Already Configured (from screenshots):
-- [x] Satellite Domains:
-  - Frontend API: `clerk.hellogroot.com` (Verified)
-  - Account Portal: `accounts.hellogroot.com` (Verified)
-- [x] Component Paths:
-  - Sign-in: Account Portal
-  - Sign-up: Account Portal
-  - Sign-out: Account Portal
+### ✅ Required Configuration:
 
-### ⚠️ Fallback URLs (Screenshot #1 - Account Portal Redirects):
-Current settings (finance-specific):
-```
-After sign-up fallback: https://finance.hellogroot.com/onboarding
-After sign-in fallback: https://finance.hellogroot.com/en
-After logo click: https://finance.hellogroot.com/home
-```
+1. **Domains** → Set root domain to `hellogroot.com`
+   - This automatically enables authentication across ALL `*.hellogroot.com` subdomains
+   - No need to configure individual subdomains
 
-**Note**: These are ONLY used when no `redirect_url` is provided in the query params. Since our app always provides `redirect_url`, these won't affect staff.hellogroot.com behavior.
+2. **Account Portal Settings**:
+   - Enable Account Portal at `accounts.hellogroot.com`
+   - Configure component paths to use Account Portal:
+     - Sign-in: Account Portal
+     - Sign-up: Account Portal
+     - Sign-out: Account Portal
+
+3. **Fallback URLs** (Account Portal → Paths):
+   - After sign-up: `https://finance.hellogroot.com/onboarding`
+   - After sign-in: `https://finance.hellogroot.com/en`
+   - After logo click: `https://finance.hellogroot.com/home`
+
+**Note**: Fallback URLs are ONLY used when no `redirect_url` is provided in the query params. Since both finance and staff apps always provide `redirect_url`, these settings won't affect cross-app navigation.
 
 ## Testing Checklist
 

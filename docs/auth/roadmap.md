@@ -3,9 +3,9 @@
 ## Current State (✅ Implemented)
 
 ### Authentication
-- ✅ Clerk Satellite Domain architecture
-- ✅ Centralized authentication at `accounts.hellogroot.com`
-- ✅ Single sign-on across all `*.hellogroot.com` domains
+- ✅ Clerk subdomain authentication (automatic session sharing)
+- ✅ Centralized Account Portal at `accounts.hellogroot.com`
+- ✅ Single sign-on across all `*.hellogroot.com` subdomains
 - ✅ JWT-based session management
 - ✅ Webhook integration for user sync
 
