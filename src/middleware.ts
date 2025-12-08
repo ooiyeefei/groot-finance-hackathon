@@ -2,12 +2,11 @@ import { clerkMiddleware } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// Clerk middleware with centralized Account Portal
+// Clerk middleware for subdomain authentication
 // Note: Subdomain authentication (finance.hellogroot.com, staff.hellogroot.com) works automatically
 // when root domain (hellogroot.com) is configured in Clerk Dashboard
-export default clerkMiddleware({
-  signInUrl: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || 'https://accounts.hellogroot.com/sign-in',
-})
+// Sign-in redirects are handled by our custom sign-in/sign-up pages
+export default clerkMiddleware()
 
 // Middleware configuration
 export const config = {

@@ -38,28 +38,24 @@ User visits: finance.hellogroot.com/en
 Add these to your Vercel project environment variables:
 
 ```env
-# Clerk Authentication
+# Clerk Authentication (minimal configuration)
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_xxx
 CLERK_SECRET_KEY=sk_live_xxx
-
-# Centralized Account Portal (shared across all *.hellogroot.com subdomains)
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=https://accounts.hellogroot.com/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=https://accounts.hellogroot.com/sign-up
+CLERK_WEBHOOK_SECRET=whsec_xxx
 ```
 
-**Why NEXT_PUBLIC_ prefix is required:**
-- Clerk's Next.js SDK expects these variables to be client-accessible
-- Without the prefix, Clerk cannot read them in browser/middleware contexts
-- Verified in `@clerk/nextjs/dist/esm/server/constants.js`:
-  ```javascript
-  const SIGN_IN_URL = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || "";
-  const SIGN_UP_URL = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || "";
-  ```
+**That's it!** No additional configuration needed.
 
 **⚠️ What NOT to set:**
+- `NEXT_PUBLIC_CLERK_SIGN_IN_URL` - Not needed (handled by custom pages)
+- `NEXT_PUBLIC_CLERK_SIGN_UP_URL` - Not needed (handled by custom pages)
 - `NEXT_PUBLIC_CLERK_DOMAIN` - Not needed for subdomain authentication
 - `NEXT_PUBLIC_CLERK_IS_SATELLITE` - Not needed for subdomain authentication
-- These variables are only required for cross-domain authentication (e.g., example-site.com and example-admin.io)
+
+**Why so simple?**
+- Subdomain authentication works automatically when root domain (`hellogroot.com`) is configured in Clerk Dashboard
+- Custom sign-in/sign-up pages at `/[locale]/sign-in` and `/[locale]/sign-up` handle redirects to Account Portal
+- Clerk middleware requires no additional configuration for subdomain setups
 
 ## Clerk Dashboard Configuration Checklist
 
