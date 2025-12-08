@@ -37,8 +37,12 @@ CLERK_SECRET_KEY=sk_live_xxx
 NEXT_PUBLIC_CLERK_SIGN_IN_URL=https://accounts.hellogroot.com/sign-in
 NEXT_PUBLIC_CLERK_SIGN_UP_URL=https://accounts.hellogroot.com/sign-up
 NEXT_PUBLIC_CLERK_IS_SATELLITE=true
-NEXT_PUBLIC_CLERK_DOMAIN=clerk.hellogroot.com
 ```
+
+**⚠️ CRITICAL: Do NOT set `NEXT_PUBLIC_CLERK_DOMAIN`**
+- When using Satellite Domains, Clerk automatically detects the Frontend API domain from your Dashboard configuration
+- Setting `NEXT_PUBLIC_CLERK_DOMAIN` causes Clerk to prepend "clerk." again, resulting in `clerk.clerk.hellogroot.com` (wrong!)
+- Clerk uses the **Frontend API** domain configured in your Dashboard (e.g., `clerk.hellogroot.com`)
 
 **Why NEXT_PUBLIC_ prefix is required:**
 - Clerk's Next.js SDK expects these variables to be client-accessible
@@ -48,7 +52,7 @@ NEXT_PUBLIC_CLERK_DOMAIN=clerk.hellogroot.com
   const SIGN_IN_URL = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || "";
   const SIGN_UP_URL = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || "";
   const IS_SATELLITE = isTruthy(process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE) || false;
-  const DOMAIN = process.env.NEXT_PUBLIC_CLERK_DOMAIN || "";
+  // DOMAIN is auto-detected from Clerk Dashboard, don't override!
   ```
 
 ## Clerk Dashboard Configuration Checklist
