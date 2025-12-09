@@ -161,8 +161,7 @@ export async function GET(request: NextRequest) {
       .from('expense_claims')
       .select(`
         *,
-        employee:users!expense_claims_user_id_fkey(id, full_name, email, business_id, businesses!users_business_id_fkey(home_currency)),
-        approver:users!expense_claims_current_approver_id_fkey(id, full_name, email)
+        employee:users!expense_claims_user_id_fkey(id, full_name, email, business_id, businesses!users_business_id_fkey(home_currency))
       `)
       .eq('business_id', userProfile.business_id)
       .gte('transaction_date', format(startDate, 'yyyy-MM-dd'))
@@ -185,8 +184,8 @@ export async function GET(request: NextRequest) {
       if (isAdmin) {
         // Admin can see all claims in their business (no additional filtering)
       } else if (isManager) {
-        // Managers see their team's claims + own claims
-        query = query.or(`user_id.eq.${userProfile.user_id},current_approver_id.eq.${userProfile.user_id}`)
+        // Managers see their team's claims + own claims (using reviewed_by instead of current_approver_id)
+        query = query.or(`user_id.eq.${userProfile.user_id},reviewed_by.eq.${userProfile.user_id}`)
       } else {
         // Employees see only their own claims
         query = query.eq('user_id', userProfile.user_id)
@@ -341,7 +340,7 @@ export async function GET(request: NextRequest) {
       const firstClaim = expenseClaims[0]
       employeeName = firstClaim?.employee?.full_name || 'Unknown Employee'
       employeeDesignation = 'Employee' // Could be enhanced with actual job title from user profile
-      approvedBy = firstClaim?.approver?.full_name
+      // Note: approvedBy left undefined - approver info was removed from the query
     } else if (!isAdmin && !isManager) {
       // Personal report
       employeeName = userData.full_name || userData.email
@@ -352,7 +351,7 @@ export async function GET(request: NextRequest) {
       if (uniqueEmployees.length === 1) {
         employeeName = expenseClaims[0]?.employee?.full_name || 'Unknown Employee'
         employeeDesignation = 'Employee'
-        approvedBy = expenseClaims[0]?.approver?.full_name
+        // Note: approvedBy left undefined - approver info was removed from the query
       }
     }
 

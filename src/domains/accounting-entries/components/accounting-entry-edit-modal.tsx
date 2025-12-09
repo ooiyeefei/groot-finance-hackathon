@@ -83,7 +83,6 @@ export default function AccountingEntryFormModal({
     payment_date: transaction?.payment_date?.split('T')[0] || undefined,
     payment_method: transaction?.payment_method || '',
     notes: transaction?.notes || '',
-    vendor_details: transaction?.vendor_details || {},
     source_record_id: prefilledData?.source_record_id || undefined
   })
 
@@ -252,7 +251,6 @@ export default function AccountingEntryFormModal({
           unit_measurement: item.unit_measurement,
           tax_rate: item.tax_rate || 0,
           tax_amount: item.tax_amount || 0,
-          item_category: item.item_category || '',
           line_order: index + 1
         }))
       }
@@ -298,8 +296,7 @@ export default function AccountingEntryFormModal({
       unit_measurement: '',
       unit_price: 0,
       tax_amount: 0,
-      tax_rate: 0,
-      item_category: ''
+      tax_rate: 0
     }])
   }
 

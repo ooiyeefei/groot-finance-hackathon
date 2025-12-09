@@ -78,7 +78,6 @@ export interface AccountingEntry {
   transaction_date: string // ISO date
   vendor_name?: string // Legacy field, being phased out
   vendor_id?: string // NEW: Reference to vendors table for data integrity
-  vendor_details?: Record<string, any>
   
   // Transaction status and workflow
   status?: 'pending' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
@@ -92,9 +91,6 @@ export interface AccountingEntry {
   updated_at: string
   created_by_method: CreationMethod
   processing_metadata?: Record<string, any>
-
-  // Cross-border tax compliance analysis (stored as JSONB)
-  compliance_analysis?: Record<string, any>
 
   // Related line items
   line_items?: LineItem[]
@@ -123,15 +119,11 @@ export interface LineItem {
   
   // Currency and metadata
   currency: string
-  category?: string
-  
+
   // Tax and discount
   tax_amount?: number
   discount_amount?: number
   tax_rate?: number
-  
-  // Classification
-  item_category?: string
   
   // System fields
   created_at?: string
@@ -173,7 +165,6 @@ export interface CreateLineItemRequest {
   unit_measurement?: string // Unit of measurement (kg, pkt, can, etc.)
   tax_rate?: number         // Optional field
   tax_amount?: number       // Optional field
-  item_category?: string    // Optional field
   line_order?: number       // Optional field
 }
 

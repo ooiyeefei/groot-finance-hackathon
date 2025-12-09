@@ -31,7 +31,6 @@ export interface Conversation {
   id: string
   title: string
   language: string
-  context_summary?: string
   is_active: boolean
   created_at: string
   updated_at: string
@@ -48,7 +47,6 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   metadata?: any
-  token_count?: number
   created_at: string
 }
 
@@ -267,7 +265,6 @@ export async function listConversations(
       id,
       title,
       language,
-      context_summary,
       is_active,
       created_at,
       updated_at,
@@ -298,7 +295,6 @@ export async function listConversations(
       id: conv.id,
       title: conv.title,
       language: conv.language,
-      context_summary: conv.context_summary,
       is_active: conv.is_active,
       created_at: conv.created_at,
       updated_at: conv.updated_at,
@@ -358,7 +354,6 @@ export async function getConversation(
       id,
       title,
       language,
-      context_summary,
       is_active,
       created_at,
       updated_at
@@ -383,7 +378,6 @@ export async function getConversation(
       role,
       content,
       metadata,
-      token_count,
       created_at
     `)
     .eq('conversation_id', conversationId)

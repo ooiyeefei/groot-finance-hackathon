@@ -427,8 +427,7 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
         unit_price: mappedData.original_amount,
         total_amount: mappedData.original_amount, // Required field: same as unit_price when quantity=1
         currency: mappedData.original_currency || 'USD', // Required field: use document currency
-        tax_rate: 0,
-        item_category: mappedData.category || 'direct_cost'
+        tax_rate: 0
       }]
     }
   }

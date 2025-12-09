@@ -35,7 +35,6 @@ export interface AccountingEntry {
   exchange_rate_date: string
   transaction_date: string
   vendor_name?: string
-  vendor_details?: Record<string, any>
   created_by_method?: string
   processing_metadata?: any
   status?: string
@@ -61,7 +60,6 @@ export interface LineItem {
   currency: string
   tax_rate: number
   tax_amount: number
-  item_category?: string
   line_order: number
 }
 
@@ -374,7 +372,6 @@ export async function createAccountingEntry(
             currency: original_currency,
             tax_rate: lineItem.tax_rate || 0,
             tax_amount: lineItem.tax_rate ? lineTotal * (lineItem.tax_rate / 100) : 0,
-            item_category: lineItem.item_category,
             line_order: i + 1
           })
           .select()
@@ -822,7 +819,6 @@ export async function updateAccountingEntry(
             currency: updatedEntry.original_currency,
             tax_rate: lineItem.tax_rate || 0,
             tax_amount: lineItem.tax_rate ? lineTotal * (lineItem.tax_rate / 100) : 0,
-            item_category: lineItem.item_category || null,
             line_order: i + 1
           })
           .select()

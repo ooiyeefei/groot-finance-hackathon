@@ -340,7 +340,6 @@ export async function createExpenseClaim(
           currency: original_currency,
           tax_amount: item.tax_rate ? (item.quantity * item.unit_price * item.tax_rate) : 0,
           tax_rate: item.tax_rate || 0,
-          item_category: item.item_category || null,
           line_order: index + 1
         })),
 
@@ -1120,7 +1119,6 @@ export async function updateExpenseClaim(
         currency: request.original_currency || existingClaim.currency,
         tax_amount: item.tax_amount || 0,
         tax_rate: item.tax_rate || 0,
-        item_category: item.item_category || null,
         line_order: index + 1
       }))
 

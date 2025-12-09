@@ -33,7 +33,6 @@ export interface ExpenseLineItemRequest {
   quantity: number
   unit_price: number
   tax_rate?: number
-  item_category?: string
 }
 
 export interface CreateExpenseClaimRequest {
@@ -132,7 +131,6 @@ export interface ExpenseClaim {
   exchange_rate?: number
 
   // Workflow fields
-  current_approver_id?: string | null
   approved_by_ids?: string[]
   rejected_by_id?: string | null
   rejection_reason?: string | null

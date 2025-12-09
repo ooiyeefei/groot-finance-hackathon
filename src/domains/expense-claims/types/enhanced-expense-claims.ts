@@ -111,10 +111,8 @@ export interface Vendor {
   name: string
   tax_id?: string
   bank_details?: any // Encrypted
-  verification_status: 'unverified' | 'pending' | 'verified' | 'rejected'
   verified_by_id?: string
   verified_at?: string
-  risk_rating: 'low' | 'medium' | 'high'
   created_at: string
 }
 
@@ -278,9 +276,7 @@ export function calculateRiskScore(claim: EnhancedExpenseClaim): number {
   else if (amount > 5000) score += 20
   else if (amount > 1000) score += 10
   
-  // Vendor risk
-  if (claim.vendor?.verification_status === 'unverified') score += 25
-  if (claim.vendor?.risk_rating === 'high') score += 20
+  // Note: Vendor risk scoring removed - verification_status and risk_level columns dropped from vendors table
   
   // Policy violations
   if (claim.policy_overrides?.length) score += 15

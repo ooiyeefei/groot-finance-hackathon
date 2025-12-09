@@ -161,7 +161,6 @@ export interface ExpenseLineItemRequest {
   quantity: number
   unit_price: number
   tax_rate?: number
-  item_category?: string
 }
 
 export interface UpdateExpenseClaimRequest extends Partial<CreateExpenseClaimRequest> {
@@ -342,9 +341,6 @@ export interface Vendor {
   id: string
   business_id: string
   name: string
-  verification_status: 'unverified' | 'pending' | 'verified' | 'rejected'
-  risk_level: 'low' | 'medium' | 'high'
-  metadata: Record<string, any> // JSONB for contact info, tax IDs, etc.
   created_at: string
   updated_at: string
 }
@@ -364,9 +360,6 @@ export interface AuditEvent {
 // API Request types for new entities
 export interface CreateVendorRequest {
   name: string
-  verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected'
-  risk_level?: 'low' | 'medium' | 'high'
-  metadata?: Record<string, any>
 }
 
 export interface UpdateVendorRequest extends Partial<CreateVendorRequest> {

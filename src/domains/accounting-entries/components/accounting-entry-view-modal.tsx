@@ -351,11 +351,6 @@ export default function AccountingEntryDetailModal({
                                 <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
                                 <td className="px-3 py-2">
                                   <div className="text-foreground font-medium">{item.item_description}</div>
-                                  {item.item_category && (
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      {formatCategoryName(item.item_category)}
-                                    </div>
-                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-foreground">{item.item_code || '-'}</td>
                                 <td className="px-3 py-2 text-right text-foreground">{item.quantity}</td>

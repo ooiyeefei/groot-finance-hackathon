@@ -202,15 +202,7 @@ export class EnhancedWorkflowEngine {
       })
     }
 
-    // Vendor verification (Otto's fraud prevention)
-    if (claim.vendor && claim.vendor.verification_status === 'unverified' && amount > 1000) {
-      checks.push({
-        code: 'UNVERIFIED_VENDOR',
-        message: 'High-value expense with unverified vendor',
-        canOverride: true,
-        requiredRole: 'admin'
-      })
-    }
+    // Note: Vendor verification check removed - verification_status column dropped from vendors table
 
 
     const failed = checks.filter(c => c.requiredRole !== context.userProfile.highestRole)
@@ -417,12 +409,7 @@ export class EnhancedWorkflowEngine {
     supabase: any
   ) {
 
-    if (actions.triggerVendorVerification && claim.vendor?.verification_status === 'unverified') {
-      await supabase
-        .from('vendors')
-        .update({ verification_status: 'pending' })
-        .eq('id', claim.transaction.vendor_id)
-    }
+    // Note: Vendor verification trigger removed - verification_status column dropped from vendors table
 
     if (actions.schedulePeriodicReview) {
       await this.schedulePeriodicReview(claim.employee.business_id, 'quarterly', supabase)
