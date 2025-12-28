@@ -1,0 +1,129 @@
+# Checkout API Contract
+# POST /api/v1/billing/checkout
+
+openapi: 3.0.3
+info:
+  title: Billing Checkout API
+  version: 1.0.0
+  description: Create Stripe Checkout sessions for subscription purchases
+
+paths:
+  /api/v1/billing/checkout:
+    post:
+      summary: Create Checkout Session
+      description: |
+        Creates a Stripe Checkout session for subscription purchase.
+        Redirects user to Stripe-hosted checkout page.
+      operationId: createCheckoutSession
+      tags:
+        - Billing
+      security:
+        - ClerkAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - priceId
+              properties:
+                priceId:
+                  type: string
+                  description: Stripe Price ID (e.g., price_xxx)
+                  example: "price_1234567890"
+                successUrl:
+                  type: string
+                  format: uri
+                  description: URL to redirect after successful checkout
+                  default: "{APP_URL}/settings/billing?success=true"
+                cancelUrl:
+                  type: string
+                  format: uri
+                  description: URL to redirect if checkout is canceled
+                  default: "{APP_URL}/pricing?canceled=true"
+
+      responses:
+        "200":
+          description: Checkout session created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                    description: Stripe Checkout Session ID
+                    example: "cs_test_a1b2c3d4"
+                  url:
+                    type: string
+                    format: uri
+                    description: URL to redirect user to Stripe Checkout
+                    example: "https://checkout.stripe.com/c/pay/cs_test_..."
+
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                invalidPriceId:
+                  value:
+                    error: "Invalid price ID"
+                    code: "INVALID_PRICE_ID"
+                alreadySubscribed:
+                  value:
+                    error: "Business already has an active subscription"
+                    code: "ALREADY_SUBSCRIBED"
+
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk session token
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        code:
+          type: string
+          description: Machine-readable error code
+        details:
+          type: object
+          description: Additional error details
+
+# Implementation Notes:
+#
+# 1. Authentication: Requires valid Clerk session
+# 2. Business Context: Uses current user's active business
+# 3. Customer Creation: Creates Stripe customer if none exists
+# 4. Idempotency: Safe to retry (creates new session each time)
+#
+# Flow:
+# 1. Validate price ID against allowed prices
+# 2. Check if business already has active subscription
+# 3. Get or create Stripe customer for business
+# 4. Create Checkout session with subscription mode
+# 5. Return session URL for client redirect

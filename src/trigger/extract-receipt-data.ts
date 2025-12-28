@@ -9,6 +9,7 @@ import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
 import { createClient } from '@supabase/supabase-js';
 import { getUserFriendlyErrorMessage, type ErrorContext } from '../lib/shared/error-message-mapper';
+import { recordOcrUsage } from '@/lib/stripe/usage';
 
 // Initialize Supabase client with service role key for background processing
 const createSupabaseClient = () => {
@@ -844,6 +845,10 @@ export const extractReceiptData = task({
             }
           });
       }
+
+      // Record OCR usage for billing (non-blocking - doesn't fail the task)
+      // Pass token usage data for fair billing: only charges if API tokens were consumed
+      await recordOcrUsage(expenseClaim.business_id, payload.documentId, pythonResult.tokens_used);
 
       return {
         success: true,

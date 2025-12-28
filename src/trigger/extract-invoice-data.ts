@@ -15,6 +15,7 @@ import {
 } from '@/domains/expense-claims/lib/expense-category-mapper';
 import { IFRS_CATEGORIES } from '@/lib/constants/ifrs-categories';
 import { getUserFriendlyErrorMessage, type ErrorContext } from '../lib/shared/error-message-mapper';
+import { recordOcrUsage } from '@/lib/stripe/usage';
 
 // Note: AI processing function defined directly in Python inline code below
 
@@ -1402,6 +1403,12 @@ print(json.dumps(result))
 
       console.log(`✅ Document ${payload.documentId} processed successfully`);
 
+      // Record OCR usage for billing (only for invoices domain)
+      // Note: Invoice task uses inline Python without token tracking - pass minimal token object to ensure billing
+      if (payload.documentDomain === 'invoices' && docRecord.business_id) {
+        await recordOcrUsage(docRecord.business_id, payload.documentId, { has_usage_data: true, total_tokens: 1 });
+      }
+
       return {
         success: true,
         documentId: payload.documentId,
@@ -1766,7 +1773,13 @@ print(json.dumps(result))
           }
 
           console.log(`✅ Document ${payload.documentId} processed successfully with vLLM fallback`);
-          
+
+          // Record OCR usage for billing (only for invoices domain)
+          // Note: vLLM fallback uses inline Python without token tracking - pass minimal token object to ensure billing
+          if (payload.documentDomain === 'invoices' && docRecord.business_id) {
+            await recordOcrUsage(docRecord.business_id, payload.documentId, { has_usage_data: true, total_tokens: 1 });
+          }
+
           return {
             success: true,
             documentId: payload.documentId,

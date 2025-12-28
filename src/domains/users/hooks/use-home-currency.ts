@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { useAuth } from '@clerk/nextjs'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 
 const SUPPORTED_CURRENCIES: { code: SupportedCurrency; name: string }[] = [
@@ -41,6 +42,7 @@ const CACHE_DURATION = 30 * 60 * 1000 // 30 minutes
  * @returns {Object} Currency state and loading status
  */
 export function useHomeCurrency() {
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth()
   const [currency, setCurrency] = useState<SupportedCurrency>(() => {
     // Priority 1: Check singleton cache first (fastest)
     if (cachedCurrency && Date.now() - cacheTimestamp < CACHE_DURATION) {
@@ -63,6 +65,11 @@ export function useHomeCurrency() {
 
   useEffect(() => {
     const loadCurrency = async () => {
+      // Wait for Clerk auth to be ready before making API calls
+      if (!isAuthLoaded || !isSignedIn) {
+        return
+      }
+
       // Skip fetch if cache is still fresh
       if (cachedCurrency && Date.now() - cacheTimestamp < CACHE_DURATION) {
         setIsLoading(false)
@@ -116,7 +123,7 @@ export function useHomeCurrency() {
       window.addEventListener('storage', handleStorageChange)
       return () => window.removeEventListener('storage', handleStorageChange)
     }
-  }, [])
+  }, [isAuthLoaded, isSignedIn])
 
   return {
     currency,

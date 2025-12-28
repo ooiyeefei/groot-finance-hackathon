@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useEffect, useState } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { AlertTriangle, TrendingDown, TrendingUp, CheckCircle, CreditCard, PiggyBank, AlertCircle, Calendar, Clock } from 'lucide-react';
 import ActionButton from '@/components/ui/action-button';
 import { AnalyticsData, AnalyticsTrends, ActionItem } from '@/domains/analytics/types/analytics';
@@ -19,6 +20,7 @@ export default function ActionCenter({
   onActionClick,
   loading
 }: ActionCenterProps) {
+  const { isLoaded, isSignedIn } = useAuth();
   const [statusBasedData, setStatusBasedData] = useState<{
     overdueTransactions: AccountingEntry[];
     upcomingDueTransactions: AccountingEntry[];
@@ -33,7 +35,13 @@ export default function ActionCenter({
   const [lastUpdated, setLastUpdated] = useState<string>('');
 
   // Fetch status-based transaction data for smart alerts
+  // Wait for Clerk auth to be loaded before fetching
   useEffect(() => {
+    // Don't fetch until auth is fully loaded and user is signed in
+    if (!isLoaded || !isSignedIn) {
+      return;
+    }
+
     const fetchStatusData = async () => {
       try {
         const response = await fetch('/api/v1/accounting-entries?include_status_analytics=true');
@@ -73,7 +81,7 @@ export default function ActionCenter({
     };
 
     fetchStatusData();
-  }, [analytics]); // Refetch when analytics change
+  }, [analytics, isLoaded, isSignedIn]); // Refetch when analytics change or auth state changes
 
   // Update timestamp on client side to avoid hydration mismatch
   useEffect(() => {

@@ -8,6 +8,7 @@ import CompleteDashboard from '@/domains/analytics/components/complete-dashboard
 import { GeneralDisclaimer } from '@/components/ui/financial-disclaimer'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { getUserData } from '@/lib/db/supabase-server'
+import { UpgradeBanner } from '@/domains/billing/components/upgrade-banner'
 
 export default async function Dashboard({ params }: { params: Promise<{ locale: string }> }) {
   // Server-side authentication check
@@ -70,6 +71,9 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
           {/* Main Content Area */}
           <main className="flex-1 overflow-auto p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
+              {/* Upgrade Banner for Free Plan Users */}
+              <UpgradeBanner />
+
               {/* Complete Financial Dashboard with Charts */}
               <CompleteDashboard />
             </div>

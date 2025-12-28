@@ -4,10 +4,11 @@ import { Suspense, lazy } from 'react'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { ClientProviders } from '@/components/providers/client-providers'
-import { User, Settings as SettingsIcon, Loader2 } from 'lucide-react'
+import { User, Settings as SettingsIcon, Loader2, Sparkles } from 'lucide-react'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const UserProfileSection = lazy(() => import('@/domains/account-management/components/user-profile-section'))
+const SubscriptionCard = lazy(() => import('@/domains/billing/components/subscription-card').then(m => ({ default: m.SubscriptionCard })))
 
 export default async function SettingsPage() {
   // Server-side authentication check
@@ -81,6 +82,28 @@ export default async function SettingsPage() {
                     </p>
                   </div>
                 </div>
+
+                {/* Subscription & Billing Section */}
+                <div className="flex items-center gap-3 mb-4 mt-8">
+                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-foreground">Subscription & Billing</h2>
+                    <p className="text-sm text-muted-foreground">Manage your plan and payment settings</p>
+                  </div>
+                </div>
+
+                <Suspense fallback={
+                  <div className="bg-card rounded-lg border border-border p-6">
+                    <div className="flex items-center justify-center p-4">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                      <span className="ml-2 text-muted-foreground">Loading subscription...</span>
+                    </div>
+                  </div>
+                }>
+                  <SubscriptionCard />
+                </Suspense>
             </div>
           </div>
         </main>

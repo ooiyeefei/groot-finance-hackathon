@@ -25,15 +25,27 @@ from pydantic import BaseModel, Field
 from typing import Literal
 
 
-def log_gemini_usage(lm, model_name: str, image_count: int = 0):
+def log_gemini_usage(lm, model_name: str, image_count: int = 0) -> Dict[str, Any]:
     """
-    Log Gemini API usage for cost tracking.
+    Log Gemini API usage for cost tracking and return token data.
 
     Args:
         lm: The configured dspy.LM object
         model_name: Name of the Gemini model being used
         image_count: Number of images sent in the API call
+
+    Returns:
+        Dict with token usage data for billing
     """
+    token_data = {
+        "model": model_name,
+        "image_count": image_count,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "has_usage_data": False
+    }
+
     try:
         if hasattr(lm, 'history') and lm.history:
             # Get the most recent API call from history
@@ -47,6 +59,13 @@ def log_gemini_usage(lm, model_name: str, image_count: int = 0):
                 completion_tokens = usage.get('completion_tokens', usage.get('output_tokens', 0))
                 total_tokens = usage.get('total_tokens', prompt_tokens + completion_tokens)
 
+                token_data.update({
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "has_usage_data": True
+                })
+
                 # Print usage log to stderr for Trigger.dev logs
                 print(f"[Usage] Model: {model_name}, Images: {image_count}, Input Tokens: {prompt_tokens}, Output Tokens: {completion_tokens}, Total Tokens: {total_tokens}", file=sys.stderr)
             else:
@@ -55,6 +74,8 @@ def log_gemini_usage(lm, model_name: str, image_count: int = 0):
             print(f"[Usage] Model: {model_name}, Images: {image_count}, LM history not available", file=sys.stderr)
     except Exception as e:
         print(f"[Usage] Failed to log usage: {str(e)}", file=sys.stderr)
+
+    return token_data
 
 
 class ExtractedLineItem(BaseModel):
@@ -91,6 +112,7 @@ class ScriptResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if failed")
     debug_info: Optional[Dict[str, Any]] = Field(None, description="Debug information")
     processing_time_ms: Optional[int] = Field(None, description="Processing time in milliseconds")
+    tokens_used: Optional[Dict[str, Any]] = Field(None, description="API token usage for billing")
 
 
 # DSPy Signature for receipt extraction
@@ -139,12 +161,13 @@ class ReceiptExtractor(dspy.Module):
             available_categories=categories_json
         )
 
-        # Log API usage for cost tracking
+        # Log API usage for cost tracking and capture token data
+        token_data = None
         if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
-            log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
+            token_data = log_gemini_usage(dspy.settings.lm, "gemini-2.5-flash", image_count=1)
 
-        # Return the full prediction object, then access extracted_data at call site
-        return prediction
+        # Return the full prediction object and token data
+        return prediction, token_data
 
     def _format_categories_for_llm(self, business_categories: List[Dict] = None) -> str:
         """Format business categories as JSON for LLM"""
@@ -240,7 +263,7 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
         # Run extraction
         print("🧠 Running DSPy receipt extraction...", file=sys.stderr)
         extractor = ReceiptExtractor(model_name="gemini-2.5-flash")
-        prediction = extractor(image_data=image_data, business_categories=business_categories)
+        prediction, token_data = extractor(image_data=image_data, business_categories=business_categories)
 
         # Extract the data from the prediction
         extracted_data = prediction.extracted_data
@@ -292,7 +315,8 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "success": True,
             "data": result_data,
-            "processing_time_ms": processing_time
+            "processing_time_ms": processing_time,
+            "tokens_used": token_data
         }
 
     except Exception as e:
@@ -304,7 +328,8 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
             "success": False,
             "error": str(e),
             "extraction_method": "dspy",
-            "processing_time_ms": processing_time
+            "processing_time_ms": processing_time,
+            "tokens_used": None  # No tokens consumed if failed before API call
         }
 
 
@@ -343,13 +368,15 @@ def main():
             response = ScriptResponse(
                 success=True,
                 data=extraction_result['data'],
-                processing_time_ms=extraction_result.get('processing_time_ms', 0)
+                processing_time_ms=extraction_result.get('processing_time_ms', 0),
+                tokens_used=extraction_result.get('tokens_used')
             )
         else:
             response = ScriptResponse(
                 success=False,
                 error=extraction_result.get('error', 'Unknown extraction error'),
-                debug_info=extraction_result
+                debug_info=extraction_result,
+                tokens_used=extraction_result.get('tokens_used')  # Include if API was called before failure
             )
 
     except Exception as e:
@@ -358,7 +385,8 @@ def main():
         response = ScriptResponse(
             success=False,
             error=f"Critical execution error: {str(e)}",
-            debug_info={"error_type": type(e).__name__}
+            debug_info={"error_type": type(e).__name__},
+            tokens_used=None  # No API call made
         )
 
     # CRITICAL: Only this line outputs to stdout - everything else goes to stderr

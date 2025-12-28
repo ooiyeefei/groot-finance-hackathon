@@ -1,11 +1,11 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
-import { ClerkProvider } from '@clerk/nextjs';
 import { locales, type Locale } from '@/i18n';
 import { notFound } from 'next/navigation';
 import { I18nErrorBoundary } from '@/components/i18n-error-boundary';
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { BusinessContextProvider } from '@/contexts/business-context';
+import { ClerkProviderWrapper } from '@/components/providers/ClerkProviderWrapper';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -52,7 +52,7 @@ export default async function LocaleLayout({
   }
 
   return (
-    <ClerkProvider>
+    <ClerkProviderWrapper>
       <QueryProvider>
         <I18nErrorBoundary fallbackLocale={locale}>
           <NextIntlClientProvider locale={locale} messages={messages}>
@@ -62,6 +62,6 @@ export default async function LocaleLayout({
           </NextIntlClientProvider>
         </I18nErrorBoundary>
       </QueryProvider>
-    </ClerkProvider>
+    </ClerkProviderWrapper>
   );
 }

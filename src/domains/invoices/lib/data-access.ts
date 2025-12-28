@@ -9,6 +9,7 @@ import {
   logSuspiciousSearch
 } from '@/lib/security/search-validator'
 import { withCache, CACHE_TTL } from '@/lib/cache/api-cache'
+import { checkOcrUsage } from '@/lib/stripe/usage'
 
 // Error details structure for LLM-generated error messages
 export interface ErrorDetails {
@@ -642,6 +643,18 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
 
   const userData = await getUserData(userId)
   const supabase = await createBusinessContextSupabaseClient()
+
+  // Check OCR usage limits before processing (soft-block)
+  if (userData.business_id) {
+    const usageCheck = await checkOcrUsage(userData.business_id)
+    if (!usageCheck.canUse) {
+      throw new Error(
+        `OCR limit reached (${usageCheck.used}/${usageCheck.limit} scans used this month). ` +
+        `Please upgrade your plan to continue processing documents.`
+      )
+    }
+    console.log(`[Document] OCR usage check passed: ${usageCheck.used}/${usageCheck.limit ?? 'unlimited'}`)
+  }
 
   // Verify document ownership and get document details
   const document = await getDocument(documentId)
