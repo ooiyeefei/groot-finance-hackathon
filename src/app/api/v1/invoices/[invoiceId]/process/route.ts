@@ -54,6 +54,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }, { status: 409 }) // Conflict
       }
 
+      // Handle OCR usage limit exceeded
+      if (error.message.includes('OCR limit reached')) {
+        return NextResponse.json({
+          success: false,
+          error: error.message,
+          requiresUpgrade: true
+        }, { status: 403 }) // Forbidden - requires upgrade
+      }
+
       return NextResponse.json({
         success: false,
         error: error.message

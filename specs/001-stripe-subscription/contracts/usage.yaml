@@ -1,0 +1,274 @@
+# Usage Tracking API Contract
+# GET/POST /api/v1/billing/usage
+
+openapi: 3.0.3
+info:
+  title: OCR Usage Tracking API
+  version: 1.0.0
+  description: Track and query OCR credit usage for billing
+
+paths:
+  /api/v1/billing/usage:
+    get:
+      summary: Get Current Usage
+      description: |
+        Returns current OCR usage for the billing period.
+        Includes usage count, limit, and percentage.
+      operationId: getUsage
+      tags:
+        - Billing
+        - Usage
+      security:
+        - ClerkAuth: []
+
+      parameters:
+        - name: period
+          in: query
+          description: Billing period (defaults to current month)
+          schema:
+            type: string
+            format: date
+            example: "2025-01"
+
+      responses:
+        "200":
+          description: Usage data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageResponse"
+
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      summary: Record Usage
+      description: |
+        Records OCR credit usage. Called internally after document processing.
+        Not intended for direct client use.
+      operationId: recordUsage
+      tags:
+        - Billing
+        - Usage
+        - Internal
+      security:
+        - InternalAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - businessId
+                - documentId
+                - creditsUsed
+              properties:
+                businessId:
+                  type: string
+                  format: uuid
+                documentId:
+                  type: string
+                  format: uuid
+                creditsUsed:
+                  type: integer
+                  minimum: 1
+                  default: 1
+
+      responses:
+        "201":
+          description: Usage recorded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  currentUsage:
+                    type: integer
+                  limit:
+                    type: integer
+                  limitReached:
+                    type: boolean
+
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+        "403":
+          description: Usage limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: "OCR usage limit exceeded"
+                code: "USAGE_LIMIT_EXCEEDED"
+                details:
+                  currentUsage: 100
+                  limit: 100
+                  planId: "pro"
+
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/billing/usage/check:
+    get:
+      summary: Check Usage Availability
+      description: |
+        Checks if business can use OCR credits.
+        Call before processing to implement soft block.
+      operationId: checkUsage
+      tags:
+        - Billing
+        - Usage
+      security:
+        - ClerkAuth: []
+
+      responses:
+        "200":
+          description: Usage check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  canUse:
+                    type: boolean
+                    description: Whether OCR can be used
+                  currentUsage:
+                    type: integer
+                  limit:
+                    type: integer
+                  remaining:
+                    type: integer
+                  warningThreshold:
+                    type: boolean
+                    description: True if at 80% or more usage
+
+components:
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+    InternalAuth:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+      description: Internal service authentication
+
+  schemas:
+    UsageResponse:
+      type: object
+      properties:
+        businessId:
+          type: string
+          format: uuid
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+            end:
+              type: string
+              format: date
+        usage:
+          type: object
+          properties:
+            current:
+              type: integer
+              description: Credits used this period
+              example: 45
+            limit:
+              type: integer
+              description: Maximum credits allowed (-1 for unlimited)
+              example: 100
+            remaining:
+              type: integer
+              description: Credits remaining (null if unlimited)
+              example: 55
+            percentage:
+              type: number
+              format: float
+              description: Usage percentage (0-100)
+              example: 45.0
+        plan:
+          type: object
+          properties:
+            id:
+              type: string
+              example: "pro"
+            name:
+              type: string
+              example: "Pro"
+        status:
+          type: string
+          enum:
+            - available
+            - warning
+            - limit_reached
+          description: |
+            - available: Under 80% usage
+            - warning: 80-99% usage
+            - limit_reached: At or over 100%
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+
+# Implementation Notes:
+#
+# Soft Block Pattern:
+# ```typescript
+# // In OCR processing flow
+# const check = await fetch('/api/v1/billing/usage/check');
+# if (!check.canUse) {
+#   throw new OcrLimitExceededError({
+#     currentUsage: check.currentUsage,
+#     limit: check.limit
+#   });
+# }
+# // Proceed with OCR...
+# // After success, record usage
+# await fetch('/api/v1/billing/usage', { method: 'POST', ... });
+# ```
+#
+# Warning Notification (80% threshold):
+# - Triggered when warningThreshold: true
+# - Show in-app notification
+# - Optional: Send email notification (via Trigger.dev)
+#
+# Billing Period:
+# - Aligned to subscription billing cycle
+# - For Free tier: Calendar month
+# - Usage resets at period start

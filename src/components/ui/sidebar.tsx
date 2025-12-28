@@ -4,7 +4,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, Building2, FileCheck } from 'lucide-react'
+import { useAuth } from '@clerk/nextjs'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, Building2, FileCheck, Sparkles } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/domains/account-management/components/enhanced-business-display'
@@ -22,6 +23,7 @@ export default function Sidebar() {
   const pathname = usePathname()
   const locale = useLocale()
   const t = useTranslations('navigation')
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth()
   // CRITICAL CLS FIX: Initialize with null to prevent layout shift until hydration
   const [isExpanded, setIsExpanded] = useState<boolean | null>(null)
   const [isMobile, setIsMobile] = useState(false)
@@ -59,6 +61,11 @@ export default function Sidebar() {
     { name: t('businessSettings'), href: localizedHref('/business-settings'), icon: Building2 },
   ] : []
 
+  // Billing navigation (available to everyone)
+  const billingNavigation = [
+    { name: t('billing'), href: localizedHref('/settings/billing'), icon: Sparkles }
+  ]
+
   // Personal settings (available to everyone)
   const settingsNavigation = [
     { name: t('settings'), href: localizedHref('/settings'), icon: Settings }
@@ -70,6 +77,7 @@ export default function Sidebar() {
     ...managerNavigation,
     ...coreNavigationPart2,
     ...businessNavigation,
+    ...billingNavigation,
     ...settingsNavigation
   ]
 
@@ -114,7 +122,13 @@ export default function Sidebar() {
     window.addEventListener('resize', checkMobile)
 
     // Load user role using optimized cache-first approach
+    // Wait for Clerk auth to be ready before making API calls
     const loadUserRole = async () => {
+      // Don't fetch until auth is fully loaded and user is signed in
+      if (!isAuthLoaded || !isSignedIn) {
+        return
+      }
+
       try {
         // Check cache first for instant loading (prefetched data should be available)
         const roleData = await fetchUserRoleWithCache()
@@ -137,7 +151,7 @@ export default function Sidebar() {
     return () => {
       window.removeEventListener('resize', checkMobile)
     }
-  }, [])
+  }, [isAuthLoaded, isSignedIn])
 
 
   // Fetch user role using centralized cache-first approach

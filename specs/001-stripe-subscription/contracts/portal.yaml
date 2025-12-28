@@ -1,0 +1,113 @@
+# Customer Portal API Contract
+# POST /api/v1/billing/portal
+
+openapi: 3.0.3
+info:
+  title: Billing Portal API
+  version: 1.0.0
+  description: Create Stripe Customer Portal sessions for subscription management
+
+paths:
+  /api/v1/billing/portal:
+    post:
+      summary: Create Portal Session
+      description: |
+        Creates a Stripe Customer Portal session.
+        Allows users to manage subscription, update payment method, and view invoices.
+      operationId: createPortalSession
+      tags:
+        - Billing
+      security:
+        - ClerkAuth: []
+
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                returnUrl:
+                  type: string
+                  format: uri
+                  description: URL to return to after portal session
+                  default: "{APP_URL}/settings/billing"
+
+      responses:
+        "200":
+          description: Portal session created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                    description: URL to redirect user to Stripe Customer Portal
+                    example: "https://billing.stripe.com/p/session/..."
+
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                noCustomer:
+                  value:
+                    error: "No billing account found. Please subscribe first."
+                    code: "NO_STRIPE_CUSTOMER"
+
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+
+# Implementation Notes:
+#
+# 1. Requires existing Stripe customer (from previous checkout)
+# 2. Portal configured via Stripe Dashboard (not API):
+#    - Enable subscription cancellation (with feedback)
+#    - Enable plan switching (with proration preview)
+#    - Enable payment method updates
+#    - Enable invoice history
+#
+# 3. Portal handles:
+#    - Payment method updates (credit card, etc.)
+#    - Plan upgrades/downgrades
+#    - Subscription cancellation
+#    - Invoice downloads
+#
+# Flow:
+# 1. Get business's stripe_customer_id
+# 2. If no customer, return error (must subscribe first)
+# 3. Create portal session
+# 4. Return URL for client redirect

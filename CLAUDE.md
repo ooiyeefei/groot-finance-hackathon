@@ -1005,3 +1005,10 @@ extensions: [
 Extensions only affect deployment, not local development. Use `external` array for packages that shouldn't be bundled.
 
 <!-- TRIGGER.DEV config END -->
+
+## Active Technologies
+- TypeScript 5.9+ with Next.js 15 App Router + Stripe SDK (`stripe`), Stripe React (`@stripe/stripe-js`), Supabase Client (001-stripe-subscription)
+- Supabase PostgreSQL with RLS (subscription data synced from Stripe via webhooks) (001-stripe-subscription)
+
+## Recent Changes
+- 001-stripe-subscription: Added TypeScript 5.9+ with Next.js 15 App Router + Stripe SDK (`stripe`), Stripe React (`@stripe/stripe-js`), Supabase Client

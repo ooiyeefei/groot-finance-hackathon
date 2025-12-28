@@ -27,34 +27,20 @@ export function WebVitalsReporter() {
       })
     }
 
-    // Send to analytics endpoint (can be customized)
-    const body = JSON.stringify({
-      name: metric.name,
-      value: metric.value,
-      rating: metric.rating,
-      delta: metric.delta,
-      id: metric.id,
-      navigationType: metric.navigationType,
-      page: window.location.pathname
-    })
-
-    // Use sendBeacon for reliability (doesn't block navigation)
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon('/api/analytics/vitals', body)
-    } else {
-      // Fallback for browsers that don't support sendBeacon
-      fetch('/api/analytics/vitals', {
-        method: 'POST',
-        body,
-        keepalive: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      }).catch((error) => {
-        // Silently fail - don't block user experience
-        console.error('[Web Vitals] Failed to send metrics:', error)
-      })
-    }
+    // Analytics endpoint disabled - uncomment when backend is ready
+    // To enable: create /api/analytics/vitals route
+    // const body = JSON.stringify({
+    //   name: metric.name,
+    //   value: metric.value,
+    //   rating: metric.rating,
+    //   delta: metric.delta,
+    //   id: metric.id,
+    //   navigationType: metric.navigationType,
+    //   page: window.location.pathname
+    // })
+    // if (navigator.sendBeacon) {
+    //   navigator.sendBeacon('/api/analytics/vitals', body)
+    // }
   })
 
   return null // No UI rendering needed

@@ -1,0 +1,69 @@
+import { auth } from '@clerk/nextjs/server'
+import Sidebar from '@/components/ui/sidebar'
+import HeaderWithUser from '@/components/ui/header-with-user'
+import { ClientProviders } from '@/components/providers/client-providers'
+import { PricingTable } from '@/domains/billing/components/pricing-table'
+import { CreditCard } from 'lucide-react'
+
+export const metadata = {
+  title: 'Pricing - FinanSEAL',
+  description: 'Choose the right plan for your business',
+}
+
+export default async function PricingPage() {
+  // Check if user is authenticated (optional for pricing page)
+  const { userId } = await auth()
+
+  return (
+    <ClientProviders>
+      <div className="flex h-screen bg-background">
+        {/* Sidebar */}
+        <Sidebar />
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {/* Header */}
+          <HeaderWithUser
+            title="Pricing"
+            subtitle="Choose the plan that fits your business needs"
+          />
+
+          {/* Main Content Area */}
+          <main className="flex-1 p-6 overflow-auto">
+            <div className="max-w-5xl mx-auto">
+              {/* Header Section */}
+              <div className="text-center mb-12">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-4">
+                  <CreditCard className="w-8 h-8 text-primary" />
+                </div>
+                <h1 className="text-3xl font-bold text-foreground mb-3">
+                  Simple, Transparent Pricing
+                </h1>
+                <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                  Start free and upgrade as your business grows. All plans include core features
+                  with OCR limits that scale with your needs.
+                </p>
+              </div>
+
+              {/* Pricing Table */}
+              <PricingTable showCurrentPlan={!!userId} />
+
+              {/* FAQ or Additional Info */}
+              <div className="mt-12 text-center">
+                <p className="text-sm text-muted-foreground">
+                  All prices in Malaysian Ringgit (MYR). Billed monthly.
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Need a custom plan?{' '}
+                  <a href="mailto:support@finanseal.com" className="text-primary hover:underline">
+                    Contact us
+                  </a>
+                </p>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </ClientProviders>
+  )
+}

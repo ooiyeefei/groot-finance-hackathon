@@ -1,0 +1,148 @@
+# Stripe Webhooks API Contract
+# POST /api/v1/billing/webhooks
+
+openapi: 3.0.3
+info:
+  title: Stripe Webhooks Handler
+  version: 1.0.0
+  description: |
+    Handles Stripe webhook events for subscription lifecycle management.
+    This endpoint is called by Stripe, not by clients.
+
+paths:
+  /api/v1/billing/webhooks:
+    post:
+      summary: Handle Stripe Webhook
+      description: |
+        Receives and processes Stripe webhook events.
+        All subscription state changes flow through this endpoint.
+      operationId: handleStripeWebhook
+      tags:
+        - Billing
+        - Webhooks
+      security:
+        - StripeSignature: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StripeEvent"
+
+      responses:
+        "200":
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+                  eventId:
+                    type: string
+                    example: "evt_1234567890"
+
+        "400":
+          description: Invalid webhook payload or signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+        "500":
+          description: Processing error (Stripe will retry)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    StripeSignature:
+      type: apiKey
+      in: header
+      name: Stripe-Signature
+      description: |
+        Stripe webhook signature for payload verification.
+        Verified using STRIPE_WEBHOOK_SECRET.
+
+  schemas:
+    StripeEvent:
+      type: object
+      description: Stripe Event object (simplified)
+      properties:
+        id:
+          type: string
+          description: Unique event ID
+          example: "evt_1234567890"
+        type:
+          type: string
+          description: Event type
+          enum:
+            - checkout.session.completed
+            - customer.subscription.created
+            - customer.subscription.updated
+            - customer.subscription.deleted
+            - invoice.payment_succeeded
+            - invoice.payment_failed
+            - customer.updated
+        data:
+          type: object
+          properties:
+            object:
+              type: object
+              description: The relevant Stripe object
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+
+# Event Handling Matrix:
+#
+# | Event Type                        | Action                                      |
+# |-----------------------------------|---------------------------------------------|
+# | checkout.session.completed        | Create subscription record (if mode=subscription) |
+# | customer.subscription.created     | Create/update subscription, activate plan   |
+# | customer.subscription.updated     | Update status, plan, period dates           |
+# | customer.subscription.deleted     | Mark canceled, schedule downgrade to Free   |
+# | invoice.payment_succeeded         | Update subscription status to active        |
+# | invoice.payment_failed            | Mark past_due, trigger notification job     |
+# | customer.updated                  | Sync customer metadata if needed            |
+#
+# Idempotency Pattern:
+#
+# ```typescript
+# // Pseudocode
+# async function handleWebhook(event: Stripe.Event) {
+#   // 1. Verify signature (done by Stripe SDK)
+#
+#   // 2. Check idempotency
+#   const existing = await db.stripe_events.findUnique({ eventId: event.id });
+#   if (existing) {
+#     return { received: true, skipped: true };
+#   }
+#
+#   // 3. Process event in transaction
+#   await db.$transaction([
+#     // Business logic based on event type
+#     handleEventByType(event),
+#     // Record event ID
+#     db.stripe_events.create({ eventId: event.id, eventType: event.type })
+#   ]);
+#
+#   return { received: true };
+# }
+# ```
+#
+# Security Notes:
+# 1. ALWAYS verify webhook signature before processing
+# 2. NEVER trust event data without signature verification
+# 3. Return 200 quickly (within 30s) to avoid Stripe retries
+# 4. Use idempotency to handle duplicate events safely

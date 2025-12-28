@@ -519,7 +519,6 @@ export async function getAccountingEntries(
       `)
       .eq('business_id', userData.business_id)
       .is('deleted_at', null)
-      .or('deleted_at.is.null', { foreignTable: 'line_items' })
 
     // Apply filters
     if (params.transaction_type) {
@@ -610,10 +609,17 @@ export async function getAccountingEntries(
 
     const hasMore = offset + params.limit! < (totalCount || 0)
 
+    // Filter out soft-deleted line_items in post-processing
+    // (PostgREST doesn't support filtering on embedded resources via .or() with foreignTable)
+    const entriesWithFilteredLineItems = (accountingEntries || []).map(entry => ({
+      ...entry,
+      line_items: (entry.line_items || []).filter((item: { deleted_at?: string | null }) => !item.deleted_at)
+    }))
+
     const result = {
       success: true,
       data: {
-        transactions: accountingEntries || [], // Keep "transactions" key for backwards compatibility
+        transactions: entriesWithFilteredLineItems, // Keep "transactions" key for backwards compatibility
         pagination: {
           page: params.page!,
           limit: params.limit!,
@@ -685,6 +691,13 @@ export async function getAccountingEntryById(
       accountingEntry.expense_claims = expenseClaims
     } else {
       accountingEntry.expense_claims = []
+    }
+
+    // Filter out soft-deleted line_items in post-processing
+    if (accountingEntry.line_items) {
+      accountingEntry.line_items = accountingEntry.line_items.filter(
+        (item: { deleted_at?: string | null }) => !item.deleted_at
+      )
     }
 
     // Resolve category name using dynamic business categories
