@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { stripe } from '@/lib/stripe/client'
+import { getStripe } from '@/lib/stripe/client'
 import { PLANS, PlanName } from '@/lib/stripe/plans'
 import { createClient } from '@supabase/supabase-js'
 
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     if (!customerId) {
       // Create new Stripe customer
-      const customer = await stripe.customers.create({
+      const customer = await getStripe().customers.create({
         email: user.email ?? undefined,
         name: business.name,
         metadata: {
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     // Build checkout session
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],

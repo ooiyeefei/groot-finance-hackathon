@@ -8,20 +8,32 @@
 
 import Stripe from 'stripe';
 
-// Server-side Stripe client
-// Only use in API routes and server components
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-12-15.clover',
-  typescript: true,
-});
+// Lazy-initialized Stripe client (prevents build failure when env vars missing)
+let stripeInstance: Stripe | null = null;
 
 // Helper to get Stripe instance with validation
+// Uses lazy initialization to avoid build-time errors
 export function getStripe(): Stripe {
   if (!process.env.STRIPE_SECRET_KEY) {
     throw new Error('STRIPE_SECRET_KEY is not configured');
   }
-  return stripe;
+
+  if (!stripeInstance) {
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-12-15.clover',
+      typescript: true,
+    });
+  }
+
+  return stripeInstance;
 }
+
+// For backward compatibility - lazy getter
+export const stripe = {
+  get instance() {
+    return getStripe();
+  }
+};
 
 // Type exports for use in other files
 export type { Stripe };

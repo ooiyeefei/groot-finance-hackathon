@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { stripe } from '@/lib/stripe/client'
+import { getStripe } from '@/lib/stripe/client'
 import { createClient } from '@supabase/supabase-js'
 
 // Supabase client with service role for server-side operations
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch invoices from Stripe
     // Using type assertion for Stripe SDK v20+ compatibility
-    const invoicesResponse = await stripe.invoices.list({
+    const invoicesResponse = await getStripe().invoices.list({
       customer: business.stripe_customer_id,
       limit,
       starting_after: startingAfter,

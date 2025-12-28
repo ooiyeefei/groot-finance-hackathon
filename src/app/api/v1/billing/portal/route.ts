@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { stripe } from '@/lib/stripe/client'
+import { getStripe } from '@/lib/stripe/client'
 import { createClient } from '@supabase/supabase-js'
 
 // Supabase client with service role for server-side operations
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     const returnUrl = `${origin}/settings/billing`
 
     // Create Stripe Customer Portal session
-    const portalSession = await stripe.billingPortal.sessions.create({
+    const portalSession = await getStripe().billingPortal.sessions.create({
       customer: business.stripe_customer_id,
       return_url: returnUrl,
     })

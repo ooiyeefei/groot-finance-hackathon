@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { stripe } from '@/lib/stripe/client'
+import { getStripe } from '@/lib/stripe/client'
 import { PLANS, PlanName, getOcrLimit } from '@/lib/stripe/plans'
 import { createClient } from '@supabase/supabase-js'
 
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     if (business.stripe_subscription_id) {
       try {
         // Stripe SDK v20+ type workaround - cast to access properties
-        const subscription = (await stripe.subscriptions.retrieve(
+        const subscription = (await getStripe().subscriptions.retrieve(
           business.stripe_subscription_id
         )) as unknown as {
           id: string
