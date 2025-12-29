@@ -11,12 +11,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
 import { PLANS, PlanName, canUseOcr, getOcrLimit, getUsagePercentage } from '@/lib/stripe/plans'
+import { Database } from '@/lib/database.types'
 
-// Supabase client with service role for server-side operations
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for Supabase client
+let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null
+
+function getSupabaseAdmin() {
+  if (!supabaseAdmin) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!url || !key) {
+      throw new Error('Supabase environment variables not configured')
+    }
+
+    supabaseAdmin = createClient<Database>(url, key)
+  }
+  return supabaseAdmin
+}
 
 /**
  * GET /api/v1/billing/usage
@@ -37,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
+    const { data: user, error: userError } = await getSupabaseAdmin()
       .from('users')
       .select('id, business_id')
       .eq('clerk_user_id', userId)
@@ -51,7 +63,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get business plan
-    const { data: business, error: businessError } = await supabaseAdmin
+    const { data: business, error: businessError } = await getSupabaseAdmin()
       .from('businesses')
       .select('id, plan_name')
       .eq('id', user.business_id)
@@ -68,7 +80,7 @@ export async function GET(request: NextRequest) {
     const limit = getOcrLimit(planName)
 
     // Get current month usage
-    const { data: usageData, error: usageError } = await supabaseAdmin.rpc(
+    const { data: usageData, error: usageError } = await getSupabaseAdmin().rpc(
       'get_monthly_ocr_usage',
       { p_business_id: business.id }
     )
@@ -126,7 +138,7 @@ export async function POST(request: NextRequest) {
     const credits = typeof body.credits === 'number' ? body.credits : 1
 
     // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
+    const { data: user, error: userError } = await getSupabaseAdmin()
       .from('users')
       .select('id, business_id')
       .eq('clerk_user_id', userId)
@@ -140,7 +152,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get business plan for limit check
-    const { data: business, error: businessError } = await supabaseAdmin
+    const { data: business, error: businessError } = await getSupabaseAdmin()
       .from('businesses')
       .select('id, plan_name')
       .eq('id', user.business_id)
@@ -156,7 +168,7 @@ export async function POST(request: NextRequest) {
     const planName = (business.plan_name as PlanName) || 'free'
 
     // Get current usage to check if we're at limit
-    const { data: currentUsageData } = await supabaseAdmin.rpc(
+    const { data: currentUsageData } = await getSupabaseAdmin().rpc(
       'get_monthly_ocr_usage',
       { p_business_id: business.id }
     )
@@ -186,7 +198,7 @@ export async function POST(request: NextRequest) {
       .split('T')[0]
 
     // Record usage
-    const { data: usageRecord, error: insertError } = await supabaseAdmin
+    const { data: usageRecord, error: insertError } = await getSupabaseAdmin()
       .from('ocr_usage')
       .insert({
         business_id: user.business_id,

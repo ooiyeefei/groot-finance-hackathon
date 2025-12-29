@@ -88,3 +88,4 @@ src/scripts/knowledge_base/*.log
 # clerk configuration (can include secrets)
 /.clerk/
 .env*.local
+firebase-debug.log

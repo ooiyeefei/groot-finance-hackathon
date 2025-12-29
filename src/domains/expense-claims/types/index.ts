@@ -86,7 +86,7 @@ export interface UpdateExpenseClaimRequest {
 
   // Status change metadata
   comment?: string
-  rejection_reason?: string
+  reviewer_notes?: string
 }
 
 export interface ExpenseClaimListParams {
@@ -133,7 +133,7 @@ export interface ExpenseClaim {
   // Workflow fields
   approved_by_ids?: string[]
   rejected_by_id?: string | null
-  rejection_reason?: string | null
+  reviewer_notes?: string | null
 
   // Timestamps
   submission_date?: string | null

@@ -823,27 +823,6 @@ export const extractReceiptData = task({
         }
 
         console.log(`✅ Expense claim ${payload.expenseClaimId} updated successfully`);
-
-        // Log audit event without sensitive data
-        await supabase
-          .from('audit_events')
-          .insert({
-            business_id: expenseClaim.business_id,
-            actor_user_id: payload.userId,
-            event_type: 'expense_claim.extraction_completed',
-            target_entity_type: 'expense_claim',
-            target_entity_id: payload.expenseClaimId,
-            details: {
-              extraction_method: 'ai',
-              vendor_masked: maskSensitiveData(extractionResult.vendor_name),
-              amount_present: !!extractionResult.total_amount,
-              currency: extractionResult.currency,
-              category: autoCategory,
-              line_items_count: extractionResult.line_items?.length || 0,
-              confidence_score: extractionResult.confidence_score,
-              processing_time_ms: pythonResult.processing_time_ms
-            }
-          });
       }
 
       // Record OCR usage for billing (non-blocking - doesn't fail the task)

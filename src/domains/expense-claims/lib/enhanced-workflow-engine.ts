@@ -266,7 +266,7 @@ export class EnhancedWorkflowEngine {
         
       case 'rejected':
         updateData.rejected_by_id = context.userProfile.id
-        updateData.rejection_reason = context.comment || 'No reason provided'
+        updateData.reviewer_notes = context.comment || 'No reason provided'
         updateData.reviewed_by = context.userProfile.id
         break
         

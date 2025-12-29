@@ -1009,6 +1009,8 @@ Extensions only affect deployment, not local development. Use `external` array f
 ## Active Technologies
 - TypeScript 5.9+ with Next.js 15 App Router + Stripe SDK (`stripe`), Stripe React (`@stripe/stripe-js`), Supabase Client (001-stripe-subscription)
 - Supabase PostgreSQL with RLS (subscription data synced from Stripe via webhooks) (001-stripe-subscription)
+- TypeScript 5.9+ with Next.js 15 App Router + Convex (database), Clerk (auth), Stripe (billing), Trigger.dev v3 (background jobs) (001-db-revamp)
+- Convex (tables + files) - migration from Supabase PostgreSQL (001-db-revamp)
 
 ## Recent Changes
 - 001-stripe-subscription: Added TypeScript 5.9+ with Next.js 15 App Router + Stripe SDK (`stripe`), Stripe React (`@stripe/stripe-js`), Supabase Client

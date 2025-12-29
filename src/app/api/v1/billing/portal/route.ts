@@ -11,12 +11,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
 import { createClient } from '@supabase/supabase-js'
+import { Database } from '@/lib/database.types'
 
-// Supabase client with service role for server-side operations
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for Supabase client
+let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null
+
+function getSupabaseAdmin() {
+  if (!supabaseAdmin) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!url || !key) {
+      throw new Error('Supabase environment variables not configured')
+    }
+
+    supabaseAdmin = createClient<Database>(url, key)
+  }
+  return supabaseAdmin
+}
 
 export async function POST(request: NextRequest) {
   console.log('[Billing Portal] Creating portal session')
@@ -32,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
+    const { data: user, error: userError } = await getSupabaseAdmin()
       .from('users')
       .select('id, business_id')
       .eq('clerk_user_id', userId)
@@ -54,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get business Stripe customer ID
-    const { data: business, error: businessError } = await supabaseAdmin
+    const { data: business, error: businessError } = await getSupabaseAdmin()
       .from('businesses')
       .select('id, stripe_customer_id')
       .eq('id', user.business_id)

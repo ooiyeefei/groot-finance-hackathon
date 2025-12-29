@@ -85,7 +85,7 @@ export interface ExpenseClaim {
   reviewed_by?: string | null // WHO should approve (when status=submitted) or WHO did approve/reject (audit trail)
   approved_by_ids: string[]
   rejected_by_id?: string
-  rejection_reason?: string
+  reviewer_notes?: string // Notes from manager for approve/reject/reimburse actions
   
   // Otto's compliance enhancements (NEW)
   business_purpose_details: string | null // Additional business purpose details as text
@@ -167,7 +167,7 @@ export interface UpdateExpenseClaimRequest extends Partial<CreateExpenseClaimReq
   id?: never // Prevent ID updates
   status?: ExpenseClaimStatus // Allow status updates
   comment?: string // For approval/rejection comments
-  rejection_reason?: string // For rejection reason
+  reviewer_notes?: string // For approve/reject/reimburse notes
 }
 
 export interface ExpenseClaimApprovalRequest {
