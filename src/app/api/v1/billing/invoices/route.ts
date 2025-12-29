@@ -118,11 +118,34 @@ export async function GET(request: NextRequest) {
 
     // Fetch invoices from Stripe
     // Using type assertion for Stripe SDK v20+ compatibility
-    const invoicesResponse = await getStripe().invoices.list({
-      customer: business.stripe_customer_id,
-      limit,
-      starting_after: startingAfter,
-    })
+    let invoicesResponse
+    try {
+      invoicesResponse = await getStripe().invoices.list({
+        customer: business.stripe_customer_id,
+        limit,
+        starting_after: startingAfter,
+      })
+    } catch (stripeError) {
+      // Handle Stripe errors (e.g., customer not found)
+      const errorMessage = stripeError instanceof Error ? stripeError.message : 'Unknown Stripe error'
+      console.error(`[Billing Invoices] Stripe error: ${errorMessage}`)
+
+      // If customer doesn't exist in Stripe, return empty invoices
+      // This handles stale/test customer IDs gracefully
+      if (errorMessage.includes('No such customer')) {
+        return NextResponse.json({
+          success: true,
+          data: {
+            invoices: [],
+            hasMore: false,
+            message: 'Stripe customer not found. Please resubscribe to view invoices.'
+          }
+        })
+      }
+
+      // Re-throw other Stripe errors
+      throw stripeError
+    }
 
     // Transform Stripe invoices to our response format
     const invoices: InvoiceResponse[] = (invoicesResponse.data as unknown as Array<{

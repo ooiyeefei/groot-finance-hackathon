@@ -92,10 +92,32 @@ export async function POST(request: NextRequest) {
     const returnUrl = `${origin}/settings/billing`
 
     // Create Stripe Customer Portal session
-    const portalSession = await getStripe().billingPortal.sessions.create({
-      customer: business.stripe_customer_id,
-      return_url: returnUrl,
-    })
+    let portalSession
+    try {
+      portalSession = await getStripe().billingPortal.sessions.create({
+        customer: business.stripe_customer_id,
+        return_url: returnUrl,
+      })
+    } catch (stripeError) {
+      // Handle Stripe errors (e.g., customer not found)
+      const errorMessage = stripeError instanceof Error ? stripeError.message : 'Unknown Stripe error'
+      console.error(`[Billing Portal] Stripe error: ${errorMessage}`)
+
+      // If customer doesn't exist in Stripe, return helpful error
+      if (errorMessage.includes('No such customer')) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Stripe customer not found. Please subscribe to a plan first.',
+            code: 'STRIPE_CUSTOMER_NOT_FOUND'
+          },
+          { status: 400 }
+        )
+      }
+
+      // Re-throw other Stripe errors
+      throw stripeError
+    }
 
     console.log('[Billing Portal] Portal session created:', portalSession.id)
 
