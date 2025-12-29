@@ -11,12 +11,24 @@ import { auth } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
 import { PLANS, PlanName, getOcrLimit } from '@/lib/stripe/plans'
 import { createClient } from '@supabase/supabase-js'
+import { Database } from '@/lib/database.types'
 
-// Supabase client with service role for server-side operations
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for Supabase client
+let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null
+
+function getSupabaseAdmin() {
+  if (!supabaseAdmin) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!url || !key) {
+      throw new Error('Supabase environment variables not configured')
+    }
+
+    supabaseAdmin = createClient<Database>(url, key)
+  }
+  return supabaseAdmin
+}
 
 export async function GET(request: NextRequest) {
   console.log('[Billing Subscription] Fetching subscription status')
@@ -32,7 +44,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
+    const supabase = getSupabaseAdmin()
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('id, business_id')
       .eq('clerk_user_id', userId)
@@ -54,7 +67,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get business subscription details
-    const { data: business, error: businessError } = await supabaseAdmin
+    const { data: business, error: businessError } = await supabase
       .from('businesses')
       .select(`
         id,
@@ -77,7 +90,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get current month OCR usage
-    const { data: usageData, error: usageError } = await supabaseAdmin.rpc(
+    const { data: usageData, error: usageError } = await supabase.rpc(
       'get_monthly_ocr_usage',
       { p_business_id: business.id }
     )

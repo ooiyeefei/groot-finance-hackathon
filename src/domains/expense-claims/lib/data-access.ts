@@ -505,27 +505,6 @@ export async function createExpenseClaim(
       }
     }
 
-    // Log audit event
-    await supabase
-      .from('audit_events')
-      .insert({
-        business_id: employeeProfile.business_id,
-        actor_user_id: userData.id,
-        event_type: `expense_claim.${request.file ? 'upload' : 'create'}_${request.processing_mode || 'manual'}`,
-        target_entity_type: 'expense_claim',
-        target_entity_id: expenseClaim.id,
-        details: {
-          processing_mode: request.processing_mode || 'manual',
-          filename: request.file?.name,
-          file_size: request.file?.size,
-          expense_amount: original_amount,
-          currency: original_currency,
-          storage_path: standardizedFilePath,
-          document_id: documentId,
-          flow_type: 'north_star_api_v1'
-        }
-      })
-
     return {
       success: true,
       data: expenseClaim,
@@ -963,6 +942,10 @@ export async function updateExpenseClaim(
         case 'approved':
           statusUpdateData.approved_at = now
           statusUpdateData.reviewed_by = userProfile.user_id
+          // Store approval notes from manager (fixes bug where approval notes were lost)
+          if (request.comment) {
+            statusUpdateData.reviewer_notes = request.comment
+          }
 
           // ✅ CRITICAL FIX: Use RPC function instead of direct INSERT to ensure proper category mapping
           console.log(`[RPC Approval] Creating accounting entry via RPC for expense claim: ${claimId}`)
@@ -992,13 +975,17 @@ export async function updateExpenseClaim(
         case 'rejected':
           statusUpdateData.rejected_at = now
           statusUpdateData.reviewed_by = userProfile.user_id
-          statusUpdateData.rejection_reason = request.comment || request.rejection_reason || 'No reason provided'
+          statusUpdateData.reviewer_notes = request.comment || request.reviewer_notes || 'No reason provided'
           // No need to clear current_approver_id since we use reviewed_by + status pattern
           break
 
         case 'reimbursed':
           statusUpdateData.paid_at = now
           statusUpdateData.reviewed_by = userProfile.user_id
+          // Store reimbursement notes if provided
+          if (request.comment) {
+            statusUpdateData.reviewer_notes = request.comment
+          }
 
           // Update accounting entry status
           if (existingClaim.accounting_entry_id) {
@@ -1016,7 +1003,7 @@ export async function updateExpenseClaim(
           statusUpdateData.rejected_at = null
           statusUpdateData.paid_at = null
           statusUpdateData.reviewed_by = null
-          statusUpdateData.rejection_reason = null
+          statusUpdateData.reviewer_notes = null
           // No need to clear current_approver_id since we use reviewed_by + status pattern
           break
       }
@@ -1030,26 +1017,6 @@ export async function updateExpenseClaim(
       if (statusUpdateError) {
         return { success: false, error: 'Failed to update expense claim status' }
       }
-
-      // Log audit event
-      await supabase
-        .from('audit_events')
-        .insert({
-          business_id: existingClaim.business_id,
-          actor_user_id: userProfile.user_id,
-          event_type: `expense_claim.${request.status}`,
-          target_entity_type: 'expense_claim',
-          target_entity_id: claimId,
-          details: {
-            previous_status: existingClaim.status,
-            new_status: request.status,
-            action_comment: request.comment,
-            expense_amount: existingClaim.total_amount,
-            currency: existingClaim.currency,
-            approver_role: userProfile.role,
-            risk_score: existingClaim.risk_score
-          }
-        })
 
       return await getExpenseClaim(userId, claimId)
     }

@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStripe } from '@/lib/stripe/client'
 import { createClient } from '@supabase/supabase-js'
+import { Database } from '@/lib/database.types'
 import Stripe from 'stripe'
 import {
   handleCheckoutSessionCompleted,
@@ -20,12 +21,23 @@ import {
   handleInvoicePaymentSucceeded,
 } from '@/lib/stripe/webhook-handlers'
 
-// Create Supabase client with service role for webhook processing
+// Lazy initialization for Supabase client
 // Webhooks bypass RLS since they come from Stripe, not authenticated users
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null
+
+function getSupabaseAdmin() {
+  if (!supabaseAdmin) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!url || !key) {
+      throw new Error('Supabase environment variables not configured')
+    }
+
+    supabaseAdmin = createClient<Database>(url, key)
+  }
+  return supabaseAdmin
+}
 
 // Events we handle
 const RELEVANT_EVENTS = new Set([
@@ -83,8 +95,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Event type not handled' })
     }
 
+    // Get Supabase client (lazy initialized)
+    const supabase = getSupabaseAdmin()
+
     // Idempotency check - prevent duplicate processing
-    const { data: existingEvent } = await supabaseAdmin
+    const { data: existingEvent } = await supabase
       .from('stripe_events')
       .select('event_id')
       .eq('event_id', event.id)
@@ -96,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Record event before processing (prevents race conditions)
-    const { error: insertError } = await supabaseAdmin
+    const { error: insertError } = await supabase
       .from('stripe_events')
       .insert({
         event_id: event.id,
@@ -119,42 +134,42 @@ export async function POST(request: NextRequest) {
         case 'checkout.session.completed':
           await handleCheckoutSessionCompleted(
             event.data.object as Stripe.Checkout.Session,
-            supabaseAdmin
+            supabase
           )
           break
 
         case 'customer.subscription.created':
           await handleSubscriptionCreated(
             event.data.object as Stripe.Subscription,
-            supabaseAdmin
+            supabase
           )
           break
 
         case 'customer.subscription.updated':
           await handleSubscriptionUpdated(
             event.data.object as Stripe.Subscription,
-            supabaseAdmin
+            supabase
           )
           break
 
         case 'customer.subscription.deleted':
           await handleSubscriptionDeleted(
             event.data.object as Stripe.Subscription,
-            supabaseAdmin
+            supabase
           )
           break
 
         case 'invoice.payment_failed':
           await handleInvoicePaymentFailed(
             event.data.object as Stripe.Invoice,
-            supabaseAdmin
+            supabase
           )
           break
 
         case 'invoice.payment_succeeded':
           await handleInvoicePaymentSucceeded(
             event.data.object as Stripe.Invoice,
-            supabaseAdmin
+            supabase
           )
           break
 
