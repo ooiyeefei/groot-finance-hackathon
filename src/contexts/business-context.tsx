@@ -10,7 +10,7 @@
  * - Loading and error states
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import {
   TBusinessWithMembership,
@@ -161,7 +161,32 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
       const response = await getBusinessContext()
 
       if (response.success) {
-        setActiveContext(response.data.context)
+        const context = response.data.context
+
+        // AUTO-RECOVERY DETECTION: If server switched to a different business due to
+        // the user's previous business being deleted/orphaned, clear all local caches
+        // and force a full page refresh to ensure all data is consistent
+        if (context?.autoRecovered) {
+          log.debug(' 🔄 AUTO-RECOVERY detected - clearing caches and refreshing page')
+
+          // Clear all business-related localStorage caches
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.removeItem('business-profile')
+              localStorage.removeItem('user-role-cache')
+              log.debug(' ✅ Cleared local storage caches')
+            } catch (cacheError) {
+              log.warn(' Failed to clear localStorage:', cacheError)
+            }
+          }
+
+          // Force page refresh to ensure all components get fresh data
+          // This is the cleanest way to ensure complete state consistency
+          window.location.reload()
+          return // Don't continue after reload
+        }
+
+        setActiveContext(context)
       } else {
         // Handle error response
         const errorMsg = ('error' in response ? response.error : 'Failed to load business context') as string
@@ -245,8 +270,10 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         // Refresh memberships to update last_accessed_at
         await refreshMemberships()
 
-        // Refresh profile for new business
-        await refreshProfile()
+        // NOTE: Do NOT call refreshProfile() here!
+        // The useEffect hook will automatically handle profile refresh
+        // when activeContext changes and detects a mismatch with cached profile.
+        // Calling it here causes duplicate/racing API calls leading to 429 errors.
 
         return true
       } else {
@@ -264,7 +291,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     } finally {
       setIsSwitching(false)
     }
-  }, [refreshMemberships, refreshProfile])
+  }, [refreshMemberships])
 
   const updateProfile = useCallback((updatedProfile: BusinessProfile) => {
     setProfile(updatedProfile)
@@ -475,32 +502,45 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     }
   }, [memberships, activeContext, isLoadingMemberships, isLoadingContext, isSwitching, isAuthLoaded, isSignedIn, membershipsError, switchActiveBusiness, hasCompletedInitialLoad])
 
-  // Load business profile when active context becomes available
-  useEffect(() => {
-    // Only load profile if we have active context and haven't loaded it yet
-    if (activeContext && !isLoadingProfile && !profile) {
-      log.debug(' Active context available, loading business profile...')
-      refreshProfile()
-    }
+  // REF-BASED BUSINESS SWITCH TRACKING
+  // Using a ref to track previous business ID avoids race conditions that occur
+  // when using state-based mismatch detection (which can fire multiple times
+  // before React processes state updates)
+  const prevBusinessIdRef = useRef<string | undefined>(undefined)
 
-    // CRITICAL FIX: Check for business name mismatch between context and cached profile
-    if (activeContext && profile && activeContext.businessName !== profile.name) {
-      log.debug('Business name mismatch detected', {
-        activeContext: activeContext.businessName,
-        cachedProfile: profile.name
+  // Load business profile when active context becomes available or business changes
+  useEffect(() => {
+    const currentBusinessId = activeContext?.businessId
+
+    // BUSINESS SWITCH DETECTION: Compare current vs previous business ID
+    // This is more reliable than name mismatch detection because refs update synchronously
+    if (prevBusinessIdRef.current !== undefined &&
+        currentBusinessId !== undefined &&
+        prevBusinessIdRef.current !== currentBusinessId) {
+      log.debug('Business switch detected via ref', {
+        from: prevBusinessIdRef.current,
+        to: currentBusinessId
       })
 
-      // Clear stale cache and reload fresh profile data
+      // Clear stale localStorage cache
       if (typeof window !== 'undefined') {
         try {
           localStorage.removeItem('business-profile')
-          log.debug(' ✅ Cleared stale business-profile cache')
         } catch (error) {
           log.warn(' Failed to clear business-profile cache:', error)
         }
       }
 
-      // Refresh profile from API to get updated business name
+      // Clear profile state - the next condition will handle loading
+      setProfile(null)
+    }
+
+    // Update ref SYNCHRONOUSLY (no race condition)
+    prevBusinessIdRef.current = currentBusinessId
+
+    // Load profile if we have active context and no profile loaded
+    if (activeContext && !isLoadingProfile && !profile) {
+      log.debug(' Active context available, loading business profile...')
       refreshProfile()
     }
   }, [activeContext, isLoadingProfile, profile, refreshProfile])

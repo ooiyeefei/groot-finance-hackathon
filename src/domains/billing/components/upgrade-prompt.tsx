@@ -12,12 +12,12 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AlertTriangle, Zap, Check, X } from 'lucide-react'
-import { PLANS, PlanName } from '@/lib/stripe/plans'
+import { FALLBACK_PLANS, PlanKey } from '@/lib/stripe/plans'
 
 interface UpgradePromptProps {
   isOpen: boolean
   onClose: () => void
-  currentPlan?: PlanName
+  currentPlan?: PlanKey
   usageUsed?: number
   usageLimit?: number
   feature?: string
@@ -26,9 +26,9 @@ interface UpgradePromptProps {
 export function UpgradePrompt({
   isOpen,
   onClose,
-  currentPlan = 'free',
+  currentPlan = 'trial',
   usageUsed = 0,
-  usageLimit = 5,
+  usageLimit = 100,
   feature = 'document scanning',
 }: UpgradePromptProps) {
   const router = useRouter()
@@ -39,16 +39,17 @@ export function UpgradePrompt({
   }, [router, onClose])
 
   // Get recommended plan (next tier up)
-  const getRecommendedPlan = (): PlanName => {
-    if (currentPlan === 'free') return 'pro'
+  const getRecommendedPlan = (): PlanKey => {
+    if (currentPlan === 'trial') return 'starter'
+    if (currentPlan === 'starter') return 'pro'
     if (currentPlan === 'pro') return 'enterprise'
-    return 'pro'
+    return 'starter'
   }
 
   if (!isOpen) return null
 
   const recommendedPlan = getRecommendedPlan()
-  const recommendedPlanDetails = PLANS[recommendedPlan]
+  const recommendedPlanDetails = FALLBACK_PLANS[recommendedPlan]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -85,7 +86,7 @@ export function UpgradePrompt({
             <p className="text-sm text-muted-foreground mt-2">
               You've used all {usageLimit} {feature} credits for this month on the{' '}
               <Badge variant="outline" className="mx-1">
-                {PLANS[currentPlan].name}
+                {FALLBACK_PLANS[currentPlan].name}
               </Badge>{' '}
               plan.
             </p>
@@ -173,7 +174,7 @@ export function UpgradePrompt({
 export function useUpgradePrompt() {
   const [isOpen, setIsOpen] = useState(false)
   const [promptData, setPromptData] = useState<{
-    currentPlan?: PlanName
+    currentPlan?: PlanKey
     usageUsed?: number
     usageLimit?: number
     feature?: string

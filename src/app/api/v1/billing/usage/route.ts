@@ -9,26 +9,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createClient } from '@supabase/supabase-js'
-import { PLANS, PlanName, canUseOcr, getOcrLimit, getUsagePercentage } from '@/lib/stripe/plans'
-import { Database } from '@/lib/database.types'
-
-// Lazy initialization for Supabase client
-let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null
-
-function getSupabaseAdmin() {
-  if (!supabaseAdmin) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !key) {
-      throw new Error('Supabase environment variables not configured')
-    }
-
-    supabaseAdmin = createClient<Database>(url, key)
-  }
-  return supabaseAdmin
-}
+import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
+import { PlanKey, canUseOcr, getOcrLimit, getUsagePercentage } from '@/lib/stripe/plans'
 
 /**
  * GET /api/v1/billing/usage
@@ -40,6 +22,8 @@ export async function GET(request: NextRequest) {
   console.log('[Billing Usage] Checking usage')
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
+
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json(
@@ -49,7 +33,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's business context
-    const { data: user, error: userError } = await getSupabaseAdmin()
+    const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, business_id')
       .eq('clerk_user_id', userId)
@@ -63,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get business plan
-    const { data: business, error: businessError } = await getSupabaseAdmin()
+    const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
       .select('id, plan_name')
       .eq('id', user.business_id)
@@ -76,11 +60,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const planName = (business.plan_name as PlanName) || 'free'
+    const planName = (business.plan_name as PlanKey) || 'trial'
     const limit = getOcrLimit(planName)
 
     // Get current month usage
-    const { data: usageData, error: usageError } = await getSupabaseAdmin().rpc(
+    const { data: usageData, error: usageError } = await supabaseAdmin.rpc(
       'get_monthly_ocr_usage',
       { p_business_id: business.id }
     )
@@ -125,6 +109,8 @@ export async function POST(request: NextRequest) {
   console.log('[Billing Usage] Recording usage')
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
+
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json(
@@ -138,7 +124,7 @@ export async function POST(request: NextRequest) {
     const credits = typeof body.credits === 'number' ? body.credits : 1
 
     // Get user's business context
-    const { data: user, error: userError } = await getSupabaseAdmin()
+    const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, business_id')
       .eq('clerk_user_id', userId)
@@ -152,7 +138,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get business plan for limit check
-    const { data: business, error: businessError } = await getSupabaseAdmin()
+    const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
       .select('id, plan_name')
       .eq('id', user.business_id)
@@ -165,10 +151,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const planName = (business.plan_name as PlanName) || 'free'
+    const planName = (business.plan_name as PlanKey) || 'trial'
 
     // Get current usage to check if we're at limit
-    const { data: currentUsageData } = await getSupabaseAdmin().rpc(
+    const { data: currentUsageData } = await supabaseAdmin.rpc(
       'get_monthly_ocr_usage',
       { p_business_id: business.id }
     )
@@ -198,7 +184,7 @@ export async function POST(request: NextRequest) {
       .split('T')[0]
 
     // Record usage
-    const { data: usageRecord, error: insertError } = await getSupabaseAdmin()
+    const { data: usageRecord, error: insertError } = await supabaseAdmin
       .from('ocr_usage')
       .insert({
         business_id: user.business_id,

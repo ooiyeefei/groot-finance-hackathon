@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { SupportedCurrency } from '@/domains/accounting-entries/types';
 import { AnalyticsResponse, AnalyticsData, AnalyticsTrends } from '../types/analytics';
+import { useActiveBusiness } from '@/contexts/business-context';
 
 interface UseFinancialAnalyticsOptions {
   period?: 'month' | 'quarter' | 'year';
@@ -28,7 +29,8 @@ interface UseFinancialAnalyticsReturn {
  * Fetches financial analytics data from the API endpoint
  */
 const fetchFinancialAnalytics = async ({ queryKey }: { queryKey: any[] }): Promise<AnalyticsResponse> => {
-  const [_key, period, homeCurrency, includeTrends, forceRefresh] = queryKey;
+  // Note: businessId is in queryKey for cache isolation but not sent to API (server uses auth context)
+  const [_key, _businessId, period, homeCurrency, includeTrends, forceRefresh] = queryKey;
 
   const params = new URLSearchParams({
     period,
@@ -69,6 +71,9 @@ export default function useFinancialAnalytics(
     refreshInterval = 300000 // 5 minutes
   } = options;
 
+  // Get current business context - refetch when business changes
+  const { businessId } = useActiveBusiness();
+
   // Use TanStack Query for data fetching with smart caching
   const {
     data,
@@ -79,7 +84,8 @@ export default function useFinancialAnalytics(
     dataUpdatedAt
   } = useQuery({
     // Unique query key that includes all parameters that affect the data
-    queryKey: ['financialAnalytics', period, homeCurrency, includeTrends, false],
+    // businessId ensures cache invalidation when switching businesses
+    queryKey: ['financialAnalytics', businessId, period, homeCurrency, includeTrends, false],
 
     // The function that fetches the data
     queryFn: fetchFinancialAnalytics,

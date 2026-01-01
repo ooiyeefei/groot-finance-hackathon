@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
@@ -12,6 +11,8 @@ import EnhancedBusinessDisplay from '@/domains/account-management/components/enh
 import { fetchUserRoleWithCache, clearUserRoleCache } from '@/lib/cache-utils'
 import { useTranslations, useLocale } from 'next-intl'
 import { useActiveBusiness } from '@/contexts/business-context'
+import { useSubscription } from '@/domains/billing/hooks/use-subscription'
+import { TrialCountdown } from '@/domains/billing/components/trial-countdown'
 
 interface UserRole {
   employee: boolean
@@ -35,6 +36,9 @@ export default function Sidebar() {
 
   // CRITICAL FIX: Listen to active business context changes
   const { business, businessId } = useActiveBusiness()
+
+  // Fetch subscription data for trial countdown
+  const { data: subscriptionData } = useSubscription()
 
   // Helper function to create localized hrefs (our i18n feature)
   const localizedHref = (path: string) => `/${locale}${path}`
@@ -295,6 +299,35 @@ export default function Sidebar() {
           </ul>
         </nav>
 
+        {/* Trial Countdown - shown only for trial users */}
+        {subscriptionData?.trial?.isOnTrial && (
+          <div className="px-4 pb-3">
+            {isExpanded ? (
+              <TrialCountdown
+                trial={subscriptionData.trial}
+                compact={false}
+                showUpgradeButton={true}
+              />
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <TrialCountdown
+                      trial={subscriptionData.trial}
+                      compact={true}
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-[200px]">
+                  <p className="text-sm font-medium">
+                    {subscriptionData.trial.daysRemaining} days left in trial
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        )}
+
         {/* AI Disclaimer */}
         <div className="px-4 pb-3">
           <div className="text-xs text-muted-foreground">
@@ -315,39 +348,6 @@ export default function Sidebar() {
               </Tooltip>
             )}
           </div>
-        </div>
-
-        {/* Powered by FinanSEAL */}
-        <div className="p-4">
-          {isExpanded ? (
-            <div className="flex items-center justify-center space-x-2 text-muted-foreground text-sm">
-              <span>Powered by</span>
-              <Image
-                src="https://ohxwghdgsuyabgsndfzc.supabase.co/storage/v1/object/public/business-profiles/cc5fdbbc-1459-43ad-9736-3cc65649d23b/logo_1760635116031.png"
-                alt="FinanSEAL"
-                width={27}
-                height={27}
-                className="rounded opacity-80"
-              />
-              <span className="font-medium">FinanSEAL</span>
-            </div>
-          ) : (
-            <div className="flex justify-center">
-              <div className="relative group">
-                <Image
-                  src="https://ohxwghdgsuyabgsndfzc.supabase.co/storage/v1/object/public/business-profiles/cc5fdbbc-1459-43ad-9736-3cc65649d23b/logo_1760635116031.png"
-                  alt="Powered by FinanSEAL"
-                  width={23}
-                  height={23}
-                  className="rounded opacity-60 hover:opacity-80 transition-opacity"
-                />
-                {/* Tooltip for collapsed state */}
-                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                  Powered by FinanSEAL
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
       </div>

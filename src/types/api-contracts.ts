@@ -79,6 +79,11 @@ export interface TBusinessContext {
   role: BusinessRole
   isOwner: boolean
   permissions: TBusinessPermissions
+  /**
+   * Flag indicating the context was auto-recovered from a deleted/orphaned business.
+   * When true, client should clear local caches and refresh all data.
+   */
+  autoRecovered?: boolean
 }
 
 // ============================================================================

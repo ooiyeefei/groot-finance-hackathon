@@ -9,31 +9,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
-import { PLANS, PlanName, getOcrLimit } from '@/lib/stripe/plans'
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/lib/database.types'
-
-// Lazy initialization for Supabase client
-let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null
-
-function getSupabaseAdmin() {
-  if (!supabaseAdmin) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !key) {
-      throw new Error('Supabase environment variables not configured')
-    }
-
-    supabaseAdmin = createClient<Database>(url, key)
-  }
-  return supabaseAdmin
-}
+import { getPlan, PlanKey, getOcrLimitSync } from '@/lib/stripe/plans'
+import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
 
 export async function GET(request: NextRequest) {
   console.log('[Billing Subscription] Fetching subscription status')
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
+
     // Authenticate user
     const { userId } = await auth()
     if (!userId) {
@@ -44,8 +28,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's business context
-    const supabase = getSupabaseAdmin()
-    const { data: user, error: userError } = await supabase
+    const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, business_id')
       .eq('clerk_user_id', userId)
@@ -67,7 +50,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get business subscription details
-    const { data: business, error: businessError } = await supabase
+    const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
       .select(`
         id,
@@ -76,7 +59,10 @@ export async function GET(request: NextRequest) {
         stripe_subscription_id,
         stripe_product_id,
         plan_name,
-        subscription_status
+        subscription_status,
+        trial_start_date,
+        trial_end_date,
+        created_at
       `)
       .eq('id', user.business_id)
       .single()
@@ -90,15 +76,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Get current month OCR usage
-    const { data: usageData, error: usageError } = await supabase.rpc(
+    const { data: usageData, error: usageError } = await supabaseAdmin.rpc(
       'get_monthly_ocr_usage',
       { p_business_id: business.id }
     )
 
     const currentUsage = usageError ? 0 : (usageData ?? 0)
-    const planName = (business.plan_name as PlanName) || 'free'
-    const plan = PLANS[planName]
-    const ocrLimit = getOcrLimit(planName)
+    // Normalize plan key - 'free' maps to 'trial'
+    const rawPlanKey = business.plan_name || 'trial'
+    const planKey: PlanKey = rawPlanKey === 'free' ? 'trial' : (rawPlanKey as PlanKey)
+    // Get plan from Stripe catalog (with caching/fallback)
+    const plan = await getPlan(planKey)
+    const ocrLimit = getOcrLimitSync(planKey)
 
     // Build subscription response
     let subscriptionDetails = null
@@ -137,11 +126,73 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Calculate trial info
+    // Check both plan_name and subscription_status for robustness
+    // Stripe sets subscription_status='trialing' which webhook syncs to plan_name='trial'
+    const isTrialPlan = planKey === 'trial'
+    const isTrialingStatus = business.subscription_status === 'trialing'
+    const isPausedStatus = business.subscription_status === 'paused'
+    const isOnTrial = isTrialPlan || isTrialingStatus
+
+    let trialInfo: {
+      isOnTrial: boolean
+      trialStartDate: string | null
+      trialEndDate: string | null
+      daysRemaining: number | null
+      trialExpired: boolean
+      isPaused: boolean
+    } = {
+      isOnTrial: false,
+      trialStartDate: null,
+      trialEndDate: null,
+      daysRemaining: null,
+      trialExpired: false,
+      isPaused: isPausedStatus,
+    }
+
+    if (isOnTrial) {
+      const now = new Date()
+
+      // Use explicit trial dates if set, otherwise calculate from created_at (14-day trial)
+      let trialStart: Date
+      let trialEnd: Date
+
+      if (business.trial_end_date) {
+        // Use explicitly set trial dates
+        trialEnd = new Date(business.trial_end_date)
+        trialStart = business.trial_start_date
+          ? new Date(business.trial_start_date)
+          : new Date(trialEnd.getTime() - 14 * 24 * 60 * 60 * 1000)
+      } else {
+        // Calculate from business creation date (14-day trial period)
+        trialStart = new Date(business.created_at)
+        trialEnd = new Date(trialStart.getTime() + 14 * 24 * 60 * 60 * 1000)
+      }
+
+      const daysRemaining = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+
+      trialInfo = {
+        isOnTrial: true,
+        trialStartDate: trialStart.toISOString(),
+        trialEndDate: trialEnd.toISOString(),
+        daysRemaining: Math.max(0, daysRemaining),
+        trialExpired: daysRemaining < 0,
+        isPaused: isPausedStatus,
+      }
+    }
+
+    // Handle paused status (trial ended without payment method)
+    // User needs to upgrade via Checkout to resume
+    if (isPausedStatus && !isOnTrial) {
+      trialInfo.isPaused = true
+      trialInfo.trialExpired = true
+    }
+
     const response = {
       success: true,
       data: {
         plan: {
-          name: planName,
+          name: planKey,
           displayName: plan.name,
           price: plan.price,
           currency: plan.currency,
@@ -160,6 +211,7 @@ export async function GET(request: NextRequest) {
           ocrPercentage: ocrLimit === -1 ? 0 : Math.min(100, Math.round((currentUsage / ocrLimit) * 100)),
           isUnlimited: ocrLimit === -1,
         },
+        trial: trialInfo,
         business: {
           id: business.id,
           name: business.name,

@@ -8,7 +8,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
 import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
 import { getUserFriendlyErrorMessage, type ErrorContext } from '@/lib/shared/error-message-mapper'
 
@@ -43,29 +43,6 @@ const DOMAIN_CONFIGS: Record<string, DomainConfig> = {
 // Timeout configuration
 const STUCK_TIMEOUT_MINUTES = 10 // Mark as failed after 10 minutes in processing status
 const MAX_RECORDS_TO_PROCESS = 50 // Batch size limit for safety
-
-// Lazy initialization for Supabase service role client
-// Using untyped client because this monitor dynamically accesses different tables
-let _supabaseServiceRole: SupabaseClient | null = null
-
-function getSupabaseServiceRole(): SupabaseClient {
-  if (!_supabaseServiceRole) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !key) {
-      throw new Error('Supabase environment variables not configured')
-    }
-
-    _supabaseServiceRole = createClient(url, key, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
-      }
-    })
-  }
-  return _supabaseServiceRole
-}
 
 function createStuckRecordFailureMetadata(minutesStuck: number, domain: string) {
   // Create error context for stuck record timeout
@@ -105,6 +82,8 @@ function createStuckRecordFailureMetadata(minutesStuck: number, domain: string) 
  */
 export async function GET(request: NextRequest) {
   try {
+    const supabaseServiceRole = getSupabaseAdmin()
+
     // Get user context with business permissions
     const userContext = await getCurrentUserContextWithBusiness()
 
@@ -155,7 +134,7 @@ export async function GET(request: NextRequest) {
 
       try {
         // Build query for stuck records in this domain
-        let query = getSupabaseServiceRole()
+        let query = supabaseServiceRole
           .from(config.tableName)
           .select('id, processing_started_at, updated_at, user_id, status')
 
@@ -228,7 +207,7 @@ export async function GET(request: NextRequest) {
               updateData[config.processingStatusField] = 'failed'
             }
 
-            const { error: updateError } = await getSupabaseServiceRole()
+            const { error: updateError } = await supabaseServiceRole
               .from(config.tableName)
               .update(updateData)
               .eq('id', record.id)
@@ -283,6 +262,33 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Log audit event for monitoring action
+    if (allResults.total_fixed_records > 0) {
+      try {
+        await supabaseServiceRole
+          .from('audit_events')
+          .insert({
+            business_id: businessId,
+            actor_user_id: userContext.userId,
+            event_type: 'system.stuck_records_monitor_all_domains',
+            target_entity_type: 'system_monitoring',
+            target_entity_id: null, // Multiple records
+            details: {
+              action: 'auto_failed_stuck_records_all_domains',
+              domains_checked: allResults.domains_checked,
+              total_records_found: allResults.total_stuck_records,
+              total_records_fixed: allResults.total_fixed_records,
+              total_failed_fixes: allResults.total_failed_fixes,
+              timeout_threshold_minutes: STUCK_TIMEOUT_MINUTES,
+              domain_results: allResults.domain_results
+            }
+          })
+      } catch (auditError) {
+        console.error('❌ [System Monitor] Failed to log audit event:', auditError)
+        // Don't fail the whole operation if audit logging fails
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -307,6 +313,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabaseServiceRole = getSupabaseAdmin()
+
     // Get user context with business permissions
     const userContext = await getCurrentUserContextWithBusiness()
 
@@ -345,7 +353,7 @@ export async function POST(request: NextRequest) {
     const businessId = userContext.profile.business_id
 
     // Get the record to verify it exists and is in our business
-    let query = getSupabaseServiceRole()
+    let query = supabaseServiceRole
       .from(config.tableName)
       .select(`id, ${config.statusField}, ${config.processingStartedField}, user_id`)
       .eq('id', record_id)
@@ -415,7 +423,7 @@ export async function POST(request: NextRequest) {
       updateData[config.processingStatusField] = 'failed'
     }
 
-    const { error: updateError } = await getSupabaseServiceRole()
+    const { error: updateError } = await supabaseServiceRole
       .from(config.tableName)
       .update(updateData)
       .eq('id', record_id)
@@ -426,6 +434,30 @@ export async function POST(request: NextRequest) {
         { success: false, error: `Failed to update ${config.displayName.toLowerCase()} status` },
         { status: 500 }
       )
+    }
+
+    // Log audit event for manual override
+    try {
+      await supabaseServiceRole
+        .from('audit_events')
+        .insert({
+          business_id: businessId,
+          actor_user_id: userContext.userId,
+          event_type: `${domain}.manual_override_failed`,
+          target_entity_type: domain,
+          target_entity_id: record_id,
+          details: {
+            action: 'manual_force_fail',
+            domain: domain,
+            domain_display_name: config.displayName,
+            original_status: (record as any)[config.statusField],
+            reason: reason || 'No reason provided',
+            minutes_stuck: minutesStuck
+          }
+        })
+    } catch (auditError) {
+      console.error('❌ [Manual Override] Failed to log audit event:', auditError)
+      // Don't fail the operation if audit logging fails
     }
 
     console.log(`✅ [Manual Override] Admin ${userContext.userId} manually failed ${domain} record ${record_id}`)

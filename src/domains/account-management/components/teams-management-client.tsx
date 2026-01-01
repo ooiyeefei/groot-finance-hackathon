@@ -63,6 +63,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [editingName, setEditingName] = useState<Set<string>>(new Set())
   const [editingNameValue, setEditingNameValue] = useState<string>('')
+  // Team limit exceeded state (T045)
+  const [teamLimitExceeded, setTeamLimitExceeded] = useState(false)
+  const [teamLimitMessage, setTeamLimitMessage] = useState<string | undefined>()
   const router = useRouter()
   const { addToast } = useToast()
   const { businessId } = useActiveBusiness()
@@ -283,12 +286,26 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       })
 
       const result = await response.json()
+
+      // Handle team limit exceeded error (T045)
+      if (!result.success && result.code === 'TEAM_LIMIT_EXCEEDED') {
+        // Throw a special error that will be caught in onError
+        const limitError = new Error(result.error || 'Team limit exceeded')
+        ;(limitError as any).code = 'TEAM_LIMIT_EXCEEDED'
+        ;(limitError as any).upgradeRequired = result.upgradeRequired
+        throw limitError
+      }
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to send invitation')
       }
       return result
     },
     onSuccess: (result, data) => {
+      // Clear any previous team limit error
+      setTeamLimitExceeded(false)
+      setTeamLimitMessage(undefined)
+
       if (result.emailFailed && result.warning) {
         addToast({
           type: 'warning',
@@ -305,8 +322,17 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       setShowInviteDialog(false)
       queryClient.invalidateQueries({ queryKey: ['pending-invitations', businessId] })
     },
-    onError: (error: Error) => {
+    onError: (error: Error & { code?: string; upgradeRequired?: boolean }) => {
       console.error('Failed to send invitation:', error)
+
+      // Handle team limit exceeded error (T045)
+      if (error.code === 'TEAM_LIMIT_EXCEEDED') {
+        setTeamLimitExceeded(true)
+        setTeamLimitMessage(error.message)
+        // Don't close dialog, show upgrade prompt instead
+        return
+      }
+
       addToast({
         type: 'error',
         title: 'Error',
@@ -660,9 +686,20 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
       <InvitationDialog
         isOpen={showInviteDialog}
-        onClose={() => setShowInviteDialog(false)}
+        onClose={() => {
+          setShowInviteDialog(false)
+          // Clear team limit state when closing dialog
+          setTeamLimitExceeded(false)
+          setTeamLimitMessage(undefined)
+        }}
         onInvite={sendInvitation}
         isLoading={sendInvitationMutation.isPending}
+        teamLimitExceeded={teamLimitExceeded}
+        teamLimitMessage={teamLimitMessage}
+        onDismissLimitError={() => {
+          setTeamLimitExceeded(false)
+          setTeamLimitMessage(undefined)
+        }}
       />
 
       <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as 'members' | 'invitations')} className="space-y-4">
