@@ -391,7 +391,7 @@ function ExpenseCategoryManagement({ userRole }: { userRole: UserRole }) {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <DollarSign className="w-3 h-3" />
-                          <span className="capitalize">{category.tax_treatment.replace('_', ' ')}</span>
+                          <span className="capitalize">{category.tax_treatment?.replace('_', ' ') || 'Standard'}</span>
                         </div>
 
                         <div className={`text-xs ${category.requires_receipt ? 'text-action-view' : 'text-muted-foreground'}`}>

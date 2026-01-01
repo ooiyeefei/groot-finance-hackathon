@@ -10,36 +10,13 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/lib/database.types'
+import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
 import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
 import { getUserFriendlyErrorMessage, type ErrorContext } from '@/domains/expense-claims/lib/error-message-mapper'
 
 // Timeout configuration
 const STUCK_TIMEOUT_MINUTES = 10 // Mark as failed after 10 minutes in 'analyzing' status
 const MAX_RECORDS_TO_PROCESS = 50 // Batch size limit for safety
-
-// Lazy initialization for Supabase service role client
-let _supabaseServiceRole: ReturnType<typeof createClient<Database>> | null = null
-
-function getSupabaseServiceRole() {
-  if (!_supabaseServiceRole) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !key) {
-      throw new Error('Supabase environment variables not configured')
-    }
-
-    _supabaseServiceRole = createClient<Database>(url, key, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
-      }
-    })
-  }
-  return _supabaseServiceRole
-}
 
 function createStuckRecordFailureMetadata(minutesStuck: number) {
   // Create error context for stuck record timeout
@@ -77,6 +54,8 @@ function createStuckRecordFailureMetadata(minutesStuck: number) {
  */
 export async function GET(request: NextRequest) {
   try {
+    const supabaseServiceRole = getSupabaseAdmin()
+
     // Get user context with business permissions
     const userContext = await getCurrentUserContextWithBusiness()
 
@@ -104,7 +83,7 @@ export async function GET(request: NextRequest) {
     console.log(`🔍 [Stuck Monitor] Checking for records older than: ${timeoutThreshold.toISOString()}`)
 
     // Find expense claims stuck in 'analyzing' status
-    const { data: stuckRecords, error: findError } = await getSupabaseServiceRole()
+    const { data: stuckRecords, error: findError } = await supabaseServiceRole
       .from('expense_claims')
       .select('id, processing_started_at, updated_at, user_id, vendor_name, total_amount, status')
       .eq('business_id', businessId)
@@ -140,11 +119,6 @@ export async function GET(request: NextRequest) {
 
     for (const record of stuckRecords) {
       try {
-        // Skip records without processing_started_at (shouldn't happen due to SQL filter)
-        if (!record.processing_started_at) {
-          continue
-        }
-
         // Calculate how long it's been stuck
         const processingStarted = new Date(record.processing_started_at)
         const minutesStuck = Math.floor((Date.now() - processingStarted.getTime()) / (1000 * 60))
@@ -155,7 +129,7 @@ export async function GET(request: NextRequest) {
         const failureMetadata = createStuckRecordFailureMetadata(minutesStuck)
 
         // Update the stuck record to 'failed' status
-        const { error: updateError } = await getSupabaseServiceRole()
+        const { error: updateError } = await supabaseServiceRole
           .from('expense_claims')
           .update({
             status: 'failed',
@@ -188,6 +162,33 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Log audit event for monitoring action
+    if (fixedRecords.length > 0) {
+      try {
+        await supabaseServiceRole
+          .from('audit_events')
+          .insert({
+            business_id: businessId,
+            actor_user_id: userContext.userId,
+            event_type: 'system.stuck_records_monitor',
+            target_entity_type: 'expense_claim',
+            target_entity_id: null, // Multiple records
+            details: {
+              action: 'auto_failed_stuck_records',
+              records_found: stuckRecords.length,
+              records_fixed: fixedRecords.length,
+              records_failed_to_fix: failedFixes.length,
+              timeout_threshold_minutes: STUCK_TIMEOUT_MINUTES,
+              fixed_records: fixedRecords,
+              failed_fixes: failedFixes
+            }
+          })
+      } catch (auditError) {
+        console.error('❌ [Stuck Monitor] Failed to log audit event:', auditError)
+        // Don't fail the whole operation if audit logging fails
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -215,6 +216,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabaseServiceRole = getSupabaseAdmin()
+
     // Get user context with business permissions
     const userContext = await getCurrentUserContextWithBusiness()
 
@@ -245,7 +248,7 @@ export async function POST(request: NextRequest) {
     const businessId = userContext.profile.business_id
 
     // Get the expense claim to verify it exists and is in our business
-    const { data: expenseClaim, error: fetchError } = await getSupabaseServiceRole()
+    const { data: expenseClaim, error: fetchError } = await supabaseServiceRole
       .from('expense_claims')
       .select('id, status, processing_started_at, user_id, vendor_name, total_amount')
       .eq('id', expense_claim_id)
@@ -297,7 +300,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the expense claim to 'failed' status
-    const { error: updateError } = await getSupabaseServiceRole()
+    const { error: updateError } = await supabaseServiceRole
       .from('expense_claims')
       .update({
         status: 'failed',
@@ -312,6 +315,30 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Failed to update expense claim status' },
         { status: 500 }
       )
+    }
+
+    // Log audit event for manual override
+    try {
+      await supabaseServiceRole
+        .from('audit_events')
+        .insert({
+          business_id: businessId,
+          actor_user_id: userContext.userId,
+          event_type: 'expense_claim.manual_override_failed',
+          target_entity_type: 'expense_claim',
+          target_entity_id: expense_claim_id,
+          details: {
+            action: 'manual_force_fail',
+            original_status: expenseClaim.status,
+            reason: reason || 'No reason provided',
+            minutes_stuck: minutesStuck,
+            vendor_name: expenseClaim.vendor_name,
+            amount: expenseClaim.total_amount
+          }
+        })
+    } catch (auditError) {
+      console.error('❌ [Manual Override] Failed to log audit event:', auditError)
+      // Don't fail the operation if audit logging fails
     }
 
     console.log(`✅ [Manual Override] Admin ${userContext.userId} manually failed expense claim ${expense_claim_id}`)

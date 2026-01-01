@@ -5,10 +5,11 @@
  * Combines business profile display with multi-tenant switching capability
  */
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ChevronDown, Building2, Loader2, AlertCircle, Check, PanelLeftClose, PanelLeftOpen, MoreVertical } from 'lucide-react'
+import { ChevronDown, Building2, Loader2, AlertCircle, Check, PanelLeftClose, PanelLeftOpen, MoreVertical, Plus } from 'lucide-react'
+import BusinessOnboardingModal from '@/domains/onboarding/components/business-onboarding-modal'
 import {
   useActiveBusiness,
   useBusinessMemberships,
@@ -19,6 +20,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -93,6 +95,12 @@ export default function EnhancedBusinessDisplay({
   // Business profile context (for logo/display)
   const { profile: businessProfile, isLoading: profileLoading } = useBusinessProfile()
 
+  // Modal state for creating new business
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false)
+
+  // Track Select dropdown open state to close it when opening modal
+  const [isSelectOpen, setIsSelectOpen] = useState(false)
+
   // ============================================================================
   // Event Handlers
   // ============================================================================
@@ -108,6 +116,12 @@ export default function EnhancedBusinessDisplay({
     } else {
       console.error('[EnhancedBusinessDisplay] Failed to switch business')
     }
+  }
+
+  const handleCreateNewBusiness = () => {
+    // Close the dropdown first, then open the modal
+    setIsSelectOpen(false)
+    setIsOnboardingModalOpen(true)
   }
 
   // ============================================================================
@@ -227,48 +241,54 @@ export default function EnhancedBusinessDisplay({
                   isHydrated={isHydrated}
                   size="standard"
                 />
-                {/* Dropdown indicator for multiple businesses - only show if multiple */}
-                {memberships.length > 1 && (
-                  <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
-                    <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg]:hidden">
-                      <ChevronDown className="w-3 h-3 text-foreground" />
-                    </SelectTrigger>
-                    <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
-                      {memberships.map((membership) => {
-                        const isSelected = membership.id === business?.businessId
-                        return (
-                          <SelectItem
-                            key={membership.id}
-                            value={membership.id}
-                            className="py-3 cursor-pointer hover:bg-accent/50 focus:bg-accent/50"
-                          >
-                            <div className="flex items-center gap-3 w-full">
-                              <Building2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                              <div className="flex flex-col min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium truncate text-foreground">
-                                    {membership.name}
-                                  </span>
-                                </div>
-                                <span className="text-xs text-muted-foreground truncate mt-1">
-                                  {membership.country_code} • {membership.home_currency}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                <RoleBadge
-                                  roleType={membership.isOwner ? 'owner' : membership.membership.role}
-                                  size="sm"
-                                />
-                                {/* MANAGE link placeholder for future implementation */}
-                                <span className="text-xs text-primary opacity-0">MANAGE</span>
-                              </div>
+                {/* Business dropdown - always show to allow creating new business */}
+              <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
+                <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg]:hidden">
+                  <ChevronDown className="w-3 h-3 text-foreground" />
+                </SelectTrigger>
+                <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
+                  {memberships.map((membership) => {
+                    const isSelected = membership.id === business?.businessId
+                    return (
+                      <SelectItem
+                        key={membership.id}
+                        value={membership.id}
+                        className="py-3 cursor-pointer hover:bg-accent/50 focus:bg-accent/50"
+                      >
+                        <div className="flex items-center gap-3 w-full">
+                          <Building2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium truncate text-foreground">
+                                {membership.name}
+                              </span>
                             </div>
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                )}
+                            <span className="text-xs text-muted-foreground truncate mt-1">
+                              {membership.country_code} • {membership.home_currency}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <RoleBadge
+                              roleType={membership.isOwner ? 'owner' : membership.membership.role}
+                              size="sm"
+                            />
+                            {isSelected && <Check className="h-4 w-4 text-primary" />}
+                          </div>
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
+                  {/* Create New Business Option */}
+                  <SelectSeparator className="my-1" />
+                  <div
+                    className="flex items-center gap-3 px-2 py-3 text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors rounded-sm"
+                    onClick={handleCreateNewBusiness}
+                  >
+                    <Plus className="h-4 w-4 flex-shrink-0" />
+                    <span className="text-sm font-medium">Create New Business</span>
+                  </div>
+                </SelectContent>
+              </Select>
               </div>
               <div className="min-w-0 flex-1">
                 {/* Brainwave-style: Clean business name with better typography */}
@@ -288,18 +308,68 @@ export default function EnhancedBusinessDisplay({
             </Link>
           </div>
         ) : (
-          // Collapsed state: Logo with Brainwave-style tooltip
+          // Collapsed state: Logo with tooltip and dropdown overlay
           <div className="p-1 flex flex-col items-center gap-2">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Link href={`/${locale}`} className="flex-shrink-0 rounded-lg hover:bg-accent p-2 transition-colors">
-                    <WorkspaceLogo
-                      businessProfile={businessProfile}
-                      isHydrated={isHydrated}
-                      size="compact"
-                    />
-                  </Link>
+                  <div className="relative">
+                    <Link href={`/${locale}`} className="flex-shrink-0 rounded-lg hover:bg-accent p-2 transition-colors block">
+                      <WorkspaceLogo
+                        businessProfile={businessProfile}
+                        isHydrated={isHydrated}
+                        size="compact"
+                      />
+                    </Link>
+                    {/* Business dropdown - always show to allow creating new business */}
+                    <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
+                      <SelectTrigger className="absolute -bottom-1 -right-1 w-5 h-5 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg]:hidden">
+                        <ChevronDown className="w-2.5 h-2.5 text-foreground" />
+                      </SelectTrigger>
+                      <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
+                        {memberships.map((membership) => {
+                          const isSelected = membership.id === business?.businessId
+                          return (
+                            <SelectItem
+                              key={membership.id}
+                              value={membership.id}
+                              className="py-3 cursor-pointer hover:bg-accent/50 focus:bg-accent/50"
+                            >
+                              <div className="flex items-center gap-3 w-full">
+                                <Building2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium truncate text-foreground">
+                                      {membership.name}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs text-muted-foreground truncate mt-1">
+                                    {membership.country_code} • {membership.home_currency}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <RoleBadge
+                                    roleType={membership.isOwner ? 'owner' : membership.membership.role}
+                                    size="sm"
+                                  />
+                                  {isSelected && <Check className="h-4 w-4 text-primary" />}
+                                </div>
+                              </div>
+                            </SelectItem>
+                          )
+                        })}
+                        {/* Create New Business Option */}
+                        <SelectSeparator className="my-1" />
+                        <div
+                          className="flex items-center gap-3 px-2 py-3 text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors rounded-sm"
+                          onClick={handleCreateNewBusiness}
+                        >
+                          <Plus className="h-4 w-4 flex-shrink-0" />
+                          <span className="text-sm font-medium">Create New Business</span>
+                        </div>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent
                   side="right"
@@ -323,6 +393,12 @@ export default function EnhancedBusinessDisplay({
             </button>
           </div>
         )}
+
+        {/* Business Onboarding Modal */}
+        <BusinessOnboardingModal
+          isOpen={isOnboardingModalOpen}
+          onClose={() => setIsOnboardingModalOpen(false)}
+        />
       </div>
     )
   }
@@ -352,7 +428,7 @@ export default function EnhancedBusinessDisplay({
               />
               {/* Dropdown indicator for multiple businesses - only show if multiple */}
               {memberships.length > 1 && (
-                <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
+                <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                   <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
                     <ChevronDown className="w-3 h-3 text-foreground" />
                   </SelectTrigger>
@@ -389,6 +465,15 @@ export default function EnhancedBusinessDisplay({
                         </SelectItem>
                       )
                     })}
+                    {/* Create New Business Option */}
+                    <SelectSeparator className="my-1" />
+                    <div
+                      className="flex items-center gap-3 px-2 py-3 text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors rounded-sm"
+                      onClick={handleCreateNewBusiness}
+                    >
+                      <Plus className="h-4 w-4 flex-shrink-0" />
+                      <span className="text-sm font-medium">Create New Business</span>
+                    </div>
                   </SelectContent>
                 </Select>
               )}
@@ -426,7 +511,7 @@ export default function EnhancedBusinessDisplay({
                   </Link>
                   {/* Dropdown indicator for multiple businesses in collapsed state */}
                   {memberships.length > 1 && (
-                    <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching}>
+                    <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                       <SelectTrigger className="absolute -bottom-1 -right-1 w-5 h-5 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
                         <ChevronDown className="w-2.5 h-2.5 text-foreground" />
                       </SelectTrigger>
@@ -463,6 +548,15 @@ export default function EnhancedBusinessDisplay({
                             </SelectItem>
                           )
                         })}
+                        {/* Create New Business Option */}
+                        <SelectSeparator className="my-1" />
+                        <div
+                          className="flex items-center gap-3 px-2 py-3 text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors rounded-sm"
+                          onClick={handleCreateNewBusiness}
+                        >
+                          <Plus className="h-4 w-4 flex-shrink-0" />
+                          <span className="text-sm font-medium">Create New Business</span>
+                        </div>
                       </SelectContent>
                     </Select>
                   )}
@@ -493,6 +587,12 @@ export default function EnhancedBusinessDisplay({
           </button>
         </div>
       )}
+
+      {/* Business Onboarding Modal */}
+      <BusinessOnboardingModal
+        isOpen={isOnboardingModalOpen}
+        onClose={() => setIsOnboardingModalOpen(false)}
+      />
     </div>
   )
 }

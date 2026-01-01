@@ -89,3 +89,6 @@ src/scripts/knowledge_base/*.log
 /.clerk/
 .env*.local
 firebase-debug.log
+
+# Playwright MCP debugging screenshots
+.playwright-mcp/

@@ -6,7 +6,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { PlanName, canUseOcr, getOcrLimit, getUsagePercentage } from './plans'
+import { PlanKey, canUseOcr, getOcrLimit, getUsagePercentage } from './plans'
 
 // Supabase admin client for server-side operations
 const getSupabaseAdmin = () => {
@@ -23,7 +23,7 @@ export interface UsageCheckResult {
   remaining: number | null
   percentage: number
   isUnlimited: boolean
-  plan: PlanName
+  plan: PlanKey
   requiresUpgrade: boolean
 }
 
@@ -47,7 +47,7 @@ export async function checkOcrUsage(businessId: string): Promise<UsageCheckResul
     throw new Error(`Business not found: ${businessId}`)
   }
 
-  const planName = (business.plan_name as PlanName) || 'free'
+  const planName = (business.plan_name as PlanKey) || 'trial'
   const limit = getOcrLimit(planName)
 
   // Get current month usage

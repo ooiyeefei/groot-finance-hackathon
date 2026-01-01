@@ -1,17 +1,21 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Mail, X } from 'lucide-react'
+import { Mail, X, AlertTriangle, ArrowRight } from 'lucide-react'
 
 interface InvitationDialogProps {
   isOpen: boolean
   onClose: () => void
   onInvite: (data: InvitationFormData) => Promise<void>
   isLoading?: boolean
+  teamLimitExceeded?: boolean
+  teamLimitMessage?: string
+  onDismissLimitError?: () => void
 }
 
 export interface InvitationFormData {
@@ -26,8 +30,12 @@ export default function InvitationDialog({
   isOpen,
   onClose,
   onInvite,
-  isLoading = false
+  isLoading = false,
+  teamLimitExceeded = false,
+  teamLimitMessage,
+  onDismissLimitError
 }: InvitationDialogProps) {
+  const router = useRouter()
   const [formData, setFormData] = useState<InvitationFormData>({
     email: '',
     role: 'employee',
@@ -38,6 +46,12 @@ export default function InvitationDialog({
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   if (!isOpen) return null
+
+  // Handle upgrade navigation
+  const handleUpgrade = () => {
+    onClose()
+    router.push('/settings/billing')
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -122,6 +136,40 @@ export default function InvitationDialog({
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Team Limit Exceeded Warning (T045) */}
+          {teamLimitExceeded && (
+            <div className="mx-6 mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="text-amber-500 font-medium">Team Limit Reached</h4>
+                  <p className="text-amber-400/80 text-sm mt-1">
+                    {teamLimitMessage || 'You\'ve reached the maximum number of team members for your current plan.'}
+                  </p>
+                  <div className="flex items-center gap-3 mt-3">
+                    <Button
+                      type="button"
+                      onClick={handleUpgrade}
+                      className="bg-amber-500 hover:bg-amber-600 text-black text-sm"
+                    >
+                      Upgrade Plan
+                      <ArrowRight className="w-4 h-4 ml-1" />
+                    </Button>
+                    {onDismissLimitError && (
+                      <button
+                        type="button"
+                        onClick={onDismissLimitError}
+                        className="text-amber-400/60 hover:text-amber-400 text-sm"
+                      >
+                        Dismiss
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-4">

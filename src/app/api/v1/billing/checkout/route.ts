@@ -9,31 +9,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
-import { PLANS, PlanName } from '@/lib/stripe/plans'
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/lib/database.types'
-
-// Lazy initialization for Supabase client
-let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null
-
-function getSupabaseAdmin() {
-  if (!supabaseAdmin) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !key) {
-      throw new Error('Supabase environment variables not configured')
-    }
-
-    supabaseAdmin = createClient<Database>(url, key)
-  }
-  return supabaseAdmin
-}
+import { getPlan, FALLBACK_PLANS, PlanKey } from '@/lib/stripe/plans'
+import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
 
 export async function POST(request: NextRequest) {
   console.log('[Billing Checkout] Creating checkout session')
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
+
     // Authenticate user
     const { userId } = await auth()
     if (!userId) {
@@ -45,16 +29,23 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json()
-    const { planName } = body as { planName: PlanName }
+    const { planName, successUrl, isOnboarding } = body as {
+      planName: PlanKey
+      successUrl?: string
+      isOnboarding?: boolean
+    }
 
-    if (!planName || !PLANS[planName]) {
+    // Validate plan key
+    const validPlanKeys: PlanKey[] = ['trial', 'starter', 'pro', 'enterprise']
+    if (!planName || !validPlanKeys.includes(planName)) {
       return NextResponse.json(
         { success: false, error: 'Invalid plan name' },
         { status: 400 }
       )
     }
 
-    const plan = PLANS[planName]
+    // Get plan from Stripe catalog (with fallback)
+    const plan = await getPlan(planName)
 
     // Free plan doesn't need checkout
     if (!plan.priceId) {
@@ -65,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's business context
-    const { data: user, error: userError } = await getSupabaseAdmin()
+    const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, business_id, email, full_name')
       .eq('clerk_user_id', userId)
@@ -87,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get business details
-    const { data: business, error: businessError } = await getSupabaseAdmin()
+    const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
       .select('id, name, stripe_customer_id, stripe_subscription_id')
       .eq('id', user.business_id)
@@ -129,7 +120,7 @@ export async function POST(request: NextRequest) {
       customerId = customer.id
 
       // Update business with customer ID
-      await getSupabaseAdmin()
+      await supabaseAdmin
         .from('businesses')
         .update({ stripe_customer_id: customerId })
         .eq('id', business.id)
@@ -139,6 +130,20 @@ export async function POST(request: NextRequest) {
 
     // Build checkout session
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+    // Build dynamic URLs based on isOnboarding flag
+    let finalSuccessUrl: string
+    let finalCancelUrl: string
+
+    if (isOnboarding) {
+      // Onboarding flow: use provided successUrl or default to business setup
+      finalSuccessUrl = successUrl || `${baseUrl}/en/onboarding/business?plan=${planName}`
+      finalCancelUrl = `${baseUrl}/en/onboarding/plan-selection?canceled=true`
+    } else {
+      // Normal billing flow: existing behavior
+      finalSuccessUrl = `${baseUrl}/en/settings/billing?success=true&session_id={CHECKOUT_SESSION_ID}`
+      finalCancelUrl = `${baseUrl}/en/pricing?canceled=true`
+    }
 
     const session = await getStripe().checkout.sessions.create({
       customer: customerId,
@@ -150,12 +155,13 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${baseUrl}/en/settings/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/en/pricing?canceled=true`,
+      success_url: finalSuccessUrl,
+      cancel_url: finalCancelUrl,
       metadata: {
         business_id: business.id,
         user_id: user.id,
         plan_name: planName,
+        is_onboarding: isOnboarding ? 'true' : 'false',
       },
       subscription_data: {
         metadata: {

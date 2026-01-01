@@ -16,8 +16,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { useSubscription } from '@/domains/billing/hooks/use-subscription'
+import {
+  useSubscription,
+  TRIAL_DURATION_DAYS,
+  calculateTrialDaysUsed,
+  calculateTrialProgress,
+} from '@/domains/billing/hooks/use-subscription'
 import { CreditCard, Check, ExternalLink, Loader2, AlertCircle, RefreshCw, Sparkles, Star, Zap } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import InvoiceList from '@/domains/billing/components/invoice-list'
 
@@ -286,6 +292,45 @@ function BillingContent() {
                             {data.plan.currency} {data.plan.price}/month
                           </span>
                         </div>
+                        {/* Trial Days Remaining - inline for trial users */}
+                        {data.trial?.isOnTrial && data.trial.daysRemaining !== null && (
+                          <div className="py-3 border-b border-border space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Trial Period</span>
+                              <span className={cn(
+                                "font-medium",
+                                data.trial.daysRemaining <= 3 ? "text-red-600 dark:text-red-400" :
+                                data.trial.daysRemaining <= 7 ? "text-yellow-600 dark:text-yellow-400" :
+                                "text-foreground"
+                              )}>
+                                {data.trial.trialExpired ? 'Expired' : `${data.trial.daysRemaining} days left`}
+                              </span>
+                            </div>
+                            {/* Trial progress bar with tooltip */}
+                            {!data.trial.trialExpired && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="cursor-pointer">
+                                      <Progress
+                                        value={calculateTrialProgress(data.trial)}
+                                        className={cn(
+                                          'h-2',
+                                          data.trial.daysRemaining <= 3 ? '[&>div]:bg-red-500' :
+                                          data.trial.daysRemaining <= 7 ? '[&>div]:bg-yellow-500' :
+                                          '[&>div]:bg-primary'
+                                        )}
+                                      />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="font-medium">Day {calculateTrialDaysUsed(data.trial)}/{TRIAL_DURATION_DAYS}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        )}
                         {data.subscription.currentPeriodEnd && (
                           <div className="flex items-center justify-between py-3 border-b border-border">
                             <span className="text-muted-foreground">Next Billing Date</span>
@@ -314,15 +359,16 @@ function BillingContent() {
                           </Button>
                         )}
 
-                        {/* Upgrade CTA for free users without Stripe customer */}
-                        {data.plan.name === 'free' && !data.subscription.stripeCustomerId && (
-                          <Button
-                            className="w-full mt-4"
-                            onClick={() => (window.location.href = '/en/pricing')}
-                          >
-                            Upgrade Your Plan
-                          </Button>
-                        )}
+                        {/* Compare Plans link - visible for all users */}
+                        <Button
+                          variant={data.plan.name === 'trial' || !data.subscription.stripeCustomerId ? 'default' : 'ghost'}
+                          className="w-full mt-2"
+                          onClick={() => (window.location.href = '/en/pricing')}
+                        >
+                          {data.plan.name === 'trial' || !data.subscription.stripeCustomerId
+                            ? 'Upgrade Your Plan'
+                            : 'Compare Plans'}
+                        </Button>
                       </CardContent>
                     </Card>
 

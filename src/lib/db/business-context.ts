@@ -49,6 +49,11 @@ export interface BusinessContext {
     canManageCategories: boolean
     canViewAllData: boolean
   }
+  /**
+   * Flag indicating the context was auto-recovered from a deleted/orphaned business.
+   * When true, client should clear local caches and refresh all data.
+   */
+  autoRecovered?: boolean
 }
 
 /**
@@ -175,6 +180,7 @@ export async function verifyBusinessMembership(
 
 /**
  * Get current business context (OPTIMIZED - single query approach)
+ * Includes auto-recovery for deleted/orphaned business references
  */
 export async function getCurrentBusinessContext(userId?: string): Promise<BusinessContext | null> {
   const clerkUserId = userId || (await auth()).userId
@@ -212,12 +218,84 @@ export async function getCurrentBusinessContext(userId?: string): Promise<Busine
       .single()
 
     if (error || !businessData) {
-      console.warn('[BusinessContext] Business context not available - possible auth propagation delay or expired membership:', {
-        businessId,
+      // AUTO-RECOVERY: User's business_id points to deleted/invalid business
+      // Attempt to switch to another active business
+      console.warn('[BusinessContext] Business context not available - attempting auto-recovery:', {
+        orphanedBusinessId: businessId,
         userId: userData.id,
         error: error?.message || 'No active membership found'
       })
-      return null
+
+      // Find another active business membership for this user
+      const { data: otherMemberships, error: otherError } = await supabase
+        .from('business_memberships')
+        .select(`
+          business_id,
+          role,
+          businesses!business_memberships_business_id_fkey(
+            id,
+            name,
+            owner_id
+          )
+        `)
+        .eq('user_id', userData.id)
+        .eq('status', 'active')
+        .order('last_accessed_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+
+      if (otherError || !otherMemberships || otherMemberships.length === 0) {
+        // No other businesses available - user truly has no business context
+        console.warn('[BusinessContext] AUTO-RECOVERY: No other active businesses found for user')
+
+        // Clear the orphaned business_id to prevent repeated failed lookups
+        await supabase
+          .from('users')
+          .update({
+            business_id: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userData.id)
+
+        console.log('[BusinessContext] AUTO-RECOVERY: Cleared orphaned business_id from user record')
+        return null
+      }
+
+      // Found another business - auto-switch the user
+      const newMembership = otherMemberships[0]
+      const newBusinessId = newMembership.business_id
+
+      // Update user's business_id to the new business
+      await supabase
+        .from('users')
+        .update({
+          business_id: newBusinessId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userData.id)
+
+      // Invalidate cache to ensure fresh data
+      try {
+        const { invalidateUserCache } = await import('./business-context-cache')
+        invalidateUserCache(clerkUserId)
+      } catch {
+        // Cache module may not be available in all contexts
+      }
+
+      const newBusiness = Array.isArray(newMembership.businesses)
+        ? newMembership.businesses[0]
+        : newMembership.businesses
+      const isOwner = newBusiness?.owner_id === userData.id
+
+      console.log(`[BusinessContext] AUTO-RECOVERY: Switched user to business "${newBusiness?.name}" (${newBusinessId})`)
+
+      return {
+        businessId: newBusinessId,
+        businessName: newBusiness?.name || 'Unknown Business',
+        role: newMembership.role,
+        isOwner,
+        permissions: computePermissions(newMembership.role, isOwner),
+        autoRecovered: true  // Signal to client that context was auto-recovered
+      }
     }
 
     const business = Array.isArray(businessData.businesses)

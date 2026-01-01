@@ -1,9 +1,11 @@
 import { auth } from '@clerk/nextjs/server'
+import Link from 'next/link'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { PricingTable } from '@/domains/billing/components/pricing-table'
-import { CreditCard } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { CreditCard, ArrowLeft } from 'lucide-react'
 
 export const metadata = {
   title: 'Pricing - FinanSEAL',
@@ -31,6 +33,16 @@ export default async function PricingPage() {
           {/* Main Content Area */}
           <main className="flex-1 p-6 overflow-auto">
             <div className="max-w-5xl mx-auto">
+              {/* Back Button */}
+              <div className="mb-6">
+                <Link href="/en/settings/billing">
+                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Back to Billing
+                  </Button>
+                </Link>
+              </div>
+
               {/* Header Section */}
               <div className="text-center mb-12">
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-4">

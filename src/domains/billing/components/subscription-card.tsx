@@ -47,13 +47,14 @@ export function SubscriptionCard() {
 
   const { plan, usage } = data
   const { ocrUsed, ocrLimit, ocrPercentage, isUnlimited } = usage
-  const isFreePlan = plan.name === 'free'
+  const isTrialPlan = plan.name === 'trial'
   const isAtLimit = !isUnlimited && ocrPercentage >= 100
   const isNearLimit = !isUnlimited && ocrPercentage >= 80
 
   // Plan badge styling
   const getPlanBadgeClass = () => {
-    if (isFreePlan) return 'bg-muted text-muted-foreground'
+    if (isTrialPlan) return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30'
+    if (plan.name === 'starter') return 'bg-muted text-muted-foreground border border-border'
     if (plan.name === 'pro') return 'bg-primary/10 text-primary border border-primary/30'
     return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30'
   }
@@ -74,7 +75,7 @@ export function SubscriptionCard() {
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                {isFreePlan ? 'Upgrade to unlock more features' : `${plan.currency} ${plan.price}/month`}
+                {isTrialPlan ? '14-day free trial • Upgrade anytime' : `${plan.currency} ${plan.price}/month`}
               </p>
             </div>
           </div>
@@ -118,12 +119,12 @@ export function SubscriptionCard() {
           )}
         </div>
 
-        {/* Upgrade CTA for free users */}
-        {isFreePlan && (
+        {/* Upgrade CTA for trial users */}
+        {isTrialPlan && (
           <Link href="/en/pricing" className="block mt-4">
             <Button className="w-full" variant="default" size="sm">
               <Zap className="w-4 h-4 mr-2" />
-              Upgrade to Pro
+              View Plans
             </Button>
           </Link>
         )}

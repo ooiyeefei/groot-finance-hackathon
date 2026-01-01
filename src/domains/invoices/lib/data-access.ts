@@ -106,9 +106,15 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
   // Apply pagination
   const limit = filters.limit || 20
 
+  // Validate business context for multi-tenant isolation
+  if (!userData.business_id) {
+    throw new Error('Business context required - no active business selected')
+  }
+
   // ⚡ PERFORMANCE: Cache the RPC result to avoid repeated database calls
   const rpcParams = {
     p_user_id: userData.id,
+    p_business_id: userData.business_id,  // Multi-tenant isolation
     p_status: filters.status || null,
     p_file_type: filters.file_type || null,
     p_date_from: filters.date_from || null,

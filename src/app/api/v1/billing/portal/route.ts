@@ -10,30 +10,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/lib/database.types'
-
-// Lazy initialization for Supabase client
-let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null
-
-function getSupabaseAdmin() {
-  if (!supabaseAdmin) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !key) {
-      throw new Error('Supabase environment variables not configured')
-    }
-
-    supabaseAdmin = createClient<Database>(url, key)
-  }
-  return supabaseAdmin
-}
+import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
 
 export async function POST(request: NextRequest) {
   console.log('[Billing Portal] Creating portal session')
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
+
     // Authenticate user
     const { userId } = await auth()
     if (!userId) {
@@ -44,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's business context
-    const { data: user, error: userError } = await getSupabaseAdmin()
+    const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, business_id')
       .eq('clerk_user_id', userId)
@@ -66,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get business Stripe customer ID
-    const { data: business, error: businessError } = await getSupabaseAdmin()
+    const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
       .select('id, stripe_customer_id')
       .eq('id', user.business_id)
@@ -92,32 +76,10 @@ export async function POST(request: NextRequest) {
     const returnUrl = `${origin}/settings/billing`
 
     // Create Stripe Customer Portal session
-    let portalSession
-    try {
-      portalSession = await getStripe().billingPortal.sessions.create({
-        customer: business.stripe_customer_id,
-        return_url: returnUrl,
-      })
-    } catch (stripeError) {
-      // Handle Stripe errors (e.g., customer not found)
-      const errorMessage = stripeError instanceof Error ? stripeError.message : 'Unknown Stripe error'
-      console.error(`[Billing Portal] Stripe error: ${errorMessage}`)
-
-      // If customer doesn't exist in Stripe, return helpful error
-      if (errorMessage.includes('No such customer')) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Stripe customer not found. Please subscribe to a plan first.',
-            code: 'STRIPE_CUSTOMER_NOT_FOUND'
-          },
-          { status: 400 }
-        )
-      }
-
-      // Re-throw other Stripe errors
-      throw stripeError
-    }
+    const portalSession = await getStripe().billingPortal.sessions.create({
+      customer: business.stripe_customer_id,
+      return_url: returnUrl,
+    })
 
     console.log('[Billing Portal] Portal session created:', portalSession.id)
 

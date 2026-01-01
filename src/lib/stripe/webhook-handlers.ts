@@ -109,13 +109,13 @@ export async function handleSubscriptionDeleted(
     throw new Error(`Business not found for customer: ${customerId}`)
   }
 
-  // Downgrade to free plan
+  // Downgrade to trial plan (user can upgrade again)
   const { error: updateError } = await supabase
     .from('businesses')
     .update({
       stripe_subscription_id: null,
       stripe_product_id: null,
-      plan_name: 'free',
+      plan_name: 'trial',
       subscription_status: 'canceled',
     })
     .eq('id', business.id)
@@ -125,7 +125,7 @@ export async function handleSubscriptionDeleted(
     throw updateError
   }
 
-  console.log(`[Webhook Handler] Downgraded business ${business.id} to free plan`)
+  console.log(`[Webhook Handler] Downgraded business ${business.id} to trial plan`)
 }
 
 /**
@@ -217,7 +217,54 @@ export async function handleInvoicePaymentSucceeded(
 }
 
 /**
+ * Handle customer.subscription.trial_will_end
+ *
+ * Called 3 days before trial ends.
+ * Use this to send reminder emails or in-app notifications.
+ */
+export async function handleSubscriptionTrialWillEnd(
+  subscription: Stripe.Subscription,
+  supabase: SupabaseClient
+): Promise<void> {
+  console.log(`[Webhook Handler] subscription.trial_will_end: ${subscription.id}`)
+
+  const customerId = subscription.customer as string
+
+  // Find business by Stripe customer ID
+  const { data: business, error: findError } = await supabase
+    .from('businesses')
+    .select('id, name')
+    .eq('stripe_customer_id', customerId)
+    .single()
+
+  if (findError || !business) {
+    console.error(`[Webhook Handler] Business not found for customer: ${customerId}`)
+    throw new Error(`Business not found for customer: ${customerId}`)
+  }
+
+  const trialEndDate = subscription.trial_end
+    ? new Date(subscription.trial_end * 1000)
+    : null
+
+  console.log(
+    `[Webhook Handler] Trial ending soon for business ${business.id} (${business.name}). ` +
+    `Trial ends: ${trialEndDate?.toISOString() ?? 'unknown'}`
+  )
+
+  // TODO: Send reminder email to business owner
+  // This is a placeholder for future email integration
+  // Options:
+  // 1. Use Resend/SendGrid/Postmark to send email
+  // 2. Create an in-app notification in a notifications table
+  // 3. Trigger a background job for email delivery
+
+  // For now, just log that we received the event
+  // The business can be notified via the UpgradeBanner in the UI
+}
+
+/**
  * Helper: Update business with subscription details
+ * Syncs subscription status and trial dates from Stripe (single source of truth)
  */
 async function updateBusinessSubscription(
   subscription: Stripe.Subscription,
@@ -240,19 +287,33 @@ async function updateBusinessSubscription(
   // Get plan details from subscription
   const priceId = subscription.items.data[0]?.price?.id
   const productId = subscription.items.data[0]?.price?.product as string
-  const planName = priceId ? getPlanFromPriceId(priceId) : 'free'
+  const planName = priceId ? getPlanFromPriceId(priceId) : 'trial'
 
   // Map Stripe subscription status to our status
   const subscriptionStatus = mapStripeStatus(subscription.status)
 
+  // Determine plan_name: 'trial' while trialing, actual plan name after
+  const effectivePlanName = subscriptionStatus === 'trialing' ? 'trial' : planName
+
+  // Build update object with trial dates from Stripe
+  const updateData: Record<string, unknown> = {
+    stripe_subscription_id: subscription.id,
+    stripe_product_id: productId,
+    plan_name: effectivePlanName,
+    subscription_status: subscriptionStatus,
+  }
+
+  // Sync trial dates from Stripe (single source of truth)
+  if (subscription.trial_start) {
+    updateData.trial_start_date = new Date(subscription.trial_start * 1000).toISOString()
+  }
+  if (subscription.trial_end) {
+    updateData.trial_end_date = new Date(subscription.trial_end * 1000).toISOString()
+  }
+
   const { error: updateError } = await supabase
     .from('businesses')
-    .update({
-      stripe_subscription_id: subscription.id,
-      stripe_product_id: productId,
-      plan_name: planName,
-      subscription_status: subscriptionStatus,
-    })
+    .update(updateData)
     .eq('id', business.id)
 
   if (updateError) {
@@ -261,7 +322,8 @@ async function updateBusinessSubscription(
   }
 
   console.log(
-    `[Webhook Handler] Updated business ${business.id}: plan=${planName}, status=${subscriptionStatus}`
+    `[Webhook Handler] Updated business ${business.id}: plan=${effectivePlanName}, status=${subscriptionStatus}` +
+    (subscription.trial_end ? `, trial_end=${new Date(subscription.trial_end * 1000).toISOString()}` : '')
   )
 }
 
@@ -270,7 +332,7 @@ async function updateBusinessSubscription(
  */
 function mapStripeStatus(
   stripeStatus: Stripe.Subscription.Status
-): 'active' | 'past_due' | 'canceled' | 'trialing' | 'unpaid' {
+): 'active' | 'past_due' | 'canceled' | 'trialing' | 'unpaid' | 'paused' {
   switch (stripeStatus) {
     case 'active':
       return 'active'
@@ -282,9 +344,12 @@ function mapStripeStatus(
       return 'trialing'
     case 'unpaid':
       return 'unpaid'
+    case 'paused':
+      // Subscription is paused (trial ended without payment method)
+      // User needs to add payment via Checkout to resume
+      return 'paused'
     case 'incomplete':
     case 'incomplete_expired':
-    case 'paused':
     default:
       return 'canceled'
   }

@@ -9,35 +9,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getStripe } from '@/lib/stripe/client'
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/lib/database.types'
+import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
 import Stripe from 'stripe'
 import {
   handleCheckoutSessionCompleted,
   handleSubscriptionCreated,
   handleSubscriptionUpdated,
   handleSubscriptionDeleted,
+  handleSubscriptionTrialWillEnd,
   handleInvoicePaymentFailed,
   handleInvoicePaymentSucceeded,
 } from '@/lib/stripe/webhook-handlers'
-
-// Lazy initialization for Supabase client
-// Webhooks bypass RLS since they come from Stripe, not authenticated users
-let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null
-
-function getSupabaseAdmin() {
-  if (!supabaseAdmin) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !key) {
-      throw new Error('Supabase environment variables not configured')
-    }
-
-    supabaseAdmin = createClient<Database>(url, key)
-  }
-  return supabaseAdmin
-}
 
 // Events we handle
 const RELEVANT_EVENTS = new Set([
@@ -45,12 +27,16 @@ const RELEVANT_EVENTS = new Set([
   'customer.subscription.created',
   'customer.subscription.updated',
   'customer.subscription.deleted',
+  'customer.subscription.trial_will_end',
   'invoice.payment_failed',
   'invoice.payment_succeeded',
 ])
 
 export async function POST(request: NextRequest) {
   console.log('[Billing Webhook] Received webhook request')
+
+  // Get Supabase admin client (lazy-initialized to avoid build errors)
+  const supabaseAdmin = getSupabaseAdmin()
 
   try {
     // Get raw body for signature verification
@@ -95,11 +81,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Event type not handled' })
     }
 
-    // Get Supabase client (lazy initialized)
-    const supabase = getSupabaseAdmin()
-
     // Idempotency check - prevent duplicate processing
-    const { data: existingEvent } = await supabase
+    const { data: existingEvent } = await supabaseAdmin
       .from('stripe_events')
       .select('event_id')
       .eq('event_id', event.id)
@@ -111,7 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Record event before processing (prevents race conditions)
-    const { error: insertError } = await supabase
+    const { error: insertError } = await supabaseAdmin
       .from('stripe_events')
       .insert({
         event_id: event.id,
@@ -134,42 +117,49 @@ export async function POST(request: NextRequest) {
         case 'checkout.session.completed':
           await handleCheckoutSessionCompleted(
             event.data.object as Stripe.Checkout.Session,
-            supabase
+            supabaseAdmin
           )
           break
 
         case 'customer.subscription.created':
           await handleSubscriptionCreated(
             event.data.object as Stripe.Subscription,
-            supabase
+            supabaseAdmin
           )
           break
 
         case 'customer.subscription.updated':
           await handleSubscriptionUpdated(
             event.data.object as Stripe.Subscription,
-            supabase
+            supabaseAdmin
           )
           break
 
         case 'customer.subscription.deleted':
           await handleSubscriptionDeleted(
             event.data.object as Stripe.Subscription,
-            supabase
+            supabaseAdmin
           )
           break
 
         case 'invoice.payment_failed':
           await handleInvoicePaymentFailed(
             event.data.object as Stripe.Invoice,
-            supabase
+            supabaseAdmin
           )
           break
 
         case 'invoice.payment_succeeded':
           await handleInvoicePaymentSucceeded(
             event.data.object as Stripe.Invoice,
-            supabase
+            supabaseAdmin
+          )
+          break
+
+        case 'customer.subscription.trial_will_end':
+          await handleSubscriptionTrialWillEnd(
+            event.data.object as Stripe.Subscription,
+            supabaseAdmin
           )
           break
 

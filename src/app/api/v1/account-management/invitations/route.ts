@@ -69,6 +69,18 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('[Invitations V1 API] POST error:', error)
+
+    // Handle team limit exceeded error (T044)
+    if (error instanceof Error && error.message.startsWith('TEAM_LIMIT_EXCEEDED:')) {
+      const message = error.message.replace('TEAM_LIMIT_EXCEEDED:', '')
+      return NextResponse.json({
+        success: false,
+        error: message,
+        code: 'TEAM_LIMIT_EXCEEDED',
+        upgradeRequired: true
+      }, { status: 403 })
+    }
+
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Internal server error'

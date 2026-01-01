@@ -39,6 +39,7 @@ import { createInvitationToken } from './invitation-tokens'
 import { getDefaultExpenseCategories } from '@/domains/expense-claims/lib/default-expense-categories'
 import { getDefaultCOGSCategories } from '@/domains/invoices/lib/default-cogs-categories'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { canAddTeamMember, getTeamLimit, type PlanKey } from '@/lib/stripe/plans'
 
 // ============================================================================
 // Types
@@ -649,6 +650,44 @@ export async function createInvitation(
   }
 
   const supabase = createServiceSupabaseClient()
+
+  // ========================================
+  // Team Limit Check (T044)
+  // ========================================
+  // Get business subscription plan and current team size
+  const { data: businessPlan, error: businessPlanError } = await supabase
+    .from('businesses')
+    .select('subscription_plan')
+    .eq('id', businessId)
+    .single()
+
+  if (businessPlanError || !businessPlan) {
+    throw new Error('Failed to retrieve business information')
+  }
+
+  // Count current active + pending memberships (excluding inviter to avoid double counting)
+  const { count: currentTeamSize, error: countError } = await supabase
+    .from('business_memberships')
+    .select('*', { count: 'exact', head: true })
+    .eq('business_id', businessId)
+    .in('status', ['active', 'pending'])
+
+  if (countError) {
+    console.error('[Invitation Service] Failed to count team members:', countError)
+    throw new Error('Failed to check team membership count')
+  }
+
+  const planName = (businessPlan.subscription_plan || 'trial') as PlanKey
+  const teamSize = currentTeamSize || 0
+
+  console.log(`[Invitation Service] Team limit check - Plan: ${planName}, Current size: ${teamSize}, Limit: ${getTeamLimit(planName)}`)
+
+  if (!canAddTeamMember(planName, teamSize)) {
+    const limit = getTeamLimit(planName)
+    throw new Error(
+      `TEAM_LIMIT_EXCEEDED:Team member limit reached (${limit} members). Please upgrade your plan to add more team members.`
+    )
+  }
 
   console.log(`[Invitation Service] Checking for existing user with email: ${email}`)
 
