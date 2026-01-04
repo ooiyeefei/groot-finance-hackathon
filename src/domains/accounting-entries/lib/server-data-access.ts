@@ -3,9 +3,12 @@
  *
  * Functions designed for Server Components to enable parallel data fetching
  * Bypasses API routes for direct database access (faster performance)
+ *
+ * MIGRATED TO CONVEX (2026-01-03)
  */
 
-import { createServiceSupabaseClient } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 import {
   getAccountingEntries,
   type AccountingEntry,
@@ -50,7 +53,7 @@ export async function getInitialAccountingEntries(
 }
 
 /**
- * Get business context for current user
+ * Get business context for current user (CONVEX)
  * Used to display business info and validate access
  */
 export async function getBusinessContext(userId: string): Promise<{
@@ -66,55 +69,37 @@ export async function getBusinessContext(userId: string): Promise<{
   try {
     console.log(`[Server Data Access] Fetching business context for user: ${userId}`)
 
-    const supabase = createServiceSupabaseClient()
+    const { client } = await getAuthenticatedConvex()
 
-    // Get user profile with business information
-    const { data: userProfile, error: profileError } = await supabase
-      .from('users')
-      .select('business_id, home_currency')
-      .eq('id', userId)
-      .single()
-
-    if (profileError || !userProfile) {
+    if (!client) {
       return {
         success: false,
-        error: 'User profile not found'
+        error: 'Not authenticated'
       }
     }
 
-    // Get business details
-    const { data: business, error: businessError } = await supabase
-      .from('businesses')
-      .select('id, name, home_currency')
-      .eq('id', userProfile.business_id)
-      .single()
+    // Fetch business context and business details in parallel
+    const [businessContext, business] = await Promise.all([
+      client.query(api.functions.businesses.getBusinessContext, {}),
+      client.query(api.functions.businesses.getCurrentBusiness, {})
+    ])
 
-    if (businessError || !business) {
+    if (!businessContext || !business) {
       return {
         success: false,
-        error: 'Business not found'
+        error: 'Business not found or not accessible'
       }
     }
 
-    // Get user role in business
-    const { data: membership, error: membershipError } = await supabase
-      .from('business_user_roles')
-      .select('role')
-      .eq('business_id', userProfile.business_id)
-      .eq('user_id', userId)
-      .single()
-
-    const role = membership?.role || 'employee'
-
-    console.log(`[Server Data Access] ✅ Business context: ${business.name} (${role})`)
+    console.log(`[Server Data Access] ✅ Business context: ${businessContext.businessName} (${businessContext.role})`)
 
     return {
       success: true,
       data: {
-        business_id: business.id,
-        business_name: business.name,
-        home_currency: business.home_currency || userProfile.home_currency || 'USD',
-        role: role as 'owner' | 'admin' | 'manager' | 'employee'
+        business_id: String(businessContext.businessId),
+        business_name: businessContext.businessName,
+        home_currency: business.homeCurrency || 'USD',
+        role: businessContext.role as 'owner' | 'admin' | 'manager' | 'employee'
       }
     }
   } catch (error) {
@@ -127,7 +112,7 @@ export async function getBusinessContext(userId: string): Promise<{
 }
 
 /**
- * Get enabled expense categories
+ * Get enabled expense categories (CONVEX)
  * Used for dropdowns and filtering
  */
 export async function getEnabledCategories(businessId: string): Promise<{
@@ -143,28 +128,33 @@ export async function getEnabledCategories(businessId: string): Promise<{
   try {
     console.log(`[Server Data Access] Fetching categories for business: ${businessId}`)
 
-    const supabase = createServiceSupabaseClient()
+    const { client } = await getAuthenticatedConvex()
 
-    const { data: categories, error } = await supabase
-      .from('expense_categories')
-      .select('id, category_name, category_code, is_custom')
-      .eq('business_id', businessId)
-      .eq('is_enabled', true)
-      .order('category_name', { ascending: true })
-
-    if (error) {
-      console.error('[Server Data Access] Error fetching categories:', error)
+    if (!client) {
       return {
         success: false,
-        error: error.message
+        error: 'Not authenticated'
       }
     }
 
+    const categories = await client.query(
+      api.functions.businesses.getEnabledExpenseCategories,
+      { businessId }
+    )
+
     console.log(`[Server Data Access] ✅ Fetched ${categories?.length || 0} categories`)
+
+    // Map Convex response to expected format
+    const mappedCategories = (categories || []).map(cat => ({
+      id: cat.id,
+      category_name: cat.category_name,
+      category_code: cat.category_code,
+      is_custom: true // Categories from customExpenseCategories are always custom
+    }))
 
     return {
       success: true,
-      data: categories || []
+      data: mappedCategories
     }
   } catch (error) {
     console.error('[Server Data Access] Error fetching categories:', error)

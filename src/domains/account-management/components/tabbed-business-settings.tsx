@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, Suspense, lazy, memo } from 'react'
+import { Suspense, lazy, memo, useCallback } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Building2, DollarSign, Users, Loader2 } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { useUser } from '@clerk/nextjs'
@@ -21,11 +22,27 @@ const TeamManagementTab = ({ userId }: { userId?: string }) => (
 )
 
 const TabbedBusinessSettings = memo(() => {
-  const { isAdmin, isManager } = usePermissions()
+  const { isAdmin, isManager, isOwner } = usePermissions()
   const { user } = useUser()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
 
-  // Only show business management tabs to managers and admins
-  const canManageBusiness = isAdmin || isManager
+  // URL-based tab persistence: read from ?tab= query param
+  const validTabs = ['business-profile', 'category-management', 'team-management'] as const
+  type TabValue = typeof validTabs[number]
+  const tabFromUrl = searchParams.get('tab') as TabValue | null
+  const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'business-profile'
+
+  // Update URL when tab changes (without full page reload)
+  const handleTabChange = useCallback((value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', value)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [searchParams, router, pathname])
+
+  // Only show business management tabs to owners, managers, and admins
+  const canManageBusiness = isOwner || isAdmin || isManager
 
   if (!canManageBusiness) {
     return (
@@ -39,7 +56,7 @@ const TabbedBusinessSettings = memo(() => {
 
   return (
     <div className="w-full space-y-4">
-      <Tabs defaultValue="business-profile" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         {/* Tab Navigation - Semantic Design System */}
         <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'} bg-muted border border-border`}>
           <TabsTrigger

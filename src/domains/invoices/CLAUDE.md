@@ -307,9 +307,9 @@
        - ✅ Removed `updateDocumentStatus()` call that was overwriting jsonb with plain string
        - ✅ Database already updated correctly before error thrown
 
-  2. `src/trigger/utils/db-helpers.ts` (line 50)
+  2. `src/trigger/utils/convex-helpers.ts` (Convex Migration - 2025)
      - ✅ Accept both string and jsonb: `errorMessage?: string | { message, suggestions[], ... }`
-     - ✅ Supabase handles jsonb serialization automatically
+     - ✅ Convex handles serialization automatically (migrated from Supabase db-helpers.ts)
 
   3. `src/trigger/utils/schemas.ts` (line 27)
      - ✅ Added `suggestions: z.array(z.string()).optional()` to `ClassificationResultSchema`

@@ -144,21 +144,19 @@ export class CrossBorderTaxComplianceTool extends BaseTool {
     try {
       console.log(`[CrossBorderTaxComplianceTool] RAG-powered analysis for transaction ${params.transaction_id}`)
 
-      // SECURITY: Use authenticated client for RLS enforcement
-      if (!this.authenticatedSupabase) {
-        throw new Error('Authenticated Supabase client not available')
+      // CRITICAL: Ensure authenticated Convex client is available
+      if (!this.convex) {
+        throw new Error('Convex client not initialized - authentication may have failed')
       }
 
-      // Verify the transaction exists and belongs to the user with proper business context
-      const { data: transaction, error: txError } = await this.authenticatedSupabase
-        .from('accounting_entries')
-        .select('*')
-        .eq('id', params.transaction_id)
-        .eq('user_id', userContext.supabaseUserId)    // ✅ FIXED: Use Supabase user ID
-        .eq('business_id', userContext.businessId)   // ✅ SECURITY: Add business context filtering
-        .single()
+      // ✅ MIGRATED: Use Convex getById to verify transaction exists
+      // The Convex function handles user/business context validation via Clerk auth
+      const transaction = await this.convex.query(
+        this.convexApi.functions.accountingEntries.getById,
+        { id: params.transaction_id }
+      )
 
-      if (txError || !transaction) {
+      if (!transaction) {
         return {
           success: false,
           error: 'Transaction not found or access denied'
@@ -168,18 +166,16 @@ export class CrossBorderTaxComplianceTool extends BaseTool {
       // Perform curated RAG compliance analysis with regulatory knowledge base
       const analysis = await this.performCuratedRAGAnalysis(params)
 
-      // Save the analysis result to the transaction record with proper business context
-      const { error: updateError } = await this.authenticatedSupabase
-        .from('accounting_entries')
-        .update({
-          compliance_analysis: analysis,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', params.transaction_id)
-        .eq('user_id', userContext.supabaseUserId)    // ✅ FIXED: Use Supabase user ID
-        .eq('business_id', userContext.businessId)   // ✅ SECURITY: Add business context filtering
-
-      if (updateError) {
+      // ✅ MIGRATED: Save analysis result using Convex mutation
+      try {
+        await this.convex.mutation(
+          this.convexApi.functions.accountingEntries.updateComplianceAnalysis,
+          {
+            id: params.transaction_id,
+            complianceAnalysis: analysis
+          }
+        )
+      } catch (updateError) {
         console.error('[CrossBorderTaxComplianceTool] Failed to save compliance analysis:', updateError)
         // Continue with analysis result even if save fails
       }
@@ -204,17 +200,19 @@ export class CrossBorderTaxComplianceTool extends BaseTool {
       try {
         const fallbackAnalysis = await this.performFallbackAnalysis(params)
         
-        // Save fallback analysis with proper business context
-        if (this.authenticatedSupabase) {
-          await this.authenticatedSupabase
-            .from('accounting_entries')
-            .update({
-              compliance_analysis: { ...fallbackAnalysis, analysis_method: 'fallback_rules' },
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', params.transaction_id)
-            .eq('user_id', userContext.supabaseUserId)    // ✅ FIXED: Use Supabase user ID
-            .eq('business_id', userContext.businessId)   // ✅ SECURITY: Add business context filtering
+        // ✅ MIGRATED: Save fallback analysis using Convex mutation
+        try {
+          if (this.convex) {
+            await this.convex.mutation(
+              this.convexApi.functions.accountingEntries.updateComplianceAnalysis,
+              {
+                id: params.transaction_id,
+                complianceAnalysis: { ...fallbackAnalysis, analysis_method: 'fallback_rules' }
+              }
+            )
+          }
+        } catch (saveError) {
+          console.error('[CrossBorderTaxComplianceTool] Failed to save fallback analysis:', saveError)
         }
 
         return {

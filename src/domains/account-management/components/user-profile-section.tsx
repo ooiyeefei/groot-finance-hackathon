@@ -114,23 +114,6 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
           </div>
         </div>
 
-        {/* User Info Display */}
-        <div className="mb-6 p-4 bg-muted/50 rounded-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-success rounded-full flex items-center justify-center">
-              <User className="w-5 h-5 text-success-foreground" />
-            </div>
-            <div>
-              <p className="text-foreground font-medium">
-                {user?.fullName || user?.firstName + ' ' + user?.lastName || 'User'}
-              </p>
-              <p className="text-muted-foreground text-sm">
-                {user?.primaryEmailAddress?.emailAddress}
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* Preferred Currency */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-foreground mb-2">

@@ -9,7 +9,7 @@ import { z } from 'zod'
 import {
   currencySchema,
   dateStringSchema,
-  uuidSchema,
+  documentIdSchema,
   positiveAmountSchema,
   nonNegativeAmountSchema,
   paginationSchema,
@@ -83,7 +83,7 @@ export const createExpenseClaimSchema = z.object({
     .max(200, 'Vendor name too long')
     .optional(),
 
-  vendor_id: uuidSchema.optional(),
+  vendor_id: documentIdSchema.optional(),
 
   reference_number: z.string()
     .max(100, 'Reference number too long')
@@ -127,7 +127,7 @@ export const createExpenseClaimFileSchema = z.object({
 
   vendor_name: z.string().max(200).default(''),
 
-  vendor_id: uuidSchema.optional(),
+  vendor_id: documentIdSchema.optional(),
 
   reference_number: z.string().max(100).optional(),
 
@@ -163,7 +163,7 @@ export const listExpenseClaimsQuerySchema = paginationSchema.extend({
 
   expense_category: z.string().optional(),
 
-  user_id: uuidSchema.optional(),
+  user_id: documentIdSchema.optional(),
 
   approver: z.enum(['me']).optional(),
 
@@ -197,7 +197,7 @@ export const listExpenseClaimsQuerySchema = paginationSchema.extend({
  * Expense claim ID parameter schema
  */
 export const expenseClaimIdParamSchema = z.object({
-  id: uuidSchema
+  id: documentIdSchema
 })
 
 /**

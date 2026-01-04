@@ -596,7 +596,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
       {selectedDocument && getDocumentById(selectedDocument) && (
         <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
           <DocumentAnalysisModal
-            document={getDocumentById(selectedDocument)!}
+            document={getDocumentById(selectedDocument)! as any}
             onClose={closeModal}
           />
         </Suspense>
@@ -608,8 +608,6 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
           <AccountingEntryFormModal
             onClose={closeTransactionForm}
             onSubmit={handleCreateTransaction}
-            onSave={handleSaveInvoice}
-            showSaveOption={true}
             prefilledData={{
               ...mapDocumentToAccountingEntry(getDocumentById(transactionFormDocument)! as any),
               // ✅ POLYMORPHIC: Link to invoice record with discriminator

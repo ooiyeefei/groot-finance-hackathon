@@ -1,22 +1,26 @@
 /**
  * Re-extract/reprocess expense claim API endpoint
- * Moves Trigger.dev call from client-side to server-side to fix TRIGGER_SECRET_KEY error
+ * Triggers Trigger.dev receipt extraction task on server-side
+ *
+ * MIGRATED: Database uses Convex, file storage uses AWS S3
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 import { tasks } from '@trigger.dev/sdk/v3'
 import type { extractReceiptData } from '@/trigger/extract-receipt-data'
+import { getPresignedDownloadUrl, URL_EXPIRY } from '@/lib/aws-s3'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Authenticate user
-    const { userId } = await auth()
-    if (!userId) {
+    // Get authenticated Convex client
+    const { client, userId } = await getAuthenticatedConvex()
+
+    if (!client || !userId) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -26,64 +30,36 @@ export async function POST(
     const { id: expenseClaimId } = await params
     console.log('[Reprocess API] Starting reprocess for claim:', expenseClaimId)
 
-    // Initialize Supabase client with service role for server-side access
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    // Get expense claim from Convex - handles auth and access control internally
+    const claim = await client.query(api.functions.expenseClaims.getById, {
+      id: expenseClaimId,
+    })
 
-    // Get user's Supabase UUID from Clerk user ID
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('clerk_user_id', userId)
-      .single()
-
-    if (userError || !userData) {
+    if (!claim) {
       return NextResponse.json(
-        { success: false, error: 'User not found' },
+        { success: false, error: 'Expense claim not found or access denied' },
         { status: 404 }
-      )
-    }
-
-    const supabaseUserId = userData.id
-
-    // Get expense claim to verify access and get storage path
-    const { data: claim, error: claimError } = await supabase
-      .from('expense_claims')
-      .select('id, storage_path, user_id')
-      .eq('id', expenseClaimId)
-      .single()
-
-    if (claimError || !claim) {
-      return NextResponse.json(
-        { success: false, error: 'Expense claim not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify user owns this claim (compare Supabase UUIDs)
-    if (claim.user_id !== supabaseUserId) {
-      return NextResponse.json(
-        { success: false, error: 'Access denied' },
-        { status: 403 }
       )
     }
 
     // Check if claim has receipt to reprocess
-    if (!claim.storage_path) {
+    if (!claim.storagePath) {
       return NextResponse.json(
         { success: false, error: 'No receipt available for reprocessing' },
         { status: 400 }
       )
     }
 
-    // Create signed URL for the receipt (same pattern as data-access.ts)
-    const { data: urlData, error: urlError } = await supabase.storage
-      .from('expense_claims')
-      .createSignedUrl(claim.storage_path, 600) // 10 minutes
-
-    if (urlError || !urlData?.signedUrl) {
+    // Create signed URL for the receipt (AWS S3)
+    let signedUrl: string
+    try {
+      signedUrl = await getPresignedDownloadUrl(
+        'expense_claims',
+        claim.storagePath,
+        URL_EXPIRY.shortLived // 10 minutes
+      )
+      console.log('[Reprocess API] Generated S3 signed URL for reprocessing')
+    } catch (urlError) {
       console.error('[Reprocess API] Failed to create signed URL:', urlError)
       return NextResponse.json(
         { success: false, error: 'Failed to generate secure access to receipt' },
@@ -91,34 +67,42 @@ export async function POST(
       )
     }
 
-    console.log('[Reprocess API] Generated signed URL for reprocessing')
-
-    // Step 1: Update status to 'analyzing' immediately for instant UI feedback
-    const { error: statusError } = await supabase
-      .from('expense_claims')
-      .update({
-        status: 'analyzing',
-        processing_started_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+    // Update status to 'processing' using Convex mutation
+    // This also sets processingStartedAt automatically
+    try {
+      await client.mutation(api.functions.expenseClaims.updateStatus, {
+        id: expenseClaimId,
+        status: 'processing',
       })
-      .eq('id', expenseClaimId)
-
-    if (statusError) {
+      console.log('[Reprocess API] Status updated to processing')
+    } catch (statusError) {
       console.error('[Reprocess API] Failed to update status:', statusError)
       // Continue anyway - status will be set by Trigger.dev job
-    } else {
-      console.log('[Reprocess API] Status updated to analyzing')
     }
 
-    // Step 2: Trigger the same Trigger.dev job as upload workflow (server-side with environment variables)
+    // Get user's Convex ID for the Trigger.dev task
+    // The task needs this for database operations
+    const user = await client.query(api.functions.users.getByClerkId, {
+      clerkUserId: userId,
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // Trigger the receipt extraction task
+    // Uses the same task as the upload workflow
     const triggerResult = await tasks.trigger<typeof extractReceiptData>(
       "extract-receipt-data",
       {
         expenseClaimId: expenseClaimId,
         documentId: undefined, // No separate document ID for direct expense claims
-        userId: supabaseUserId, // Pass the Supabase UUID for consistency
+        userId: user._id, // Pass Convex user ID for consistency
         documentDomain: 'expense_claims',
-        receiptImageUrl: urlData.signedUrl
+        receiptImageUrl: signedUrl
       }
     )
 
@@ -137,6 +121,23 @@ export async function POST(
 
   } catch (error) {
     console.error('[Reprocess API] Error:', error)
+
+    // Handle specific Convex errors
+    if (error instanceof Error) {
+      if (error.message.includes('Not authenticated')) {
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+      if (error.message.includes('not found')) {
+        return NextResponse.json(
+          { success: false, error: 'Expense claim not found' },
+          { status: 404 }
+        )
+      }
+    }
+
     return NextResponse.json(
       {
         success: false,

@@ -7,40 +7,29 @@
 
 import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
-import { createClient } from '@supabase/supabase-js';
 import { getUserFriendlyErrorMessage, type ErrorContext } from '../lib/shared/error-message-mapper';
-import { recordOcrUsage } from '@/lib/stripe/usage';
-
-// Initialize Supabase client with service role key for background processing
-const createSupabaseClient = () => {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL environment variable is missing');
-  }
-
-  if (!supabaseKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is missing');
-  }
-
-  console.log(`🔗 Connecting to Supabase: ${supabaseUrl.substring(0, 30)}...`);
-
-  return createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    }
-  });
-};
-
-const supabase = createSupabaseClient();
+import { listFiles, getPresignedDownloadUrl, fileExists, type S3Prefix } from './utils/s3-helpers';
+// ✅ CONVEX MIGRATION: Use Convex helpers instead of direct Supabase client
+import {
+  fetchDocument,
+  fetchBusinessCategories,
+  updateDocumentStatus,
+  updateExtractionResults,
+  recordOcrUsage,
+  type ExtractionResult
+} from './utils/convex-helpers';
 
 // Domain-to-table mapping for multi-domain architecture
 const DOMAIN_TABLE_MAP = {
   'invoices': 'invoices',
   'expense_claims': 'expense_claims'
 } as const;
+
+// ✅ S3 MIGRATION: Domain-to-S3-prefix mapping
+const DOMAIN_S3_PREFIX_MAP: Record<string, S3Prefix> = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims'
+};
 
 // Security validation functions
 function validateImageUrl(url: string): { isValid: boolean; error?: string; sanitizedUrl?: string } {
@@ -52,16 +41,23 @@ function validateImageUrl(url: string): { isValid: boolean; error?: string; sani
       return { isValid: false, error: 'Only HTTPS URLs are allowed' };
     }
 
-    // Allow only Supabase storage URLs for signed URLs
+    // Allow Supabase storage URLs and AWS S3 presigned URLs
     const allowedHosts = [
       process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('https://', '').replace('http://', ''),
-      // Add other allowed storage providers if needed
     ].filter(Boolean);
 
     const hostname = parsedUrl.hostname;
-    const isAllowedHost = allowedHosts.some(host =>
+
+    // Check for allowed hosts (Supabase, S3)
+    const isSupabaseHost = allowedHosts.some(host =>
       hostname === host || hostname.endsWith(`.${host}`) || hostname.endsWith('.supabase.co')
     );
+
+    // ✅ S3 MIGRATION: Allow AWS S3 presigned URLs
+    // S3 URL patterns: bucket.s3.region.amazonaws.com or bucket.s3.amazonaws.com
+    const isS3Host = hostname.endsWith('.amazonaws.com') && hostname.includes('.s3.');
+
+    const isAllowedHost = isSupabaseHost || isS3Host;
 
     if (!isAllowedHost) {
       return { isValid: false, error: 'URL host not allowed for security reasons' };
@@ -197,15 +193,8 @@ async function handleTaskFailure(
       timestamp: new Date().toISOString()
     };
 
-    await supabase
-      .from('expense_claims')
-      .update({
-        status: 'failed',
-        processing_metadata: failureMetadata,
-        error_message: errorJsonb,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', expenseClaimId);
+    // ✅ CONVEX MIGRATION: Use Convex helper for status update
+    await updateDocumentStatus(expenseClaimId, 'failed', errorJsonb, 'expense_claims');
 
     console.log(`🚨 Expense claim ${expenseClaimId} marked as failed due to system failure in ${context}`);
   } catch (updateError) {
@@ -248,7 +237,9 @@ export const extractReceiptData = task({
       // Route to correct table based on domain (fallback to 'invoices' for backward compatibility)
       const documentDomain = payload.documentDomain || 'invoices';
       const tableName = DOMAIN_TABLE_MAP[documentDomain];
-      console.log(`🔍 Using table: ${tableName} for domain: ${documentDomain}`);
+      // ✅ S3 MIGRATION: Route to correct S3 prefix based on domain
+      const s3Prefix = DOMAIN_S3_PREFIX_MAP[documentDomain];
+      console.log(`🔍 Using table: ${tableName} for domain: ${documentDomain}, S3 prefix: ${s3Prefix}`);
 
     // Step 1: Fetch business categories for enhanced categorization (if expense claim provided)
     let businessCategories: any[] = [];
@@ -257,29 +248,35 @@ export const extractReceiptData = task({
     try {
 
       if (payload.expenseClaimId) {
-        console.log(`🏢 Fetching business categories for AI categorization`);
+        console.log(`🏢 Fetching expense claim from Convex: ${payload.expenseClaimId}`);
 
-        // Get the expense claim and its business_id
-        const { data: fetchedExpenseClaim, error: fetchError } = await supabase
-          .from('expense_claims')
-          .select('id, accounting_entry_id, business_id, storage_path, converted_image_path, file_name, processing_metadata, vendor_name, total_amount, status')
-          .eq('id', payload.expenseClaimId)
-          .single();
+        // ✅ CONVEX MIGRATION: Use fetchDocument instead of direct Supabase
+        try {
+          const fetchedExpenseClaim = await fetchDocument(payload.expenseClaimId, 'expense_claims');
+          expenseClaim = fetchedExpenseClaim;
+          console.log(`✅ Expense claim fetched successfully - storage_path: ${expenseClaim?.storage_path ? 'present' : 'missing'}, business_id: ${expenseClaim?.business_id || 'missing'}`);
+        } catch (fetchError) {
+          console.error(`❌ Failed to fetch expense claim from Convex:`, fetchError);
+          throw fetchError;
+        }
 
-        expenseClaim = fetchedExpenseClaim;
-
-        if (!fetchError && expenseClaim?.business_id) {
+        if (expenseClaim?.business_id) {
           console.log(`🏷️ Fetching business expense categories - business_id: ${expenseClaim.business_id}`);
 
-          const { data: business, error: businessError } = await supabase
-            .from('businesses')
-            .select('custom_expense_categories')
-            .eq('id', expenseClaim.business_id)
-            .single();
+          // ✅ CONVEX MIGRATION: Use fetchBusinessCategories instead of direct Supabase
+          let businessCats;
+          try {
+            businessCats = await fetchBusinessCategories(expenseClaim.business_id);
+            console.log(`✅ Business categories fetched: ${businessCats?.customExpenseCategories?.length || 0} expense categories`);
+          } catch (catError) {
+            console.error(`❌ Failed to fetch business categories:`, catError);
+            // Non-fatal - continue without categories
+            businessCats = null;
+          }
 
-          if (!businessError && business?.custom_expense_categories) {
+          if (businessCats?.customExpenseCategories && businessCats.customExpenseCategories.length > 0) {
             // Filter for ACTIVE categories only (is_active: true)
-            businessCategories = business.custom_expense_categories.filter((cat: any) =>
+            businessCategories = businessCats.customExpenseCategories.filter((cat: any) =>
               cat && cat.category_name && cat.is_active === true
             );
             console.log(`🏷️ Found ${businessCategories.length} active categories`);
@@ -304,71 +301,23 @@ export const extractReceiptData = task({
         console.log(`🔗 Attempting to create signed URL for path: ${imagePath}`);
 
         try {
-          // Step 2a: First verify the file actually exists in storage to prevent hanging
-          console.log(`🔍 Verifying file exists in storage before creating signed URL...`);
+          // ✅ S3 MIGRATION: Step 2a - Verify file exists in S3
+          console.log(`🔍 Verifying file exists in S3 before creating presigned URL...`);
 
-          // Extract folder path and filename for file existence check
-          const pathParts = imagePath.split('/');
-          const fileName = pathParts.pop();
-          const folderPath = pathParts.join('/');
+          const exists = await fileExists(s3Prefix, imagePath);
 
-          // Check if file exists with a reasonable timeout
-          const listTimeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Storage list operation timed out after 30 seconds')), 30000)
-          );
-
-          const listOperation = supabase.storage
-            .from('expense_claims')
-            .list(folderPath, {
-              limit: 1000,
-              search: fileName
-            });
-
-          const { data: files, error: listError } = await Promise.race([
-            listOperation,
-            listTimeoutPromise
-          ]) as any;
-
-          if (listError) {
-            console.error(`❌ File existence check failed: ${listError.message}`);
-            throw new Error(`Unable to verify file exists in storage: ${listError.message}`);
-          }
-
-          if (!files || files.length === 0) {
-            console.error(`❌ File not found in storage: ${imagePath}`);
+          if (!exists) {
+            console.error(`❌ File not found in S3: ${s3Prefix}/${imagePath}`);
             throw new Error(`Receipt file not found in storage at path: ${imagePath}. The file may not have been uploaded correctly or may have been moved.`);
           }
 
-          console.log(`✅ File verified to exist: ${files[0].name} (${files[0].metadata?.size || 'unknown size'})`);
+          console.log(`✅ File verified to exist in S3: ${s3Prefix}/${imagePath}`);
 
-          // Step 2b: Create signed URL with timeout protection
-          console.log(`🔗 Creating signed URL with timeout protection...`);
+          // ✅ S3 MIGRATION: Step 2b - Create presigned URL
+          console.log(`🔗 Creating S3 presigned URL...`);
 
-          const signedUrlTimeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Signed URL creation timed out after 20 seconds')), 20000)
-          );
-
-          const signedUrlOperation = supabase.storage
-            .from('expense_claims')
-            .createSignedUrl(imagePath, 600); // 10 minutes
-
-          const { data: urlData, error: urlError } = await Promise.race([
-            signedUrlOperation,
-            signedUrlTimeoutPromise
-          ]) as any;
-
-          if (urlError) {
-            console.error(`❌ Signed URL creation failed: ${urlError.message}`);
-            throw new Error(`Failed to create signed URL: ${urlError.message}`);
-          }
-
-          if (!urlData?.signedUrl) {
-            console.error(`❌ Signed URL creation returned no data`);
-            throw new Error('Signed URL creation returned no data');
-          }
-
-          imageUrl = urlData.signedUrl;
-          console.log(`✅ Signed URL created successfully`);
+          imageUrl = await getPresignedDownloadUrl(s3Prefix, imagePath, 600); // 10 minutes
+          console.log(`✅ S3 presigned URL created successfully`);
 
         } catch (storageError) {
           console.error(`❌ Storage access error:`, storageError);
@@ -506,15 +455,8 @@ export const extractReceiptData = task({
             timestamp: new Date().toISOString()
           };
 
-          await supabase
-            .from('expense_claims')
-            .update({
-              status: 'failed',
-              processing_metadata: failureMetadata,
-              error_message: errorJsonb,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', payload.expenseClaimId);
+          // ✅ CONVEX MIGRATION: Use updateDocumentStatus instead of direct Supabase
+          await updateDocumentStatus(payload.expenseClaimId, 'failed', errorJsonb, 'expense_claims');
 
           console.log(`❌ Expense claim ${payload.expenseClaimId} marked as failed due to ${errorCategory} error`);
         }
@@ -579,15 +521,8 @@ export const extractReceiptData = task({
               timestamp: new Date().toISOString()
             };
 
-            await supabase
-              .from('expense_claims')
-              .update({
-                status: 'failed',
-                processing_metadata: parseFailureMetadata,
-                error_message: parseErrorJsonb,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', payload.expenseClaimId);
+            // ✅ CONVEX MIGRATION: Use updateDocumentStatus instead of direct Supabase
+            await updateDocumentStatus(payload.expenseClaimId, 'failed', parseErrorJsonb, 'expense_claims');
 
             console.log(`❌ Expense claim ${payload.expenseClaimId} marked as failed due to parsing error`);
           }
@@ -634,14 +569,8 @@ export const extractReceiptData = task({
             timestamp: new Date().toISOString()
           };
 
-          await supabase
-            .from('expense_claims')
-            .update({
-              status: 'failed',
-              error_message: errorJsonb,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', payload.expenseClaimId);
+          // ✅ CONVEX MIGRATION: Use updateDocumentStatus instead of direct Supabase
+          await updateDocumentStatus(payload.expenseClaimId, 'failed', errorJsonb, 'expense_claims');
         }
 
         console.error(`❌ Technical error details:`, pythonResult.error);
@@ -673,13 +602,9 @@ export const extractReceiptData = task({
       if (payload.expenseClaimId) {
         // Ensure processing status is set to 'analyzing' at start ✅ Unified status
         console.log(`🔄 Ensuring unified status is set to 'analyzing' for claim ${payload.expenseClaimId}`);
-        await supabase
-          .from('expense_claims')
-          .update({
-            status: 'analyzing', // ✅ Unified status field
-            processing_started_at: new Date().toISOString()
-          })
-          .eq('id', payload.expenseClaimId);
+        // ✅ CONVEX MIGRATION: Use updateDocumentStatus instead of direct Supabase
+        // Note: processingStartedAt is handled by Convex mutation internally
+        await updateDocumentStatus(payload.expenseClaimId, 'analyzing', undefined, 'expense_claims');
 
         console.log(`💰 Updating expense claim ${payload.expenseClaimId} with extraction metadata`);
 
@@ -788,39 +713,32 @@ export const extractReceiptData = task({
         console.log(`💾 Final category determined: ${autoCategory || businessCategories[0]?.category_code || 'other_business'}`);
         console.log(`💾 Updating expense claim ${payload.expenseClaimId} with extraction data`);
 
-        const { error: updateError } = await supabase
-          .from('expense_claims')
-          .update({
-            // Update basic fields for UI convenience
+        // ✅ CONVEX MIGRATION: Use updateExtractionResults instead of direct Supabase
+        // Build extraction result with all expense claim fields
+        const expenseExtractionResult: ExtractionResult = {
+          success: true,
+          extracted_data: {
+            ...extractionMetadata,
+            // Core fields
             vendor_name: extractionResult.vendor_name,
             total_amount: extractionResult.total_amount,
             currency: extractionResult.currency,
             transaction_date: extractionResult.transaction_date,
-            expense_category: autoCategory || businessCategories[0]?.category_code || 'other_business', // Use first active category as fallback
+            // Expense claim specific fields
+            expense_category: autoCategory || businessCategories[0]?.category_code || 'other_business',
             business_purpose: extractionResult.business_purpose || 'Business expense',
             description: extractionResult.description || extractionResult.vendor_name,
             reference_number: extractionResult.receipt_number || null,
-            confidence_score: extractionResult.confidence_score || null,
-
             // Currency fields (no conversion, same as original)
             home_currency: extractionResult.currency,
             home_currency_amount: extractionResult.total_amount,
             exchange_rate: 1.0,
+          },
+          confidence_score: extractionResult.confidence_score || undefined,
+          extraction_method: 'ai',
+        };
 
-            // Store all metadata in processing_metadata JSONB field
-            processing_metadata: extractionMetadata,
-
-            // ✅ Key change: OCR completion goes to 'draft' for user review
-            status: 'draft', // User can now edit and submit when ready
-            processed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', payload.expenseClaimId);
-
-        if (updateError) {
-          console.error('Failed to update expense claim:', updateError);
-          throw new Error(`Failed to update expense claim: ${updateError.message}`);
-        }
+        await updateExtractionResults(payload.expenseClaimId, expenseExtractionResult, 'expense_claims');
 
         console.log(`✅ Expense claim ${payload.expenseClaimId} updated successfully`);
       }
@@ -895,11 +813,8 @@ export const extractReceiptData = task({
         // Re-fetch expense claim data if not available (fallback for edge cases)
         if (!expenseClaim) {
           try {
-            const { data: fetchedClaim } = await supabase
-              .from('expense_claims')
-              .select('processing_metadata, vendor_name, total_amount, status')
-              .eq('id', payload.expenseClaimId)
-              .single();
+            // ✅ CONVEX MIGRATION: Use fetchDocument instead of direct Supabase
+            const fetchedClaim = await fetchDocument(payload.expenseClaimId, 'expense_claims');
             expenseClaim = fetchedClaim;
           } catch (fetchError) {
             console.error('Failed to re-fetch expense claim data:', fetchError);
@@ -959,15 +874,8 @@ export const extractReceiptData = task({
             timestamp: new Date().toISOString()
           };
 
-          await supabase
-            .from('expense_claims')
-            .update({
-              status: targetStatus,
-              processing_metadata: failureMetadata,
-              error_message: generalErrorJsonb,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', payload.expenseClaimId);
+          // ✅ CONVEX MIGRATION: Use updateDocumentStatus instead of direct Supabase
+          await updateDocumentStatus(payload.expenseClaimId, targetStatus, generalErrorJsonb, 'expense_claims');
 
           console.log(logMessage);
         } catch (updateError) {
@@ -983,6 +891,19 @@ export const extractReceiptData = task({
     } catch (systemError) {
       // 🚨 GLOBAL CATCH - System-level failures (ENOENT, CONFIGURED_INCORRECTLY, etc.)
       console.error('🚨 SYSTEM-LEVEL FAILURE detected:', systemError);
+
+      // 🔍 DETAILED ERROR LOGGING for debugging
+      if (systemError instanceof Error) {
+        console.error('🔍 Error name:', systemError.name);
+        console.error('🔍 Error message:', systemError.message);
+        console.error('🔍 Error stack:', systemError.stack);
+        const errorWithCode = systemError as Error & { code?: string; cause?: unknown };
+        if (errorWithCode.code) console.error('🔍 Error code:', errorWithCode.code);
+        if (errorWithCode.cause) console.error('🔍 Error cause:', errorWithCode.cause);
+      } else {
+        console.error('🔍 Error type:', typeof systemError);
+        console.error('🔍 Error value:', JSON.stringify(systemError, null, 2));
+      }
 
       // Use the global error handler for system failures
       await handleTaskFailure(payload.expenseClaimId, systemError, 'system_task_execution');

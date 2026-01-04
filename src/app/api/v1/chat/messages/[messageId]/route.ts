@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserData } from '@/lib/db/supabase-server'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { deleteMessage } from '@/domains/chat/lib/chat.service'
 
 export async function DELETE(
@@ -28,8 +28,14 @@ export async function DELETE(
       )
     }
 
-    // Get user data
-    const userData = await getUserData(userId)
+    // Get user profile from Convex (includes business_id)
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to get user profile' },
+        { status: 400 }
+      )
+    }
     const { messageId } = await context.params
 
     console.log(`[Message Delete V1 API] Deleting message ${messageId}`)
@@ -38,7 +44,7 @@ export async function DELETE(
     await deleteMessage(
       messageId,
       userId,
-      userData.id
+      userProfile.user_id
     )
 
     return NextResponse.json({

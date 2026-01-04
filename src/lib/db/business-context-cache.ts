@@ -37,8 +37,9 @@ interface CacheEntry {
 export const businessContextCache = redisBusinessContextCache
 
 /**
- * Cached version of getUserData with invalidation on business changes
- * UPDATED: Now async to support Redis operations
+ * Cached version of user data with invalidation on business changes
+ * UPDATED: Now uses Convex ensureUserProfile instead of Supabase getUserData
+ * MIGRATION: Switched from Supabase to Convex (2025-01-03)
  */
 export async function getCachedUserData(clerkUserId: string): Promise<{
   id: string
@@ -53,12 +54,25 @@ export async function getCachedUserData(clerkUserId: string): Promise<{
     return cached
   }
 
-  // Cache miss - get from database
-  log.debug('Fetching from database');
+  // Cache miss - get from Convex
+  log.debug('Fetching from Convex');
 
   // Import here to avoid circular dependency
-  const { getUserData } = await import('./supabase-server')
-  const userData = await getUserData(clerkUserId)
+  const { ensureUserProfile } = await import('@/domains/security/lib/ensure-employee-profile')
+  const userProfile = await ensureUserProfile(clerkUserId)
+
+  if (!userProfile) {
+    throw new Error('User profile not found in Convex')
+  }
+
+  // Map Convex profile to expected format
+  const userData = {
+    id: userProfile.user_id,
+    business_id: userProfile.business_id || null,
+    home_currency: userProfile.home_currency || 'USD',
+    email: '', // Email not stored in Convex profile
+    full_name: null as string | null
+  }
 
   // Cache the result (Redis is async)
   await businessContextCache.set(clerkUserId, userData)

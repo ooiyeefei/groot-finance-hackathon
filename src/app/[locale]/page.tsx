@@ -7,7 +7,7 @@ import HeaderWithUser from '@/components/ui/header-with-user'
 import CompleteDashboard from '@/domains/analytics/components/complete-dashboard'
 import { GeneralDisclaimer } from '@/components/ui/financial-disclaimer'
 import { ClientProviders } from '@/components/providers/client-providers'
-import { getUserData } from '@/lib/db/supabase-server'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { UpgradeBanner } from '@/domains/billing/components/upgrade-banner'
 
 export default async function Dashboard({ params }: { params: Promise<{ locale: string }> }) {
@@ -30,18 +30,19 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
   const { locale } = await params
 
   try {
-    const userData = await getUserData(userId)
+    // Use ensureUserProfile from Convex instead of getUserData from Supabase
+    const userProfile = await ensureUserProfile(userId)
 
-    // If user exists but has no business_id, redirect to onboarding
-    if (!userData.business_id) {
-      console.log(`[Dashboard] User ${userData.email} has no business context, redirecting to onboarding`)
+    // If user doesn't have a profile or no business_id, redirect to onboarding
+    if (!userProfile || !userProfile.business_id) {
+      console.log(`[Dashboard] User has no business context, redirecting to onboarding`)
       redirect(`/${locale}/onboarding/business`)
     }
 
-    console.log(`[Dashboard] User ${userData.email} has business context: ${userData.business_id}`)
+    console.log(`[Dashboard] User has business context: ${userProfile.business_id}`)
   } catch (error) {
     console.error('[Dashboard] Error checking business context:', error)
-    // If user doesn't exist in our Supabase (e.g., signed up on staff app), show access denied
+    // If user doesn't exist in Convex, show access denied
     redirect(`/${locale}/access-denied`)
   }
 

@@ -18,6 +18,7 @@ import ExpenseFormFields from './expense-form-fields'
 import LineItemTable from './line-item-table'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import { useState, useCallback, useEffect } from 'react'
+import { formatBusinessDate } from '@/lib/utils'
 
 interface EditExpenseModalNewProps {
   expenseClaimId: string
@@ -265,10 +266,10 @@ export default function EditExpenseModalNew({
     <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50">
       <div className="bg-card rounded-lg w-full max-w-7xl h-[90vh] overflow-hidden relative m-4">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-700">
+        <div className="flex items-center justify-between px-6 py-3 border-b border-border">
           <div>
-            <h2 className="text-xl font-semibold text-white">Edit Expense Claim</h2>
-            <p className="text-gray-400 text-sm">
+            <h2 className="text-xl font-semibold text-foreground">Edit Expense Claim</h2>
+            <p className="text-muted-foreground text-sm">
               Modify your expense claim details
             </p>
           </div>
@@ -288,7 +289,7 @@ export default function EditExpenseModalNew({
             <button
               onClick={() => handleSaveWithLineItems('draft')}
               disabled={saving || submitting || isReprocessing}
-              className="inline-flex items-center px-4 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-4 py-1.5 bg-secondary hover:bg-secondary/80 text-secondary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               {saving ? (
                 <>
@@ -323,7 +324,7 @@ export default function EditExpenseModalNew({
             <button
               onClick={onClose}
               disabled={saving || submitting}
-              className="inline-flex items-center px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 hover:text-gray-900 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-3 py-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               <X className="w-4 h-4" />
             </button>
@@ -334,17 +335,17 @@ export default function EditExpenseModalNew({
           <div className="p-0 h-full">
             {loading ? (
               <div className="text-center py-12">
-                <Loader2 className="w-12 h-12 mx-auto text-blue-500 mb-4 animate-spin" />
-                <p className="text-gray-400">Loading expense details...</p>
+                <Loader2 className="w-12 h-12 mx-auto text-primary mb-4 animate-spin" />
+                <p className="text-muted-foreground">Loading expense details...</p>
               </div>
             ) : loadError ? (
               <div className="text-center py-12">
-                <AlertCircle className="w-12 h-12 mx-auto text-red-500 mb-4" />
-                <p className="text-red-400 mb-4">{loadError}</p>
+                <AlertCircle className="w-12 h-12 mx-auto text-destructive mb-4" />
+                <p className="text-destructive mb-4">{loadError}</p>
                 <Button
                   onClick={onClose}
                   variant="outline"
-                  className="border-gray-600 text-gray-300"
+                  className="border-border text-muted-foreground"
                 >
                   Try Again
                 </Button>
@@ -352,20 +353,20 @@ export default function EditExpenseModalNew({
             ) : (
               <div className="flex flex-col h-full">
                 {/* Top Banner - Expense Summary (compact height) */}
-                <div className="bg-gray-700 p-3 border-b border-gray-600">
+                <div className="bg-muted p-3 border-b border-border">
                   <div className="flex items-center justify-between mb-3">
                     {/* Left side - Status and key info */}
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
-                        <span className="bg-blue-900/20 text-blue-300 border border-blue-700/50 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
+                        <span className="bg-primary/10 text-primary border border-primary/30 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
                           {claimStatus.toWellFormed() || 'Draft'}
                         </span>
                       </div>
 
                       {/* Key expense summary info - Enhanced prominence */}
-                      <div className="flex items-center gap-8 text-white">
+                      <div className="flex items-center gap-8 text-foreground">
                         <div className="flex items-center gap-3">
-                          <span className="font-semibold text-lg text-green-400">
+                          <span className="font-semibold text-lg text-success">
                             {formData.original_currency} {formData.original_amount.toFixed(2)}
                           </span>
                         </div>
@@ -374,18 +375,18 @@ export default function EditExpenseModalNew({
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="font-semibold text-lg">
-                            {formData.transaction_date ? new Date(formData.transaction_date).toLocaleDateString() : 'N/A'}
+                            {formData.transaction_date ? formatBusinessDate(formData.transaction_date) : 'N/A'}
                           </span>
                         </div>
                       </div>
                     </div>
 
                     {/* Right side - Progress indicator for drafts */}
-                    <div className="text-right text-gray-400 flex items-center gap-4">
+                    <div className="text-right text-muted-foreground flex items-center gap-4">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-lg">10%</span>
-                        <div className="w-16 bg-gray-600 rounded-full h-2">
-                          <div className="h-2 rounded-full bg-blue-500 transition-all duration-300" style={{ width: '10%' }} />
+                        <div className="w-16 bg-muted-foreground/30 rounded-full h-2">
+                          <div className="h-2 rounded-full bg-primary transition-all duration-300" style={{ width: '10%' }} />
                         </div>
                       </div>
                     </div>
@@ -395,14 +396,14 @@ export default function EditExpenseModalNew({
                 {/* Bottom Section - 40/60 Split */}
                 <div className="flex flex-1 overflow-hidden">
                   {/* Left Panel - Receipt Preview (40%) */}
-                  <div className="w-2/5 border-r border-gray-700 flex flex-col">
-                    <div className="flex-1 bg-gray-900 p-4 overflow-hidden">
+                  <div className="w-2/5 border-r border-border flex flex-col">
+                    <div className="flex-1 bg-muted p-4 overflow-hidden">
                       {receiptInfo.hasReceipt ? (
                         <div className="h-full flex flex-col">
-                          <div className="flex-1 bg-gray-900 overflow-hidden">
+                          <div className="flex-1 bg-muted overflow-hidden">
                             {imageLoading ? (
                               <div className="flex items-center justify-center h-full">
-                                <div className="text-center text-gray-400">
+                                <div className="text-center text-muted-foreground">
                                   <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin" />
                                   <p className="text-xs">Loading preview...</p>
                                 </div>
@@ -438,15 +439,15 @@ export default function EditExpenseModalNew({
                               />
                             ) : receiptInfo.storagePath ? (
                               <div className="flex items-center justify-center h-full">
-                                <div className="text-center text-gray-400">
+                                <div className="text-center text-muted-foreground">
                                   <Receipt className="w-12 h-12 mx-auto mb-2" />
                                   <p className="text-xs">Failed to generate secure URL</p>
-                                  <p className="text-xs text-gray-500">Please contact support if this persists</p>
+                                  <p className="text-xs text-muted-foreground/70">Please contact support if this persists</p>
                                 </div>
                               </div>
                             ) : (
                               <div className="flex items-center justify-center h-full">
-                                <div className="text-center text-gray-400">
+                                <div className="text-center text-muted-foreground">
                                   <Receipt className="w-12 h-12 mx-auto mb-2" />
                                   <p className="text-xs">No receipt attached</p>
                                 </div>
@@ -456,7 +457,7 @@ export default function EditExpenseModalNew({
                         </div>
                       ) : (
                         <div className="flex items-center justify-center h-full">
-                          <div className="text-center text-gray-400">
+                          <div className="text-center text-muted-foreground">
                             <Receipt className="w-12 h-12 mx-auto mb-2" />
                             <p className="text-xs">No receipt attached</p>
                           </div>
@@ -490,10 +491,10 @@ export default function EditExpenseModalNew({
 
 
                       {/* Basic Information - Editable */}
-                      <Card className="bg-gray-800 border-gray-600">
+                      <Card className="bg-card border-border">
                         <CardHeader className="pb-3">
-                          <CardTitle className="text-gray-300 text-sm flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-gray-400" />
+                          <CardTitle className="text-foreground text-sm flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-muted-foreground" />
                             Basic Information
                           </CardTitle>
                         </CardHeader>
@@ -525,10 +526,10 @@ export default function EditExpenseModalNew({
                       </Card>
 
                       {/* Line Items - Editable */}
-                      <Card className="bg-gray-800 border-gray-600">
+                      <Card className="bg-card border-border">
                         <CardHeader>
-                          <CardTitle className="text-gray-300 text-sm flex items-center gap-2">
-                            <DollarSign className="w-4 h-4 text-gray-400" />
+                          <CardTitle className="text-foreground text-sm flex items-center gap-2">
+                            <DollarSign className="w-4 h-4 text-muted-foreground" />
                             Line Items {lineItems && lineItems.length > 0 ? `(${lineItems.length})` : '(0)'}
                           </CardTitle>
                         </CardHeader>
@@ -550,12 +551,12 @@ export default function EditExpenseModalNew({
                       </Card>
 
                       {/* Expense ID at bottom of content */}
-                      <div className="flex justify-end mt-6 pt-4 border-t border-gray-600">
-                        <div className="flex items-center gap-2 bg-gray-700/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-600">
-                          <span className="text-gray-300 text-xs font-mono">Expense ID: {expenseClaimId}</span>
+                      <div className="flex justify-end mt-6 pt-4 border-t border-border">
+                        <div className="flex items-center gap-2 bg-muted/90 backdrop-blur-sm px-3 py-1.5 rounded-md border border-border">
+                          <span className="text-muted-foreground text-xs font-mono">Expense ID: {expenseClaimId}</span>
                           <button
                             onClick={() => navigator.clipboard.writeText(expenseClaimId)}
-                            className="text-gray-400 hover:text-gray-200 transition-colors"
+                            className="text-muted-foreground hover:text-foreground transition-colors"
                             title="Copy Receipt ID"
                           >
                             <Copy className="w-3 h-3" />

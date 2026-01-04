@@ -2,9 +2,12 @@
  * Expense Category Mapping System
  * Maps business-specific expense categories to standard accounting categories
  * Based on Otto financial consultant's IFRS compliance recommendations
+ *
+ * Migrated to Convex from Supabase
  */
 
-import { createServiceSupabaseClient } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 
 // Standard IFRS accounting categories for transactions table
 export const ACCOUNTING_CATEGORIES = {
@@ -144,37 +147,36 @@ export function mapExpenseCategoryToAccounting(
 /**
  * Gets business expense category details by code
  * Used for validation and enriched transaction data
+ * Uses Convex to fetch business categories
  */
 export async function getBusinessExpenseCategory(
   businessId: string,
   categoryCode: string
 ): Promise<ExpenseCategoryInfo | null> {
   try {
-    const supabase = createServiceSupabaseClient()
-
-    const { data: business, error } = await supabase
-      .from('businesses')
-      .select('custom_expense_categories')
-      .eq('id', businessId)
-      .single()
-
-    if (error || !business?.custom_expense_categories) {
-      console.error('[Category Mapper] Failed to fetch business categories:', error)
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Category Mapper] Failed to get authenticated Convex client')
       return null
     }
 
-    const categories = business.custom_expense_categories as Array<{
+    // Use the Convex query to get enabled expense categories
+    const categories = await client.query(api.functions.businesses.getEnabledExpenseCategories, {
+      businessId
+    })
+
+    if (!categories || categories.length === 0) {
+      return null
+    }
+
+    // Find the specific category by code
+    const category = categories.find((cat: {
       category_code: string
       category_name: string
       description?: string
       requires_receipt?: boolean
       requires_manager_approval?: boolean
-      is_active?: boolean
-    }>
-
-    const category = categories.find(cat =>
-      cat.category_code === categoryCode && cat.is_active !== false
-    )
+    }) => cat.category_code === categoryCode)
 
     if (!category) {
       return null
@@ -200,45 +202,42 @@ export async function getBusinessExpenseCategory(
 /**
  * Gets all valid business expense categories for a business
  * Used for dropdown selections and AI categorization
+ * Uses Convex to fetch business categories
  */
 export async function getBusinessExpenseCategories(
   businessId: string
 ): Promise<ExpenseCategoryInfo[]> {
   try {
-    const supabase = createServiceSupabaseClient()
-
-    const { data: business, error } = await supabase
-      .from('businesses')
-      .select('custom_expense_categories')
-      .eq('id', businessId)
-      .single()
-
-    if (error || !business?.custom_expense_categories) {
-      console.error('[Category Mapper] Failed to fetch business categories:', error)
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Category Mapper] Failed to get authenticated Convex client')
       return []
     }
 
-    const categories = business.custom_expense_categories as Array<{
+    // Use the Convex query to get enabled expense categories (already sorted)
+    const categories = await client.query(api.functions.businesses.getEnabledExpenseCategories, {
+      businessId
+    })
+
+    if (!categories || categories.length === 0) {
+      return []
+    }
+
+    // Transform to ExpenseCategoryInfo format
+    return categories.map((category: {
       category_code: string
       category_name: string
       description?: string
       requires_receipt?: boolean
       requires_manager_approval?: boolean
-      is_active?: boolean
-      sort_order?: number
-    }>
-
-    return categories
-      .filter(cat => cat.is_active !== false)
-      .sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999))
-      .map(category => ({
-        business_category_code: category.category_code,
-        business_category_name: category.category_name,
-        accounting_category: mapExpenseCategoryToAccounting(category.category_code),
-        description: category.description,
-        requires_receipt: category.requires_receipt,
-        requires_manager_approval: category.requires_manager_approval
-      }))
+    }) => ({
+      business_category_code: category.category_code,
+      business_category_name: category.category_name,
+      accounting_category: mapExpenseCategoryToAccounting(category.category_code),
+      description: category.description,
+      requires_receipt: category.requires_receipt,
+      requires_manager_approval: category.requires_manager_approval
+    }))
 
   } catch (error) {
     console.error('[Category Mapper] Unexpected error:', error)

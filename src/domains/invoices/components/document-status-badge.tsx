@@ -4,7 +4,7 @@ import { Clock, CheckCircle, XCircle, Loader2, Upload, Cog, Eye, Brain, FileText
 import { ErrorDetails } from '@/domains/invoices/lib/data-access'
 
 interface DocumentStatusBadgeProps {
-  status: 'pending' | 'uploading' | 'analyzing' | 'processing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed'
+  status: 'pending' | 'uploading' | 'analyzing' | 'extracting' | 'processing' | 'completed' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed'
   errorMessage?: ErrorDetails | string | null
   processingStage?: 'extracting' | 'analyzing' | 'finalizing'
   animated?: boolean
@@ -57,6 +57,20 @@ export default function DocumentStatusBadge({
           text: 'Classifying Document',
           variant: 'info' as const,
           animate: true
+        }
+      case 'extracting':
+        return {
+          icon: FileText,
+          text: 'Extracting Data',
+          variant: 'info' as const,
+          animate: true
+        }
+      case 'completed':
+        return {
+          icon: CheckCircle,
+          text: 'Completed',
+          variant: 'success' as const,
+          animate: false
         }
       case 'classification_failed':
         return {

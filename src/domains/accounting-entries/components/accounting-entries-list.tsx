@@ -13,6 +13,7 @@ import type { TransactionStatus } from '@/domains/accounting-entries/constants/t
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { useExpenseCategories } from '@/domains/expense-claims/hooks/use-expense-categories'
 import { useCOGSCategories } from '@/lib/hooks/accounting/use-cogs-categories'
+import { formatBusinessDate, formatTimestamp } from '@/lib/utils'
 
 interface AccountingEntriesListProps {
   transactions: AccountingEntry[]
@@ -56,13 +57,9 @@ export default function AccountingEntriesList({
   const { categories: expenseCategories } = useExpenseCategories()
   const { categories: cogsCategories } = useCOGSCategories()
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    })
-  }
+  // CRITICAL: Use formatBusinessDate for transaction_date (business date - no timezone conversion)
+  // Use formatTimestamp for created_at, processed_at (system timestamps - local timezone OK)
+  const formatDate = (dateString: string) => formatBusinessDate(dateString)
 
   // Format category name - supports both dynamic categories and hardcoded ones - same logic as edit form
   const formatCategoryName = (categoryCode: string, accountingEntryType?: TransactionType) => {

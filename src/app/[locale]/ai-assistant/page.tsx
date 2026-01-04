@@ -154,53 +154,20 @@ export default function AIAssistantPage() {
     }
   }
 
-  // Start new chat
-  const startNewChat = async () => {
-    try {
-      setLoading(true)
-
-      // Create new conversation via API
-      const response = await fetch('/api/v1/chat/conversations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          language: 'en' // You can pass locale here if needed
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const newConversationId = data.conversation.id
-
-        console.log(`[AI Assistant] Created new conversation: ${newConversationId}`)
-
-        // Clear messages and set new conversation ID
-        setCurrentMessages([])
-        setCurrentConversationId(newConversationId)
-
-        // Trigger sidebar refresh to show new conversation
-        setSidebarRefreshTrigger(prev => prev + 1)
-      } else {
-        console.error('[AI Assistant] Failed to create conversation')
-        // Fallback to clearing UI only
-        setCurrentMessages([])
-        setCurrentConversationId(undefined)
-      }
-    } catch (error) {
-      console.error('[AI Assistant] Error creating conversation:', error)
-      // Fallback to clearing UI only
-      setCurrentMessages([])
-      setCurrentConversationId(undefined)
-    } finally {
-      setLoading(false)
-    }
+  // Start new chat - TRANSIENT until first message is sent
+  // Conversation is created by the chat API when the first message is sent
+  const startNewChat = () => {
+    console.log('[AI Assistant] Starting new transient chat (no conversation created yet)')
+    setCurrentMessages([])
+    setCurrentConversationId(undefined) // No ID = transient, will be created on first message
   }
 
-  // Handle conversation creation from chat interface
+  // Handle conversation creation from chat interface (when first message is sent)
   const handleConversationCreated = (conversationId: string) => {
+    console.log(`[AI Assistant] Conversation created on first message: ${conversationId}`)
     setCurrentConversationId(conversationId)
+    // Refresh sidebar to show the new conversation
+    setSidebarRefreshTrigger(prev => prev + 1)
   }
 
   // Handle messages update from chat interface
@@ -208,12 +175,44 @@ export default function AIAssistantPage() {
     setCurrentMessages(messages)
   }
 
-  // Handle conversation deletion
-  const handleConversationDeleted = (conversationId: string) => {
-    // If the deleted conversation was currently active, start a new chat
-    if (conversationId === currentConversationId) {
-      startNewChat()
+  // Handle conversation deletion - load next available conversation or show welcome screen
+  const handleConversationDeleted = async (deletedConversationId: string) => {
+    // If the deleted conversation was currently active, load next available
+    if (deletedConversationId === currentConversationId) {
+      try {
+        // Fetch remaining conversations (limit 1 since we just need the most recent)
+        const response = await fetch('/api/v1/chat/conversations?limit=1')
+        if (response.ok) {
+          const data = await response.json()
+          const conversations = data.conversations || []
+
+          // Filter out the deleted one (in case cache hasn't updated yet)
+          const remaining = conversations.filter((c: { id: string }) => c.id !== deletedConversationId)
+
+          if (remaining.length > 0) {
+            // Load the next most recent conversation
+            console.log(`[AI Assistant] Loading next conversation: ${remaining[0].id}`)
+            await loadConversation(remaining[0].id)
+          } else {
+            // No conversations left, show welcome screen (transient new chat)
+            console.log('[AI Assistant] No conversations left, showing welcome screen')
+            setCurrentMessages([])
+            setCurrentConversationId(undefined)
+          }
+        } else {
+          // API error, just clear to welcome screen
+          setCurrentMessages([])
+          setCurrentConversationId(undefined)
+        }
+      } catch (error) {
+        console.error('[AI Assistant] Error loading next conversation:', error)
+        setCurrentMessages([])
+        setCurrentConversationId(undefined)
+      }
     }
+
+    // Trigger sidebar refresh to reflect deletion
+    setSidebarRefreshTrigger(prev => prev + 1)
   }
 
   if (!isLoaded || !userId) {

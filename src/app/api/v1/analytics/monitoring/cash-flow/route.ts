@@ -17,7 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserData } from '@/lib/db/supabase-server'
+import { getUserDataConvex } from '@/lib/convex'
 import {
   runCashFlowMonitoring,
   DEFAULT_MONITORING_CONFIG,
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userData = await getUserData(userId)
+    const userData = await getUserDataConvex(userId)
 
     if (!userData.business_id) {
       return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })

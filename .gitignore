@@ -41,6 +41,10 @@ yarn-error.log*
 next-env.d.ts
 
 .trigger
+
+# Convex backup (prod data exports)
+.convex-backup/
+
 # LangGraph API
 .langgraph_api
 

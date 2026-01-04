@@ -1,9 +1,11 @@
 /**
  * Custom hook for fetching dynamic COGS categories
  * Replaces hardcoded COGS categories with business-configured categories
+ * Falls back to default categories when business has no custom categories
  */
 
 import { useState, useEffect } from 'react'
+import { getDefaultCOGSCategories } from '@/domains/invoices/lib/default-cogs-categories'
 
 export interface DynamicCOGSCategory {
   id: string
@@ -50,13 +52,21 @@ export function useCOGSCategories(): UseCOGSCategoriesReturn {
         throw new Error(result.error || 'Failed to fetch COGS categories')
       }
 
-      setCategories(result.data || [])
+      // Fallback to default categories if API returns empty array
+      const apiCategories = result.data || []
+      if (apiCategories.length === 0) {
+        console.log('[COGS Categories] No custom categories configured, using defaults')
+        setCategories(getDefaultCOGSCategories())
+      } else {
+        setCategories(apiCategories)
+      }
     } catch (err) {
       console.error('Error fetching COGS categories:', err)
       setError(err instanceof Error ? err.message : 'Failed to load COGS categories')
 
-      // Fallback to empty array on error
-      setCategories([])
+      // Fallback to default categories on error
+      console.log('[COGS Categories] API error, using default categories')
+      setCategories(getDefaultCOGSCategories())
     } finally {
       setLoading(false)
     }

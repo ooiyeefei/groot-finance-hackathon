@@ -15,6 +15,7 @@ interface TransactionLookupParameters {
   category?: string
   minAmount?: number
   maxAmount?: number
+  transactionType?: 'Income' | 'Cost of Goods Sold' | 'Expense'  // Filter by transaction type (income, expense, COGS)
   // Internal parameter for source document type filtering (not exposed to AI)
   _sourceDocumentType?: 'invoice' | 'expense_claim'
 }
@@ -192,6 +193,11 @@ export class TransactionLookupTool extends BaseTool {
               description: "Maximum number of results to return (default: 10)",
               minimum: 1,
               maximum: 100
+            },
+            transactionType: {
+              type: "string",
+              description: "Filter by transaction type. Use 'Income' for revenue/sales/deals, 'Expense' for costs/purchases, 'Cost of Goods Sold' for COGS/inventory costs. CRITICAL: When user asks about 'income', 'revenue', 'sales', 'deals' use 'Income'. When user asks about 'expenses', 'costs', 'purchases' use 'Expense'.",
+              enum: ["Income", "Cost of Goods Sold", "Expense"]
             }
           },
           required: []
@@ -202,7 +208,7 @@ export class TransactionLookupTool extends BaseTool {
 
   protected async validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }> {
     // CRITICAL: Strip out unsupported parameters that AI models sometimes pass
-    const supportedParams = ['query', 'limit', 'startDate', 'endDate', 'dateRange', 'category', 'minAmount', 'maxAmount', '_sourceDocumentType']
+    const supportedParams = ['query', 'limit', 'startDate', 'endDate', 'dateRange', 'category', 'minAmount', 'maxAmount', 'transactionType', '_sourceDocumentType']
     const cleanedParameters: any = {}
     
     for (const [key, value] of Object.entries(parameters)) {
@@ -269,6 +275,14 @@ export class TransactionLookupTool extends BaseTool {
       const validSourceDocumentTypes = ['invoice', 'expense_claim']
       if (!validSourceDocumentTypes.includes(params._sourceDocumentType)) {
         return { valid: false, error: 'Invalid source document type. Must be invoice or expense_claim' }
+      }
+    }
+
+    // Validate transactionType if provided
+    if (params.transactionType != null) {
+      const validTransactionTypes = ['Income', 'Cost of Goods Sold', 'Expense']
+      if (!validTransactionTypes.includes(params.transactionType)) {
+        return { valid: false, error: 'Invalid transaction type. Must be Income, Cost of Goods Sold, or Expense' }
       }
     }
 
@@ -429,6 +443,28 @@ export class TransactionLookupTool extends BaseTool {
       return { startDate, endDate }
     }
 
+    // Pattern 3b: "X year(s)" or "past year" or "last year" (supports omitting the number for singular year)
+    // FIX: Handles queries like "past year", "last year", "1 year", "2 years"
+    const yearsMatch = dateRangeLower.match(/(?:past\s+|last\s+)?(\d*)\s*years?/)
+    if (yearsMatch) {
+      // Default to 1 year if no number specified (e.g., "past year" vs "past 2 years")
+      const yearCount = yearsMatch[1] ? parseInt(yearsMatch[1], 10) : 1
+
+      // VALIDATION: Reasonable range limits (1-5 years max)
+      if (yearCount < 1 || yearCount > 5) {
+        return {
+          startDate: endDate,
+          endDate,
+          error: `Invalid year count: ${yearCount}. Must be between 1 and 5 years.`
+        }
+      }
+
+      // Calculate start date by going back X years (using 365 days per year)
+      const dayCount = yearCount * 365
+      console.log(`[TransactionLookupTool] YEAR PATTERN: "${dateRange}" parsed as ${yearCount} year(s) = ${dayCount} days`)
+      return this._calculateDaysRange(dayCount, today, dateRange, endDate)
+    }
+
     // Pattern 4: Legacy numbered patterns like "past_60_days"
     const legacyDaysMatch = dateRangeLower.match(/past_(\d+)_days?/)
     if (legacyDaysMatch) {
@@ -477,12 +513,13 @@ export class TransactionLookupTool extends BaseTool {
    * Helper method to calculate date range for day-based periods with validation
    */
   private _calculateDaysRange(dayCount: number, today: Date, originalRange: string, endDate: string): { startDate: string; endDate: string; error?: string } {
-    // VALIDATION: Reasonable range limits (1-730 days = 2 years max)
-    if (dayCount < 1 || dayCount > 730) {
+    // VALIDATION: Reasonable range limits (1-1825 days = 5 years max)
+    // Aligned with year pattern validation (lines 454-460) which allows 1-5 years
+    if (dayCount < 1 || dayCount > 1825) {
       return {
         startDate: endDate,
         endDate,
-        error: `Invalid day count: ${dayCount}. Must be between 1 and 730 days.`
+        error: `Invalid day count: ${dayCount}. Must be between 1 and 1825 days (5 years).`
       }
     }
 
@@ -493,6 +530,44 @@ export class TransactionLookupTool extends BaseTool {
 
     console.log(`[TransactionLookupTool] DYNAMIC: ${originalRange} = ${startDate} to ${endDate} (${dayCount} days)`)
     return { startDate, endDate }
+  }
+
+  /**
+   * Extract transaction type from user query using friendly terms
+   * Maps user-friendly terms like "income", "revenue", "expense" to database values
+   */
+  private _extractTransactionType(query: string): 'Income' | 'Cost of Goods Sold' | 'Expense' | null {
+    if (!query) return null
+
+    const queryLower = query.toLowerCase()
+
+    // Map user-friendly terms to database values
+    const incomeTerms = ['income', 'incomes', 'revenue', 'revenues', 'sale', 'sales', 'deal', 'deals', 'earning', 'earnings', 'profit', 'profits']
+    const expenseTerms = ['expense', 'expenses', 'cost', 'costs', 'purchase', 'purchases', 'payment', 'payments', 'spending', 'spendings']
+    const cogsTerms = ['cogs', 'cost of goods', 'cost of goods sold', 'inventory cost', 'inventory costs']
+
+    // Check for COGS-related terms first (more specific)
+    const hasCogsTerms = cogsTerms.some(term => queryLower.includes(term))
+    if (hasCogsTerms) {
+      console.log(`[TransactionLookupTool] 📦 Detected COGS request from query: "${query}"`)
+      return 'Cost of Goods Sold'
+    }
+
+    // Check for income-related terms
+    const hasIncomeTerms = incomeTerms.some(term => queryLower.includes(term))
+    if (hasIncomeTerms) {
+      console.log(`[TransactionLookupTool] 💰 Detected income request from query: "${query}"`)
+      return 'Income'
+    }
+
+    // Check for expense-related terms (but not COGS)
+    const hasExpenseTerms = expenseTerms.some(term => queryLower.includes(term))
+    if (hasExpenseTerms) {
+      console.log(`[TransactionLookupTool] 💸 Detected expense request from query: "${query}"`)
+      return 'Expense'
+    }
+
+    return null
   }
 
   /**
@@ -586,10 +661,14 @@ export class TransactionLookupTool extends BaseTool {
   /**
    * Detect analysis queries (largest, smallest, etc.) from query content and parameters
    * LOW RISK: Pure analysis function with no side effects
+   *
+   * CRITICAL FIX: Only detect analysis for EXPLICIT terms like "largest", "biggest".
+   * DO NOT infer from limit=1 alone - that breaks "latest", "most recent" queries
+   * which should sort by DATE, not by AMOUNT.
    */
   private _detectAnalysisQuery(query: string, limit: number, params: TransactionLookupParameters): boolean {
-    // CRITICAL: Detect analysis queries - check query content or inference from parameters
-    // If limit=1 and minAmount=0, it's likely an analysis query for "largest" transaction
+    // CRITICAL: Only detect analysis queries based on EXPLICIT terms in the query
+    // DO NOT infer from limit=1 - that incorrectly triggers for "latest" queries
     const queryAnalysis = query.toLowerCase().includes('largest') || query.toLowerCase().includes('biggest') ||
                          query.toLowerCase().includes('highest') || query.toLowerCase().includes('maximum') ||
                          query.toLowerCase().includes('smallest') || query.toLowerCase().includes('lowest') ||
@@ -599,16 +678,16 @@ export class TransactionLookupTool extends BaseTool {
                          query.toLowerCase().includes('least expensive') ||
                          !!query.toLowerCase().match(/\b(top|max|min)\s*\d*\b/)
 
-    // Make inference more flexible - analysis queries often have limit=1 or small limits
-    const inferredAnalysis = (limit === 1) || (params.minAmount === 0 && limit <= 5)
-    const isAnalysisQuery = queryAnalysis || inferredAnalysis
+    // REMOVED: Inference from limit=1 - this incorrectly triggered for "latest" queries
+    // Previously: const inferredAnalysis = (limit === 1) || (params.minAmount === 0 && limit <= 5)
+    // Now: Only explicit terms trigger analysis mode
+    const isAnalysisQuery = queryAnalysis
 
     console.log(`[TransactionLookupTool] ❗ ANALYSIS DETECTION DEBUG:`)
     console.log(`[TransactionLookupTool]   - Raw query: "${query}"`)
-    console.log(`[TransactionLookupTool]   - Query contains analysis terms: ${queryAnalysis}`)
-    console.log(`[TransactionLookupTool]   - Inferred analysis (limit=1, minAmount=0): ${inferredAnalysis}`)
+    console.log(`[TransactionLookupTool]   - Query contains explicit analysis terms: ${queryAnalysis}`)
     console.log(`[TransactionLookupTool]   - Final isAnalysisQuery: ${isAnalysisQuery}`)
-    console.log(`[TransactionLookupTool]   - needsAnalysis will be set to: ${isAnalysisQuery}`)
+    console.log(`[TransactionLookupTool]   - Note: limit=${limit} no longer triggers analysis (fixes "latest" queries)`)
 
     return isAnalysisQuery
   }
@@ -719,6 +798,9 @@ export class TransactionLookupTool extends BaseTool {
     // ✅ DOCUMENT TYPE EXTRACTION: Extract source document type from query
     const extractedSourceDocumentType = this._extractSourceDocumentType(originalQuery)
 
+    // ✅ TRANSACTION TYPE EXTRACTION: Extract transaction type from query (income, expense, COGS)
+    const extractedTransactionType = this._extractTransactionType(originalQuery)
+
     // ✅ CLARIFICATION LOGIC: Check if query mentions document types but is ambiguous
     const clarificationNeeded = this._detectDocumentTypeClarificationNeeded(originalQuery)
     if (clarificationNeeded && !extractedSourceDocumentType) {
@@ -751,6 +833,14 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
       console.log(`[TransactionLookupTool] 🎯 Applied source document type filter: ${extractedSourceDocumentType}`)
     }
 
+    // ✅ APPLY TRANSACTION TYPE: Set extracted transaction type for filtering (income, expense, COGS)
+    // Priority: Explicit param from AI > Extracted from query
+    const effectiveTransactionType = sanitizedParams.transactionType || extractedTransactionType
+    if (effectiveTransactionType) {
+      sanitizedParams.transactionType = effectiveTransactionType
+      console.log(`[TransactionLookupTool] 🎯 Applied transaction type filter: ${effectiveTransactionType}`)
+    }
+
     try {
       console.log(`[TransactionLookupTool] Processing query for user ${userContext.userId}: ${query}`)
       console.log(`[TransactionLookupTool] ✅ ANALYSIS QUERY DETECTED (BEFORE SANITIZATION): ${isAnalysisQuery}`)
@@ -760,112 +850,82 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
       const startDate = dateRange.startDate
       const endDate = dateRange.endDate
 
-      // SECURITY: Use Supabase UUID and business context for proper tenant isolation
-      if (!userContext.supabaseUserId || !userContext.businessId) {
-        throw new Error('Missing user context: Supabase UUID and business ID required for secure queries')
+      // SECURITY: Use business context for proper tenant isolation
+      if (!userContext.businessId) {
+        throw new Error('Missing user context: Business ID required for secure queries')
       }
 
       console.log(`[TransactionLookupTool] SECURITY: Using proper identifiers:`, {
-        supabaseUserId: userContext.supabaseUserId,
+        userId: userContext.userId,
         businessId: userContext.businessId
       })
 
       // OPTIMIZED DATABASE QUERY STRATEGY
-      // PERFORMANCE: Requires database indexes on (user_id, business_id, transaction_date)
-      // Phase 1: Broad Search - Use only high-confidence filters for optimal index usage
-      console.log(`[TransactionLookupTool] Phase 1: Optimized broad search with business context validation`)
+      // Phase 1: Broad Search - Use Convex searchForAI query with filters
+      console.log(`[TransactionLookupTool] Phase 1: Optimized broad search via Convex`)
 
-      // Use authenticated client for RLS enforcement
-      if (!this.authenticatedSupabase) {
-        throw new Error('Authenticated Supabase client not available')
+      // SMART CATEGORY FILTERING: Don't filter by "invoice" as category since it's not a real category
+      let categoryFilter = sanitizedParams.category
+      const commonNonCategories = ['invoice', 'bill', 'receipt', 'payment', 'expense', 'transaction']
+      if (categoryFilter && commonNonCategories.includes(categoryFilter.toLowerCase())) {
+        console.log(`[TransactionLookupTool] IGNORED category filter "${categoryFilter}" - treating as description search instead`)
+        categoryFilter = undefined
       }
 
-      // SECURITY: Structure query with proper business context validation
-      let broadQuery = this.authenticatedSupabase
-        .from('accounting_entries')
-        .select(`
-          id,
-          description,
-          original_amount,
-          original_currency,
-          home_currency_amount,
-          transaction_date,
-          category,
-          vendor_name,
-          transaction_type,
-          source_document_type,
-          created_at
-        `)
-        .eq('user_id', userContext.supabaseUserId)
-        .eq('business_id', userContext.businessId)
-        .is('deleted_at', null)
-
-      // Apply high-confidence filters (dates, amounts, specific category)
-      if (startDate) {
-        broadQuery = broadQuery.gte('transaction_date', startDate)
-        console.log(`[TransactionLookupTool] Applied startDate filter: ${startDate}`)
-      }
-      if (endDate) {
-        broadQuery = broadQuery.lte('transaction_date', endDate)
-        console.log(`[TransactionLookupTool] Applied endDate filter: ${endDate}`)
-      }
-      if (sanitizedParams.category) {
-        // SMART CATEGORY FILTERING: Don't filter by "invoice" as category since it's not a real category
-        // "invoice" should be treated as a description search, not category filter
-        const commonNonCategories = ['invoice', 'bill', 'receipt', 'payment', 'expense', 'transaction']
-
-        if (!commonNonCategories.includes(sanitizedParams.category.toLowerCase())) {
-          broadQuery = broadQuery.ilike('category', `%${sanitizedParams.category}%`)
-          console.log(`[TransactionLookupTool] Applied category filter: ${sanitizedParams.category}`)
-        } else {
-          console.log(`[TransactionLookupTool] IGNORED category filter "${sanitizedParams.category}" - treating as description search instead`)
-        }
-      }
-      // CRITICAL: For analysis queries (largest/smallest), don't apply amount filters
-      // as they exclude negative expenses. Users want largest by absolute value.
-      if (!isAnalysisQuery) {
-        if (sanitizedParams.minAmount != null) {
-          broadQuery = broadQuery.gte('home_currency_amount', sanitizedParams.minAmount)
-          console.log(`[TransactionLookupTool] Applied minAmount filter: ${sanitizedParams.minAmount}`)
-        }
-        if (sanitizedParams.maxAmount != null) {
-          broadQuery = broadQuery.lte('home_currency_amount', sanitizedParams.maxAmount)
-          console.log(`[TransactionLookupTool] Applied maxAmount filter: ${sanitizedParams.maxAmount}`)
-        }
-      } else {
-        console.log(`[TransactionLookupTool] SKIPPED amount filters for analysis query to include negative expenses`)
-      }
-
-      // ✅ APPLY SOURCE DOCUMENT TYPE FILTER: Use correct database field
-      if (sanitizedParams._sourceDocumentType) {
-        broadQuery = broadQuery.eq('source_document_type', sanitizedParams._sourceDocumentType)
-        console.log(`[TransactionLookupTool] Applied source_document_type filter: ${sanitizedParams._sourceDocumentType}`)
-      }
-
-      // PERFORMANCE OPTIMIZATION: Apply ordering and limit after all filters for index efficiency
-      broadQuery = broadQuery.order('transaction_date', { ascending: false })
-
-      // PERFORMANCE OPTIMIZATION: Calculate fetch limit directly without redundant variable
+      // PERFORMANCE OPTIMIZATION: Calculate fetch limit
       const fetchLimit = isAnalysisQuery ? Math.max(50, limit * 3) : limit
-      broadQuery = broadQuery.limit(fetchLimit)
-      
+
       console.log(`[TransactionLookupTool] Fetching ${fetchLimit} records (analysis needed: ${isAnalysisQuery})`)
 
-      // CRITICAL DEBUG: Log the full SQL query for debugging
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG: Executing database query with filters:`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - user_id: ${userContext.supabaseUserId}`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - business_id: ${userContext.businessId}`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - deleted_at: NULL`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - startDate: ${startDate || 'none'}`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - endDate: ${endDate || 'none'}`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - category: ${sanitizedParams.category || 'none'}`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - minAmount: ${sanitizedParams.minAmount || 'none'} (skipped for analysis: ${isAnalysisQuery})`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - maxAmount: ${sanitizedParams.maxAmount || 'none'} (skipped for analysis: ${isAnalysisQuery})`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - _sourceDocumentType: ${sanitizedParams._sourceDocumentType || 'none'}`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - limit: ${fetchLimit}`)
-      console.log(`[TransactionLookupTool] 🔍 SQL DEBUG:   - order: transaction_date DESC`)
+      // CRITICAL DEBUG: Log the query for debugging
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG: Executing searchForAI query with filters:`)
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG:   - businessId: ${userContext.businessId}`)
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG:   - startDate: ${startDate || 'none'}`)
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG:   - endDate: ${endDate || 'none'}`)
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG:   - category: ${categoryFilter || 'none'}`)
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG:   - minAmount: ${isAnalysisQuery ? 'skipped' : (sanitizedParams.minAmount || 'none')}`)
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG:   - maxAmount: ${isAnalysisQuery ? 'skipped' : (sanitizedParams.maxAmount || 'none')}`)
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG:   - sourceDocumentType: ${sanitizedParams._sourceDocumentType || 'none'}`)
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG:   - transactionType: ${sanitizedParams.transactionType || 'none'}`)
+      console.log(`[TransactionLookupTool] 🔍 CONVEX DEBUG:   - limit: ${fetchLimit}`)
 
-      const { data: allTransactions, error } = await broadQuery
+      // CRITICAL: Ensure authenticated Convex client is available
+      if (!this.convex) {
+        throw new Error('Convex client not initialized - authentication may have failed')
+      }
+
+      // ✅ MIGRATED: Use Convex searchForAI instead of Supabase (authenticated)
+      const result = await this.convex.query(
+        this.convexApi.functions.accountingEntries.searchForAI,
+        {
+          businessId: userContext.businessId,
+          startDate: startDate,
+          endDate: endDate,
+          category: categoryFilter,
+          // CRITICAL: For analysis queries, skip amount filters to include negative expenses
+          minAmount: isAnalysisQuery ? undefined : sanitizedParams.minAmount,
+          maxAmount: isAnalysisQuery ? undefined : sanitizedParams.maxAmount,
+          sourceDocumentType: sanitizedParams._sourceDocumentType,
+          transactionType: sanitizedParams.transactionType,
+          limit: fetchLimit,
+        }
+      )
+
+      // Map Convex results to match expected format
+      const allTransactions = result.entries.map((entry: any) => ({
+        id: entry._id,
+        description: entry.description,
+        original_amount: entry.originalAmount,
+        original_currency: entry.originalCurrency,
+        home_currency_amount: entry.homeCurrencyAmount,
+        transaction_date: entry.transactionDate,
+        category: entry.category,
+        vendor_name: entry.vendorName,
+        transaction_type: entry.transactionType,
+        source_document_type: entry.sourceDocumentType,
+        created_at: entry._creationTime,
+      }))
+      const error = null
 
       // CRITICAL DEBUG: Log actual query results
       console.log(`[TransactionLookupTool] 🔍 SQL RESULTS: Query returned ${allTransactions?.length || 0} records`)
@@ -895,12 +955,12 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
         // PERFORMANCE OPTIMIZATION: Only fetch count when truly needed for user feedback
         let totalCount = 0;
         try {
-          const { count } = await this.authenticatedSupabase!
-            .from('accounting_entries')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', userContext.supabaseUserId!)
-            .eq('business_id', userContext.businessId!);
-          totalCount = count || 0;
+          // ✅ MIGRATED: Use Convex instead of Supabase for count
+          const countResult = await this.convex.query(
+            this.convexApi.functions.accountingEntries.getEntryCount,
+            { businessId: userContext.businessId }
+          )
+          totalCount = countResult.count || 0;
         } catch (countError) {
           console.warn(`[TransactionLookupTool] Could not fetch user transaction count:`, countError);
           // Continue without count rather than failing
@@ -1028,15 +1088,15 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
 
       // Apply analysis for superlative queries (largest, smallest, etc.)
       if (isAnalysisQuery) {
-        const inferredFromParams = (limit === 1) || (sanitizedParams.minAmount === 0 && limit <= 5)
-        console.log(`[TransactionLookupTool] Applying analysis - query: "${query}", inference: ${inferredFromParams}`)
+        console.log(`[TransactionLookupTool] Applying analysis - query: "${query}" (explicit terms detected)`)
 
-        // Determine analysis type from query or default to "largest" for inferred analysis
+        // Determine analysis type from query - NO inference from params
         const queryLower = query.toLowerCase()
         const isLargest = queryLower.includes('largest') || queryLower.includes('biggest') ||
-                         queryLower.includes('highest') || queryLower.includes('maximum') || inferredFromParams
-        const isSmallest = queryLower.includes('smallest') || queryLower.includes('lowest') || 
-                          queryLower.includes('minimum')
+                         queryLower.includes('highest') || queryLower.includes('maximum') ||
+                         queryLower.includes('most expensive')
+        const isSmallest = queryLower.includes('smallest') || queryLower.includes('lowest') ||
+                          queryLower.includes('minimum') || queryLower.includes('least expensive')
         
         if (isLargest) {
           // Sort by ABSOLUTE VALUE descending to handle negative expenses properly
@@ -1138,7 +1198,10 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
 
   protected formatResultData(data: any[]): string {
     return data.map((transaction, index) => {
-      const date = new Date(transaction.transaction_date).toLocaleDateString()
+      // CRITICAL FIX: Display business date without timezone conversion
+      // Financial documents should preserve the date as recorded (e.g., invoice date)
+      // NOT converted based on viewer's timezone
+      const date = this.formatBusinessDate(transaction.transaction_date)
       const amount = `${transaction.original_amount} ${transaction.original_currency}`
       const homeAmount = transaction.home_currency_amount
         ? ` (${transaction.home_currency_amount} home currency)`
@@ -1404,6 +1467,50 @@ Your response must be valid JSON only. Nothing else.`
   private isValidDate(dateString: string): boolean {
     const date = new Date(dateString)
     return !isNaN(date.getTime()) && dateString.length >= 8 // Basic validation
+  }
+
+  /**
+   * Format business date without timezone conversion
+   * CRITICAL: Financial documents should preserve the date as recorded (e.g., invoice date)
+   * NOT converted based on viewer's timezone
+   *
+   * @param dateString - ISO date string (YYYY-MM-DD or full ISO timestamp)
+   * @returns Formatted date string (e.g., "October 31, 2025")
+   */
+  private formatBusinessDate(dateString: string): string {
+    if (!dateString) return 'Unknown date'
+
+    try {
+      // Extract just the date part (YYYY-MM-DD) to avoid timezone issues
+      const datePart = dateString.split('T')[0]
+      const [year, month, day] = datePart.split('-').map(Number)
+
+      // Validate parsed values
+      if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) {
+        console.warn(`[TransactionLookupTool] Invalid date format: ${dateString}`)
+        return dateString // Return original if parsing fails
+      }
+
+      // Format without timezone conversion using UTC-based Date constructor
+      // new Date(year, month, day) uses LOCAL timezone
+      // new Date(Date.UTC(year, month-1, day)) uses UTC - but we want to display the business date
+      // So we use Intl.DateTimeFormat with explicit UTC timezone to avoid conversion
+      const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ]
+
+      const monthName = monthNames[month - 1]
+      if (!monthName) {
+        console.warn(`[TransactionLookupTool] Invalid month: ${month}`)
+        return dateString
+      }
+
+      return `${monthName} ${day}, ${year}`
+    } catch (error) {
+      console.warn(`[TransactionLookupTool] Date formatting error for ${dateString}:`, error)
+      return dateString // Return original on error
+    }
   }
 
   /**

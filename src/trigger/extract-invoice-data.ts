@@ -7,23 +7,22 @@
 
 import { task } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
-import { createClient } from '@supabase/supabase-js';
 import { DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories';
+import { listFiles, getPresignedDownloadUrl, type S3Prefix } from './utils/s3-helpers';
+import {
+  fetchDocument,
+  fetchBusinessCategories,
+  updateDocumentStatus,
+  updateExtractionResults,
+  recordOcrUsage,
+  type ExtractionResult
+} from './utils/convex-helpers';
 import {
   mapExpenseCategoryToAccounting,
   ACCOUNTING_CATEGORIES
 } from '@/domains/expense-claims/lib/expense-category-mapper';
 import { IFRS_CATEGORIES } from '@/lib/constants/ifrs-categories';
 import { getUserFriendlyErrorMessage, type ErrorContext } from '../lib/shared/error-message-mapper';
-import { recordOcrUsage } from '@/lib/stripe/usage';
-
-// Note: AI processing function defined directly in Python inline code below
-
-// Initialize Supabase client with service role key for background processing
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // ✅ PHASE 4C: Domain-to-table mapping for multi-domain architecture
 const DOMAIN_TABLE_MAP = {
@@ -31,74 +30,36 @@ const DOMAIN_TABLE_MAP = {
   'expense_claims': 'expense_claims'
 } as const;
 
-// Helper function to fetch enabled expense categories directly from database
-async function fetchEnabledExpenseCategoriesFromDB(businessId: string): Promise<DynamicExpenseCategory[]> {
-  try {
-    const { data: businessData, error } = await supabase
-      .from('businesses')
-      .select('custom_expense_categories')
-      .eq('id', businessId)
-      .single();
+// ✅ S3 MIGRATION: Domain-to-S3-prefix mapping
+const DOMAIN_S3_PREFIX_MAP: Record<string, S3Prefix> = {
+  'invoices': 'invoices',
+  'expense_claims': 'expense_claims'
+};
 
-    if (error) {
-      console.error('Error fetching expense categories from DB:', error);
-      return [];
-    }
-
-    const allCategories = businessData?.custom_expense_categories || [];
-    const enabledCategories = allCategories
-      .filter((category: any) => category.is_active !== false)
-      .sort((a: any, b: any) => (a.sort_order || 99) - (b.sort_order || 99))
-      .map((category: any) => ({
-        id: category.id || category.category_code,
-        category_name: category.category_name,
-        category_code: category.category_code,
-        description: category.description,
-        vendor_patterns: category.vendor_patterns || [],
-        ai_keywords: category.ai_keywords || []
-      }));
-
-    return enabledCategories;
-  } catch (error) {
-    console.error('Failed to fetch expense categories from database:', error);
-    return [];
-  }
-}
-
-// Helper function to fetch enabled COGS categories directly from database
-async function fetchEnabledCOGSCategoriesFromDB(businessId: string): Promise<DynamicExpenseCategory[]> {
-  try {
-    const { data: businessData, error } = await supabase
-      .from('businesses')
-      .select('custom_cogs_categories')
-      .eq('id', businessId)
-      .single();
-
-    if (error) {
-      console.error('Error fetching COGS categories from DB:', error);
-      return [];
-    }
-
-    // Extract categories from flattened JSONB structure (updated to match database migration)
-    const allCategories = businessData?.custom_cogs_categories || [];
-    const enabledCategories = allCategories
-      .filter((category: any) => category.is_active !== false)
-      .sort((a: any, b: any) => (a.sort_order || 99) - (b.sort_order || 99))
-      .map((category: any) => ({
-        id: category.id || category.category_code,
-        category_name: category.category_name,
-        category_code: category.category_code,
-        description: category.description,
-        cost_type: category.cost_type, // COGS-specific field
-        vendor_patterns: category.vendor_patterns || [],
-        ai_keywords: category.ai_keywords || []
-      }));
-
-    return enabledCategories;
-  } catch (error) {
-    console.error('Failed to fetch COGS categories from database:', error);
-    return [];
-  }
+// Helper function to transform Convex categories to DynamicExpenseCategory format
+function transformCategoriesToDynamic(categories: Array<{
+  id?: string;
+  category_name: string;
+  category_code: string;
+  description?: string;
+  cost_type?: string;
+  vendor_patterns?: string[];
+  ai_keywords?: string[];
+  is_active?: boolean;
+  sort_order?: number;
+}>): DynamicExpenseCategory[] {
+  return categories
+    .filter((category) => category.is_active !== false)
+    .sort((a, b) => (a.sort_order || 99) - (b.sort_order || 99))
+    .map((category) => ({
+      id: category.id || category.category_code,
+      category_name: category.category_name,
+      category_code: category.category_code,
+      description: category.description,
+      cost_type: category.cost_type, // COGS-specific field
+      vendor_patterns: category.vendor_patterns || [],
+      ai_keywords: category.ai_keywords || []
+    }));
 }
 
 // Enhanced categorization function using common business logic
@@ -319,33 +280,19 @@ async function handleInvoiceTaskFailure(
     const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
     const userFriendlyError = userFriendlyMapping.userMessage;
 
-    const failureMetadata = {
-      extraction_method: 'ai',
-      extraction_timestamp: new Date().toISOString(),
-      ai_processing_status: 'failed',
-      processing_status: 'failed', // For ProcessingStep compatibility
+    // Build error details for Convex
+    const errorDetails = {
+      message: userFriendlyError,
+      error_type: 'extraction_failed',
       error_category: errorCategory,
       error_code: errorCode,
-      error_message: userFriendlyError,
       technical_error: error?.message || error?.toString() || 'Unknown system error',
-      failed_at: new Date().toISOString(),
       processing_stage: context,
-      failure_level: 'system' // Indicates this was a system-level failure
+      failure_level: 'system'
     };
 
-    // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
-    const usesStatusColumn = tableName === 'expense_claims' || tableName === 'invoices';
-    const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
-    const metadataColumn = tableName === 'expense_claims' ? 'processing_metadata' : 'document_metadata';
-
-    await supabase
-      .from(tableName)
-      .update({
-        [statusColumn]: 'failed',
-        [metadataColumn]: failureMetadata,
-        processed_at: new Date().toISOString()
-      })
-      .eq('id', documentId);
+    // ✅ CONVEX MIGRATION: Use Convex helper instead of Supabase
+    await updateDocumentStatus(documentId, 'failed', errorDetails, tableName);
 
     console.log(`🚨 Document ${documentId} marked as failed due to system failure in ${context}`);
   } catch (updateError) {
@@ -361,11 +308,13 @@ export const extractInvoiceData = task({
     // 🚨 GLOBAL TASK WRAPPER - Catches ALL failures including system failures
     // ✅ PHASE 4C: Route to correct table based on domain (declare at outer scope)
     const tableName = DOMAIN_TABLE_MAP[payload.documentDomain];
+    // ✅ S3 MIGRATION: Route to correct S3 prefix based on domain
+    const s3Prefix = DOMAIN_S3_PREFIX_MAP[payload.documentDomain];
 
     try {
       console.log(`🚀 Starting Document OCR extraction`);
       console.log(`📄 Document ID: ${payload.documentId}`);
-      console.log(`📊 Table: ${tableName} (domain: ${payload.documentDomain})`);
+      console.log(`📊 Table: ${tableName} (domain: ${payload.documentDomain}, S3 prefix: ${s3Prefix})`);
       console.log(`🖼️ Image storage path: ${payload.imageStoragePath || 'Will fetch from document record'}`);
 
       // Dynamic category logging based on document domain
@@ -381,18 +330,15 @@ export const extractInvoiceData = task({
 
       try {
       // Step 1: Fetch document record and determine image path
-      const { data: fetchedDocRecord, error: fetchError } = await supabase
-        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-        .select('file_name, file_type, file_size, user_id, business_id, storage_path, converted_image_path')
-        .eq('id', payload.documentId)
-        .single();
+      // ✅ CONVEX MIGRATION: Use Convex helper instead of Supabase
+      const fetchedDocRecord = await fetchDocument(payload.documentId, tableName);
 
-      if (fetchError || !fetchedDocRecord) {
+      if (!fetchedDocRecord) {
         // Create error context for fetch failure
         const errorContext: ErrorContext = {
           errorCode: 'RECORD_NOT_FOUND',
           errorCategory: 'data_integrity',
-          technicalError: fetchError?.message || 'Document record not found',
+          technicalError: 'Document record not found',
           processingStage: 'document_fetch',
           domain: 'invoices',
           documentType: 'invoice'
@@ -404,8 +350,16 @@ export const extractInvoiceData = task({
         throw new Error(userFriendlyMapping.userMessage);
       }
 
-      // Assign to function-scoped variable
-      docRecord = fetchedDocRecord;
+      // Assign to function-scoped variable (map Convex field names to expected format)
+      docRecord = {
+        file_name: fetchedDocRecord.file_name,
+        file_type: fetchedDocRecord.file_type,
+        file_size: fetchedDocRecord.file_size,
+        user_id: fetchedDocRecord.user_id,
+        business_id: fetchedDocRecord.business_id,
+        storage_path: fetchedDocRecord.storage_path,
+        converted_image_path: fetchedDocRecord.converted_image_path
+      };
 
       // Determine image storage path: use provided path or fall back to document.storage_path
       imageStoragePath = payload.imageStoragePath || docRecord.storage_path;
@@ -431,40 +385,42 @@ export const extractInvoiceData = task({
       console.log(`🖼️ Using image storage path: ${imageStoragePath}`);
 
       // Step 1.5: Fetch business categories based on document domain
+      // ✅ CONVEX MIGRATION: Use fetchBusinessCategories instead of separate DB functions
       if (docRecord.business_id) {
-        if (payload.documentDomain === 'invoices') {
-          console.log(`🏷️ Fetching business COGS categories for invoices - business_id: ${docRecord.business_id}`);
-          try {
-            businessCategories = await fetchEnabledCOGSCategoriesFromDB(docRecord.business_id);
-            console.log(`🏷️ Found ${businessCategories.length} enabled COGS categories for invoice categorization`);
+        try {
+          console.log(`🏷️ Fetching business categories - business_id: ${docRecord.business_id}`);
+          const businessCats = await fetchBusinessCategories(docRecord.business_id);
 
-            if (businessCategories.length > 0) {
-              console.log(`🏷️ COGS Categories Overview:`, businessCategories.map(cat => `${cat.category_code}: ${cat.category_name}`).join(', '));
+          if (businessCats) {
+            if (payload.documentDomain === 'invoices') {
+              console.log(`🏷️ Using COGS categories for invoices`);
+              businessCategories = transformCategoriesToDynamic(businessCats.customCogsCategories);
+              console.log(`🏷️ Found ${businessCategories.length} enabled COGS categories for invoice categorization`);
 
-              // Summary logging for AI processing
-              const totalKeywords = businessCategories.reduce((sum, cat) => sum + (cat.ai_keywords?.length || 0), 0);
-              const totalVendorPatterns = businessCategories.reduce((sum, cat) => sum + (cat.vendor_patterns?.length || 0), 0);
-              console.log(`🤖 AI Processing: ${businessCategories.length} COGS categories (${totalKeywords} keywords, ${totalVendorPatterns} vendor patterns) sent to AI`);
+              if (businessCategories.length > 0) {
+                console.log(`🏷️ COGS Categories Overview:`, businessCategories.map(cat => `${cat.category_code}: ${cat.category_name}`).join(', '));
+
+                // Summary logging for AI processing
+                const totalKeywords = businessCategories.reduce((sum, cat) => sum + (cat.ai_keywords?.length || 0), 0);
+                const totalVendorPatterns = businessCategories.reduce((sum, cat) => sum + (cat.vendor_patterns?.length || 0), 0);
+                console.log(`🤖 AI Processing: ${businessCategories.length} COGS categories (${totalKeywords} keywords, ${totalVendorPatterns} vendor patterns) sent to AI`);
+              } else {
+                console.log(`⚠️ No COGS categories found, will fall back to IFRS categories`);
+              }
+            } else if (payload.documentDomain === 'expense_claims') {
+              console.log(`🏷️ Using expense categories for expense claims`);
+              businessCategories = transformCategoriesToDynamic(businessCats.customExpenseCategories);
+              console.log(`🏷️ Found ${businessCategories.length} enabled expense categories for expense claim categorization`);
             } else {
-              console.log(`⚠️ No COGS categories found, will fall back to IFRS categories`);
+              console.log(`📝 Document domain '${payload.documentDomain}' - using IFRS categorization only`);
             }
-          } catch (categoryError) {
-            console.error(`⚠️ Failed to fetch COGS categories for invoices: ${categoryError}`);
-            console.log(`⚠️ Will continue with IFRS categorization only`);
-            businessCategories = [];
+          } else {
+            console.log(`⚠️ No business categories found for business_id: ${docRecord.business_id}`);
           }
-        } else if (payload.documentDomain === 'expense_claims') {
-          console.log(`🏷️ Fetching business expense categories for expense claims - business_id: ${docRecord.business_id}`);
-          try {
-            businessCategories = await fetchEnabledExpenseCategoriesFromDB(docRecord.business_id);
-            console.log(`🏷️ Found ${businessCategories.length} enabled expense categories for expense claim categorization`);
-          } catch (categoryError) {
-            console.error(`⚠️ Failed to fetch expense categories for expense claims: ${categoryError}`);
-            console.log(`⚠️ Will continue with IFRS categorization only`);
-            businessCategories = [];
-          }
-        } else {
-          console.log(`📝 Document domain '${payload.documentDomain}' - using IFRS categorization only`);
+        } catch (categoryError) {
+          console.error(`⚠️ Failed to fetch business categories: ${categoryError}`);
+          console.log(`⚠️ Will continue with IFRS categorization only`);
+          businessCategories = [];
         }
       } else {
         console.log(`⚠️ No business_id available - using IFRS categorization only`);
@@ -480,19 +436,21 @@ export const extractInvoiceData = task({
         // PDF CASE: converted_image_path is a folder containing multiple images
         console.log(`[ProcessDocumentOCR] PDF workflow - using converted image folder: ${docRecord.converted_image_path}`);
 
-        const { data: fileList, error: listError } = await supabase.storage
-          .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-          .list(docRecord.converted_image_path, {
-            limit: 100,
-            sortBy: { column: 'name', order: 'asc' }
-          });
-
-        if (listError) {
+        // ✅ S3 MIGRATION: Use S3 listFiles instead of Supabase storage
+        let fileList: Array<{ key: string; name: string; size: number; lastModified: Date }>;
+        try {
+          const result = await listFiles(
+            s3Prefix,
+            docRecord.converted_image_path,
+            { maxKeys: 100 }
+          );
+          fileList = result.files;
+        } catch (listError) {
           // Create error context for storage list failure
           const errorContext: ErrorContext = {
             errorCode: 'STORAGE_ACCESS_ERROR',
             errorCategory: 'storage_access',
-            technicalError: `Failed to list converted images: ${listError.message}`,
+            technicalError: `Failed to list converted images: ${listError instanceof Error ? listError.message : listError}`,
             processingStage: 'image_listing',
             domain: 'invoices',
             documentType: 'invoice'
@@ -528,16 +486,21 @@ export const extractInvoiceData = task({
           const filePath = `${docRecord.converted_image_path}/${file.name}`;
           console.log(`[ProcessDocumentOCR] Creating signed URL for file: ${filePath}`);
 
-          const { data: urlData, error: urlError } = await supabase.storage
-            .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-            .createSignedUrl(filePath, 600);
+          // ✅ S3 MIGRATION: Use S3 presigned URL instead of Supabase storage
+          try {
+            const signedUrl = await getPresignedDownloadUrl(s3Prefix, filePath, 600);
 
-          if (urlError || !urlData) {
+            pageUrls.push({
+              url: signedUrl,
+              filename: file.name,
+              path: filePath
+            });
+          } catch (urlError) {
             // Create error context for signed URL failure
             const errorContext: ErrorContext = {
               errorCode: 'STORAGE_ACCESS_ERROR',
               errorCategory: 'storage_access',
-              technicalError: `Failed to create signed URL for ${filePath}: ${urlError?.message}`,
+              technicalError: `Failed to create signed URL for ${filePath}: ${urlError instanceof Error ? urlError.message : String(urlError)}`,
               processingStage: 'signed_url_creation',
               domain: 'invoices',
               documentType: 'invoice'
@@ -548,12 +511,6 @@ export const extractInvoiceData = task({
 
             throw new Error(userFriendlyMapping.userMessage);
           }
-
-          pageUrls.push({
-            url: urlData.signedUrl,
-            filename: file.name,
-            path: filePath
-          });
         }
 
       } else {
@@ -564,21 +521,33 @@ export const extractInvoiceData = task({
         // Create signed URL for the single image file
         console.log(`[ProcessDocumentOCR] Creating signed URL for single image: ${processImagePath}`);
 
-        const { data: urlData, error: urlError } = await supabase.storage
-          .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-          .createSignedUrl(processImagePath, 600);
+        // ✅ S3 MIGRATION: Use S3 presigned URL instead of Supabase storage
+        try {
+          const signedUrl = await getPresignedDownloadUrl(s3Prefix, processImagePath, 600);
 
-        if (urlError || !urlData) {
-          throw new Error(`Failed to create signed URL for ${processImagePath}: ${urlError?.message}`);
+          // Extract filename from path for consistency
+          const filename = processImagePath.split('/').pop() || 'image';
+          pageUrls.push({
+            url: signedUrl,
+            filename: filename,
+            path: processImagePath
+          });
+        } catch (urlError) {
+          // Create error context for signed URL failure
+          const errorContext: ErrorContext = {
+            errorCode: 'STORAGE_ACCESS_ERROR',
+            errorCategory: 'storage_access',
+            technicalError: `Failed to create signed URL for ${processImagePath}: ${urlError instanceof Error ? urlError.message : String(urlError)}`,
+            processingStage: 'signed_url_creation',
+            domain: 'invoices',
+            documentType: 'invoice'
+          };
+
+          // Get user-friendly error message using mapper
+          const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
+
+          throw new Error(userFriendlyMapping.userMessage);
         }
-
-        // Extract filename from path for consistency
-        const filename = processImagePath.split('/').pop() || 'image';
-        pageUrls.push({
-          url: urlData.signedUrl,
-          filename: filename,
-          path: processImagePath
-        });
       }
 
       console.log(`[ProcessDocumentOCR] Created ${pageUrls.length} signed URLs for processing`);
@@ -1379,27 +1348,15 @@ print(json.dumps(result))
 
       console.log(`📊 Storing selected category in extracted_data: ${selectedCategory.category_code} -> ${selectedCategory.category_name}`);
 
-      const { error: updateError } = await supabase
-        .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-        .update(updateData)
-        .eq('id', payload.documentId);
+      // ✅ CONVEX MIGRATION: Use Convex helper instead of Supabase
+      const extractionResult: ExtractionResult = {
+        success: true,
+        extracted_data: finalAIResult,
+        confidence_score: finalExtractionData.confidence_score,
+        extraction_method: finalExtractionData.backend_used || 'ai_processing',
+      };
 
-      if (updateError) {
-        // Create error context for database update failure
-        const errorContext: ErrorContext = {
-          errorCode: 'DATABASE_UPDATE_ERROR',
-          errorCategory: 'database_update',
-          technicalError: `Failed to update document: ${updateError.message}`,
-          processingStage: 'database_update',
-          domain: 'invoices',
-          documentType: 'invoice'
-        };
-
-        // Get user-friendly error message using mapper
-        const userFriendlyMapping = getUserFriendlyErrorMessage(errorContext);
-
-        throw new Error(userFriendlyMapping.userMessage);
-      }
+      await updateExtractionResults(payload.documentId, extractionResult, tableName);
 
       console.log(`✅ Document ${payload.documentId} processed successfully`);
 
@@ -1763,14 +1720,15 @@ print(json.dumps(result))
 
           console.log(`📊 Storing vLLM fallback category in extracted_data: ${selectedCategory.category_code} -> ${selectedCategory.category_name}`);
 
-          const { error: vllmUpdateError } = await supabase
-            .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-            .update(vllmUpdateData)
-            .eq('id', payload.documentId);
+          // ✅ CONVEX MIGRATION: Use Convex helper instead of Supabase
+          const vllmExtractionResult: ExtractionResult = {
+            success: true,
+            extracted_data: finalVllmAiResult,
+            confidence_score: vllmExtractionData.confidence_score,
+            extraction_method: vllmExtractionData.backend_used || 'vllm_fallback',
+          };
 
-          if (vllmUpdateError) {
-            throw new Error(`Failed to update document with vLLM results: ${vllmUpdateError.message}`);
-          }
+          await updateExtractionResults(payload.documentId, vllmExtractionResult, tableName);
 
           console.log(`✅ Document ${payload.documentId} processed successfully with vLLM fallback`);
 
@@ -1793,40 +1751,30 @@ print(json.dumps(result))
 
         } catch (fallbackError) {
           console.error("❌ vLLM fallback also failed:", fallbackError);
-          
-          // Both DSPy and vLLM failed - mark as failed
-          // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
-          const usesStatusColumn1 = tableName === 'expense_claims' || tableName === 'invoices';
-          const statusColumn1 = usesStatusColumn1 ? 'status' : 'processing_status';
 
-          await supabase
-            .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-            .update({
-              [statusColumn1]: 'failed',
-            error_message: `Primary AI processing failed: ${aiError instanceof Error ? aiError.message : 'Unknown error'}. vLLM fallback failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`,
-            processed_at: new Date().toISOString(),
+          // ✅ CONVEX MIGRATION: Use Convex helper instead of Supabase
+          const bothFailedErrorDetails = {
+            message: `Primary AI processing failed: ${aiError instanceof Error ? aiError.message : 'Unknown error'}. vLLM fallback failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`,
+            error_type: 'extraction_failed',
             processing_method: 'both_methods_failed'
-          }).eq('id', payload.documentId);
-          
+          };
+
+          await updateDocumentStatus(payload.documentId, 'failed', bothFailedErrorDetails, tableName);
+
           throw new Error(`Both primary and vLLM processing failed. Primary: ${aiError}. vLLM: ${fallbackError}`);
         }
       } else {
         console.warn("⚠️ No OCR_ENDPOINT_URL configured for vLLM fallback");
-        
-        // No fallback available - mark as failed
-        // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
-        const usesStatusColumn2 = tableName === 'expense_claims' || tableName === 'invoices';
-        const statusColumn2 = usesStatusColumn2 ? 'status' : 'processing_status';
 
-        await supabase
-          .from(tableName)  // ✅ PHASE 4C: Routed based on domain
-          .update({
-            [statusColumn2]: 'failed',
-          error_message: `AI processing failed: ${aiError instanceof Error ? aiError.message : 'Processing failed'}. No vLLM fallback configured.`,
-          processed_at: new Date().toISOString(),
+        // ✅ CONVEX MIGRATION: Use Convex helper instead of Supabase
+        const aiOnlyFailedErrorDetails = {
+          message: `AI processing failed: ${aiError instanceof Error ? aiError.message : 'Processing failed'}. No vLLM fallback configured.`,
+          error_type: 'extraction_failed',
           processing_method: 'ai_only_failed'
-        }).eq('id', payload.documentId);
-        
+        };
+
+        await updateDocumentStatus(payload.documentId, 'failed', aiOnlyFailedErrorDetails, tableName);
+
         throw aiError;
       }
     }

@@ -1,14 +1,20 @@
 /**
  * Base Tool Abstract Class
  * Enforces security-first architecture with mandatory user context validation
+ *
+ * MIGRATED TO CONVEX (2026-01-03)
+ * - Convex: Primary database for all operations
+ * - AWS S3: File storage (via convex actions)
  */
 
-import { createServerSupabaseClient, createAuthenticatedSupabaseClient, getUserData } from '@/lib/db/supabase-server'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
+import type { ConvexHttpClient } from 'convex/browser'
 
 export interface UserContext {
   userId: string // Clerk user ID
-  supabaseUserId?: string // Supabase UUID
+  supabaseUserId?: string // Database user ID (legacy name, now Convex user ID)
   businessId?: string // Business ID for tenant isolation
   conversationId?: string
 }
@@ -70,13 +76,10 @@ export interface OpenAIToolSchema {
  * Abstract base class that enforces security patterns for all tools
  */
 export abstract class BaseTool {
-  protected supabase: SupabaseClient
-  protected authenticatedSupabase: SupabaseClient | null = null
-
-  constructor() {
-    // Use basic server client for permission checks only
-    this.supabase = createServerSupabaseClient()
-  }
+  // Convex client for database queries
+  // CRITICAL: Must be authenticated for queries requiring ctx.auth.getUserIdentity()
+  protected convex: ConvexHttpClient | null = null
+  protected convexApi = api
 
   /**
    * Public execute method with mandatory security validation
@@ -91,19 +94,24 @@ export abstract class BaseTool {
         }
       }
 
-      // SECURITY: Get complete user data including business context for proper tenant isolation
-      let userData: { id: string; business_id: string | null; home_currency: string; email: string; full_name: string | null }
+      // SECURITY: Get complete user data from Convex including business context for proper tenant isolation
       try {
-        userData = await getUserData(userContext.userId)
+        const userProfile = await ensureUserProfile(userContext.userId)
+        if (!userProfile) {
+          return {
+            success: false,
+            error: 'Authentication failed: Unable to resolve user profile'
+          }
+        }
 
         // Enrich user context with business information for proper security validation
-        userContext.supabaseUserId = userData.id
-        userContext.businessId = userData.business_id || undefined
+        userContext.supabaseUserId = userProfile.user_id
+        userContext.businessId = userProfile.business_id || undefined
 
         console.log(`[${this.getToolName()}] Enhanced user context:`, {
           clerkUserId: userContext.userId,
-          supabaseUserId: userData.id,
-          businessId: userData.business_id
+          convexUserId: userProfile.user_id,
+          businessId: userProfile.business_id
         })
       } catch (userDataError) {
         return {
@@ -112,13 +120,23 @@ export abstract class BaseTool {
         }
       }
 
-      // CRITICAL: Create authenticated client for this specific user with business context
+      // CRITICAL: Create authenticated Convex client for queries requiring ctx.auth.getUserIdentity()
       try {
-        this.authenticatedSupabase = await createAuthenticatedSupabaseClient(userContext.userId)
-      } catch (authError) {
+        const { client: convexAuthClient } = await getAuthenticatedConvex()
+        if (!convexAuthClient) {
+          console.error(`[${this.getToolName()}] ❌ Convex authentication failed - no JWT token`)
+          return {
+            success: false,
+            error: 'Authentication failed: Unable to create authenticated Convex connection'
+          }
+        }
+        this.convex = convexAuthClient
+        console.log(`[${this.getToolName()}] ✅ Convex authenticated client created`)
+      } catch (convexAuthError) {
+        console.error(`[${this.getToolName()}] ❌ Convex auth error:`, convexAuthError)
         return {
           success: false,
-          error: 'Authentication failed: Unable to create authenticated database connection'
+          error: 'Authentication failed: Unable to authenticate with Convex'
         }
       }
 
@@ -185,33 +203,6 @@ export abstract class BaseTool {
       console.error(`[${this.getToolName()}] Permission check error:`, error)
       return false
     }
-  }
-
-  /**
-   * Utility method to create RLS-enabled database queries using authenticated client
-   * SECURITY: Now includes proper business context validation for multi-tenant isolation
-   */
-  protected createSecureQuery<T = any>(tableName: string, userContext: UserContext) {
-    if (!this.authenticatedSupabase) {
-      throw new Error('Authenticated client not available - ensure execute() method created it')
-    }
-
-    if (!userContext.supabaseUserId) {
-      throw new Error('Supabase user ID not available in user context')
-    }
-
-    let query = this.authenticatedSupabase
-      .from(tableName)
-      .select('*')
-      .eq('user_id', userContext.supabaseUserId)
-
-    // SECURITY: Add business context validation for multi-tenant tables
-    if (userContext.businessId) {
-      query = query.eq('business_id', userContext.businessId)
-      console.log(`[${this.getToolName()}] Applied business context filter: ${userContext.businessId}`)
-    }
-
-    return query as any
   }
 
   /**

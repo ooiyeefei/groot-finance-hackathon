@@ -1,23 +1,31 @@
 /**
  * Trigger.dev Task: PDF to Image Conversion using Python
- * 
+ *
  * This task handles PDF to image conversion using Python's pdf2image library,
  * which is more reliable in containerized environments than Node.js alternatives.
- * 
- * Flow: PDF → Python conversion → Upload image → Trigger classification task
+ *
+ * Flow: PDF → Python conversion → Upload image to S3 → Trigger classification task
+ *
+ * STORAGE: Migrated from Supabase Storage to AWS S3 (2025)
+ * DATABASE: Migrated from Supabase to Convex (2025)
  */
 
 import { task, tasks } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
-import { createClient } from '@supabase/supabase-js';
 import { analyzeStoragePath, generateProcessedPath, StoragePathBuilder, type DocumentType } from '@/lib/storage-paths';
-
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import {
+  downloadFile,
+  uploadFile,
+  listFiles,
+  fileExists,
+  type S3Prefix
+} from './utils/s3-helpers';
+// ✅ CONVEX MIGRATION: Use Convex helpers instead of direct Supabase client
+import {
+  fetchDocument,
+  updateDocumentStatus,
+  updateConvertedImagePath,
+} from './utils/convex-helpers';
 
 // ✅ PHASE 4B-2: Domain-to-table mapping for multi-domain architecture
 const DOMAIN_TABLE_MAP = {
@@ -25,11 +33,11 @@ const DOMAIN_TABLE_MAP = {
   'expense_claims': 'expense_claims'
 } as const;
 
-// ✅ PHASE 4J: Domain-to-bucket mapping for multi-bucket architecture
-const DOMAIN_BUCKET_MAP = {
+// ✅ S3 MIGRATION: Domain-to-S3-prefix mapping
+const DOMAIN_S3_PREFIX_MAP: Record<string, S3Prefix> = {
   'invoices': 'invoices',
   'expense_claims': 'expense_claims'
-} as const;
+};
 
 export const convertPdfToImage = task({
   id: "convert-pdf-to-image",
@@ -44,22 +52,19 @@ export const convertPdfToImage = task({
     try {
       // ✅ PHASE 4B-2: Route to correct table based on domain
       const tableName = DOMAIN_TABLE_MAP[payload.documentDomain];
-      const bucketName = DOMAIN_BUCKET_MAP[payload.documentDomain];  // ✅ PHASE 4J: Route to correct bucket
-      console.log(`🔍 Using table: ${tableName} and bucket: ${bucketName} for domain: ${payload.documentDomain}`);
+      const s3Prefix = DOMAIN_S3_PREFIX_MAP[payload.documentDomain];  // ✅ S3 MIGRATION: Route to correct S3 prefix
+      console.log(`🔍 Using table: ${tableName} and S3 prefix: ${s3Prefix} for domain: ${payload.documentDomain}`);
 
       // Step 1: Get PDF storage path if not provided (for Applications workflow)
       let pdfStoragePath = payload.pdfStoragePath;
 
       if (!pdfStoragePath) {
         console.log(`🔍 Fetching storage path for document: ${payload.documentId}`);
-        const { data: document, error: fetchError } = await supabase
-          .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
-          .select('storage_path')
-          .eq('id', payload.documentId)
-          .single();
+        // ✅ CONVEX MIGRATION: Use fetchDocument helper instead of direct Supabase
+        const document = await fetchDocument(payload.documentId, tableName);
 
-        if (fetchError || !document) {
-          throw new Error(`Failed to fetch document storage path: ${fetchError?.message}`);
+        if (!document) {
+          throw new Error(`Failed to fetch document storage path: Document not found`);
         }
 
         pdfStoragePath = document.storage_path;
@@ -70,42 +75,32 @@ export const convertPdfToImage = task({
         throw new Error('PDF storage path is required but not provided');
       }
 
-      // Step 2: Download PDF from Supabase Storage
-      console.log(`📥 Downloading PDF from: ${pdfStoragePath}`);
+      // Step 2: Download PDF from AWS S3
+      console.log(`📥 Downloading PDF from S3: ${s3Prefix}/${pdfStoragePath}`);
 
-      // First, check if file exists
-      const { data: fileExists, error: listError } = await supabase.storage
-        .from(bucketName)  // ✅ PHASE 4J: Routed to correct bucket
-        .list(pdfStoragePath.split('/').slice(0, -1).join('/'), {
-          limit: 1000,
-          search: pdfStoragePath.split('/').pop()
-        });
+      // ✅ S3 MIGRATION: Check if file exists in S3
+      const pdfExists = await fileExists(s3Prefix, pdfStoragePath);
 
-      if (listError) {
-        console.error(`❌ Error checking file existence:`, listError);
-      } else if (!fileExists || fileExists.length === 0) {
-        console.error(`❌ File not found in storage: ${pdfStoragePath}`);
-        throw new Error(`PDF file not found in storage: ${pdfStoragePath}`);
-      } else {
-        console.log(`✅ File exists in storage: ${fileExists[0].name} (${fileExists[0].metadata?.size || 'unknown size'})`);
+      if (!pdfExists) {
+        console.error(`❌ File not found in S3: ${s3Prefix}/${pdfStoragePath}`);
+        throw new Error(`PDF file not found in S3: ${pdfStoragePath}`);
       }
 
-      // Now attempt download
-      const { data: pdfData, error: downloadError } = await supabase.storage
-        .from(bucketName)  // ✅ PHASE 4J: Routed to correct bucket
-        .download(pdfStoragePath);
+      console.log(`✅ File exists in S3: ${pdfStoragePath}`);
 
-      if (downloadError) {
-        console.error(`❌ Download error details:`, JSON.stringify(downloadError, null, 2));
-        throw new Error(`Failed to download PDF: ${downloadError.message || JSON.stringify(downloadError)}`);
+      // ✅ S3 MIGRATION: Download PDF from S3
+      let pdfBuffer: Buffer;
+      try {
+        pdfBuffer = await downloadFile(s3Prefix, pdfStoragePath);
+        console.log(`✅ Downloaded PDF from S3: ${pdfBuffer.length} bytes`);
+      } catch (downloadError) {
+        console.error(`❌ S3 Download error:`, downloadError);
+        throw new Error(`Failed to download PDF from S3: ${downloadError instanceof Error ? downloadError.message : 'Unknown error'}`);
       }
 
-      if (!pdfData) {
+      if (!pdfBuffer || pdfBuffer.length === 0) {
         throw new Error(`No data received from PDF download`);
       }
-
-      // Convert Blob to Buffer for Python processing
-      const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
       console.log(`📄 PDF downloaded successfully: ${pdfBuffer.length} bytes`);
 
       // Validate PDF format
@@ -366,39 +361,20 @@ except Exception as e:
       // We only need file_name, business_id, user_id for path construction
       // Document type classification happens AFTER conversion in classify-document.ts
 
-      // Fetch document based on table type (expense_claims doesn't have document_metadata)
-      let document: any;
-      let docError: any;
+      // ✅ CONVEX MIGRATION: Use fetchDocument helper which returns all fields for both table types
+      const docContext = await fetchDocument(payload.documentId, tableName);
 
-      if (tableName === 'expense_claims') {
-        const result = await supabase
-          .from(tableName)
-          .select('file_name, business_id, user_id, processing_metadata')
-          .eq('id', payload.documentId)
-          .single();
-        document = result.data;
-        docError = result.error;
-      } else {
-        const result = await supabase
-          .from(tableName)
-          .select('file_name, business_id, user_id, document_metadata')
-          .eq('id', payload.documentId)
-          .single();
-        document = result.data;
-        docError = result.error;
+      if (!docContext) {
+        throw new Error(`Failed to fetch document context: Document not found`);
       }
 
-      if (docError || !document) {
-        throw new Error(`Failed to fetch document context: ${docError?.message}`);
-      }
-
-      // Type assertion for consistent access
-      const typedDocument = document as {
-        file_name: string;
-        business_id: string | null;
-        user_id: string;
-        document_metadata?: any;
-        processing_metadata?: any;
+      // Map Convex response to expected format (already includes all fields)
+      const typedDocument = {
+        file_name: docContext.file_name || '',
+        business_id: docContext.business_id || null,
+        user_id: docContext.user_id || '',
+        document_metadata: docContext.document_metadata,
+        processing_metadata: docContext.processing_metadata,
       };
 
       const originalFilename = typedDocument.file_name;
@@ -485,27 +461,29 @@ except Exception as e:
         console.log(`⚠️ Fallback folder structure with timestamp folder: ${convertedFolderPath}`);
       }
 
-      // Step 4: Upload all pages using unified logic
+      // Step 4: Upload all pages to S3 using unified logic
       const uploadPromises = conversionResult.pages.map(async (page: any, index: number) => {
         const imagePath = imagePaths[index];
 
         // Convert base64 to buffer for upload
         const imageBuffer = Buffer.from(page.base64_image, 'base64');
 
-        console.log(`📄 Uploading page ${page.page_number} (${imageBuffer.length} bytes) to: ${imagePath}`);
+        console.log(`📄 Uploading page ${page.page_number} (${imageBuffer.length} bytes) to S3: ${s3Prefix}/${imagePath}`);
 
-        // Upload to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-          .from(bucketName)  // ✅ PHASE 4J: Routed to correct bucket
-          .upload(imagePath, imageBuffer, {
-            contentType: 'image/jpeg',
-            upsert: true
-          });
+        // ✅ S3 MIGRATION: Upload to AWS S3
+        const uploadResult = await uploadFile(
+          s3Prefix,
+          imagePath,
+          imageBuffer,
+          'image/jpeg'
+        );
 
-        if (uploadError) {
-          console.error(`❌ Upload error for page ${page.page_number}:`, JSON.stringify(uploadError, null, 2));
-          throw new Error(`Failed to upload page ${page.page_number}: ${JSON.stringify(uploadError)}`);
+        if (!uploadResult.success) {
+          console.error(`❌ S3 Upload error for page ${page.page_number}:`, uploadResult.error);
+          throw new Error(`Failed to upload page ${page.page_number} to S3: ${uploadResult.error}`);
         }
+
+        console.log(`✅ Page ${page.page_number} uploaded to S3: ${uploadResult.key}`);
 
         return {
           page_number: page.page_number,
@@ -530,42 +508,18 @@ except Exception as e:
         height: page.height
       }));
 
-      // Build update data based on table type
-      const updateData: any = {
-        converted_image_path: convertedFolderPath // Store converted folder path without overwriting storage_path
-      };
-
-      // Only add width/height columns for tables that have them (not expense_claims)
-      if (tableName !== 'expense_claims') {
-        updateData.converted_image_width = uploadedPages[0]?.width || null; // First page dimensions for compatibility
-        updateData.converted_image_height = uploadedPages[0]?.height || null;
-        updateData.document_metadata = {
-          ...typedDocument.document_metadata,
-          pages: pageMetadata, // Detailed page metadata
-          total_pages: uploadedPages.length
-        };
-      } else {
-        // For expense_claims, store page metadata in processing_metadata instead
-        updateData.processing_metadata = {
-          ...typedDocument.processing_metadata,
-          pages: pageMetadata,
-          total_pages: uploadedPages.length,
-          // Store dimensions in metadata for expense_claims
-          converted_image_width: uploadedPages[0]?.width || null,
-          converted_image_height: uploadedPages[0]?.height || null
-        };
-      }
-
-      const { error: updateError } = await supabase
-        .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
-        .update(updateData)
-        .eq('id', payload.documentId);
-
-      if (updateError) {
-        console.warn(`⚠️ Failed to update ${tableName} converted_image_path: ${updateError.message}`);
-        // Don't throw error - continue with classification
-      } else {
+      // ✅ CONVEX MIGRATION: Use updateConvertedImagePath helper (handles table-specific metadata internally)
+      try {
+        await updateConvertedImagePath(
+          payload.documentId,
+          convertedFolderPath,
+          pageMetadata,
+          tableName
+        );
         console.log(`✅ ${tableName} converted_image_path updated to: ${convertedFolderPath} with ${uploadedPages.length} pages`);
+      } catch (updateError) {
+        console.warn(`⚠️ Failed to update ${tableName} converted_image_path: ${updateError instanceof Error ? updateError.message : updateError}`);
+        // Don't throw error - continue with classification
       }
 
       // Step 6: Trigger classification task for the converted image
@@ -577,21 +531,15 @@ except Exception as e:
         documentDomain: payload.documentDomain  // ✅ PHASE 4B-2: Pass domain to next task
       };
 
-      // Note: converted_image_path already updated above, just update status
-      // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
-      const usesStatusColumn = tableName === 'expense_claims' || tableName === 'invoices';
-      const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
+      // ✅ CONVEX MIGRATION: Update status before triggering classification
+      // Status values: expense_claims → 'analyzing', invoices → 'uploading', others → 'classifying'
       const statusValue = tableName === 'expense_claims' ? 'analyzing' :
                         tableName === 'invoices' ? 'uploading' : 'classifying';
 
-      const { error: statusUpdateError } = await supabase
-        .from(tableName)  // ✅ PHASE 4B-2: Routed based on domain
-        .update({
-          [statusColumn]: statusValue // Update status as it moves to classification
-        })
-        .eq('id', payload.documentId);
-
-      if (statusUpdateError) {
+      try {
+        await updateDocumentStatus(payload.documentId, statusValue, undefined, tableName);
+        console.log(`✅ ${tableName} status updated to '${statusValue}' for classification`);
+      } catch (statusUpdateError) {
         console.error(`❌ Failed to update ${tableName} status:`, statusUpdateError);
         // Don't throw - continue with classification as conversion succeeded
       }
@@ -617,40 +565,24 @@ except Exception as e:
     } catch (error) {
       console.error("❌ PDF conversion failed:", error);
 
-      // ✅ PHASE 4B-2: Route error update to correct table
+      // ✅ CONVEX MIGRATION: Route error update to correct table using Convex helper
       const errorTableName = DOMAIN_TABLE_MAP[payload.documentDomain];
 
-      // Build error details in consistent format
+      // Build error details in consistent format (Convex helper handles JSONB vs string internally)
       const errorDetails = {
         message: error instanceof Error ? error.message : 'PDF conversion failed',
         error_type: 'conversion_failed'
       };
 
-      // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
-      const usesStatusColumn = errorTableName === 'expense_claims' || errorTableName === 'invoices';
-      const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
-      const timestampColumn = errorTableName === 'expense_claims' ? 'failed_at' : 'processed_at';
+      console.log(`🔄 Updating ${errorTableName} status to 'failed' for document ${payload.documentId}`);
 
-      console.log(`🔄 Updating ${errorTableName}.${statusColumn} to 'failed' for document ${payload.documentId}`);
-
-      const updateData: any = {
-        [statusColumn]: 'failed',
-        [timestampColumn]: new Date().toISOString()
-      };
-
-      // Use JSONB format for expense_claims, string for others
-      if (errorTableName === 'expense_claims') {
-        updateData.error_message = errorDetails;  // JSONB format
-      } else {
-        updateData.error_message = errorDetails.message;  // String format
+      try {
+        await updateDocumentStatus(payload.documentId, 'failed', errorDetails, errorTableName);
+        console.log(`✅ Updated ${errorTableName} status to 'failed' for document ${payload.documentId}`);
+      } catch (updateError) {
+        console.error(`⚠️ Failed to update ${errorTableName} error status:`, updateError);
+        // Don't throw - we're already in the error handler
       }
-
-      await supabase
-        .from(errorTableName)
-        .update(updateData)
-        .eq('id', payload.documentId);
-
-      console.log(`✅ Updated ${errorTableName} status to 'failed' for document ${payload.documentId}`);
 
       throw error;
     }

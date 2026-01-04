@@ -2,14 +2,16 @@
  * Business API V1
  * POST /api/v1/businesses - Create new business
  * GET /api/v1/businesses - List user's businesses
+ *
+ * Migrated to Convex from Supabase
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth,currentUser } from '@clerk/nextjs/server'
 import { createBusiness, getUserBusinessMemberships } from '@/domains/account-management/lib/account-management.service'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
-import { csrfProtection } from '@/domains/security/lib/csrf-protection'
-import { getUserData, createServiceSupabaseClient } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 
 /**
  * Create new business and assign current user as owner
@@ -24,6 +26,18 @@ export async function POST(request: NextRequest) {
       }, { status: 401 })
     }
 
+    // Get Clerk user info for repair function
+    const clerkUser = await currentUser()
+    if (!clerkUser) {
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to get user info'
+      }, { status: 401 })
+    }
+
+    const userEmail = clerkUser.emailAddresses[0]?.emailAddress || ''
+    const userFullName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || undefined
+
     // Apply rate limiting
     const rateLimitResponse = await rateLimiters.admin(request)
     if (rateLimitResponse) {
@@ -37,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     // 🔧 REPAIR LOGIC: Check for broken user state before creating new business
     console.log(`[Business API] 🛠️ Checking for broken user state: ${userId}`)
-    const repairResult = await repairBrokenUserState(userId)
+    const repairResult = await repairBrokenUserState(userId, userEmail, userFullName)
 
     // Handle existing business cases (both repaired and non-repaired)
     if (repairResult.hasExistingBusiness || repairResult.fixed) {
@@ -144,112 +158,58 @@ export async function GET(request: NextRequest) {
 
 /**
  * 🛠️ REPAIR FUNCTION: Fix broken user states from incomplete signup flows
- * Handles cases where user has business_id but missing business_membership
+ * Migrated to use Convex ensureUserWithBusiness mutation
+ *
+ * Handles cases where:
+ * - User has business_id but missing business_membership
+ * - User exists but no active membership
+ * - Pending invitations need activation
  */
-async function repairBrokenUserState(clerkUserId: string): Promise<{
+async function repairBrokenUserState(clerkUserId: string, email: string, fullName?: string): Promise<{
   fixed: boolean
   hasExistingBusiness: boolean
-  business?: any
+  business?: { id: string; name: string }
   error?: string
 }> {
   try {
-    console.log(`[Repair] 🔍 Diagnosing user state: ${clerkUserId}`)
+    console.log(`[Repair] 🔍 Diagnosing user state via Convex: ${clerkUserId}`)
 
-    // Get user data to check current state
-    const userData = await getUserData(clerkUserId)
-    console.log(`[Repair] 📊 User data: business_id=${userData.business_id}, email=${userData.email}`)
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error(`[Repair] ❌ Failed to get authenticated Convex client`)
+      return { fixed: false, hasExistingBusiness: false, error: 'Authentication failed' }
+    }
 
-    // Case 1: User has no business_id - completely new user, no repair needed
-    if (!userData.business_id) {
-      console.log(`[Repair] ✅ User has no business_id - new user, no repair needed`)
+    // Call Convex mutation that handles all repair scenarios atomically
+    const result = await client.mutation(api.functions.users.ensureUserWithBusiness, {
+      clerkUserId,
+      email,
+      fullName
+    })
+
+    if (!result) {
+      console.log(`[Repair] ❌ ensureUserWithBusiness returned null - user needs onboarding`)
       return { fixed: false, hasExistingBusiness: false }
     }
 
-    // Case 2: User has business_id - check if business and membership exist
-    const supabase = createServiceSupabaseClient()
-
-    // Check if business exists
-    const { data: business, error: businessError } = await supabase
-      .from('businesses')
-      .select('id, name, owner_id')
-      .eq('id', userData.business_id)
-      .single()
-
-    if (businessError || !business) {
-      console.log(`[Repair] ❌ Business ${userData.business_id} not found, user state is corrupted`)
-      // Could reset user's business_id to null here, but safer to let them create new business
-      return { fixed: false, hasExistingBusiness: false }
-    }
-
-    console.log(`[Repair] 🏢 Found business: ${business.name} (owner: ${business.owner_id})`)
-
-    // Check if business membership exists
-    const { data: membership, error: membershipError } = await supabase
-      .from('business_memberships')
-      .select('id, role, status')
-      .eq('user_id', userData.id)
-      .eq('business_id', userData.business_id)
-      .single()
-
-    if (!membershipError && membership) {
-      console.log(`[Repair] ✅ Business membership exists: role=${membership.role}, status=${membership.status}`)
-
-      // If membership exists but status is not active, fix it
-      if (membership.status !== 'active') {
-        console.log(`[Repair] 🔧 Fixing inactive membership status`)
-        const { error: updateError } = await supabase
-          .from('business_memberships')
-          .update({
-            status: 'active',
-            joined_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', membership.id)
-
-        if (updateError) {
-          console.error(`[Repair] ❌ Failed to fix membership status:`, updateError)
-          return { fixed: false, hasExistingBusiness: true, business, error: 'Failed to repair membership' }
-        }
-
-        console.log(`[Repair] ✅ Fixed membership status to active`)
-        return { fixed: true, hasExistingBusiness: true, business }
-      }
-
-      // Membership is active, user is good to go
-      return { fixed: false, hasExistingBusiness: true, business }
-    }
-
-    // Case 3: Business exists but membership is missing - CREATE MISSING MEMBERSHIP
-    console.log(`[Repair] 🚑 CRITICAL: Business exists but membership missing - creating repair membership`)
-
-    const role: 'admin' | 'manager' | 'employee' = business.owner_id === userData.id ? 'admin' : 'employee'
-    console.log(`[Repair] 👤 Creating membership with role: ${role} (user=${userData.id}, owner=${business.owner_id})`)
-
-    const { data: newMembership, error: createError } = await supabase
-      .from('business_memberships')
-      .insert({
-        user_id: userData.id,
-        business_id: userData.business_id,
-        role: role,
-        status: 'active',
-        joined_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
+    // If we have a business_id, fetch the business details
+    if (result.business_id) {
+      const business = await client.query(api.functions.businesses.getById, {
+        id: result.business_id
       })
-      .select('id, role, status')
-      .single()
 
-    if (createError) {
-      console.error(`[Repair] ❌ Failed to create missing business membership:`, createError)
-      return { fixed: false, hasExistingBusiness: false, error: 'Failed to repair membership' }
+      if (business) {
+        console.log(`[Repair] ✅ User has active membership to business: ${business.name}`)
+        return {
+          fixed: true,
+          hasExistingBusiness: true,
+          business: { id: business._id, name: business.name }
+        }
+      }
     }
 
-    console.log(`[Repair] 🎉 SUCCESS: Created missing business membership - role=${newMembership.role}`)
-
-    // REMOVED: employee_profiles table was dropped in migration 20251005085345
-    // All role/permission data is now in business_memberships table
-    // No need to create separate employee profile
-
-    return { fixed: true, hasExistingBusiness: true, business }
+    console.log(`[Repair] ⚠️ User exists but no business found`)
+    return { fixed: false, hasExistingBusiness: false }
 
   } catch (error) {
     console.error('[Repair] 💥 Error during repair:', error)

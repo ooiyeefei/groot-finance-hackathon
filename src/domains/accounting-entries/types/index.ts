@@ -193,6 +193,7 @@ export interface EntityMapping {
 export interface AccountingEntryListParams {
   page?: number
   limit?: number
+  business_id?: string
   transaction_type?: TransactionType
   category?: string
   date_from?: string
@@ -200,6 +201,7 @@ export interface AccountingEntryListParams {
   search?: string
   sort_by?: 'date' | 'amount' | 'created_at' | 'transaction_date' | 'original_amount'
   sort_order?: 'asc' | 'desc'
+  cursor?: string // For Convex pagination
 }
 
 export interface AccountingEntryListResponse {

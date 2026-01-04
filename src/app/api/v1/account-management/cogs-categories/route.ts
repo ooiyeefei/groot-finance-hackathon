@@ -20,7 +20,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserData } from '@/lib/db/supabase-server'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import {
   getCOGSCategories,
@@ -41,30 +40,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userData = await getUserData(userId)
-
-    if (!userData.business_id) {
-      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
-    }
-
-
-    // Get user profile with role permissions from database
+    // Get user profile from Convex (same pattern as expense categories)
     const userProfile = await ensureUserProfile(userId)
     if (!userProfile) {
       return NextResponse.json({ success: false, error: 'Failed to get user profile' }, { status: 400 })
     }
 
+    if (!userProfile.business_id) {
+      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
+    }
+
+    console.log('[COGS Categories V1 API] Fetching categories for business:', userProfile.business_id)
+
     // ✅ PERFORMANCE: Cache COGS categories with in-memory cache + existing Redis cache
     const categories = await withCache(
       userId,
       'cogs-categories',
-      () => getCOGSCategories(userData.business_id!),
+      () => getCOGSCategories(userProfile.business_id),
       {
-        params: { business_id: userData.business_id! },
-        ttlMs: CACHE_TTL.BUSINESS_SETTINGS,
-        skipCache: false
+        params: { business_id: userProfile.business_id },
+        ttlMs: CACHE_TTL.BUSINESS_SETTINGS
       }
     )
+
+    console.log('[COGS Categories V1 API] Found', categories?.length || 0, 'categories')
 
     // Check management permissions from database (consistent with expense-claims API)
     const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.admin
@@ -94,16 +93,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userData = await getUserData(userId)
-
-    if (!userData.business_id) {
-      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
-    }
-
-    // Get user profile with role permissions from database
+    // Get user profile from Convex (same pattern as expense categories)
     const userProfile = await ensureUserProfile(userId)
     if (!userProfile) {
       return NextResponse.json({ success: false, error: 'Failed to get user profile' }, { status: 400 })
+    }
+
+    if (!userProfile.business_id) {
+      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
     }
 
     // Check management permissions from database (consistent with expense-claims API)
@@ -117,13 +114,12 @@ export async function POST(request: NextRequest) {
 
     const body: CreateCOGSCategoryRequest = await request.json()
 
-
     // Call service layer
-    const newCategory = await createCOGSCategory(userData.business_id!, body)
+    const newCategory = await createCOGSCategory(userProfile.business_id, body)
 
     // Invalidate both in-memory and Redis cache for this business
     apiCache.invalidate(userId, 'cogs-categories')
-    await redisCategoryCache.invalidateBusinessCategories(userData.business_id!)
+    await redisCategoryCache.invalidateBusinessCategories(userProfile.business_id)
 
     return NextResponse.json({
       success: true,
@@ -156,16 +152,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userData = await getUserData(userId)
-
-    if (!userData.business_id) {
-      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
-    }
-
-    // Get user profile with role permissions from database
+    // Get user profile from Convex (same pattern as expense categories)
     const userProfile = await ensureUserProfile(userId)
     if (!userProfile) {
       return NextResponse.json({ success: false, error: 'Failed to get user profile' }, { status: 400 })
+    }
+
+    if (!userProfile.business_id) {
+      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
     }
 
     // Check management permissions from database (consistent with expense-claims API)
@@ -187,11 +181,11 @@ export async function PUT(request: NextRequest) {
     }
 
     // Call service layer
-    const updatedCategory = await updateCOGSCategory(userData.business_id!, body)
+    const updatedCategory = await updateCOGSCategory(userProfile.business_id, body)
 
     // Invalidate both in-memory and Redis cache for this business
     apiCache.invalidate(userId, 'cogs-categories')
-    await redisCategoryCache.invalidateBusinessCategories(userData.business_id!)
+    await redisCategoryCache.invalidateBusinessCategories(userProfile.business_id)
 
     return NextResponse.json({
       success: true,
@@ -224,16 +218,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userData = await getUserData(userId)
-
-    if (!userData.business_id) {
-      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
-    }
-
-    // Get user profile with role permissions from database
+    // Get user profile from Convex (same pattern as expense categories)
     const userProfile = await ensureUserProfile(userId)
     if (!userProfile) {
       return NextResponse.json({ success: false, error: 'Failed to get user profile' }, { status: 400 })
+    }
+
+    if (!userProfile.business_id) {
+      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
     }
 
     // Check management permissions from database (consistent with expense-claims API)
@@ -255,11 +247,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Call service layer
-    await deleteCOGSCategory(userData.business_id!, body.id)
+    await deleteCOGSCategory(userProfile.business_id, body.id)
 
     // Invalidate both in-memory and Redis cache for this business
     apiCache.invalidate(userId, 'cogs-categories')
-    await redisCategoryCache.invalidateBusinessCategories(userData.business_id!)
+    await redisCategoryCache.invalidateBusinessCategories(userProfile.business_id)
 
     return NextResponse.json({
       success: true,

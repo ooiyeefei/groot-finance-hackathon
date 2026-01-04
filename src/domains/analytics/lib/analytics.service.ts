@@ -5,15 +5,14 @@
  * - Consolidated analytics, realtime metrics, and cash flow monitoring
  * - Reuses existing analytics engine and risk-scoring logic
  * - Multi-tenant security with business_id isolation
- * - Performance optimization with RPC functions
+ * - Performance optimization with Convex queries
  *
- * Migrated from:
- * - src/lib/analytics/engine.ts (calculateFinancialAnalytics, calculateAnalyticsTrends)
- * - src/app/api/analytics/realtime/route.ts (realtime RPC handler)
- * - src/lib/monitoring/cash-flow-monitor.ts (runCashFlowMonitoring + 5 helpers)
+ * Migrated to Convex from Supabase
  */
 
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import {
   calculateFinancialAnalytics as calculateAnalyticsEngine,
@@ -121,17 +120,12 @@ export async function calculateAnalyticsTrends(
 }
 
 // ==========================================
-// Realtime Metrics Functions
-// ==========================================
-
-
-// ==========================================
 // Cash Flow Monitoring Functions
 // ==========================================
 
 /**
  * Main cash flow monitoring orchestrator
- * Consolidates all monitoring logic from cash-flow-monitor.ts
+ * Uses Convex queries for all database operations
  */
 export async function runCashFlowMonitoring(
   clerkUserId: string,
@@ -148,35 +142,57 @@ export async function runCashFlowMonitoring(
   const alerts: CashFlowAlert[] = []
   const projections: CashFlowProjection[] = []
 
-  // Get user data with business context
-  const userProfile = await getUserData(clerkUserId)
-
-  if (!userProfile.business_id) {
+  // Get user profile with business context
+  const userProfile = await ensureUserProfile(clerkUserId)
+  if (!userProfile || !userProfile.business_id) {
     throw new Error('No business context found')
   }
 
-  // Create authenticated Supabase client
-  const supabase = await createAuthenticatedSupabaseClient(clerkUserId)
+  const homeCurrency = userProfile.home_currency || 'SGD'
+
+  // Get Convex client
+  const { client: convexClient } = await getAuthenticatedConvex()
+  if (!convexClient) {
+    throw new Error('Failed to get Convex client')
+  }
 
   try {
     // 1. Check overdue receivables
-    const receivableAlerts = await checkOverdueReceivables(clerkUserId, config, supabase, userProfile)
+    const receivableAlerts = await checkOverdueReceivables(
+      config,
+      convexClient,
+      userProfile.business_id,
+      homeCurrency
+    )
     alerts.push(...receivableAlerts)
 
     // 2. Check upcoming payment deadlines
-    const paymentAlerts = await checkPaymentDeadlines(clerkUserId, config, supabase, userProfile)
+    const paymentAlerts = await checkPaymentDeadlines(
+      config,
+      convexClient,
+      userProfile.business_id,
+      homeCurrency
+    )
     alerts.push(...paymentAlerts)
 
     // 3. Analyze currency exposure risk
-    const currencyAlerts = await checkCurrencyExposure(clerkUserId, config, supabase, userProfile)
+    const currencyAlerts = await checkCurrencyExposure(
+      config,
+      convexClient,
+      userProfile.business_id
+    )
     alerts.push(...currencyAlerts)
 
     // 4. Generate cash flow projections
-    const cashProjections = await generateCashFlowProjections(clerkUserId, supabase, userProfile)
+    const cashProjections = await generateCashFlowProjections(
+      convexClient,
+      userProfile.business_id,
+      homeCurrency
+    )
     projections.push(...cashProjections)
 
     // 5. Check for potential cash shortages
-    const cashAlerts = await checkCashShortageRisk(clerkUserId, projections, config)
+    const cashAlerts = checkCashShortageRisk(projections, config)
     alerts.push(...cashAlerts)
 
   } catch (error) {
@@ -204,194 +220,126 @@ export async function runCashFlowMonitoring(
 }
 
 /**
- * Check for overdue receivables (income transactions)
+ * Check for overdue receivables using Convex query
  */
 async function checkOverdueReceivables(
-  clerkUserId: string,
   config: MonitoringConfig,
-  supabase: any,
-  userProfile: any
+  convexClient: any,
+  businessId: string,
+  homeCurrency: string
 ): Promise<CashFlowAlert[]> {
   const alerts: CashFlowAlert[] = []
 
-  // Fetch income transactions that are overdue
-  const { data: receivables, error } = await supabase
-    .from('accounting_entries')
-    .select('*')
-    .eq('user_id', userProfile.id)
-    .eq('business_id', userProfile.business_id)
-    .eq('transaction_type', 'Income')
-    .in('status', ['pending', 'awaiting_payment', 'overdue'])
+  // Fetch overdue receivables via Convex
+  const overdueItems = await convexClient.query(api.functions.analytics.getOverdueReceivables, {
+    businessId: businessId as any,
+    agingThresholdDays: config.receivable_aging_threshold
+  })
 
-  if (error) {
-    console.error('[Analytics Service] Error fetching receivables:', error)
+  if (!overdueItems || overdueItems.length === 0) {
     return alerts
   }
 
-  if (!receivables || receivables.length === 0) {
-    return alerts
-  }
-
-  const currentDate = new Date()
-
-  for (const receivable of receivables) {
-    const dueDate = receivable.due_date ? new Date(receivable.due_date) : null
-    const transactionDate = new Date(receivable.transaction_date)
-
-    // Default to 30 days payment terms if no due date
-    const effectiveDueDate = dueDate || new Date(transactionDate.getTime() + (30 * 24 * 60 * 60 * 1000))
-
-    const daysPastDue = Math.floor((currentDate.getTime() - effectiveDueDate.getTime()) / (1000 * 60 * 60 * 24))
-
-    // Only alert if past the configured threshold
-    if (daysPastDue > config.receivable_aging_threshold) {
-      // Calculate risk score
-      const riskContext: TransactionRiskContext = {
-        amount: receivable.home_currency_amount || receivable.original_amount,
-        currency: receivable.home_currency || receivable.original_currency,
-        daysPastDue,
-        transactionType: 'income',
-        paymentTerms: 30
-      }
-
-      const riskScore = calculateRiskScore(riskContext, DEFAULT_RISK_CONFIG)
-
-      alerts.push({
-        id: `receivable-${receivable.id}`,
-        type: 'overdue_receivables',
-        severity: riskScore.level,
-        title: 'Overdue Receivable',
-        description: `Payment from ${receivable.vendor_name || 'customer'} is ${daysPastDue} days overdue`,
-        amount: receivable.home_currency_amount || receivable.original_amount,
-        currency: receivable.home_currency || receivable.original_currency,
-        due_date: effectiveDueDate.toISOString(),
-        transaction_ids: [receivable.id],
-        recommendation: riskScore.recommendation,
-        created_at: new Date().toISOString()
-      })
+  for (const item of overdueItems) {
+    // Calculate risk score
+    const riskContext: TransactionRiskContext = {
+      amount: item.amount,
+      currency: item.currency as SupportedCurrency,
+      daysPastDue: item.daysPastDue,
+      transactionType: 'income',
+      paymentTerms: 30
     }
+
+    const riskScore = calculateRiskScore(riskContext, DEFAULT_RISK_CONFIG)
+
+    alerts.push({
+      id: `receivable-${item.id}`,
+      type: 'overdue_receivables',
+      severity: riskScore.level,
+      title: 'Overdue Receivable',
+      description: `Payment from ${item.vendorName || 'customer'} is ${item.daysPastDue} days overdue`,
+      amount: item.amount,
+      currency: item.currency as SupportedCurrency,
+      due_date: item.dueDate,
+      transaction_ids: [item.id],
+      recommendation: riskScore.recommendation,
+      created_at: new Date().toISOString()
+    })
   }
 
   return alerts
 }
 
 /**
- * Check for upcoming payment deadlines (expense transactions)
+ * Check for upcoming payment deadlines using Convex query
  */
 async function checkPaymentDeadlines(
-  clerkUserId: string,
   config: MonitoringConfig,
-  supabase: any,
-  userProfile: any
+  convexClient: any,
+  businessId: string,
+  homeCurrency: string
 ): Promise<CashFlowAlert[]> {
   const alerts: CashFlowAlert[] = []
 
-  // Fetch expense transactions with upcoming due dates
-  const { data: payables, error } = await supabase
-    .from('accounting_entries')
-    .select('*')
-    .eq('user_id', userProfile.id)
-    .eq('business_id', userProfile.business_id)
-    .eq('transaction_type', 'Expense')
-    .in('status', ['pending', 'awaiting_payment'])
+  // Fetch upcoming payments via Convex
+  const upcomingPayments = await convexClient.query(api.functions.analytics.getUpcomingPayments, {
+    businessId: businessId as any,
+    windowDays: config.payment_deadline_window
+  })
 
-  if (error) {
-    console.error('[Analytics Service] Error fetching payables:', error)
+  if (!upcomingPayments || upcomingPayments.length === 0) {
     return alerts
   }
 
-  if (!payables || payables.length === 0) {
-    return alerts
-  }
-
-  const currentDate = new Date()
-  const windowDate = new Date(currentDate.getTime() + (config.payment_deadline_window * 24 * 60 * 60 * 1000))
-
-  for (const payable of payables) {
-    const dueDate = payable.due_date ? new Date(payable.due_date) : null
-
-    if (!dueDate) continue
-
-    // Alert if due date is within the configured window
-    if (dueDate <= windowDate && dueDate >= currentDate) {
-      const daysUntilDue = Math.floor((dueDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))
-
-      alerts.push({
-        id: `payment-${payable.id}`,
-        type: 'payment_deadline',
-        severity: daysUntilDue <= 3 ? 'high' : 'medium',
-        title: 'Upcoming Payment Due',
-        description: `Payment to ${payable.vendor_name || 'vendor'} due in ${daysUntilDue} days`,
-        amount: payable.home_currency_amount || payable.original_amount,
-        currency: payable.home_currency || payable.original_currency,
-        due_date: dueDate.toISOString(),
-        transaction_ids: [payable.id],
-        recommendation: `Schedule payment to maintain supplier relationships`,
-        created_at: new Date().toISOString()
-      })
-    }
+  for (const payment of upcomingPayments) {
+    alerts.push({
+      id: `payment-${payment.id}`,
+      type: 'payment_deadline',
+      severity: payment.daysUntilDue <= 3 ? 'high' : 'medium',
+      title: 'Upcoming Payment Due',
+      description: `Payment to ${payment.vendorName || 'vendor'} due in ${payment.daysUntilDue} days`,
+      amount: payment.amount,
+      currency: payment.currency as SupportedCurrency,
+      due_date: payment.dueDate,
+      transaction_ids: [payment.id],
+      recommendation: `Schedule payment to maintain supplier relationships`,
+      created_at: new Date().toISOString()
+    })
   }
 
   return alerts
 }
 
 /**
- * Check currency exposure concentration risk
+ * Check currency exposure concentration risk using Convex query
  */
 async function checkCurrencyExposure(
-  clerkUserId: string,
   config: MonitoringConfig,
-  supabase: any,
-  userProfile: any
+  convexClient: any,
+  businessId: string
 ): Promise<CashFlowAlert[]> {
   const alerts: CashFlowAlert[] = []
 
-  // Fetch all active transactions
-  const { data: transactions, error } = await supabase
-    .from('accounting_entries')
-    .select('original_currency, home_currency_amount, original_amount')
-    .eq('user_id', userProfile.id)
-    .eq('business_id', userProfile.business_id)
-    .in('status', ['pending', 'awaiting_payment'])
+  // Fetch currency exposure via Convex
+  const exposureData = await convexClient.query(api.functions.analytics.getCurrencyExposure, {
+    businessId: businessId as any
+  })
 
-  if (error) {
-    console.error('[Analytics Service] Error fetching transactions:', error)
+  if (!exposureData || !exposureData.currencyExposure || exposureData.currencyExposure.length === 0) {
     return alerts
-  }
-
-  if (!transactions || transactions.length === 0) {
-    return alerts
-  }
-
-  // Calculate currency breakdown
-  const currencyTotals: Record<string, number> = {}
-  let totalAmount = 0
-
-  for (const txn of transactions) {
-    const amount = Math.abs(txn.home_currency_amount || txn.original_amount || 0)
-    const currency = txn.original_currency
-
-    if (!currencyTotals[currency]) {
-      currencyTotals[currency] = 0
-    }
-
-    currencyTotals[currency] += amount
-    totalAmount += amount
   }
 
   // Check if any currency exceeds threshold
-  for (const [currency, amount] of Object.entries(currencyTotals)) {
-    const percentage = (amount / totalAmount) * 100
-
-    if (percentage > config.currency_exposure_threshold) {
+  for (const exposure of exposureData.currencyExposure) {
+    if (exposure.percentage > config.currency_exposure_threshold) {
       alerts.push({
-        id: `currency-${currency}`,
+        id: `currency-${exposure.currency}`,
         type: 'currency_exposure',
-        severity: percentage > 70 ? 'high' : 'medium',
+        severity: exposure.percentage > 70 ? 'high' : 'medium',
         title: 'High Currency Concentration',
-        description: `${percentage.toFixed(1)}% of outstanding transactions are in ${currency}`,
-        amount,
-        currency: currency as SupportedCurrency,
+        description: `${exposure.percentage.toFixed(1)}% of outstanding transactions are in ${exposure.currency}`,
+        amount: exposure.amount,
+        currency: exposure.currency as SupportedCurrency,
         recommendation: `Consider diversifying currency exposure to reduce foreign exchange risk`,
         created_at: new Date().toISOString()
       })
@@ -402,16 +350,15 @@ async function checkCurrencyExposure(
 }
 
 /**
- * Generate cash flow projections (7, 30, 90 days)
+ * Generate cash flow projections using Convex queries
  */
 async function generateCashFlowProjections(
-  clerkUserId: string,
-  supabase: any,
-  userProfile: any
+  convexClient: any,
+  businessId: string,
+  homeCurrency: string
 ): Promise<CashFlowProjection[]> {
   const projections: CashFlowProjection[] = []
 
-  const currentDate = new Date()
   const periods = [
     { days: 7, period: '7_day' as const, label: '7-Day Projection' },
     { days: 30, period: '30_day' as const, label: '30-Day Projection' },
@@ -419,61 +366,36 @@ async function generateCashFlowProjections(
   ]
 
   for (const { days, period, label } of periods) {
-    const periodEnd = new Date(currentDate.getTime() + (days * 24 * 60 * 60 * 1000))
-
-    // Fetch transactions with due dates in this period
-    const { data: transactions, error } = await supabase
-      .from('accounting_entries')
-      .select('transaction_type, home_currency_amount, original_amount, due_date')
-      .eq('user_id', userProfile.id)
-      .eq('business_id', userProfile.business_id)
-      .gte('due_date', currentDate.toISOString().split('T')[0])
-      .lte('due_date', periodEnd.toISOString().split('T')[0])
-
-    if (error) {
-      console.error('[Analytics Service] Error fetching projection data:', error)
-      continue
-    }
-
-    let projectedInflows = 0
-    let projectedOutflows = 0
-
-    if (transactions) {
-      for (const txn of transactions) {
-        const amount = Math.abs(txn.home_currency_amount || txn.original_amount || 0)
-
-        if (txn.transaction_type === 'Income') {
-          projectedInflows += amount
-        } else {
-          projectedOutflows += amount
-        }
-      }
-    }
-
-    projections.push({
-      period,
-      period_label: label,
-      period_start: currentDate.toISOString().split('T')[0],
-      period_end: periodEnd.toISOString().split('T')[0],
-      projected_inflows: projectedInflows,
-      projected_outflows: projectedOutflows,
-      net_cash_flow: projectedInflows - projectedOutflows,
-      confidence_level: days <= 7 ? 'high' : days <= 30 ? 'medium' : 'low',
-      currency: userProfile.home_currency || 'SGD'
+    const projectionData = await convexClient.query(api.functions.analytics.getCashFlowProjection, {
+      businessId: businessId as any,
+      periodDays: days
     })
+
+    if (projectionData) {
+      projections.push({
+        period,
+        period_label: label,
+        period_start: projectionData.periodStart,
+        period_end: projectionData.periodEnd,
+        projected_inflows: projectionData.projectedInflows,
+        projected_outflows: projectionData.projectedOutflows,
+        net_cash_flow: projectionData.netCashFlow,
+        confidence_level: days <= 7 ? 'high' : days <= 30 ? 'medium' : 'low',
+        currency: (projectionData.currency || homeCurrency) as SupportedCurrency
+      })
+    }
   }
 
   return projections
 }
 
 /**
- * Check for potential cash shortage risk
+ * Check for potential cash shortage risk (pure calculation - no DB access)
  */
-async function checkCashShortageRisk(
-  clerkUserId: string,
+function checkCashShortageRisk(
   projections: CashFlowProjection[],
   config: MonitoringConfig
-): Promise<CashFlowAlert[]> {
+): CashFlowAlert[] {
   const alerts: CashFlowAlert[] = []
 
   // Check each projection for negative cash flow

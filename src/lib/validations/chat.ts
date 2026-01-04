@@ -6,7 +6,7 @@
 
 import { z } from 'zod'
 import {
-  uuidSchema,
+  documentIdSchema,
   languageSchema,
   paginationSchema,
   searchQuerySchema
@@ -43,14 +43,14 @@ export const sendChatMessageSchema = z.object({
     .min(1, 'Message cannot be empty')
     .max(5000, 'Message too long'),
 
-  conversation_id: uuidSchema.optional(),
+  conversation_id: documentIdSchema.optional(),
 
   language: languageSchema.default('en'),
 
   context: z.object({
-    document_id: uuidSchema.optional(),
-    transaction_id: uuidSchema.optional(),
-    business_id: uuidSchema.optional()
+    document_id: documentIdSchema.optional(),
+    transaction_id: documentIdSchema.optional(),
+    business_id: documentIdSchema.optional()
   }).optional()
 })
 
@@ -84,21 +84,21 @@ export const listConversationsQuerySchema = paginationSchema.extend({
  * Conversation ID parameter schema
  */
 export const conversationIdParamSchema = z.object({
-  conversationId: uuidSchema
+  conversationId: documentIdSchema
 })
 
 /**
  * Message ID parameter schema
  */
 export const messageIdParamSchema = z.object({
-  messageId: uuidSchema
+  messageId: documentIdSchema
 })
 
 /**
  * Citation preview request schema
  */
 export const citationPreviewSchema = z.object({
-  source_id: uuidSchema,
+  source_id: documentIdSchema,
 
   source_type: citationSourceTypeSchema
 })
@@ -107,7 +107,7 @@ export const citationPreviewSchema = z.object({
  * Feedback schema for AI responses
  */
 export const messageFeedbackSchema = z.object({
-  message_id: uuidSchema,
+  message_id: documentIdSchema,
 
   rating: z.enum(['positive', 'negative']),
 
@@ -130,7 +130,7 @@ export const messageFeedbackSchema = z.object({
  * Export conversation schema
  */
 export const exportConversationSchema = z.object({
-  conversation_id: uuidSchema,
+  conversation_id: documentIdSchema,
 
   format: z.enum(['txt', 'json', 'pdf']).default('txt'),
 

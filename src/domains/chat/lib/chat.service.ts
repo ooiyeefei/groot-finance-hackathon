@@ -1,15 +1,23 @@
 /**
  * Chat Service Layer
+ *
  * Business logic for LangGraph AI agent conversations, messages, and citations.
+ *
+ * Migrated to Convex from Supabase
+ *
+ * North Star Architecture:
+ * - All business logic centralized in service layer
+ * - API routes are thin wrappers handling HTTP concerns
  */
 
-import { createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 import { createFinancialAgent, createAgentState } from '@/lib/ai/langgraph-agent'
 import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages'
 import { type Locale, isValidLocale } from '@/i18n'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 
-// Types
+// ===== TYPE DEFINITIONS =====
 
 export interface SendMessageRequest {
   message: string
@@ -50,7 +58,7 @@ export interface Message {
   created_at: string
 }
 
-// Main Chat Functions
+// ===== CORE SERVICE FUNCTIONS =====
 
 /**
  * Send chat message and get AI agent response with conversation history and citations
@@ -64,7 +72,10 @@ export async function sendChatMessage(
   const { message, conversationId, language: rawLanguage = 'en' } = request
   const language: Locale = isValidLocale(rawLanguage) ? rawLanguage as Locale : 'en'
 
-  const supabase = await createBusinessContextSupabaseClient(userId)
+  const { client: convexClient } = await getAuthenticatedConvex()
+  if (!convexClient) {
+    throw new Error('Failed to get Convex client')
+  }
 
   // Get or create conversation
   let currentConversationId: string
@@ -72,39 +83,24 @@ export async function sendChatMessage(
   if (conversationId) {
     currentConversationId = conversationId
   } else {
-    const { data: newConversation, error: conversationError } = await supabase
-      .from('conversations')
-      .insert({
-        user_id: supabaseUserId,
-        business_id: businessId,
-        title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
-        language: language
-      })
-      .select('id')
-      .single()
+    // Create new conversation via Convex
+    const newConversationId = await convexClient.mutation(api.functions.conversations.create, {
+      businessId: businessId as any, // Convex will validate
+      title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
+      language: language
+    })
 
-    if (conversationError) {
-      throw new Error(`Failed to create conversation: ${conversationError.message}`)
-    }
-
-    currentConversationId = newConversation.id
+    currentConversationId = newConversationId
   }
 
-  // Get recent conversation history (last 10 messages)
-  const { data: recentMessages, error: historyError } = await supabase
-    .from('messages')
-    .select('role, content, metadata')
-    .eq('conversation_id', currentConversationId)
-    .eq('user_id', supabaseUserId)
-    .order('created_at', { ascending: false })
-    .limit(10)
+  // Get recent conversation history (last 10 messages) for LangGraph context
+  const historyResult = await convexClient.query(api.functions.messages.getRecentForContext, {
+    conversationId: currentConversationId,
+    limit: 10
+  })
 
-  if (historyError) {
-    throw new Error(`Failed to fetch conversation history: ${historyError.message}`)
-  }
-
-  // Convert to LangChain format (reverse to chronological order)
-  const conversationHistory: BaseMessage[] = recentMessages.reverse().map(msg => {
+  // Convert to LangChain format
+  const conversationHistory: BaseMessage[] = (historyResult || []).map((msg: any) => {
     if (msg.role === 'user') {
       return new HumanMessage(msg.content)
     } else {
@@ -114,11 +110,10 @@ export async function sendChatMessage(
 
   // Check if this is a clarification response
   const isClarificationResponse = await _checkIfClarificationResponse(
-    supabase,
+    convexClient,
     currentConversationId,
-    userId,
     message,
-    recentMessages
+    historyResult
   )
 
   // Create user context for agent
@@ -172,15 +167,12 @@ export async function sendChatMessage(
   const agentCitations = agentResult.citations || []
   assistantResponse = _ensureCitationMarkers(assistantResponse, agentCitations)
 
-  // Save messages to database
-  await supabase
-    .from('messages')
-    .insert({
-      conversation_id: currentConversationId,
-      user_id: supabaseUserId,
-      role: 'user',
-      content: message
-    })
+  // Save user message to database
+  await convexClient.mutation(api.functions.messages.create, {
+    conversationId: currentConversationId,
+    role: 'user',
+    content: message
+  })
 
   // Prepare assistant message metadata
   const assistantMetadata: any = {}
@@ -191,27 +183,19 @@ export async function sendChatMessage(
 
   if (agentResult.needsClarification && agentResult.clarificationQuestions?.length) {
     assistantMetadata.clarification_pending = true
-    assistantMetadata.agent_state = agentResult
+    // Serialize agent state - convert LangChain messages to plain objects for Convex
+    assistantMetadata.agent_state = _serializeAgentState(agentResult)
     assistantMetadata.clarification_questions = agentResult.clarificationQuestions
     assistantMetadata.original_query = message
   }
 
-  await supabase
-    .from('messages')
-    .insert({
-      conversation_id: currentConversationId,
-      user_id: supabaseUserId,
-      role: 'assistant',
-      content: assistantResponse,
-      metadata: Object.keys(assistantMetadata).length > 0 ? assistantMetadata : null
-    })
-
-  // Update conversation timestamp
-  await supabase
-    .from('conversations')
-    .update({ updated_at: new Date().toISOString() })
-    .eq('id', currentConversationId)
-    .eq('user_id', supabaseUserId)
+  // Save assistant message
+  await convexClient.mutation(api.functions.messages.create, {
+    conversationId: currentConversationId,
+    role: 'assistant',
+    content: assistantResponse,
+    metadata: Object.keys(assistantMetadata).length > 0 ? assistantMetadata : undefined
+  })
 
   return {
     message: assistantResponse,
@@ -226,7 +210,6 @@ export async function sendChatMessage(
 
 /**
  * List user conversations with message counts
- * OPTIMIZED: Uses RPC function to eliminate N+1 query pattern
  */
 export async function listConversations(
   clerkUserId: string,
@@ -234,76 +217,43 @@ export async function listConversations(
   businessId: string,
   limit: number = 50
 ): Promise<Conversation[]> {
-  const supabase = await createBusinessContextSupabaseClient(clerkUserId)
+  console.log(`[Chat Service] listConversations called with businessId: ${businessId}, limit: ${limit}`)
 
-  // Try optimized RPC function first (90% faster)
-  try {
-    const { data: conversations, error: rpcError } = await supabase
-      .rpc('list_conversations_optimized', {
-        p_user_id: supabaseUserId,
-        p_business_id: businessId,
-        p_limit: limit
-      })
-
-    if (!rpcError && conversations) {
-      console.log(`[Chat Service] ✅ Used optimized RPC query (${conversations.length} conversations)`)
-      return conversations
-    }
-
-    // If RPC fails, log and fall through to backup method
-    console.warn(`[Chat Service] ⚠️ RPC function failed, using fallback:`, rpcError?.message)
-  } catch (rpcError) {
-    console.warn(`[Chat Service] ⚠️ RPC error, using fallback:`, rpcError)
+  const { client: convexClient, userId: authUserId } = await getAuthenticatedConvex()
+  if (!convexClient) {
+    console.error('[Chat Service] ❌ Failed to get authenticated Convex client')
+    throw new Error('Failed to get Convex client')
   }
 
-  // FALLBACK: Original implementation (for backward compatibility)
-  console.log(`[Chat Service] 📊 Using legacy query method`)
+  console.log(`[Chat Service] ✅ Got authenticated Convex client for user: ${authUserId}`)
 
-  const { data: conversations, error } = await supabase
-    .from('conversations')
-    .select(`
-      id,
-      title,
-      language,
-      is_active,
-      created_at,
-      updated_at,
-      messages (
-        id,
-        role,
-        content,
-        created_at,
-        deleted_at
-      )
-    `)
-    .eq('user_id', supabaseUserId)
-    .eq('business_id', businessId)
-    .is('deleted_at', null)
-    .order('updated_at', { ascending: false })
-    .limit(limit)
-
-  if (error) {
-    console.error(`[Chat Service] DEBUG: Database query failed:`, error)
-    throw new Error(`Failed to fetch conversations: ${error.message}`)
-  }
-
-  // Format conversations with latest message preview
-  const formattedConversations = conversations.map(conv => {
-    const activeMessages = conv.messages?.filter(msg => !msg.deleted_at) || []
-
-    return {
-      id: conv.id,
-      title: conv.title,
-      language: conv.language,
-      is_active: conv.is_active,
-      created_at: conv.created_at,
-      updated_at: conv.updated_at,
-      message_count: activeMessages.length,
-      latest_message: activeMessages.length > 0 ? activeMessages[activeMessages.length - 1] : null
-    }
+  // Query conversations via Convex
+  console.log(`[Chat Service] Querying Convex conversations.list...`)
+  const result = await convexClient.query(api.functions.conversations.list, {
+    businessId: businessId as any,
+    limit
   })
 
-  return formattedConversations
+  console.log(`[Chat Service] Convex returned:`, JSON.stringify(result, null, 2))
+
+  // Transform Convex response to expected format
+  const conversations: Conversation[] = (result.conversations || []).map((conv: any) => ({
+    id: conv._id,
+    title: conv.title || 'New Chat',
+    language: conv.language || 'en',
+    is_active: conv.isActive ?? true,
+    created_at: new Date(conv._creationTime).toISOString(),
+    updated_at: conv.updatedAt ? new Date(conv.updatedAt).toISOString() : new Date(conv._creationTime).toISOString(),
+    message_count: conv.messageCount ?? 0,
+    latest_message: conv.lastMessageContent ? {
+      role: conv.lastMessageRole,
+      content: conv.lastMessageContent,
+      created_at: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : null
+    } : null
+  }))
+
+  console.log(`[Chat Service] ✅ Fetched ${conversations.length} conversations via Convex`)
+  return conversations
 }
 
 /**
@@ -315,26 +265,24 @@ export async function createConversation(
   businessId: string,
   language: string = 'en'
 ): Promise<{ id: string; title: string }> {
-  const supabase = await createBusinessContextSupabaseClient(clerkUserId)
-
-  const { data: newConversation, error: conversationError } = await supabase
-    .from('conversations')
-    .insert({
-      user_id: supabaseUserId,
-      business_id: businessId,
-      title: 'New Chat',
-      language: language
-    })
-    .select('id, title')
-    .single()
-
-  if (conversationError) {
-    throw new Error(`Failed to create conversation: ${conversationError.message}`)
+  const { client: convexClient } = await getAuthenticatedConvex()
+  if (!convexClient) {
+    throw new Error('Failed to get Convex client')
   }
 
-  console.log(`[Chat Service] Created new conversation: ${newConversation.id}`)
+  // Create conversation via Convex
+  const conversationId = await convexClient.mutation(api.functions.conversations.create, {
+    businessId: businessId as any,
+    title: 'New Chat',
+    language: language
+  })
 
-  return newConversation
+  console.log(`[Chat Service] Created new conversation: ${conversationId}`)
+
+  return {
+    id: conversationId,
+    title: 'New Chat'
+  }
 }
 
 /**
@@ -345,132 +293,88 @@ export async function getConversation(
   clerkUserId: string,
   supabaseUserId: string
 ): Promise<ConversationWithMessages> {
-  const supabase = await createBusinessContextSupabaseClient(clerkUserId)
+  const { client: convexClient } = await getAuthenticatedConvex()
+  if (!convexClient) {
+    throw new Error('Failed to get Convex client')
+  }
 
   // Get conversation
-  const { data: conversation, error: conversationError } = await supabase
-    .from('conversations')
-    .select(`
-      id,
-      title,
-      language,
-      is_active,
-      created_at,
-      updated_at
-    `)
-    .eq('id', conversationId)
-    .eq('user_id', supabaseUserId)
-    .is('deleted_at', null)
-    .single()
+  const conversation = await convexClient.query(api.functions.conversations.getById, {
+    id: conversationId
+  })
 
-  if (conversationError) {
-    if (conversationError.code === 'PGRST116') {
-      throw new Error('Conversation not found')
-    }
-    throw new Error(`Failed to fetch conversation: ${conversationError.message}`)
+  if (!conversation) {
+    throw new Error('Conversation not found')
   }
 
   // Get all messages
-  const { data: messages, error: messagesError } = await supabase
-    .from('messages')
-    .select(`
-      id,
-      role,
-      content,
-      metadata,
-      created_at
-    `)
-    .eq('conversation_id', conversationId)
-    .eq('user_id', supabaseUserId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: true })
+  const messagesResult = await convexClient.query(api.functions.messages.list, {
+    conversationId: conversationId,
+    limit: 1000 // Get all messages
+  })
 
-  if (messagesError) {
-    throw new Error(`Failed to fetch messages: ${messagesError.message}`)
-  }
+  // Transform to expected format
+  const messages: Message[] = (messagesResult.messages || []).map((msg: any) => ({
+    id: msg._id,
+    role: msg.role as 'user' | 'assistant',
+    content: msg.content,
+    metadata: msg.metadata,
+    created_at: new Date(msg._creationTime).toISOString()
+  }))
 
   return {
-    ...conversation,
-    messages: messages || []
+    id: conversation._id,
+    title: conversation.title || 'New Chat',
+    language: conversation.language || 'en',
+    is_active: conversation.isActive ?? true,
+    created_at: new Date(conversation._creationTime).toISOString(),
+    updated_at: conversation.updatedAt ? new Date(conversation.updatedAt).toISOString() : new Date(conversation._creationTime).toISOString(),
+    messages
   }
 }
 
 /**
- * Soft delete conversation and messages
+ * Delete conversation and messages
+ * Note: Convex uses hard delete instead of soft delete
  */
 export async function deleteConversation(
   conversationId: string,
   clerkUserId: string,
   supabaseUserId: string
 ): Promise<void> {
-  const supabase = await createBusinessContextSupabaseClient(clerkUserId)
-  const now = new Date().toISOString()
-
-  // Soft delete conversation
-  const { error: conversationError } = await supabase
-    .from('conversations')
-    .update({ deleted_at: now })
-    .eq('id', conversationId)
-    .eq('user_id', supabaseUserId)
-    .is('deleted_at', null)
-
-  if (conversationError) {
-    throw new Error(`Failed to delete conversation: ${conversationError.message}`)
+  const { client: convexClient } = await getAuthenticatedConvex()
+  if (!convexClient) {
+    throw new Error('Failed to get Convex client')
   }
 
-  // Soft delete all messages in the conversation
-  const { error: messagesError } = await supabase
-    .from('messages')
-    .update({ deleted_at: now })
-    .eq('conversation_id', conversationId)
-    .eq('user_id', supabaseUserId)
-    .is('deleted_at', null)
+  // Delete conversation (this also deletes all messages in Convex)
+  await convexClient.mutation(api.functions.conversations.remove, {
+    id: conversationId
+  })
 
-  if (messagesError) {
-    console.error('[Chat Service] Failed to delete messages:', messagesError)
-    // Continue - conversation deletion is more important
-  }
+  console.log(`[Chat Service] Deleted conversation: ${conversationId}`)
 }
 
 /**
- * Soft delete message
+ * Delete message
+ * Note: Convex uses hard delete instead of soft delete
  */
 export async function deleteMessage(
   messageId: string,
   clerkUserId: string,
   supabaseUserId: string
 ): Promise<void> {
-  const supabase = await createBusinessContextSupabaseClient(clerkUserId)
-
-  // Verify message belongs to user by checking conversation ownership
-  const { data: message, error: fetchError } = await supabase
-    .from('messages')
-    .select(`
-      id,
-      conversation_id,
-      conversations!inner (
-        user_id
-      )
-    `)
-    .eq('id', messageId)
-    .eq('conversations.user_id', supabaseUserId)
-    .is('deleted_at', null)
-    .single()
-
-  if (fetchError || !message) {
-    throw new Error('Message not found')
+  const { client: convexClient } = await getAuthenticatedConvex()
+  if (!convexClient) {
+    throw new Error('Failed to get Convex client')
   }
 
-  // Soft delete message
-  const { error: deleteError } = await supabase
-    .from('messages')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', messageId)
-    .is('deleted_at', null)
+  // Delete message
+  await convexClient.mutation(api.functions.messages.remove, {
+    id: messageId
+  })
 
-  if (deleteError) {
-    throw new Error(`Failed to delete message: ${deleteError.message}`)
-  }
+  console.log(`[Chat Service] Deleted message: ${messageId}`)
 }
 
 /**
@@ -507,7 +411,74 @@ export async function proxyCitationDocument(url: string): Promise<Response> {
   })
 }
 
-// Private Helper Functions
+// ===== PRIVATE HELPER FUNCTIONS =====
+
+/**
+ * Serialize LangGraph agent state for Convex storage
+ * Converts LangChain message objects to plain JSON-serializable objects
+ *
+ * Preserves all important message data:
+ * - role, content (essential)
+ * - tool_calls, additional_kwargs (for tool-using agents)
+ * - name, id (message identity)
+ * - response_metadata (model info)
+ */
+function _serializeAgentState(agentResult: any): any {
+  const serialized: any = {}
+
+  // Copy primitive and simple object properties
+  for (const [key, value] of Object.entries(agentResult)) {
+    if (key === 'messages') {
+      // Convert LangChain messages to plain objects, preserving all important data
+      serialized.messages = (value as any[]).map((msg: any) => {
+        // Check if it's a LangChain message object
+        if (msg && typeof msg._getType === 'function') {
+          const plainMsg: any = {
+            role: msg._getType() === 'human' ? 'user' : 'assistant',
+            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+          }
+
+          // Preserve tool calls for AI messages (important for agent continuity)
+          if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+            plainMsg.tool_calls = msg.tool_calls
+          }
+
+          // Preserve additional kwargs (can contain function call details)
+          if (msg.additional_kwargs && Object.keys(msg.additional_kwargs).length > 0) {
+            plainMsg.additional_kwargs = msg.additional_kwargs
+          }
+
+          // Preserve message identity if present
+          if (msg.name) plainMsg.name = msg.name
+          if (msg.id) plainMsg.id = msg.id
+
+          // Preserve response metadata (token usage, model info)
+          if (msg.response_metadata && Object.keys(msg.response_metadata).length > 0) {
+            plainMsg.response_metadata = msg.response_metadata
+          }
+
+          return plainMsg
+        }
+        // Already a plain object - ensure it has required fields
+        return {
+          role: msg.role || 'unknown',
+          content: msg.content || '',
+          ...(msg.tool_calls && { tool_calls: msg.tool_calls }),
+          ...(msg.additional_kwargs && { additional_kwargs: msg.additional_kwargs }),
+          ...(msg.name && { name: msg.name }),
+          ...(msg.id && { id: msg.id })
+        }
+      })
+    } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      // Deep copy objects but skip functions
+      serialized[key] = JSON.parse(JSON.stringify(value))
+    } else if (typeof value !== 'function') {
+      serialized[key] = value
+    }
+  }
+
+  return serialized
+}
 
 /**
  * Parse and clean AI response - removes tool calls, thinking blocks, and DONE commands
@@ -594,23 +565,40 @@ function _ensureCitationMarkers(content: string, citations: CitationData[]): str
  * Check if message is a clarification response to previous questions
  */
 async function _checkIfClarificationResponse(
-  supabase: any,
+  convexClient: any,
   conversationId: string,
-  userId: string,
   message: string,
   recentMessages: any[]
 ): Promise<{ isResponse: boolean; originalState?: any }> {
   // Look for most recent assistant message with clarification questions
-  const lastAssistantMessage = [...recentMessages]
-    .reverse()
-    .find(msg => msg.role === 'assistant')
+  const reversedMessages = [...recentMessages].reverse()
+  const lastAssistantMessage = reversedMessages.find(msg => msg.role === 'assistant')
 
   if (!lastAssistantMessage) {
     return { isResponse: false }
   }
 
+  // Get full message details to check metadata
+  // Note: recentMessages from getRecentForContext doesn't include metadata
+  // We need to query the actual message to get metadata
+  const messagesResult = await convexClient.query(api.functions.messages.list, {
+    conversationId: conversationId,
+    limit: 5
+  })
+
+  // Find assistant messages with clarification metadata
+  const assistantMessages = (messagesResult.messages || [])
+    .filter((msg: any) => msg.role === 'assistant')
+    .reverse()
+
+  const lastAssistantWithMeta = assistantMessages[0]
+
+  if (!lastAssistantWithMeta) {
+    return { isResponse: false }
+  }
+
   // Priority check: Look for explicit clarification state in metadata
-  const assistantMetadata = lastAssistantMessage.metadata as any
+  const assistantMetadata = lastAssistantWithMeta.metadata
 
   if (assistantMetadata && assistantMetadata.clarification_pending) {
     // Check if user message appears to be answering clarification questions

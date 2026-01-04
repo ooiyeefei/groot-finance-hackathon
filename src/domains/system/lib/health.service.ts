@@ -6,6 +6,8 @@
  * - External service status checks
  * - Uptime monitoring integration
  *
+ * Migrated to Convex from Supabase
+ *
  * North Star Architecture:
  * - All business logic centralized in service layer
  * - API routes are thin wrappers handling HTTP concerns
@@ -16,7 +18,8 @@
  * - DevOps alerting systems
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '@/convex/_generated/api'
 
 // ===== TYPE DEFINITIONS =====
 
@@ -27,7 +30,7 @@ export interface HealthStatus {
   database: {
     connected: boolean
     url: string
-    hasServiceKey: boolean
+    provider: string
   }
   error?: string
 }
@@ -37,56 +40,80 @@ export interface HealthStatus {
 /**
  * Check Database Health
  *
- * Tests Supabase connection with a simple query.
+ * Tests Convex connection with a simple query.
  * Used by uptime monitoring and load balancers.
  *
  * @returns Health status with database connection details
- * @throws Error if health check fails
  */
 export async function checkDatabaseHealth(): Promise<HealthStatus> {
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
+
   try {
-    console.log('[Health Service] Checking Supabase connection...')
-    console.log('[Health Service] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
-    console.log('[Health Service] Service key exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
+    console.log('[Health Service] Checking Convex connection...')
+    console.log('[Health Service] Convex URL:', convexUrl)
 
-    // Create Supabase client for health check
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
-    // Test basic query - check invoices table
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('count')
-      .limit(1)
-
-    if (error) {
-      console.error('[Health Service] Database error:', error)
+    if (!convexUrl) {
       return {
         success: false,
-        message: 'Database connection failed',
+        message: 'Convex URL not configured',
         timestamp: new Date().toISOString(),
         database: {
           connected: false,
-          url: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-          hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+          url: '',
+          provider: 'convex'
         },
-        error: error.message
+        error: 'NEXT_PUBLIC_CONVEX_URL environment variable is not set'
       }
     }
 
-    console.log('[Health Service] Connection successful')
+    // Create Convex HTTP client for health check (no auth required for this check)
+    const convex = new ConvexHttpClient(convexUrl)
 
-    return {
-      success: true,
-      message: 'Database connection working',
-      timestamp: new Date().toISOString(),
-      database: {
-        connected: true,
-        url: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-        hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+    // Test connection by making a simple query
+    // We use a public query that doesn't require auth - just listing tables
+    // If the connection works, we get a result (even if empty)
+    const startTime = Date.now()
+
+    try {
+      // Try to get current user (will return null without auth, but connection test passes)
+      await convex.query(api.functions.users.getCurrentUser, {})
+      const responseTime = Date.now() - startTime
+
+      console.log(`[Health Service] Connection successful (${responseTime}ms)`)
+
+      return {
+        success: true,
+        message: `Database connection working (${responseTime}ms)`,
+        timestamp: new Date().toISOString(),
+        database: {
+          connected: true,
+          url: convexUrl,
+          provider: 'convex'
+        }
       }
+    } catch (queryError) {
+      // Query might fail due to auth, but if the error is about auth, connection is still working
+      const errorMessage = queryError instanceof Error ? queryError.message : 'Unknown error'
+
+      // Auth errors mean connection works but auth is needed
+      if (errorMessage.includes('Unauthenticated') || errorMessage.includes('auth')) {
+        const responseTime = Date.now() - startTime
+        console.log(`[Health Service] Connection successful (auth required) (${responseTime}ms)`)
+
+        return {
+          success: true,
+          message: `Database connection working (${responseTime}ms)`,
+          timestamp: new Date().toISOString(),
+          database: {
+            connected: true,
+            url: convexUrl,
+            provider: 'convex'
+          }
+        }
+      }
+
+      // Other errors indicate connection issues
+      throw queryError
     }
   } catch (error) {
     console.error('[Health Service] Health check failed:', error)
@@ -96,8 +123,8 @@ export async function checkDatabaseHealth(): Promise<HealthStatus> {
       timestamp: new Date().toISOString(),
       database: {
         connected: false,
-        url: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-        hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+        url: convexUrl || '',
+        provider: 'convex'
       },
       error: error instanceof Error ? error.message : 'Unknown error'
     }

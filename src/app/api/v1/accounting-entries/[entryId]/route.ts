@@ -1,6 +1,7 @@
 /**
  * GET /api/v1/accounting-entries/[entryId] - Get single accounting entry
- * PUT /api/v1/accounting-entries/[entryId] - Update accounting entry
+ * PUT /api/v1/accounting-entries/[entryId] - Update accounting entry (full replace)
+ * PATCH /api/v1/accounting-entries/[entryId] - Update accounting entry (partial)
  * DELETE /api/v1/accounting-entries/[entryId] - Delete accounting entry
  * RESTful API following Next.js 15 App Router conventions
  */
@@ -134,3 +135,8 @@ export async function DELETE(
     )
   }
 }
+
+/**
+ * Partial update accounting entry (PATCH is alias for PUT in this context)
+ */
+export const PATCH = PUT

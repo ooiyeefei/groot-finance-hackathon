@@ -1,0 +1,225 @@
+/**
+ * Stripe Webhook Event Handlers (Convex Version)
+ *
+ * Individual handlers for each Stripe webhook event type.
+ * All handlers use Convex internal mutations (no auth required).
+ *
+ * ✅ MIGRATED TO CONVEX (2025-01)
+ */
+
+import type Stripe from 'stripe'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '@/convex/_generated/api'
+import { getPlanFromPriceId } from './plans'
+
+// Initialize Convex HTTP client for internal mutations
+// Webhooks use HTTP client since they don't have user sessions
+function getConvexInternalClient() {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL
+  if (!url) {
+    throw new Error('NEXT_PUBLIC_CONVEX_URL not configured')
+  }
+  return new ConvexHttpClient(url)
+}
+
+/**
+ * Handle checkout.session.completed
+ *
+ * Called when a customer completes Stripe Checkout.
+ * Creates/updates the Stripe customer ID on the business.
+ */
+export async function handleCheckoutSessionCompletedConvex(
+  session: Stripe.Checkout.Session
+): Promise<void> {
+  console.log(`[Webhook Handler Convex] checkout.session.completed: ${session.id}`)
+
+  const businessId = session.metadata?.business_id
+  if (!businessId) {
+    console.error('[Webhook Handler Convex] No business_id in session metadata')
+    throw new Error('Missing business_id in checkout session metadata')
+  }
+
+  const customerId = session.customer as string
+  const subscriptionId = session.subscription as string
+
+  if (!customerId) {
+    console.error('[Webhook Handler Convex] No customer ID in checkout session')
+    throw new Error('Missing customer ID in checkout session')
+  }
+
+  const convex = getConvexInternalClient()
+
+  // Update business with Stripe customer ID
+  await convex.mutation(api.functions.businesses.updateStripeCustomerFromCheckout, {
+    businessId,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscriptionId || undefined,
+  })
+
+  console.log(`[Webhook Handler Convex] Updated business ${businessId} with customer ${customerId}`)
+}
+
+/**
+ * Handle customer.subscription.created
+ *
+ * Called when a new subscription is created.
+ * Updates the business with subscription details and plan.
+ */
+export async function handleSubscriptionCreatedConvex(
+  subscription: Stripe.Subscription
+): Promise<void> {
+  console.log(`[Webhook Handler Convex] subscription.created: ${subscription.id}`)
+
+  await updateBusinessSubscriptionConvex(subscription)
+}
+
+/**
+ * Handle customer.subscription.updated
+ *
+ * Called when a subscription is updated (plan change, status change, etc).
+ * Updates the business with new subscription details.
+ */
+export async function handleSubscriptionUpdatedConvex(
+  subscription: Stripe.Subscription
+): Promise<void> {
+  console.log(`[Webhook Handler Convex] subscription.updated: ${subscription.id}`)
+
+  await updateBusinessSubscriptionConvex(subscription)
+}
+
+/**
+ * Handle customer.subscription.deleted
+ *
+ * Called when a subscription is cancelled/deleted.
+ * Downgrades the business to the free plan.
+ */
+export async function handleSubscriptionDeletedConvex(
+  subscription: Stripe.Subscription
+): Promise<void> {
+  console.log(`[Webhook Handler Convex] subscription.deleted: ${subscription.id}`)
+
+  const customerId = subscription.customer as string
+  const convex = getConvexInternalClient()
+
+  await convex.mutation(api.functions.businesses.downgradeToFreeFromWebhook, {
+    stripeCustomerId: customerId,
+  })
+
+  console.log(`[Webhook Handler Convex] Downgraded business for customer ${customerId} to free plan`)
+}
+
+/**
+ * Handle invoice.payment_failed
+ *
+ * Called when a payment fails.
+ * Marks the subscription as past_due.
+ */
+export async function handleInvoicePaymentFailedConvex(
+  invoice: Stripe.Invoice
+): Promise<void> {
+  console.log(`[Webhook Handler Convex] invoice.payment_failed: ${invoice.id}`)
+
+  const customerId = invoice.customer as string
+  const convex = getConvexInternalClient()
+
+  const result = await convex.mutation(api.functions.businesses.updateSubscriptionStatusFromWebhook, {
+    stripeCustomerId: customerId,
+    subscriptionStatus: 'past_due',
+  })
+
+  if (result) {
+    console.log(`[Webhook Handler Convex] Marked business as past_due for customer ${customerId}`)
+  } else {
+    console.warn(`[Webhook Handler Convex] Business not found for customer ${customerId} - may be during checkout`)
+  }
+}
+
+/**
+ * Handle invoice.payment_succeeded
+ *
+ * Called when a payment succeeds.
+ * Clears any past_due status.
+ */
+export async function handleInvoicePaymentSucceededConvex(
+  invoice: Stripe.Invoice
+): Promise<void> {
+  console.log(`[Webhook Handler Convex] invoice.payment_succeeded: ${invoice.id}`)
+
+  const customerId = invoice.customer as string
+  const convex = getConvexInternalClient()
+
+  // Get current business state to check if past_due
+  const business = await convex.query(api.functions.businesses.getByStripeCustomerIdInternal, {
+    stripeCustomerId: customerId,
+  })
+
+  if (!business) {
+    console.warn(`[Webhook Handler Convex] Business not found for customer ${customerId} - may be during checkout`)
+    return
+  }
+
+  // Only update if currently past_due
+  if (business.subscriptionStatus === 'past_due') {
+    await convex.mutation(api.functions.businesses.updateSubscriptionStatusFromWebhook, {
+      stripeCustomerId: customerId,
+      subscriptionStatus: 'active',
+    })
+
+    console.log(`[Webhook Handler Convex] Cleared past_due status for customer ${customerId}`)
+  }
+}
+
+/**
+ * Helper: Update business with subscription details
+ */
+async function updateBusinessSubscriptionConvex(
+  subscription: Stripe.Subscription
+): Promise<void> {
+  const customerId = subscription.customer as string
+  const convex = getConvexInternalClient()
+
+  // Get plan details from subscription
+  const priceId = subscription.items.data[0]?.price?.id
+  const productId = subscription.items.data[0]?.price?.product as string
+  const planName = priceId ? getPlanFromPriceId(priceId) : 'free'
+
+  // Map Stripe subscription status to our status
+  const subscriptionStatus = mapStripeStatus(subscription.status)
+
+  await convex.mutation(api.functions.businesses.updateSubscriptionFromWebhook, {
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    stripeProductId: productId || undefined,
+    planName,
+    subscriptionStatus,
+  })
+
+  console.log(
+    `[Webhook Handler Convex] Updated business for customer ${customerId}: plan=${planName}, status=${subscriptionStatus}`
+  )
+}
+
+/**
+ * Map Stripe subscription status to our simplified status
+ */
+function mapStripeStatus(
+  stripeStatus: Stripe.Subscription.Status
+): 'active' | 'past_due' | 'canceled' | 'trialing' | 'unpaid' {
+  switch (stripeStatus) {
+    case 'active':
+      return 'active'
+    case 'past_due':
+      return 'past_due'
+    case 'canceled':
+      return 'canceled'
+    case 'trialing':
+      return 'trialing'
+    case 'unpaid':
+      return 'unpaid'
+    case 'incomplete':
+    case 'incomplete_expired':
+    case 'paused':
+    default:
+      return 'canceled'
+  }
+}

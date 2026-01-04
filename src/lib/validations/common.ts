@@ -50,6 +50,15 @@ export const uuidSchema = z.string()
   .uuid('Invalid UUID format')
 
 /**
+ * Convex document ID validation
+ * Convex generates unique string IDs - exact format is internal to Convex.
+ * We validate it's a non-empty string; Convex handles the rest.
+ */
+export const documentIdSchema = z.string()
+  .min(1, 'Document ID is required')
+  .max(100, 'Document ID too long')
+
+/**
  * Positive amount validation (for financial values)
  */
 export const positiveAmountSchema = z.number()
@@ -118,14 +127,14 @@ export const statusFilterSchema = z.string()
  * Business context validation
  */
 export const businessIdSchema = z.object({
-  business_id: uuidSchema
+  business_id: documentIdSchema
 })
 
 /**
  * User ID validation
  */
 export const userIdSchema = z.object({
-  user_id: uuidSchema
+  user_id: documentIdSchema
 })
 
 /**
@@ -175,18 +184,17 @@ export const taxIdSchema = z.string()
   .optional()
 
 /**
- * Transaction type validation (IFRS-compliant)
+ * Transaction type validation (P&L compliant)
+ * Only Income, Cost of Goods Sold, and Expense are allowed for accounting entries
+ * These are the core P&L statement categories
  */
 export const transactionTypeSchema = z.enum([
   'Income',
   'Cost of Goods Sold',
-  'Operating Expense',
-  'Capital Expenditure',
-  'Asset',
-  'Liability'
+  'Expense'
 ], {
   errorMap: () => ({
-    message: 'Invalid transaction type. Must be one of: Income, Cost of Goods Sold, Operating Expense, Capital Expenditure, Asset, Liability'
+    message: 'Invalid transaction type. Must be one of: Income, Cost of Goods Sold, Expense'
   })
 })
 
@@ -209,7 +217,7 @@ export const paymentStatusSchema = z.enum([
  * Generic ID parameter validation (for route params)
  */
 export const idParamSchema = z.object({
-  id: uuidSchema
+  id: documentIdSchema
 })
 
 /**

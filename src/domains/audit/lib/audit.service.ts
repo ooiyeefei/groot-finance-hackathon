@@ -6,6 +6,8 @@
  * - Multi-tenant isolation with business context
  * - Query filtering and pagination
  *
+ * Migrated to Convex from Supabase
+ *
  * North Star Architecture:
  * - All business logic centralized in service layer
  * - API routes are thin wrappers handling HTTP concerns
@@ -21,7 +23,9 @@
  * - Compliance reporting
  */
 
-import { createAuthenticatedSupabaseClient, getUserData } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 
 // ===== TYPE DEFINITIONS =====
 
@@ -96,62 +100,65 @@ export async function getAuditEvents(request: GetAuditEventsRequest): Promise<Ge
     date_to
   } = request
 
-  // Get user data with business context
-  const userData = await getUserData(userId)
-  const supabase = await createAuthenticatedSupabaseClient(userId)
-
-  // Build query with MANDATORY business context filtering
-  let query = supabase
-    .from('audit_events')
-    .select(`
-      *,
-      actor_user:users!audit_events_actor_user_id_fkey (
-        id,
-        full_name,
-        email
-      )
-    `, { count: 'exact' })
-    .eq('business_id', userData.business_id) // CRITICAL: Multi-tenant isolation
-    .order('created_at', { ascending: false })
-
-  // Apply filters
-  if (event_type) {
-    query = query.eq('event_type', event_type)
-  }
-  if (target_entity_type) {
-    query = query.eq('target_entity_type', target_entity_type)
-  }
-  if (target_entity_id) {
-    query = query.eq('target_entity_id', target_entity_id)
-  }
-  if (actor_user_id) {
-    query = query.eq('actor_user_id', actor_user_id)
-  }
-  if (date_from) {
-    query = query.gte('created_at', date_from)
-  }
-  if (date_to) {
-    query = query.lte('created_at', date_to)
+  // Get user profile with business context
+  const userProfile = await ensureUserProfile(userId)
+  if (!userProfile) {
+    throw new Error('Failed to get user profile')
   }
 
-  // Apply pagination
+  // Get Convex client
+  const { client: convexClient } = await getAuthenticatedConvex()
+  if (!convexClient) {
+    throw new Error('Failed to get Convex client')
+  }
+
+  // Convert date strings to timestamps if provided
+  const dateFromTs = date_from ? new Date(date_from).getTime() : undefined
+  const dateToTs = date_to ? new Date(date_to).getTime() : undefined
+
+  // Calculate cursor from page
+  const cursor = page > 1 ? String((page - 1) * limit) : undefined
+
+  // Query audit events using Convex
+  const result = await convexClient.query(api.functions.audit.list, {
+    businessId: userProfile.business_id,
+    eventType: event_type,
+    targetEntityType: target_entity_type,
+    targetEntityId: target_entity_id,
+    actorUserId: actor_user_id,
+    dateFrom: dateFromTs,
+    dateTo: dateToTs,
+    limit,
+    cursor
+  })
+
+  // Transform Convex response to expected format
+  const events: AuditEvent[] = (result.events || []).map((event: any) => ({
+    id: event._id,
+    business_id: event.businessId,
+    actor_user_id: event.actorUserId,
+    event_type: event.eventType,
+    target_entity_type: event.targetEntityType,
+    target_entity_id: event.targetEntityId,
+    details: event.details || {},
+    created_at: new Date(event._creationTime).toISOString(),
+    actor_user: event.actorUser ? {
+      id: event.actorUser.id,
+      full_name: event.actorUser.fullName || '',
+      email: event.actorUser.email
+    } : undefined
+  }))
+
+  const total = result.totalCount || 0
   const offset = (page - 1) * limit
-  query = query.range(offset, offset + limit - 1)
-
-  const { data: auditEvents, error, count } = await query
-
-  if (error) {
-    console.error('[Audit Service] Query error:', error)
-    throw new Error('Failed to fetch audit events')
-  }
 
   return {
-    events: auditEvents || [],
+    events,
     pagination: {
       page,
       limit,
-      total: count || 0,
-      has_more: (count || 0) > offset + limit
+      total,
+      has_more: total > offset + limit
     }
   }
 }
@@ -174,28 +181,49 @@ export async function createAuditEvent(request: CreateAuditEventRequest): Promis
     throw new Error('event_type, target_entity_type, and target_entity_id are required')
   }
 
-  // Get user data with business context
-  const userData = await getUserData(userId)
-  const supabase = await createAuthenticatedSupabaseClient(userId)
-
-  // Create audit event with proper business context
-  const { data: auditEvent, error: auditError } = await supabase
-    .from('audit_events')
-    .insert({
-      business_id: userData.business_id, // Multi-tenant isolation
-      actor_user_id: userData.id, // Use Supabase UUID
-      event_type,
-      target_entity_type,
-      target_entity_id,
-      details
-    })
-    .select()
-    .single()
-
-  if (auditError) {
-    console.error('[Audit Service] Create error:', auditError)
-    throw new Error('Failed to create audit event')
+  // Get user profile with business context
+  const userProfile = await ensureUserProfile(userId)
+  if (!userProfile) {
+    throw new Error('Failed to get user profile')
   }
 
-  return auditEvent
+  // Get Convex client
+  const { client: convexClient } = await getAuthenticatedConvex()
+  if (!convexClient) {
+    throw new Error('Failed to get Convex client')
+  }
+
+  // Create audit event using Convex mutation
+  const eventId = await convexClient.mutation(api.functions.audit.create, {
+    businessId: userProfile.business_id,
+    eventType: event_type,
+    targetEntityType: target_entity_type,
+    targetEntityId: target_entity_id,
+    details
+  })
+
+  // Return the created event (fetch it to get full data)
+  const createdEvent = await convexClient.query(api.functions.audit.getById, {
+    id: eventId
+  })
+
+  if (!createdEvent) {
+    throw new Error('Failed to retrieve created audit event')
+  }
+
+  return {
+    id: createdEvent._id,
+    business_id: createdEvent.businessId,
+    actor_user_id: createdEvent.actorUserId,
+    event_type: createdEvent.eventType,
+    target_entity_type: createdEvent.targetEntityType,
+    target_entity_id: createdEvent.targetEntityId,
+    details: createdEvent.details || {},
+    created_at: new Date(createdEvent._creationTime).toISOString(),
+    actor_user: createdEvent.actorUser ? {
+      id: createdEvent.actorUser.id,
+      full_name: createdEvent.actorUser.fullName || '',
+      email: createdEvent.actorUser.email
+    } : undefined
+  }
 }

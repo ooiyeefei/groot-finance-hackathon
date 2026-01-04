@@ -16,26 +16,7 @@ import { clearUserRoleCache, fetchUserRoleWithCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useToast } from '@/components/ui/toast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-
-interface TeamMember {
-  id: string
-  employee_id: string
-  user_id: string
-  full_name?: string
-  email?: string
-  department?: string
-  job_title?: string
-  role_permissions: {
-    employee: boolean
-    manager: boolean
-    admin: boolean
-  }
-  created_at: string
-  clerk_user?: any
-  manager_id?: string
-  manager_name?: string
-  manager_user_id_field?: string
-}
+import { useTeamMembersRealtime, type TeamMember, type UserRole } from '@/domains/account-management/hooks/use-team-members-realtime'
 
 interface PendingInvitation {
   id: string
@@ -46,8 +27,6 @@ interface PendingInvitation {
   status: 'pending' | 'accepted'
 }
 
-type UserRole = 'employee' | 'manager' | 'admin'
-
 interface TeamsManagementClientProps {
   userId: string
 }
@@ -57,7 +36,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   const [activeTab, setActiveTab] = useState<'members' | 'invitations'>('members')
   const [userRole, setUserRole] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [updating, setUpdating] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showInviteDialog, setShowInviteDialog] = useState(false)
@@ -66,31 +44,23 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   // Team limit exceeded state (T045)
   const [teamLimitExceeded, setTeamLimitExceeded] = useState(false)
   const [teamLimitMessage, setTeamLimitMessage] = useState<string | undefined>()
+  const [nameUpdating, setNameUpdating] = useState<Set<string>>(new Set())
   const router = useRouter()
   const { addToast } = useToast()
   const { businessId } = useActiveBusiness()
 
+  // Real-time team members from Convex - instant updates, no polling!
   const {
-    data: teamMembers = [],
+    teamMembers,
     isLoading: teamMembersLoading,
-    error: teamMembersError
-  } = useQuery({
-    queryKey: ['team-members', businessId],
-    queryFn: async () => {
-      const response = await fetch('/api/v1/users/team')
-      if (!response.ok) {
-        throw new Error('Failed to fetch team members')
-      }
-      const result = await response.json()
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to fetch team members')
-      }
-      return result.data.users as TeamMember[]
-    },
-    staleTime: 1000 * 60,
-    enabled: !!businessId && activeTab === 'members',
-  })
+    error: teamMembersError,
+    updateRole,
+    removeMember,
+    assignManager,
+    updating,
+  } = useTeamMembersRealtime({ businessId: businessId || undefined })
 
+  // Always fetch invitations so tab count stays updated when sending new invitations
   const {
     data: pendingInvitations = [],
     isLoading: invitationsLoading
@@ -108,7 +78,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       return result.invitations || [] as PendingInvitation[]
     },
     staleTime: 1000 * 30,
-    enabled: !!businessId && activeTab === 'invitations',
+    enabled: !!businessId,  // Always enabled - removed tab condition for real-time count updates
   })
 
   useEffect(() => {
@@ -146,104 +116,67 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       setError(teamMembersError instanceof Error ? teamMembersError.message : 'Failed to fetch team members')
     }
   }, [teamMembersError])
-  const removeUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const response = await fetch(`/api/v1/users/${userId}/roles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remove_from_business: true })
-      })
 
-      const result = await response.json()
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to remove user from business')
-      }
-      return result
-    },
-    onMutate: (userId) => {
-      setUpdating(prev => new Set([...prev, userId]))
+  // Wrapper functions with toast notifications for Convex mutations
+  // No invalidateQueries needed - Convex auto-updates via WebSocket subscription!
+  const handleUpdateRole = async (membershipId: string, newRole: UserRole) => {
+    try {
       setError(null)
-      setSuccess(null)
-    },
-    onSuccess: () => {
+      await updateRole(membershipId, newRole)
+      addToast({
+        type: 'success',
+        title: 'Success',
+        description: 'User role updated successfully'
+      })
+      clearUserRoleCache()
+    } catch (err) {
+      console.error('Failed to update role:', err)
+      addToast({
+        type: 'error',
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to update role'
+      })
+    }
+  }
+
+  const handleRemoveMember = async (membershipId: string) => {
+    try {
+      setError(null)
+      await removeMember(membershipId)
       addToast({
         type: 'success',
         title: 'Success',
         description: 'User removed from business successfully'
       })
       clearUserRoleCache()
-      queryClient.invalidateQueries({ queryKey: ['team-members', businessId] })
-    },
-    onError: (error: Error) => {
-      console.error('Failed to remove user from business:', error)
+    } catch (err) {
+      console.error('Failed to remove member:', err)
       addToast({
         type: 'error',
         title: 'Error',
-        description: error.message || 'Network error while removing user from business'
-      })
-    },
-    onSettled: (_, __, userId) => {
-      setUpdating(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(userId)
-        return newSet
+        description: err instanceof Error ? err.message : 'Failed to remove member'
       })
     }
-  })
-
-  const updateUserRole = async (membershipId: string, newRole: UserRole) => {
-    await updateMembershipMutation.mutateAsync({ membershipId, updates: { role: newRole } })
   }
 
-  const removeUserFromBusiness = async (userId: string) => {
-    await removeUserMutation.mutateAsync(userId)
-  }
-  const assignManagerMutation = useMutation({
-    mutationFn: async ({ employeeId, managerId }: { employeeId: string; managerId: string }) => {
-      const response = await fetch(`/api/v1/users/${employeeId}/roles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_id: managerId === 'none' ? null : managerId })
-      })
-
-      const result = await response.json()
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to assign manager')
-      }
-      return result
-    },
-    onMutate: ({ employeeId }) => {
-      setUpdating(prev => new Set([...prev, employeeId]))
+  const handleAssignManager = async (employeeUserId: string, managerId: string) => {
+    try {
       setError(null)
-      setSuccess(null)
-    },
-    onSuccess: () => {
+      // Convert "none" to null for the Convex mutation
+      await assignManager(employeeUserId, managerId === 'none' ? null : managerId)
       addToast({
         type: 'success',
         title: 'Success',
         description: 'Manager assignment updated successfully'
       })
-      queryClient.invalidateQueries({ queryKey: ['team-members', businessId] })
-    },
-    onError: (error: Error) => {
-      console.error('Failed to assign manager:', error)
+    } catch (err) {
+      console.error('Failed to assign manager:', err)
       addToast({
         type: 'error',
         title: 'Error',
-        description: error.message || 'Network error while assigning manager'
-      })
-    },
-    onSettled: (_, __, { employeeId }) => {
-      setUpdating(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(employeeId)
-        return newSet
+        description: err instanceof Error ? err.message : 'Failed to assign manager'
       })
     }
-  })
-
-  const assignManager = async (employeeId: string, managerId: string) => {
-    await assignManagerMutation.mutateAsync({ employeeId, managerId })
   }
 
   const getAvailableManagers = () => {
@@ -447,70 +380,6 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     setEditingNameValue('')
   }
 
-  const updateMembershipMutation = useMutation({
-    mutationFn: async ({ membershipId, updates }: {
-      membershipId: string;
-      updates: { status?: 'active' | 'inactive' | 'suspended'; role?: UserRole; reason?: string }
-    }) => {
-      const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
-      if (!csrfResponse.ok) {
-        throw new Error('Failed to get CSRF token')
-      }
-      const csrfData = await csrfResponse.json()
-      if (!csrfData.success) {
-        throw new Error(csrfData.error || 'Failed to get CSRF token')
-      }
-
-      const response = await fetch(`/api/v1/account-management/memberships/${membershipId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfData.data.token
-        },
-        body: JSON.stringify(updates)
-      })
-
-      const result = await response.json()
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to update membership')
-      }
-      return { result, updates }
-    },
-    onMutate: ({ membershipId }) => {
-      setUpdating(prev => new Set([...prev, membershipId]))
-      setError(null)
-      setSuccess(null)
-    },
-    onSuccess: ({ updates }) => {
-      const action = updates.status === 'inactive' ? 'removed' :
-                    updates.status === 'active' ? 'reactivated' :
-                    updates.role ? 'role updated for' : 'updated'
-
-      addToast({
-        type: 'success',
-        title: 'Success',
-        description: `User ${action} successfully`
-      })
-      clearUserRoleCache()
-      queryClient.invalidateQueries({ queryKey: ['team-members', businessId] })
-    },
-    onError: (error: Error) => {
-      console.error('Failed to update membership:', error)
-      addToast({
-        type: 'error',
-        title: 'Error',
-        description: error.message || 'Network error while updating membership'
-      })
-    },
-    onSettled: (_, __, { membershipId }) => {
-      setUpdating(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(membershipId)
-        return newSet
-      })
-    }
-  })
-
   const updateUserNameMutation = useMutation({
     mutationFn: async ({ memberId, name }: { memberId: string; name: string }) => {
       if (!name.trim()) {
@@ -533,7 +402,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       return { result, memberId }
     },
     onMutate: ({ memberId }) => {
-      setUpdating(prev => new Set([...prev, memberId]))
+      setNameUpdating(prev => new Set([...prev, memberId]))
     },
     onSuccess: ({ memberId }) => {
       addToast({
@@ -542,7 +411,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         description: 'Name updated successfully'
       })
       cancelEditingName(memberId)
-      queryClient.invalidateQueries({ queryKey: ['team-members', businessId] })
+      // No invalidateQueries needed - Convex real-time subscription auto-updates!
     },
     onError: (error: Error) => {
       console.error('Failed to update name:', error)
@@ -554,7 +423,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     },
     onSettled: (data) => {
       if (data) {
-        setUpdating(prev => {
+        setNameUpdating(prev => {
           const newSet = new Set(prev)
           newSet.delete(data.memberId)
           return newSet
@@ -755,7 +624,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                       <Button
                                         size="sm"
                                         onClick={() => updateUserName(member.user_id)}
-                                        disabled={updating.has(member.id)}
+                                        disabled={nameUpdating.has(member.id)}
                                         className="h-8 px-2 bg-action-view hover:bg-action-view/90 text-action-view-foreground"
                                       >
                                         <Save className="w-3 h-3" />
@@ -834,7 +703,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                 <span className="text-xs text-muted-foreground mb-1.5">Role</span>
                                 <Select
                                   value={currentRole}
-                                  onValueChange={(newRole: UserRole) => updateUserRole(member.id, newRole)}
+                                  onValueChange={(newRole: UserRole) => handleUpdateRole(member.id, newRole)}
                                   disabled={isUpdating}
                                 >
                                   <SelectTrigger className="bg-input border border-border text-foreground h-9 min-w-[110px]">
@@ -860,7 +729,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                 </span>
                                 <Select
                                   value={getCurrentManagerUserId(member)}
-                                  onValueChange={(managerId) => assignManager(member.user_id, managerId)}
+                                  onValueChange={(managerId) => handleAssignManager(member.user_id, managerId)}
                                   disabled={isUpdating}
                                 >
                                   <SelectTrigger className="bg-input border border-border text-foreground h-9 min-w-[160px]">
@@ -893,7 +762,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                onClick={() => removeUserFromBusiness(member.user_id)}
+                                onClick={() => handleRemoveMember(member.id)}
                                 disabled={isUpdating}
                                 className="h-9 px-3"
                               >

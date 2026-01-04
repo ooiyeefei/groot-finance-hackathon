@@ -8,6 +8,7 @@ import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import MultiPageDocumentPreview from './multi-page-document-preview'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
+import { formatBusinessDate } from '@/lib/utils'
 
 interface AccountingEntryDetailModalProps {
   transaction: AccountingEntry
@@ -61,13 +62,9 @@ export default function AccountingEntryDetailModal({
     })
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
+  // CRITICAL: Use formatBusinessDate for transaction_date (business date - no timezone conversion)
+  // Financial documents should preserve the date as recorded, NOT converted to viewer's timezone
+  const formatDate = (dateString: string) => formatBusinessDate(dateString, 'long')
 
   const formatCategoryName = (category: string) => {
     return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())

@@ -13,7 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserData } from '@/lib/db/supabase-server'
+import { getUserDataConvex } from '@/lib/convex'
 import { sendChatMessage } from '@/domains/chat/lib/chat.service'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { validateBody, sendChatMessageSchema } from '@/lib/validations'
@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user data with business context
-    const userData = await getUserData(userId)
+    // Get user data with business context (from Convex)
+    const userData = await getUserDataConvex(userId)
 
     if (!userData.business_id) {
       return NextResponse.json({ error: 'No business context found' }, { status: 400 })

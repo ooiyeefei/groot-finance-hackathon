@@ -65,10 +65,10 @@ export default function Sidebar() {
     { name: t('businessSettings'), href: localizedHref('/business-settings'), icon: Building2 },
   ] : []
 
-  // Billing navigation (available to everyone)
-  const billingNavigation = [
+  // Billing navigation (managers and admins only - employees don't manage billing)
+  const billingNavigation = userRole.manager || userRole.admin ? [
     { name: t('billing'), href: localizedHref('/settings/billing'), icon: Sparkles }
-  ]
+  ] : []
 
   // Personal settings (available to everyone)
   const settingsNavigation = [

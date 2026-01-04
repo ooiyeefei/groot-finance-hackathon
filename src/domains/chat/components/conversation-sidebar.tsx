@@ -118,35 +118,47 @@ export default function ConversationSidebar({
     return text.substring(0, maxLength) + '...'
   }
 
-  // Handle delete conversation with cache invalidation
+  // Handle delete conversation with optimistic update
   const handleDeleteConversation = async () => {
     if (!conversationToDelete) return
 
     setIsDeleting(true)
+    const deletedId = conversationToDelete
+
     try {
-      const response = await fetch(`/api/v1/chat/conversations/${conversationToDelete}`, {
+      const response = await fetch(`/api/v1/chat/conversations/${deletedId}`, {
         method: 'DELETE',
       })
 
       if (response.ok) {
-        // Invalidate React Query cache to refetch conversations
+        // Optimistic update: Immediately remove from cache before refetch
+        // This ensures instant UI feedback
+        queryClient.setQueryData(['conversations'], (old: Conversation[] | undefined) => {
+          if (!old) return []
+          return old.filter(conv => conv.id !== deletedId)
+        })
+
+        // Also invalidate to ensure data consistency with server
         queryClient.invalidateQueries({ queryKey: ['conversations'] })
 
         // Notify parent component if the deleted conversation is currently active
-        if (conversationToDelete === currentConversationId) {
-          onConversationDeleted?.(conversationToDelete)
+        if (deletedId === currentConversationId) {
+          onConversationDeleted?.(deletedId)
         }
 
         setDeleteDialogOpen(false)
         setConversationToDelete(null)
         setOpenMenuId(null)
       } else {
-        console.error('Failed to delete conversation')
-        // TODO: Add toast notification for error
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error('Failed to delete conversation:', errorData)
+        // Refetch to ensure UI shows correct state after failed delete
+        queryClient.invalidateQueries({ queryKey: ['conversations'] })
       }
     } catch (error) {
       console.error('Error deleting conversation:', error)
-      // TODO: Add toast notification for error
+      // Refetch to ensure UI shows correct state after error
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
     } finally {
       setIsDeleting(false)
     }

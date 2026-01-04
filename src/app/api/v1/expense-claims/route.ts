@@ -8,8 +8,10 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createExpenseClaim, listExpenseClaims } from '@/domains/expense-claims/lib/data-access'
 import { CreateExpenseClaimRequest, ExpenseClaimListParams } from '@/domains/expense-claims/types'
+import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { getBusinessExpenseCategories } from '@/domains/expense-claims/lib/expense-category-mapper'
-import { getUserData, createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { validateQuery, validateBody, validateFormData, listExpenseClaimsQuerySchema, createExpenseClaimSchema, createExpenseClaimFileSchema } from '@/lib/validations'
 import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
@@ -148,40 +150,23 @@ export async function POST(request: NextRequest) {
       createRequest = validated.data as any
     }
 
-    // ✅ BUSINESS CURRENCY VALIDATION (OPTIMIZED - SINGLE QUERY)
+    // ✅ BUSINESS CURRENCY VALIDATION (CONVEX)
     // Validate that the submitted currency is allowed by the business
     try {
-      const supabase = await createBusinessContextSupabaseClient()
+      const { client: convex } = await getAuthenticatedConvex()
 
-      // Single query with JOIN to fetch user and business data together
-      // Using !users_business_id_fkey to specify the relationship via users.business_id -> businesses.id
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select(`
-          business_id,
-          businesses!users_business_id_fkey (
-            home_currency,
-            allowed_currencies
-          )
-        `)
-        .eq('clerk_user_id', userId)
-        .single()
-
-      if (userError || !userData || !userData.businesses) {
-        console.error('[Currency Validation] Failed to fetch user and business data:', userError)
+      if (!convex) {
+        console.error('[Currency Validation] Failed to authenticate with Convex')
         return NextResponse.json(
-          { success: false, error: 'Failed to validate currency against business settings' },
-          { status: 500 }
+          { success: false, error: 'Authentication failed' },
+          { status: 401 }
         )
       }
 
-      // When using the specific foreign key relationship, businesses is always a single object (many-to-one)
-      // Handle both array and single object cases for TypeScript
-      const businessData = Array.isArray(userData.businesses)
-        ? userData.businesses[0]
-        : userData.businesses as { home_currency: string; allowed_currencies?: string[] } | null
+      // Get current business from Convex (includes homeCurrency and allowedCurrencies)
+      const business = await convex.query(api.functions.businesses.getCurrentBusiness, {})
 
-      if (!businessData) {
+      if (!business) {
         console.error('[Currency Validation] No business data found for user')
         return NextResponse.json(
           { success: false, error: 'Business not found or not accessible' },
@@ -189,7 +174,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const allowedCurrencies = businessData.allowed_currencies || ['USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR']
+      const allowedCurrencies = business.allowedCurrencies || ['USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR']
 
       if (!allowedCurrencies.includes(createRequest.original_currency)) {
         return NextResponse.json(
@@ -205,8 +190,9 @@ export async function POST(request: NextRequest) {
       console.log(`[Currency Validation] ✅ Currency ${createRequest.original_currency} is allowed by business`)
 
       // Add business currency context to the request for downstream processing
-      createRequest.business_home_currency = businessData.home_currency
-      createRequest.business_allowed_currencies = allowedCurrencies
+      // Cast to SupportedCurrency since Convex schema stores string but our types use union
+      createRequest.business_home_currency = business.homeCurrency as SupportedCurrency
+      createRequest.business_allowed_currencies = allowedCurrencies as SupportedCurrency[]
 
     } catch (error) {
       console.error('[Currency Validation] Error during currency validation:', error)

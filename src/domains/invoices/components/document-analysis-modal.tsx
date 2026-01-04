@@ -14,10 +14,10 @@ interface Document {
   converted_image_path?: string
   converted_image_width?: number
   converted_image_height?: number
-  status: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed'
+  status: 'pending' | 'uploading' | 'analyzing' | 'classifying' | 'extracting' | 'processing' | 'completed' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classification_failed'
   created_at: string
   processed_at?: string
-  error_message?: string
+  error_message?: string | { message: string; suggestions?: string[] } | null
   extracted_data?: {
     text?: string
 

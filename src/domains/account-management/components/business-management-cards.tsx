@@ -16,12 +16,12 @@ interface ManagementCard {
 }
 
 export default function BusinessManagementCards() {
-  const { isAdmin, isManager } = usePermissions()
+  const { isAdmin, isManager, isOwner } = usePermissions()
   const params = useParams()
   const locale = params.locale as string
 
-  // Only show business management cards to managers and admins
-  const canManageBusiness = isAdmin || isManager
+  // Only show business management cards to owners, managers, and admins
+  const canManageBusiness = isOwner || isAdmin || isManager
 
   // Helper function to create localized href
   const localizedHref = (path: string) => `/${locale}${path}`
