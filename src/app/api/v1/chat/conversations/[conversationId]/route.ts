@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserData } from '@/lib/db/supabase-server'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { getConversation, deleteConversation } from '@/domains/chat/lib/chat.service'
 
 export async function GET(
@@ -26,8 +26,11 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user data
-    const userData = await getUserData(userId)
+    // Get user profile from Convex (includes business_id)
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
+      return NextResponse.json({ error: 'Failed to get user profile' }, { status: 400 })
+    }
     const { conversationId } = await context.params
 
     console.log(`[Conversation Detail V1 API] Fetching conversation ${conversationId}`)
@@ -36,7 +39,7 @@ export async function GET(
     const conversation = await getConversation(
       conversationId,
       userId,
-      userData.id
+      userProfile.user_id
     )
 
     return NextResponse.json({
@@ -74,8 +77,14 @@ export async function DELETE(
       )
     }
 
-    // Get user data
-    const userData = await getUserData(userId)
+    // Get user profile from Convex (includes business_id)
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to get user profile' },
+        { status: 400 }
+      )
+    }
     const { conversationId } = await context.params
 
     console.log(`[Conversation Delete V1 API] Deleting conversation ${conversationId}`)
@@ -84,7 +93,7 @@ export async function DELETE(
     await deleteConversation(
       conversationId,
       userId,
-      userData.id
+      userProfile.user_id
     )
 
     return NextResponse.json({

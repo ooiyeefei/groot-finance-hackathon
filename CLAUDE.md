@@ -88,6 +88,19 @@ src/domains/
 - **Max Duration**: 3600 seconds for long-running OCR processing
 - **Auto Retry**: 3 attempts with exponential backoff
 
+#### Trigger.dev Environment Variables
+Required environment variables for Trigger.dev tasks (set in Trigger.dev Dashboard → Environment Variables):
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `NEXT_PUBLIC_CONVEX_URL` | Convex deployment URL (e.g., `https://kindhearted-lynx-129.convex.cloud`) | Yes |
+| `AWS_ACCESS_KEY_ID` | AWS access key for S3 operations | Yes |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key for S3 operations | Yes |
+| `AWS_REGION` | AWS region (default: us-west-2) | No |
+| `AWS_S3_BUCKET` | S3 bucket name (default: finanseal-bucket) | No |
+
+**Security Model**: Trigger.dev tasks use Convex system functions that don't require authentication. Document IDs are long random strings that only our backend knows - knowing the ID provides implicit authorization. This is a common pattern for backend-to-backend communication.
+
 ## Development Guidelines
 
 ### **Core Workflow Rules**
@@ -693,7 +706,7 @@ export default defineConfig({
   },
 
   // Global lifecycle hooks
-  onStart: async ({ payload, ctx }) => {
+  onStartAttempt: async ({ payload, ctx }) => {
     console.log("Global task start");
   },
   onSuccess: async ({ payload, output, ctx }) => {
@@ -1011,6 +1024,8 @@ Extensions only affect deployment, not local development. Use `external` array f
 - Supabase PostgreSQL with RLS (subscription data synced from Stripe via webhooks) (001-stripe-subscription)
 - TypeScript 5.9+ with Next.js 15 App Router + Convex (database), Clerk (auth), Stripe (billing), Trigger.dev v3 (background jobs) (001-db-revamp)
 - Convex (tables + files) - migration from Supabase PostgreSQL (001-db-revamp)
+- TypeScript 5.9+ with Next.js 15.4.6 App Router + Convex (database), Clerk (auth), Stripe (billing), Trigger.dev v3 (background jobs) (002-convex-migration)
+- Convex (native) - migrating from Supabase PostgreSQL + Storage (002-convex-migration)
 
 ## Recent Changes
 - 001-stripe-subscription: Added TypeScript 5.9+ with Next.js 15 App Router + Stripe SDK (`stripe`), Stripe React (`@stripe/stripe-js`), Supabase Client

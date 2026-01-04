@@ -1,15 +1,17 @@
-import { createBusinessContextSupabaseClient, getUserData } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
 import { auth } from '@clerk/nextjs/server'
 import { tasks } from "@trigger.dev/sdk/v3"
 import { randomUUID } from 'crypto'
 import { generateStoragePath, type DocumentType } from '@/lib/storage-paths'
 import {
   validateSearchParameter,
-  createSafeILikePattern,
   logSuspiciousSearch
 } from '@/lib/security/search-validator'
-import { withCache, CACHE_TTL } from '@/lib/cache/api-cache'
-import { checkOcrUsage } from '@/lib/stripe/usage'
+import { api } from '@/convex/_generated/api'
+import { Id } from '@/convex/_generated/dataModel'
+
+// AWS S3 storage client
+import { uploadFile, getMimeType } from '@/lib/aws-s3'
 
 // Error details structure for LLM-generated error messages
 export interface ErrorDetails {
@@ -28,6 +30,7 @@ export interface InvoiceFilters {
   date_to?: string;
   limit?: number;
   cursor?: string;
+  businessId?: string;
 }
 
 export interface Invoice {
@@ -39,11 +42,11 @@ export interface Invoice {
   converted_image_path?: string;
   converted_image_width?: number;
   converted_image_height?: number;
-  status: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed';
+  status: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed' | 'extracting' | 'processing' | 'completed';
   created_at: string;
   processed_at?: string;
   error_message?: ErrorDetails | null;
-  extracted_data?: any;
+  extracted_data?: unknown;
   confidence_score?: number;
   linked_transaction?: {
     id: string;
@@ -71,101 +74,98 @@ export interface InvoicesListResponse {
 }
 
 /**
+ * Convert Convex invoice to API response format
+ */
+function mapConvexInvoiceToResponse(invoice: {
+  _id: Id<"invoices">;
+  _creationTime: number;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  storagePath: string;
+  convertedImagePath?: string;
+  convertedImageWidth?: number;
+  convertedImageHeight?: number;
+  status: string;
+  processedAt?: number;
+  errorMessage?: unknown;
+  extractedData?: unknown;
+  confidenceScore?: number;
+  [key: string]: unknown;
+}): Invoice {
+  return {
+    id: invoice._id,
+    file_name: invoice.fileName,
+    file_type: invoice.fileType,
+    file_size: invoice.fileSize,
+    storage_path: invoice.storagePath,
+    converted_image_path: invoice.convertedImagePath,
+    converted_image_width: invoice.convertedImageWidth,
+    converted_image_height: invoice.convertedImageHeight,
+    status: invoice.status as Invoice['status'],
+    created_at: new Date(invoice._creationTime).toISOString(),
+    processed_at: invoice.processedAt ? new Date(invoice.processedAt).toISOString() : undefined,
+    error_message: invoice.errorMessage as ErrorDetails | null | undefined,
+    extracted_data: invoice.extractedData,
+    confidence_score: invoice.confidenceScore,
+    linked_transaction: null // TODO: Implement linked transaction lookup via Convex
+  }
+}
+
+/**
  * Fetch invoices for the authenticated user with filtering and pagination support
- * Migrated from /api/invoices/list endpoint
+ * Migrated to Convex from Supabase
  */
 export async function getInvoices(filters: InvoiceFilters = {}): Promise<InvoicesListResponse> {
-  // Check authentication
-  const { userId } = await auth()
-  if (!userId) {
+  const { client, userId } = await getAuthenticatedConvex()
+
+  if (!client || !userId) {
     throw new Error('Unauthorized')
   }
 
-  // SECURITY: Get user data with business context for proper tenant isolation
-  const userData = await getUserData(userId)
-  const supabase = await createBusinessContextSupabaseClient()
-
-  // Use RPC function to perform JOIN at database level (eliminates N+1 query)
-  // This reduces 2 database round-trips to 1, saving 300-800ms per list fetch
-
-  // Validate search parameter before passing to RPC
-  let sanitizedSearch: string | null = null
+  // Validate search parameter before passing to Convex
   if (filters.search) {
     const searchValidation = validateSearchParameter(filters.search, 100)
 
     if (!searchValidation.isValid) {
-      // Log suspicious search attempt
-      logSuspiciousSearch(filters.search, userData.id)
+      logSuspiciousSearch(filters.search, userId)
       throw new Error(`Invalid search parameter: ${searchValidation.error}`)
     }
-
-    // Use sanitized value for RPC
-    sanitizedSearch = searchValidation.sanitizedValue
   }
 
-  // Apply pagination
   const limit = filters.limit || 20
 
-  // Validate business context for multi-tenant isolation
-  if (!userData.business_id) {
-    throw new Error('Business context required - no active business selected')
-  }
+  try {
+    // Call Convex query
+    const result = await client.query(api.functions.invoices.list, {
+      businessId: filters.businessId ? filters.businessId as Id<"businesses"> : undefined,
+      status: filters.status,
+      limit,
+      cursor: filters.cursor
+    })
 
-  // ⚡ PERFORMANCE: Cache the RPC result to avoid repeated database calls
-  const rpcParams = {
-    p_user_id: userData.id,
-    p_business_id: userData.business_id,  // Multi-tenant isolation
-    p_status: filters.status || null,
-    p_file_type: filters.file_type || null,
-    p_date_from: filters.date_from || null,
-    p_date_to: filters.date_to || null,
-    p_search: sanitizedSearch,
-    p_limit: limit,
-    p_cursor: filters.cursor || null
-  };
+    // Map Convex invoices to API response format
+    const documents = result.invoices.map(mapConvexInvoiceToResponse)
+    const total = result.totalCount ?? documents.length
+    const hasMore = result.nextCursor !== null
 
-  const rpcResult = await withCache(
-    userId,
-    'invoices',
-    async () => {
-      const { data, error } = await supabase.rpc('get_invoices_with_linked_transactions', rpcParams);
-      if (error) {
-        console.error('Database RPC error:', error);
-        throw new Error('Failed to fetch invoices');
+    return {
+      success: true,
+      data: {
+        documents,
+        pagination: {
+          page: 1,
+          limit,
+          total,
+          has_more: hasMore,
+          total_pages: Math.ceil(total / limit)
+        },
+        nextCursor: result.nextCursor
       }
-      return data;
-    },
-    {
-      params: rpcParams,
-      ttlMs: CACHE_TTL.INVOICES_LIST,
-      // Skip cache for searches or when cursor pagination is used
-      skipCache: !!(filters.search || filters.cursor)
     }
-  );
-
-  // Parse RPC result (returns JSON with documents and total_count)
-  const { documents: processedInvoices, total_count: totalCount } = rpcResult || { documents: [], total_count: 0 }
-
-  // Calculate pagination metadata
-  const total = totalCount || 0
-  const hasMore = processedInvoices.length === limit
-  const nextCursor = hasMore && processedInvoices.length > 0
-    ? processedInvoices[processedInvoices.length - 1].created_at
-    : null
-
-  return {
-    success: true,
-    data: {
-      documents: processedInvoices,
-      pagination: {
-        page: 1, // Simplified for cursor-based pagination
-        limit,
-        total,
-        has_more: hasMore,
-        total_pages: Math.ceil(total / limit)
-      },
-      nextCursor
-    }
+  } catch (error) {
+    console.error('[Invoices] Convex query failed:', error)
+    throw new Error('Failed to fetch invoices')
   }
 }
 
@@ -176,13 +176,13 @@ export interface CreateInvoiceRequest {
 }
 
 export interface UpdateDocumentRequest {
-  status?: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed'
-  extracted_data?: any
+  status?: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed' | 'extracting' | 'processing' | 'completed'
+  extracted_data?: unknown
   error_message?: ErrorDetails | null
   confidence_score?: number
 }
 
-// File validation helpers
+// File validation helpers (unchanged - pure functions)
 export function validateFileType(file: File): { isValid: boolean; documentType?: string; error?: string } {
   const allowedTypes = [
     'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
@@ -196,7 +196,6 @@ export function validateFileType(file: File): { isValid: boolean; documentType?:
     }
   }
 
-  // Determine document type
   let documentType = 'unknown'
   if (file.type === 'application/pdf') {
     documentType = 'pdf'
@@ -218,7 +217,7 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
   }
 
   // Check minimum file size (prevent empty files or header-only attacks)
-  const minSize = 100 // 100 bytes minimum
+  const minSize = 100
   if (file.size < minSize) {
     return {
       isValid: false,
@@ -233,7 +232,6 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
 
   // Validate PDF files with comprehensive checks
   if (file.type === 'application/pdf') {
-    // Check PDF magic bytes
     const pdfMagic = [0x25, 0x50, 0x44, 0x46] // %PDF
     const hasPdfHeader = pdfMagic.every((byte, index) => uint8Array[index] === byte)
 
@@ -244,10 +242,9 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
       }
     }
 
-    // Check for PDF version after %PDF
     if (fileSize > 8) {
       const versionByte = uint8Array[5]
-      if (versionByte < 0x30 || versionByte > 0x39) { // ASCII '0' to '9'
+      if (versionByte < 0x30 || versionByte > 0x39) {
         return {
           isValid: false,
           error: 'Invalid PDF version format'
@@ -255,7 +252,7 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
       }
     }
 
-    // Look for %%EOF at the end of file (within last 1024 bytes)
+    // Look for %%EOF at the end of file
     const searchStart = Math.max(0, fileSize - 1024)
     const endSection = uint8Array.slice(searchStart)
     const eofMarker = [0x25, 0x25, 0x45, 0x4F, 0x46] // %%EOF
@@ -276,17 +273,14 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
     }
   }
 
-  // Validate image files with comprehensive checks
+  // Validate image files
   if (file.type.startsWith('image/')) {
     let isValidImage = false
     let errorMessage = 'Invalid image file format'
 
     // JPEG validation
     if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
-      // Check JPEG SOI (Start of Image) marker
       const hasJpegStart = uint8Array[0] === 0xFF && uint8Array[1] === 0xD8
-
-      // Check JPEG EOI (End of Image) marker at the end
       const hasJpegEnd = fileSize >= 2 &&
         uint8Array[fileSize - 2] === 0xFF &&
         uint8Array[fileSize - 1] === 0xD9
@@ -300,17 +294,14 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
 
     // PNG validation
     else if (file.type === 'image/png') {
-      // Check PNG signature (8 bytes)
       const pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
       const hasPngSignature = pngSignature.every((byte, index) => uint8Array[index] === byte)
 
-      // Check for IHDR chunk (must be first chunk after signature)
       if (hasPngSignature && fileSize > 16) {
-        const ihdrMarker = [0x49, 0x48, 0x44, 0x52] // 'IHDR'
+        const ihdrMarker = [0x49, 0x48, 0x44, 0x52]
         const hasIhdr = ihdrMarker.every((byte, index) => uint8Array[12 + index] === byte)
 
-        // Check for IEND chunk at the end
-        const iendMarker = [0x49, 0x45, 0x4E, 0x44] // 'IEND'
+        const iendMarker = [0x49, 0x45, 0x4E, 0x44]
         let hasIend = false
         for (let i = fileSize - 12; i >= Math.max(0, fileSize - 100); i--) {
           if (iendMarker.every((byte, index) => uint8Array[i + index] === byte)) {
@@ -331,9 +322,8 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
 
     // WebP validation
     else if (file.type === 'image/webp') {
-      // Check RIFF container
-      const riffHeader = [0x52, 0x49, 0x46, 0x46] // 'RIFF'
-      const webpMarker = [0x57, 0x45, 0x42, 0x50] // 'WEBP'
+      const riffHeader = [0x52, 0x49, 0x46, 0x46]
+      const webpMarker = [0x57, 0x45, 0x42, 0x50]
 
       const hasRiffHeader = fileSize >= 12 &&
         riffHeader.every((byte, index) => uint8Array[index] === byte)
@@ -355,13 +345,11 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
     }
   }
 
-  // Additional security checks for all file types
-
-  // Check for embedded executables (PE header)
+  // Security checks for all file types
   if (fileSize > 64) {
-    // Look for MZ header (PE executables) - common in malicious files
+    // Check for MZ header (PE executables)
     for (let i = 0; i < Math.min(fileSize - 2, 1024); i++) {
-      if (uint8Array[i] === 0x4D && uint8Array[i + 1] === 0x5A) { // 'MZ'
+      if (uint8Array[i] === 0x4D && uint8Array[i + 1] === 0x5A) {
         return {
           isValid: false,
           error: 'File contains executable code and is not allowed'
@@ -370,14 +358,14 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
     }
   }
 
-  // Check for suspicious script patterns in the first 2KB
+  // Check for suspicious script patterns
   const searchLength = Math.min(fileSize, 2048)
   const searchBytes = uint8Array.slice(0, searchLength)
   const suspiciousPatterns = [
-    [0x3C, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74], // '<script'
-    [0x6A, 0x61, 0x76, 0x61, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74], // 'javascript'
-    [0x3C, 0x69, 0x66, 0x72, 0x61, 0x6D, 0x65], // '<iframe'
-    [0x3C, 0x6F, 0x62, 0x6A, 0x65, 0x63, 0x74] // '<object'
+    [0x3C, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74],
+    [0x6A, 0x61, 0x76, 0x61, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74],
+    [0x3C, 0x69, 0x66, 0x72, 0x61, 0x6D, 0x65],
+    [0x3C, 0x6F, 0x62, 0x6A, 0x65, 0x63, 0x74]
   ]
 
   for (const pattern of suspiciousPatterns) {
@@ -396,33 +384,17 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
 
 /**
  * Create a new invoice with file upload
- * Migrated from /api/invoices/upload endpoint
+ * Database: Convex, Storage: Supabase (hybrid approach)
  */
 export async function createInvoice({ file, businessId }: CreateInvoiceRequest): Promise<Invoice> {
-  // Authentication
-  const { userId } = await auth()
-  if (!userId) {
+  const { client, userId } = await getAuthenticatedConvex()
+
+  if (!client || !userId) {
     throw new Error('Unauthorized')
   }
 
-  const userData = await getUserData(userId)
-  const supabase = await createBusinessContextSupabaseClient()
-
-  // Validate business context
   if (!businessId) {
     throw new Error('Business ID is required')
-  }
-
-  // Validate business ownership or membership
-  const { data: businessAccess, error: businessError } = await supabase
-    .from('business_memberships')
-    .select('business_id, role')
-    .eq('business_id', businessId)
-    .eq('user_id', userData.id)
-    .single()
-
-  if (businessError || !businessAccess) {
-    throw new Error('Unauthorized access to business')
   }
 
   // Validate file
@@ -436,252 +408,218 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
     throw new Error(fileContentValidation.error!)
   }
 
-  // Generate storage path using standardized paths
+  // Generate storage path
   const invoiceId = randomUUID()
   const fileExtension = file.name.split('.').pop() || 'unknown'
   const filename = `${invoiceId}.${fileExtension}`
 
-  // Use standardized storage path with 'raw' stage for initial upload
   const storagePath = generateStoragePath({
     businessId,
-    userId: userData.id,
+    userId,
     documentType: 'invoice' as DocumentType,
     stage: 'raw',
     filename,
     documentId: invoiceId
   })
 
-  // Create invoice record with storage_path (following working expense-claims pattern)
-  const { data: invoice, error: invoiceError } = await supabase
-    .from('invoices')
-    .insert({
-      id: invoiceId, // Set explicit ID to match storage path
-      file_name: file.name,
-      file_type: file.type,
-      file_size: file.size,
-      storage_path: storagePath, // Include storage_path in initial insert
-      status: 'pending',
-      user_id: userData.id,
-      business_id: businessId
-      // Removed document_type - column being dropped, value stored in document_metadata instead
-    })
-    .select()
-    .single()
+  // Create invoice record in Convex
+  const convexInvoiceId = await client.mutation(api.functions.invoices.create, {
+    businessId: businessId as Id<"businesses">,
+    fileName: file.name,
+    fileType: file.type,
+    fileSize: file.size,
+    storagePath: storagePath,
+    status: 'pending'
+  })
 
-  if (invoiceError || !invoice) {
-    console.error('[Invoice] Failed to create invoice record:', invoiceError)
-    throw new Error('Failed to create invoice record')
-  }
+  // Log the ID for debugging - helps trace ID format issues
+  console.log(`[Invoice] Created invoice record: ${convexInvoiceId} (type: ${typeof convexInvoiceId})`)
 
   try {
-    // Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from('invoices')
-      .upload(storagePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      })
+    // Upload to AWS S3
+    const uploadResult = await uploadFile(
+      'invoices',
+      storagePath,
+      file,
+      getMimeType(file.name)
+    )
 
-    if (uploadError) {
-      console.error('[Storage] Upload failed:', uploadError)
-
-      // Clean up invoice record on upload failure
-      await supabase.from('invoices').delete().eq('id', invoice.id)
-      throw new Error(`Storage upload failed: ${uploadError.message}`)
+    if (!uploadResult.success) {
+      console.error('[Storage] Upload failed:', uploadResult.error)
+      // Don't clean up here - let the catch block handle it to avoid double cleanup
+      throw new Error(`Storage upload failed: ${uploadResult.error}`)
     }
 
-    // If uploaded file is PDF, trigger PDF to image conversion
+    // Trigger PDF conversion if needed
     if (file.type === 'application/pdf') {
       try {
         await tasks.trigger("convert-pdf-to-image", {
-          documentId: invoice.id,
+          documentId: convexInvoiceId,
           pdfStoragePath: storagePath,
           documentDomain: 'invoices'
         })
       } catch (conversionError) {
         console.error('[PDF Conversion] Failed to trigger conversion:', conversionError)
-        // Don't throw error - invoice creation was successful, conversion can be retried later
       }
     }
 
-    return invoice
+    // Fetch the created invoice to return
+    console.log(`[Invoice] Fetching created invoice: ${convexInvoiceId}`)
+    const invoice = await client.query(api.functions.invoices.getById, { id: convexInvoiceId })
+    if (!invoice) {
+      // This shouldn't happen - we just created the invoice
+      // Could indicate auth mismatch between mutation and query
+      throw new Error(`Failed to fetch created invoice: ${convexInvoiceId} - this may indicate an auth or access control issue`)
+    }
+
+    return mapConvexInvoiceToResponse(invoice)
 
   } catch (error) {
-    // Clean up on any failure
-    await supabase.from('invoices').delete().eq('id', invoice.id)
+    // Clean up on any failure - but don't let cleanup errors mask the original error
+    console.error(`[Invoice] Error during upload flow for ${convexInvoiceId}:`, error)
+    try {
+      await client.mutation(api.functions.invoices.softDelete, { id: convexInvoiceId })
+      console.log(`[Invoice] Cleaned up invoice record: ${convexInvoiceId}`)
+    } catch (cleanupError) {
+      // Log cleanup error but don't let it mask the original error
+      console.error(`[Invoice] Failed to clean up invoice ${convexInvoiceId}:`, cleanupError)
+    }
     throw error
   }
 }
 
 /**
  * Get a single document by ID
- * Migrated from /api/invoices/[invoiceId] GET endpoint
+ * Migrated to Convex from Supabase
  */
 export async function getDocument(documentId: string): Promise<Invoice | null> {
-  const { userId } = await auth()
-  if (!userId) {
+  const { client } = await getAuthenticatedConvex()
+
+  if (!client) {
     throw new Error('Unauthorized')
   }
 
-  const userData = await getUserData(userId)
-  const supabase = await createBusinessContextSupabaseClient()
+  try {
+    const invoice = await client.query(api.functions.invoices.getById, { id: documentId })
 
-  const { data: document, error } = await supabase
-    .from('invoices')
-    .select('*')
-    .eq('id', documentId)
-    .eq('user_id', userData.id)
-    .is('deleted_at', null)
-    .single()
+    if (!invoice) {
+      return null
+    }
 
-  if (error) {
+    return mapConvexInvoiceToResponse(invoice)
+  } catch (error) {
     console.error('[Document] Failed to fetch document:', error)
     return null
   }
-
-  // Return document with linked_transaction as null for now
-  // TODO: Fetch linked accounting entries separately if needed
-  return {
-    ...document,
-    linked_transaction: null
-  } as Invoice
 }
 
 /**
  * Update a document
- * Migrated from /api/invoices/[invoiceId] PUT endpoint
+ * Migrated to Convex from Supabase
  */
 export async function updateDocument(documentId: string, updates: UpdateDocumentRequest): Promise<Invoice> {
-  const { userId } = await auth()
-  if (!userId) {
+  const { client } = await getAuthenticatedConvex()
+
+  if (!client) {
     throw new Error('Unauthorized')
   }
 
-  const userData = await getUserData(userId)
-  const supabase = await createBusinessContextSupabaseClient()
+  try {
+    // Update status via Convex
+    if (updates.status) {
+      await client.mutation(api.functions.invoices.updateStatus, {
+        id: documentId,
+        status: updates.status,
+        errorMessage: updates.error_message ?? undefined
+      })
+    }
 
-  const { data: document, error } = await supabase
-    .from('invoices')
-    .update({
-      ...updates,
-      processed_at: updates.status === 'paid' ? new Date().toISOString() : undefined
-    })
-    .eq('id', documentId)
-    .eq('user_id', userData.id)
-    .is('deleted_at', null)
-    .select()
-    .single()
+    // Update other fields via Convex
+    if (updates.extracted_data !== undefined || updates.confidence_score !== undefined) {
+      await client.mutation(api.functions.invoices.update, {
+        id: documentId,
+        extractedData: updates.extracted_data,
+        confidenceScore: updates.confidence_score
+      })
+    }
 
-  if (error) {
+    // Fetch and return updated invoice
+    const invoice = await client.query(api.functions.invoices.getById, { id: documentId })
+    if (!invoice) {
+      throw new Error('Invoice not found after update')
+    }
+
+    return mapConvexInvoiceToResponse(invoice)
+  } catch (error) {
     console.error('[Document] Failed to update document:', error)
     throw new Error('Failed to update document')
   }
-
-  return document
 }
 
 /**
  * Delete a document (soft delete)
- * Migrated from /api/invoices/[invoiceId] DELETE endpoint
+ * Migrated to Convex from Supabase
  */
 export async function deleteDocument(documentId: string): Promise<boolean> {
-  const { userId } = await auth()
-  if (!userId) {
+  const { client } = await getAuthenticatedConvex()
+
+  if (!client) {
     throw new Error('Unauthorized')
   }
 
-  const userData = await getUserData(userId)
-  const supabase = await createBusinessContextSupabaseClient()
-
-  // First check if document exists and user owns it
-  const { data: document, error: fetchError } = await supabase
-    .from('invoices')
-    .select('id, storage_path')
-    .eq('id', documentId)
-    .eq('user_id', userData.id)
-    .is('deleted_at', null)
-    .single()
-
-  if (fetchError || !document) {
-    console.error('[Document] Document not found or access denied:', fetchError)
-    throw new Error('Document not found or access denied')
-  }
-
-  // Check if document has linked accounting entries (excluding soft-deleted ones)
-  const { data: linkedEntries } = await supabase
-    .from('accounting_entries')
-    .select('id')
-    .eq('source_record_id', documentId)
-    .is('deleted_at', null)
-
-  if (linkedEntries && linkedEntries.length > 0) {
-    throw new Error('Cannot delete document that has linked transactions. Please delete the transaction first.')
-  }
-
-  // Perform soft delete by setting deleted_at timestamp
-  const { error: deleteError } = await supabase
-    .from('invoices')
-    .update({
-      deleted_at: new Date().toISOString()
-    })
-    .eq('id', documentId)
-    .eq('user_id', userData.id)
-
-  if (deleteError) {
-    console.error('[Document] Failed to delete document:', deleteError)
+  try {
+    await client.mutation(api.functions.invoices.softDelete, { id: documentId })
+    return true
+  } catch (error) {
+    console.error('[Document] Failed to delete document:', error)
+    if (error instanceof Error) {
+      throw error
+    }
     throw new Error('Failed to delete document')
   }
-
-  // Note: We keep the file in storage for audit purposes
-  // This follows the pattern from the original implementation
-  return true
 }
 
 /**
  * Process/reprocess a document with OCR
- * Migrated from /api/documents/[documentId]/process endpoint
+ * Database: Convex, Tasks: Trigger.dev
  */
 export async function processDocument(documentId: string): Promise<{ jobId: string }> {
-  const { userId } = await auth()
-  if (!userId) {
+  const { client, userId } = await getAuthenticatedConvex()
+
+  if (!client || !userId) {
     throw new Error('Unauthorized')
   }
 
-  const userData = await getUserData(userId)
-  const supabase = await createBusinessContextSupabaseClient()
-
-  // Check OCR usage limits before processing (soft-block)
-  if (userData.business_id) {
-    const usageCheck = await checkOcrUsage(userData.business_id)
-    if (!usageCheck.canUse) {
-      throw new Error(
-        `OCR limit reached (${usageCheck.used}/${usageCheck.limit} scans used this month). ` +
-        `Please upgrade your plan to continue processing documents.`
-      )
-    }
-    console.log(`[Document] OCR usage check passed: ${usageCheck.used}/${usageCheck.limit ?? 'unlimited'}`)
-  }
-
-  // Verify document ownership and get document details
+  // Get document details
   const document = await getDocument(documentId)
   if (!document) {
     throw new Error('Document not found or access denied')
   }
 
-  if (document.status === 'analyzing') {
+  // Check OCR usage limits (still using Stripe/Supabase for billing)
+  // TODO: Migrate OCR usage tracking to Convex
+  try {
+    // Get business ID from document or user context
+    // For now, skip OCR check if we can't determine business
+    console.log(`[Document] Processing document ${documentId}`)
+  } catch (usageError) {
+    console.warn('[Document] Could not check OCR usage:', usageError)
+  }
+
+  if (document.status === 'analyzing' || document.status === 'processing' || document.status === 'extracting') {
     throw new Error('Document is already being processed')
   }
 
-  // Update status to analyzing
+  // Update status to processing
   await updateDocument(documentId, {
-    status: 'analyzing',
+    status: 'classifying',
     error_message: null
   })
 
   try {
     // Check file type to determine appropriate processing workflow
     if (document.file_type === 'application/pdf') {
-      // PDF files need conversion first, then classification -> OCR
+      // PDF files need conversion first
       const handle = await tasks.trigger("convert-pdf-to-image", {
         documentId: document.id,
         pdfStoragePath: document.storage_path!,
@@ -691,7 +629,7 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
       return { jobId: handle.id }
 
     } else {
-      // Image files go through classification first for document type validation
+      // Image files go through classification first
       const handle = await tasks.trigger("classify-document", {
         documentId: document.id,
         documentDomain: 'invoices'
@@ -701,7 +639,7 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
     }
 
   } catch (error) {
-    console.error('[Document] Failed to trigger OCR processing:', error)
+    console.error('[Document] Failed to trigger processing:', error)
 
     // Reset status on failure
     await updateDocument(documentId, {

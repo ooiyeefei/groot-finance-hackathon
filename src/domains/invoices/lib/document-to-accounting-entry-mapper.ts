@@ -356,6 +356,14 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
   const vendorName = mappedData.vendor_name || 'Unknown Vendor'
   mappedData.description = `${vendorName} - ${document.file_name.replace(/\.[^/.]+$/, "")}`
 
+  // DEBUG: Log category-related fields to trace data flow
+  console.log('[Mapper Debug] document.id:', document.id)
+  console.log('[Mapper Debug] extractedData keys:', Object.keys(extractedData || {}))
+  console.log('[Mapper Debug] suggested_category:', extractedData?.suggested_category)
+  console.log('[Mapper Debug] selected_category:', extractedData?.selected_category)
+  console.log('[Mapper Debug] accounting_category:', extractedData?.accounting_category)
+  console.log('[Mapper Debug] category_confidence:', extractedData?.category_confidence)
+
   // Category assignment - prioritize AI-selected category from business definitions
   // AI should return valid business COGS category codes (MATERIALS, LABOR, SUBCONTRACT, etc.)
   if (extractedData.suggested_category) {

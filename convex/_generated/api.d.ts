@@ -1,0 +1,89 @@
+/* eslint-disable */
+/**
+ * Generated `api` utility.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
+ */
+
+import type * as functions_accountingEntries from "../functions/accountingEntries.js";
+import type * as functions_admin from "../functions/admin.js";
+import type * as functions_analytics from "../functions/analytics.js";
+import type * as functions_audit from "../functions/audit.js";
+import type * as functions_businesses from "../functions/businesses.js";
+import type * as functions_conversations from "../functions/conversations.js";
+import type * as functions_expenseClaims from "../functions/expenseClaims.js";
+import type * as functions_invoices from "../functions/invoices.js";
+import type * as functions_memberships from "../functions/memberships.js";
+import type * as functions_messages from "../functions/messages.js";
+import type * as functions_ocrUsage from "../functions/ocrUsage.js";
+import type * as functions_stripeEvents from "../functions/stripeEvents.js";
+import type * as functions_system from "../functions/system.js";
+import type * as functions_systemMonitoring from "../functions/systemMonitoring.js";
+import type * as functions_users from "../functions/users.js";
+import type * as functions_vendors from "../functions/vendors.js";
+import type * as functions_webhooks from "../functions/webhooks.js";
+import type * as lib_resolvers from "../lib/resolvers.js";
+import type * as lib_validators from "../lib/validators.js";
+import type * as migrations from "../migrations.js";
+import type * as types from "../types.js";
+
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
+
+declare const fullApi: ApiFromModules<{
+  "functions/accountingEntries": typeof functions_accountingEntries;
+  "functions/admin": typeof functions_admin;
+  "functions/analytics": typeof functions_analytics;
+  "functions/audit": typeof functions_audit;
+  "functions/businesses": typeof functions_businesses;
+  "functions/conversations": typeof functions_conversations;
+  "functions/expenseClaims": typeof functions_expenseClaims;
+  "functions/invoices": typeof functions_invoices;
+  "functions/memberships": typeof functions_memberships;
+  "functions/messages": typeof functions_messages;
+  "functions/ocrUsage": typeof functions_ocrUsage;
+  "functions/stripeEvents": typeof functions_stripeEvents;
+  "functions/system": typeof functions_system;
+  "functions/systemMonitoring": typeof functions_systemMonitoring;
+  "functions/users": typeof functions_users;
+  "functions/vendors": typeof functions_vendors;
+  "functions/webhooks": typeof functions_webhooks;
+  "lib/resolvers": typeof lib_resolvers;
+  "lib/validators": typeof lib_validators;
+  migrations: typeof migrations;
+  types: typeof types;
+}>;
+
+/**
+ * A utility for referencing Convex functions in your app's public API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
+export declare const api: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "public">
+>;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
+export declare const internal: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "internal">
+>;
+
+export declare const components: {};

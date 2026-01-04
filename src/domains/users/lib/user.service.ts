@@ -2,18 +2,22 @@
  * User Service Layer
  * Extracted business logic for user management operations
  *
+ * Migrated to Convex from Supabase
+ *
  * Functions:
  * - getUserProfile() - Get user profile with home currency
  * - updateUserProfile() - Update user profile settings
- * - getTeamMembers() - Get team members with RPC optimization
+ * - getTeamMembers() - Get team members with manager info
  * - getUserRole() - Get user role and permissions
  * - updateUserRole() - Update user role (unified role management)
  * - assignManager() - Assign/update manager for employee
  * - updateUserName() - Update user's full name
+ * - removeUserFromBusiness() - Remove user from business
  */
 
-import { createServiceSupabaseClient, getUserData, createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
-import { requirePermission, getCurrentUserContextWithBusiness, updateUserRole as rbacUpdateUserRole } from '@/domains/security/lib/rbac'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
+import { getCurrentUserContextWithBusiness, updateUserRole as rbacUpdateUserRole } from '@/domains/security/lib/rbac'
 import { clerkClient } from '@clerk/nextjs/server'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 
@@ -74,19 +78,31 @@ export interface UserRoleInfo {
 
 /**
  * Get user profile data including preferred currency
+ * Uses Convex to fetch user by Clerk ID
  */
 export async function getUserProfile(clerkUserId: string): Promise<UserProfile> {
-  const userData = await getUserData(clerkUserId)
+  const { client } = await getAuthenticatedConvex()
+  if (!client) {
+    throw new Error('Failed to get authenticated Convex client')
+  }
+
+  const user = await client.query(api.functions.users.getByClerkId, {
+    clerkUserId
+  })
+
+  if (!user) {
+    throw new Error('User not found')
+  }
 
   const completeProfile: UserProfile = {
-    id: userData.id,
-    email: userData.email,
-    full_name: userData.full_name,
-    preferred_currency: userData.preferred_currency as SupportedCurrency,
-    language_preference: (userData as any).language_preference || 'en',
-    timezone: (userData as any).timezone || 'Asia/Singapore',
-    created_at: (userData as any).created_at || null,
-    updated_at: (userData as any).updated_at || null
+    id: user._id,
+    email: user.email,
+    full_name: user.fullName || null,
+    preferred_currency: (user.homeCurrency || 'SGD') as SupportedCurrency,
+    language_preference: user.preferences?.language || 'en',
+    timezone: 'Asia/Singapore', // Default - could be added to Convex schema
+    created_at: user._creationTime ? new Date(user._creationTime).toISOString() : null,
+    updated_at: user.updatedAt ? new Date(user.updatedAt).toISOString() : null
   }
 
   return completeProfile
@@ -94,14 +110,12 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile> 
 
 /**
  * Update user profile settings
+ * Uses Convex mutation
  */
 export async function updateUserProfile(
   clerkUserId: string,
   updates: Partial<Pick<UserProfile, 'preferred_currency' | 'full_name' | 'language_preference' | 'timezone'>>
 ): Promise<UserProfile> {
-  const userData = await getUserData(clerkUserId)
-  const supabase = createServiceSupabaseClient()
-
   // Validate preferred_currency if provided
   if (updates.preferred_currency) {
     const supportedCurrencies: SupportedCurrency[] = ['THB', 'IDR', 'MYR', 'SGD', 'USD', 'EUR', 'CNY', 'VND', 'PHP', 'INR']
@@ -114,148 +128,76 @@ export async function updateUserProfile(
     throw new Error('No valid fields to update')
   }
 
-  // Add updated timestamp
-  const updateData = {
-    ...updates,
-    updated_at: new Date().toISOString()
+  const { client } = await getAuthenticatedConvex()
+  if (!client) {
+    throw new Error('Failed to get authenticated Convex client')
   }
 
-  const { data: updatedProfile, error } = await supabase
-    .from('users')
-    .update(updateData)
-    .eq('id', userData.id)
-    .select('id, email, full_name, preferred_currency, language_preference, timezone, created_at, updated_at')
-    .single()
+  // Map service layer fields to Convex field names
+  // Note: Convex expects undefined (not null) for optional fields
+  await client.mutation(api.functions.users.updateProfile, {
+    fullName: updates.full_name ?? undefined,
+    homeCurrency: updates.preferred_currency
+  })
 
-  if (error) {
-    throw new Error(`Failed to update profile: ${error.message}`)
-  }
-
-  return updatedProfile as UserProfile
+  // Fetch and return updated profile
+  return await getUserProfile(clerkUserId)
 }
 
 /**
- * Get team members with RPC optimization
- * Requires admin permission
+ * Get team members with manager info
+ * Uses Convex query that replaces the Supabase RPC
  */
 export async function getTeamMembers(
   clerkUserId: string,
   businessId: string
 ): Promise<{ users: TeamMember[]; business_id: string }> {
-  // Create authenticated client
-  const supabase = await createBusinessContextSupabaseClient()
-
-  // Use optimized RPC function with proper status filtering
-  console.log('[User Service] Using get_manager_team_employees RPC for business:', businessId)
-
-  const { data: rpcTeamData, error: rpcError } = await supabase
-    .rpc('get_manager_team_employees', {
-      manager_user_id: clerkUserId,
-      business_id_param: businessId
-    })
-
-  console.log('[User Service] 🔍 RAW RPC Response - Count:', rpcTeamData?.length || 0)
-  console.log('[User Service] 🔍 RAW RPC Response - Data:', JSON.stringify(rpcTeamData, null, 2))
-
-  let enrichedProfiles: TeamMember[] = []
-
-  if (rpcError) {
-    console.error('[User Service] RPC function error:', rpcError)
-    // Fallback to manual approach if RPC fails
-    const { data: memberships, error: fallbackError } = await supabase
-      .from('business_memberships')
-      .select(`
-        id,
-        user_id,
-        business_id,
-        role,
-        created_at,
-        users!business_memberships_user_id_fkey(
-          id,
-          email,
-          full_name,
-          business_id,
-          clerk_user_id,
-          businesses!users_business_id_fkey(home_currency)
-        )
-      `)
-      .eq('business_id', businessId)
-      .eq('status', 'active')
-      .not('users.clerk_user_id', 'is', null)
-      .order('created_at', { ascending: false })
-
-    if (fallbackError) {
-      throw new Error(`Failed to fetch team members: ${fallbackError.message}`)
-    }
-
-    enrichedProfiles = (memberships || []).map(membership => {
-      const user = Array.isArray(membership.users) ? membership.users[0] : membership.users
-
-      return {
-        id: membership.id,
-        user_id: membership.user_id,
-        business_id: membership.business_id,
-        full_name: user?.full_name || null,
-        email: user?.email || null,
-        role_permissions: {
-          employee: true,
-          manager: membership.role === 'admin' || membership.role === 'manager',
-          admin: membership.role === 'admin'
-        },
-        home_currency: (user as any)?.businesses?.home_currency || null,
-        manager_id: null,
-        manager_name: null,
-        manager_user_id: null,
-        created_at: membership.created_at,
-        updated_at: membership.created_at,
-        clerk_user: null
-      }
-    })
-  } else {
-    // RPC returns pre-joined data
-    console.log('[User Service] RPC returned data:', JSON.stringify(rpcTeamData, null, 2))
-    enrichedProfiles = (rpcTeamData || []).map((member: any) => ({
-      id: member.membership_id || member.employee_id, // Use membership_id if available, fallback to employee_id
-      user_id: member.user_id,
-      business_id: businessId,
-      full_name: member.full_name,
-      email: member.email,
-      role_permissions: member.role_permissions || {
-        employee: true,
-        manager: false,
-        admin: false
-      },
-      home_currency: member.home_currency || 'SGD',
-      manager_id: member.manager_id,
-      manager_name: member.manager_name,
-      manager_user_id: member.manager_user_id_field,
-      created_at: member.created_at,
-      updated_at: member.updated_at,
-      clerk_user: null
-    }))
+  const { client } = await getAuthenticatedConvex()
+  if (!client) {
+    throw new Error('Failed to get authenticated Convex client')
   }
 
-  console.log('[User Service] 📊 Profiles before Clerk enrichment:', enrichedProfiles.length)
-  enrichedProfiles.forEach((profile, index) => {
-    console.log(`[User Service] Profile ${index + 1}:`, {
-      id: profile.id,
-      user_id: profile.user_id,
-      full_name: profile.full_name,
-      email: profile.email,
-      role_permissions: profile.role_permissions
-    })
+  console.log('[User Service] Using Convex getTeamMembersWithManagers for business:', businessId)
+
+  const teamData = await client.query(api.functions.memberships.getTeamMembersWithManagers, {
+    businessId
   })
+
+  console.log('[User Service] Convex returned data count:', teamData?.length || 0)
+
+  let enrichedProfiles: TeamMember[] = (teamData || []).map((member: any) => ({
+    id: member.id,
+    user_id: member.user_id,
+    business_id: member.business_id,
+    full_name: member.full_name,
+    email: member.email,
+    role_permissions: member.role_permissions || {
+      employee: true,
+      manager: false,
+      admin: false
+    },
+    home_currency: member.home_currency || 'SGD',
+    manager_id: member.manager_id,
+    manager_name: member.manager_name,
+    manager_user_id: member.manager_user_id,
+    created_at: member.created_at,
+    updated_at: member.updated_at,
+    clerk_user: null
+  }))
+
+  console.log('[User Service] Profiles before Clerk enrichment:', enrichedProfiles.length)
 
   // Batch fetch Clerk user data
   if (enrichedProfiles.length > 0) {
     const clerkUserIds: string[] = []
     const profileClerkIdMap = new Map<string, TeamMember>()
 
-    enrichedProfiles.forEach((profile) => {
-      const memberData = rpcTeamData ? rpcTeamData.find((member: any) => member.user_id === profile.user_id) : null
+    // Get clerk_user_id from the Convex response
+    enrichedProfiles.forEach((profile, index) => {
+      const memberData = teamData ? teamData[index] : null
       const clerkId = memberData?.clerk_user_id
 
-      if (clerkId) {
+      if (clerkId && !clerkId.startsWith('migrated_') && !clerkId.startsWith('pending_')) {
         clerkUserIds.push(clerkId)
         profileClerkIdMap.set(clerkId, profile)
       }
@@ -273,22 +215,22 @@ export async function getTeamMembers(
           clerkUsersMap.set(user.id, user)
         })
 
-        enrichedProfiles = enrichedProfiles.map((profile) => {
-          const memberData = rpcTeamData ? rpcTeamData.find((member: any) => member.user_id === profile.user_id) : null
+        enrichedProfiles = enrichedProfiles.map((profile, index) => {
+          const memberData = teamData ? teamData[index] : null
           const clerkId = memberData?.clerk_user_id
 
           if (clerkId && clerkUsersMap.has(clerkId)) {
             profile.clerk_user = clerkUsersMap.get(clerkId)
           }
           return profile
-        }) // Remove the filter - always return all profiles even if Clerk data is missing
+        })
       } catch (error) {
         console.error('[User Service] Batch Clerk fetch failed:', error)
       }
     }
   }
 
-  console.log('[User Service] Final profiles returned:', enrichedProfiles.length, enrichedProfiles.map(p => ({ user_id: p.user_id, full_name: p.full_name })))
+  console.log('[User Service] Final profiles returned:', enrichedProfiles.length)
 
   return {
     users: enrichedProfiles,
@@ -298,6 +240,7 @@ export async function getTeamMembers(
 
 /**
  * Get user role and permissions
+ * Uses already-migrated RBAC functions
  */
 export async function getUserRole(): Promise<UserRoleInfo> {
   const userContext = await getCurrentUserContextWithBusiness()
@@ -350,7 +293,7 @@ export async function updateUserRole(
 
 /**
  * Assign or update manager for an employee
- * Requires admin permission
+ * Uses Convex mutation
  */
 export async function assignManager(
   employeeId: string,
@@ -358,58 +301,18 @@ export async function assignManager(
   currentUserId: string,
   businessId: string
 ): Promise<void> {
-  const supabase = createServiceSupabaseClient()
-
-  // Validate employee exists in same business
-  const { data: employee, error: employeeError } = await supabase
-    .from('business_memberships')
-    .select('id, user_id, business_id, role')
-    .eq('user_id', employeeId)
-    .eq('business_id', businessId)
-    .eq('status', 'active')
-    .single()
-
-  if (employeeError || !employee) {
-    throw new Error('Employee not found or access denied')
+  const { client } = await getAuthenticatedConvex()
+  if (!client) {
+    throw new Error('Failed to get authenticated Convex client')
   }
 
-  // Validate manager if provided
-  let managerMembershipId = null
-  if (managerId) {
-    const { data: manager, error: managerError } = await supabase
-      .from('business_memberships')
-      .select('id, user_id, role, business_id')
-      .eq('user_id', managerId)
-      .eq('business_id', businessId)
-      .eq('status', 'active')
-      .single()
+  await client.mutation(api.functions.memberships.assignManager, {
+    businessId,
+    employeeUserId: employeeId,
+    managerUserId: managerId || undefined
+  })
 
-    if (managerError || !manager) {
-      throw new Error('Manager not found or access denied')
-    }
-
-    if (manager.role !== 'manager' && manager.role !== 'admin') {
-      throw new Error('Assigned user must have manager or admin role')
-    }
-
-    managerMembershipId = manager.user_id
-  }
-
-  // Update manager assignment
-  const { error: updateError } = await supabase
-    .from('business_memberships')
-    .update({
-      manager_id: managerMembershipId,
-      updated_at: new Date().toISOString()
-    })
-    .eq('user_id', employeeId)
-    .eq('business_id', businessId)
-
-  if (updateError) {
-    throw new Error(`Failed to update manager assignment: ${updateError.message}`)
-  }
-
-  console.log(`[User Service] Manager assignment updated: ${employeeId} → ${managerMembershipId || 'none'}`)
+  console.log(`[User Service] Manager assignment updated: ${employeeId} → ${managerId || 'none'}`)
 }
 
 /**
@@ -431,39 +334,27 @@ export async function updateUserName(
     throw new Error('Name must be at least 2 characters long')
   }
 
-  const supabase = createServiceSupabaseClient()
+  const { client } = await getAuthenticatedConvex()
+  if (!client) {
+    throw new Error('Failed to get authenticated Convex client')
+  }
 
-  // If updating someone else, verify permission
-  if (targetUserId !== currentUserId) {
+  // If updating self, use the regular updateProfile
+  if (targetUserId === currentUserId) {
+    await client.mutation(api.functions.users.updateProfile, {
+      fullName: fullName.trim()
+    })
+  } else {
+    // Admin updating another user
     if (!canManageUsers) {
       throw new Error('Admin permissions required to update other users')
     }
 
-    // Verify target user exists in same business
-    const { data: targetUser, error: targetUserError } = await supabase
-      .from('business_memberships')
-      .select('user_id, business_id')
-      .eq('user_id', targetUserId)
-      .eq('business_id', businessId)
-      .eq('status', 'active')
-      .single()
-
-    if (targetUserError || !targetUser) {
-      throw new Error('Target user not found or access denied')
-    }
-  }
-
-  // Update user's full name
-  const { error: updateError } = await supabase
-    .from('users')
-    .update({
-      full_name: fullName.trim(),
-      updated_at: new Date().toISOString()
+    await client.mutation(api.functions.users.updateFullNameByAdmin, {
+      targetUserId,
+      fullName: fullName.trim(),
+      businessId
     })
-    .eq('id', targetUserId)
-
-  if (updateError) {
-    throw new Error(`Failed to update name: ${updateError.message}`)
   }
 
   console.log(`[User Service] Name updated: ${targetUserId} → ${fullName.trim()}`)
@@ -471,41 +362,35 @@ export async function updateUserName(
 
 /**
  * Remove user from business (set membership status to inactive)
- * Requires admin permission
+ * Uses Convex mutation
  */
 export async function removeUserFromBusiness(
   targetUserId: string,
   currentUserId: string,
   businessId: string
 ): Promise<void> {
-  const supabase = createServiceSupabaseClient()
+  const { client } = await getAuthenticatedConvex()
+  if (!client) {
+    throw new Error('Failed to get authenticated Convex client')
+  }
 
-  // Validate target user exists in same business
-  const { data: targetMembership, error: membershipError } = await supabase
-    .from('business_memberships')
-    .select('id, user_id, business_id, role, status')
-    .eq('user_id', targetUserId)
-    .eq('business_id', businessId)
-    .eq('status', 'active')
-    .single()
+  // The Convex removeMember function requires the membership ID
+  // We need to find it first
+  const teamMembers = await client.query(api.functions.memberships.getTeamMembersWithManagers, {
+    businessId
+  })
 
-  if (membershipError || !targetMembership) {
+  const targetMembership = teamMembers?.find((m: any) =>
+    m.user_id === targetUserId || String(m.user_id) === targetUserId
+  )
+
+  if (!targetMembership) {
     throw new Error('User membership not found or access denied')
   }
 
-  // Update membership status to inactive
-  const { error: updateError } = await supabase
-    .from('business_memberships')
-    .update({
-      status: 'inactive',
-      updated_at: new Date().toISOString()
-    })
-    .eq('user_id', targetUserId)
-    .eq('business_id', businessId)
-
-  if (updateError) {
-    throw new Error(`Failed to remove user from business: ${updateError.message}`)
-  }
+  await client.mutation(api.functions.memberships.removeMember, {
+    membershipId: targetMembership.id
+  })
 
   console.log(`[User Service] User removed from business: ${targetUserId} from business ${businessId}`)
 }

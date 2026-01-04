@@ -7,6 +7,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X,
   FileText,
@@ -306,8 +307,11 @@ export default function UnifiedExpenseDetailsModal({
 
   if (!isOpen) return null
 
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  // Use portal for SSR safety and to bypass CSS containment
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <Card className="bg-record-layer-1 border-record-border w-full max-w-7xl max-h-[95vh] overflow-hidden relative">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 px-6 py-4">
           <CardTitle className="text-foreground flex items-center gap-2">
@@ -747,6 +751,7 @@ export default function UnifiedExpenseDetailsModal({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }

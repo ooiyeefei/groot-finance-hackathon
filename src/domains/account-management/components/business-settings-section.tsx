@@ -18,10 +18,10 @@ interface BusinessSettingsSectionProps {
 
 export default function BusinessSettingsSection({ className }: BusinessSettingsSectionProps) {
   const { profile, isLoadingProfile } = useBusinessContext()
-  const { isAdmin, isManager } = usePermissions()
+  const { isAdmin, isManager, isOwner } = usePermissions()
 
-  // Only show business management cards to managers and admins
-  const canManageBusiness = isAdmin || isManager
+  // Only show business management cards to owners, managers, and admins
+  const canManageBusiness = isOwner || isAdmin || isManager
 
   if (isLoadingProfile) {
     return (

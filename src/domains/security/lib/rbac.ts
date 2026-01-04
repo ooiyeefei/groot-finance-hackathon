@@ -1,10 +1,13 @@
 /**
  * Role-Based Access Control (RBAC) System
  * Integrates Clerk authentication with employee profile permissions
+ *
+ * Migrated to Convex from Supabase
  */
 
 import { auth, clerkClient } from '@clerk/nextjs/server'
-import { createBusinessContextSupabaseClient, createServiceSupabaseClient } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 import { ensureUserProfile, UserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { getCurrentBusinessContext, checkBusinessOwnership, type BusinessContext } from '@/lib/db/business-context'
 
@@ -132,10 +135,11 @@ function determineUserRoles(permissions: RolePermissions): UserRole[] {
 }
 
 /**
- * Update user role in Clerk and sync with employee profile
+ * Update user role in database
+ * Migrated to Convex
  */
 export async function updateUserRole(
-  targetUserId: string, 
+  targetUserId: string,
   role: UserRole,
   updatedBy: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -143,41 +147,32 @@ export async function updateUserRole(
     // Special case: SaaS owner can bypass permission checks (master key validation done in API)
     if (updatedBy !== 'saas_owner') {
       const updaterContext = await getCurrentUserContext()
-      
+
       // Only admin users can update roles
       if (!updaterContext?.canManageUsers) {
         return { success: false, error: 'Insufficient permissions to update user roles' }
       }
     }
 
-    // Ensure employee profile exists first (creates if missing)
-    const employeeProfile = await ensureUserProfile(targetUserId)
-    if (!employeeProfile) {
-      return { success: false, error: 'Failed to create or access employee profile' }
+    // Get business context for current user
+    const businessContext = await getCurrentBusinessContext()
+    if (!businessContext) {
+      return { success: false, error: 'No active business context' }
     }
 
-    // ✅ SECURITY FIX: Use business context client with proper RLS enforcement
-    const supabase = await createBusinessContextSupabaseClient()
-    
-    // Update employee profile permissions using the correct UUID
-    const permissions = roleToPermissions(role)
-    
-    const { error: updateError } = await supabase
-      .from('business_memberships')
-      .update({
-        role: role,
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', employeeProfile.user_id) // Update business membership role
-
-    if (updateError) {
-      console.error('[RBAC] Error updating employee profile:', updateError)
-      return { success: false, error: 'Failed to update employee profile' }
+    // Use Convex to update role
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Failed to get authenticated client' }
     }
 
-    // DEPRECATED: No longer syncing to Clerk metadata (using native integration)
-    // Role is stored in Supabase business_memberships table only
-    console.log(`[RBAC] Role updated in database: ${targetUserId} → ${role} by ${updatedBy}`)
+    await client.mutation(api.functions.memberships.updateRoleByStringIds, {
+      userId: targetUserId,
+      businessId: businessContext.businessId,
+      newRole: role
+    })
+
+    console.log(`[RBAC] Role updated in Convex: ${targetUserId} → ${role} by ${updatedBy}`)
     return { success: true }
 
   } catch (error) {
@@ -329,6 +324,7 @@ export async function requirePermission(permission: keyof RolePermissions): Prom
 
 /**
  * Get all users in the business with their roles
+ * Migrated to Convex
  */
 export async function getBusinessUsers(businessId: string): Promise<{
   success: boolean
@@ -337,57 +333,47 @@ export async function getBusinessUsers(businessId: string): Promise<{
 }> {
   try {
     const context = await getCurrentUserContext()
-    
+
     if (!context?.canManageUsers) {
       return { success: false, error: 'Insufficient permissions' }
     }
 
-    // ✅ SECURITY FIX: Use business context client with proper RLS enforcement
-    const supabase = await createBusinessContextSupabaseClient()
-    
-    const { data: profiles, error } = await supabase
-      .from('business_memberships')
-      .select(`
-        id,
-        user_id,
-        business_id,
-        role,
-        created_at,
-        users!business_memberships_user_id_fkey(
-          id,
-          email,
-          full_name,
-          business_id,
-          businesses!users_business_id_fkey(home_currency)
-        )
-      `)
-      .eq('business_id', businessId)
-      .order('created_at', { ascending: false })
+    // Use Convex to fetch business users
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Failed to get authenticated client' }
+    }
 
-    if (error) {
+    const memberships = await client.query(api.functions.memberships.getBusinessUsersByStringId, {
+      businessId
+    })
+
+    if (!memberships || !Array.isArray(memberships)) {
       return { success: false, error: 'Failed to fetch users' }
     }
 
-    // Transform business memberships to UserProfile format and enrich with Clerk user data
+    // Transform Convex response and enrich with Clerk user data
     const enrichedUsers = await Promise.all(
-      profiles.map(async (membership) => {
+      memberships.map(async (membership: any) => {
         try {
-          const clerkUser = await (await clerkClient()).users.getUser(membership.user_id)
+          // Try to get Clerk user data using the clerkUserId from Convex
+          let clerkUser = null
+          if (membership.user?.clerkUserId && !membership.user.clerkUserId.startsWith('migrated_') && !membership.user.clerkUserId.startsWith('pending_')) {
+            try {
+              clerkUser = await (await clerkClient()).users.getUser(membership.user.clerkUserId)
+            } catch {
+              // Clerk user not found, continue without it
+            }
+          }
 
-          // Transform business membership to UserProfile format
           const userProfile: UserProfile & { clerk_user?: any } = {
             id: membership.id,
             user_id: membership.user_id,
             business_id: membership.business_id,
             role: membership.role,
-            role_permissions: {
-              employee: true,
-              manager: membership.role === 'admin' || membership.role === 'manager',
-              admin: membership.role === 'admin'
-            },
-            home_currency: (membership.users?.[0] as any)?.businesses?.home_currency,
+            role_permissions: membership.role_permissions,
             created_at: membership.created_at,
-            updated_at: membership.created_at, // Use created_at as fallback for updated_at
+            updated_at: membership.updated_at,
             clerk_user: clerkUser
           }
 
@@ -399,14 +385,9 @@ export async function getBusinessUsers(businessId: string): Promise<{
             user_id: membership.user_id,
             business_id: membership.business_id,
             role: membership.role,
-            role_permissions: {
-              employee: true,
-              manager: membership.role === 'admin' || membership.role === 'manager',
-              admin: membership.role === 'admin'
-            },
-            home_currency: (membership.users?.[0] as any)?.businesses?.home_currency,
+            role_permissions: membership.role_permissions,
             created_at: membership.created_at,
-            updated_at: membership.created_at
+            updated_at: membership.updated_at
           }
 
           return userProfile
@@ -415,7 +396,7 @@ export async function getBusinessUsers(businessId: string): Promise<{
     )
 
     return { success: true, users: enrichedUsers }
-    
+
   } catch (error) {
     console.error('[RBAC] Error fetching business users:', error)
     return { success: false, error: 'Internal server error' }

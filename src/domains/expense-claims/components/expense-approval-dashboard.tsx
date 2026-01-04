@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { formatBusinessDate } from '@/lib/utils'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
@@ -663,7 +664,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-foreground" />
                     <span className="text-foreground">
-                      {new Date(claim.transaction_date).toLocaleDateString()}
+                      {formatBusinessDate(claim.transaction_date)}
                     </span>
                   </div>
                 </div>
@@ -675,7 +676,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-3 pt-4 border-t border">
+                <div className="flex gap-3 pt-4">
                   <Button
                     size="sm"
                     onClick={() => setSelectedClaim(claim)}
@@ -717,7 +718,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
 
       {/* Unified Expense Details Modal - Manager View */}
       {selectedClaim && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
           <UnifiedExpenseDetailsModal
             claimId={selectedClaim.id}
             isOpen={Boolean(selectedClaim)}

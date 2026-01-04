@@ -7,64 +7,16 @@
  * 3. Routes to appropriate extraction task
  *
  * Supports: Invoice, Receipt
+ *
+ * STORAGE: AWS S3 (2025)
+ * DATABASE: Convex via ConvexHttpClient (2025 migration)
  */
 
 import { task, tasks } from "@trigger.dev/sdk/v3";
 import { python } from "@trigger.dev/python";
-import { supabase, updateDocumentStatus, updateDocumentClassification } from './utils/db-helpers';
+import { updateDocumentStatus, updateDocumentClassification, fetchDocument, updateExtractionTaskId } from './utils/convex-helpers';
 import { ClassificationResultSchema, safePythonScriptResult, type ClassificationResult } from './utils/schemas';
-
-// ⚡ OPTIMIZATION: Signed URL cache to avoid redundant Storage API calls
-// Cache structure: Map<storage_path, { signedUrl: string, expiryTime: number }>
-const signedUrlCache = new Map<string, { signedUrl: string; expiryTime: number }>();
-const SIGNED_URL_CACHE_DURATION_MS = 8 * 60 * 1000; // 8 minutes (URLs valid for 10 min, cache for 8 min)
-
-/**
- * Get or create cached signed URL for a storage path
- * Reduces Storage API calls by caching signed URLs with TTL
- */
-async function getOrCreateSignedUrl(
-  bucketName: string,
-  storagePath: string,
-  expirySeconds: number = 600
-): Promise<string> {
-  const now = Date.now();
-  const cached = signedUrlCache.get(storagePath);
-
-  // Return cached URL if still valid
-  if (cached && cached.expiryTime > now) {
-    console.log(`[Cache HIT] Using cached signed URL for: ${storagePath}`);
-    return cached.signedUrl;
-  }
-
-  // Create new signed URL
-  console.log(`[Cache MISS] Creating new signed URL for: ${storagePath}`);
-  const { data: urlData, error: urlError } = await supabase.storage
-    .from(bucketName)
-    .createSignedUrl(storagePath, expirySeconds);
-
-  if (urlError || !urlData) {
-    throw new Error(`Failed to create signed URL: ${urlError?.message}`);
-  }
-
-  // Cache the signed URL with expiry time (8 min for 10 min URLs)
-  const expiryTime = now + SIGNED_URL_CACHE_DURATION_MS;
-  signedUrlCache.set(storagePath, {
-    signedUrl: urlData.signedUrl,
-    expiryTime
-  });
-
-  // Periodic cache cleanup (remove expired entries every 50 requests)
-  if (signedUrlCache.size % 50 === 0) {
-    for (const [path, entry] of signedUrlCache.entries()) {
-      if (entry.expiryTime <= now) {
-        signedUrlCache.delete(path);
-      }
-    }
-  }
-
-  return urlData.signedUrl;
-}
+import { getOrCreateSignedUrl, listFiles, type S3Prefix } from './utils/s3-helpers';
 
 // Import task types for routing
 import type { extractInvoiceData } from './extract-invoice-data';
@@ -76,11 +28,11 @@ const DOMAIN_TABLE_MAP = {
   'expense_claims': 'expense_claims'
 } as const;
 
-// ✅ PHASE 4J: Domain-to-bucket mapping for multi-bucket architecture
-const DOMAIN_BUCKET_MAP = {
+// ✅ S3 MIGRATION: Domain-to-S3-prefix mapping
+const DOMAIN_S3_PREFIX_MAP: Record<string, S3Prefix> = {
   'invoices': 'invoices',
   'expense_claims': 'expense_claims'
-} as const;
+};
 
 interface ClassifyDocumentPayload {
   documentId: string;
@@ -107,35 +59,22 @@ export const classifyDocument = task({
 
   // ✅ PHASE 4B-3: Route to correct table based on domain
   const tableName = DOMAIN_TABLE_MAP[documentDomain];
-  // ✅ PHASE 4J: Route to correct bucket based on domain
-  const bucketName = DOMAIN_BUCKET_MAP[documentDomain];
-  console.log(`[Classify] Starting classification for document ${documentId} in ${tableName} (domain: ${documentDomain}, bucket: ${bucketName})`);
+  // ✅ S3 MIGRATION: Route to correct S3 prefix based on domain
+  const s3Prefix = DOMAIN_S3_PREFIX_MAP[documentDomain];
+  console.log(`[Classify] Starting classification for document ${documentId} in ${tableName} (domain: ${documentDomain}, S3 prefix: ${s3Prefix})`);
 
   try {
-    // ⚡ OPTIMIZATION: Combine status update + fetch in single query (saves 200-500ms)
-    // Handle different column names: both expense_claims and invoices use 'status', other tables use 'processing_status'
+    // Update status and fetch document details via Convex
     const isExpenseClaims = tableName === 'expense_claims';
-    const usesStatusColumn = tableName === 'expense_claims' || tableName === 'invoices';
-    const statusColumn = usesStatusColumn ? 'status' : 'processing_status';
-    const metadataColumn = isExpenseClaims ? 'processing_metadata' : 'document_metadata';
+    const initialStatus = isExpenseClaims ? 'analyzing' : 'classifying';
 
-    const updateData: any = {
-      [statusColumn]: isExpenseClaims ? 'analyzing' : 'classifying', // expense_claims uses 'analyzing' status
-      error_message: null,
-      updated_at: new Date().toISOString()
-    };
+    // Update status first
+    await updateDocumentStatus(documentId, initialStatus, undefined, tableName);
 
-    const selectColumns = `storage_path, converted_image_path, file_type, ${metadataColumn}`;
-
-    const { data: document, error: fetchError } = await supabase
-      .from(tableName)
-      .update(updateData)
-      .eq('id', documentId)
-      .select(selectColumns)
-      .single();
-
-    if (fetchError || !document) {
-      throw new Error(`Document not found: ${fetchError?.message}`);
+    // Fetch document details
+    const document = await fetchDocument(documentId, tableName);
+    if (!document) {
+      throw new Error(`Document not found: ${documentId}`);
     }
 
     // GRACEFUL PATH HANDLING: Different approaches for images vs converted PDFs
@@ -148,15 +87,17 @@ export const classifyDocument = task({
       console.log(`[Classify] PDF workflow - using converted image folder: ${(document as any).converted_image_path}`);
 
       // ⚡ OPTIMIZATION: Only fetch 1 file since we only use the first (saves 100-200ms + 90% data transfer)
-      const { data: fileList, error: listError } = await supabase.storage
-        .from(bucketName)  // ✅ PHASE 4J: Route to correct bucket
-        .list((document as any).converted_image_path, {
-          limit: 1,
-          sortBy: { column: 'name', order: 'asc' }
-        });
-
-      if (listError) {
-        throw new Error(`Failed to list converted images: ${listError.message}`);
+      // ✅ S3 MIGRATION: Use S3 listFiles instead of Supabase storage
+      let fileList: Array<{ key: string; name: string; size: number; lastModified: Date }>;
+      try {
+        const result = await listFiles(
+          s3Prefix,
+          (document as any).converted_image_path,
+          { maxKeys: 1 }  // Limit to 1 file
+        );
+        fileList = result.files;
+      } catch (listError) {
+        throw new Error(`Failed to list converted images: ${listError instanceof Error ? listError.message : listError}`);
       }
 
       if (!fileList || fileList.length === 0) {
@@ -178,7 +119,8 @@ export const classifyDocument = task({
     console.log(`[Classify] Final classification image path: ${classifyImagePath}`);
 
     // ⚡ OPTIMIZATION: Use cached signed URL to avoid redundant Storage API calls
-    const signedUrl = await getOrCreateSignedUrl(bucketName, classifyImagePath, 600);
+    // ✅ S3 MIGRATION: Use S3 presigned URL
+    const signedUrl = await getOrCreateSignedUrl(s3Prefix, classifyImagePath, 600);
     console.log(`[Classify] Got signed URL for classification`);
 
     // Run structured AI classification script with slot validation context
@@ -273,7 +215,18 @@ export const classifyDocument = task({
 
     // Update database with classification results
     console.log(`[Classify] Updating database with classification: ${classificationResult.document_type}`);
-    await updateDocumentClassification(documentId, classificationResult, taskId, tableName);  // ✅ PHASE 4B-3: Pass tableName
+    // Map Python's `success` field to Convex helper's expected `is_supported` field
+    const classificationForConvex = {
+      is_supported: classificationResult.success === true,  // Map success → is_supported
+      document_type: classificationResult.document_type,
+      confidence_score: classificationResult.confidence_score,
+      classification_method: classificationResult.classification_method,
+      model_used: classificationResult.model_used,
+      reasoning: classificationResult.reasoning,
+      detected_elements: classificationResult.detected_elements,
+      user_message: classificationResult.user_message,
+    };
+    await updateDocumentClassification(documentId, classificationForConvex, taskId, tableName);  // ✅ PHASE 4B-3: Pass tableName
 
     // ✅ INVOICE DOMAIN VALIDATION: Reject non-invoice documents in invoices domain
     if (documentDomain === 'invoices') {
@@ -451,10 +404,7 @@ export const classifyDocument = task({
     // Only update the extraction_task_id if a task was actually triggered
     if (extractionTaskId) {
       console.log(`[Classify] Updating extraction task ID: ${extractionTaskId}`);
-      await supabase
-        .from(tableName)  // ✅ PHASE 4B-3: Routed based on domain
-        .update({ extraction_task_id: extractionTaskId })
-        .eq('id', documentId);
+      await updateExtractionTaskId(documentId, extractionTaskId, tableName);
     }
 
     console.log(`[Classify] Successfully routed or handled ${docType} document`);

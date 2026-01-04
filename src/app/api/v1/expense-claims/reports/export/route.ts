@@ -8,33 +8,21 @@
  * - Memory-efficient processing using ReadableStream and batch queries
  * - Fixed date logic using exclusive end date for accurate month boundaries
  * - Same RBAC and filtering logic as main reports API
+ *
+ * ✅ MIGRATED TO CONVEX (2025-01)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
-import { getUserData } from '@/lib/db/supabase-server'
-import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
-import { createBusinessContextSupabaseClient, createServiceSupabaseClient } from '@/lib/db/supabase-server'
-import { startOfMonth, addMonths, parse } from 'date-fns'
+import { api } from '@/convex/_generated/api'
+import { getAuthenticatedConvex } from '@/lib/convex'
 import { mapExpenseCategoryToAccounting } from '@/domains/expense-claims/lib/expense-category-mapper'
 
 export async function GET(request: NextRequest) {
   try {
-    // Authentication - following established pattern
-    const { userId } = await auth()
-    if (!userId) {
+    // ✅ MIGRATED: Get authenticated Convex client (handles Clerk auth)
+    const { client: convex, userId } = await getAuthenticatedConvex()
+    if (!convex || !userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const userData = await getUserData(userId)
-    if (!userData.business_id) {
-      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
-    }
-
-    // Get user profile with role permissions
-    const userProfile = await ensureUserProfile(userId)
-    if (!userProfile) {
-      return NextResponse.json({ success: false, error: 'Failed to get user profile' }, { status: 400 })
     }
 
     // Parse query parameters
@@ -61,51 +49,18 @@ export async function GET(request: NextRequest) {
 
     console.log(`[CSV Stream Export] Starting stream for month: ${month}, user: ${userId}, requestedEmployee: ${employeeId}`)
 
-    // Role-based access control - following established patterns
-    const isAdmin = userProfile.role_permissions.admin
-    const isManager = userProfile.role_permissions.manager
+    // ✅ MIGRATED: Get current user's business context from Convex
+    const businessContext = await convex.query(
+      api.functions.businesses.getBusinessContext,
+      {}
+    )
 
-    // Choose appropriate Supabase client based on role
-    let supabase
-    if (isAdmin || isManager) {
-      supabase = createServiceSupabaseClient()
-    } else {
-      supabase = await createBusinessContextSupabaseClient()
-    }
-
-    // Calculate timezone-aware date range using date-fns (FIXED: proper exclusive end date)
-    const parsedMonth = parse(month, 'yyyy-MM', new Date())
-    const startDate = startOfMonth(parsedMonth)
-    const nextMonthDate = addMonths(startDate, 1)
-
-    console.log(`[CSV Stream Export] Date range: ${startDate.toISOString()} to ${nextMonthDate.toISOString()} (exclusive end)`)
-
-    // Get custom expense categories from business settings (fetch once for stream)
-    const { data: businessData, error: businessError } = await supabase
-      .from('businesses')
-      .select('custom_expense_categories')
-      .eq('id', userProfile.business_id)
-      .single()
-
-    // Convert categories array to a keyed object for fast lookup
-    const categoriesArray = businessData?.custom_expense_categories || []
-    const customCategories = categoriesArray.reduce((acc: any, cat: any) => {
-      acc[cat.category_code] = {
-        business_category_name: cat.category_name,
-        accounting_category: cat.accounting_category || mapExpenseCategoryToAccounting(cat.category_code)
-      }
-      return acc
-    }, {})
-
-    // Currency conversion rates (same as main API)
-    const conversionRates: { [key: string]: { [key: string]: number } } = {
-      'SGD': { 'MYR': 3.3, 'USD': 0.74 },
-      'MYR': { 'SGD': 0.30, 'USD': 0.22 },
-      'USD': { 'SGD': 1.35, 'MYR': 4.5 }
+    if (!businessContext) {
+      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
     }
 
     // Helper function to escape CSV values
-    const escapeCSV = (value: any): string => {
+    const escapeCSV = (value: unknown): string => {
       if (value === null || value === undefined) return ''
       const str = String(value)
       // If contains comma, quote, or newline, wrap in quotes and escape internal quotes
@@ -113,55 +68,6 @@ export async function GET(request: NextRequest) {
         return `"${str.replace(/"/g, '""')}"`
       }
       return str
-    }
-
-    // Helper function to calculate home currency amount
-    const calculateHomeAmount = (claim: any): number => {
-      if (claim.home_currency_amount) {
-        return parseFloat(claim.home_currency_amount)
-      } else if (claim.total_amount) {
-        const amount = parseFloat(claim.total_amount)
-        if (claim.currency === userData.home_currency) {
-          return amount
-        } else {
-          const rate = conversionRates[claim.currency]?.[userData.home_currency] || 1
-          return amount * rate
-        }
-      }
-      return 0
-    }
-
-    // Helper function to convert claim to CSV row
-    const claimToCSVRow = (claim: any): string => {
-      const categoryCode = claim.expense_category || 'UNCATEGORIZED'
-      const categoryInfo = customCategories[categoryCode] || {
-        business_category_name: 'Uncategorized',
-        accounting_category: mapExpenseCategoryToAccounting(categoryCode)
-      }
-
-      const claimAmount = calculateHomeAmount(claim)
-
-      const row = [
-        escapeCSV(categoryInfo.business_category_name),
-        escapeCSV(categoryCode),
-        escapeCSV(claim.id),
-        escapeCSV(claim.description || claim.business_purpose),
-        escapeCSV(claim.vendor_name),
-        claimAmount.toFixed(2),
-        escapeCSV(claim.home_currency || userData.home_currency),
-        escapeCSV(claim.transaction_date),
-        escapeCSV(claim.status),
-        escapeCSV(claim.submitted_at),
-        escapeCSV(claim.approved_at),
-        escapeCSV(claim.paid_at),
-        escapeCSV(claim.employee?.full_name),
-        escapeCSV(claim.employee?.email),
-        escapeCSV(claim.business_purpose),
-        escapeCSV(claim.reference_number),
-        escapeCSV(categoryInfo.accounting_category)
-      ]
-
-      return row.join(',') + '\n'
     }
 
     // Create streaming CSV response
@@ -192,60 +98,99 @@ export async function GET(request: NextRequest) {
           const headerRow = csvHeaders.join(',') + '\n'
           controller.enqueue(new TextEncoder().encode(headerRow))
 
-          // 2. Query database in batches for memory efficiency
+          // 2. Query Convex in batches for memory efficiency
           const BATCH_SIZE = 500
           let offset = 0
           let hasMore = true
           let totalProcessed = 0
+          let homeCurrency = 'SGD'
+          let categoryLookup: Record<string, { name: string; accountingCategory?: string }> = {}
 
           while (hasMore) {
-            // Build base query with same logic as main reports API
-            let batchQuery = supabase
-              .from('expense_claims')
-              .select(`
-                *,
-                employee:users!expense_claims_user_id_fkey(id, full_name, email, business_id, businesses!users_business_id_fkey(home_currency))
-              `)
-              .eq('business_id', userProfile.business_id)
-              .gte('submitted_at', startDate.toISOString())
-              .lt('submitted_at', nextMonthDate.toISOString()) // FIXED: exclusive end date
-              .not('submitted_at', 'is', null)
-
-            // Apply role-based filtering (same as main API)
-            if (employeeId) {
-              if (!isAdmin && !isManager) {
-                controller.error(new Error('Only managers and admins can filter by employee ID'))
-                return
+            // ✅ MIGRATED: Fetch batch from Convex
+            const batchData = await convex.query(
+              api.functions.expenseClaims.getExportClaims,
+              {
+                businessId: businessContext.businessId,
+                month,
+                employeeId: employeeId || undefined,
+                offset,
+                limit: BATCH_SIZE,
               }
-              batchQuery = batchQuery.eq('user_id', employeeId)
-            } else {
-              if (isAdmin) {
-                // Admin can see all claims (no additional filtering)
-              } else if (isManager) {
-                // Managers see their team's claims + own claims
-                batchQuery = batchQuery.or(`user_id.eq.${userProfile.user_id},reviewed_by.eq.${userProfile.user_id}`)
-              } else {
-                // Employees see only their own claims
-                batchQuery = batchQuery.eq('user_id', userProfile.user_id)
-              }
-            }
+            )
 
-            // Add pagination and ordering
-            batchQuery = batchQuery
-              .order('created_at', { ascending: true })
-              .range(offset, offset + BATCH_SIZE - 1)
-
-            const { data: claims, error } = await batchQuery
-
-            if (error) {
-              console.error('[CSV Stream Export] Database error:', error)
-              controller.error(error)
+            if (!batchData) {
+              controller.error(new Error('Failed to fetch export data'))
               return
             }
 
+            // Check for permission errors
+            if ('error' in batchData) {
+              controller.error(new Error(batchData.error))
+              return
+            }
+
+            // Store metadata from first batch
+            if (offset === 0) {
+              homeCurrency = batchData.homeCurrency
+              categoryLookup = batchData.categoryLookup
+            }
+
+            const { claims } = batchData
+
             if (claims && claims.length > 0) {
               // 3. Convert batch to CSV rows and stream them
-              const csvRows = claims.map(claimToCSVRow).join('')
+              const csvRows = claims.map((claim: {
+                _id: string
+                expenseCategory?: string
+                description?: string
+                businessPurpose?: string
+                vendorName?: string
+                homeCurrencyAmount?: number
+                totalAmount?: number
+                homeCurrency?: string
+                transactionDate?: string
+                status?: string
+                submittedAt?: number
+                approvedAt?: number
+                paidAt?: number
+                referenceNumber?: string
+                employee?: {
+                  fullName?: string
+                  email?: string
+                } | null
+              }) => {
+                const categoryCode = claim.expenseCategory || 'UNCATEGORIZED'
+                const categoryInfo = categoryLookup[categoryCode] || {
+                  name: 'Uncategorized',
+                  accountingCategory: mapExpenseCategoryToAccounting(categoryCode)
+                }
+
+                const claimAmount = claim.homeCurrencyAmount ?? claim.totalAmount ?? 0
+
+                const row = [
+                  escapeCSV(categoryInfo.name),
+                  escapeCSV(categoryCode),
+                  escapeCSV(claim._id),
+                  escapeCSV(claim.description || claim.businessPurpose),
+                  escapeCSV(claim.vendorName),
+                  claimAmount.toFixed(2),
+                  escapeCSV(claim.homeCurrency || homeCurrency),
+                  escapeCSV(claim.transactionDate),
+                  escapeCSV(claim.status),
+                  escapeCSV(claim.submittedAt ? new Date(claim.submittedAt).toISOString() : ''),
+                  escapeCSV(claim.approvedAt ? new Date(claim.approvedAt).toISOString() : ''),
+                  escapeCSV(claim.paidAt ? new Date(claim.paidAt).toISOString() : ''),
+                  escapeCSV(claim.employee?.fullName),
+                  escapeCSV(claim.employee?.email),
+                  escapeCSV(claim.businessPurpose),
+                  escapeCSV(claim.referenceNumber),
+                  escapeCSV(categoryInfo.accountingCategory || mapExpenseCategoryToAccounting(categoryCode))
+                ]
+
+                return row.join(',') + '\n'
+              }).join('')
+
               controller.enqueue(new TextEncoder().encode(csvRows))
 
               totalProcessed += claims.length
@@ -255,9 +200,7 @@ export async function GET(request: NextRequest) {
             }
 
             // Check if we have more data to fetch
-            if (!claims || claims.length < BATCH_SIZE) {
-              hasMore = false
-            }
+            hasMore = batchData.hasMore
           }
 
           console.log(`[CSV Stream Export] Completed. Total claims processed: ${totalProcessed}`)
@@ -272,10 +215,25 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // ✅ MIGRATED: Get role for filename determination
+    const initialData = await convex.query(
+      api.functions.expenseClaims.getExportClaims,
+      {
+        businessId: businessContext.businessId,
+        month,
+        employeeId: employeeId || undefined,
+        offset: 0,
+        limit: 1,
+      }
+    )
+
+    const role = initialData && !('error' in initialData) ? initialData.role : 'employee'
+    const isAdmin = role === 'owner' || role === 'admin'
+    const isManager = role === 'manager'
+
     // 5. Determine filename based on scope
     let filename = `expense_report_${month}`
     if (employeeId) {
-      // Will be set from first claim if available
       filename = `expense_report_${month}_employee`
     } else if (isAdmin) {
       filename = `expense_report_${month}_company`

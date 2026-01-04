@@ -9,6 +9,7 @@ import {
   currencySchema,
   emailSchema,
   uuidSchema,
+  documentIdSchema,
   phoneNumberSchema,
   urlSchema,
   taxIdSchema
@@ -110,7 +111,8 @@ export const uploadBusinessLogoSchema = z.object({
  * Switch business context schema
  */
 export const switchBusinessSchema = z.object({
-  business_id: uuidSchema
+  // Accept both UUID (legacy Supabase) and Convex ID formats
+  business_id: z.string().min(1, 'Business ID is required').max(100, 'Business ID too long')
 })
 
 /**
@@ -121,7 +123,13 @@ export const sendInvitationSchema = z.object({
 
   role: businessRoleSchema,
 
-  business_id: uuidSchema,
+  // Accept both UUID (legacy Supabase) and Convex ID formats
+  business_id: documentIdSchema,
+
+  // Optional fields for employee profile setup
+  employee_id: z.string().max(50, 'Employee ID too long').optional().nullable(),
+  department: z.string().max(100, 'Department too long').optional().nullable(),
+  job_title: z.string().max(100, 'Job title too long').optional().nullable(),
 
   message: z.string()
     .max(500, 'Message too long')
@@ -145,7 +153,7 @@ export const acceptInvitationSchema = z.object({
  * Invitation ID parameter schema
  */
 export const invitationIdParamSchema = z.object({
-  invitationId: uuidSchema
+  invitationId: documentIdSchema
 })
 
 /**
@@ -170,7 +178,7 @@ export const updateMembershipSchema = z.object({
  * Membership ID parameter schema
  */
 export const membershipIdParamSchema = z.object({
-  membershipId: uuidSchema
+  membershipId: documentIdSchema
 })
 
 /**

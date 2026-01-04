@@ -119,19 +119,19 @@ export default function InvitationDialog({
 
       {/* Dialog */}
       <div className="flex min-h-full items-center justify-center p-4 text-center sm:items-center sm:p-6">
-        <div className="relative transform overflow-hidden rounded-xl bg-gray-800 shadow-2xl text-left transition-all sm:my-8 w-full max-w-md">
+        <div className="relative transform overflow-hidden rounded-xl bg-card border border-border shadow-2xl text-left transition-all sm:my-8 w-full max-w-md">
           {/* Header */}
           <div className="flex items-center justify-between p-6 pb-4">
             <div className="flex items-center gap-2">
-              <Mail className="w-5 h-5 text-blue-500" />
-              <h3 className="text-lg font-semibold text-white">
+              <Mail className="w-5 h-5 text-primary" />
+              <h3 className="text-lg font-semibold text-foreground">
                 Invite Team Member
               </h3>
             </div>
             <button
               onClick={handleClose}
               disabled={isLoading}
-              className="text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+              className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
             >
               <X className="w-5 h-5" />
             </button>
@@ -175,7 +175,7 @@ export default function InvitationDialog({
           <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-4">
             {/* Email Field */}
             <div>
-              <Label htmlFor="email" className="text-white">
+              <Label htmlFor="email" className="text-foreground">
                 Email Address *
               </Label>
               <Input
@@ -183,18 +183,18 @@ export default function InvitationDialog({
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="mt-1 bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                className="mt-1 bg-input border-border text-foreground placeholder:text-muted-foreground"
                 placeholder="user@example.com"
                 disabled={isLoading}
               />
               {errors.email && (
-                <p className="text-red-400 text-sm mt-1">{errors.email}</p>
+                <p className="text-destructive text-sm mt-1">{errors.email}</p>
               )}
             </div>
 
             {/* Role Field */}
             <div>
-              <Label htmlFor="role" className="text-white">
+              <Label htmlFor="role" className="text-foreground">
                 Role *
               </Label>
               <Select
@@ -204,51 +204,51 @@ export default function InvitationDialog({
                 }
                 disabled={isLoading}
               >
-                <SelectTrigger className="mt-1 bg-gray-700 border-gray-600 text-white">
+                <SelectTrigger className="mt-1 bg-input border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
-                  <SelectItem value="employee" className="text-white hover:bg-gray-600">
+                <SelectContent className="bg-popover border-border">
+                  <SelectItem value="employee" className="text-foreground">
                     Employee
                   </SelectItem>
-                  <SelectItem value="manager" className="text-white hover:bg-gray-600">
+                  <SelectItem value="manager" className="text-foreground">
                     Manager
                   </SelectItem>
-                  <SelectItem value="admin" className="text-white hover:bg-gray-600">
+                  <SelectItem value="admin" className="text-foreground">
                     Admin
                   </SelectItem>
                 </SelectContent>
               </Select>
               {errors.role && (
-                <p className="text-red-400 text-sm mt-1">{errors.role}</p>
+                <p className="text-destructive text-sm mt-1">{errors.role}</p>
               )}
             </div>
 
             {/* Optional Fields */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="employee_id" className="text-gray-300">
+                <Label htmlFor="employee_id" className="text-muted-foreground">
                   Employee ID
                 </Label>
                 <Input
                   id="employee_id"
                   value={formData.employee_id}
                   onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-                  className="mt-1 bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                  className="mt-1 bg-input border-border text-foreground placeholder:text-muted-foreground"
                   placeholder="Optional"
                   disabled={isLoading}
                 />
               </div>
 
               <div>
-                <Label htmlFor="department" className="text-gray-300">
+                <Label htmlFor="department" className="text-muted-foreground">
                   Department
                 </Label>
                 <Input
                   id="department"
                   value={formData.department}
                   onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="mt-1 bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                  className="mt-1 bg-input border-border text-foreground placeholder:text-muted-foreground"
                   placeholder="Optional"
                   disabled={isLoading}
                 />
@@ -256,14 +256,14 @@ export default function InvitationDialog({
             </div>
 
             <div>
-              <Label htmlFor="job_title" className="text-gray-300">
+              <Label htmlFor="job_title" className="text-muted-foreground">
                 Job Title
               </Label>
               <Input
                 id="job_title"
                 value={formData.job_title}
                 onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
-                className="mt-1 bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                className="mt-1 bg-input border-border text-foreground placeholder:text-muted-foreground"
                 placeholder="Optional"
                 disabled={isLoading}
               />
@@ -273,20 +273,19 @@ export default function InvitationDialog({
             <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
               <Button
                 type="button"
+                variant="outline"
                 onClick={handleClose}
                 disabled={isLoading}
-                className="bg-gray-600 hover:bg-gray-700 text-white border-gray-600"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="bg-blue-600 hover:bg-blue-500"
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
                     <span>Sending...</span>
                   </div>
                 ) : (

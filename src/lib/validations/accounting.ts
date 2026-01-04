@@ -10,6 +10,7 @@ import {
   currencySchema,
   dateStringSchema,
   uuidSchema,
+  documentIdSchema,
   positiveAmountSchema,
   nonNegativeAmountSchema,
   paginationSchema,
@@ -103,8 +104,8 @@ export const createAccountingEntrySchema = z.object({
   // Line items
   line_items: z.array(lineItemSchema).default([]),
 
-  // Source document linking
-  source_record_id: uuidSchema.optional(),
+  // Source document linking (accepts UUID or Convex ID for migration compatibility)
+  source_record_id: documentIdSchema.optional(),
   source_document_type: documentTypeSchema.optional(),
 
   // Exchange rate information
@@ -162,6 +163,12 @@ export const recategorizeAccountingEntrySchema = z.object({
  * List accounting entries query parameters schema
  */
 export const listAccountingEntriesQuerySchema = paginationSchema.extend({
+  // Business context
+  business_id: z.string().optional(),  // Convex document ID or legacy UUID
+
+  // Multi-business: When true, returns entries from ALL user's businesses (ignores business_id injection)
+  all_businesses: z.coerce.boolean().default(false),
+
   // Filtering
   transaction_type: transactionTypeSchema.optional(),
 
@@ -187,7 +194,10 @@ export const listAccountingEntriesQuerySchema = paginationSchema.extend({
   sort_order: sortOrderSchema,
 
   // Search
-  search: searchQuerySchema
+  search: searchQuerySchema,
+
+  // Pagination cursor for Convex
+  cursor: z.string().optional()
 }).refine((data) => {
   if (!data.date_from || !data.date_to) return true
   return new Date(data.date_from) <= new Date(data.date_to)
@@ -199,7 +209,7 @@ export const listAccountingEntriesQuerySchema = paginationSchema.extend({
  * Accounting entry ID parameter schema
  */
 export const accountingEntryIdParamSchema = z.object({
-  entryId: uuidSchema
+  entryId: documentIdSchema
 })
 
 /**

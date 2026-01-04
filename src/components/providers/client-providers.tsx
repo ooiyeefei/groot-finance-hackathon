@@ -4,6 +4,7 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { useState } from 'react'
+import { ConvexClientProvider } from './ConvexClientProvider'
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   // Create QueryClient instance per component to avoid state sharing between requests
@@ -29,7 +30,9 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ErrorBoundary>{children}</ErrorBoundary>
+      <ConvexClientProvider>
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </ConvexClientProvider>
       {/* React Query DevTools for debugging (only in development) */}
       <ReactQueryDevtools initialIsOpen={false} position="bottom" />
     </QueryClientProvider>

@@ -13,12 +13,14 @@
  * Scenarios:
  * 1. Invitation-based: Admin invites → User signs up → Links to existing invitation
  * 2. Direct signup: User signs up → Creates new business → Auto-creates user + employee profile
+ *
+ * Migrated to Convex from Supabase
  */
 
 import { Webhook } from 'svix'
-import { createServiceSupabaseClient } from '@/lib/db/supabase-server'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '@/convex/_generated/api'
 import { syncRoleToClerk } from '@/domains/security/lib/rbac'
-import { createUserFirstBusiness } from '@/lib/db/business-context'
 
 // ===== TYPE DEFINITIONS =====
 
@@ -45,6 +47,20 @@ export interface WebhookVerificationResult {
   success: boolean
   event?: ClerkWebhookEvent
   error?: string
+}
+
+// ===== CONVEX CLIENT =====
+
+/**
+ * Get Convex client for webhook operations
+ * Uses HTTP client since webhooks don't have auth context
+ */
+function getConvexClient(): ConvexHttpClient {
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
+  if (!convexUrl) {
+    throw new Error('NEXT_PUBLIC_CONVEX_URL is not configured')
+  }
+  return new ConvexHttpClient(convexUrl)
 }
 
 // ===== WEBHOOK VERIFICATION =====
@@ -97,13 +113,13 @@ export function verifyClerkWebhook(
  * 1. Invitation-based: Links Clerk user to existing invitation
  * 2. Direct signup: Creates new business and user profile
  *
+ * Uses Convex action that handles all database operations
+ *
  * @param user - Clerk user data
  */
 export async function handleClerkUserCreated(user: ClerkUser): Promise<void> {
   console.log(`[Webhook Service] 🚀 Processing user.created for Clerk ID: ${user.id}`)
   console.log(`[Webhook Service] 📧 User email addresses:`, user.email_addresses.map(e => ({ email: e.email_address, verified: e.verification?.status })))
-
-  const supabase = createServiceSupabaseClient()
 
   // Get primary verified email
   const primaryEmail = user.email_addresses.find(
@@ -125,79 +141,52 @@ export async function handleClerkUserCreated(user: ClerkUser): Promise<void> {
   console.log(`[Webhook Service] 📝 Processing: email=${email}, fullName=${fullName}`)
 
   try {
-    // Check if user already exists by clerk_user_id to prevent duplicates
-    console.log(`[Webhook Service] Checking for existing user with Clerk ID: ${user.id}`)
+    const convex = getConvexClient()
 
-    const { data: existingUser, error: existingUserError } = await supabase
-      .from('users')
-      .select('id, business_id, role, invited_by, clerk_user_id, email')
-      .eq('clerk_user_id', user.id)
-      .maybeSingle()
-
-    if (!existingUserError && existingUser) {
-      console.log(`[Webhook Service] User already exists with Clerk ID: ${user.id}, email: ${existingUser.email}`)
-      return // User already processed
-    }
-
-    console.log(`[Webhook Service] 🔍 Checking for existing invitation for email: ${email}`)
-
-    // SCENARIO 1: Check if user has pending invitation
-    const { data: existingInvitation, error: invitationError } = await supabase
-      .from('users')
-      .select('id, business_id, role, invited_by, clerk_user_id')
-      .ilike('email', email)
-      .not('invited_by', 'is', null)
-      .maybeSingle()
-
-    if (invitationError) {
-      console.log(`[Webhook Service] 📄 Invitation check error (expected for direct signups): ${invitationError.message}`)
-    }
-
-    if (!invitationError && existingInvitation) {
-      console.log(`[Webhook Service] 🎫 SCENARIO 1: Found existing invitation for ${email}`)
-      if (!existingInvitation.clerk_user_id) {
-        // Link existing invitation to Clerk user
-        console.log(`[Webhook Service] 🔗 Linking invitation to Clerk user: ${email}`)
-
-        const { error: linkError } = await supabase
-          .from('users')
-          .update({
-            clerk_user_id: user.id,
-            full_name: fullName,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingInvitation.id)
-
-        if (linkError) {
-          console.error('[Webhook Service] ❌ Error linking invitation:', linkError)
-          return
-        }
-
-        // Create employee profile with invitation's business and role
-        console.log(`[Webhook Service] 👤 Creating employee profile for invitation`)
-        await createEmployeeProfile(
-          existingInvitation.id,
-          existingInvitation.business_id,
-          existingInvitation.role,
-          user.id
-        )
-
-        console.log(`[Webhook Service] ✅ Successfully linked invitation: ${email} → Business: ${existingInvitation.business_id}`)
-      } else {
-        console.log(`[Webhook Service] ⚠️ Invitation already linked for: ${email}`)
-      }
-      return
-    }
-
-    // SCENARIO 2: Direct signup - create new user with multi-tenant business
-    console.log(`[Webhook Service] SCENARIO 2: Creating new user from direct signup: ${email}`)
-
-    const { businessId, userId } = await createUserFirstBusiness(user.id, {
-      full_name: fullName || `${email.split('@')[0]}`,
-      email: email
+    // Call Convex action to handle user creation
+    const result = await convex.action(api.functions.webhooks.handleUserCreated, {
+      clerkUserId: user.id,
+      email: email,
+      fullName: fullName
     })
 
-    console.log(`[Webhook Service] Successfully created multi-tenant signup: ${email} → Business: ${businessId}, User: ${userId}`)
+    console.log(`[Webhook Service] Convex action result:`, result)
+
+    // Sync role to Clerk if invitation was linked
+    if (result.success && result.action === 'invitation_linked' && result.businessId) {
+      console.log(`[Webhook Service] 🔄 Syncing role permissions to Clerk metadata`)
+      await new Promise(resolve => setTimeout(resolve, 500)) // 500ms delay for Clerk rate limits
+
+      const rolePermissions = {
+        employee: true,
+        manager: false, // Default for invitation-based, will be set based on actual role
+        admin: false
+      }
+
+      const syncResult = await syncRoleToClerk(user.id, rolePermissions)
+      if (!syncResult.success) {
+        console.error(`[Webhook Service] ⚠️ Failed to sync permissions to Clerk: ${syncResult.error}`)
+      }
+    }
+
+    // Sync role for direct signups (owner role)
+    if (result.success && result.action === 'user_created') {
+      console.log(`[Webhook Service] 🔄 Syncing owner role to Clerk metadata`)
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      const ownerPermissions = {
+        employee: true,
+        manager: true,
+        admin: true
+      }
+
+      const syncResult = await syncRoleToClerk(user.id, ownerPermissions)
+      if (!syncResult.success) {
+        console.error(`[Webhook Service] ⚠️ Failed to sync owner permissions to Clerk: ${syncResult.error}`)
+      }
+    }
+
+    console.log(`[Webhook Service] ✅ Successfully processed user.created for ${email}`)
 
   } catch (error) {
     console.error('[Webhook Service] 💥 Critical error in handleClerkUserCreated for user', user.id, ':', error)
@@ -213,14 +202,12 @@ export async function handleClerkUserCreated(user: ClerkUser): Promise<void> {
 /**
  * Handle Clerk User Updated Event
  *
- * Syncs name and email changes from Clerk to Supabase.
+ * Syncs name and email changes from Clerk to Convex.
  *
  * @param user - Clerk user data
  */
 export async function handleClerkUserUpdated(user: ClerkUser): Promise<void> {
   console.log(`[Webhook Service] Processing user.updated for Clerk ID: ${user.id}`)
-
-  const supabase = createServiceSupabaseClient()
 
   const primaryEmail = user.email_addresses.find(
     email => email.verification?.status === 'verified'
@@ -238,20 +225,18 @@ export async function handleClerkUserUpdated(user: ClerkUser): Promise<void> {
     : email.split('@')[0]
 
   try {
-    const { error } = await supabase
-      .from('users')
-      .update({
-        email: email,
-        full_name: fullName,
-        updated_at: new Date().toISOString()
-      })
-      .eq('clerk_user_id', user.id)
+    const convex = getConvexClient()
 
-    if (error) {
-      console.error('[Webhook Service] Error updating user:', error)
-      throw error
-    } else {
+    const result = await convex.action(api.functions.webhooks.handleUserUpdated, {
+      clerkUserId: user.id,
+      email: email,
+      fullName: fullName
+    })
+
+    if (result.success) {
       console.log(`[Webhook Service] Successfully updated user: ${email}`)
+    } else {
+      console.error('[Webhook Service] Error updating user:', result.error)
     }
 
   } catch (error) {
@@ -271,98 +256,19 @@ export async function handleClerkUserUpdated(user: ClerkUser): Promise<void> {
 export async function handleClerkUserDeleted(user: ClerkUser): Promise<void> {
   console.log(`[Webhook Service] Processing user.deleted for Clerk ID: ${user.id}`)
 
-  const supabase = createServiceSupabaseClient()
-
   try {
-    // Soft delete by clearing Clerk ID and anonymizing data
-    const { error } = await supabase
-      .from('users')
-      .update({
-        clerk_user_id: null,
-        email: `deleted_${user.id}@deleted.local`,
-        full_name: 'Deleted User',
-        updated_at: new Date().toISOString()
-      })
-      .eq('clerk_user_id', user.id)
+    const convex = getConvexClient()
 
-    if (error) {
-      console.error('[Webhook Service] Error soft-deleting user:', error)
-      throw error
-    } else {
+    const result = await convex.action(api.functions.webhooks.handleUserDeleted, {
+      clerkUserId: user.id
+    })
+
+    if (result.success) {
       console.log(`[Webhook Service] Successfully soft-deleted user: ${user.id}`)
     }
 
   } catch (error) {
     console.error('[Webhook Service] Error in handleClerkUserDeleted:', error)
-    throw error
-  }
-}
-
-// ===== HELPER FUNCTIONS =====
-
-/**
- * Create Employee Profile
- *
- * Creates business membership and syncs role permissions to Clerk.
- * Used for both invitation-based and direct signup scenarios.
- *
- * @param userId - Supabase user ID
- * @param businessId - Business ID
- * @param role - User role (admin, manager, employee)
- * @param clerkUserId - Clerk user ID
- */
-async function createEmployeeProfile(
-  userId: string,
-  businessId: string,
-  role: string,
-  clerkUserId: string
-): Promise<void> {
-  console.log(`[Webhook Service] 🆔 createEmployeeProfile called with:`, { userId, businessId, role, clerkUserId })
-  const supabase = createServiceSupabaseClient()
-
-  try {
-    // Define role permissions
-    const rolePermissions = {
-      employee: true,
-      manager: role === 'admin' || role === 'manager',
-      admin: role === 'admin'
-    }
-
-    console.log(`[Webhook Service] 📋 Creating employee profile with role: ${role}`)
-
-    // Create business membership
-    const { error } = await supabase
-      .from('business_memberships')
-      .insert({
-        user_id: userId,
-        business_id: businessId,
-        role: role,
-        created_at: new Date().toISOString()
-      })
-
-    if (error) {
-      console.error('[Webhook Service] ❌ Error creating employee profile:', error)
-      throw error
-    }
-
-    console.log(`[Webhook Service] ✅ Employee profile created successfully`)
-
-    // Sync role permissions to Clerk metadata (add small delay to avoid race conditions)
-    console.log(`[Webhook Service] 🔄 Syncing role permissions to Clerk metadata`)
-    await new Promise(resolve => setTimeout(resolve, 500)) // 500ms delay
-    const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
-
-    if (!syncResult.success) {
-      console.error(`[Webhook Service] ⚠️ Failed to sync permissions to Clerk: ${syncResult.error}`)
-    }
-
-    console.log(`[Webhook Service] 🎯 Successfully created employee profile for user: ${userId} with role: ${role}`)
-
-  } catch (error) {
-    console.error('[Webhook Service] 💥 Error in createEmployeeProfile:', error)
-    if (error instanceof Error) {
-      console.error('[Webhook Service] 📚 createEmployeeProfile stack:', error.stack)
-    }
     throw error
   }
 }

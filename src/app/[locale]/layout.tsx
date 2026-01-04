@@ -6,6 +6,7 @@ import { I18nErrorBoundary } from '@/components/i18n-error-boundary';
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { BusinessContextProvider } from '@/contexts/business-context';
 import { ClerkProviderWrapper } from '@/components/providers/ClerkProviderWrapper';
+import { ConvexClientProvider } from '@/components/providers/ConvexClientProvider';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -53,15 +54,17 @@ export default async function LocaleLayout({
 
   return (
     <ClerkProviderWrapper>
-      <QueryProvider>
-        <I18nErrorBoundary fallbackLocale={locale}>
-          <NextIntlClientProvider locale={locale} messages={messages}>
-            <BusinessContextProvider>
-              {children}
-            </BusinessContextProvider>
-          </NextIntlClientProvider>
-        </I18nErrorBoundary>
-      </QueryProvider>
+      <ConvexClientProvider>
+        <QueryProvider>
+          <I18nErrorBoundary fallbackLocale={locale}>
+            <NextIntlClientProvider locale={locale} messages={messages}>
+              <BusinessContextProvider>
+                {children}
+              </BusinessContextProvider>
+            </NextIntlClientProvider>
+          </I18nErrorBoundary>
+        </QueryProvider>
+      </ConvexClientProvider>
     </ClerkProviderWrapper>
   );
 }

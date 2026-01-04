@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserData, createServiceSupabaseClient } from '@/lib/db/supabase-server'
+import { getUserDataConvex } from '@/lib/convex'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '@/convex/_generated/api'
 import { getStripe } from '@/lib/stripe/client'
 import { getPlan } from '@/lib/stripe/plans'
+
+// Lazy-initialized Convex HTTP client for server-side calls
+let convexClient: ConvexHttpClient | null = null
+
+function getConvexHttpClient(): ConvexHttpClient {
+  if (!convexClient) {
+    const url = process.env.NEXT_PUBLIC_CONVEX_URL
+    if (!url) {
+      throw new Error('NEXT_PUBLIC_CONVEX_URL not configured')
+    }
+    convexClient = new ConvexHttpClient(url)
+  }
+  return convexClient
+}
 
 /**
  * POST /api/v1/onboarding/start-trial
@@ -25,8 +41,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user data including business_id
-    const userData = await getUserData(userId)
+    // Get user data including business_id (Convex)
+    const userData = await getUserDataConvex(userId)
 
     if (!userData?.business_id) {
       return NextResponse.json(
@@ -36,17 +52,13 @@ export async function POST(request: NextRequest) {
     }
 
     const businessId = userData.business_id
-    const supabase = createServiceSupabaseClient()
+    const convex = getConvexHttpClient()
 
-    // Get business details
-    const { data: business, error: businessError } = await supabase
-      .from('businesses')
-      .select('id, name, stripe_customer_id, stripe_subscription_id')
-      .eq('id', businessId)
-      .single()
+    // Get business details from Convex
+    const business = await convex.query(api.functions.businesses.getById, { id: businessId })
 
-    if (businessError || !business) {
-      console.error('[Start Trial] Business not found:', businessError?.message)
+    if (!business) {
+      console.error('[Start Trial] Business not found')
       return NextResponse.json(
         { error: 'Business not found' },
         { status: 404 }
@@ -54,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if already has subscription
-    if (business.stripe_subscription_id) {
+    if (business.stripeSubscriptionId) {
       return NextResponse.json(
         { error: 'Business already has an active subscription' },
         { status: 400 }
@@ -64,32 +76,26 @@ export async function POST(request: NextRequest) {
     const stripe = getStripe()
 
     // Get or create Stripe customer
-    let customerId = business.stripe_customer_id
+    let customerId = business.stripeCustomerId
 
     if (!customerId) {
-      // Get user email for customer creation
-      const { data: user } = await supabase
-        .from('users')
-        .select('email')
-        .eq('clerk_user_id', userId)
-        .single()
-
+      // User email already available from userData
       const customer = await stripe.customers.create({
-        email: user?.email ?? undefined,
+        email: userData.email ?? undefined,
         name: business.name,
         metadata: {
-          business_id: business.id,
+          business_id: businessId,
         },
       })
 
       customerId = customer.id
       console.log(`[Start Trial] Created Stripe customer: ${customerId}`)
 
-      // Save customer ID
-      await supabase
-        .from('businesses')
-        .update({ stripe_customer_id: customerId })
-        .eq('id', business.id)
+      // Save customer ID via Convex mutation
+      await convex.mutation(api.functions.businesses.updateStripeCustomerFromCheckout, {
+        businessId,
+        stripeCustomerId: customerId
+      })
     }
 
     // Get Starter plan price (trial gives access to Starter features)
@@ -119,14 +125,14 @@ export async function POST(request: NextRequest) {
         },
       },
       metadata: {
-        business_id: business.id,
+        business_id: businessId, // Use the string businessId from user data
         is_trial: 'true',
       },
     })
 
     console.log(`[Start Trial] Created subscription ${subscription.id} with trial ending ${new Date(subscription.trial_end! * 1000).toISOString()}`)
 
-    // Update business with subscription details
+    // Update business with subscription details via Convex
     // Trial dates come from Stripe subscription
     const trialStart = subscription.trial_start
       ? new Date(subscription.trial_start * 1000).toISOString()
@@ -135,25 +141,23 @@ export async function POST(request: NextRequest) {
       ? new Date(subscription.trial_end * 1000).toISOString()
       : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
 
-    const { data: updatedBusiness, error: updateError } = await supabase
-      .from('businesses')
-      .update({
-        stripe_subscription_id: subscription.id,
-        stripe_product_id: starterPlan.productId,
-        trial_start_date: trialStart,
-        trial_end_date: trialEnd,
-        plan_name: 'trial',
-        subscription_status: 'trialing',
-        updated_at: new Date().toISOString(),
+    try {
+      // Update subscription details using the webhook handler function
+      // (Trial dates are managed by Stripe, not stored in DB)
+      await convex.mutation(api.functions.businesses.updateSubscriptionFromWebhook, {
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscription.id,
+        stripeProductId: starterPlan.productId ?? undefined,
+        planName: 'trial',
+        subscriptionStatus: 'trialing',
       })
-      .eq('id', businessId)
-      .select()
-      .single()
-
-    if (updateError) {
+    } catch (updateError) {
       console.error('[Start Trial] Error updating business:', updateError)
       // Don't fail - subscription was created, webhook will sync
     }
+
+    // Get updated business
+    const updatedBusiness = await convex.query(api.functions.businesses.getById, { id: businessId })
 
     return NextResponse.json({
       success: true,

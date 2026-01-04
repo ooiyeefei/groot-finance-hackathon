@@ -6,7 +6,8 @@
 
 import { SupportedCurrency, AccountingEntry } from '@/domains/accounting-entries/types'
 import { ExpenseClaimStatus, ComplianceFlag } from './expense-claims' // ✅ Use unified status type
-import { SupabaseClient } from '@supabase/supabase-js'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 
 // Enhanced workflow transition with hooks and business logic
 export interface EnhancedWorkflowTransition {
@@ -24,8 +25,8 @@ export interface EnhancedWorkflowTransition {
     requiresBusinessPurpose?: boolean
   }
   
-  // Dynamic next approver determination
-  getNextApprover?: (claim: any, userProfile: any, supabase: SupabaseClient) => Promise<string | null>
+  // Dynamic next approver determination (Convex client obtained internally)
+  getNextApprover?: (claim: any, userProfile: any) => Promise<string | null>
   
   // Side effects to execute after successful transition
   postTransitionActions?: {
@@ -226,10 +227,10 @@ export const ENHANCED_WORKFLOW_TRANSITIONS: EnhancedWorkflowTransition[] = [
       schedulePeriodicReview: true,
       updateRiskScore: true
     },
-    getNextApprover: async (claim, userProfile, supabase) => {
+    getNextApprover: async (claim, userProfile) => {
       // For high-value claims, require admin approval after manager
       if (claim.transaction?.home_currency_amount > 10000) {
-        return await getAdminApprover(supabase, claim.employee.business_id)
+        return await getAdminApprover(claim.employee.business_id)
       }
       return null // No further approval needed
     }
@@ -287,18 +288,28 @@ export function calculateRiskScore(claim: EnhancedExpenseClaim): number {
   return Math.min(score, 100)
 }
 
-// Helper functions
-async function getAdminApprover(supabase: SupabaseClient, businessId: string): Promise<string | null> {
-  const { data } = await supabase
-    .from('business_memberships')
-    .select('user_id')
-    .eq('business_id', businessId)
-    .eq('role', 'admin')
-    .eq('status', 'active')
-    .limit(1)
-    .single()
+// Helper functions - uses Convex for database access
+async function getAdminApprover(businessId: string): Promise<string | null> {
+  try {
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Enhanced Expense Claims] Failed to get Convex client')
+      return null
+    }
 
-  return data?.user_id || null
+    // Use Convex query to find an active admin for this business
+    const admins = await client.query(api.functions.memberships.getBusinessMembers, {
+      businessId,
+      role: 'admin',
+      status: 'active'
+    })
+
+    // Return the first admin's user ID
+    return admins?.[0]?.userId || null
+  } catch (error) {
+    console.error('[Enhanced Expense Claims] Error getting admin approver:', error)
+    return null
+  }
 }
 
 // Export original types for backward compatibility

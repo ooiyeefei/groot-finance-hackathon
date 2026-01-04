@@ -634,3 +634,66 @@ WHERE status = 'submitted'
 - Check Network tab for redundant API calls
 - Categories should cache for 30 minutes
 - Dashboard data refreshes every 1 minute
+
+## Date Handling Compliance
+
+### Business Dates vs System Timestamps
+
+**Finance Compliance Principle**: Financial document dates must preserve the exact calendar date as recorded, without timezone conversion.
+
+```
+Business Dates (NO timezone conversion):
+├── transaction_date    → The day the purchase/expense occurred
+├── invoice_date        → The date on the invoice
+├── payment_date        → The date payment was made
+└── receipt_date        → The date on the receipt
+
+System Timestamps (timezone conversion OK):
+├── created_at          → When record was created in system
+├── processed_at        → When AI extraction completed
+├── approval_date       → When manager approved
+└── submitted_at        → When employee submitted claim
+```
+
+### Implementation
+
+**Shared Utility Functions** (`src/lib/utils.ts`):
+
+```typescript
+// For business dates - preserves exact calendar date
+export function formatBusinessDate(dateString: string | null | undefined, format: 'short' | 'long' = 'short'): string {
+  // Parses "YYYY-MM-DD" directly without Date constructor
+  // Returns "Oct 31, 2025" or "October 31, 2025"
+}
+
+// For system timestamps - local timezone display OK
+export function formatTimestamp(timestamp: string | null | undefined): string {
+  // Uses new Date().toLocaleDateString() for local time
+}
+```
+
+### Why This Matters
+
+**The JavaScript Date Bug**:
+```typescript
+// WRONG: Causes ±1 day shift due to timezone conversion
+new Date("2025-10-31").toLocaleDateString()
+// → "Oct 30, 2025" (viewer in UTC-8) or "Oct 31, 2025" (UTC)
+
+// CORRECT: Parses date parts directly
+const [year, month, day] = "2025-10-31".split('-')
+// → Always "Oct 31, 2025" regardless of viewer timezone
+```
+
+**Financial Accuracy**: A receipt dated October 31, 2025 in Singapore must display as October 31, 2025 everywhere - not October 30th for users in US timezones.
+
+### Files Using Business Date Formatting
+
+The following components use `formatBusinessDate()` for transaction dates:
+
+- `src/domains/expense-claims/components/personal-expense-dashboard.tsx`
+- `src/domains/expense-claims/components/expense-approval-dashboard.tsx`
+- `src/domains/expense-claims/components/edit-expense-modal-new.tsx`
+- `src/domains/accounting-entries/components/accounting-entries-list.tsx`
+- `src/domains/accounting-entries/components/accounting-entry-view-modal.tsx`
+- `src/lib/ai/tools/transaction-lookup-tool.ts` (AI responses)

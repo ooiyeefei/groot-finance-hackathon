@@ -1,10 +1,13 @@
 /**
  * Business Context Service - Multi-Tenant RBAC System
  * Handles business membership, ownership, and context switching
+ *
+ * Migrated to Convex from Supabase
  */
 
-import { auth, clerkClient } from '@clerk/nextjs/server'
-import { createServiceSupabaseClient, getUserData } from '@/lib/db/supabase-server'
+import { auth } from '@clerk/nextjs/server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 
 export interface BusinessMembership {
   id: string
@@ -49,88 +52,77 @@ export interface BusinessContext {
     canManageCategories: boolean
     canViewAllData: boolean
   }
-  /**
-   * Flag indicating the context was auto-recovered from a deleted/orphaned business.
-   * When true, client should clear local caches and refresh all data.
-   */
-  autoRecovered?: boolean
 }
 
 /**
  * Get all businesses a user is member of (with ownership info)
+ * Migrated to Convex
  */
 export async function getUserBusinessMemberships(userId?: string): Promise<BusinessWithOwnership[]> {
   const clerkUserId = userId || (await auth()).userId
   if (!clerkUserId) throw new Error('Authentication required')
 
-  // Get Supabase user ID
-  const userData = await getUserData(clerkUserId)
-  const supabaseUserId = userData.id
+  try {
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      throw new Error('Failed to get authenticated Convex client')
+    }
 
-  const supabase = createServiceSupabaseClient()
+    // Call Convex query for businesses with memberships
+    const businesses = await client.query(api.functions.businesses.getMyBusinessesWithMemberships, {})
 
-  // Get all businesses user is member of
-  const { data: memberships, error: membershipsError } = await supabase
-    .from('business_memberships')
-    .select(`
-      *,
-      business:businesses (
-        id,
-        name,
-        slug,
-        owner_id,
-        country_code,
-        home_currency,
-        logo_url,
-        logo_fallback_color
-      )
-    `)
-    .eq('user_id', supabaseUserId)
-    .eq('status', 'active')
-    .order('last_accessed_at', { ascending: false })
+    if (!businesses || !Array.isArray(businesses)) {
+      return []
+    }
 
-  if (membershipsError) {
-    console.error('[BusinessContext] Error fetching memberships:', membershipsError)
+    // Map Convex response to expected interface
+    return businesses.map((b: any) => ({
+      id: b.id,
+      name: b.name,
+      slug: b.slug || '',
+      owner_id: b.ownerId,
+      country_code: b.countryCode || 'SG',
+      home_currency: b.homeCurrency || 'SGD',
+      logo_url: b.logoUrl,
+      logo_fallback_color: b.logoFallbackColor || '#4F46E5',
+      membership: b.membership ? {
+        id: b.membership.id,
+        user_id: b.membership.userId,
+        business_id: b.membership.businessId,
+        role: b.membership.role,
+        invited_at: b.membership.invitedAt ? new Date(b.membership.invitedAt).toISOString() : undefined,
+        joined_at: b.membership.joinedAt ? new Date(b.membership.joinedAt).toISOString() : new Date(b.membership.createdAt).toISOString(),
+        last_accessed_at: b.membership.lastAccessedAt ? new Date(b.membership.lastAccessedAt).toISOString() : undefined,
+        status: b.membership.status,
+        created_at: new Date(b.membership.createdAt).toISOString(),
+        updated_at: b.membership.updatedAt ? new Date(b.membership.updatedAt).toISOString() : new Date(b.membership.createdAt).toISOString()
+      } : undefined,
+      isOwner: b.isOwner
+    }))
+
+  } catch (error) {
+    console.error('[BusinessContext] Error fetching memberships:', error)
     throw new Error('Failed to fetch business memberships')
   }
-
-  return (memberships || []).map((membership: any) => ({
-    ...membership.business,
-    membership: {
-      id: membership.id,
-      user_id: membership.user_id,
-      business_id: membership.business_id,
-      role: membership.role,
-      invited_at: membership.invited_at,
-      joined_at: membership.joined_at,
-      last_accessed_at: membership.last_accessed_at,
-      status: membership.status,
-      created_at: membership.created_at,
-      updated_at: membership.updated_at
-    },
-    isOwner: membership.business.owner_id === supabaseUserId
-  }))
 }
 
 /**
  * Check if user is owner of a specific business
+ * Migrated to Convex
  */
 export async function checkBusinessOwnership(businessId: string, userId?: string): Promise<boolean> {
   const clerkUserId = userId || (await auth()).userId
   if (!clerkUserId) return false
 
   try {
-    const userData = await getUserData(clerkUserId)
-    const supabase = createServiceSupabaseClient()
+    const { client } = await getAuthenticatedConvex()
+    if (!client) return false
 
-    const { data: business, error } = await supabase
-      .from('businesses')
-      .select('owner_id')
-      .eq('id', businessId)
-      .single()
+    const isOwner = await client.query(api.functions.businesses.checkOwnership, {
+      businessId
+    })
 
-    if (error || !business) return false
-    return business.owner_id === userData.id
+    return isOwner === true
   } catch (error) {
     console.error('[BusinessContext] Error checking ownership:', error)
     return false
@@ -139,6 +131,7 @@ export async function checkBusinessOwnership(businessId: string, userId?: string
 
 /**
  * Verify user has membership in a business and return membership details
+ * Migrated to Convex
  */
 export async function verifyBusinessMembership(
   businessId: string,
@@ -151,27 +144,20 @@ export async function verifyBusinessMembership(
   }
 
   try {
-    const userData = await getUserData(clerkUserId)
-    const supabase = createServiceSupabaseClient()
+    const { client } = await getAuthenticatedConvex()
+    if (!client) return null
 
-    const { data: membership, error } = await supabase
-      .from('business_memberships')
-      .select('*')
-      .eq('user_id', userData.id)
-      .eq('business_id', businessId)
-      .eq('status', 'active')
-      .single()
-
-    if (error) {
-      console.error('[BusinessContext] Query error from business_memberships:', error)
-      return null
-    }
+    const membership = await client.query(api.functions.memberships.verifyMembership, {
+      businessId
+    })
 
     if (!membership) {
       return null
     }
 
-    return membership
+    // Response is already in snake_case format from Convex
+    return membership as BusinessMembership
+
   } catch (error) {
     console.error('[BusinessContext] Exception in verifyBusinessMembership:', error)
     return null
@@ -180,136 +166,31 @@ export async function verifyBusinessMembership(
 
 /**
  * Get current business context (OPTIMIZED - single query approach)
- * Includes auto-recovery for deleted/orphaned business references
+ * Migrated to Convex
  */
 export async function getCurrentBusinessContext(userId?: string): Promise<BusinessContext | null> {
   const clerkUserId = userId || (await auth()).userId
   if (!clerkUserId) return null
 
   try {
-    // PERFORMANCE FIX: Single getUserData call instead of 3 duplicate calls
-    const userData = await getUserData(clerkUserId)
-    const businessId = userData.business_id
+    const { client } = await getAuthenticatedConvex()
+    if (!client) return null
 
-    if (!businessId) {
-      // No business associated with user
+    const context = await client.query(api.functions.businesses.getBusinessContext, {})
+
+    if (!context) {
       return null
     }
 
-    // PERFORMANCE FIX: Single optimized query to get all needed data
-    const supabase = createServiceSupabaseClient()
-    const { data: businessData, error } = await supabase
-      .from('business_memberships')
-      .select(`
-        id,
-        user_id,
-        business_id,
-        role,
-        status,
-        businesses!business_memberships_business_id_fkey(
-          id,
-          name,
-          owner_id
-        )
-      `)
-      .eq('user_id', userData.id)
-      .eq('business_id', businessId)
-      .eq('status', 'active')
-      .single()
-
-    if (error || !businessData) {
-      // AUTO-RECOVERY: User's business_id points to deleted/invalid business
-      // Attempt to switch to another active business
-      console.warn('[BusinessContext] Business context not available - attempting auto-recovery:', {
-        orphanedBusinessId: businessId,
-        userId: userData.id,
-        error: error?.message || 'No active membership found'
-      })
-
-      // Find another active business membership for this user
-      const { data: otherMemberships, error: otherError } = await supabase
-        .from('business_memberships')
-        .select(`
-          business_id,
-          role,
-          businesses!business_memberships_business_id_fkey(
-            id,
-            name,
-            owner_id
-          )
-        `)
-        .eq('user_id', userData.id)
-        .eq('status', 'active')
-        .order('last_accessed_at', { ascending: false, nullsFirst: false })
-        .limit(1)
-
-      if (otherError || !otherMemberships || otherMemberships.length === 0) {
-        // No other businesses available - user truly has no business context
-        console.warn('[BusinessContext] AUTO-RECOVERY: No other active businesses found for user')
-
-        // Clear the orphaned business_id to prevent repeated failed lookups
-        await supabase
-          .from('users')
-          .update({
-            business_id: null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', userData.id)
-
-        console.log('[BusinessContext] AUTO-RECOVERY: Cleared orphaned business_id from user record')
-        return null
-      }
-
-      // Found another business - auto-switch the user
-      const newMembership = otherMemberships[0]
-      const newBusinessId = newMembership.business_id
-
-      // Update user's business_id to the new business
-      await supabase
-        .from('users')
-        .update({
-          business_id: newBusinessId,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userData.id)
-
-      // Invalidate cache to ensure fresh data
-      try {
-        const { invalidateUserCache } = await import('./business-context-cache')
-        invalidateUserCache(clerkUserId)
-      } catch {
-        // Cache module may not be available in all contexts
-      }
-
-      const newBusiness = Array.isArray(newMembership.businesses)
-        ? newMembership.businesses[0]
-        : newMembership.businesses
-      const isOwner = newBusiness?.owner_id === userData.id
-
-      console.log(`[BusinessContext] AUTO-RECOVERY: Switched user to business "${newBusiness?.name}" (${newBusinessId})`)
-
-      return {
-        businessId: newBusinessId,
-        businessName: newBusiness?.name || 'Unknown Business',
-        role: newMembership.role,
-        isOwner,
-        permissions: computePermissions(newMembership.role, isOwner),
-        autoRecovered: true  // Signal to client that context was auto-recovered
-      }
-    }
-
-    const business = Array.isArray(businessData.businesses)
-      ? businessData.businesses[0]
-      : businessData.businesses
-    const isOwner = business?.owner_id === userData.id
-
+    // Map Convex response to expected interface
     return {
-      businessId: businessId,
-      businessName: business?.name || 'Unknown Business',
-      role: businessData.role,
-      isOwner,
-      permissions: computePermissions(businessData.role, isOwner)
+      businessId: context.businessId,
+      businessName: context.businessName,
+      role: context.role as 'admin' | 'manager' | 'employee',
+      isOwner: context.isOwner,
+      permissions: context.permissions
     }
+
   } catch (error) {
     console.error('[BusinessContext] Error getting current context:', error)
     return null
@@ -317,7 +198,8 @@ export async function getCurrentBusinessContext(userId?: string): Promise<Busine
 }
 
 /**
- * Switch user's active business (updates Clerk JWT)
+ * Switch user's active business
+ * Migrated to Convex
  */
 export async function switchActiveBusiness(businessId: string, userId?: string): Promise<{
   success: boolean
@@ -331,46 +213,32 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
   }
 
   try {
-    // Verify user has access to this business
+    // Verify user has access to this business first
     const membership = await verifyBusinessMembership(businessId, clerkUserId)
 
     if (!membership) {
       return { success: false, error: 'Access denied to business' }
     }
 
-    // Update database only (single source of truth)
-    const userData = await getUserData(clerkUserId)
-    const supabase = createServiceSupabaseClient()
-    const { error: updateUserError } = await supabase
-      .from('users')
-      .update({
-        business_id: businessId,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userData.id)
-
-    if (updateUserError) {
-      console.error('[BusinessContext] Failed to update users table:', updateUserError)
-      throw updateUserError
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Failed to get authenticated client' }
     }
 
-    // Update last accessed time in business_memberships
-    const { error: updateMembershipError } = await supabase
-      .from('business_memberships')
-      .update({
-        last_accessed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', userData.id)
-      .eq('business_id', businessId)
-
-    if (updateMembershipError) {
-      console.error('[BusinessContext] Failed to update business_memberships (non-critical):', updateMembershipError)
-    }
+    // Call Convex mutation to switch business
+    // Note: switchBusiness requires a Convex ID, we pass the string and let it resolve
+    await client.mutation(api.functions.users.switchBusiness, {
+      businessId: businessId as any // The Convex function handles ID resolution
+    })
 
     // Invalidate cache when business context changes
-    const { invalidateUserCache } = await import('./business-context-cache')
-    invalidateUserCache(clerkUserId)
+    try {
+      const { invalidateUserCache } = await import('./business-context-cache')
+      invalidateUserCache(clerkUserId)
+    } catch (cacheError) {
+      // Cache invalidation is non-critical
+      console.warn('[BusinessContext] Cache invalidation failed:', cacheError)
+    }
 
     // Return the new context
     const context = await getCurrentBusinessContext(clerkUserId)
@@ -411,71 +279,36 @@ function computePermissions(role: 'admin' | 'manager' | 'employee', isOwner: boo
 
 /**
  * Initialize first business for new user (called during signup)
+ * Migrated to Convex
  */
 export async function createUserFirstBusiness(
   clerkUserId: string,
   userData: { full_name: string; email: string }
 ): Promise<{ businessId: string; userId: string }> {
-  const supabase = createServiceSupabaseClient()
-
   try {
-    // 1. Create user in our database
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .insert({
-        clerk_user_id: clerkUserId,
-        email: userData.email,
-        full_name: userData.full_name
-      })
-      .select()
-      .single()
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      throw new Error('Failed to get authenticated Convex client')
+    }
 
-    if (userError) throw userError
+    // 1. Create or update user in Convex (upsert handles both cases)
+    const userId = await client.mutation(api.functions.users.upsertFromClerk, {
+      clerkUserId,
+      email: userData.email,
+      fullName: userData.full_name
+    })
 
-    // 2. Create business (user becomes owner)
+    // 2. Create business (user becomes owner via Convex mutation)
     const businessName = `${userData.full_name}'s Business`
-    const businessSlug = businessName.toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') + '-' + Date.now()
 
-    const { data: business, error: businessError } = await supabase
-      .from('businesses')
-      .insert({
-        name: businessName,
-        slug: businessSlug,
-        owner_id: user.id, // User is owner
-        country_code: 'SG',
-        home_currency: 'SGD'
-      })
-      .select()
-      .single()
+    const businessId = await client.mutation(api.functions.businesses.create, {
+      name: businessName,
+      homeCurrency: 'SGD'
+    })
 
-    if (businessError) throw businessError
+    console.log(`[BusinessContext] Created first business ${businessId} for user ${userId}`)
 
-    // 3. Add user as Admin in business_memberships
-    const { error: membershipError } = await supabase
-      .from('business_memberships')
-      .insert({
-        user_id: user.id,
-        business_id: business.id,
-        role: 'admin',
-        status: 'active',
-        joined_at: new Date().toISOString()
-      })
-
-    if (membershipError) throw membershipError
-
-    // 4. Update user's business_id in database
-    await supabase
-      .from('users')
-      .update({
-        business_id: business.id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', user.id)
-
-    // Database is single source of truth - no JWT metadata needed
-    return { businessId: business.id, userId: user.id }
+    return { businessId: businessId as string, userId: userId as string }
 
   } catch (error) {
     console.error('[BusinessContext] Error creating first business:', error)

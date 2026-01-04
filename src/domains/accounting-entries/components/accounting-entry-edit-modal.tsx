@@ -67,6 +67,7 @@ export default function AccountingEntryFormModal({
   }
 
   const initialTransactionType = (transaction?.transaction_type || prefilledData?.transaction_type || 'Expense') as TransactionType
+  const initialCategory = transaction?.category || prefilledData?.category || getDefaultCategory(initialTransactionType)
 
   const [formData, setFormData] = useState({
     transaction_type: initialTransactionType,
@@ -75,7 +76,7 @@ export default function AccountingEntryFormModal({
     original_currency: transaction?.original_currency || prefilledData?.original_currency || userHomeCurrency,
     home_currency: transaction?.home_currency || prefilledData?.home_currency || userHomeCurrency,
     transaction_date: transaction?.transaction_date?.split('T')[0] || prefilledData?.transaction_date || new Date().toISOString().split('T')[0],
-    category: transaction?.category || prefilledData?.category || getDefaultCategory(initialTransactionType),
+    category: initialCategory,
     vendor_name: transaction?.vendor_name || prefilledData?.vendor_name || '',
     document_number: transaction?.reference_number || prefilledData?.reference_number || '',
     status: transaction?.status || prefilledData?.status || 'pending',
@@ -104,6 +105,41 @@ export default function AccountingEntryFormModal({
       })
     }
   }, [userHomeCurrency, transaction?.original_currency, prefilledData?.original_currency])
+
+  // Fix race condition: When COGS categories finish loading, re-apply the prefilled category
+  // This ensures the controlled <select> properly shows the value that was set before options loaded
+  useEffect(() => {
+    if (!cogsCategoriesLoading && formData.transaction_type === 'Cost of Goods Sold') {
+      const availableCategories = getAvailableCategories(formData.transaction_type, expenseCategories, cogsCategories)
+      const prefilledCategory = prefilledData?.category || transaction?.category
+
+      if (prefilledCategory && availableCategories.includes(prefilledCategory)) {
+        setFormData(prev => {
+          if (prev.category !== prefilledCategory) {
+            return { ...prev, category: prefilledCategory }
+          }
+          return prev
+        })
+      }
+    }
+  }, [cogsCategoriesLoading, cogsCategories, formData.transaction_type, prefilledData?.category, transaction?.category, expenseCategories])
+
+  // Same fix for Expense categories
+  useEffect(() => {
+    if (!expenseCategoriesLoading && formData.transaction_type === 'Expense') {
+      const availableCategories = getAvailableCategories(formData.transaction_type, expenseCategories, cogsCategories)
+      const prefilledCategory = prefilledData?.category || transaction?.category
+
+      if (prefilledCategory && availableCategories.includes(prefilledCategory)) {
+        setFormData(prev => {
+          if (prev.category !== prefilledCategory) {
+            return { ...prev, category: prefilledCategory }
+          }
+          return prev
+        })
+      }
+    }
+  }, [expenseCategoriesLoading, expenseCategories, formData.transaction_type, prefilledData?.category, transaction?.category, cogsCategories])
 
   const [lineItems, setLineItems] = useState<Partial<LineItem>[]>([])
 

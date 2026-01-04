@@ -1,6 +1,8 @@
 /**
  * Get Unique Vendors Tool
  * Returns a list of unique vendor names from user's transactions
+ *
+ * Migrated to Convex from Supabase
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
@@ -17,7 +19,7 @@ export class GetVendorsTool extends BaseTool {
   getToolSchema(modelType: ModelType = 'openai'): OpenAIToolSchema {
     const toolName = this.getToolName(modelType)
     const description = this.getDescription(modelType)
-    
+
     return {
       type: "function",
       function: {
@@ -41,32 +43,20 @@ export class GetVendorsTool extends BaseTool {
 
   protected async executeInternal(_parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     try {
-      console.log(`[GetVendorsTool] Getting unique vendors for user ${userContext.userId}`)
+      console.log(`[GetVendorsTool] Getting unique vendors for user ${userContext.userId} via Convex`)
 
-      // SECURITY: Use authenticated client for RLS enforcement
-      if (!this.authenticatedSupabase) {
-        throw new Error('Authenticated Supabase client not available')
+      // CRITICAL: Ensure authenticated Convex client is available
+      if (!this.convex) {
+        throw new Error('Convex client not initialized - authentication may have failed')
       }
 
-      // Query all transactions to get vendor names with proper business context
-      const { data: vendors, error } = await this.authenticatedSupabase
-        .from('accounting_entries')
-        .select('vendor_name')
-        .eq('user_id', userContext.supabaseUserId)    // ✅ FIXED: Use Supabase user ID
-        .eq('business_id', userContext.businessId)   // ✅ SECURITY: Add business context filtering
-        .is('deleted_at', null)                      // ✅ NEW: Filter out soft-deleted records
-        .not('vendor_name', 'is', null)
-        .not('vendor_name', 'eq', '')
+      // ✅ MIGRATED: Use Convex instead of Supabase
+      const result = await this.convex.query(
+        this.convexApi.functions.accountingEntries.getUniqueVendors,
+        { businessId: userContext.businessId }
+      )
 
-      if (error) {
-        console.error('[GetVendorsTool] Query error:', error)
-        return {
-          success: false,
-          error: 'Failed to retrieve vendor information'
-        }
-      }
-
-      if (!vendors || vendors.length === 0) {
+      if (!result || result.totalCount === 0) {
         return {
           success: true,
           data: "I couldn't find any vendors in your transaction history. This might be because you haven't added any transactions yet, or your transactions don't have vendor information.",
@@ -77,10 +67,7 @@ export class GetVendorsTool extends BaseTool {
         }
       }
 
-      // Get unique vendor names and sort them alphabetically
-      const uniqueVendorNames = [...new Set(vendors.map(v => v.vendor_name))]
-        .filter(name => name && name.trim().length > 0)
-        .sort()
+      const uniqueVendorNames = result.vendors
 
       if (uniqueVendorNames.length === 0) {
         return {
@@ -88,18 +75,17 @@ export class GetVendorsTool extends BaseTool {
           data: "I found transactions but none of them have vendor information specified.",
           metadata: {
             vendorCount: 0,
-            totalTransactions: vendors.length,
             userId: userContext.userId
           }
         }
       }
 
       // Format the response
-      const vendorList = uniqueVendorNames.map((vendor, index) => `${index + 1}. ${vendor}`).join('\n')
-      
+      const vendorList = uniqueVendorNames.map((vendor: string, index: number) => `${index + 1}. ${vendor}`).join('\n')
+
       const response = `Here are all the unique vendors from your transaction history:\n\n${vendorList}\n\nTotal: ${uniqueVendorNames.length} unique vendors found.`
 
-      console.log(`[GetVendorsTool] Found ${uniqueVendorNames.length} unique vendors for user ${userContext.userId}`)
+      console.log(`[GetVendorsTool] ✅ Found ${uniqueVendorNames.length} unique vendors via Convex`)
 
       return {
         success: true,

@@ -2,12 +2,17 @@
  * Business Profile Logo Upload API V1
  * POST /api/v1/account-management/businesses/profile/upload-logo - Upload business logo
  * DELETE /api/v1/account-management/businesses/profile/upload-logo - Remove business logo
+ *
+ * ✅ S3 MIGRATION: Uses AWS S3 for storage instead of Supabase Storage
+ * ✅ CONVEX MIGRATION (2026-01-03): Uses Convex for business profile storage
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { createBusinessContextSupabaseClient } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
+import { uploadFile, deleteFile } from '@/lib/aws-s3'
 
 // Supported image types for business logos
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
@@ -70,7 +75,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createBusinessContextSupabaseClient()
+    // Get authenticated Convex client
+    const { client: convex } = await getAuthenticatedConvex()
+    if (!convex) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to connect to database' },
+        { status: 500 }
+      )
+    }
 
     // Generate unique filename with business ID
     const fileExtension = file.name.split('.').pop() || 'jpg'
@@ -78,49 +90,35 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Logo Upload] Uploading logo for business ${userProfile.business_id}: ${filename}`)
 
-    // Upload to Supabase storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('business-profiles')
-      .upload(filename, file, {
-        cacheControl: '3600',
-        upsert: true // Allow overwriting existing logos
-      })
+    // ✅ S3 MIGRATION: Upload to AWS S3 instead of Supabase Storage
+    // Convert File to Buffer for S3 upload
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
 
-    if (uploadError) {
-      console.error('[Logo Upload] Supabase upload error:', uploadError)
+    const uploadResult = await uploadFile(
+      'business_profiles',
+      filename,
+      fileBuffer,
+      file.type
+    )
+
+    if (!uploadResult.success) {
+      console.error('[Logo Upload] S3 upload error:', uploadResult.error)
       return NextResponse.json(
         { success: false, error: 'Failed to upload logo to storage' },
         { status: 500 }
       )
     }
 
-    // Get public URL for the uploaded logo
-    const { data: urlData } = supabase.storage
-      .from('business-profiles')
-      .getPublicUrl(filename)
-
-    if (!urlData.publicUrl) {
-      return NextResponse.json(
-        { success: false, error: 'Failed to generate logo URL' },
-        { status: 500 }
-      )
-    }
-
-    // Update business profile with logo URL
-    const { error: updateError } = await supabase
-      .from('businesses')
-      .update({
-        logo_url: urlData.publicUrl,
-        updated_at: new Date().toISOString()
+    // ✅ CONVEX MIGRATION: Store S3 path in Convex (presigned URLs generated on-demand)
+    try {
+      await convex.mutation(api.functions.businesses.updateBusinessByStringId, {
+        businessId: userProfile.business_id,
+        logo_url: filename // Store S3 path (e.g., "business-id/logo_timestamp.jpg")
       })
-      .eq('id', userProfile.business_id)
-
-    if (updateError) {
-      console.error('[Logo Upload] Database update error:', updateError)
-      // Try to clean up uploaded file if database update fails
-      await supabase.storage
-        .from('business-profiles')
-        .remove([filename])
+    } catch (updateError) {
+      console.error('[Logo Upload] Convex update error:', updateError)
+      // Clean up uploaded file if database update fails
+      await deleteFile('business_profiles', filename)
 
       return NextResponse.json(
         { success: false, error: 'Failed to update business profile' },
@@ -130,10 +128,11 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Logo Upload] Successfully uploaded logo for business ${userProfile.business_id}`)
 
+    // ✅ S3 MIGRATION: Return S3 path (presigned URLs generated on-demand when displaying)
     return NextResponse.json({
       success: true,
       data: {
-        logo_url: urlData.publicUrl,
+        logo_url: filename, // S3 path - frontend generates presigned URL for display
         filename: filename
       }
     })
@@ -177,57 +176,54 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const supabase = await createBusinessContextSupabaseClient()
+    // Get authenticated Convex client
+    const { client: convex } = await getAuthenticatedConvex()
+    if (!convex) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to connect to database' },
+        { status: 500 }
+      )
+    }
 
-    // Get current business profile to find existing logo
-    const { data: business, error: fetchError } = await supabase
-      .from('businesses')
-      .select('logo_url')
-      .eq('id', userProfile.business_id)
-      .single()
+    // Get current business profile to find existing logo (from Convex)
+    const business = await convex.query(api.functions.businesses.getCurrentBusiness, {})
 
-    if (fetchError || !business) {
+    if (!business) {
       return NextResponse.json(
         { success: false, error: 'Business profile not found' },
         { status: 404 }
       )
     }
 
-    // If there's a logo URL, try to extract filename and remove from storage
-    if (business.logo_url) {
+    // ✅ S3 MIGRATION: If there's a logo path, remove from S3 storage
+    const logoPath = business.logoStoragePath || business.logoUrl
+    if (logoPath) {
       try {
-        // Extract filename from URL (assumes URL format: .../storage/v1/object/public/business-profiles/filename)
-        const urlPath = new URL(business.logo_url).pathname
-        const filename = urlPath.split('/').pop()
+        // logoStoragePath stores the S3 path directly (e.g., "business-id/logo_timestamp.jpg")
+        console.log(`[Logo Remove] Deleting logo from S3: business_profiles/${logoPath}`)
 
-        if (filename && filename.includes(userProfile.business_id)) {
-          // Remove from storage
-          const { error: deleteError } = await supabase.storage
-            .from('business-profiles')
-            .remove([`${userProfile.business_id}/${filename}`])
+        const deleteResult = await deleteFile('business_profiles', logoPath)
 
-          if (deleteError) {
-            console.warn('[Logo Remove] Failed to delete from storage:', deleteError)
-            // Continue with database update even if storage deletion fails
-          }
+        if (!deleteResult.success) {
+          console.warn('[Logo Remove] Failed to delete from S3:', deleteResult.error)
+          // Continue with database update even if storage deletion fails
+        } else {
+          console.log(`[Logo Remove] Successfully deleted from S3: ${logoPath}`)
         }
       } catch (error) {
-        console.warn('[Logo Remove] Failed to parse logo URL for deletion:', error)
+        console.warn('[Logo Remove] Failed to delete logo from S3:', error)
         // Continue with database update even if we can't delete the file
       }
     }
 
-    // Update business profile to remove logo URL
-    const { error: updateError } = await supabase
-      .from('businesses')
-      .update({
-        logo_url: null,
-        updated_at: new Date().toISOString()
+    // ✅ CONVEX MIGRATION: Update business profile to remove logo URL
+    try {
+      await convex.mutation(api.functions.businesses.updateBusinessByStringId, {
+        businessId: userProfile.business_id,
+        logo_url: '' // Clear the logo path (empty string instead of null for Convex)
       })
-      .eq('id', userProfile.business_id)
-
-    if (updateError) {
-      console.error('[Logo Remove] Database update error:', updateError)
+    } catch (updateError) {
+      console.error('[Logo Remove] Convex update error:', updateError)
       return NextResponse.json(
         { success: false, error: 'Failed to update business profile' },
         { status: 500 }

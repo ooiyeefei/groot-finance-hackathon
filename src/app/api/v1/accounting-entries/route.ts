@@ -14,6 +14,8 @@ import {
 } from '@/domains/accounting-entries/lib/data-access'
 import { validateQuery, validateBody, createAccountingEntrySchema, listAccountingEntriesQuerySchema } from '@/lib/validations'
 import { withEnhancedCache, enhancedApiCache, ENHANCED_CACHE_TTL } from '@/lib/cache/enhanced-api-cache'
+import { convexClient } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 
 /**
  * Create new accounting entry
@@ -34,7 +36,21 @@ export async function POST(request: NextRequest) {
       return validated.error
     }
 
-    const result = await createAccountingEntry(userId, validated.data as any)
+    // ✅ Inject user's current business context from Convex if not provided in body
+    const requestData = validated.data as any
+    if (!requestData.business_id) {
+      try {
+        const convexUser = await convexClient.query(api.functions.users.getByClerkId, { clerkUserId: userId })
+        if (convexUser?.businessId) {
+          requestData.business_id = convexUser.businessId
+          console.log(`[Accounting Entries API v1] 🏢 Injected business_id for creation from Convex: ${requestData.business_id}`)
+        }
+      } catch (err) {
+        console.error(`[Accounting Entries API v1] ❌ Failed to get user from Convex for POST:`, err)
+      }
+    }
+
+    const result = await createAccountingEntry(userId, requestData)
 
     if (!result.success) {
       return NextResponse.json(
@@ -84,8 +100,34 @@ export async function GET(request: NextRequest) {
     const params: AccountingEntryListParams = validated.data as any
     console.log(`[Accounting Entries API v1] 📝 Query params validated:`, JSON.stringify(params, null, 2))
 
+    // ✅ Multi-business support: Skip businessId injection if all_businesses=true
+    // This allows users with multiple business memberships to see all their entries
+    const allBusinesses = (params as any).all_businesses === true
+
+    if (allBusinesses) {
+      console.log(`[Accounting Entries API v1] 🌐 all_businesses=true: Skipping businessId injection, will show entries from ALL user's businesses`)
+      // Ensure business_id is NOT set so Convex returns entries by userId only
+      delete params.business_id
+    } else if (!params.business_id) {
+      // ✅ Inject user's current business context from Convex if not provided in query
+      try {
+        const convexUser = await convexClient.query(api.functions.users.getByClerkId, { clerkUserId: userId })
+        if (convexUser?.businessId) {
+          params.business_id = convexUser.businessId
+          console.log(`[Accounting Entries API v1] 🏢 Injected business_id from Convex: ${params.business_id}`)
+        } else {
+          console.log(`[Accounting Entries API v1] ⚠️ No business context found for user in Convex (will show all user entries)`)
+        }
+      } catch (err) {
+        console.error(`[Accounting Entries API v1] ❌ Failed to get user from Convex:`, err)
+      }
+    }
+
+    // Check for cache bypass query param (for debugging)
+    const skipCache = request.nextUrl.searchParams.get('skip_cache') === 'true'
+
     // Cache accounting entries with enhanced Redis cache + stale-while-revalidate
-    console.log(`[Accounting Entries API v1] 🔄 Calling getAccountingEntries with enhanced cache...`)
+    console.log(`[Accounting Entries API v1] 🔄 Calling getAccountingEntries with enhanced cache... (skipCache=${skipCache})`)
     const result = await withEnhancedCache(
       userId,
       'accounting-entries',
@@ -93,8 +135,8 @@ export async function GET(request: NextRequest) {
       {
         params,
         ttlMs: ENHANCED_CACHE_TTL.ACCOUNTING_ENTRIES,
-        skipCache: false,
-        staleWhileRevalidate: true // Return cached data while refreshing in background
+        skipCache: skipCache, // Allow cache bypass for debugging
+        staleWhileRevalidate: !skipCache // Disable stale-while-revalidate when bypassing
       }
     )
 

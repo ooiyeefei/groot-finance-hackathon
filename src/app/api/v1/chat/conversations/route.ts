@@ -3,11 +3,13 @@
  *
  * GET /api/v1/chat/conversations - List user's conversations
  * POST /api/v1/chat/conversations - Create new conversation
+ *
+ * Migrated to Convex for business context resolution
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserData } from '@/lib/db/supabase-server'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { listConversations, createConversation } from '@/domains/chat/lib/chat.service'
 
 export async function GET(request: NextRequest) {
@@ -18,10 +20,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user data and business context
-    const userData = await getUserData(userId)
+    // Get user profile from Convex (includes business_id)
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
+      return NextResponse.json({ error: 'Failed to get user profile' }, { status: 400 })
+    }
 
-    if (!userData.business_id) {
+    if (!userProfile.business_id) {
       return NextResponse.json({ error: 'No business context found' }, { status: 400 })
     }
 
@@ -32,13 +37,13 @@ export async function GET(request: NextRequest) {
       100 // Max 100 conversations per page
     )
 
-    console.log(`[Conversations V1 API] Fetching conversations for user: ${userId}, business: ${userData.business_id}, limit: ${limit}`)
+    console.log(`[Conversations V1 API] Fetching conversations for user: ${userId}, business: ${userProfile.business_id}, limit: ${limit}`)
 
     // Call service layer to get conversations with pagination
     const conversations = await listConversations(
       userId,
-      userData.id,
-      userData.business_id,
+      userProfile.user_id,
+      userProfile.business_id,
       limit
     )
 
@@ -69,10 +74,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user data and business context
-    const userData = await getUserData(userId)
+    // Get user profile from Convex (includes business_id)
+    const userProfile = await ensureUserProfile(userId)
+    if (!userProfile) {
+      return NextResponse.json({ error: 'Failed to get user profile' }, { status: 400 })
+    }
 
-    if (!userData.business_id) {
+    if (!userProfile.business_id) {
       return NextResponse.json({ error: 'No business context found' }, { status: 400 })
     }
 
@@ -80,13 +88,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const language = body.language || 'en'
 
-    console.log(`[Conversations V1 API] Creating new conversation for user: ${userId}, business: ${userData.business_id}`)
+    console.log(`[Conversations V1 API] Creating new conversation for user: ${userId}, business: ${userProfile.business_id}`)
 
     // Call service layer to create conversation
     const newConversation = await createConversation(
       userId,
-      userData.id,
-      userData.business_id,
+      userProfile.user_id,
+      userProfile.business_id,
       language
     )
 

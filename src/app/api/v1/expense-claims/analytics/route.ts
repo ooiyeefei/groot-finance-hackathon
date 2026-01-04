@@ -16,7 +16,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserData } from '@/lib/db/supabase-server'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { getExpenseAnalytics } from '@/domains/expense-claims/lib/data-access'
 
@@ -27,15 +26,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userData = await getUserData(userId)
-    if (!userData.business_id) {
-      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
-    }
-
-    // Get user profile with role permissions
+    // Get user profile from Convex (includes business_id and role_permissions)
     const userProfile = await ensureUserProfile(userId)
     if (!userProfile) {
       return NextResponse.json({ success: false, error: 'Failed to get user profile' }, { status: 400 })
+    }
+
+    if (!userProfile.business_id) {
+      return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
     }
 
     // Parse query parameters

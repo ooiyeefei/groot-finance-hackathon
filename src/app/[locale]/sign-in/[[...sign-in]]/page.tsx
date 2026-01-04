@@ -57,6 +57,8 @@ export default function SignInPage() {
   }
 
   // Show Clerk's SignIn component - handles Account Portal redirect automatically
+  // NOTE: Appearance is configured globally in ClerkProviderWrapper.tsx for consistent dark theme
+  // Do NOT add local appearance overrides here as they conflict with the global dark theme
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <SignIn
@@ -64,12 +66,6 @@ export default function SignInPage() {
         path={`/${locale}/sign-in`}
         signUpUrl={`/${locale}/sign-up`}
         afterSignInUrl={redirectUrl}
-        appearance={{
-          elements: {
-            rootBox: 'mx-auto',
-            card: 'bg-card border border-border shadow-lg',
-          }
-        }}
       />
     </div>
   )

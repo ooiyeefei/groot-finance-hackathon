@@ -6,13 +6,18 @@
 
 'use client'
 
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatBusinessDate } from '@/lib/utils'
+
+// ✅ CONVEX REAL-TIME: Import hooks for automatic real-time updates
+import { useActiveBusiness } from '@/contexts/business-context'
+import { useExpenseClaimsRealtime } from '../hooks/use-expense-claims-realtime'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseSubmissionFlow = lazy(() => import('./expense-submission-flow'))
@@ -40,9 +45,19 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   const searchParams = useSearchParams()
   const router = useRouter()
 
+  // ✅ CONVEX REAL-TIME: Get business context for multi-tenancy
+  const { businessId, isLoading: isBusinessLoading } = useActiveBusiness()
+
+  // ✅ CONVEX REAL-TIME: Real-time expense claims data - automatically updates when Trigger.dev changes status
+  // This replaces the REST API polling approach with instant WebSocket-based updates
+  const {
+    dashboardData: convexDashboardData,
+    loading: convexLoading,
+    deleteClaim: convexDeleteClaim,
+    deleting: convexDeleting,
+  } = useExpenseClaimsRealtime(businessId, { limit: 10 })
+
   const [activeTab, setActiveTab] = useState('overview')
-  const [dashboardData, setDashboardData] = useState<PersonalDashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
   const [showSubmissionForm, setShowSubmissionForm] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingClaimId, setEditingClaimId] = useState<string | null>(null)
@@ -72,71 +87,33 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     return progressMap[status] || 0
   }, [])
 
-  // Fetch personal dashboard data
-  const fetchDashboardData = useCallback(async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/v1/expense-claims?limit=10&sort_order=desc', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+  // ✅ CONVEX REAL-TIME: Enrich claims with workflow progress using memoization
+  // This transforms Convex data to match the expected dashboard format
+  const enrichedDashboardData = useMemo(() => {
+    if (!convexDashboardData) return null
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('[PersonalExpenseDashboard] Error response:', errorText)
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
+    const enrichedClaims = convexDashboardData.recent_claims.map((claim: any) => ({
+      ...claim,
+      workflow_progress: getWorkflowProgress(claim.status)
+    }))
 
-      const result = await response.json()
-
-      if (result.success) {
-        // Transform v1 API response to dashboard format
-        const claims = result.data?.claims || [];
-        const pagination = result.data?.pagination || {};
-
-        const summary = {
-          total_claims: pagination.total || 0,
-          pending_approval: claims.filter((claim: any) => claim.status === 'submitted').length,
-          approved_amount: claims
-            .filter((claim: any) => claim.status === 'approved' || claim.status === 'reimbursed')
-            .reduce((sum: number, claim: any) => sum + (claim.home_currency_amount || claim.total_amount || 0), 0),
-          rejected_count: claims.filter((claim: any) => claim.status === 'rejected').length,
-        };
-
-        // Enrich claims with workflow progress
-        const enrichedClaims = claims.map((claim: any) => ({
-          ...claim,
-          workflow_progress: getWorkflowProgress(claim.status)
-        }))
-
-        setDashboardData({
-          summary: summary,
-          recent_claims: enrichedClaims
-        })
-      } else {
-        console.error('[PersonalExpenseDashboard] API returned success: false, error:', result.error)
-        throw new Error(result.error || 'Failed to fetch dashboard data')
-      }
-    } catch (error) {
-      console.error('[PersonalExpenseDashboard] Failed to fetch dashboard data:', error)
-      console.error('[PersonalExpenseDashboard] Error details:', error instanceof Error ? error.message : 'Unknown error')
-
-      // Set minimal fallback data
-      setDashboardData({
-        summary: {
-          total_claims: 0,
-          pending_approval: 0,
-          approved_amount: 0,
-          rejected_count: 0
-        },
-        recent_claims: []
-      })
-    } finally {
-      setLoading(false)
+    return {
+      summary: convexDashboardData.summary,
+      recent_claims: enrichedClaims
     }
-  }, [getWorkflowProgress])
+  }, [convexDashboardData, getWorkflowProgress])
+
+  // ✅ CONVEX MIGRATION: Use enriched data and combined loading state
+  const dashboardData = enrichedDashboardData
+  const loading = convexLoading || isBusinessLoading
+
+  // ✅ CONVEX REAL-TIME: No-op function for backward compatibility with child components
+  // Child components still receive this prop but don't need to call it anymore
+  // Convex subscriptions automatically update the UI when data changes
+  const fetchDashboardData = useCallback(() => {
+    // No-op: Convex useQuery handles real-time updates automatically
+    console.log('[Dashboard] fetchDashboardData called - no-op, Convex handles updates')
+  }, [])
 
   // Handle delete click to show confirmation dialog
   const handleDeleteClick = useCallback((claimId: string) => {
@@ -144,38 +121,30 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     setShowDeleteConfirm(true)
   }, [])
 
-  // Delete expense claim function
+  // ✅ CONVEX MIGRATION: Delete expense claim using Convex mutation
+  // No manual refresh needed - Convex automatically updates the UI
   const deleteClaim = useCallback(async () => {
     if (!deletingClaimId) return
-    
+
     setIsDeleting(true)
 
     try {
-      const response = await fetch(`/api/v1/expense-claims/${deletingClaimId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      const result = await response.json()
-      
-      if (response.ok && result.success) {
-        setToastType('success')
-        setToastMessage('Expense claim deleted successfully')
-        fetchDashboardData() // Refresh data
-        setShowDeleteConfirm(false)
-        setDeletingClaimId(null)
-      } else {
-        setToastType('error')
-        setToastMessage(`Failed to delete claim: ${result.error}`)
-      }
+      // Use Convex mutation for real-time update
+      await convexDeleteClaim(deletingClaimId)
+
+      setToastType('success')
+      setToastMessage('Expense claim deleted successfully')
+      // ✅ No fetchDashboardData() needed - Convex subscription auto-updates
+      setShowDeleteConfirm(false)
+      setDeletingClaimId(null)
     } catch (error) {
       console.error('Error deleting claim:', error)
       setToastType('error')
-      setToastMessage('An error occurred while deleting the claim')
+      setToastMessage(error instanceof Error ? error.message : 'An error occurred while deleting the claim')
     } finally {
       setIsDeleting(false)
     }
-  }, [deletingClaimId, fetchDashboardData])
+  }, [deletingClaimId, convexDeleteClaim])
 
   const handleCloseDeleteConfirm = useCallback(() => {
     if (!isDeleting) {
@@ -184,15 +153,16 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     }
   }, [isDeleting])
 
-  // AI reprocessing handler - Calls server-side API to fix TRIGGER_SECRET_KEY error
+  // ✅ CONVEX REAL-TIME: AI reprocessing handler - no manual refresh needed
+  // Convex subscription auto-updates when Trigger.dev changes status
   const handleReprocessClick = useCallback(async (claimId: string, storagePath: string) => {
     try {
       setReprocessingClaims(prev => new Set(prev).add(claimId))
       setToastType('success')
       setToastMessage('Starting AI reprocessing...')
 
-
       // Step 1: Update status to 'analyzing' immediately for UI feedback
+      // ✅ Convex subscription will auto-update UI when status changes
       try {
         const statusResponse = await fetch(`/api/v1/expense-claims/${claimId}`, {
           method: 'PUT',
@@ -202,10 +172,10 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
           body: JSON.stringify({ status: 'analyzing' })
         })
 
-        if (statusResponse.ok) {
-          // Refresh UI immediately to show analyzing status
-          fetchDashboardData()
+        if (!statusResponse.ok) {
+          console.warn('[Dashboard] Failed to update status to analyzing')
         }
+        // ✅ No fetchDashboardData() needed - Convex subscription auto-updates
       } catch (statusError) {
         console.warn('[Dashboard] Failed to update status to analyzing:', statusError)
         // Continue with reprocessing even if status update fails
@@ -225,22 +195,15 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         throw new Error(result.error || 'Failed to start reprocessing')
       }
 
-
       setToastType('success')
-      setToastMessage('AI reprocessing started successfully! Results will appear in a few moments.')
-
-      // Refresh dashboard data after a short delay to show processing status
-      setTimeout(() => {
-        fetchDashboardData()
-      }, 2000)
+      setToastMessage('AI reprocessing started successfully! Results will appear automatically.')
+      // ✅ No fetchDashboardData() or setTimeout needed - Convex subscription auto-updates
 
     } catch (error) {
       console.error('Reprocess error:', error)
       setToastType('error')
       setToastMessage(error instanceof Error ? error.message : 'Failed to reprocess expense claim')
-
-      // If reprocessing failed, refresh data to show current status
-      fetchDashboardData()
+      // ✅ No fetchDashboardData() needed - Convex will show current state
     } finally {
       setReprocessingClaims(prev => {
         const newSet = new Set(prev)
@@ -248,13 +211,11 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         return newSet
       })
     }
-  }, [fetchDashboardData])
+  }, []) // ✅ No dependencies on fetchDashboardData
 
-  useEffect(() => {
-    if (userId) {
-      fetchDashboardData()
-    }
-  }, [userId, fetchDashboardData])
+  // ✅ CONVEX REAL-TIME: No initial fetchDashboardData() needed
+  // Convex useQuery automatically fetches data when component mounts
+  // and keeps it in sync via WebSocket subscription
 
   // Handle highlight parameter to auto-open expense claim details modal
   useEffect(() => {
@@ -285,107 +246,10 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     }
   }, [searchParams, highlightProcessed])
 
-  // ✅ PERFORMANCE OPTIMIZATION: Highly optimized polling with exponential backoff and smart conditions
-  useEffect(() => {
-    if (!dashboardData?.recent_claims) return
-
-    // Get IDs of claims that are currently processing
-    const processingClaimIds = dashboardData.recent_claims
-      .filter(claim => claim.status === 'analyzing' || claim.status === 'uploading')
-      .map(claim => claim.id)
-
-    if (processingClaimIds.length === 0) return
-
-    let pollAttempts = 0
-    let maxAttempts = 20 // Stop after 20 attempts (2-4 minutes depending on backoff)
-
-    const performPoll = async () => {
-      try {
-        pollAttempts++
-
-        // ✅ PERFORMANCE OPTIMIZATION: Batch API call instead of multiple individual calls
-        const batchResponse = await fetch('/api/v1/expense-claims', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'batch_status_check',
-            claim_ids: processingClaimIds
-          })
-        }).catch(() => {
-          // Fallback to individual calls if batch endpoint doesn't exist
-          return Promise.all(
-            processingClaimIds.slice(0, 3).map(async (claimId) => { // Limit to 3 concurrent requests
-              const response = await fetch(`/api/v1/expense-claims/${claimId}`)
-              if (response.ok) {
-                const result = await response.json()
-                return result.success ? { claimId, claim: result.data } : null
-              }
-              return null
-            })
-          )
-        })
-
-        let statusResults = []
-
-        if (batchResponse instanceof Response) {
-          const batchResult = await batchResponse.json()
-          statusResults = batchResult.success ? batchResult.data : []
-        } else {
-          statusResults = batchResponse
-        }
-
-        // Check if any claims finished processing
-        let shouldRefreshAll = false
-        let allProcessingComplete = true
-
-        statusResults.forEach((result: any) => {
-          if (result && result.claim) {
-            const { claimId, claim } = result
-
-            // If claim is no longer processing, we need a full refresh to update summary
-            if (claim.status !== 'analyzing' && claim.status !== 'uploading') {
-              shouldRefreshAll = true
-            } else {
-              allProcessingComplete = false
-            }
-          }
-        })
-
-        // ✅ PERFORMANCE OPTIMIZATION: Stop polling when all processing is complete or max attempts reached
-        if (shouldRefreshAll || allProcessingComplete || pollAttempts >= maxAttempts) {
-          fetchDashboardData()
-          return // Stop polling
-        }
-
-        // ✅ PERFORMANCE OPTIMIZATION: Exponential backoff for less aggressive polling
-        const baseInterval = 8000 // Start with 8 seconds
-        const backoffMultiplier = Math.min(1.5, 1 + (pollAttempts * 0.1)) // Gradual increase
-        const nextInterval = Math.min(baseInterval * backoffMultiplier, 30000) // Max 30 seconds
-
-        setTimeout(performPoll, nextInterval)
-
-      } catch (error) {
-        console.error('[Optimized Polling] Error checking claim status:', error)
-
-        // ✅ PERFORMANCE OPTIMIZATION: Exponential backoff on errors
-        const errorBackoff = Math.min(15000 + (pollAttempts * 2000), 60000) // 15s to 60s
-
-        if (pollAttempts < maxAttempts) {
-          setTimeout(performPoll, errorBackoff)
-        } else {
-          // Final attempt: full refresh
-          fetchDashboardData()
-        }
-      }
-    }
-
-    // Start polling with initial delay
-    const initialTimeout = setTimeout(performPoll, 3000) // Start after 3 seconds
-
-    return () => {
-      clearTimeout(initialTimeout)
-    }
-  }, [dashboardData?.recent_claims?.map(c => `${c.id}:${c.status}`).join(',')]) // Only re-run when claim statuses actually change
+  // ✅ CONVEX REAL-TIME: No polling needed!
+  // Convex WebSocket subscriptions provide instant updates (~50ms latency)
+  // when Trigger.dev calls internalUpdateStatus/internalUpdateExtraction
+  // This replaces the previous REST API polling (3-30s with exponential backoff)
 
   // Auto-hide toast after 3 seconds
   useEffect(() => {
@@ -804,7 +668,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           </p>
           <p className="text-muted-foreground text-xs">
             {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} •
-            {new Date(claim.transaction?.transaction_date || claim.created_at).toLocaleDateString()}
+            {formatBusinessDate(claim.transaction?.transaction_date || claim.created_at)}
           </p>
         </div>
         <div className="text-right">

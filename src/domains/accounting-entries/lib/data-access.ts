@@ -2,11 +2,14 @@
  * Accounting Entries Data Access Layer
  * Centralized business logic for accounting entries CRUD operations
  * Consolidates logic from both /api/accounting-entries and /api/transactions
+ *
+ * Migrated to Convex from Supabase
  */
 
-import { createBusinessContextSupabaseClient, getUserData } from '@/lib/db/supabase-server'
+import { getAuthenticatedConvex } from '@/lib/convex'
 import { currencyService } from '@/lib/services/currency-service'
 import { CrossBorderTaxComplianceTool } from '@/lib/ai/tools'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import {
   CreateAccountingEntryRequest as CreateTransactionRequest,
   UpdateAccountingEntryRequest as UpdateTransactionRequest,
@@ -14,6 +17,8 @@ import {
   AccountingEntryListParams as TransactionListParams,
   TRANSACTION_CATEGORIES
 } from '@/domains/accounting-entries/types'
+import { api } from '@/convex/_generated/api'
+import { Id } from '@/convex/_generated/dataModel'
 
 export interface AccountingEntry {
   id: string
@@ -75,75 +80,22 @@ export interface AccountingEntryListParams extends TransactionListParams {
   // All properties inherited from TransactionListParams
 }
 
-// Helper function to fetch dynamic categories from database
-async function fetchDynamicCategories(supabase: any, businessId: string, transactionType: 'Income' | 'Cost of Goods Sold' | 'Expense') {
-  try {
-    let validCategories: string[] = []
-    let validCategoryNames: string[] = []
-
-    if (transactionType === 'Cost of Goods Sold') {
-      // Fetch COGS categories
-      const { data: businessData, error } = await supabase
-        .from('businesses')
-        .select('custom_cogs_categories')
-        .eq('id', businessId)
-        .single()
-
-      if (!error && businessData?.custom_cogs_categories) {
-        const categories = businessData.custom_cogs_categories
-        const activeCategories = categories.filter((cat: any) => cat.is_active !== false)
-        validCategories = activeCategories.map((cat: any) => cat.category_code)
-        validCategoryNames = activeCategories.map((cat: any) => cat.category_name)
-      }
-    } else if (transactionType === 'Expense') {
-      // Fetch expense categories
-      const { data: businessData, error } = await supabase
-        .from('businesses')
-        .select('custom_expense_categories')
-        .eq('id', businessId)
-        .single()
-
-      if (!error && businessData?.custom_expense_categories) {
-        const categories = businessData.custom_expense_categories
-        const activeCategories = categories.filter((cat: any) => cat.is_active !== false)
-        validCategories = activeCategories.map((cat: any) => cat.category_code)
-        validCategoryNames = activeCategories.map((cat: any) => cat.category_name)
-      }
-    } else if (transactionType === 'Income') {
-      // For income, use hardcoded categories for now (can be made dynamic later)
-      validCategories = ['operating_revenue', 'other_income', 'investment_income', 'government_grants']
-      validCategoryNames = ['Operating Revenue', 'Other Income', 'Investment Income', 'Government Grants']
-    }
-
-    // Fallback to hardcoded categories if no dynamic categories found
-    if (validCategories.length === 0) {
-      const typeCategories = TRANSACTION_CATEGORIES[transactionType]
-      if (typeCategories) {
-        validCategories = Object.keys(typeCategories)
-        validCategoryNames = Object.keys(typeCategories).map(key =>
-          key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-        )
-      }
-    }
-
-    return { codes: validCategories, names: validCategoryNames }
-  } catch (error) {
-    console.error('Error fetching dynamic categories:', error)
-    // Fallback to hardcoded categories
-    const typeCategories = TRANSACTION_CATEGORIES[transactionType]
-    if (typeCategories) {
-      const codes = Object.keys(typeCategories)
-      const names = codes.map(key =>
-        key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-      )
-      return { codes, names }
-    }
-    return { codes: [], names: [] }
+// Helper function to get valid categories (uses hardcoded categories, dynamic fetching done in Convex)
+function getValidCategories(transactionType: 'Income' | 'Cost of Goods Sold' | 'Expense') {
+  const typeCategories = TRANSACTION_CATEGORIES[transactionType]
+  if (typeCategories) {
+    const codes = Object.keys(typeCategories)
+    const names = codes.map(key =>
+      key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    )
+    return { codes, names }
   }
+  return { codes: [], names: [] }
 }
 
 /**
  * Create a new accounting entry
+ * Migrated to Convex
  */
 export async function createAccountingEntry(
   userId: string,
@@ -192,52 +144,41 @@ export async function createAccountingEntry(
 
     console.log(`[Accounting Entries Data Access] Creating ${transaction_type} entry for user ${userId}`)
 
-    const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient(userId)
-
-    // DUPLICATE PREVENTION: Check if accounting entry already exists for this source document
-    if (source_record_id && source_document_type) {
-      const { data: existingEntry, error: existingError } = await supabase
-        .from('accounting_entries')
-        .select('id, description, original_amount, original_currency')
-        .eq('source_record_id', source_record_id)
-        .eq('source_document_type', source_document_type)
-        .eq('business_id', userData.business_id)
-        .is('deleted_at', null)
-        .single()
-
-      if (existingEntry) {
-        console.log(`[Accounting Entries Data Access] Duplicate prevention: Entry already exists for ${source_document_type} ${source_record_id}:`, existingEntry)
-        return {
-          success: false,
-          error: `An accounting entry already exists for this ${source_document_type}. Description: "${existingEntry.description}" (${existingEntry.original_amount} ${existingEntry.original_currency})`
-        }
-      } else if (existingError && existingError.code !== 'PGRST116') {
-        // PGRST116 is "no rows found" which is expected, any other error is concerning
-        console.error(`[Accounting Entries Data Access] Error checking for duplicates:`, existingError)
-        return {
-          success: false,
-          error: 'Failed to verify duplicate entries'
-        }
-      }
-
-      console.log(`[Accounting Entries Data Access] No duplicate found for ${source_document_type} ${source_record_id}, proceeding with creation`)
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Unauthorized' }
     }
 
-    // Ensure user has a business_id for category validation
-    if (!userData.business_id) {
-      return {
-        success: false,
-        error: 'User must be associated with a business to create accounting entries'
+    // Category validation using hardcoded categories
+    const categoryData = getValidCategories(transaction_type as 'Income' | 'Cost of Goods Sold' | 'Expense')
+    let validCategories = [...categoryData.codes]
+    let validCategoryNames = [...categoryData.names]
+
+    // For 'Cost of Goods Sold', also include custom business COGS categories
+    if (transaction_type === 'Cost of Goods Sold') {
+      try {
+        // Get user's business_id for COGS category lookup
+        const employeeProfile = await ensureUserProfile(userId)
+        if (!employeeProfile) {
+          console.warn('[Accounting Entries Data Access] Failed to get employee profile for COGS categories')
+        } else {
+          // Fetch custom COGS categories from user's business
+          const customCogsCategories = await client.query(api.functions.businesses.getEnabledCogsCategories, {
+            businessId: employeeProfile.business_id
+          })
+          if (customCogsCategories && customCogsCategories.length > 0) {
+            const customCodes = customCogsCategories.map((cat: any) => cat.category_code || cat.id)
+            const customNames = customCogsCategories.map((cat: any) => cat.name || cat.category_name)
+            validCategories = [...validCategories, ...customCodes]
+            validCategoryNames = [...validCategoryNames, ...customNames]
+            console.log(`[Accounting Entries Data Access] Including ${customCogsCategories.length} custom COGS categories in validation`)
+          }
+        }
+      } catch (error) {
+        console.warn('[Accounting Entries Data Access] Failed to fetch custom COGS categories, using defaults:', error)
       }
     }
 
-    // Fetch dynamic categories for validation
-    const categoryData = await fetchDynamicCategories(supabase, userData.business_id, transaction_type)
-    const validCategories = categoryData.codes
-    const validCategoryNames = categoryData.names
-
-    // Dynamic category validation
     let finalCategory = category
     let finalSubcategory = subcategory
 
@@ -294,104 +235,56 @@ export async function createAccountingEntry(
       }
     }
 
-    const { data: accountingEntry, error: entryError } = await supabase
-      .from('accounting_entries')
-      .insert({
-        user_id: userData.id,
-        business_id: userData.business_id,
-        source_record_id: source_record_id || null,
-        source_document_type: source_document_type || null,
-        transaction_type,
-        category: finalCategory,
-        subcategory: finalSubcategory,
-        description,
-        reference_number,
-        original_currency,
-        original_amount,
-        home_currency: homeCurrency,
-        home_currency_amount: homeAmount,
-        exchange_rate: exchangeRate,
-        exchange_rate_date: exchangeRateDate,
-        transaction_date,
-        vendor_name,
-        created_by_method: source_record_id ? 'document_extract' : 'manual',
-        processing_metadata: {
-          created_via: 'api',
-          conversion_attempted: original_currency !== homeCurrency,
-          source_record_id: source_record_id || null
-        }
-      })
-      .select()
-      .single()
+    // Prepare line items for Convex (camelCase)
+    const convexLineItems = line_items.map((item, index) => ({
+      itemDescription: item.item_description,
+      itemCode: item.item_code,
+      quantity: item.quantity,
+      unitMeasurement: item.unit_measurement,
+      unitPrice: item.unit_price,
+      totalAmount: item.quantity * item.unit_price,
+      currency: original_currency,
+      taxRate: item.tax_rate || 0,
+      taxAmount: item.tax_rate ? (item.quantity * item.unit_price) * (item.tax_rate / 100) : 0,
+      lineOrder: index + 1
+    }))
 
-    if (entryError) {
-      console.error('[Accounting Entries Data Access] Failed to create accounting entry:', entryError)
-      return { success: false, error: 'Failed to create accounting entry' }
+    // Call Convex create mutation
+    const entryId = await client.mutation(api.functions.accountingEntries.create, {
+      transactionType: transaction_type,
+      category: finalCategory,
+      subcategory: finalSubcategory,
+      description,
+      referenceNumber: reference_number,
+      originalCurrency: original_currency,
+      originalAmount: original_amount,
+      homeCurrency,
+      homeCurrencyAmount: homeAmount,
+      exchangeRate,
+      exchangeRateDate,
+      transactionDate: transaction_date,
+      vendorName: vendor_name,
+      sourceRecordId: source_record_id,
+      sourceDocumentType: source_document_type,
+      createdByMethod: source_record_id ? 'document_extract' : 'manual',
+      processingMetadata: {
+        created_via: 'api',
+        conversion_attempted: original_currency !== homeCurrency,
+        source_record_id: source_record_id || null
+      },
+      lineItems: convexLineItems.length > 0 ? convexLineItems : undefined
+    })
+
+    // Fetch the created entry to return
+    const entry = await client.query(api.functions.accountingEntries.getById, {
+      id: entryId as string
+    })
+
+    if (!entry) {
+      return { success: false, error: 'Failed to retrieve created entry' }
     }
 
-    // Create line items if provided
-    console.log(`[Accounting Entries Data Access] Processing ${line_items.length} line items for entry ${accountingEntry.id}`)
-
-    const createdLineItems = []
-    if (line_items.length > 0) {
-      for (let i = 0; i < line_items.length; i++) {
-        const lineItem = line_items[i]
-        const lineTotal = lineItem.quantity * lineItem.unit_price
-
-        // Validate line item data before insertion
-        if (!lineItem.item_description || !lineItem.quantity || !lineItem.unit_price) {
-          console.error('[Accounting Entries Data Access] Invalid line item data:', {
-            index: i,
-            item_description: lineItem.item_description,
-            quantity: lineItem.quantity,
-            unit_price: lineItem.unit_price,
-            issue: !lineItem.item_description ? 'missing item_description' :
-                   !lineItem.quantity ? 'missing quantity' : 'missing unit_price'
-          })
-          continue // Skip invalid line items
-        }
-
-        console.log(`[Accounting Entries Data Access] Creating line item ${i + 1}:`, {
-          item_description: lineItem.item_description,
-          item_code: lineItem.item_code,
-          quantity: lineItem.quantity,
-          unit_price: lineItem.unit_price,
-          total_amount: lineTotal
-        })
-
-        const { data: createdLineItem, error: lineItemError } = await supabase
-          .from('line_items')
-          .insert({
-            accounting_entry_id: accountingEntry.id,
-            item_description: lineItem.item_description,
-            item_code: lineItem.item_code || null,
-            quantity: lineItem.quantity,
-            unit_measurement: lineItem.unit_measurement || null,
-            unit_price: lineItem.unit_price,
-            total_amount: lineTotal,
-            currency: original_currency,
-            tax_rate: lineItem.tax_rate || 0,
-            tax_amount: lineItem.tax_rate ? lineTotal * (lineItem.tax_rate / 100) : 0,
-            line_order: i + 1
-          })
-          .select()
-          .single()
-
-        if (lineItemError) {
-          console.error('[Accounting Entries Data Access] Failed to create line item:', lineItemError)
-          // Continue creating other line items rather than failing the entire transaction
-        } else {
-          console.log('[Accounting Entries Data Access] ✅ Successfully created line item:', {
-            id: createdLineItem.id,
-            description: createdLineItem.item_description,
-            total_amount: createdLineItem.total_amount
-          })
-          createdLineItems.push(createdLineItem)
-        }
-      }
-    }
-
-    console.log(`[Accounting Entries Data Access] Created accounting entry ${accountingEntry.id} with ${createdLineItems.length} line items`)
+    console.log(`[Accounting Entries Data Access] ✅ Created entry ${entryId} via Convex`)
 
     // Cross-border compliance analysis
     const isCrossBorderTransaction = original_currency !== homeCurrency
@@ -405,7 +298,7 @@ export async function createAccountingEntry(
           const complianceTool = new CrossBorderTaxComplianceTool()
 
           const analysisResult = await complianceTool.execute({
-            accounting_entry_id: accountingEntry.id,
+            accounting_entry_id: entryId as string,
             amount: original_amount,
             original_currency: original_currency,
             home_currency: homeCurrency,
@@ -418,25 +311,69 @@ export async function createAccountingEntry(
           })
 
           if (analysisResult.success) {
-            console.log(`[Accounting Entries Data Access] Compliance analysis completed for entry ${accountingEntry.id}`)
+            console.log(`[Accounting Entries Data Access] Compliance analysis completed for entry ${entryId}`)
           } else {
-            console.error(`[Accounting Entries Data Access] Compliance analysis failed for entry ${accountingEntry.id}:`, analysisResult.error)
+            console.error(`[Accounting Entries Data Access] Compliance analysis failed for entry ${entryId}:`, analysisResult.error)
           }
         } catch (error) {
-          console.error(`[Accounting Entries Data Access] Compliance analysis error for entry ${accountingEntry.id}:`, error)
+          console.error(`[Accounting Entries Data Access] Compliance analysis error for entry ${entryId}:`, error)
         }
       })
     } else {
       console.log(`[Accounting Entries Data Access] Domestic transaction (${original_currency}), skipping compliance analysis`)
     }
 
+    // Map Convex entry to API response format
+    const transaction: AccountingEntry = {
+      id: entry._id,
+      user_id: entry.userId,
+      business_id: entry.businessId,
+      source_record_id: entry.sourceRecordId,
+      source_document_type: entry.sourceDocumentType,
+      transaction_type: entry.transactionType || '',
+      category: entry.category || '',
+      category_name: (entry as any).categoryName,
+      subcategory: (entry as any).subcategory,
+      description: entry.description || '',
+      reference_number: entry.referenceNumber,
+      original_currency: entry.originalCurrency || '',
+      original_amount: entry.originalAmount || 0,
+      home_currency: entry.homeCurrency || '',
+      home_currency_amount: entry.homeCurrencyAmount || 0,
+      exchange_rate: entry.exchangeRate || 1,
+      exchange_rate_date: entry.exchangeRateDate || '',
+      transaction_date: entry.transactionDate || '',
+      vendor_name: entry.vendorName,
+      created_by_method: entry.createdByMethod,
+      processing_metadata: entry.processingMetadata,
+      status: entry.status,
+      due_date: entry.dueDate,
+      payment_date: entry.paymentDate,
+      payment_method: entry.paymentMethod,
+      notes: entry.notes,
+      created_at: entry._creationTime ? new Date(entry._creationTime).toISOString() : new Date().toISOString(),
+      updated_at: entry.updatedAt ? new Date(entry.updatedAt).toISOString() : new Date().toISOString(),
+      deleted_at: entry.deletedAt ? new Date(entry.deletedAt).toISOString() : undefined,
+      line_items: (entry.lineItems || []).map((item: any) => ({
+        id: item._id,
+        accounting_entry_id: entry._id,
+        item_description: item.itemDescription,
+        item_code: item.itemCode,
+        quantity: item.quantity,
+        unit_measurement: item.unitMeasurement,
+        unit_price: item.unitPrice,
+        total_amount: item.totalAmount,
+        currency: item.currency,
+        tax_rate: item.taxRate,
+        tax_amount: item.taxAmount,
+        line_order: item.lineOrder
+      }))
+    }
+
     return {
       success: true,
       data: {
-        transaction: {
-          ...accountingEntry,
-          line_items: createdLineItems
-        }
+        transaction
       }
     }
 
@@ -448,6 +385,7 @@ export async function createAccountingEntry(
 
 /**
  * Get accounting entries with filtering and pagination
+ * Migrated to Convex
  */
 export async function getAccountingEntries(
   userId: string,
@@ -470,174 +408,101 @@ export async function getAccountingEntries(
     console.log(`[Accounting Entries Data Access] 🚀 Starting getAccountingEntries for user ${userId}`)
     console.log(`[Accounting Entries Data Access] 📋 Query params:`, JSON.stringify(params, null, 2))
 
-    console.log(`[Accounting Entries Data Access] 🔄 Getting user data...`)
-    const userData = await getUserData(userId)
-    console.log(`[Accounting Entries Data Access] 👤 User data resolved:`, {
-      id: userData.id,
-      business_id: userData.business_id,
-      email: userData.email,
-      home_currency: userData.home_currency
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
+    // Call Convex list query
+    const result = await client.query(api.functions.accountingEntries.list, {
+      businessId: params.business_id as Id<"businesses"> | undefined,
+      transactionType: params.transaction_type,
+      category: params.category,
+      startDate: params.date_from,
+      endDate: params.date_to,
+      limit: params.limit || 50,
+      cursor: params.cursor
     })
 
-    if (!userData.business_id) {
-      console.log(`[Accounting Entries Data Access] ❌ No business_id found for user ${userId}`)
-      return { success: false, error: 'No business context found' }
-    }
-
-    console.log(`[Accounting Entries Data Access] 🔗 Creating business context Supabase client...`)
-    const supabase = await createBusinessContextSupabaseClient(userId)
-    console.log(`[Accounting Entries Data Access] ✅ Supabase client created successfully`)
-
-    // DIAGNOSTIC: Check if ANY data exists for this business_id
-    console.log(`[Accounting Entries Data Access] 🔍 DIAGNOSTIC: Checking if ANY entries exist for business_id: ${userData.business_id}`)
-    const { count: totalEntriesForBusiness, error: diagError } = await supabase
-      .from('accounting_entries')
-      .select('*', { count: 'exact', head: true })
-      .eq('business_id', userData.business_id)
-
-    if (diagError) {
-      console.error('[Accounting Entries Data Access] ❌ DIAGNOSTIC: Failed to check entries count:', diagError)
-    } else {
-      console.log(`[Accounting Entries Data Access] 📊 DIAGNOSTIC: Found ${totalEntriesForBusiness} total entries for business_id: ${userData.business_id}`)
-
-      // Also check deleted entries
-      const { count: deletedEntries } = await supabase
-        .from('accounting_entries')
-        .select('*', { count: 'exact', head: true })
-        .eq('business_id', userData.business_id)
-        .not('deleted_at', 'is', null)
-
-      console.log(`[Accounting Entries Data Access] 📊 DIAGNOSTIC: Found ${deletedEntries} soft-deleted entries for business_id: ${userData.business_id}`)
-      console.log(`[Accounting Entries Data Access] 📊 DIAGNOSTIC: Active entries (non-deleted): ${(totalEntriesForBusiness || 0) - (deletedEntries || 0)}`)
-    }
-
-    let query = supabase
-      .from('accounting_entries')
-      .select(`
-        *,
-        line_items!left (*)
-      `)
-      .eq('business_id', userData.business_id)
-      .is('deleted_at', null)
-
-    // Apply filters
-    if (params.transaction_type) {
-      query = query.eq('transaction_type', params.transaction_type)
-    }
-
-    if (params.category) {
-      query = query.eq('category', params.category)
-    }
-
-    if (params.date_from) {
-      query = query.gte('transaction_date', params.date_from)
-    }
-
-    if (params.date_to) {
-      query = query.lte('transaction_date', params.date_to)
-    }
-
-    if (params.search) {
-      // Sanitize search input to prevent SQL injection
-      const sanitizedSearch = params.search.replace(/[%_]/g, '\\$&').replace(/[^\w\s-]/g, '')
-      if (sanitizedSearch.trim()) {
-        query = query.or(`description.ilike.%${sanitizedSearch}%,vendor_name.ilike.%${sanitizedSearch}%,reference_number.ilike.%${sanitizedSearch}%`)
-      }
-    }
-
-    // Apply sorting with whitelist validation to prevent SQL injection
-    const validSortColumns = ['transaction_date', 'original_amount', 'description', 'vendor_name', 'category', 'created_at']
-    let sortColumn = 'transaction_date' // Safe default
-
-    if (params.sort_by === 'amount') {
-      sortColumn = 'original_amount'
-    } else if (params.sort_by === 'date') {
-      sortColumn = 'transaction_date'
-    } else if (params.sort_by && validSortColumns.includes(params.sort_by)) {
-      sortColumn = params.sort_by
-    }
-
-    const sortOrder = params.sort_order === 'asc' ? 'asc' : 'desc' // Safe default
-    query = query.order(sortColumn, { ascending: sortOrder === 'asc' })
-
-    // Apply pagination
-    const offset = (params.page! - 1) * params.limit!
-    query = query.range(offset, offset + params.limit! - 1)
-
-    console.log(`[Accounting Entries Data Access] 📍 Final query filters applied:`)
-    console.log(`[Accounting Entries Data Access] - business_id: ${userData.business_id}`)
-    console.log(`[Accounting Entries Data Access] - deleted_at: null`)
-    console.log(`[Accounting Entries Data Access] - pagination: offset=${offset}, limit=${params.limit}`)
-    console.log(`[Accounting Entries Data Access] - sort: ${params.sort_by || 'transaction_date'} ${params.sort_order || 'desc'}`)
-    if (params.transaction_type) console.log(`[Accounting Entries Data Access] - transaction_type: ${params.transaction_type}`)
-    if (params.category) console.log(`[Accounting Entries Data Access] - category: ${params.category}`)
-    if (params.search) console.log(`[Accounting Entries Data Access] - search: ${params.search}`)
-
-    console.log(`[Accounting Entries Data Access] 🔍 Executing main query...`)
-    const { data: accountingEntries, error } = await query
-
-    if (error) {
-      console.error('[Accounting Entries Data Access] ❌ Database query failed:', error)
-      console.error('[Accounting Entries Data Access] ❌ Error details:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      })
-      return { success: false, error: 'Failed to fetch accounting entries' }
-    }
-
-    console.log(`[Accounting Entries Data Access] 📊 Main query result:`, {
-      entriesReturned: accountingEntries?.length || 0,
-      firstEntryId: accountingEntries?.[0]?.id || 'N/A',
-      lastEntryId: accountingEntries?.[accountingEntries?.length - 1]?.id || 'N/A'
+    // DEBUG: Log raw entries to verify soft-delete filtering
+    console.log(`[Accounting Entries Data Access] 🔍 DEBUG: Raw Convex result:`, {
+      totalEntries: result.entries.length,
+      entriesWithDeletedAt: result.entries.filter((e: any) => e.deletedAt).length,
+      sampleEntries: result.entries.slice(0, 3).map((e: any) => ({
+        id: e._id,
+        deletedAt: e.deletedAt,
+        description: e.description?.substring(0, 30)
+      }))
     })
 
-    // Get total count with proper business filtering (excluding soft-deleted entries)
-    console.log(`[Accounting Entries Data Access] 🔢 Getting total count...`)
-    const { count: totalCount, error: countError } = await supabase
-      .from('accounting_entries')
-      .select('*', { count: 'exact', head: true })
-      .eq('business_id', userData.business_id)
-      .is('deleted_at', null)
-
-    if (countError) {
-      console.error('[Accounting Entries Data Access] ❌ Count query failed:', countError)
-    } else {
-      console.log(`[Accounting Entries Data Access] 🔢 Total count in database: ${totalCount}`)
-    }
-
-    const hasMore = offset + params.limit! < (totalCount || 0)
-
-    // Filter out soft-deleted line_items in post-processing
-    // (PostgREST doesn't support filtering on embedded resources via .or() with foreignTable)
-    const entriesWithFilteredLineItems = (accountingEntries || []).map(entry => ({
-      ...entry,
-      line_items: (entry.line_items || []).filter((item: { deleted_at?: string | null }) => !item.deleted_at)
+    // Map Convex entries to API response format
+    const transactions: AccountingEntry[] = result.entries.map((entry: any) => ({
+      id: entry._id,
+      user_id: entry.userId,
+      business_id: entry.businessId,
+      source_record_id: entry.sourceRecordId,
+      source_document_type: entry.sourceDocumentType,
+      transaction_type: entry.transactionType || '',
+      category: entry.category || '',
+      category_name: (entry as any).categoryName,
+      subcategory: (entry as any).subcategory,
+      description: entry.description || '',
+      reference_number: entry.referenceNumber,
+      original_currency: entry.originalCurrency || '',
+      original_amount: entry.originalAmount || 0,
+      home_currency: entry.homeCurrency || '',
+      home_currency_amount: entry.homeCurrencyAmount || 0,
+      exchange_rate: entry.exchangeRate || 1,
+      exchange_rate_date: entry.exchangeRateDate || '',
+      transaction_date: entry.transactionDate || '',
+      vendor_name: entry.vendorName,
+      created_by_method: entry.createdByMethod,
+      processing_metadata: entry.processingMetadata,
+      status: entry.status,
+      due_date: entry.dueDate,
+      payment_date: entry.paymentDate,
+      payment_method: entry.paymentMethod,
+      notes: entry.notes,
+      created_at: entry._creationTime ? new Date(entry._creationTime).toISOString() : new Date().toISOString(),
+      updated_at: entry.updatedAt ? new Date(entry.updatedAt).toISOString() : new Date().toISOString(),
+      deleted_at: entry.deletedAt ? new Date(entry.deletedAt).toISOString() : undefined,
+      line_items: (entry.lineItems || []).map((item: any) => ({
+        id: item._id,
+        accounting_entry_id: entry._id,
+        item_description: item.itemDescription,
+        item_code: item.itemCode,
+        quantity: item.quantity,
+        unit_measurement: item.unitMeasurement,
+        unit_price: item.unitPrice,
+        total_amount: item.totalAmount,
+        currency: item.currency,
+        tax_rate: item.taxRate,
+        tax_amount: item.taxAmount,
+        line_order: item.lineOrder
+      }))
     }))
 
-    const result = {
+    const page = params.page || 1
+    const limit = params.limit || 50
+    const total = result.totalCount || transactions.length
+    const totalPages = Math.ceil(total / limit)
+    const hasMore = !!result.nextCursor
+
+    console.log(`[Accounting Entries Data Access] ✅ Retrieved ${transactions.length} entries via Convex`)
+
+    return {
       success: true,
       data: {
-        transactions: entriesWithFilteredLineItems, // Keep "transactions" key for backwards compatibility
+        transactions,
         pagination: {
-          page: params.page!,
-          limit: params.limit!,
-          total: totalCount || 0,
+          page,
+          limit,
+          total,
           has_more: hasMore,
-          total_pages: Math.ceil((totalCount || 0) / params.limit!)
+          total_pages: totalPages
         }
       }
     }
-
-    console.log(`[Accounting Entries Data Access] ✅ Final result summary:`, {
-      success: result.success,
-      transactionsCount: result.data.transactions.length,
-      pagination: result.data.pagination,
-      businessId: userData.business_id
-    })
-
-    return result
 
   } catch (error) {
     console.error('[Accounting Entries Data Access] Unexpected error:', error)
@@ -647,6 +512,7 @@ export async function getAccountingEntries(
 
 /**
  * Get a single accounting entry by ID
+ * Migrated to Convex
  */
 export async function getAccountingEntryById(
   userId: string,
@@ -655,69 +521,74 @@ export async function getAccountingEntryById(
   try {
     console.log(`[Accounting Entries Data Access] Getting entry ${entryId} for user ${userId}`)
 
-    const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient(userId)
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Unauthorized' }
+    }
 
-    const { data: accountingEntry, error } = await supabase
-      .from('accounting_entries')
-      .select(`
-        *,
-        line_items!left (*)
-      `)
-      .eq('id', entryId)
-      .eq('business_id', userData.business_id)
-      .is('deleted_at', null)
-      .single()
+    // Call Convex getById query
+    const entry = await client.query(api.functions.accountingEntries.getById, {
+      id: entryId
+    })
 
-    if (error || !accountingEntry) {
-      console.error('[Accounting Entries Data Access] Entry not found or access denied:', error)
+    if (!entry) {
+      console.error('[Accounting Entries Data Access] Entry not found or access denied')
       return { success: false, error: 'Accounting entry not found or access denied' }
     }
 
-    // Fetch related expense claim separately (since FK is on expense_claims table)
-    const { data: expenseClaims, error: expenseClaimError } = await supabase
-      .from('expense_claims')
-      .select(`
-        id,
-        status,
-        business_purpose,
-        created_at
-      `)
-      .eq('accounting_entry_id', entryId)
-      .eq('business_id', userData.business_id)
-
-    // Attach expense claims to the accounting entry (should be at most one)
-    if (!expenseClaimError && expenseClaims && expenseClaims.length > 0) {
-      accountingEntry.expense_claims = expenseClaims
-    } else {
-      accountingEntry.expense_claims = []
+    // Map Convex entry to API response format
+    const transaction: AccountingEntry = {
+      id: entry._id,
+      user_id: entry.userId,
+      business_id: entry.businessId,
+      source_record_id: entry.sourceRecordId,
+      source_document_type: entry.sourceDocumentType,
+      transaction_type: entry.transactionType || '',
+      category: entry.category || '',
+      category_name: (entry as any).categoryName,
+      subcategory: (entry as any).subcategory,
+      description: entry.description || '',
+      reference_number: entry.referenceNumber,
+      original_currency: entry.originalCurrency || '',
+      original_amount: entry.originalAmount || 0,
+      home_currency: entry.homeCurrency || '',
+      home_currency_amount: entry.homeCurrencyAmount || 0,
+      exchange_rate: entry.exchangeRate || 1,
+      exchange_rate_date: entry.exchangeRateDate || '',
+      transaction_date: entry.transactionDate || '',
+      vendor_name: entry.vendorName,
+      created_by_method: entry.createdByMethod,
+      processing_metadata: entry.processingMetadata,
+      status: entry.status,
+      due_date: entry.dueDate,
+      payment_date: entry.paymentDate,
+      payment_method: entry.paymentMethod,
+      notes: entry.notes,
+      created_at: entry._creationTime ? new Date(entry._creationTime).toISOString() : new Date().toISOString(),
+      updated_at: entry.updatedAt ? new Date(entry.updatedAt).toISOString() : new Date().toISOString(),
+      deleted_at: entry.deletedAt ? new Date(entry.deletedAt).toISOString() : undefined,
+      line_items: (entry.lineItems || []).map((item: any) => ({
+        id: item._id,
+        accounting_entry_id: entry._id,
+        item_description: item.itemDescription,
+        item_code: item.itemCode,
+        quantity: item.quantity,
+        unit_measurement: item.unitMeasurement,
+        unit_price: item.unitPrice,
+        total_amount: item.totalAmount,
+        currency: item.currency,
+        tax_rate: item.taxRate,
+        tax_amount: item.taxAmount,
+        line_order: item.lineOrder
+      }))
     }
 
-    // Filter out soft-deleted line_items in post-processing
-    if (accountingEntry.line_items) {
-      accountingEntry.line_items = accountingEntry.line_items.filter(
-        (item: { deleted_at?: string | null }) => !item.deleted_at
-      )
-    }
-
-    // Resolve category name using dynamic business categories
-    if (userData.business_id && accountingEntry.transaction_type && accountingEntry.category) {
-      try {
-        const categoryData = await fetchDynamicCategories(supabase, userData.business_id, accountingEntry.transaction_type)
-        const categoryIndex = categoryData.codes.indexOf(accountingEntry.category)
-        if (categoryIndex !== -1 && categoryData.names[categoryIndex]) {
-          accountingEntry.category_name = categoryData.names[categoryIndex]
-        }
-      } catch (error) {
-        console.error('[Accounting Entries Data Access] Failed to resolve category name:', error)
-        // Continue without category name resolution
-      }
-    }
+    console.log(`[Accounting Entries Data Access] ✅ Retrieved entry ${entryId} via Convex`)
 
     return {
       success: true,
       data: {
-        transaction: accountingEntry
+        transaction
       }
     }
 
@@ -729,6 +600,7 @@ export async function getAccountingEntryById(
 
 /**
  * Update an accounting entry
+ * Migrated to Convex
  */
 export async function updateAccountingEntry(
   userId: string,
@@ -738,138 +610,107 @@ export async function updateAccountingEntry(
   try {
     console.log(`[Accounting Entries Data Access] Updating entry ${entryId} for user ${userId}`)
 
-    const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient(userId)
-
-    // First verify the entry exists and user has access to it
-    const { data: existingEntry, error: fetchError } = await supabase
-      .from('accounting_entries')
-      .select('id, user_id, transaction_type, business_id')
-      .eq('id', entryId)
-      .eq('business_id', userData.business_id)
-      .is('deleted_at', null)
-      .single()
-
-    if (fetchError || !existingEntry) {
-      return { success: false, error: 'Accounting entry not found or access denied' }
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Unauthorized' }
     }
 
-    // Prepare update data (filter out undefined/null values)
-    const updateData: any = {}
-
+    // Prepare update data for Convex (camelCase)
+    const updateData: Record<string, any> = {}
     if (updates.category !== undefined) updateData.category = updates.category
     if (updates.subcategory !== undefined) updateData.subcategory = updates.subcategory
     if (updates.description !== undefined) updateData.description = updates.description
-    if (updates.vendor_name !== undefined) updateData.vendor_name = updates.vendor_name
-    if (updates.reference_number !== undefined) updateData.reference_number = updates.reference_number
-    if (updates.transaction_date !== undefined) updateData.transaction_date = updates.transaction_date
-    if (updates.original_amount !== undefined) updateData.original_amount = updates.original_amount
-    if (updates.original_currency !== undefined) updateData.original_currency = updates.original_currency
+    if (updates.vendor_name !== undefined) updateData.vendorName = updates.vendor_name
+    if (updates.reference_number !== undefined) updateData.referenceNumber = updates.reference_number
+    if (updates.transaction_date !== undefined) updateData.transactionDate = updates.transaction_date
+    if (updates.original_amount !== undefined) updateData.originalAmount = updates.original_amount
+    if (updates.original_currency !== undefined) updateData.originalCurrency = updates.original_currency
     if (updates.status !== undefined) updateData.status = updates.status
 
-    // Update the entry
-    const { data: updatedEntry, error: updateError } = await supabase
-      .from('accounting_entries')
-      .update(updateData)
-      .eq('id', entryId)
-      .eq('business_id', userData.business_id)
-      .select()
-      .single()
-
-    if (updateError) {
-      console.error('[Accounting Entries Data Access] Failed to update entry:', updateError)
-      return { success: false, error: 'Failed to update accounting entry' }
-    }
-
-    // Handle line items updates if provided
-    let updatedLineItems: LineItem[] = []
-
+    // Map line items to Convex format if provided
     if (updates.line_items !== undefined) {
-      console.log(`[Accounting Entries Data Access] Processing ${updates.line_items.length} line item updates for entry ${entryId}`)
-
-      // First, delete all existing line items for this entry (soft delete approach)
-      await supabase
-        .from('line_items')
-        .delete()
-        .eq('accounting_entry_id', entryId)
-
-      // Create new line items from the updated list
-      for (let i = 0; i < updates.line_items.length; i++) {
-        const lineItem = updates.line_items[i]
-        const lineTotal = lineItem.quantity * lineItem.unit_price
-
-        // Validate line item data before insertion
-        if (!lineItem.item_description || !lineItem.quantity || !lineItem.unit_price) {
-          console.error('[Accounting Entries Data Access] Invalid line item data in update:', {
-            index: i,
-            item_description: lineItem.item_description,
-            quantity: lineItem.quantity,
-            unit_price: lineItem.unit_price,
-            issue: !lineItem.item_description ? 'missing item_description' :
-                   !lineItem.quantity ? 'missing quantity' : 'missing unit_price'
-          })
-          continue // Skip invalid line items
-        }
-
-        console.log(`[Accounting Entries Data Access] Creating updated line item ${i + 1}:`, {
-          item_description: lineItem.item_description,
-          item_code: lineItem.item_code,
-          quantity: lineItem.quantity,
-          unit_price: lineItem.unit_price,
-          total_amount: lineTotal
-        })
-
-        const { data: createdLineItem, error: lineItemError } = await supabase
-          .from('line_items')
-          .insert({
-            accounting_entry_id: entryId,
-            item_description: lineItem.item_description,
-            item_code: lineItem.item_code || null,
-            quantity: lineItem.quantity,
-            unit_measurement: lineItem.unit_measurement || null,
-            unit_price: lineItem.unit_price,
-            total_amount: lineTotal,
-            currency: updatedEntry.original_currency,
-            tax_rate: lineItem.tax_rate || 0,
-            tax_amount: lineItem.tax_rate ? lineTotal * (lineItem.tax_rate / 100) : 0,
-            line_order: i + 1
-          })
-          .select()
-          .single()
-
-        if (lineItemError) {
-          console.error('[Accounting Entries Data Access] Failed to create updated line item:', lineItemError)
-          // Continue creating other line items rather than failing the entire update
-        } else {
-          console.log('[Accounting Entries Data Access] ✅ Successfully created updated line item:', {
-            id: createdLineItem.id,
-            description: createdLineItem.item_description,
-            total_amount: createdLineItem.total_amount
-          })
-          updatedLineItems.push(createdLineItem)
-        }
-      }
-
-      console.log(`[Accounting Entries Data Access] Updated entry ${entryId} with ${updatedLineItems.length} line items`)
-    } else {
-      // If no line items update requested, fetch existing line items
-      const { data: existingLineItems } = await supabase
-        .from('line_items')
-        .select('*')
-        .eq('accounting_entry_id', entryId)
-        .is('deleted_at', null)
-        .order('line_order')
-
-      updatedLineItems = existingLineItems || []
+      updateData.lineItems = updates.line_items.map((item, index) => ({
+        itemDescription: item.item_description,
+        itemCode: item.item_code,
+        quantity: item.quantity,
+        unitMeasurement: item.unit_measurement,
+        unitPrice: item.unit_price,
+        totalAmount: item.quantity * item.unit_price,
+        currency: item.currency || updates.original_currency,
+        taxRate: item.tax_rate || 0,
+        taxAmount: item.tax_rate ? (item.quantity * item.unit_price) * (item.tax_rate / 100) : 0,
+        lineOrder: index + 1
+      }))
     }
+
+    // Call Convex update mutation
+    const entryIdAsConvex = await client.mutation(api.functions.accountingEntries.update, {
+      id: entryId,
+      ...updateData
+    })
+
+    // Fetch updated entry to return
+    const entry = await client.query(api.functions.accountingEntries.getById, {
+      id: entryId
+    })
+
+    if (!entry) {
+      return { success: false, error: 'Failed to retrieve updated entry' }
+    }
+
+    // Map Convex entry to API response format
+    const transaction: AccountingEntry = {
+      id: entry._id,
+      user_id: entry.userId,
+      business_id: entry.businessId,
+      source_record_id: entry.sourceRecordId,
+      source_document_type: entry.sourceDocumentType,
+      transaction_type: entry.transactionType || '',
+      category: entry.category || '',
+      category_name: (entry as any).categoryName,
+      subcategory: (entry as any).subcategory,
+      description: entry.description || '',
+      reference_number: entry.referenceNumber,
+      original_currency: entry.originalCurrency || '',
+      original_amount: entry.originalAmount || 0,
+      home_currency: entry.homeCurrency || '',
+      home_currency_amount: entry.homeCurrencyAmount || 0,
+      exchange_rate: entry.exchangeRate || 1,
+      exchange_rate_date: entry.exchangeRateDate || '',
+      transaction_date: entry.transactionDate || '',
+      vendor_name: entry.vendorName,
+      created_by_method: entry.createdByMethod,
+      processing_metadata: entry.processingMetadata,
+      status: entry.status,
+      due_date: entry.dueDate,
+      payment_date: entry.paymentDate,
+      payment_method: entry.paymentMethod,
+      notes: entry.notes,
+      created_at: entry._creationTime ? new Date(entry._creationTime).toISOString() : new Date().toISOString(),
+      updated_at: entry.updatedAt ? new Date(entry.updatedAt).toISOString() : new Date().toISOString(),
+      deleted_at: entry.deletedAt ? new Date(entry.deletedAt).toISOString() : undefined,
+      line_items: (entry.lineItems || []).map((item: any) => ({
+        id: item._id,
+        accounting_entry_id: entry._id,
+        item_description: item.itemDescription,
+        item_code: item.itemCode,
+        quantity: item.quantity,
+        unit_measurement: item.unitMeasurement,
+        unit_price: item.unitPrice,
+        total_amount: item.totalAmount,
+        currency: item.currency,
+        tax_rate: item.taxRate,
+        tax_amount: item.taxAmount,
+        line_order: item.lineOrder
+      }))
+    }
+
+    console.log(`[Accounting Entries Data Access] ✅ Updated entry ${entryId} via Convex`)
 
     return {
       success: true,
       data: {
-        transaction: {
-          ...updatedEntry,
-          line_items: updatedLineItems
-        }
+        transaction
       }
     }
 
@@ -881,6 +722,7 @@ export async function updateAccountingEntry(
 
 /**
  * Delete an accounting entry (soft delete)
+ * Migrated to Convex
  */
 export async function deleteAccountingEntry(
   userId: string,
@@ -889,21 +731,17 @@ export async function deleteAccountingEntry(
   try {
     console.log(`[Accounting Entries Data Access] Deleting entry ${entryId} for user ${userId}`)
 
-    const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient(userId)
-
-    // Soft delete by setting deleted_at timestamp
-    const { error } = await supabase
-      .from('accounting_entries')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', entryId)
-      .eq('business_id', userData.business_id)
-      .is('deleted_at', null)
-
-    if (error) {
-      console.error('[Accounting Entries Data Access] Failed to delete entry:', error)
-      return { success: false, error: 'Failed to delete accounting entry' }
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Unauthorized' }
     }
+
+    // Call Convex softDelete mutation
+    await client.mutation(api.functions.accountingEntries.softDelete, {
+      id: entryId
+    })
+
+    console.log(`[Accounting Entries Data Access] ✅ Soft-deleted entry ${entryId} via Convex`)
 
     return { success: true }
 
@@ -915,6 +753,7 @@ export async function deleteAccountingEntry(
 
 /**
  * Update accounting entry category
+ * Migrated to Convex
  */
 export async function updateAccountingEntryCategory(
   userId: string,
@@ -925,33 +764,80 @@ export async function updateAccountingEntryCategory(
   try {
     console.log(`[Accounting Entries Data Access] Updating category for entry ${entryId}`)
 
-    const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient(userId)
-
-    const { data: updatedEntry, error } = await supabase
-      .from('accounting_entries')
-      .update({
-        category,
-        subcategory: subcategory || null
-      })
-      .eq('id', entryId)
-      .eq('business_id', userData.business_id)
-      .is('deleted_at', null)
-      .select(`
-        *,
-        line_items!left (*)
-      `)
-      .single()
-
-    if (error) {
-      console.error('[Accounting Entries Data Access] Failed to update category:', error)
-      return { success: false, error: 'Failed to update category' }
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Unauthorized' }
     }
+
+    // Call Convex update mutation with category data
+    await client.mutation(api.functions.accountingEntries.update, {
+      id: entryId,
+      category,
+      subcategory: subcategory || undefined
+    })
+
+    // Fetch updated entry
+    const entry = await client.query(api.functions.accountingEntries.getById, {
+      id: entryId
+    })
+
+    if (!entry) {
+      return { success: false, error: 'Failed to retrieve updated entry' }
+    }
+
+    // Map Convex entry to API response format
+    const transaction: AccountingEntry = {
+      id: entry._id,
+      user_id: entry.userId,
+      business_id: entry.businessId,
+      source_record_id: entry.sourceRecordId,
+      source_document_type: entry.sourceDocumentType,
+      transaction_type: entry.transactionType || '',
+      category: entry.category || '',
+      category_name: (entry as any).categoryName,
+      subcategory: (entry as any).subcategory,
+      description: entry.description || '',
+      reference_number: entry.referenceNumber,
+      original_currency: entry.originalCurrency || '',
+      original_amount: entry.originalAmount || 0,
+      home_currency: entry.homeCurrency || '',
+      home_currency_amount: entry.homeCurrencyAmount || 0,
+      exchange_rate: entry.exchangeRate || 1,
+      exchange_rate_date: entry.exchangeRateDate || '',
+      transaction_date: entry.transactionDate || '',
+      vendor_name: entry.vendorName,
+      created_by_method: entry.createdByMethod,
+      processing_metadata: entry.processingMetadata,
+      status: entry.status,
+      due_date: entry.dueDate,
+      payment_date: entry.paymentDate,
+      payment_method: entry.paymentMethod,
+      notes: entry.notes,
+      created_at: entry._creationTime ? new Date(entry._creationTime).toISOString() : new Date().toISOString(),
+      updated_at: entry.updatedAt ? new Date(entry.updatedAt).toISOString() : new Date().toISOString(),
+      deleted_at: entry.deletedAt ? new Date(entry.deletedAt).toISOString() : undefined,
+      line_items: (entry.lineItems || []).map((item: any) => ({
+        id: item._id,
+        accounting_entry_id: entry._id,
+        item_description: item.itemDescription,
+        item_code: item.itemCode,
+        quantity: item.quantity,
+        unit_measurement: item.unitMeasurement,
+        unit_price: item.unitPrice,
+        total_amount: item.totalAmount,
+        currency: item.currency,
+        tax_rate: item.taxRate,
+        tax_amount: item.taxAmount,
+        line_order: item.lineOrder
+      }))
+    }
+
+    console.log(`[Accounting Entries Data Access] ✅ Updated category for entry ${entryId} via Convex`)
 
     return {
       success: true,
       data: {
-        transaction: updatedEntry
+        transaction
       }
     }
 
@@ -963,6 +849,7 @@ export async function updateAccountingEntryCategory(
 
 /**
  * Update accounting entry status
+ * Migrated to Convex
  */
 export async function updateAccountingEntryStatus(
   userId: string,
@@ -972,30 +859,79 @@ export async function updateAccountingEntryStatus(
   try {
     console.log(`[Accounting Entries Data Access] Updating status for entry ${entryId} to ${status}`)
 
-    const userData = await getUserData(userId)
-    const supabase = await createBusinessContextSupabaseClient(userId)
-
-    const { data: updatedEntry, error } = await supabase
-      .from('accounting_entries')
-      .update({ status })
-      .eq('id', entryId)
-      .eq('business_id', userData.business_id)
-      .is('deleted_at', null)
-      .select(`
-        *,
-        line_items!left (*)
-      `)
-      .single()
-
-    if (error) {
-      console.error('[Accounting Entries Data Access] Failed to update status:', error)
-      return { success: false, error: 'Failed to update status' }
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      return { success: false, error: 'Unauthorized' }
     }
+
+    // Call Convex updateStatus mutation
+    await client.mutation(api.functions.accountingEntries.updateStatus, {
+      id: entryId,
+      status: status as 'pending' | 'paid' | 'overdue' | 'cancelled' | 'disputed'
+    })
+
+    // Fetch updated entry
+    const entry = await client.query(api.functions.accountingEntries.getById, {
+      id: entryId
+    })
+
+    if (!entry) {
+      return { success: false, error: 'Failed to retrieve updated entry' }
+    }
+
+    // Map Convex entry to API response format
+    const transaction: AccountingEntry = {
+      id: entry._id,
+      user_id: entry.userId,
+      business_id: entry.businessId,
+      source_record_id: entry.sourceRecordId,
+      source_document_type: entry.sourceDocumentType,
+      transaction_type: entry.transactionType || '',
+      category: entry.category || '',
+      category_name: (entry as any).categoryName,
+      subcategory: (entry as any).subcategory,
+      description: entry.description || '',
+      reference_number: entry.referenceNumber,
+      original_currency: entry.originalCurrency || '',
+      original_amount: entry.originalAmount || 0,
+      home_currency: entry.homeCurrency || '',
+      home_currency_amount: entry.homeCurrencyAmount || 0,
+      exchange_rate: entry.exchangeRate || 1,
+      exchange_rate_date: entry.exchangeRateDate || '',
+      transaction_date: entry.transactionDate || '',
+      vendor_name: entry.vendorName,
+      created_by_method: entry.createdByMethod,
+      processing_metadata: entry.processingMetadata,
+      status: entry.status,
+      due_date: entry.dueDate,
+      payment_date: entry.paymentDate,
+      payment_method: entry.paymentMethod,
+      notes: entry.notes,
+      created_at: entry._creationTime ? new Date(entry._creationTime).toISOString() : new Date().toISOString(),
+      updated_at: entry.updatedAt ? new Date(entry.updatedAt).toISOString() : new Date().toISOString(),
+      deleted_at: entry.deletedAt ? new Date(entry.deletedAt).toISOString() : undefined,
+      line_items: (entry.lineItems || []).map((item: any) => ({
+        id: item._id,
+        accounting_entry_id: entry._id,
+        item_description: item.itemDescription,
+        item_code: item.itemCode,
+        quantity: item.quantity,
+        unit_measurement: item.unitMeasurement,
+        unit_price: item.unitPrice,
+        total_amount: item.totalAmount,
+        currency: item.currency,
+        tax_rate: item.taxRate,
+        tax_amount: item.taxAmount,
+        line_order: item.lineOrder
+      }))
+    }
+
+    console.log(`[Accounting Entries Data Access] ✅ Updated status for entry ${entryId} via Convex`)
 
     return {
       success: true,
       data: {
-        transaction: updatedEntry
+        transaction
       }
     }
 
