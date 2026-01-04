@@ -5,21 +5,38 @@
  * Implements signature verification and idempotency checking.
  *
  * @route POST /api/v1/billing/webhooks
+ *
+ * ✅ MIGRATED TO CONVEX (2025-01)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getStripe } from '@/lib/stripe/client'
-import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '@/convex/_generated/api'
 import Stripe from 'stripe'
 import {
-  handleCheckoutSessionCompleted,
-  handleSubscriptionCreated,
-  handleSubscriptionUpdated,
-  handleSubscriptionDeleted,
-  handleSubscriptionTrialWillEnd,
-  handleInvoicePaymentFailed,
-  handleInvoicePaymentSucceeded,
-} from '@/lib/stripe/webhook-handlers'
+  handleCheckoutSessionCompletedConvex,
+  handleSubscriptionCreatedConvex,
+  handleSubscriptionUpdatedConvex,
+  handleSubscriptionDeletedConvex,
+  handleInvoicePaymentFailedConvex,
+  handleInvoicePaymentSucceededConvex,
+} from '@/lib/stripe/webhook-handlers-convex'
+
+// ✅ MIGRATED: Lazy initialization for Convex HTTP client
+// Webhooks use HTTP client since they don't have user sessions
+let convexClient: ConvexHttpClient | null = null
+
+function getConvexClient() {
+  if (!convexClient) {
+    const url = process.env.NEXT_PUBLIC_CONVEX_URL
+    if (!url) {
+      throw new Error('NEXT_PUBLIC_CONVEX_URL not configured')
+    }
+    convexClient = new ConvexHttpClient(url)
+  }
+  return convexClient
+}
 
 // Events we handle
 const RELEVANT_EVENTS = new Set([
@@ -27,16 +44,12 @@ const RELEVANT_EVENTS = new Set([
   'customer.subscription.created',
   'customer.subscription.updated',
   'customer.subscription.deleted',
-  'customer.subscription.trial_will_end',
   'invoice.payment_failed',
   'invoice.payment_succeeded',
 ])
 
 export async function POST(request: NextRequest) {
   console.log('[Billing Webhook] Received webhook request')
-
-  // Get Supabase admin client (lazy-initialized to avoid build errors)
-  const supabaseAdmin = getSupabaseAdmin()
 
   try {
     // Get raw body for signature verification
@@ -81,85 +94,73 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Event type not handled' })
     }
 
-    // Idempotency check - prevent duplicate processing
-    const { data: existingEvent } = await supabaseAdmin
-      .from('stripe_events')
-      .select('event_id')
-      .eq('event_id', event.id)
-      .single()
+    // ✅ MIGRATED: Get Convex client (lazy initialized)
+    const convex = getConvexClient()
+
+    // ✅ MIGRATED: Idempotency check - prevent duplicate processing
+    const existingEvent = await convex.query(api.functions.stripeEvents.exists, {
+      stripeEventId: event.id,
+    })
 
     if (existingEvent) {
       console.log(`[Billing Webhook] Event already processed: ${event.id}`)
       return NextResponse.json({ success: true, message: 'Event already processed' })
     }
 
-    // Record event before processing (prevents race conditions)
-    const { error: insertError } = await supabaseAdmin
-      .from('stripe_events')
-      .insert({
-        event_id: event.id,
-        event_type: event.type,
+    // ✅ MIGRATED: Record event before processing (prevents race conditions)
+    try {
+      await convex.mutation(api.functions.stripeEvents.create, {
+        stripeEventId: event.id,
+        eventType: event.type,
+        payload: event.data.object,
       })
-
-    if (insertError) {
+    } catch (insertError) {
       // If insert fails due to duplicate, another worker got it first
-      if (insertError.code === '23505') {
+      const message = insertError instanceof Error ? insertError.message : 'Unknown error'
+      if (message.includes('duplicate') || message.includes('already exists')) {
         console.log(`[Billing Webhook] Event being processed by another worker: ${event.id}`)
         return NextResponse.json({ success: true, message: 'Event being processed' })
       }
-      console.error(`[Billing Webhook] Failed to record event: ${insertError.message}`)
+      console.error(`[Billing Webhook] Failed to record event: ${message}`)
       // Continue processing - idempotency is best effort
     }
 
-    // Process the event
+    // ✅ MIGRATED: Process the event using Convex handlers
     try {
       switch (event.type) {
         case 'checkout.session.completed':
-          await handleCheckoutSessionCompleted(
-            event.data.object as Stripe.Checkout.Session,
-            supabaseAdmin
+          await handleCheckoutSessionCompletedConvex(
+            event.data.object as Stripe.Checkout.Session
           )
           break
 
         case 'customer.subscription.created':
-          await handleSubscriptionCreated(
-            event.data.object as Stripe.Subscription,
-            supabaseAdmin
+          await handleSubscriptionCreatedConvex(
+            event.data.object as Stripe.Subscription
           )
           break
 
         case 'customer.subscription.updated':
-          await handleSubscriptionUpdated(
-            event.data.object as Stripe.Subscription,
-            supabaseAdmin
+          await handleSubscriptionUpdatedConvex(
+            event.data.object as Stripe.Subscription
           )
           break
 
         case 'customer.subscription.deleted':
-          await handleSubscriptionDeleted(
-            event.data.object as Stripe.Subscription,
-            supabaseAdmin
+          await handleSubscriptionDeletedConvex(
+            event.data.object as Stripe.Subscription
           )
           break
 
         case 'invoice.payment_failed':
-          await handleInvoicePaymentFailed(
-            event.data.object as Stripe.Invoice,
-            supabaseAdmin
+          await handleInvoicePaymentFailedConvex(
+            event.data.object as Stripe.Invoice
           )
           break
 
         case 'invoice.payment_succeeded':
-          await handleInvoicePaymentSucceeded(
-            event.data.object as Stripe.Invoice,
-            supabaseAdmin
-          )
-          break
-
-        case 'customer.subscription.trial_will_end':
-          await handleSubscriptionTrialWillEnd(
-            event.data.object as Stripe.Subscription,
-            supabaseAdmin
+          await handleInvoicePaymentSucceededConvex(
+            event.data.object as Stripe.Invoice
           )
           break
 
@@ -167,11 +168,26 @@ export async function POST(request: NextRequest) {
           console.log(`[Billing Webhook] Unhandled event type: ${event.type}`)
       }
 
+      // ✅ MIGRATED: Mark event as processed in Convex
+      await convex.mutation(api.functions.stripeEvents.markProcessed, {
+        stripeEventId: event.id,
+      })
+
       console.log(`[Billing Webhook] Successfully processed: ${event.type} (${event.id})`)
       return NextResponse.json({ success: true, message: 'Event processed' })
     } catch (handlerError) {
       const message = handlerError instanceof Error ? handlerError.message : 'Unknown error'
       console.error(`[Billing Webhook] Handler error for ${event.type}: ${message}`)
+
+      // ✅ MIGRATED: Mark event as failed in Convex
+      try {
+        await convex.mutation(api.functions.stripeEvents.markFailed, {
+          stripeEventId: event.id,
+          error: message,
+        })
+      } catch (markError) {
+        console.error('[Billing Webhook] Failed to mark event as failed:', markError)
+      }
 
       // Return 500 so Stripe retries the webhook
       return NextResponse.json(

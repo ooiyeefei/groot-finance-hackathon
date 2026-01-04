@@ -181,7 +181,7 @@ async function updateBusinessSubscriptionConvex(
   // Get plan details from subscription
   const priceId = subscription.items.data[0]?.price?.id
   const productId = subscription.items.data[0]?.price?.product as string
-  const planName = priceId ? getPlanFromPriceId(priceId) : 'free'
+  const planName = priceId ? await getPlanFromPriceId(priceId) : 'free'
 
   // Map Stripe subscription status to our status
   const subscriptionStatus = mapStripeStatus(subscription.status)
