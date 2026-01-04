@@ -171,6 +171,11 @@ export async function handleInvoicePaymentSucceededConvex(
 
 /**
  * Helper: Update business with subscription details
+ *
+ * Uses fallback logic:
+ * 1. Try to find business by stripeCustomerId
+ * 2. If not found, use business_id from subscription metadata (handles case where
+ *    checkout.session.completed webhook failed and stripeCustomerId isn't linked yet)
  */
 async function updateBusinessSubscriptionConvex(
   subscription: Stripe.Subscription
@@ -186,17 +191,44 @@ async function updateBusinessSubscriptionConvex(
   // Map Stripe subscription status to our status
   const subscriptionStatus = mapStripeStatus(subscription.status)
 
-  await convex.mutation(api.functions.businesses.updateSubscriptionFromWebhook, {
-    stripeCustomerId: customerId,
-    stripeSubscriptionId: subscription.id,
-    stripeProductId: productId || undefined,
-    planName,
-    subscriptionStatus,
-  })
+  // Try to update using stripeCustomerId first
+  try {
+    await convex.mutation(api.functions.businesses.updateSubscriptionFromWebhook, {
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: subscription.id,
+      stripeProductId: productId || undefined,
+      planName,
+      subscriptionStatus,
+    })
 
-  console.log(
-    `[Webhook Handler Convex] Updated business for customer ${customerId}: plan=${planName}, status=${subscriptionStatus}`
-  )
+    console.log(
+      `[Webhook Handler Convex] Updated business for customer ${customerId}: plan=${planName}, status=${subscriptionStatus}`
+    )
+    return
+  } catch (error) {
+    // If business not found by stripeCustomerId, try metadata fallback
+    const businessId = subscription.metadata?.business_id
+    if (!businessId) {
+      console.error(`[Webhook Handler Convex] No business found for customer ${customerId} and no business_id in metadata`)
+      throw error
+    }
+
+    console.log(`[Webhook Handler Convex] Business not found by customer ID, trying metadata business_id: ${businessId}`)
+
+    // Use the fallback mutation that accepts businessId and also links stripeCustomerId
+    await convex.mutation(api.functions.businesses.updateSubscriptionFromWebhookWithBusinessId, {
+      businessId,
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: subscription.id,
+      stripeProductId: productId || undefined,
+      planName,
+      subscriptionStatus,
+    })
+
+    console.log(
+      `[Webhook Handler Convex] Updated business ${businessId} (linked customer ${customerId}): plan=${planName}, status=${subscriptionStatus}`
+    )
+  }
 }
 
 /**

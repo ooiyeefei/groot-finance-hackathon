@@ -1563,6 +1563,42 @@ export const downgradeToFreeFromWebhook = mutation({
 });
 
 /**
+ * Update subscription details using businessId from metadata (fallback)
+ * Called when stripeCustomerId lookup fails (e.g., checkout webhook didn't process first)
+ * Also links the stripeCustomerId to the business for future lookups
+ */
+export const updateSubscriptionFromWebhookWithBusinessId = mutation({
+  args: {
+    businessId: v.string(),
+    stripeCustomerId: v.string(),
+    stripeSubscriptionId: v.string(),
+    stripeProductId: v.optional(v.string()),
+    planName: v.string(),
+    subscriptionStatus: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Find business by ID (supports both Convex and legacy UUIDs)
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+
+    if (!business) {
+      throw new Error(`Business not found: ${args.businessId}`);
+    }
+
+    // Update business with subscription details AND link stripeCustomerId
+    await ctx.db.patch(business._id, {
+      stripeCustomerId: args.stripeCustomerId,
+      stripeSubscriptionId: args.stripeSubscriptionId,
+      stripeProductId: args.stripeProductId,
+      planName: args.planName,
+      subscriptionStatus: args.subscriptionStatus,
+      updatedAt: Date.now(),
+    });
+
+    return business._id;
+  },
+});
+
+/**
  * Update subscription status (e.g., past_due, active)
  * Called from invoice.payment_failed and invoice.payment_succeeded webhooks
  */
