@@ -78,12 +78,17 @@ interface WebhookResponse {
 }
 
 /**
- * Validates the Sentry webhook token.
+ * Validates the Sentry webhook signature.
  *
- * Sentry sends a configurable token in the X-Sentry-Token header.
- * We validate this against our SENTRY_WEBHOOK_SECRET env var.
+ * Sentry Internal Integrations sign the request body using HMAC-SHA256
+ * with the Client Secret and send the signature in sentry-hook-signature header.
+ *
+ * Also supports legacy X-Sentry-Token header for manual testing.
  */
-function validateWebhookToken(request: NextRequest): boolean {
+async function validateWebhookSignature(
+  request: NextRequest,
+  body: string
+): Promise<boolean> {
   const secret = process.env.SENTRY_WEBHOOK_SECRET;
 
   if (!secret) {
@@ -93,14 +98,34 @@ function validateWebhookToken(request: NextRequest): boolean {
     return true; // Allow in development without secret
   }
 
-  const token = request.headers.get("X-Sentry-Token");
+  // Check for Sentry's HMAC signature (Internal Integrations)
+  const signature = request.headers.get("sentry-hook-signature");
+  if (signature) {
+    const crypto = await import("crypto");
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(body)
+      .digest("hex");
 
-  if (!token) {
-    console.warn("[Sentry Webhook] Missing X-Sentry-Token header");
-    return false;
+    const isValid = signature === expectedSignature;
+    if (!isValid) {
+      console.warn("[Sentry Webhook] Invalid sentry-hook-signature");
+    }
+    return isValid;
   }
 
-  return token === secret;
+  // Fallback: Check for legacy X-Sentry-Token (manual testing)
+  const token = request.headers.get("X-Sentry-Token");
+  if (token) {
+    const isValid = token === secret;
+    if (!isValid) {
+      console.warn("[Sentry Webhook] Invalid X-Sentry-Token");
+    }
+    return isValid;
+  }
+
+  console.warn("[Sentry Webhook] Missing authentication header");
+  return false;
 }
 
 /**
@@ -194,18 +219,21 @@ export async function POST(
   request: NextRequest
 ): Promise<NextResponse<WebhookResponse | { error: string; code?: string }>> {
   try {
-    // 1. Validate webhook token
-    if (!validateWebhookToken(request)) {
+    // 1. Read body as text for signature validation
+    const body = await request.text();
+
+    // 2. Validate webhook signature
+    if (!(await validateWebhookSignature(request, body))) {
       return NextResponse.json(
-        { error: "Invalid or missing webhook token", code: "INVALID_TOKEN" },
+        { error: "Invalid or missing webhook signature", code: "INVALID_SIGNATURE" },
         { status: 401 }
       );
     }
 
-    // 2. Parse payload
+    // 3. Parse payload
     let payload: SentryWebhookPayload;
     try {
-      payload = await request.json();
+      payload = JSON.parse(body);
     } catch {
       return NextResponse.json(
         { error: "Invalid JSON payload", code: "INVALID_PAYLOAD" },
