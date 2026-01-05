@@ -147,17 +147,26 @@ async function deleteAlertRule(
  */
 
 /**
- * Alert rule configurations for FinanSEAL
- * Note: Webhook actions are configured separately via Sentry Dashboard
+ * Alert rules for FinanSEAL
+ *
+ * Custom alert rules for comprehensive error monitoring:
+ * - New Issue: Triggers when ANY new error is first seen (catches all new bugs)
+ * - Regression: When resolved issues come back (bugs returning)
+ * - High Volume: When error rate spikes (>100/hr)
+ *
+ * Note: Sentry's default "high priority issues" rule uses AI-based priority detection
+ * which may not catch all errors. The "New Issue" rule ensures no error goes unnoticed.
+ *
+ * Webhook actions must be configured manually in Sentry Dashboard after creation.
  */
 const ALERT_RULES: AlertRuleConfig[] = [
   {
-    name: "[FinanSEAL] Every Error Alert",
+    name: "[FinanSEAL] New Issue Alert",
     actionMatch: "any",
     filterMatch: "all",
     conditions: [
       {
-        id: "sentry.rules.conditions.every_event.EveryEventCondition",
+        id: "sentry.rules.conditions.first_seen_event.FirstSeenEventCondition",
       },
     ],
     actions: [
@@ -167,39 +176,7 @@ const ALERT_RULES: AlertRuleConfig[] = [
         fallthroughType: "ActiveMembers",
       },
     ],
-    filters: [
-      {
-        id: "sentry.rules.filters.level.LevelFilter",
-        match: "gte",
-        level: "40", // ERROR level and above
-      },
-    ],
-    frequency: 5, // Minimum 5 minutes - alerts won't re-fire within this window
-  },
-  {
-    name: "[FinanSEAL] Critical/Fatal Alert - Immediate",
-    actionMatch: "any",
-    filterMatch: "all",
-    conditions: [
-      {
-        id: "sentry.rules.conditions.every_event.EveryEventCondition",
-      },
-    ],
-    actions: [
-      {
-        id: "sentry.mail.actions.NotifyEmailAction",
-        targetType: "IssueOwners",
-        fallthroughType: "ActiveMembers",
-      },
-    ],
-    filters: [
-      {
-        id: "sentry.rules.filters.level.LevelFilter",
-        match: "gte",
-        level: "50", // FATAL level
-      },
-    ],
-    frequency: 5, // Minimum 5 minutes (Sentry API requirement)
+    frequency: 30, // Don't re-trigger within 30 minutes (per issue)
   },
   {
     name: "[FinanSEAL] Regression Alert",
@@ -307,10 +284,10 @@ async function main() {
 
     console.log("\n✅ Alert rules setup complete!");
     console.log("\n📝 Summary of created rules:");
-    console.log("   1. New Issue Alert - Notifies on first occurrence of new errors");
-    console.log("   2. Critical/Fatal Alert - Immediate notification for fatal errors");
-    console.log("   3. Regression Alert - Notifies when resolved issues recur");
-    console.log("   4. High Volume Alert - Triggers when error rate spikes (>100/hr)");
+    console.log("   1. New Issue Alert - Notifies when ANY new error is first seen");
+    console.log("   2. Regression Alert - Notifies when resolved issues recur");
+    console.log("   3. High Volume Alert - Triggers when error rate spikes (>100/hr)");
+    console.log("\n📌 Note: New Issue Alert catches all errors that Sentry's AI-based 'high priority' rule might miss");
 
     // Show webhook configuration instructions
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://your-domain.com";
