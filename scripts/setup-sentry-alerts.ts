@@ -112,9 +112,26 @@ async function deleteAlertRule(
   project: string,
   ruleId: string
 ): Promise<void> {
-  await sentryRequest(`/projects/${org}/${project}/rules/${ruleId}/`, {
-    method: "DELETE",
-  });
+  const apiKey = process.env.SENTRY_API_KEY;
+  if (!apiKey) {
+    throw new Error("SENTRY_API_KEY environment variable is required");
+  }
+
+  const response = await fetch(
+    `https://sentry.io/api/0/projects/${org}/${project}/rules/${ruleId}/`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to delete rule ${ruleId}: ${errorText}`);
+  }
+  // DELETE returns empty body, don't parse JSON
 }
 
 /**
@@ -135,12 +152,12 @@ async function deleteAlertRule(
  */
 const ALERT_RULES: AlertRuleConfig[] = [
   {
-    name: "[FinanSEAL] New Issue Alert - All Errors",
+    name: "[FinanSEAL] Every Error Alert",
     actionMatch: "any",
     filterMatch: "all",
     conditions: [
       {
-        id: "sentry.rules.conditions.first_seen_event.FirstSeenEventCondition",
+        id: "sentry.rules.conditions.every_event.EveryEventCondition",
       },
     ],
     actions: [
@@ -157,7 +174,7 @@ const ALERT_RULES: AlertRuleConfig[] = [
         level: "40", // ERROR level and above
       },
     ],
-    frequency: 5, // Minimum 5 minutes
+    frequency: 5, // Minimum 5 minutes - alerts won't re-fire within this window
   },
   {
     name: "[FinanSEAL] Critical/Fatal Alert - Immediate",
