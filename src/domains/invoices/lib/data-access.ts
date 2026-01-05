@@ -1,7 +1,7 @@
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { auth } from '@clerk/nextjs/server'
-import { tasks } from "@trigger.dev/sdk/v3"
 import { randomUUID } from 'crypto'
+import { invokeDocumentProcessor } from '@/lib/lambda-invoker'
 import { generateStoragePath, type DocumentType } from '@/lib/storage-paths'
 import {
   validateSearchParameter,
@@ -450,18 +450,8 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
       throw new Error(`Storage upload failed: ${uploadResult.error}`)
     }
 
-    // Trigger PDF conversion if needed
-    if (file.type === 'application/pdf') {
-      try {
-        await tasks.trigger("convert-pdf-to-image", {
-          documentId: convexInvoiceId,
-          pdfStoragePath: storagePath,
-          documentDomain: 'invoices'
-        })
-      } catch (conversionError) {
-        console.error('[PDF Conversion] Failed to trigger conversion:', conversionError)
-      }
-    }
+    // Note: PDF conversion is handled by Lambda during processDocument()
+    // No eager conversion on upload - saves resources until processing is triggered
 
     // Fetch the created invoice to return
     console.log(`[Invoice] Fetching created invoice: ${convexInvoiceId}`)
@@ -581,7 +571,7 @@ export async function deleteDocument(documentId: string): Promise<boolean> {
 
 /**
  * Process/reprocess a document with OCR
- * Database: Convex, Tasks: Trigger.dev
+ * Database: Convex, Tasks: AWS Lambda Durable Functions
  */
 export async function processDocument(documentId: string): Promise<{ jobId: string }> {
   const { client, userId } = await getAuthenticatedConvex()
@@ -617,26 +607,8 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
   })
 
   try {
-    // Check file type to determine appropriate processing workflow
-    if (document.file_type === 'application/pdf') {
-      // PDF files need conversion first
-      const handle = await tasks.trigger("convert-pdf-to-image", {
-        documentId: document.id,
-        pdfStoragePath: document.storage_path!,
-        documentDomain: 'invoices'
-      })
-
-      return { jobId: handle.id }
-
-    } else {
-      // Image files go through classification first
-      const handle = await tasks.trigger("classify-document", {
-        documentId: document.id,
-        documentDomain: 'invoices'
-      })
-
-      return { jobId: handle.id }
-    }
+    // Use AWS Lambda Durable Functions for document processing
+    return await processDocumentWithLambda(document)
 
   } catch (error) {
     console.error('[Document] Failed to trigger processing:', error)
@@ -654,3 +626,29 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
     throw new Error('Failed to start document processing')
   }
 }
+
+/**
+ * Process document using AWS Lambda Durable Functions
+ * Single Lambda handles all steps with automatic checkpointing
+ */
+async function processDocumentWithLambda(document: Invoice): Promise<{ jobId: string }> {
+  console.log(`[Document] Processing with Lambda: ${document.id}`)
+
+  // Determine file type
+  const fileType: 'pdf' | 'image' = document.file_type === 'application/pdf' ? 'pdf' : 'image'
+
+  // Invoke Lambda with fire-and-forget (async)
+  const result = await invokeDocumentProcessor({
+    documentId: document.id,
+    storagePath: document.storage_path,
+    documentType: 'invoice',
+    fileType,
+    // Generate idempotency key to prevent duplicate processing
+    idempotencyKey: `invoice-${document.id}-${Date.now()}`,
+  })
+
+  // Map Lambda executionId to jobId for API compatibility
+  console.log(`[Document] Lambda invoked: ${result.executionId}`)
+  return { jobId: result.executionId }
+}
+

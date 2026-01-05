@@ -6,7 +6,9 @@
 - S3 Bucket: `finanseal-bucket`
 - Region: `us-west-2`
 
-## Step 1: Create IAM Policy
+## Step 1: Create IAM Policies
+
+### Policy 1: S3 Access (`FinansealS3Access`)
 
 1. Go to **IAM → Policies → Create policy**
 2. Click **JSON** tab and paste:
@@ -39,6 +41,34 @@
 
 3. Click **Next**
 4. Name: `FinansealS3Access`
+5. Click **Create policy**
+
+### Policy 2: Lambda Invoke (`FinansealLambdaInvoke`)
+
+1. Go to **IAM → Policies → Create policy**
+2. Click **JSON** tab and paste:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "FinansealDocumentProcessorInvoke",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:InvokeFunction"
+      ],
+      "Resource": [
+        "arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor",
+        "arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor:*"
+      ]
+    }
+  ]
+}
+```
+
+3. Click **Next**
+4. Name: `FinansealLambdaInvoke`
 5. Click **Create policy**
 
 ## Step 2: Create IAM User (for Trigger.dev & Development)
@@ -94,7 +124,9 @@ If you have Vercel Pro and want zero-credential deployment:
 3. Identity provider: `oidc.vercel.com`
 4. Audience: `YOUR_VERCEL_TEAM_ID`
 5. Click **Next**
-6. Attach `FinansealS3Access` policy
+6. Attach both policies:
+   - `FinansealS3Access` (S3 bucket access)
+   - `FinansealLambdaInvoke` (Lambda invocation)
 7. Role name: `FinansealVercelOIDCRole`
 8. Click **Create role**
 
