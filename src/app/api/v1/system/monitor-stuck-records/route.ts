@@ -4,39 +4,30 @@
  * Monitors and fixes stuck records across ALL domains using Trigger.dev processing:
  * - invoices (process-document-ocr)
  * - expense_claims (extract-receipt-data)
+ *
+ * ✅ MIGRATED TO CONVEX (2025-01)
  */
 
-import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
 import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
 import { getUserFriendlyErrorMessage, type ErrorContext } from '@/lib/shared/error-message-mapper'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 
-// Domain configuration for monitoring
+// Domain configuration for monitoring (metadata only - Convex functions handle the actual queries)
 interface DomainConfig {
-  tableName: string;
-  statusField: string;
-  processingStatusField?: string; // Some domains use separate processing status
-  stuckStatus: string[];
-  processingStartedField: string;
   displayName: string;
+  stuckStatuses: string[];
 }
 
 const DOMAIN_CONFIGS: Record<string, DomainConfig> = {
   'invoices': {
-    tableName: 'documents', // invoices table name may vary
-    statusField: 'processing_status',
-    stuckStatus: ['processing', 'analyzing'],
-    processingStartedField: 'processing_started_at',
-    displayName: 'Invoice Processing'
+    displayName: 'Invoice Processing',
+    stuckStatuses: ['processing', 'analyzing', 'classifying', 'extracting', 'uploading']
   },
   'expense_claims': {
-    tableName: 'expense_claims',
-    statusField: 'status',
-    processingStatusField: 'processing_status', // Has separate field for processing status
-    stuckStatus: ['analyzing'],
-    processingStartedField: 'processing_started_at',
-    displayName: 'Receipt Processing'
+    displayName: 'Receipt Processing',
+    stuckStatuses: ['processing', 'uploading', 'analyzing']
   }
 };
 
@@ -82,8 +73,6 @@ function createStuckRecordFailureMetadata(minutesStuck: number, domain: string) 
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabaseServiceRole = getSupabaseAdmin()
-
     // Get user context with business permissions
     const userContext = await getCurrentUserContextWithBusiness()
 
@@ -102,15 +91,31 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const businessId = userContext.profile.business_id
+    if (!userContext.businessContext) {
+      return NextResponse.json(
+        { success: false, error: 'No business context found. Please select a business.' },
+        { status: 400 }
+      )
+    }
+
+    const businessId = userContext.businessContext.businessId
     const { searchParams } = new URL(request.url)
     const targetDomain = searchParams.get('domain') // Optional: monitor specific domain
 
-    // Calculate timeout threshold
-    const timeoutThreshold = new Date()
-    timeoutThreshold.setMinutes(timeoutThreshold.getMinutes() - STUCK_TIMEOUT_MINUTES)
+    // Get authenticated Convex client
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[System Monitor] Failed to get Convex client')
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      )
+    }
 
-    console.log(`🔍 [System Monitor] Checking for stuck records older than: ${timeoutThreshold.toISOString()}`)
+    // Calculate timeout threshold (Unix timestamp)
+    const timeoutThreshold = Date.now() - (STUCK_TIMEOUT_MINUTES * 60 * 1000)
+
+    console.log(`🔍 [System Monitor] Checking for stuck records older than: ${new Date(timeoutThreshold).toISOString()}`)
 
     const allResults: any = {
       domains_checked: [],
@@ -133,37 +138,21 @@ export async function GET(request: NextRequest) {
       console.log(`🔍 [System Monitor] Checking domain: ${domain} (${config.displayName})`)
 
       try {
-        // Build query for stuck records in this domain
-        let query = supabaseServiceRole
-          .from(config.tableName)
-          .select('id, processing_started_at, updated_at, user_id, status')
+        // Get stuck records using domain-specific Convex query
+        let stuckRecords: any[] = []
 
-        // Add business_id filter if the table supports it
-        if (config.tableName !== 'documents') { // documents table might not have business_id
-          query = query.eq('business_id', businessId)
-        }
-
-        // Add status conditions for stuck records
-        if (config.stuckStatus.length === 1) {
-          query = query.eq(config.statusField, config.stuckStatus[0])
-        } else {
-          query = query.in(config.statusField, config.stuckStatus)
-        }
-
-        // Add timeout condition
-        query = query
-          .lt(config.processingStartedField, timeoutThreshold.toISOString())
-          .limit(MAX_RECORDS_TO_PROCESS)
-
-        const { data: stuckRecords, error: findError } = await query
-
-        if (findError) {
-          console.error(`❌ [System Monitor] Database query error for ${domain}:`, findError)
-          allResults.domain_results[domain] = {
-            error: findError.message,
-            checked: false
-          }
-          continue
+        if (domain === 'invoices') {
+          stuckRecords = await client.query(api.functions.invoices.getStuckInvoices, {
+            businessId,
+            timeoutThreshold,
+            limit: MAX_RECORDS_TO_PROCESS
+          })
+        } else if (domain === 'expense_claims') {
+          stuckRecords = await client.query(api.functions.expenseClaims.getStuckRecords, {
+            businessId,
+            timeoutThreshold,
+            limit: MAX_RECORDS_TO_PROCESS
+          })
         }
 
         allResults.domains_checked.push(domain)
@@ -171,6 +160,7 @@ export async function GET(request: NextRequest) {
         if (!stuckRecords || stuckRecords.length === 0) {
           console.log(`✅ [System Monitor] No stuck records found for ${domain}`)
           allResults.domain_results[domain] = {
+            display_name: config.displayName,
             stuck_records_found: 0,
             fixed_records: 0,
             checked: true
@@ -180,62 +170,55 @@ export async function GET(request: NextRequest) {
 
         console.log(`⚠️ [System Monitor] Found ${stuckRecords.length} stuck records for ${domain}`)
 
-        // Process each stuck record
-        const fixedRecords = []
-        const failedFixes = []
+        // Prepare records for batch update
+        const recordsToUpdate = stuckRecords.map(record => {
+          // Calculate how long it's been stuck
+          const processingStarted = record.processingStartedAt || record.updatedAt || 0
+          const minutesStuck = Math.floor((Date.now() - processingStarted) / (1000 * 60))
 
-        for (const record of stuckRecords) {
-          try {
-            // Calculate how long it's been stuck
-            const processingStarted = new Date(record.processing_started_at || record.updated_at)
-            const minutesStuck = Math.floor((Date.now() - processingStarted.getTime()) / (1000 * 60))
+          console.log(`🚨 [System Monitor] Processing stuck ${domain} record ${record.id} - stuck for ${minutesStuck} minutes`)
 
-            console.log(`🚨 [System Monitor] Processing stuck ${domain} record ${record.id} - stuck for ${minutesStuck} minutes`)
-
-            // Create failure metadata
-            const failureMetadata = createStuckRecordFailureMetadata(minutesStuck, domain)
-
-            // Update the stuck record to 'failed' status
-            const updateData: any = {
-              [config.statusField]: 'failed',
-              processing_metadata: failureMetadata,
-              updated_at: new Date().toISOString()
-            }
-
-            // If domain has separate processing status field, update that too
-            if (config.processingStatusField) {
-              updateData[config.processingStatusField] = 'failed'
-            }
-
-            const { error: updateError } = await supabaseServiceRole
-              .from(config.tableName)
-              .update(updateData)
-              .eq('id', record.id)
-
-            if (updateError) {
-              console.error(`❌ [System Monitor] Failed to update ${domain} record ${record.id}:`, updateError)
-              failedFixes.push({
-                domain,
-                record_id: record.id,
-                error: updateError.message
-              })
-            } else {
-              console.log(`✅ [System Monitor] Successfully marked ${domain} record ${record.id} as failed`)
-              fixedRecords.push({
-                domain,
-                record_id: record.id,
-                minutes_stuck: minutesStuck
-              })
-            }
-          } catch (error) {
-            console.error(`❌ [System Monitor] Error processing ${domain} record ${record.id}:`, error)
-            failedFixes.push({
-              domain,
-              record_id: record.id,
-              error: error instanceof Error ? error.message : 'Unknown error'
-            })
+          return {
+            id: String(record.id),
+            minutesStuck,
+            errorMetadata: createStuckRecordFailureMetadata(minutesStuck, domain)
           }
+        })
+
+        // Batch update using domain-specific Convex mutation
+        let updateResults: { fixed: string[], failed: { id: string; error: string }[] } = { fixed: [], failed: [] }
+
+        if (domain === 'invoices') {
+          updateResults = await client.mutation(api.functions.invoices.markStuckInvoicesFailed, {
+            businessId,
+            records: recordsToUpdate,
+            actorUserId: userContext.userId
+          })
+        } else if (domain === 'expense_claims') {
+          updateResults = await client.mutation(api.functions.expenseClaims.markStuckRecordsFailed, {
+            businessId,
+            records: recordsToUpdate,
+            actorUserId: userContext.userId
+          })
         }
+
+        // Format results for response
+        const fixedRecords = updateResults.fixed.map((id) => {
+          const original = stuckRecords.find(r => String(r.id) === id)
+          const updateRecord = recordsToUpdate.find(r => r.id === id)
+          return {
+            domain,
+            record_id: id,
+            minutes_stuck: updateRecord?.minutesStuck || 0,
+            file_name: original?.fileName || original?.vendorName || 'Unknown'
+          }
+        })
+
+        const failedFixes = updateResults.failed.map(f => ({
+          domain,
+          record_id: f.id,
+          error: f.error
+        }))
 
         // Store domain results
         allResults.domain_results[domain] = {
@@ -265,24 +248,22 @@ export async function GET(request: NextRequest) {
     // Log audit event for monitoring action
     if (allResults.total_fixed_records > 0) {
       try {
-        await supabaseServiceRole
-          .from('audit_events')
-          .insert({
-            business_id: businessId,
-            actor_user_id: userContext.userId,
-            event_type: 'system.stuck_records_monitor_all_domains',
-            target_entity_type: 'system_monitoring',
-            target_entity_id: null, // Multiple records
-            details: {
-              action: 'auto_failed_stuck_records_all_domains',
-              domains_checked: allResults.domains_checked,
-              total_records_found: allResults.total_stuck_records,
-              total_records_fixed: allResults.total_fixed_records,
-              total_failed_fixes: allResults.total_failed_fixes,
-              timeout_threshold_minutes: STUCK_TIMEOUT_MINUTES,
-              domain_results: allResults.domain_results
-            }
-          })
+        await client.mutation(api.functions.audit.logEvent, {
+          businessId,
+          actorUserId: userContext.userId,
+          eventType: 'system.stuck_records_monitor_all_domains',
+          targetEntityType: 'system_monitoring',
+          targetEntityId: 'batch_operation',
+          details: {
+            action: 'auto_failed_stuck_records_all_domains',
+            domains_checked: allResults.domains_checked,
+            total_records_found: allResults.total_stuck_records,
+            total_records_fixed: allResults.total_fixed_records,
+            total_failed_fixes: allResults.total_failed_fixes,
+            timeout_threshold_minutes: STUCK_TIMEOUT_MINUTES,
+            domain_results: allResults.domain_results
+          }
+        })
       } catch (auditError) {
         console.error('❌ [System Monitor] Failed to log audit event:', auditError)
         // Don't fail the whole operation if audit logging fails
@@ -313,8 +294,6 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabaseServiceRole = getSupabaseAdmin()
-
     // Get user context with business permissions
     const userContext = await getCurrentUserContextWithBusiness()
 
@@ -350,40 +329,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const businessId = userContext.profile.business_id
-
-    // Get the record to verify it exists and is in our business
-    let query = supabaseServiceRole
-      .from(config.tableName)
-      .select(`id, ${config.statusField}, ${config.processingStartedField}, user_id`)
-      .eq('id', record_id)
-
-    // Add business_id filter if the table supports it
-    if (config.tableName !== 'documents') {
-      query = query.eq('business_id', businessId)
-    }
-
-    const { data: record, error: fetchError } = await query.single()
-
-    if (fetchError || !record) {
+    if (!userContext.businessContext) {
       return NextResponse.json(
-        { success: false, error: `${config.displayName} record not found` },
-        { status: 404 }
+        { success: false, error: 'No business context found. Please select a business.' },
+        { status: 400 }
       )
     }
 
-    // Calculate how long it's been stuck (if applicable)
-    let minutesStuck = 0
-    if ((record as any)[config.processingStartedField]) {
-      const processingStarted = new Date((record as any)[config.processingStartedField])
-      minutesStuck = Math.floor((Date.now() - processingStarted.getTime()) / (1000 * 60))
+    const businessId = userContext.businessContext.businessId
+
+    // Get authenticated Convex client
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Manual Override] Failed to get Convex client')
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      )
     }
 
     // Create error context for manual override
     const errorContext: ErrorContext = {
       errorCode: 'MANUAL_OVERRIDE',
       errorCategory: 'admin_override',
-      technicalError: `Manually failed by admin user ${userContext.userId}. Original status: ${(record as any)[config.statusField]}`,
+      technicalError: `Manually failed by admin user ${userContext.userId}`,
       processingStage: 'admin_manual_override',
       domain: domain as any
     };
@@ -393,7 +362,7 @@ export async function POST(request: NextRequest) {
     const finalErrorMessage = reason || userFriendlyMapping.userMessage;
 
     // Create failure metadata for manual override
-    const failureMetadata = {
+    const errorMetadata = {
       extraction_method: 'ai',
       extraction_timestamp: new Date().toISOString(),
       ai_processing_status: 'failed',
@@ -401,60 +370,56 @@ export async function POST(request: NextRequest) {
       error_category: 'admin_override',
       error_code: 'MANUAL_OVERRIDE',
       error_message: finalErrorMessage,
-      technical_error: `Manually failed by admin user ${userContext.userId}. Original status: ${(record as any)[config.statusField]}`,
+      technical_error: `Manually failed by admin user ${userContext.userId}`,
       failed_at: new Date().toISOString(),
       processing_stage: 'admin_manual_override',
       failure_level: 'admin_action',
-      minutes_stuck: minutesStuck,
       override_reason: reason,
       overridden_by: userContext.userId,
       domain: domain
     }
 
-    // Update the record to 'failed' status
-    const updateData: any = {
-      [config.statusField]: 'failed',
-      processing_metadata: failureMetadata,
-      updated_at: new Date().toISOString()
-    }
+    // Force fail using domain-specific Convex mutation
+    let result: any
 
-    // If domain has separate processing status field, update that too
-    if (config.processingStatusField) {
-      updateData[config.processingStatusField] = 'failed'
-    }
-
-    const { error: updateError } = await supabaseServiceRole
-      .from(config.tableName)
-      .update(updateData)
-      .eq('id', record_id)
-
-    if (updateError) {
-      console.error(`❌ [Manual Override] Failed to update ${domain} record ${record_id}:`, updateError)
+    if (domain === 'invoices') {
+      result = await client.mutation(api.functions.invoices.forceFailInvoice, {
+        businessId,
+        invoiceId: record_id,
+        reason: reason || undefined,
+        errorMetadata
+      })
+    } else if (domain === 'expense_claims') {
+      result = await client.mutation(api.functions.expenseClaims.forceFailRecord, {
+        businessId,
+        claimId: record_id,
+        reason: reason || undefined,
+        errorMetadata
+      })
+    } else {
       return NextResponse.json(
-        { success: false, error: `Failed to update ${config.displayName.toLowerCase()} status` },
-        { status: 500 }
+        { success: false, error: `Unsupported domain: ${domain}` },
+        { status: 400 }
       )
     }
 
     // Log audit event for manual override
     try {
-      await supabaseServiceRole
-        .from('audit_events')
-        .insert({
-          business_id: businessId,
-          actor_user_id: userContext.userId,
-          event_type: `${domain}.manual_override_failed`,
-          target_entity_type: domain,
-          target_entity_id: record_id,
-          details: {
-            action: 'manual_force_fail',
-            domain: domain,
-            domain_display_name: config.displayName,
-            original_status: (record as any)[config.statusField],
-            reason: reason || 'No reason provided',
-            minutes_stuck: minutesStuck
-          }
-        })
+      await client.mutation(api.functions.audit.logEvent, {
+        businessId,
+        actorUserId: userContext.userId,
+        eventType: `${domain}.manual_override_failed`,
+        targetEntityType: domain,
+        targetEntityId: record_id,
+        details: {
+          action: 'manual_force_fail',
+          domain: domain,
+          domain_display_name: config.displayName,
+          original_status: result.originalStatus,
+          reason: reason || 'No reason provided',
+          minutes_stuck: result.minutesStuck
+        }
+      })
     } catch (auditError) {
       console.error('❌ [Manual Override] Failed to log audit event:', auditError)
       // Don't fail the operation if audit logging fails
@@ -468,8 +433,8 @@ export async function POST(request: NextRequest) {
         message: `${config.displayName} record manually marked as failed`,
         domain,
         record_id,
-        original_status: (record as any)[config.statusField],
-        minutes_stuck: minutesStuck
+        original_status: result.originalStatus,
+        minutes_stuck: result.minutesStuck
       }
     })
 

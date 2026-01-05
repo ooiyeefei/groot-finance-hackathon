@@ -3,13 +3,17 @@
  *
  * Handles OCR usage recording and checking for billing limits.
  *
+ * ✅ MIGRATED TO CONVEX (2025-01)
+ *
  * @route GET /api/v1/billing/usage - Check current usage and limits
  * @route POST /api/v1/billing/usage - Record OCR usage after successful processing
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
+import { Id } from '@/convex/_generated/dataModel'
 import { PlanKey, canUseOcr, getOcrLimit, getUsagePercentage } from '@/lib/stripe/plans'
 
 /**
@@ -22,8 +26,6 @@ export async function GET(request: NextRequest) {
   console.log('[Billing Usage] Checking usage')
 
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json(
@@ -32,44 +34,40 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('id, business_id')
-      .eq('clerk_user_id', userId)
-      .single()
+    // Get authenticated Convex client
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Billing Usage] Failed to get Convex client')
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      )
+    }
 
-    if (userError || !user?.business_id) {
+    // Get current business via authenticated query
+    const business = await client.query(api.functions.businesses.getCurrentBusiness)
+
+    if (!business) {
       return NextResponse.json(
         { success: false, error: 'Business not found' },
         { status: 404 }
       )
     }
 
-    // Get business plan
-    const { data: business, error: businessError } = await supabaseAdmin
-      .from('businesses')
-      .select('id, plan_name')
-      .eq('id', user.business_id)
-      .single()
-
-    if (businessError || !business) {
-      return NextResponse.json(
-        { success: false, error: 'Business not found' },
-        { status: 404 }
-      )
-    }
-
-    const planName = (business.plan_name as PlanKey) || 'trial'
+    const planName = (business.planName as PlanKey) || 'trial'
     const limit = getOcrLimit(planName)
 
-    // Get current month usage
-    const { data: usageData, error: usageError } = await supabaseAdmin.rpc(
-      'get_monthly_ocr_usage',
-      { p_business_id: business.id }
-    )
+    // Get current month usage from Convex
+    let currentUsage = 0
+    try {
+      const usageData = await client.query(api.functions.ocrUsage.getCurrentUsage, {
+        businessId: business._id as Id<"businesses">
+      })
+      currentUsage = usageData?.creditsUsed ?? 0
+    } catch (usageError) {
+      console.error('[Billing Usage] Failed to get OCR usage:', usageError)
+    }
 
-    const currentUsage = usageError ? 0 : (usageData ?? 0)
     const canUse = canUseOcr(planName, currentUsage)
     const percentage = getUsagePercentage(planName, currentUsage)
 
@@ -109,8 +107,6 @@ export async function POST(request: NextRequest) {
   console.log('[Billing Usage] Recording usage')
 
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json(
@@ -123,42 +119,38 @@ export async function POST(request: NextRequest) {
     const documentId = body.document_id || null
     const credits = typeof body.credits === 'number' ? body.credits : 1
 
-    // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('id, business_id')
-      .eq('clerk_user_id', userId)
-      .single()
+    // Get authenticated Convex client
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Billing Usage] Failed to get Convex client')
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      )
+    }
 
-    if (userError || !user?.business_id) {
+    // Get current business via authenticated query
+    const business = await client.query(api.functions.businesses.getCurrentBusiness)
+
+    if (!business) {
       return NextResponse.json(
         { success: false, error: 'Business not found' },
         { status: 404 }
       )
     }
 
-    // Get business plan for limit check
-    const { data: business, error: businessError } = await supabaseAdmin
-      .from('businesses')
-      .select('id, plan_name')
-      .eq('id', user.business_id)
-      .single()
+    const planName = (business.planName as PlanKey) || 'trial'
 
-    if (businessError || !business) {
-      return NextResponse.json(
-        { success: false, error: 'Business not found' },
-        { status: 404 }
-      )
+    // Get current usage from Convex
+    let currentUsage = 0
+    try {
+      const usageData = await client.query(api.functions.ocrUsage.getCurrentUsage, {
+        businessId: business._id as Id<"businesses">
+      })
+      currentUsage = usageData?.creditsUsed ?? 0
+    } catch (usageError) {
+      console.error('[Billing Usage] Failed to get current usage:', usageError)
     }
-
-    const planName = (business.plan_name as PlanKey) || 'trial'
-
-    // Get current usage to check if we're at limit
-    const { data: currentUsageData } = await supabaseAdmin.rpc(
-      'get_monthly_ocr_usage',
-      { p_business_id: business.id }
-    )
-    const currentUsage = currentUsageData ?? 0
 
     // Check if usage is allowed (soft-block check)
     if (!canUseOcr(planName, currentUsage)) {
@@ -177,35 +169,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calculate period_start (first day of current month)
-    const now = new Date()
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1)
-      .toISOString()
-      .split('T')[0]
-
-    // Record usage
-    const { data: usageRecord, error: insertError } = await supabaseAdmin
-      .from('ocr_usage')
-      .insert({
-        business_id: user.business_id,
-        document_id: documentId,
-        credits_used: credits,
-        period_start: periodStart,
-      })
-      .select()
-      .single()
-
-    if (insertError) {
-      console.error('[Billing Usage] Failed to record usage:', insertError.message)
-      return NextResponse.json(
-        { success: false, error: 'Failed to record usage' },
-        { status: 500 }
-      )
-    }
+    // Record usage via Convex mutation
+    const result = await client.mutation(api.functions.ocrUsage.recordUsageFromApi, {
+      businessId: business._id as Id<"businesses">,
+      credits,
+      documentId,
+    })
 
     // Return updated usage stats
-    const newUsage = currentUsage + credits
     const limit = getOcrLimit(planName)
+    const newUsage = result.totalUsed
 
     return NextResponse.json({
       success: true,
@@ -213,7 +186,7 @@ export async function POST(request: NextRequest) {
         recorded: credits,
         used: newUsage,
         limit: limit === -1 ? null : limit,
-        remaining: limit === -1 ? null : Math.max(0, limit - newUsage),
+        remaining: limit === -1 ? null : result.remaining,
         percentage: getUsagePercentage(planName, newUsage),
         isUnlimited: limit === -1,
       },

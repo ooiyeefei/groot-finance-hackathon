@@ -3,6 +3,8 @@
  *
  * Returns current subscription status for the authenticated user's business.
  *
+ * ✅ MIGRATED TO CONVEX (2025-01)
+ *
  * @route GET /api/v1/billing/subscription
  */
 
@@ -10,14 +12,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
 import { getPlan, PlanKey, getOcrLimitSync } from '@/lib/stripe/plans'
-import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
+import { Id } from '@/convex/_generated/dataModel'
 
 export async function GET(request: NextRequest) {
   console.log('[Billing Subscription] Fetching subscription status')
 
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-
     // Authenticate user
     const { userId } = await auth()
     if (!userId) {
@@ -27,63 +29,40 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('id, business_id')
-      .eq('clerk_user_id', userId)
-      .single()
-
-    if (userError || !user) {
-      console.error('[Billing Subscription] User not found:', userError?.message)
+    // Get authenticated Convex client
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Billing Subscription] Failed to get Convex client')
       return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
       )
     }
 
-    if (!user.business_id) {
+    // Get current business via authenticated query
+    const business = await client.query(api.functions.businesses.getCurrentBusiness)
+
+    if (!business) {
       return NextResponse.json(
         { success: false, error: 'No business associated with user' },
         { status: 400 }
       )
     }
 
-    // Get business subscription details
-    const { data: business, error: businessError } = await supabaseAdmin
-      .from('businesses')
-      .select(`
-        id,
-        name,
-        stripe_customer_id,
-        stripe_subscription_id,
-        stripe_product_id,
-        plan_name,
-        subscription_status,
-        trial_start_date,
-        trial_end_date,
-        created_at
-      `)
-      .eq('id', user.business_id)
-      .single()
-
-    if (businessError || !business) {
-      console.error('[Billing Subscription] Business not found:', businessError?.message)
-      return NextResponse.json(
-        { success: false, error: 'Business not found' },
-        { status: 404 }
-      )
+    // Get current month OCR usage from Convex
+    let currentUsage = 0
+    try {
+      const usageData = await client.query(api.functions.ocrUsage.getCurrentUsage, {
+        businessId: business._id as Id<"businesses">
+      })
+      currentUsage = usageData?.creditsUsed ?? 0
+    } catch (usageError) {
+      console.error('[Billing Subscription] Failed to get OCR usage:', usageError)
+      // Continue with 0 usage
     }
 
-    // Get current month OCR usage
-    const { data: usageData, error: usageError } = await supabaseAdmin.rpc(
-      'get_monthly_ocr_usage',
-      { p_business_id: business.id }
-    )
-
-    const currentUsage = usageError ? 0 : (usageData ?? 0)
     // Normalize plan key - 'free' maps to 'trial'
-    const rawPlanKey = business.plan_name || 'trial'
+    const rawPlanKey = business.planName || 'trial'
     const planKey: PlanKey = rawPlanKey === 'free' ? 'trial' : (rawPlanKey as PlanKey)
     // Get plan from Stripe catalog (with caching/fallback)
     const plan = await getPlan(planKey)
@@ -92,11 +71,11 @@ export async function GET(request: NextRequest) {
     // Build subscription response
     let subscriptionDetails = null
 
-    if (business.stripe_subscription_id) {
+    if (business.stripeSubscriptionId) {
       try {
         // Stripe SDK v20+ type workaround - cast to access properties
         const subscription = (await getStripe().subscriptions.retrieve(
-          business.stripe_subscription_id
+          business.stripeSubscriptionId
         )) as unknown as {
           id: string
           status: string
@@ -130,8 +109,8 @@ export async function GET(request: NextRequest) {
     // Check both plan_name and subscription_status for robustness
     // Stripe sets subscription_status='trialing' which webhook syncs to plan_name='trial'
     const isTrialPlan = planKey === 'trial'
-    const isTrialingStatus = business.subscription_status === 'trialing'
-    const isPausedStatus = business.subscription_status === 'paused'
+    const isTrialingStatus = business.subscriptionStatus === 'trialing'
+    const isPausedStatus = business.subscriptionStatus === 'paused'
     const isOnTrial = isTrialPlan || isTrialingStatus
 
     let trialInfo: {
@@ -157,15 +136,16 @@ export async function GET(request: NextRequest) {
       let trialStart: Date
       let trialEnd: Date
 
-      if (business.trial_end_date) {
-        // Use explicitly set trial dates
-        trialEnd = new Date(business.trial_end_date)
-        trialStart = business.trial_start_date
-          ? new Date(business.trial_start_date)
+      if (business.trialEndDate) {
+        // Use explicitly set trial dates (Convex stores as timestamp number)
+        trialEnd = new Date(business.trialEndDate)
+        trialStart = business.trialStartDate
+          ? new Date(business.trialStartDate)
           : new Date(trialEnd.getTime() - 14 * 24 * 60 * 60 * 1000)
       } else {
         // Calculate from business creation date (14-day trial period)
-        trialStart = new Date(business.created_at)
+        // Convex uses _creationTime for created_at
+        trialStart = new Date(business._creationTime)
         trialEnd = new Date(trialStart.getTime() + 14 * 24 * 60 * 60 * 1000)
       }
 
@@ -199,9 +179,9 @@ export async function GET(request: NextRequest) {
           features: plan.features,
         },
         subscription: {
-          status: business.subscription_status || 'active',
-          stripeCustomerId: business.stripe_customer_id,
-          stripeSubscriptionId: business.stripe_subscription_id,
+          status: business.subscriptionStatus || 'active',
+          stripeCustomerId: business.stripeCustomerId,
+          stripeSubscriptionId: business.stripeSubscriptionId,
           ...subscriptionDetails,
         },
         usage: {
@@ -213,7 +193,7 @@ export async function GET(request: NextRequest) {
         },
         trial: trialInfo,
         business: {
-          id: business.id,
+          id: business._id,
           name: business.name,
         },
       },

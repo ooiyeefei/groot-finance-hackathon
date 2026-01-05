@@ -1572,3 +1572,271 @@ export const internalSoftDelete = internalMutation({
     return claim._id;
   },
 });
+
+// ============================================
+// STUCK RECORDS MONITORING (for admin operations)
+// ============================================
+
+/**
+ * Get stuck expense claims for monitoring
+ * Finds claims in 'analyzing' status older than the timeout threshold
+ * Used by: /api/v1/expense-claims/monitor-stuck-records
+ */
+export const getStuckRecords = query({
+  args: {
+    businessId: v.string(),
+    timeoutThreshold: v.number(), // Unix timestamp - records older than this are stuck
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    // Resolve business
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    // Verify admin/manager role
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return [];
+    }
+
+    if (!["owner", "admin", "manager"].includes(membership.role)) {
+      return [];
+    }
+
+    const limit = args.limit ?? 50;
+
+    // Get claims in 'analyzing' status
+    let claims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Filter for stuck records (analyzing status + older than threshold)
+    claims = claims.filter((claim) => {
+      if (claim.status !== "processing" && claim.status !== "uploading") {
+        // Also check for 'analyzing' which might be a legacy status
+        if (claim.status !== "analyzing") {
+          return false;
+        }
+      }
+
+      // Use processingStartedAt or updatedAt to determine if stuck
+      const startTime = claim.processingStartedAt || claim.updatedAt || claim._creationTime;
+      return startTime < args.timeoutThreshold;
+    });
+
+    // Filter out deleted
+    claims = claims.filter((claim) => !claim.deletedAt);
+
+    // Limit results
+    claims = claims.slice(0, limit);
+
+    return claims.map((claim) => ({
+      id: claim._id,
+      status: claim.status,
+      processingStartedAt: claim.processingStartedAt,
+      updatedAt: claim.updatedAt,
+      userId: claim.userId,
+      vendorName: claim.vendorName,
+      totalAmount: claim.totalAmount,
+    }));
+  },
+});
+
+/**
+ * Batch update stuck records to failed status
+ * Used by: /api/v1/expense-claims/monitor-stuck-records
+ */
+export const markStuckRecordsFailed = mutation({
+  args: {
+    businessId: v.string(),
+    records: v.array(
+      v.object({
+        id: v.string(),
+        minutesStuck: v.number(),
+        errorMetadata: v.any(),
+      })
+    ),
+    actorUserId: v.string(), // User performing the action (for audit)
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Resolve business
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      throw new Error("Business not found");
+    }
+
+    // Verify admin/manager role
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not authorized");
+    }
+
+    if (!["owner", "admin", "manager"].includes(membership.role)) {
+      throw new Error("Insufficient permissions");
+    }
+
+    const now = Date.now();
+    const results = {
+      fixed: [] as string[],
+      failed: [] as { id: string; error: string }[],
+    };
+
+    for (const record of args.records) {
+      try {
+        const claim = await resolveById(ctx.db, "expense_claims", record.id);
+        if (!claim) {
+          results.failed.push({ id: record.id, error: "Not found" });
+          continue;
+        }
+
+        // Verify claim belongs to this business
+        if (claim.businessId !== business._id) {
+          results.failed.push({ id: record.id, error: "Wrong business" });
+          continue;
+        }
+
+        // Update to failed status
+        await ctx.db.patch(claim._id, {
+          status: "failed",
+          processingMetadata: record.errorMetadata,
+          failedAt: now,
+          updatedAt: now,
+        });
+
+        results.fixed.push(record.id);
+      } catch (error) {
+        results.failed.push({
+          id: record.id,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    console.log(
+      `[Convex] Marked ${results.fixed.length} stuck records as failed`
+    );
+    return results;
+  },
+});
+
+/**
+ * Force-fail a single expense claim (admin override)
+ * Used by: POST /api/v1/expense-claims/monitor-stuck-records
+ */
+export const forceFailRecord = mutation({
+  args: {
+    businessId: v.string(),
+    claimId: v.string(),
+    reason: v.optional(v.string()),
+    errorMetadata: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Resolve business
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      throw new Error("Business not found");
+    }
+
+    // Verify admin role (only admins can force-fail)
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not authorized");
+    }
+
+    if (!["owner", "admin"].includes(membership.role)) {
+      throw new Error("Admin role required for manual override");
+    }
+
+    // Get the claim
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim) {
+      throw new Error("Expense claim not found");
+    }
+
+    // Verify claim belongs to this business
+    if (claim.businessId !== business._id) {
+      throw new Error("Expense claim not found in this business");
+    }
+
+    const now = Date.now();
+    const originalStatus = claim.status;
+
+    // Calculate how long it was stuck
+    let minutesStuck = 0;
+    if (claim.processingStartedAt) {
+      minutesStuck = Math.floor((now - claim.processingStartedAt) / (1000 * 60));
+    }
+
+    // Update to failed status
+    await ctx.db.patch(claim._id, {
+      status: "failed",
+      processingMetadata: args.errorMetadata,
+      failedAt: now,
+      updatedAt: now,
+      errorMessage: args.reason || "Manual admin override",
+    });
+
+    console.log(
+      `[Convex] Admin ${user._id} force-failed expense claim ${args.claimId}`
+    );
+
+    return {
+      claimId: claim._id,
+      originalStatus,
+      minutesStuck,
+      vendorName: claim.vendorName,
+      totalAmount: claim.totalAmount,
+    };
+  },
+});
