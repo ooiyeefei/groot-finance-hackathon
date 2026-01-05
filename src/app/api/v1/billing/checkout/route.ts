@@ -3,21 +3,22 @@
  *
  * Creates Stripe Checkout sessions for subscription purchases.
  *
+ * ✅ MIGRATED TO CONVEX (2025-01)
+ *
  * @route POST /api/v1/billing/checkout
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
-import { getPlan, FALLBACK_PLANS, PlanKey } from '@/lib/stripe/plans'
-import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
+import { getPlan, PlanKey } from '@/lib/stripe/plans'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 
 export async function POST(request: NextRequest) {
   console.log('[Billing Checkout] Creating checkout session')
 
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-
     // Authenticate user
     const { userId } = await auth()
     if (!userId) {
@@ -55,45 +56,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('id, business_id, email, full_name')
-      .eq('clerk_user_id', userId)
-      .single()
-
-    if (userError || !user) {
-      console.error('[Billing Checkout] User not found:', userError?.message)
+    // Get authenticated Convex client
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Billing Checkout] Failed to get Convex client')
       return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
       )
     }
 
-    if (!user.business_id) {
+    // Get current business via authenticated query
+    const business = await client.query(api.functions.businesses.getCurrentBusiness)
+
+    if (!business) {
       return NextResponse.json(
         { success: false, error: 'No business associated with user' },
         { status: 400 }
       )
     }
 
-    // Get business details
-    const { data: business, error: businessError } = await supabaseAdmin
-      .from('businesses')
-      .select('id, name, stripe_customer_id, stripe_subscription_id')
-      .eq('id', user.business_id)
-      .single()
-
-    if (businessError || !business) {
-      console.error('[Billing Checkout] Business not found:', businessError?.message)
-      return NextResponse.json(
-        { success: false, error: 'Business not found' },
-        { status: 404 }
-      )
-    }
-
     // Check if already has active subscription
-    if (business.stripe_subscription_id) {
+    if (business.stripeSubscriptionId) {
       return NextResponse.json(
         {
           success: false,
@@ -103,27 +87,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get user info from Clerk for email
+    const clerkUser = await currentUser()
+    const userEmail = clerkUser?.emailAddresses?.[0]?.emailAddress
+
     // Get or create Stripe customer
-    let customerId = business.stripe_customer_id
+    let customerId = business.stripeCustomerId
 
     if (!customerId) {
       // Create new Stripe customer
       const customer = await getStripe().customers.create({
-        email: user.email ?? undefined,
+        email: userEmail ?? undefined,
         name: business.name,
         metadata: {
-          business_id: business.id,
-          user_id: user.id,
+          business_id: business._id,
         },
       })
 
       customerId = customer.id
 
-      // Update business with customer ID
-      await supabaseAdmin
-        .from('businesses')
-        .update({ stripe_customer_id: customerId })
-        .eq('id', business.id)
+      // Update business with customer ID via Convex mutation
+      await client.mutation(api.functions.businesses.updateStripeSubscription, {
+        businessId: business._id,
+        stripeCustomerId: customerId,
+      })
 
       console.log(`[Billing Checkout] Created Stripe customer: ${customerId}`)
     }
@@ -158,14 +145,13 @@ export async function POST(request: NextRequest) {
       success_url: finalSuccessUrl,
       cancel_url: finalCancelUrl,
       metadata: {
-        business_id: business.id,
-        user_id: user.id,
+        business_id: business._id,
         plan_name: planName,
         is_onboarding: isOnboarding ? 'true' : 'false',
       },
       subscription_data: {
         metadata: {
-          business_id: business.id,
+          business_id: business._id,
         },
       },
       // Enable automatic tax calculation if needed

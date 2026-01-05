@@ -4,13 +4,16 @@
  * Returns list of invoices from Stripe for the authenticated user's business.
  * Stripe is the source of truth - we fetch directly from their API.
  *
+ * ✅ MIGRATED TO CONVEX (2025-01)
+ *
  * @route GET /api/v1/billing/invoices
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
-import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 
 /**
  * Invoice type for API response
@@ -35,8 +38,6 @@ export async function GET(request: NextRequest) {
   console.log('[Billing Invoices] Fetching invoice history')
 
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-
     // Authenticate user
     const { userId } = await auth()
     if (!userId) {
@@ -46,45 +47,28 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('id, business_id')
-      .eq('clerk_user_id', userId)
-      .single()
-
-    if (userError || !user) {
-      console.error('[Billing Invoices] User not found:', userError?.message)
+    // Get authenticated Convex client
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Billing Invoices] Failed to get Convex client')
       return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
       )
     }
 
-    if (!user.business_id) {
+    // Get current business via authenticated query
+    const business = await client.query(api.functions.businesses.getCurrentBusiness)
+
+    if (!business) {
       return NextResponse.json(
         { success: false, error: 'No business associated with user' },
         { status: 400 }
       )
     }
 
-    // Get business Stripe customer ID
-    const { data: business, error: businessError } = await supabaseAdmin
-      .from('businesses')
-      .select('id, stripe_customer_id')
-      .eq('id', user.business_id)
-      .single()
-
-    if (businessError || !business) {
-      console.error('[Billing Invoices] Business not found:', businessError?.message)
-      return NextResponse.json(
-        { success: false, error: 'Business not found' },
-        { status: 404 }
-      )
-    }
-
     // No Stripe customer = no invoices yet
-    if (!business.stripe_customer_id) {
+    if (!business.stripeCustomerId) {
       return NextResponse.json({
         success: true,
         data: {
@@ -103,7 +87,7 @@ export async function GET(request: NextRequest) {
     // Fetch invoices from Stripe
     // Using type assertion for Stripe SDK v20+ compatibility
     const invoicesResponse = await getStripe().invoices.list({
-      customer: business.stripe_customer_id,
+      customer: business.stripeCustomerId,
       limit,
       starting_after: startingAfter,
     })
@@ -154,7 +138,7 @@ export async function GET(request: NextRequest) {
         : null,
     }))
 
-    console.log(`[Billing Invoices] Found ${invoices.length} invoices for business ${business.id}`)
+    console.log(`[Billing Invoices] Found ${invoices.length} invoices for business ${business._id}`)
 
     return NextResponse.json({
       success: true,
