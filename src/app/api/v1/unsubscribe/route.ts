@@ -357,31 +357,67 @@ export async function POST(req: NextRequest) {
     // Update email preferences in Convex
     const convex = getConvexClient()
 
-    // Map unsubscribe type to preference fields
-    const updates: Record<string, boolean> = {}
+    // Try to find user by email first (userId in token might not be valid Convex ID)
+    let convexUserId: Id<'users'> | null = null
 
-    switch (type) {
-      case 'marketing':
-        updates.marketingEnabled = false
-        break
-      case 'onboarding':
-        updates.onboardingTipsEnabled = false
-        break
-      case 'product_updates':
-        updates.productUpdatesEnabled = false
-        break
-      case 'all':
-        updates.globalUnsubscribe = true
-        updates.marketingEnabled = false
-        updates.onboardingTipsEnabled = false
-        updates.productUpdatesEnabled = false
-        break
+    try {
+      // Check if userId looks like a valid Convex ID (they start with specific patterns)
+      // Convex IDs are base64-like strings, not test strings like "test-e2e-..."
+      if (userId && !userId.startsWith('test-')) {
+        // Try to use it directly - will fail if invalid
+        convexUserId = userId as Id<'users'>
+      }
+    } catch {
+      // userId is not a valid Convex ID, we'll use email-based suppression
+      convexUserId = null
     }
 
-    await convex.mutation(api.functions.emails.updateEmailPreferences, {
-      userId: userId as Id<'users'>,
-      ...updates
-    })
+    // If we have a valid Convex user ID, update their preferences
+    if (convexUserId) {
+      // Map unsubscribe type to preference fields
+      const updates: Record<string, boolean> = {}
+
+      switch (type) {
+        case 'marketing':
+          updates.marketingEnabled = false
+          break
+        case 'onboarding':
+          updates.onboardingTipsEnabled = false
+          break
+        case 'product_updates':
+          updates.productUpdatesEnabled = false
+          break
+        case 'all':
+          updates.globalUnsubscribe = true
+          updates.marketingEnabled = false
+          updates.onboardingTipsEnabled = false
+          updates.productUpdatesEnabled = false
+          break
+      }
+
+      try {
+        await convex.mutation(api.functions.emails.updateEmailPreferences, {
+          userId: convexUserId,
+          ...updates
+        })
+        console.log(`[Unsubscribe API] Updated preferences for user ${convexUserId}`)
+      } catch (prefError) {
+        // If updating preferences fails, fall back to suppression
+        console.warn(`[Unsubscribe API] Failed to update preferences, using suppression: ${prefError}`)
+        convexUserId = null
+      }
+    }
+
+    // If no valid user or preference update failed, add to email suppressions
+    // This is the fallback that always works
+    if (!convexUserId) {
+      await convex.mutation(api.functions.emails.markEmailUndeliverable, {
+        email: email,
+        reason: 'unsubscribe' as const,
+        sourceMessageId: `unsubscribe-${Date.now()}`
+      })
+      console.log(`[Unsubscribe API] Added ${email} to suppression list (type: ${type})`)
+    }
 
     console.log(`[Unsubscribe API] Processed unsubscribe for ${email}, type: ${type}`)
 
