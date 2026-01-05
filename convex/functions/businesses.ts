@@ -1632,6 +1632,77 @@ export const updateSubscriptionStatusFromWebhook = mutation({
 });
 
 // ============================================
+// ONBOARDING MUTATIONS (for business initialization flow)
+// ============================================
+
+/**
+ * Initialize a new business during user onboarding
+ * Called from API route - accepts clerkUserId for user resolution
+ * Creates: business record, owner membership, user linkage
+ */
+export const initializeBusinessFromOnboarding = mutation({
+  args: {
+    clerkUserId: v.string(),
+    name: v.string(),
+    slug: v.string(),
+    countryCode: v.string(),
+    homeCurrency: v.string(),
+    businessType: v.string(),
+    planName: v.string(),
+    subscriptionStatus: v.string(),
+    customCogsCategories: v.optional(v.any()),
+    customExpenseCategories: v.optional(v.any()),
+    allowedCurrencies: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    // Step 1: Resolve Clerk user ID to Convex user
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .first();
+
+    if (!user) {
+      throw new Error(`User not found for Clerk ID: ${args.clerkUserId}`);
+    }
+
+    // Step 2: Create the business
+    const businessId = await ctx.db.insert("businesses", {
+      name: args.name,
+      slug: args.slug,
+      countryCode: args.countryCode,
+      homeCurrency: args.homeCurrency,
+      businessType: args.businessType,
+      planName: args.planName,
+      subscriptionStatus: args.subscriptionStatus,
+      customCogsCategories: args.customCogsCategories,
+      customExpenseCategories: args.customExpenseCategories,
+      allowedCurrencies: args.allowedCurrencies || [
+        "USD", "SGD", "MYR", "THB", "IDR", "VND", "PHP", "CNY", "EUR"
+      ],
+      updatedAt: Date.now(),
+    });
+
+    // Step 3: Create owner membership
+    await ctx.db.insert("business_memberships", {
+      userId: user._id,
+      businessId,
+      role: "owner",
+      status: "active",
+      joinedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    // Step 4: Update user's active business context
+    await ctx.db.patch(user._id, {
+      businessId,
+      updatedAt: Date.now(),
+    });
+
+    return businessId;
+  },
+});
+
+// ============================================
 // DATA MIGRATION (One-time use)
 // ============================================
 

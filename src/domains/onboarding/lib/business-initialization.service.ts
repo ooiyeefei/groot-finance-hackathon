@@ -5,9 +5,12 @@
  * Handles: business creation, owner membership, user linking
  *
  * Note: Trial/Stripe subscription is handled separately by /api/v1/onboarding/start-trial
+ *
+ * ✅ MIGRATED TO CONVEX (2025-01)
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '@/convex/_generated/api';
 import {
   generateCategoryMetadata,
   type CategoryMetadata
@@ -38,6 +41,15 @@ export interface InitializeBusinessResult {
     cogs: number;
     expense: number;
   };
+}
+
+// Initialize Convex HTTP client
+function getConvexClient() {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) {
+    throw new Error('NEXT_PUBLIC_CONVEX_URL not configured');
+  }
+  return new ConvexHttpClient(url);
 }
 
 // Sanitization utilities
@@ -131,8 +143,7 @@ async function generateBusinessCategories(
  * Note: Does NOT create Stripe subscription - call /api/v1/onboarding/start-trial separately
  */
 export async function initializeBusiness(
-  input: InitializeBusinessInput,
-  supabase?: SupabaseClient
+  input: InitializeBusinessInput
 ): Promise<InitializeBusinessResult> {
   console.log(`[BusinessInit] ========================================`);
   console.log(`[BusinessInit] Starting business initialization`);
@@ -143,53 +154,9 @@ export async function initializeBusiness(
   console.log(`[BusinessInit] Plan: ${input.plan}`);
   console.log(`[BusinessInit] ========================================`);
 
-  // Create Supabase client if not provided
-  if (!supabase) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return {
-        success: false,
-        error: 'Supabase configuration missing'
-      };
-    }
-
-    supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
-      }
-    });
-  }
-
   try {
-    // Step 1: Resolve Clerk user ID to Supabase UUID
-    console.log(`[BusinessInit] 🔍 Step 1: Resolving Clerk user ID to Supabase UUID`);
-
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, business_id, email')
-      .eq('clerk_user_id', input.clerkUserId)
-      .single();
-
-    if (userError || !user) {
-      const errorMsg = `User not found for Clerk ID: ${input.clerkUserId}`;
-      console.error(`[BusinessInit] ❌ ${errorMsg}`, userError);
-      return { success: false, error: errorMsg };
-    }
-
-    console.log(`[BusinessInit] ✅ User resolved: ${user.id} (${user.email})`);
-
-    // Note: Users CAN create multiple businesses. The user.business_id field
-    // represents their "currently active" business context, not a blocker.
-    // After creating a new business, we'll switch their active context to it.
-    if (user.business_id) {
-      console.log(`[BusinessInit] ℹ️ User has existing business (${user.business_id}), creating additional business`);
-    }
-
-    // Step 2: Sanitize and validate inputs
-    console.log(`[BusinessInit] 🔒 Step 2: Sanitizing inputs`);
+    // Step 1: Sanitize and validate inputs
+    console.log(`[BusinessInit] 🔒 Step 1: Sanitizing inputs`);
 
     const sanitizedName = sanitizeTextInput(input.businessName);
     const slug = generateBusinessSlug(sanitizedName);
@@ -200,97 +167,44 @@ export async function initializeBusiness(
 
     console.log(`[BusinessInit] ✅ Business slug generated: ${slug}`);
 
-    // Step 3: Generate AI-powered categories
-    console.log(`[BusinessInit] 🤖 Step 3: Generating business categories with AI`);
+    // Step 2: Generate AI-powered categories
+    console.log(`[BusinessInit] 🤖 Step 2: Generating business categories with AI`);
 
     const businessType: BusinessType = input.businessType || 'other';
     const { cogsCategories, expenseCategories } = await generateBusinessCategories(businessType);
 
     console.log(`[BusinessInit] ✅ Categories generated - COGS: ${cogsCategories.length}, Expense: ${expenseCategories.length}`);
 
-    // Step 4: Create business record
-    // Note: subscription_status is 'pending' - will be updated when start-trial is called
-    console.log(`[BusinessInit] 🏢 Step 4: Creating business record`);
+    // Step 3: Create business via Convex mutation
+    console.log(`[BusinessInit] 🏢 Step 3: Creating business record via Convex`);
 
-    const businessData = {
-      name: sanitizedName,
-      slug: slug,
-      country_code: input.country.toUpperCase(),
-      home_currency: input.currency.toUpperCase(),
-      business_type: businessType,
-      plan_name: input.plan,
-      subscription_status: input.plan === 'trial' ? 'trialing' : 'active', // Stripe-compatible status
-      custom_cogs_categories: cogsCategories,
-      custom_expense_categories: expenseCategories,
-      allowed_currencies: input.allowedCurrencies || [
-        'USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR'
-      ],
-      owner_id: user.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
+    const convex = getConvexClient();
 
-    const { data: business, error: businessError } = await supabase
-      .from('businesses')
-      .insert(businessData)
-      .select('id')
-      .single();
+    const businessId = await convex.mutation(
+      api.functions.businesses.initializeBusinessFromOnboarding,
+      {
+        clerkUserId: input.clerkUserId,
+        name: sanitizedName,
+        slug: slug,
+        countryCode: input.country.toUpperCase(),
+        homeCurrency: input.currency.toUpperCase(),
+        businessType: businessType,
+        planName: input.plan,
+        subscriptionStatus: input.plan === 'trial' ? 'trialing' : 'active',
+        customCogsCategories: cogsCategories,
+        customExpenseCategories: expenseCategories,
+        allowedCurrencies: input.allowedCurrencies || [
+          'USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR'
+        ],
+      }
+    );
 
-    if (businessError || !business) {
-      const errorMsg = `Failed to create business: ${businessError?.message || 'Unknown error'}`;
-      console.error(`[BusinessInit] ❌ ${errorMsg}`, businessError);
-      return { success: false, error: errorMsg };
-    }
-
-    console.log(`[BusinessInit] ✅ Business created: ${business.id}`);
-
-    // Step 5: Create owner membership record
-    console.log(`[BusinessInit] 👤 Step 5: Creating owner membership`);
-
-    const membershipData = {
-      user_id: user.id,
-      business_id: business.id,
-      role: 'admin',
-      status: 'active',
-      joined_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    const { error: membershipError } = await supabase
-      .from('business_memberships')
-      .insert(membershipData);
-
-    if (membershipError) {
-      console.error(`[BusinessInit] ⚠️ Failed to create membership:`, membershipError);
-      // Non-fatal: business is created, membership can be fixed later
-    } else {
-      console.log(`[BusinessInit] ✅ Owner membership created`);
-    }
-
-    // Step 6: Update user's active business context to the new business
-    // This switches the user's "currently active" business - they can switch back via business switcher
-    console.log(`[BusinessInit] 🔗 Step 6: Switching user's active business context`);
-
-    const { error: userUpdateError } = await supabase
-      .from('users')
-      .update({
-        business_id: business.id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', user.id);
-
-    if (userUpdateError) {
-      console.error(`[BusinessInit] ⚠️ Failed to update user business_id:`, userUpdateError);
-      // Non-fatal: business is created, user can be linked later
-    } else {
-      console.log(`[BusinessInit] ✅ User linked to business`);
-    }
+    console.log(`[BusinessInit] ✅ Business created: ${businessId}`);
 
     // Success!
     console.log(`[BusinessInit] ========================================`);
     console.log(`[BusinessInit] ✅ Business initialization complete`);
-    console.log(`[BusinessInit] Business ID: ${business.id}`);
+    console.log(`[BusinessInit] Business ID: ${businessId}`);
     console.log(`[BusinessInit] Plan: ${input.plan}`);
     console.log(`[BusinessInit] Categories: ${cogsCategories.length} COGS, ${expenseCategories.length} Expense`);
     console.log(`[BusinessInit] ⚠️ Note: Call /api/v1/onboarding/start-trial to create Stripe subscription`);
@@ -298,7 +212,7 @@ export async function initializeBusiness(
 
     return {
       success: true,
-      businessId: business.id,
+      businessId: businessId,
       categoriesGenerated: {
         cogs: cogsCategories.length,
         expense: expenseCategories.length
