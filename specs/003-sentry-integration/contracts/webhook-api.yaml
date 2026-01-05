@@ -1,0 +1,173 @@
+openapi: 3.0.3
+info:
+  title: FinanSEAL Sentry Webhook API
+  description: Webhook endpoint for receiving Sentry alerts and forwarding to Telegram
+  version: 1.0.0
+
+servers:
+  - url: /api/v1/system
+    description: System domain API
+
+paths:
+  /webhooks/sentry:
+    post:
+      summary: Receive Sentry webhook alerts
+      description: |
+        Receives alert webhooks from Sentry and forwards critical errors to Telegram.
+        Only processes 'triggered' actions with error/fatal severity.
+      operationId: handleSentryWebhook
+      tags:
+        - Webhooks
+      security:
+        - SentryWebhookToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SentryWebhookPayload'
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  telegram_sent:
+                    type: boolean
+                    description: Whether alert was forwarded to Telegram
+                  message:
+                    type: string
+                    example: "Alert forwarded to Telegram"
+        '400':
+          description: Invalid webhook payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid or missing webhook token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    SentryWebhookToken:
+      type: apiKey
+      in: header
+      name: X-Sentry-Token
+      description: Sentry webhook verification token
+
+  schemas:
+    SentryWebhookPayload:
+      type: object
+      required:
+        - action
+        - data
+      properties:
+        action:
+          type: string
+          enum: [triggered, resolved, assigned, archived, ignored]
+          description: Type of alert action
+        data:
+          type: object
+          required:
+            - event
+          properties:
+            event:
+              type: object
+              required:
+                - event_id
+                - title
+                - level
+              properties:
+                event_id:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                  description: Error title/type
+                message:
+                  type: string
+                  description: Error message
+                level:
+                  type: string
+                  enum: [fatal, error, warning, info, debug]
+                platform:
+                  type: string
+                  example: javascript
+                timestamp:
+                  type: string
+                  format: date-time
+                tags:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      key:
+                        type: string
+                      value:
+                        type: string
+                user:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    email:
+                      type: string
+                    ip_address:
+                      type: string
+                contexts:
+                  type: object
+                  properties:
+                    browser:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        version:
+                          type: string
+                    os:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        version:
+                          type: string
+            triggered_rule:
+              type: string
+              description: Name of the alert rule that triggered
+        actor:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [application, user]
+            id:
+              type: string
+            name:
+              type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code for programmatic handling

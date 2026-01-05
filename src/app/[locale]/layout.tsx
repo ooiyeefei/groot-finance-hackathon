@@ -7,6 +7,7 @@ import { QueryProvider } from '@/components/providers/QueryProvider';
 import { BusinessContextProvider } from '@/contexts/business-context';
 import { ClerkProviderWrapper } from '@/components/providers/ClerkProviderWrapper';
 import { ConvexClientProvider } from '@/components/providers/ConvexClientProvider';
+import { SentryUserProvider } from '@/components/providers/SentryUserProvider';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -59,7 +60,9 @@ export default async function LocaleLayout({
           <I18nErrorBoundary fallbackLocale={locale}>
             <NextIntlClientProvider locale={locale} messages={messages}>
               <BusinessContextProvider>
-                {children}
+                <SentryUserProvider>
+                  {children}
+                </SentryUserProvider>
               </BusinessContextProvider>
             </NextIntlClientProvider>
           </I18nErrorBoundary>

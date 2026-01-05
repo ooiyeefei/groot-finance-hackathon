@@ -14,6 +14,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/webhooks(.*)',
   '/api/v1/webhooks(.*)',
   '/api/v1/billing/webhooks(.*)',
+  '/api/v1/system/webhooks(.*)',
   '/api/health(.*)',
   // Static/public pages
   '/:locale/pricing(.*)',
