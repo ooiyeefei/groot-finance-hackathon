@@ -4,12 +4,15 @@
  * Returns trial status for the authenticated user's business.
  * Uses subscription_status from database (synced from Stripe) as source of truth.
  *
+ * ✅ MIGRATED TO CONVEX (2025-01)
+ *
  * @route GET /api/v1/onboarding/trial-status
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getSupabaseAdmin } from '@/lib/supabase/admin-client'
+import { getAuthenticatedConvex } from '@/lib/convex'
+import { api } from '@/convex/_generated/api'
 
 const TRIAL_WARNING_THRESHOLD_DAYS = 3
 
@@ -26,50 +29,30 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get Supabase admin client (lazy initialization)
-    const supabaseAdmin = getSupabaseAdmin()
-
-    // Get user's business context
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('id, business_id')
-      .eq('clerk_user_id', userId)
-      .single()
-
-    if (userError || !user) {
-      console.error('[Trial Status API v1] User not found:', userError?.message)
+    // Get authenticated Convex client
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.error('[Trial Status API v1] Failed to get Convex client')
       return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
       )
     }
 
-    if (!user.business_id) {
+    // Get current business via authenticated query
+    const business = await client.query(api.functions.businesses.getCurrentBusiness)
+
+    if (!business) {
       return NextResponse.json(
         { success: false, error: 'No business associated with user' },
         { status: 400 }
       )
     }
 
-    // Get business trial data (subscription_status is synced from Stripe)
-    const { data: business, error: businessError } = await supabaseAdmin
-      .from('businesses')
-      .select('trial_start_date, trial_end_date, plan_name, subscription_status')
-      .eq('id', user.business_id)
-      .single()
-
-    if (businessError || !business) {
-      console.error('[Trial Status API v1] Business not found:', businessError?.message)
-      return NextResponse.json(
-        { success: false, error: 'Business not found' },
-        { status: 404 }
-      )
-    }
-
     // Determine trial status using subscription_status (Stripe source of truth)
-    const isTrialPlan = business.plan_name === 'trial' || business.plan_name === 'free'
-    const isTrialingStatus = business.subscription_status === 'trialing'
-    const isPausedStatus = business.subscription_status === 'paused'
+    const isTrialPlan = business.planName === 'trial' || business.planName === 'free'
+    const isTrialingStatus = business.subscriptionStatus === 'trialing'
+    const isPausedStatus = business.subscriptionStatus === 'paused'
     const isOnTrial = isTrialPlan || isTrialingStatus
 
     // Default response for non-trial users
@@ -84,19 +67,20 @@ export async function GET(request: NextRequest) {
           isExpired: false,
           shouldShowWarning: false,
           isPaused: false,
-          planName: business.plan_name,
+          planName: business.planName,
         },
       })
     }
 
     // Calculate trial dates and remaining days
-    let trialEndDate = business.trial_end_date
+    // Convex stores trialEndDate as number (timestamp) or undefined
+    let trialEndDateValue = business.trialEndDate
     let daysRemaining = 0
     let isExpired = isPausedStatus
 
-    if (trialEndDate) {
+    if (trialEndDateValue) {
       try {
-        const endDate = new Date(trialEndDate)
+        const endDate = new Date(trialEndDateValue)
         const now = new Date()
         const diffMs = endDate.getTime() - now.getTime()
         daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
@@ -113,17 +97,25 @@ export async function GET(request: NextRequest) {
 
     const shouldShowWarning = !isExpired && daysRemaining <= TRIAL_WARNING_THRESHOLD_DAYS
 
+    // Convert timestamp to ISO string for API response
+    const trialEndDateISO = trialEndDateValue
+      ? new Date(trialEndDateValue).toISOString()
+      : null
+    const trialStartDateISO = business.trialStartDate
+      ? new Date(business.trialStartDate).toISOString()
+      : null
+
     const response = {
       success: true,
       data: {
         isOnTrial: isOnTrial && !isExpired,
-        trialStartDate: business.trial_start_date,
-        trialEndDate,
+        trialStartDate: trialStartDateISO,
+        trialEndDate: trialEndDateISO,
         daysRemaining,
         isExpired,
         shouldShowWarning,
         isPaused: isPausedStatus,
-        planName: business.plan_name,
+        planName: business.planName,
       },
     }
 
