@@ -40,8 +40,9 @@
     "lint:unused-imports": "npx eslint src/ --ext .ts,.tsx --fix --rule 'unused-imports/no-unused-imports: error' || echo 'unused-imports plugin needed'"
   },
   "dependencies": {
+    "@aws-sdk/client-lambda": "^3.962.0",
     "@aws-sdk/client-s3": "^3.958.0",
-    "@aws-sdk/credential-providers": "^3.958.0",
+    "@aws-sdk/credential-providers": "^3.962.0",
     "@aws-sdk/s3-request-presigner": "^3.958.0",
     "@clerk/nextjs": "^6.30.0",
     "@google/genai": "^1.19.0",

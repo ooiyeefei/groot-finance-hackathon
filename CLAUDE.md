@@ -101,6 +101,41 @@ Required environment variables for Trigger.dev tasks (set in Trigger.dev Dashboa
 
 **Security Model**: Trigger.dev tasks use Convex system functions that don't require authentication. Document IDs are long random strings that only our backend knows - knowing the ID provides implicit authorization. This is a common pattern for backend-to-backend communication.
 
+### AWS Lambda Durable Functions (Migration in Progress)
+
+**Status**: Migrating from Trigger.dev to AWS Lambda Durable Functions for document processing.
+
+**Why**: Lambda Durable Functions provide built-in checkpointing, better cost control, and native AWS integration without third-party dependencies.
+
+#### Architecture Overview
+```
+Vercel API → AWS OIDC Auth → Lambda Durable Function
+                                    │
+                                    ├── Step 1: classify-document
+                                    ├── Step 2: convert-pdf (Python Layer)
+                                    ├── Step 3: extract-data (Gemini AI)
+                                    └── Step 4: update-status (Convex)
+```
+
+#### Key Files
+- `src/lambda/document-processor/`: Lambda handler and step implementations
+- `infra/`: AWS CDK infrastructure (Lambda, Layer, IAM, CloudWatch)
+- `src/lambda/layers/python-pdf/`: Docker-based Python Layer for pdf2image
+
+#### Lambda Environment Variables
+| Variable | Description |
+|----------|-------------|
+| `SENTRY_DSN` | Sentry error tracking DSN |
+| `SENTRY_ENVIRONMENT` | Environment name (staging/production) |
+| `NEXT_PUBLIC_CONVEX_URL` | Convex deployment URL |
+| `GEMINI_API_KEY` | Google Gemini API key |
+| `S3_BUCKET_NAME` | S3 bucket for document storage |
+
+#### Invocation Pattern
+- **API Routes**: Use `@aws-sdk/client-lambda` with OIDC authentication
+- **Auth**: Vercel OIDC provider → AWS IAM Role assumption
+- **Response**: Fire-and-forget async invocation (202 Accepted)
+
 ## Development Guidelines
 
 ### **Core Workflow Rules**
@@ -1036,6 +1071,8 @@ Extensions only affect deployment, not local development. Use `external` array f
 - Convex (tables + files) - migration from Supabase PostgreSQL (001-db-revamp)
 - TypeScript 5.9+ with Next.js 15.4.6 App Router + Convex (database), Clerk (auth), Stripe (billing), Trigger.dev v3 (background jobs) (002-convex-migration)
 - Convex (native) - migrating from Supabase PostgreSQL + Storage (002-convex-migration)
+- TypeScript 5.9+ (CDK & Lambda handler), Python 3.11 (Lambda Layer for pdf2image) + AWS CDK 2.x, @aws/durable-execution-sdk-js, @sentry/aws-serverless, @aws-sdk/client-lambda (004-lambda-durable-migration)
+- AWS S3 (existing finanseal-bucket), Convex (existing - unchanged) (004-lambda-durable-migration)
 
 ## Recent Changes
 - 001-stripe-subscription: Added TypeScript 5.9+ with Next.js 15 App Router + Stripe SDK (`stripe`), Stripe React (`@stripe/stripe-js`), Supabase Client

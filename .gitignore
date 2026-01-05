@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -41,6 +42,14 @@ yarn-error.log*
 next-env.d.ts
 
 .trigger
+
+# AWS CDK
+cdk.out/
+infra/cdk.out/
+
+# Lambda build artifacts
+**/dist/
+src/lambda/**/dist/
 
 # Convex backup (prod data exports)
 .convex-backup/
