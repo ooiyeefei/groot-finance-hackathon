@@ -126,11 +126,21 @@ These are the fundamental rules that govern all development work in this reposit
     *   If a prompt contains multiple, independent workstreams (e.g., one backend task, one frontend task), you should address them simultaneously.
     *   *Example:* Setting up the Supabase database schema and building the frontend Clerk authentication UI are non-dependent tasks and can be executed in parallel.
 
+4.  **Rule: Git Author for Vercel Deployments**
+    *   **ALWAYS set git author before pushing or merging to main branch**:
+        ```bash
+        git config user.name "grootdev-ai"
+        git config user.email "dev@hellogroot.com"
+        ```
+    *   **Why**: Vercel requires the git author to have project access. Commits from unauthorized authors will fail deployment.
+    *   This applies to all commits that will be deployed to production (main branch).
+    *   If a deployment fails with "Git author must have access to the project on Vercel", push an empty commit with the correct author to trigger deployment.
+
 ### **Design System Rules**
 
 FinanSEAL implements a **Layer 1-2-3 Semantic Design System** for consistent theming across light and dark modes. These rules are **MANDATORY** for all UI component work.
 
-4.  **Rule: Always Check Existing Components First**
+5.  **Rule: Always Check Existing Components First**
     *   Before creating ANY new UI component, you MUST check existing implementations in the correct order:
         1. **Check `src/components/ui/`** - UI component library (Button, Card, Badge, etc.)
         2. **Check `src/app/globals.css`** - Available semantic tokens (--background, --foreground, --primary, etc.)
@@ -138,13 +148,13 @@ FinanSEAL implements a **Layer 1-2-3 Semantic Design System** for consistent the
         4. **Search domain components** - Look for similar patterns in `src/domains/*/components/`
     *   **Documentation**: Detailed component standards in `src/components/ui/CLAUDE.md`
 
-5.  **Rule: Mandatory Semantic Token Usage**
+6.  **Rule: Mandatory Semantic Token Usage**
     *   **NEVER use hardcoded colors**: No `bg-gray-700`, `text-white`, `border-gray-600`, `bg-blue-600`, etc.
     *   **ALWAYS use semantic tokens**: `bg-card`, `text-foreground`, `border-border`, `bg-primary`, etc.
     *   **Follow Layer Hierarchy**: `bg-background` → `bg-surface` → `bg-card` → `bg-muted` for proper elevation
     *   **Light/Dark Mode Pattern for Badges**: `bg-{color}-500/10 text-{color}-600 dark:text-{color}-400 border border-{color}-500/30`
 
-6.  **Rule: Design Standards Compliance**
+7.  **Rule: Design Standards Compliance**
     *   **Design Language**: Material Design 3 inspired with Google-style clean aesthetics
     *   **Accessibility**: WCAG AA compliant contrast ratios (4.5:1 minimum)
     *   **Color System**: HSL-based semantic tokens with automatic light/dark adaptation
@@ -152,14 +162,14 @@ FinanSEAL implements a **Layer 1-2-3 Semantic Design System** for consistent the
     *   **Border Radius**: Material Design rounded corners (`rounded-md` standard)
     *   **Focus States**: `ring-ring` for keyboard navigation accessibility
 
-7.  **Rule: Component Integration Pattern**
+8.  **Rule: Component Integration Pattern**
     *   **Import from UI library**: `import { Button, Card, Badge } from '@/components/ui'`
     *   **Use CVA variants**: Prefer `<Button variant="default">` over custom styling
     *   **Test both themes**: Verify light and dark mode rendering before completion
     *   **App-level patterns**: Reference `src/app/CLAUDE.md` for modals, forms, navigation
     *   **Build validation**: Components must pass `npm run build` without errors
 
-8.  **Rule: Modal and Overlay Standards**
+9.  **Rule: Modal and Overlay Standards**
     *   **Full coverage**: Backdrop must cover entire viewport with no gaps
     *   **Proper layering**: Modal content uses `m-4` for spacing, not backdrop `p-4`
     *   **Close patterns**: Use `<Button variant="ghost" size="sm">` with semantic hover states
