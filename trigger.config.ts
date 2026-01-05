@@ -2,6 +2,15 @@ import { defineConfig } from "@trigger.dev/sdk/v3";
 import { pythonExtension } from "@trigger.dev/python/extension";
 import { aptGet } from "@trigger.dev/build/extensions/core";
 
+/**
+ * Trigger.dev Configuration
+ *
+ * Sentry integration for Trigger.dev tasks:
+ * - Sentry is initialized in src/trigger/utils/sentry-wrapper.ts
+ * - Use withSentry() wrapper or manual captureTaskException() in tasks
+ * - @see specs/003-sentry-integration/plan.md Phase 4
+ */
+
 export default defineConfig({
   project: "proj_qjsdxdsoxmrgplspwuwj",
   runtime: "node",
