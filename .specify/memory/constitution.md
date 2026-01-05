@@ -1,166 +1,50 @@
-<!--
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                         SYNC IMPACT REPORT                                     ║
-╠═══════════════════════════════════════════════════════════════════════════════╣
-║ Version Change: N/A → 1.0.0 (Initial ratification)                            ║
-║                                                                               ║
-║ Added Principles:                                                             ║
-║   I. Domain-Driven Architecture                                               ║
-║   II. Semantic Design System                                                  ║
-║   III. Build Validation (Non-Negotiable)                                      ║
-║   IV. Simplicity First                                                        ║
-║   V. Background Job Architecture                                              ║
-║                                                                               ║
-║ Added Sections:                                                               ║
-║   - Technology Standards                                                       ║
-║   - Development Workflow                                                       ║
-║   - Governance                                                                 ║
-║                                                                               ║
-║ Templates Requiring Updates:                                                   ║
-║   ✅ plan-template.md - Constitution Check section aligned                    ║
-║   ✅ spec-template.md - No conflicts                                          ║
-║   ✅ tasks-template.md - No conflicts                                         ║
-║                                                                               ║
-║ Follow-up TODOs: None                                                          ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
--->
-
-# FinanSEAL Constitution
+# [PROJECT_NAME] Constitution
+<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
 
 ## Core Principles
 
-### I. Domain-Driven Architecture
+### [PRINCIPLE_1_NAME]
+<!-- Example: I. Library-First -->
+[PRINCIPLE_1_DESCRIPTION]
+<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
 
-All code MUST be organized around business domains, not technical concerns.
+### [PRINCIPLE_2_NAME]
+<!-- Example: II. CLI Interface -->
+[PRINCIPLE_2_DESCRIPTION]
+<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
 
-**Non-Negotiable Rules:**
-- Feature code lives in `src/domains/{domain-name}/` with components, hooks, services, and types
-- Each domain MUST be self-contained with its own `CLAUDE.md` documentation
-- API routes follow `src/app/api/v1/{domain}/` structure
-- Shared utilities only in `src/lib/` for genuine cross-domain needs
-- No circular dependencies between domains
+### [PRINCIPLE_3_NAME]
+<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
+[PRINCIPLE_3_DESCRIPTION]
+<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
 
-**Rationale:** Domain isolation enables parallel development, clearer ownership, and prevents monolithic coupling. A domain can be understood, tested, and modified without understanding the entire codebase.
+### [PRINCIPLE_4_NAME]
+<!-- Example: IV. Integration Testing -->
+[PRINCIPLE_4_DESCRIPTION]
+<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
 
-### II. Semantic Design System
+### [PRINCIPLE_5_NAME]
+<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
+[PRINCIPLE_5_DESCRIPTION]
+<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
 
-All UI components MUST use the Layer 1-2-3 semantic token system. Hardcoded colors are forbidden.
+## [SECTION_2_NAME]
+<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
 
-**Non-Negotiable Rules:**
-- NEVER use hardcoded colors (`bg-gray-700`, `text-white`, `border-gray-600`)
-- ALWAYS use semantic tokens (`bg-card`, `text-foreground`, `border-border`)
-- Follow layer hierarchy: `bg-background` → `bg-surface` → `bg-card` → `bg-muted`
-- Badge pattern: `bg-{color}-500/10 text-{color}-600 dark:text-{color}-400 border border-{color}-500/30`
-- Check existing components in `src/components/ui/` before creating new ones
-- Reference `src/app/globals.css` for all available CSS variables
+[SECTION_2_CONTENT]
+<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
 
-**Rationale:** Semantic tokens ensure automatic light/dark mode support, WCAG AA accessibility compliance (4.5:1 contrast), and consistent visual language. Hardcoded colors break theming and accessibility.
+## [SECTION_3_NAME]
+<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
 
-### III. Build Validation (Non-Negotiable)
-
-Every code change MUST pass `npm run build` before completion. No exceptions.
-
-**Non-Negotiable Rules:**
-- Run `npm run build` after every significant code change
-- Fix ALL TypeScript errors before reporting task completion
-- Fix ALL ESLint errors before reporting task completion
-- The build-fix loop continues until zero errors
-- Never commit code that fails the build
-
-**Rationale:** Build validation catches type errors, import issues, and configuration problems before they reach production. A failing build is a blocking issue, not a warning.
-
-### IV. Simplicity First
-
-Every change MUST be the minimum necessary to achieve the goal. Avoid over-engineering.
-
-**Non-Negotiable Rules:**
-- Only make changes directly requested or clearly necessary
-- No feature flags for non-production code
-- No abstractions for single-use operations
-- No "improvements" beyond what was asked
-- No docstrings/comments for unchanged code
-- Delete unused code completely (no `_unused` variables, no `// removed` comments)
-- Three similar lines of code is better than a premature abstraction
-
-**Rationale:** Complexity has compounding costs in maintenance, testing, and onboarding. Every abstraction must earn its existence through proven reuse, not hypothetical future needs.
-
-### V. Background Job Architecture
-
-Long-running tasks MUST use Trigger.dev v3 with proper task orchestration.
-
-**Non-Negotiable Rules:**
-- Use `@trigger.dev/sdk` v4 syntax (NEVER `client.defineJob`)
-- Tasks defined in `src/trigger/` directory
-- Python scripts for ML/CV workloads in `src/python/` with `requirements.txt`
-- Fire-and-forget pattern: API returns 202 Accepted, task runs in background
-- Use `tasks.trigger<typeof taskName>()` for type-safe triggers
-- Downstream task orchestration via `triggerAndWait()` for dependent workflows
-- Max duration: 600 seconds default, override per-task when justified
-
-**Rationale:** Background jobs prevent API timeouts, enable retry logic, and allow Python runtime for specialized workloads (OCR, computer vision). The fire-and-forget pattern keeps the UI responsive.
-
-## Technology Standards
-
-**Stack Requirements:**
-- **Framework**: Next.js 15+ with App Router
-- **Language**: TypeScript 5.9+ with strict mode
-- **Styling**: Tailwind CSS 3.4+ with semantic tokens from globals.css
-- **Components**: Radix UI primitives with CVA (class-variance-authority)
-- **Database**: Supabase PostgreSQL with Row Level Security (RLS)
-- **Authentication**: Clerk for user management
-- **Background Jobs**: Trigger.dev v3 with Python extension
-- **Testing**: Vitest for unit tests, Playwright for E2E
-
-**API Design:**
-- All routes under `/api/v1/` namespace
-- Domain-specific endpoints (`/api/v1/expense-claims/`, `/api/v1/invoices/`)
-- JSON request/response with Zod validation
-- Proper HTTP status codes (200, 201, 202, 400, 401, 403, 404, 500)
-
-## Development Workflow
-
-**Before Starting Work:**
-1. Read relevant domain `CLAUDE.md` files
-2. Check existing components before creating new ones
-3. Understand the semantic token system for UI work
-
-**During Development:**
-1. Follow domain boundaries strictly
-2. Use semantic tokens for all styling
-3. Run `npm run build` frequently to catch errors early
-4. Keep changes minimal and focused
-
-**Before Completion:**
-1. `npm run build` MUST pass with zero errors
-2. Verify light AND dark mode for UI changes
-3. Test affected user flows manually
-4. Document non-obvious decisions in code comments
-
-**Code Review Gates:**
-- [ ] Build passes (`npm run build`)
-- [ ] No hardcoded colors in UI code
-- [ ] Changes are within appropriate domain boundaries
-- [ ] No over-engineering or unnecessary abstractions
-- [ ] Background tasks use Trigger.dev patterns correctly
+[SECTION_3_CONTENT]
+<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
 
 ## Governance
+<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-This constitution supersedes all other development practices. When in conflict, constitution principles take precedence.
+[GOVERNANCE_RULES]
+<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
 
-**Amendment Process:**
-1. Propose amendment with rationale
-2. Document the change with before/after comparison
-3. Update version number following semantic versioning
-4. Update dependent templates if principles change
-
-**Compliance:**
-- All PRs MUST verify compliance with constitution principles
-- Violations require explicit justification in PR description
-- Complexity additions require documented rationale
-
-**Version Policy:**
-- MAJOR: Backward-incompatible principle changes or removals
-- MINOR: New principles or significant guidance expansion
-- PATCH: Clarifications, wording improvements, typo fixes
-
-**Version**: 1.0.0 | **Ratified**: 2025-12-27 | **Last Amended**: 2025-12-27
+**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
+<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->

@@ -14,6 +14,7 @@ import type * as functions_analytics from "../functions/analytics.js";
 import type * as functions_audit from "../functions/audit.js";
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_conversations from "../functions/conversations.js";
+import type * as functions_emails from "../functions/emails.js";
 import type * as functions_expenseClaims from "../functions/expenseClaims.js";
 import type * as functions_invoices from "../functions/invoices.js";
 import type * as functions_memberships from "../functions/memberships.js";
@@ -25,6 +26,7 @@ import type * as functions_systemMonitoring from "../functions/systemMonitoring.
 import type * as functions_users from "../functions/users.js";
 import type * as functions_vendors from "../functions/vendors.js";
 import type * as functions_webhooks from "../functions/webhooks.js";
+import type * as functions_workflows from "../functions/workflows.js";
 import type * as lib_resolvers from "../lib/resolvers.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as migrations from "../migrations.js";
@@ -43,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   "functions/audit": typeof functions_audit;
   "functions/businesses": typeof functions_businesses;
   "functions/conversations": typeof functions_conversations;
+  "functions/emails": typeof functions_emails;
   "functions/expenseClaims": typeof functions_expenseClaims;
   "functions/invoices": typeof functions_invoices;
   "functions/memberships": typeof functions_memberships;
@@ -54,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   "functions/users": typeof functions_users;
   "functions/vendors": typeof functions_vendors;
   "functions/webhooks": typeof functions_webhooks;
+  "functions/workflows": typeof functions_workflows;
   "lib/resolvers": typeof lib_resolvers;
   "lib/validators": typeof lib_validators;
   migrations: typeof migrations;

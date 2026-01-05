@@ -1,0 +1,21 @@
+{
+  "name": "@finanseal/welcome-workflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lambda Durable Function for welcome email workflow",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.0"
+  },
+  "dependencies": {
+    "@aws/durable-execution-sdk-js": "^1.0.0",
+    "@aws-sdk/client-ses": "^3.750.0",
+    "convex": "^1.18.0"
+  }
+}

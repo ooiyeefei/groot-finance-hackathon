@@ -21,6 +21,11 @@ import { Webhook } from 'svix'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '@/convex/_generated/api'
 import { syncRoleToClerk } from '@/domains/security/lib/rbac'
+import {
+  triggerWelcomeWorkflow,
+  isWelcomeWorkflowConfigured,
+  type WelcomeWorkflowPayload
+} from '@/lib/aws/lambda-client'
 
 // ===== TYPE DEFINITIONS =====
 
@@ -113,11 +118,14 @@ export function verifyClerkWebhook(
  * 1. Invitation-based: Links Clerk user to existing invitation
  * 2. Direct signup: Creates new business and user profile
  *
+ * Also triggers welcome email workflow via Lambda Durable Function.
+ *
  * Uses Convex action that handles all database operations
  *
  * @param user - Clerk user data
+ * @param svixId - Svix webhook ID for idempotency (used as executionId)
  */
-export async function handleClerkUserCreated(user: ClerkUser): Promise<void> {
+export async function handleClerkUserCreated(user: ClerkUser, svixId?: string): Promise<void> {
   console.log(`[Webhook Service] 🚀 Processing user.created for Clerk ID: ${user.id}`)
   console.log(`[Webhook Service] 📧 User email addresses:`, user.email_addresses.map(e => ({ email: e.email_address, verified: e.verification?.status })))
 
@@ -184,6 +192,35 @@ export async function handleClerkUserCreated(user: ClerkUser): Promise<void> {
       if (!syncResult.success) {
         console.error(`[Webhook Service] ⚠️ Failed to sync owner permissions to Clerk: ${syncResult.error}`)
       }
+    }
+
+    // ===== WELCOME EMAIL WORKFLOW =====
+    // Trigger welcome email workflow via Lambda Durable Function
+    // Only if Lambda infrastructure is configured (graceful degradation)
+    if (result.success && result.userId && svixId && isWelcomeWorkflowConfigured()) {
+      console.log(`[Webhook Service] 📬 Triggering welcome email workflow`)
+
+      const isTeamMember = result.action === 'invitation_linked'
+
+      const workflowPayload: WelcomeWorkflowPayload = {
+        userId: result.userId,
+        clerkUserId: user.id,
+        email: email,
+        firstName: user.first_name || undefined,
+        executionId: svixId, // Svix webhook ID for idempotency
+        isTeamMember: isTeamMember
+      }
+
+      const workflowResult = await triggerWelcomeWorkflow(workflowPayload)
+
+      if (workflowResult.success) {
+        console.log(`[Webhook Service] ✅ Welcome workflow triggered successfully`)
+      } else {
+        // Log error but don't fail the webhook - email is non-critical
+        console.error(`[Webhook Service] ⚠️ Welcome workflow trigger failed: ${workflowResult.error}`)
+      }
+    } else if (result.success && result.userId && !isWelcomeWorkflowConfigured()) {
+      console.log(`[Webhook Service] ℹ️ Welcome workflow skipped - Lambda not configured (dev mode)`)
     }
 
     console.log(`[Webhook Service] ✅ Successfully processed user.created for ${email}`)

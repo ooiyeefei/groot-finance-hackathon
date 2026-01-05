@@ -1,0 +1,19 @@
+{
+  "name": "@finanseal/delivery-handler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lambda handler for SES delivery events via SNS",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.0"
+  },
+  "dependencies": {
+    "convex": "^1.18.0"
+  }
+}

@@ -19,6 +19,11 @@ import {
   MESSAGE_ROLE_VALUES,
   SOURCE_DOCUMENT_TYPE_VALUES,
   CREATED_BY_METHOD_VALUES,
+  EMAIL_TEMPLATE_TYPE_VALUES,
+  EMAIL_STATUS_VALUES,
+  EMAIL_SUPPRESSION_REASON_VALUES,
+  WORKFLOW_TYPE_VALUES,
+  WORKFLOW_STATUS_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -98,3 +103,37 @@ export const sourceDocumentTypeValidator = literalUnion(SOURCE_DOCUMENT_TYPE_VAL
  * Created by method validator
  */
 export const createdByMethodValidator = literalUnion(CREATED_BY_METHOD_VALUES);
+
+// ============================================
+// EMAIL SYSTEM VALIDATORS
+// ============================================
+
+/**
+ * Email template type validator
+ * Used in email_logs table
+ */
+export const emailTemplateTypeValidator = literalUnion(EMAIL_TEMPLATE_TYPE_VALUES);
+
+/**
+ * Email delivery status validator
+ * Used in email_logs table for tracking delivery state
+ */
+export const emailStatusValidator = literalUnion(EMAIL_STATUS_VALUES);
+
+/**
+ * Email suppression reason validator
+ * Used in email_suppressions table
+ */
+export const emailSuppressionReasonValidator = literalUnion(EMAIL_SUPPRESSION_REASON_VALUES);
+
+/**
+ * Workflow type validator
+ * Used in workflow_executions table
+ */
+export const workflowTypeValidator = literalUnion(WORKFLOW_TYPE_VALUES);
+
+/**
+ * Workflow status validator
+ * Used in workflow_executions table
+ */
+export const workflowStatusValidator = literalUnion(WORKFLOW_STATUS_VALUES);

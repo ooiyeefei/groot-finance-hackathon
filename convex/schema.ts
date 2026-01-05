@@ -11,6 +11,11 @@ import {
   expenseClaimStatusValidator,
   invoiceStatusValidator,
   messageRoleValidator,
+  emailTemplateTypeValidator,
+  emailStatusValidator,
+  emailSuppressionReasonValidator,
+  workflowTypeValidator,
+  workflowStatusValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -35,6 +40,16 @@ export default defineSchema({
       theme: v.optional(v.string()),
       language: v.optional(v.string()),
       notifications: v.optional(v.boolean()),
+    })),
+
+    // Email Preferences (stored directly on user for simpler lookups)
+    // Note: Transactional emails (security, payment) always send regardless
+    emailPreferences: v.optional(v.object({
+      marketingEnabled: v.optional(v.boolean()),        // Default: true
+      productUpdatesEnabled: v.optional(v.boolean()),   // Default: true
+      onboardingTipsEnabled: v.optional(v.boolean()),   // Default: true
+      globalUnsubscribe: v.optional(v.boolean()),       // Default: false (CAN-SPAM)
+      unsubscribedAt: v.optional(v.number()),           // Unix timestamp
     })),
 
     // Timestamps (Convex adds _creationTime automatically)
@@ -491,4 +506,143 @@ export default defineSchema({
     .index("by_targetEntityType", ["targetEntityType"])
     .index("by_targetEntity", ["targetEntityType", "targetEntityId"])
     .index("by_legacyId", ["legacyId"]),
+
+  // ============================================
+  // EMAIL DOMAIN: Preferences & Delivery Tracking
+  // ============================================
+
+  /**
+   * Email Preferences - User-level communication preferences
+   *
+   * User-level (not business-level) because a user may belong to
+   * multiple businesses but their email preferences should be consistent.
+   *
+   * Note: Transactional emails (payment, security) are ALWAYS delivered
+   * regardless of preferences per CAN-SPAM regulations.
+   */
+  email_preferences: defineTable({
+    // Identity - User level (NOT business level)
+    userId: v.id("users"),
+
+    // Marketing Preferences (user-controllable)
+    marketingEnabled: v.boolean(),           // Default: true
+    onboardingTipsEnabled: v.boolean(),      // Default: true (future drip sequences)
+    productUpdatesEnabled: v.boolean(),      // Default: true
+
+    // Global Unsubscribe (CAN-SPAM compliance)
+    globalUnsubscribe: v.boolean(),          // Default: false
+    unsubscribedAt: v.optional(v.number()),  // Unix timestamp when globally unsubscribed
+
+    // Timestamps
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"]),
+
+  /**
+   * Email Logs - Track all email sends with delivery status
+   *
+   * Follows stripe_events pattern with sesMessageId as idempotency key.
+   * Used for debugging, compliance auditing, and delivery metrics.
+   */
+  email_logs: defineTable({
+    // Identity (multi-tenant)
+    businessId: v.optional(v.id("businesses")),  // Optional for system-level emails
+    userId: v.optional(v.id("users")),           // Recipient user (if known)
+
+    // SES Tracking
+    sesMessageId: v.string(),                    // SES Message ID (idempotency key)
+    configurationSet: v.string(),                // SES Configuration Set used
+
+    // Email Details
+    templateType: emailTemplateTypeValidator,    // Email type identifier
+    recipientEmail: v.string(),
+    subject: v.string(),
+    senderEmail: v.string(),
+
+    // Delivery Status (updated by SNS handler)
+    status: emailStatusValidator,                // Current delivery status
+    deliveredAt: v.optional(v.number()),
+    bouncedAt: v.optional(v.number()),
+    bounceType: v.optional(v.string()),          // "Permanent", "Transient"
+    bounceSubType: v.optional(v.string()),       // "General", "NoEmail", "Suppressed"
+    complainedAt: v.optional(v.number()),
+    openedAt: v.optional(v.number()),
+    clickedAt: v.optional(v.number()),
+
+    // Metadata (debugging context)
+    metadata: v.optional(v.any()),               // Workflow ID, request context, etc.
+
+    // Convex adds _creationTime automatically (sent timestamp)
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_userId", ["userId"])
+    .index("by_sesMessageId", ["sesMessageId"])
+    .index("by_recipientEmail", ["recipientEmail"])
+    .index("by_templateType", ["templateType"])
+    .index("by_status", ["status"]),
+
+  /**
+   * Email Suppressions - Track undeliverable email addresses
+   *
+   * Separate from email_preferences because suppressions apply to the
+   * email address itself (not the user), and addresses may not be
+   * linked to users.
+   *
+   * IMPORTANT: Check this table before sending ANY email!
+   */
+  email_suppressions: defineTable({
+    // Suppressed Email Address
+    email: v.string(),                           // Lowercase, normalized email
+
+    // Suppression Details
+    reason: emailSuppressionReasonValidator,     // "bounce", "complaint", "unsubscribe"
+    bounceType: v.optional(v.string()),          // For bounces: "Permanent", "Transient"
+    bounceSubType: v.optional(v.string()),       // For bounces: specific reason
+
+    // Source Tracking
+    sourceMessageId: v.optional(v.string()),     // SES Message ID that caused suppression
+
+    // Timestamps
+    suppressedAt: v.number(),                    // When suppression was added
+  })
+    .index("by_email", ["email"])
+    .index("by_reason", ["reason"]),
+
+  /**
+   * Workflow Executions - Track Lambda Durable Function state
+   *
+   * Provides visibility into customer lifecycle stage without querying
+   * AWS directly. Enables admin dashboard showing onboarding progress.
+   *
+   * executionId is the Svix webhook ID (svix-id header) for idempotency.
+   */
+  workflow_executions: defineTable({
+    // Identity
+    userId: v.id("users"),
+    businessId: v.optional(v.id("businesses")),
+
+    // Workflow Details
+    workflowType: workflowTypeValidator,         // Workflow type identifier
+    workflowArn: v.optional(v.string()),         // Lambda Durable Function ARN
+    executionId: v.string(),                     // Svix webhook ID (idempotency key)
+
+    // Status Tracking
+    status: workflowStatusValidator,             // Overall workflow status
+    currentStage: v.string(),                    // Current stage in workflow
+    completedStages: v.array(v.string()),        // All completed stages
+
+    // Timestamps
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+
+    // Metadata (debugging context)
+    metadata: v.optional(v.any()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_businessId", ["businessId"])
+    .index("by_workflowType", ["workflowType"])
+    .index("by_status", ["status"])
+    .index("by_executionId", ["executionId"]),
 });

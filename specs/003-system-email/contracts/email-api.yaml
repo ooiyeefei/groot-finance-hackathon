@@ -1,0 +1,668 @@
+# Internal Email Service API Contract
+# Branch: 003-system-email
+# Purpose: Define internal APIs for email preferences and delivery tracking
+#
+# Note: These are internal APIs - not exposed publicly
+
+openapi: 3.0.3
+info:
+  title: FinanSEAL Email Service API
+  description: |
+    Internal APIs for managing email preferences, viewing delivery logs,
+    and handling unsubscribe requests.
+
+    **Authentication**: All endpoints require Clerk authentication.
+
+    **Multi-tenancy**: User preferences are user-level; logs are filtered by business.
+  version: 1.0.0
+  contact:
+    name: FinanSEAL Engineering
+    email: engineering@hellogroot.com
+
+servers:
+  - url: https://finanseal.com/api/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Development
+
+tags:
+  - name: Email Preferences
+    description: User email communication preferences
+  - name: Email Logs
+    description: Email delivery tracking (admin only)
+  - name: Unsubscribe
+    description: Public unsubscribe endpoints
+
+paths:
+  # ─────────────────────────────────────────────
+  # EMAIL PREFERENCES
+  # ─────────────────────────────────────────────
+
+  /email-preferences:
+    get:
+      operationId: getEmailPreferences
+      summary: Get Current User's Email Preferences
+      description: |
+        Returns the authenticated user's email communication preferences.
+        Returns default values if no preferences have been set.
+      tags:
+        - Email Preferences
+      security:
+        - clerkAuth: []
+
+      responses:
+        '200':
+          description: Email preferences retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailPreferences'
+              example:
+                marketingEnabled: true
+                onboardingTipsEnabled: true
+                productUpdatesEnabled: true
+                globalUnsubscribe: false
+                unsubscribedAt: null
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      operationId: updateEmailPreferences
+      summary: Update Email Preferences
+      description: |
+        Update the authenticated user's email preferences.
+        Partial updates are supported - only include fields to change.
+      tags:
+        - Email Preferences
+      security:
+        - clerkAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailPreferencesUpdate'
+            examples:
+              disableMarketing:
+                summary: Disable marketing emails
+                value:
+                  marketingEnabled: false
+              globalUnsubscribe:
+                summary: Unsubscribe from all
+                value:
+                  globalUnsubscribe: true
+
+      responses:
+        '200':
+          description: Preferences updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailPreferences'
+
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─────────────────────────────────────────────
+  # PUBLIC UNSUBSCRIBE (No Auth Required)
+  # ─────────────────────────────────────────────
+
+  /unsubscribe:
+    get:
+      operationId: renderUnsubscribePage
+      summary: Render Unsubscribe Page
+      description: |
+        Renders an unsubscribe confirmation page.
+        Uses signed token for security - no login required.
+      tags:
+        - Unsubscribe
+
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: Signed unsubscribe token (JWT)
+          schema:
+            type: string
+            example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+        - name: type
+          in: query
+          required: false
+          description: Preference type to unsubscribe from
+          schema:
+            type: string
+            enum: [marketing, onboarding, updates, all]
+            default: all
+
+      responses:
+        '200':
+          description: Unsubscribe page HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+        '400':
+          description: Invalid or expired token
+          content:
+            text/html:
+              schema:
+                type: string
+
+    post:
+      operationId: processUnsubscribe
+      summary: Process Unsubscribe Request
+      description: |
+        Processes the unsubscribe action.
+        Uses signed token for security - no login required.
+        CAN-SPAM compliant: one-click unsubscribe supported.
+      tags:
+        - Unsubscribe
+
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: Signed unsubscribe token
+                type:
+                  type: string
+                  enum: [marketing, onboarding, updates, all]
+                  default: all
+                  description: Preference type to unsubscribe from
+
+      responses:
+        '200':
+          description: Successfully unsubscribed
+          content:
+            text/html:
+              schema:
+                type: string
+              example: |
+                <html>
+                  <body>
+                    <h1>You have been unsubscribed</h1>
+                    <p>You will no longer receive marketing emails.</p>
+                  </body>
+                </html>
+
+        '400':
+          description: Invalid or expired token
+          content:
+            text/html:
+              schema:
+                type: string
+
+  # ─────────────────────────────────────────────
+  # LIST-UNSUBSCRIBE HEADER SUPPORT (RFC 8058)
+  # ─────────────────────────────────────────────
+
+  /unsubscribe/one-click:
+    post:
+      operationId: oneClickUnsubscribe
+      summary: One-Click Unsubscribe (RFC 8058)
+      description: |
+        Supports email client one-click unsubscribe functionality.
+        Called automatically by email clients (Gmail, Apple Mail, etc.)
+        when user clicks unsubscribe in email UI.
+
+        Required headers in email:
+        ```
+        List-Unsubscribe: <https://finanseal.com/api/v1/unsubscribe/one-click>
+        List-Unsubscribe-Post: List-Unsubscribe=One-Click
+        ```
+      tags:
+        - Unsubscribe
+
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - List-Unsubscribe
+              properties:
+                List-Unsubscribe:
+                  type: string
+                  enum: [One-Click]
+                  description: Must be "One-Click" per RFC 8058
+
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: Signed unsubscribe token
+          schema:
+            type: string
+
+      responses:
+        '200':
+          description: Successfully unsubscribed
+
+        '400':
+          description: Invalid request
+
+  # ─────────────────────────────────────────────
+  # EMAIL LOGS (Admin Only)
+  # ─────────────────────────────────────────────
+
+  /admin/email-logs:
+    get:
+      operationId: listEmailLogs
+      summary: List Email Delivery Logs
+      description: |
+        Returns email delivery logs for the current business.
+        Admin/Manager role required.
+      tags:
+        - Email Logs
+      security:
+        - clerkAuth: []
+
+      parameters:
+        - name: status
+          in: query
+          description: Filter by delivery status
+          schema:
+            type: string
+            enum: [sent, delivered, bounced, complained, rejected, opened, clicked]
+
+        - name: templateType
+          in: query
+          description: Filter by email template
+          schema:
+            type: string
+            enum: [welcome_new_user, welcome_team_member, invitation]
+
+        - name: recipientEmail
+          in: query
+          description: Filter by recipient email
+          schema:
+            type: string
+            format: email
+
+        - name: from
+          in: query
+          description: Start date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+
+        - name: to
+          in: query
+          description: End date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+
+        - name: limit
+          in: query
+          description: Max results (default 50, max 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+
+        - name: cursor
+          in: query
+          description: Pagination cursor
+          schema:
+            type: string
+
+      responses:
+        '200':
+          description: Email logs retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EmailLog'
+                  nextCursor:
+                    type: string
+                    nullable: true
+                  totalCount:
+                    type: integer
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/email-logs/{sesMessageId}:
+    get:
+      operationId: getEmailLog
+      summary: Get Email Log Details
+      description: |
+        Returns detailed information for a specific email.
+        Admin/Manager role required.
+      tags:
+        - Email Logs
+      security:
+        - clerkAuth: []
+
+      parameters:
+        - name: sesMessageId
+          in: path
+          required: true
+          description: SES Message ID
+          schema:
+            type: string
+
+      responses:
+        '200':
+          description: Email log details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailLogDetail'
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─────────────────────────────────────────────
+  # DELIVERY STATS (Admin Only)
+  # ─────────────────────────────────────────────
+
+  /admin/email-stats:
+    get:
+      operationId: getEmailStats
+      summary: Get Email Delivery Statistics
+      description: |
+        Returns aggregated email delivery statistics for the business.
+        Admin/Manager role required.
+      tags:
+        - Email Logs
+      security:
+        - clerkAuth: []
+
+      parameters:
+        - name: period
+          in: query
+          description: Time period for stats
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+
+      responses:
+        '200':
+          description: Email statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailStats'
+              example:
+                period: "30d"
+                totalSent: 150
+                delivered: 145
+                bounced: 3
+                complained: 0
+                opened: 98
+                clicked: 45
+                deliveryRate: 0.967
+                openRate: 0.676
+                clickRate: 0.310
+                byTemplate:
+                  welcome_new_user:
+                    sent: 50
+                    delivered: 49
+                    openRate: 0.82
+                  invitation:
+                    sent: 100
+                    delivered: 96
+                    openRate: 0.58
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  schemas:
+    EmailPreferences:
+      type: object
+      required:
+        - marketingEnabled
+        - onboardingTipsEnabled
+        - productUpdatesEnabled
+        - globalUnsubscribe
+      properties:
+        marketingEnabled:
+          type: boolean
+          description: Allow promotional/marketing emails
+          default: true
+
+        onboardingTipsEnabled:
+          type: boolean
+          description: Allow onboarding drip sequence emails
+          default: true
+
+        productUpdatesEnabled:
+          type: boolean
+          description: Allow product update announcements
+          default: true
+
+        globalUnsubscribe:
+          type: boolean
+          description: Opt-out of ALL non-transactional emails
+          default: false
+
+        unsubscribedAt:
+          type: integer
+          format: int64
+          nullable: true
+          description: Unix timestamp when globally unsubscribed
+
+    EmailPreferencesUpdate:
+      type: object
+      properties:
+        marketingEnabled:
+          type: boolean
+        onboardingTipsEnabled:
+          type: boolean
+        productUpdatesEnabled:
+          type: boolean
+        globalUnsubscribe:
+          type: boolean
+
+    EmailLog:
+      type: object
+      required:
+        - sesMessageId
+        - templateType
+        - recipientEmail
+        - status
+        - sentAt
+      properties:
+        sesMessageId:
+          type: string
+          description: SES Message ID
+        templateType:
+          type: string
+          enum: [welcome_new_user, welcome_team_member, invitation]
+        recipientEmail:
+          type: string
+          format: email
+        subject:
+          type: string
+        status:
+          type: string
+          enum: [sent, delivered, bounced, complained, rejected, opened, clicked]
+        sentAt:
+          type: string
+          format: date-time
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        openedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    EmailLogDetail:
+      allOf:
+        - $ref: '#/components/schemas/EmailLog'
+        - type: object
+          properties:
+            senderEmail:
+              type: string
+              format: email
+            configurationSet:
+              type: string
+            bounceType:
+              type: string
+              nullable: true
+            bounceSubType:
+              type: string
+              nullable: true
+            bouncedAt:
+              type: string
+              format: date-time
+              nullable: true
+            complainedAt:
+              type: string
+              format: date-time
+              nullable: true
+            clickedAt:
+              type: string
+              format: date-time
+              nullable: true
+            metadata:
+              type: object
+              additionalProperties: true
+
+    EmailStats:
+      type: object
+      required:
+        - period
+        - totalSent
+        - delivered
+        - bounced
+        - complained
+        - deliveryRate
+      properties:
+        period:
+          type: string
+          enum: [7d, 30d, 90d]
+        totalSent:
+          type: integer
+        delivered:
+          type: integer
+        bounced:
+          type: integer
+        complained:
+          type: integer
+        opened:
+          type: integer
+        clicked:
+          type: integer
+        deliveryRate:
+          type: number
+          format: float
+          description: Delivery rate (0-1)
+        openRate:
+          type: number
+          format: float
+          description: Open rate (0-1)
+        clickRate:
+          type: number
+          format: float
+          description: Click rate (0-1)
+        byTemplate:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              sent:
+                type: integer
+              delivered:
+                type: integer
+              openRate:
+                type: number
+                format: float
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Authentication required"
+            code: "UNAUTHORIZED"
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Admin or Manager role required"
+            code: "FORBIDDEN"
+
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Invalid preference value"
+            code: "BAD_REQUEST"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Email log not found"
+            code: "NOT_FOUND"
+
+  securitySchemes:
+    clerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk session JWT token
