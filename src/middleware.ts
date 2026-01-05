@@ -1,7 +1,8 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '@/convex/_generated/api'
 
 // Define public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
@@ -34,9 +35,18 @@ const isApiRoute = (req: NextRequest) => {
   return req.nextUrl.pathname.startsWith('/api/')
 }
 
+// Initialize Convex HTTP client for middleware queries
+function getConvexClient() {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL
+  if (!url) {
+    throw new Error('NEXT_PUBLIC_CONVEX_URL not configured')
+  }
+  return new ConvexHttpClient(url)
+}
+
 /**
  * Check trial expiration status for a Clerk user
- * Uses service role client for fast DB queries (bypasses RLS)
+ * Uses Convex HTTP client for fast DB queries (no auth required)
  *
  * @param clerkUserId - Clerk user ID from auth()
  * @returns Object with isExpired boolean and businessId
@@ -46,74 +56,17 @@ async function checkTrialExpiration(clerkUserId: string): Promise<{
   businessId: string | null
 }> {
   try {
-    // Create service role client for fast queries (no RLS overhead)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
+    const convex = getConvexClient()
+
+    // Query Convex for trial status using the middleware-specific query
+    const result = await convex.query(
+      api.functions.businesses.getTrialStatusByClerkId,
+      { clerkUserId }
     )
 
-    // Get user's business_id from users table
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, business_id')
-      .eq('clerk_user_id', clerkUserId)
-      .single()
-
-    if (userError || !user || !user.business_id) {
-      // No business found - let them through to onboarding
-      return { isExpired: false, businessId: null }
-    }
-
-    // Query business for trial status
-    const { data: business, error: businessError } = await supabase
-      .from('businesses')
-      .select('plan_name, subscription_status, trial_end_date')
-      .eq('id', user.business_id)
-      .single()
-
-    if (businessError || !business) {
-      // Business not found - likely deleted. Treat as "no business" case
-      // This will trigger redirect to onboarding where auto-recovery can happen
-      console.warn('[Middleware] Business not found for user - likely deleted:', {
-        businessId: user.business_id,
-        error: businessError?.message || 'No business record found'
-      })
-      return { isExpired: false, businessId: null }  // Return null to trigger onboarding redirect
-    }
-
-    // Only check trial expiration for trial/free plan users
-    // 'trial' is the current plan name, 'free' is legacy (kept for backward compatibility)
-    const isTrialPlan = business.plan_name === 'trial' || business.plan_name === 'free'
-    if (!isTrialPlan) {
-      return { isExpired: false, businessId: user.business_id }
-    }
-
-    // Check if trial has expired using subscription_status (Stripe source of truth)
-    // 'paused' = trial ended without payment method (needs upgrade via Checkout)
-    const isPaused = business.subscription_status === 'paused'
-
-    // Also check trial_end_date as fallback (synced from Stripe)
-    let dateExpired = false
-    if (business.trial_end_date) {
-      try {
-        const endDate = new Date(business.trial_end_date)
-        dateExpired = endDate < new Date()
-      } catch {
-        // Invalid date format - ignore
-      }
-    }
-
-    const expired = isPaused || dateExpired
-
     return {
-      isExpired: expired,
-      businessId: user.business_id,
+      isExpired: result.isExpired,
+      businessId: result.businessId,
     }
   } catch (error) {
     console.error('[Middleware] Error checking trial expiration:', error)

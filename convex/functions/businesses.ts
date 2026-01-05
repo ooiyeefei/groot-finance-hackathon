@@ -1429,6 +1429,66 @@ export const deleteExpenseCategory = mutation({
 });
 
 // ============================================
+// MIDDLEWARE QUERIES (for Next.js middleware - no auth required)
+// Security: Clerk userId validated by Clerk middleware before this is called
+// ============================================
+
+/**
+ * Get trial expiration status for a Clerk user
+ * Used by Next.js middleware to check if user should be redirected
+ * Returns businessId (null if no business) and isExpired flag
+ */
+export const getTrialStatusByClerkId = query({
+  args: { clerkUserId: v.string() },
+  handler: async (ctx, args) => {
+    // Find user by Clerk ID
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .first();
+
+    if (!user || !user.businessId) {
+      // No user or no business - let them through to onboarding
+      return { isExpired: false, businessId: null };
+    }
+
+    // Get business details
+    const business = await ctx.db.get(user.businessId);
+    if (!business) {
+      // Business not found - treat as no business
+      return { isExpired: false, businessId: null };
+    }
+
+    // Only check trial expiration for trial/free plan users
+    const isTrialPlan = business.planName === "trial" || business.planName === "free";
+    if (!isTrialPlan) {
+      return { isExpired: false, businessId: user.businessId };
+    }
+
+    // Check if trial has expired using subscription_status (Stripe source of truth)
+    // 'paused' = trial ended without payment method (needs upgrade via Checkout)
+    const isPaused = business.subscriptionStatus === "paused";
+
+    // Also check trial_end_date as fallback (synced from Stripe)
+    let dateExpired = false;
+    if (business.trialEndDate) {
+      try {
+        dateExpired = business.trialEndDate < Date.now();
+      } catch {
+        // Invalid date - ignore
+      }
+    }
+
+    const expired = isPaused || dateExpired;
+
+    return {
+      isExpired: expired,
+      businessId: user.businessId,
+    };
+  },
+});
+
+// ============================================
 // INTERNAL QUERIES (for webhook handlers - no auth required)
 // ============================================
 
