@@ -19,10 +19,8 @@
     "strictPropertyInitialization": false,
     "outDir": "./dist",
     "rootDir": ".",
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "esModuleInterop": true
+    "skipLibCheck": true
   },
-  "include": ["bin/**/*", "lib/**/*"],
-  "exclude": ["node_modules", "cdk.out"]
+  "include": ["bin/**/*.ts", "lib/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

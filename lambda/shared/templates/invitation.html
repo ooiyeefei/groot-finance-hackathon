@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're invited to join FinanSEAL</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .logo-text {
+      font-size: 24px;
+      font-weight: 700;
+      color: #0066cc;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin: 0 0 16px;
+      color: #1a1a1a;
+    }
+    p {
+      margin: 0 0 16px;
+      color: #4a4a4a;
+    }
+    .invite-box {
+      background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
+      color: white;
+      border-radius: 8px;
+      padding: 24px;
+      margin: 24px 0;
+      text-align: center;
+    }
+    .invite-box .inviter {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .invite-box .business {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    .role-badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+    .button {
+      display: inline-block;
+      background: #0066cc;
+      color: white;
+      text-decoration: none;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-weight: 600;
+      margin: 24px 0;
+    }
+    .button:hover {
+      background: #0052a3;
+    }
+    .about {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 24px 0;
+    }
+    .about h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      color: #1a1a1a;
+    }
+    .about p {
+      font-size: 14px;
+      margin: 0;
+    }
+    .expiry {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 14px;
+      color: #856404;
+      margin: 24px 0;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid #e5e5e5;
+    }
+    .footer p {
+      font-size: 13px;
+      color: #8a8a8a;
+    }
+    .footer a {
+      color: #0066cc;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo">
+        <span class="logo-text">FinanSEAL</span>
+      </div>
+
+      <h1>You're Invited! 🎉</h1>
+
+      <p>Hi {{recipientName}},</p>
+
+      <div class="invite-box">
+        <p class="inviter">{{inviterName}} has invited you</p>
+        <p class="business">to join {{businessName}} on FinanSEAL</p>
+        <span class="role-badge">{{role}}</span>
+      </div>
+
+      <div class="about">
+        <h3>About FinanSEAL</h3>
+        <p>FinanSEAL is an AI-powered financial co-pilot for Southeast Asian SMEs. It helps businesses manage invoices, track expenses, and gain insights from financial data - all in multiple languages and currencies.</p>
+      </div>
+
+      <p style="text-align: center;">
+        <a href="{{acceptUrl}}" class="button">Accept Invitation →</a>
+      </p>
+
+      <div class="expiry">
+        ⏰ This invitation will expire in {{expiryDays}} days. Please accept it before {{expiryDate}}.
+      </div>
+
+      <p style="font-size: 14px; color: #6c757d;">
+        If you weren't expecting this invitation, you can safely ignore this email. No account will be created without your action.
+      </p>
+
+      <div class="footer">
+        <p>© 2026 FinanSEAL. All rights reserved.</p>
+        <p>Singapore | Thailand | Indonesia | Malaysia</p>
+        <p style="font-size: 12px; color: #999;">
+          This invitation was sent to {{recipientEmail}}
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

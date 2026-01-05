@@ -1,25 +1,22 @@
 {
-  "name": "finanseal-lambda-infra",
+  "name": "@finanseal/infra",
   "version": "1.0.0",
-  "bin": {
-    "finanseal-lambda": "bin/finanseal-lambda.js"
-  },
+  "private": true,
+  "description": "AWS CDK infrastructure for FinanSEAL email system",
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
     "cdk": "cdk",
     "synth": "cdk synth",
-    "deploy:staging": "cdk deploy --context environment=staging",
-    "deploy:prod": "cdk deploy --context environment=prod"
+    "deploy": "cdk deploy",
+    "diff": "cdk diff"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "~5.7.0",
-    "aws-cdk": "^2.175.0"
+    "typescript": "~5.9.0"
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.175.0",
-    "constructs": "^10.4.0",
-    "source-map-support": "^0.5.21"
+    "aws-cdk-lib": "^2.180.0",
+    "constructs": "^10.4.0"
   }
 }

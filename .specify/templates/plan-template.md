@@ -31,13 +31,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-| Principle | Gate | Status |
-|-----------|------|--------|
-| I. Domain-Driven Architecture | Feature code in `src/domains/`? API in `/api/v1/{domain}/`? | ☐ |
-| II. Semantic Design System | UI uses semantic tokens only? No hardcoded colors? | ☐ |
-| III. Build Validation | `npm run build` passes? | ☐ |
-| IV. Simplicity First | Minimal changes? No over-engineering? | ☐ |
-| V. Background Jobs | Long tasks use Trigger.dev? Fire-and-forget pattern? | ☐ |
+[Gates determined based on constitution file]
 
 ## Project Structure
 

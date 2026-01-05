@@ -94,7 +94,8 @@ export async function POST(req: NextRequest) {
     // Route to appropriate handler
     switch (evt.type) {
       case 'user.created':
-        await handleClerkUserCreated(evt.data)
+        // Pass svixId for welcome email workflow idempotency
+        await handleClerkUserCreated(evt.data, svixId)
         break
       case 'user.updated':
         await handleClerkUserUpdated(evt.data)

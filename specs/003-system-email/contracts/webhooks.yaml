@@ -1,0 +1,284 @@
+# Clerk Webhook Contract
+# Branch: 003-system-email
+# Purpose: Define Clerk webhook payload structure for user.created events
+#
+# Security: Webhooks are verified using Svix HMAC-SHA256 signatures
+# via @clerk/nextjs/webhooks verifyWebhook() function
+
+openapi: 3.0.3
+info:
+  title: Clerk Webhooks API
+  description: |
+    Clerk webhook payloads for user lifecycle events.
+    These webhooks trigger the Lambda Durable Functions workflows.
+  version: 1.0.0
+  contact:
+    name: FinanSEAL Engineering
+    email: engineering@hellogroot.com
+
+servers:
+  - url: https://finanseal.com/api/v1
+    description: Production
+
+paths:
+  /webhooks/clerk:
+    post:
+      operationId: handleClerkWebhook
+      summary: Handle Clerk Webhook Events
+      description: |
+        Receives and processes Clerk webhook events.
+
+        **Security**: Verified using Svix signature headers.
+
+        **Supported Events**:
+        - `user.created` - Triggers welcome email workflow
+        - `user.updated` - Future: email preference sync
+        - `user.deleted` - Future: cleanup workflows
+      tags:
+        - Webhooks
+
+      parameters:
+        - name: svix-id
+          in: header
+          required: true
+          description: Unique event ID for replay protection
+          schema:
+            type: string
+            example: "msg_2srHCRRfNvRbpLJz0KQJwXDVRwX"
+
+        - name: svix-timestamp
+          in: header
+          required: true
+          description: Unix timestamp when event was sent
+          schema:
+            type: string
+            example: "1704326400"
+
+        - name: svix-signature
+          in: header
+          required: true
+          description: HMAC-SHA256 signature for verification
+          schema:
+            type: string
+            example: "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE="
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClerkWebhookEvent'
+            examples:
+              userCreated:
+                summary: New user signup
+                value:
+                  data:
+                    id: "user_2nLYaB3pVqMEGVnQxz1E7HoACRx"
+                    email_addresses:
+                      - id: "idn_2nLYa8HcNT2AcVxz1E7HoACRx"
+                        email_address: "john@example.com"
+                        verification:
+                          status: "verified"
+                          strategy: "email_code"
+                    first_name: "John"
+                    last_name: "Doe"
+                    created_at: 1704326400000
+                    updated_at: 1704326400000
+                    public_metadata:
+                      onboardingCompleted: false
+                    private_metadata: {}
+                  object: "event"
+                  type: "user.created"
+
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Success"
+
+        '400':
+          description: Webhook verification failed
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Webhook verification failed"
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    ClerkWebhookEvent:
+      type: object
+      required:
+        - data
+        - object
+        - type
+      properties:
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/UserData'
+          description: Event payload (structure depends on event type)
+
+        object:
+          type: string
+          enum: [event]
+          description: Always "event" for webhook events
+
+        type:
+          type: string
+          enum:
+            - user.created
+            - user.updated
+            - user.deleted
+          description: Event type identifier
+
+    UserData:
+      type: object
+      required:
+        - id
+        - email_addresses
+        - created_at
+      properties:
+        id:
+          type: string
+          description: Clerk user ID
+          example: "user_2nLYaB3pVqMEGVnQxz1E7HoACRx"
+
+        email_addresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailAddress'
+          minItems: 1
+
+        primary_email_address_id:
+          type: string
+          description: ID of primary email address
+          example: "idn_2nLYa8HcNT2AcVxz1E7HoACRx"
+
+        first_name:
+          type: string
+          nullable: true
+          example: "John"
+
+        last_name:
+          type: string
+          nullable: true
+          example: "Doe"
+
+        username:
+          type: string
+          nullable: true
+          example: "johndoe"
+
+        image_url:
+          type: string
+          format: uri
+          example: "https://img.clerk.com/..."
+
+        created_at:
+          type: integer
+          format: int64
+          description: Unix timestamp in milliseconds
+          example: 1704326400000
+
+        updated_at:
+          type: integer
+          format: int64
+          description: Unix timestamp in milliseconds
+          example: 1704326400000
+
+        public_metadata:
+          type: object
+          additionalProperties: true
+          description: Public user metadata (visible to frontend)
+          example:
+            onboardingCompleted: false
+            activeBusinessId: null
+
+        private_metadata:
+          type: object
+          additionalProperties: true
+          description: Private user metadata (server-only)
+          example: {}
+
+        unsafe_metadata:
+          type: object
+          additionalProperties: true
+          description: User-editable metadata
+          example: {}
+
+    EmailAddress:
+      type: object
+      required:
+        - id
+        - email_address
+      properties:
+        id:
+          type: string
+          example: "idn_2nLYa8HcNT2AcVxz1E7HoACRx"
+
+        email_address:
+          type: string
+          format: email
+          example: "john@example.com"
+
+        verification:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [verified, unverified, transferable, expired]
+            strategy:
+              type: string
+              enum: [email_code, email_link, oauth_google, oauth_github]
+
+        linked_to:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              id:
+                type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Failed to trigger welcome workflow"
+
+        code:
+          type: string
+          description: Error code
+          example: "WORKFLOW_TRIGGER_FAILED"
+
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error context
+
+  securitySchemes:
+    svixSignature:
+      type: apiKey
+      in: header
+      name: svix-signature
+      description: |
+        Svix HMAC-SHA256 signature for webhook verification.
+        Verified using `CLERK_WEBHOOK_SIGNING_SECRET` environment variable.
+
+security:
+  - svixSignature: []
