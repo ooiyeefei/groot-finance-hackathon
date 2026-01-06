@@ -5,6 +5,10 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
+
+// Load environment variables from parent project's .env.local
+dotenv.config({ path: path.join(__dirname, '../../.env.local') });
 
 export class DocumentProcessingStack extends cdk.Stack {
   public readonly documentProcessorFunction: lambda.Function;
@@ -66,8 +70,11 @@ export class DocumentProcessingStack extends cdk.Stack {
       logGroup,
       environment: {
         NODE_ENV: 'production',
-        SENTRY_DSN: process.env.SENTRY_DSN || '',
-        NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL || '',
+        // Lambda uses SENTRY_DSN, but .env.local has NEXT_PUBLIC_SENTRY_DSN
+        SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
+        SENTRY_ENVIRONMENT: 'production',
+        // Use PROD_CONVEX_URL for production Lambda (not NEXT_PUBLIC_CONVEX_URL which is DEV)
+        NEXT_PUBLIC_CONVEX_URL: process.env.PROD_CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || '',
         GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
         S3_BUCKET_NAME: 'finanseal-bucket',
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',

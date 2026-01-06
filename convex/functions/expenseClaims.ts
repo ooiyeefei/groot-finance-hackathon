@@ -1469,6 +1469,9 @@ export const internalUpdateExtraction = internalMutation({
       processingMetadata: args.extractedData,
       processedAt: now,
       updatedAt: now,
+      // Clear stale error fields from any previous failed attempts
+      errorMessage: undefined,
+      failedAt: undefined,
     };
 
     if (args.confidenceScore !== undefined) {

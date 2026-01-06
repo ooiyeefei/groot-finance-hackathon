@@ -4,16 +4,20 @@
  * Converts PDF documents to images using the Python Lambda Layer.
  * Uses child_process to invoke Python script with poppler/pdf2image.
  *
- * Storage Path Pattern: {business_id}/{user_id}/{document_type}/{document_id}/converted/{filename}
+ * Storage Path Pattern: {domain}/{business_id}/{user_id}/{document_id}/converted/{filename}
+ * Example: invoices/biz123/user456/doc789/converted/page-001.png
+ *
+ * NOTE: User ID consistency is handled at upload time (createInvoice/createExpenseClaim)
+ * where we query Convex for the user's internal ID before generating storage paths.
+ * This ensures both raw uploads and converted images use Convex user IDs.
  */
 
 import { spawn } from 'child_process';
-import * as path from 'path';
 import type { ConvertedImageInfo } from '../types';
 import {
   readDocument,
   writeConvertedImages,
-  type DocumentType,
+  type StorageDomain,
 } from '../utils/s3-client';
 
 /**
@@ -49,10 +53,10 @@ interface PythonConversionResult {
  * Convert a PDF document to images using the Python Lambda Layer.
  *
  * @param documentId - Document ID for S3 key generation
- * @param storagePath - S3 key for the PDF document
+ * @param storagePath - S3 key for the PDF document (without domain prefix)
  * @param businessId - Business ID for storage path hierarchy
  * @param userId - User ID for storage path hierarchy
- * @param documentType - Document type (invoice/receipt) for storage path
+ * @param domain - Domain for S3 prefix (invoices or expense_claims)
  * @returns Array of converted image info with S3 keys
  */
 export async function convertPdfToImages(
@@ -60,10 +64,14 @@ export async function convertPdfToImages(
   storagePath: string,
   businessId?: string,
   userId?: string,
-  documentType?: DocumentType
+  domain?: StorageDomain
 ): Promise<ConvertedImageInfo[]> {
+  // Build full S3 key by prepending domain prefix
+  // Database stores path without prefix, S3 needs full key with prefix
+  const s3Key = domain ? `${domain}/${storagePath}` : storagePath;
+
   // Read PDF from S3
-  const pdfBuffer = await readDocument(storagePath);
+  const pdfBuffer = await readDocument(s3Key);
 
   // Validate PDF header
   if (!pdfBuffer.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
@@ -99,9 +107,11 @@ export async function convertPdfToImages(
     height: page.height,
   }));
 
-  // Build path config if all required params provided
-  const pathConfig = businessId && userId && documentType
-    ? { businessId, userId, documentType }
+  // Build path config using the userId passed from Lambda handler
+  // NOTE: userId consistency is ensured at upload time (createInvoice/createExpenseClaim)
+  // where we query Convex for the user's internal ID before generating storage paths.
+  const pathConfig = businessId && userId && domain
+    ? { domain, businessId, userId }
     : undefined;
 
   // Upload converted images to S3 using proper storage path hierarchy
@@ -120,16 +130,21 @@ async function invokePythonConversion(
   pdfBuffer: Buffer
 ): Promise<PythonConversionResult> {
   return new Promise((resolve) => {
-    // Path to Python script in Lambda Layer
+    // Paths for Lambda Layer
+    const pythonBinary = '/opt/bin/python3';  // Python interpreter from layer
     const pythonScript = '/opt/python/convert_pdf.py';
     const pythonPath = '/opt/python';
+    const libPath = '/opt/lib';
+    const binPath = '/opt/bin';
 
     // Spawn Python process (use childProcess to avoid shadowing global process)
-    const childProcess = spawn('python3', [pythonScript], {
+    const childProcess = spawn(pythonBinary, [pythonScript], {
       env: {
         ...process.env,
+        PYTHONHOME: '/opt',  // Tell Python where to find its stdlib (lib64/python3.11/)
         PYTHONPATH: pythonPath,
-        PATH: `/usr/bin:${process.env.PATH}`,
+        PATH: `${binPath}:/usr/bin:${process.env.PATH || ''}`,
+        LD_LIBRARY_PATH: `${libPath}:${process.env.LD_LIBRARY_PATH || ''}`,
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     });

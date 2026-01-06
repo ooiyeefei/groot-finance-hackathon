@@ -134,6 +134,9 @@ export const updateInvoiceExtraction = mutation({
       extractedData: args.extractedData,
       processedAt: now,
       updatedAt: now,
+      // Clear stale error fields from any previous failed attempts
+      errorMessage: undefined,
+      failedAt: undefined,
     };
 
     if (args.confidenceScore !== undefined) {
@@ -306,6 +309,9 @@ export const updateExpenseClaimExtraction = mutation({
       processingMetadata: args.extractedData,
       processedAt: now,
       updatedAt: now,
+      // Clear stale error fields from any previous failed attempts
+      errorMessage: undefined,
+      failedAt: undefined,
     };
 
     if (args.confidenceScore !== undefined) {
@@ -691,6 +697,40 @@ export const recordOcrUsage = mutation({
       usageId: usage._id,
       newUsage: newCreditsUsed,
     };
+  },
+});
+
+// ============================================
+// ONE-TIME FIXUP FUNCTIONS (for data repair)
+// ============================================
+
+/**
+ * Clear stale error fields from invoices with successful extraction
+ * One-time fixup for invoices that have extractedData but also errorMessage/failedAt
+ */
+export const fixupClearStaleErrors = mutation({
+  args: {
+    invoiceId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await resolveById(ctx.db, "invoices", args.invoiceId);
+    if (!invoice) {
+      throw new Error(`Invoice not found: ${args.invoiceId}`);
+    }
+
+    // Only clear if invoice has extractedData (successful extraction)
+    if (!invoice.extractedData) {
+      return { success: false, reason: "No extracted data - nothing to fix" };
+    }
+
+    await ctx.db.patch(invoice._id, {
+      errorMessage: undefined,
+      failedAt: undefined,
+      updatedAt: Date.now(),
+    });
+
+    console.log(`[Fixup] Cleared stale error fields from invoice ${args.invoiceId}`);
+    return { success: true };
   },
 });
 

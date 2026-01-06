@@ -36,8 +36,9 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
  *
  * @param documentId - Document ID for logging
  * @param convertedImages - Images to validate (from PDF conversion or original)
- * @param storagePath - Original storage path (for images that weren't converted)
+ * @param storagePath - Original storage path (for images that weren't converted, without domain prefix)
  * @param expectedType - Expected document type based on upload context
+ * @param domain - Domain for S3 prefix (invoices or expense_claims)
  * @returns ValidationResult with detected type and validation status
  * @throws ValidationError if document type doesn't match expected
  */
@@ -45,13 +46,14 @@ export async function validateDocument(
   documentId: string,
   convertedImages: ConvertedImageInfo[] | null | undefined,
   storagePath: string,
-  expectedType: 'invoice' | 'receipt'
+  expectedType: 'invoice' | 'receipt',
+  domain?: 'invoices' | 'expense_claims'
 ): Promise<ValidationResult> {
   console.log(`[${documentId}] Starting document validation, expected type: ${expectedType}`);
 
   try {
     // Get image data for LLM analysis
-    const imageData = await getImageForValidation(convertedImages, storagePath);
+    const imageData = await getImageForValidation(convertedImages, storagePath, domain);
 
     // Use Gemini to detect document type
     const detectionResult = await detectDocumentType(imageData);
@@ -99,7 +101,8 @@ export async function validateDocument(
  */
 async function getImageForValidation(
   convertedImages: ConvertedImageInfo[] | null | undefined,
-  storagePath: string
+  storagePath: string,
+  domain?: 'invoices' | 'expense_claims'
 ): Promise<{ base64: string; mimeType: string }> {
   if (convertedImages && convertedImages.length > 0) {
     // Use first converted image (first page of PDF)
@@ -111,8 +114,10 @@ async function getImageForValidation(
     };
   }
 
-  // Use original image file
-  const imageBuffer = await readDocument(storagePath);
+  // Use original image file - build full S3 key by prepending domain prefix
+  // Database stores path without prefix, S3 needs full key with prefix
+  const s3Key = domain ? `${domain}/${storagePath}` : storagePath;
+  const imageBuffer = await readDocument(s3Key);
   const mimeType = getMimeType(storagePath);
   return {
     base64: imageBuffer.toString('base64'),

@@ -41,6 +41,12 @@ export default defineSchema({
       language: v.optional(v.string()),
       notifications: v.optional(v.boolean()),
     })),
+    emailPreferences: v.optional(v.object({
+      globalUnsubscribe: v.optional(v.boolean()),
+      marketingEnabled: v.optional(v.boolean()),
+      onboardingTipsEnabled: v.optional(v.boolean()),
+      productUpdatesEnabled: v.optional(v.boolean()),
+    })),
 
     // Email Preferences (stored directly on user for simpler lookups)
     // Note: Transactional emails (security, payment) always send regardless
