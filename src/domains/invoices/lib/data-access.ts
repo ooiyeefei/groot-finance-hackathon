@@ -35,6 +35,8 @@ export interface InvoiceFilters {
 
 export interface Invoice {
   id: string;
+  user_id: string;
+  business_id?: string;
   file_name: string;
   file_type: string;
   file_size: number;
@@ -79,6 +81,8 @@ export interface InvoicesListResponse {
 function mapConvexInvoiceToResponse(invoice: {
   _id: Id<"invoices">;
   _creationTime: number;
+  userId: Id<"users">;
+  businessId?: Id<"businesses">;
   fileName: string;
   fileType: string;
   fileSize: number;
@@ -95,6 +99,8 @@ function mapConvexInvoiceToResponse(invoice: {
 }): Invoice {
   return {
     id: invoice._id,
+    user_id: invoice.userId,
+    business_id: invoice.businessId,
     file_name: invoice.fileName,
     file_type: invoice.fileType,
     file_size: invoice.fileSize,
@@ -634,17 +640,29 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
 async function processDocumentWithLambda(document: Invoice): Promise<{ jobId: string }> {
   console.log(`[Document] Processing with Lambda: ${document.id}`)
 
+  // Validate required fields for Lambda
+  if (!document.user_id) {
+    throw new Error('Document missing user_id - cannot process')
+  }
+  if (!document.business_id) {
+    throw new Error('Document missing business_id - cannot process')
+  }
+
   // Determine file type
   const fileType: 'pdf' | 'image' = document.file_type === 'application/pdf' ? 'pdf' : 'image'
 
   // Invoke Lambda with fire-and-forget (async)
   const result = await invokeDocumentProcessor({
     documentId: document.id,
+    domain: 'invoices',  // Always 'invoices' for this domain
     storagePath: document.storage_path,
-    documentType: 'invoice',
     fileType,
+    userId: document.user_id,
+    businessId: document.business_id,
     // Generate idempotency key to prevent duplicate processing
     idempotencyKey: `invoice-${document.id}-${Date.now()}`,
+    // Optional hint for Lambda
+    expectedDocumentType: 'invoice',
   })
 
   // Map Lambda executionId to jobId for API compatibility
