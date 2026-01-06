@@ -132,23 +132,24 @@ export default function FileUploadZone({
 
         // Auto-process the document if enabled
         if (autoProcess && domain === 'invoices') {
-          // Invoice processing logic (only for images, PDFs need conversion first)
-          if (file.type !== 'application/pdf') {
-            try {
-              // Immediately trigger processing for image files only
-              const processResponse = await fetch(`/api/v1/invoices/${uploadedDocument.id}/process`, {
-                method: 'POST'
-              })
+          // Lambda handles both PDF conversion and image processing
+          // Always trigger processing for all file types
+          try {
+            console.log(`[Upload] Triggering processing for document: ${uploadedDocument.id}`)
+            const processResponse = await fetch(`/api/v1/invoices/${uploadedDocument.id}/process`, {
+              method: 'POST'
+            })
 
-              if (processResponse.ok) {
-                // Update the returned document status to processing
-                uploadedDocument.status = 'processing'
-              }
-            } catch (error) {
-              console.error('Auto-processing failed:', error)
+            if (processResponse.ok) {
+              // Update the returned document status to processing
+              uploadedDocument.status = 'processing'
+              console.log(`[Upload] Processing triggered successfully for: ${uploadedDocument.id}`)
+            } else {
+              const errorData = await processResponse.json().catch(() => ({}))
+              console.error('[Upload] Process endpoint failed:', processResponse.status, errorData)
             }
-          } else {
-            // PDF will be processed automatically after convert-pdf-to-image job completes
+          } catch (error) {
+            console.error('[Upload] Auto-processing failed:', error)
           }
         } else if (autoProcess && domain === 'expense-claims') {
           // Expense claims processing - AI processing is triggered automatically via the API
