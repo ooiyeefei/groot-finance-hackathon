@@ -99,7 +99,7 @@ async function processRecord(record: SNSEventRecord): Promise<void> {
   });
 
   // Log delivery event to Convex
-  await convex.mutation('emails:logDeliveryEvent' as any, {
+  await convex.mutation('functions/emails:logDeliveryEvent' as any, {
     sesMessageId: messageId,
     eventType,
     timestamp: Date.now(),
@@ -114,7 +114,7 @@ async function processRecord(record: SNSEventRecord): Promise<void> {
     // Only suppress on permanent bounces
     if (bounceType === 'Permanent') {
       for (const recipient of bouncedRecipients) {
-        await convex.mutation('emails:markEmailUndeliverable' as any, {
+        await convex.mutation('functions/emails:markEmailUndeliverable' as any, {
           email: recipient.emailAddress.toLowerCase(),
           reason: 'bounce',
           bounceType,
@@ -133,7 +133,7 @@ async function processRecord(record: SNSEventRecord): Promise<void> {
 
   if (sesEvent.eventType === 'Complaint' && sesEvent.complaint) {
     for (const recipient of sesEvent.complaint.complainedRecipients) {
-      await convex.mutation('emails:markEmailUndeliverable' as any, {
+      await convex.mutation('functions/emails:markEmailUndeliverable' as any, {
         email: recipient.emailAddress.toLowerCase(),
         reason: 'complaint',
         sourceMessageId: messageId,

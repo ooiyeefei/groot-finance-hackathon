@@ -111,7 +111,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   let oneClickUrl: string | undefined;
 
   if (unsubscribeToken) {
-    const baseUrl = process.env.APP_URL || 'https://finanseal.com';
+    const baseUrl = process.env.APP_URL || 'https://finance.hellogroot.com/en';
     unsubscribeUrl = `${baseUrl}/api/v1/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
     oneClickUrl = `${baseUrl}/api/v1/unsubscribe/one-click?token=${encodeURIComponent(unsubscribeToken)}`;
   }
