@@ -222,7 +222,8 @@ async function processDocument(
           storagePath,
           businessId,
           userId,
-          domain === 'invoices' ? 'invoice' : 'receipt'
+          domain === 'invoices' ? 'invoice' : 'receipt',
+          domain  // Pass domain for S3 key prefix
         );
         console.log(`[${documentId}] PDF converted to ${images.length} image(s)`);
         return images;
@@ -257,7 +258,8 @@ async function processDocument(
           documentId,
           convertedImages,
           storagePath,
-          docExpectedType
+          docExpectedType,
+          domain  // Pass domain for S3 key prefix
         );
 
         console.log(`[${documentId}] Validation passed, confidence: ${result.confidence}`);
@@ -290,9 +292,9 @@ async function processDocument(
         console.log(`[${documentId}] Step 3: Extracting ${docExpectedType} data`);
 
         if (docExpectedType === 'invoice') {
-          return await extractInvoice(documentId, convertedImages, storagePath, businessCategories);
+          return await extractInvoice(documentId, convertedImages, storagePath, businessCategories, domain);
         } else {
-          return await extractReceipt(documentId, convertedImages, storagePath, businessCategories);
+          return await extractReceipt(documentId, convertedImages, storagePath, businessCategories, domain);
         }
       }
     );

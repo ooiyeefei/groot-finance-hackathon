@@ -49,10 +49,11 @@ interface PythonConversionResult {
  * Convert a PDF document to images using the Python Lambda Layer.
  *
  * @param documentId - Document ID for S3 key generation
- * @param storagePath - S3 key for the PDF document
+ * @param storagePath - S3 key for the PDF document (without domain prefix)
  * @param businessId - Business ID for storage path hierarchy
  * @param userId - User ID for storage path hierarchy
  * @param documentType - Document type (invoice/receipt) for storage path
+ * @param domain - Domain for S3 prefix (invoices or expense_claims)
  * @returns Array of converted image info with S3 keys
  */
 export async function convertPdfToImages(
@@ -60,10 +61,15 @@ export async function convertPdfToImages(
   storagePath: string,
   businessId?: string,
   userId?: string,
-  documentType?: DocumentType
+  documentType?: DocumentType,
+  domain?: 'invoices' | 'expense_claims'
 ): Promise<ConvertedImageInfo[]> {
+  // Build full S3 key by prepending domain prefix
+  // Database stores path without prefix, S3 needs full key with prefix
+  const s3Key = domain ? `${domain}/${storagePath}` : storagePath;
+
   // Read PDF from S3
-  const pdfBuffer = await readDocument(storagePath);
+  const pdfBuffer = await readDocument(s3Key);
 
   // Validate PDF header
   if (!pdfBuffer.subarray(0, 5).equals(Buffer.from('%PDF-'))) {

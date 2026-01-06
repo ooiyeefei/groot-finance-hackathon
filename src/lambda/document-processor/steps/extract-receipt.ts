@@ -41,15 +41,17 @@ const LOW_CONFIDENCE_THRESHOLD = 0.6;
  *
  * @param documentId - Document ID for logging
  * @param images - Converted image info (for PDFs) or null (for direct images)
- * @param storagePath - Original document S3 path (used if no conversion)
+ * @param storagePath - Original document S3 path (used if no conversion, without domain prefix)
  * @param categories - Optional business categories for line item matching
+ * @param domain - Domain for S3 prefix (invoices or expense_claims)
  * @returns Receipt extraction result with needsReview flag
  */
 export async function extractReceipt(
   documentId: string,
   images: ConvertedImageInfo[] | null,
   storagePath: string,
-  categories?: BusinessCategory[]
+  categories?: BusinessCategory[],
+  domain?: 'invoices' | 'expense_claims'
 ): Promise<ReceiptExtractionResult & { needsReview: boolean }> {
   try {
     // Get presigned URLs for images
@@ -59,8 +61,9 @@ export async function extractReceipt(
       // Use converted images
       imageUrls = await getPresignedImageUrls(images);
     } else {
-      // Use original image directly
-      imageUrls = [await getPresignedReadUrl(storagePath)];
+      // Use original image directly - build full S3 key by prepending domain prefix
+      const s3Key = domain ? `${domain}/${storagePath}` : storagePath;
+      imageUrls = [await getPresignedReadUrl(s3Key)];
     }
 
     console.log(`[${documentId}] Extracting receipt data from ${imageUrls.length} image(s)`);
