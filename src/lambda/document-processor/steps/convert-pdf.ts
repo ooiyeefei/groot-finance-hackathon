@@ -7,9 +7,9 @@
  * Storage Path Pattern: {domain}/{business_id}/{user_id}/{document_id}/converted/{filename}
  * Example: invoices/biz123/user456/doc789/converted/page-001.png
  *
- * IMPORTANT: User ID is extracted from storagePath to ensure converted images
- * are stored in the same folder as the raw upload. This prevents the mismatch
- * between Clerk user ID (in storagePath from upload) and Convex user ID (in document record).
+ * NOTE: User ID consistency is handled at upload time (createInvoice/createExpenseClaim)
+ * where we query Convex for the user's internal ID before generating storage paths.
+ * This ensures both raw uploads and converted images use Convex user IDs.
  */
 
 import { spawn } from 'child_process';
@@ -19,24 +19,6 @@ import {
   writeConvertedImages,
   type StorageDomain,
 } from '../utils/s3-client';
-
-/**
- * Extract user ID from storage path.
- *
- * Storage path pattern: {businessId}/{userId}/{documentId}/{stage}/{filename}
- * Example: kh7c75c0bwz3qmhqvgxh7x6x217y0tda/user_36y7i2nfev1q9jcuqbhu22mok94/kg76hc7/raw/invoice.pdf
- *
- * @param storagePath - The full storage path without domain prefix
- * @returns The userId from the path, or undefined if pattern doesn't match
- */
-function extractUserIdFromPath(storagePath: string): string | undefined {
-  // Split path: [businessId, userId, documentId, stage, filename]
-  const segments = storagePath.split('/');
-  if (segments.length >= 2) {
-    return segments[1]; // userId is second segment
-  }
-  return undefined;
-}
 
 /**
  * Error thrown when PDF conversion fails
@@ -125,21 +107,11 @@ export async function convertPdfToImages(
     height: page.height,
   }));
 
-  // CRITICAL: Extract userId from storagePath to ensure consistency
-  // The storagePath contains the Clerk user ID from the original upload,
-  // which may differ from the Convex user ID passed as the userId parameter.
-  // We must use the same userId for converted images as the raw upload.
-  const extractedUserId = extractUserIdFromPath(storagePath);
-
-  // Log the user ID extraction for debugging
-  if (extractedUserId && userId && extractedUserId !== userId) {
-    console.log(`[PDF Convert] User ID mismatch detected - using extracted: ${extractedUserId} (passed: ${userId})`);
-  }
-
-  // Build path config using extracted userId (not the passed one!)
-  const effectiveUserId = extractedUserId || userId;
-  const pathConfig = businessId && effectiveUserId && domain
-    ? { domain, businessId, userId: effectiveUserId }
+  // Build path config using the userId passed from Lambda handler
+  // NOTE: userId consistency is ensured at upload time (createInvoice/createExpenseClaim)
+  // where we query Convex for the user's internal ID before generating storage paths.
+  const pathConfig = businessId && userId && domain
+    ? { domain, businessId, userId }
     : undefined;
 
   // Upload converted images to S3 using proper storage path hierarchy

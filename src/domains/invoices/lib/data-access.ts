@@ -390,18 +390,31 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
 
 /**
  * Create a new invoice with file upload
- * Database: Convex, Storage: Supabase (hybrid approach)
+ * Database: Convex, Storage: AWS S3 (hybrid approach)
+ *
+ * IMPORTANT: Uses Convex user ID (not Clerk ID) for storage path.
+ * This ensures all downstream processing (Lambda, converted images)
+ * uses consistent user IDs throughout the pipeline.
  */
 export async function createInvoice({ file, businessId }: CreateInvoiceRequest): Promise<Invoice> {
-  const { client, userId } = await getAuthenticatedConvex()
+  const { client } = await getAuthenticatedConvex()
 
-  if (!client || !userId) {
+  if (!client) {
     throw new Error('Unauthorized')
   }
 
   if (!businessId) {
     throw new Error('Business ID is required')
   }
+
+  // Get the current user's Convex ID (not Clerk ID!)
+  // This ensures storage paths use the same user ID as all database records
+  const currentUser = await client.query(api.functions.users.getCurrentUser, {})
+  if (!currentUser) {
+    throw new Error('User not found in database')
+  }
+
+  const convexUserId = currentUser._id
 
   // Validate file
   const fileTypeValidation = validateFileType(file)
@@ -414,14 +427,14 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
     throw new Error(fileContentValidation.error!)
   }
 
-  // Generate storage path
+  // Generate storage path using Convex user ID
   const invoiceId = randomUUID()
   const fileExtension = file.name.split('.').pop() || 'unknown'
   const filename = `${invoiceId}.${fileExtension}`
 
   const storagePath = generateStoragePath({
     businessId,
-    userId,
+    userId: convexUserId,  // Use Convex user ID, NOT Clerk user ID
     documentType: 'invoice' as DocumentType,
     stage: 'raw',
     filename,
