@@ -90,10 +90,13 @@ export class LambdaInvocationError extends Error {
 async function getVercelOIDCToken(): Promise<string> {
   try {
     // Use Vercel's official OIDC package (same as aws-s3.ts)
+    console.log('[Lambda] Fetching Vercel OIDC token...');
     const { getVercelOidcToken } = await import('@vercel/oidc');
     const token = await getVercelOidcToken();
+    console.log('[Lambda] OIDC token fetched successfully');
     return token;
   } catch (vercelError) {
+    console.error('[Lambda] Failed to get Vercel OIDC token:', vercelError);
     // For local development, check for a file-based token
     const tokenFile = process.env.AWS_WEB_IDENTITY_TOKEN_FILE;
     if (tokenFile) {
@@ -119,6 +122,11 @@ async function getVercelOIDCToken(): Promise<string> {
  * for temporary AWS credentials scoped to the Lambda invoke permission.
  */
 async function createLambdaClient(): Promise<LambdaClient> {
+  console.log('[Lambda] Creating Lambda client...');
+  console.log('[Lambda] ROLE_ARN:', ROLE_ARN ? 'set' : 'NOT SET');
+  console.log('[Lambda] LAMBDA_ARN:', LAMBDA_ARN ? 'set' : 'NOT SET');
+  console.log('[Lambda] AWS_REGION:', AWS_REGION);
+
   if (!ROLE_ARN) {
     throw new LambdaInvocationError(
       'AWS_ROLE_ARN environment variable is not configured',
@@ -127,6 +135,7 @@ async function createLambdaClient(): Promise<LambdaClient> {
   }
 
   const webIdentityToken = await getVercelOIDCToken();
+  console.log('[Lambda] Got OIDC token, creating client with role assumption...');
 
   return new LambdaClient({
     region: AWS_REGION,
@@ -167,7 +176,10 @@ async function createLambdaClient(): Promise<LambdaClient> {
 export async function invokeDocumentProcessor(
   payload: DocumentProcessingRequest
 ): Promise<LambdaInvocationResponse> {
+  console.log('[Lambda] invokeDocumentProcessor called with documentId:', payload.documentId);
+
   if (!LAMBDA_ARN) {
+    console.error('[Lambda] DOCUMENT_PROCESSOR_LAMBDA_ARN is not set!');
     throw new LambdaInvocationError(
       'DOCUMENT_PROCESSOR_LAMBDA_ARN environment variable is not configured',
       'MISSING_CONFIGURATION'
@@ -176,6 +188,7 @@ export async function invokeDocumentProcessor(
 
   try {
     const client = await createLambdaClient();
+    console.log('[Lambda] Client created, invoking function:', LAMBDA_ARN);
 
     const command = new InvokeCommand({
       FunctionName: LAMBDA_ARN,
@@ -184,6 +197,7 @@ export async function invokeDocumentProcessor(
     });
 
     const response = await client.send(command);
+    console.log('[Lambda] Invocation response status:', response.StatusCode);
 
     // For async invocation, status 202 indicates accepted
     if (response.StatusCode !== 202) {
