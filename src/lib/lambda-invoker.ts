@@ -82,34 +82,34 @@ export class LambdaInvocationError extends Error {
 /**
  * Get OIDC token from Vercel environment.
  *
- * In Vercel's serverless environment, the OIDC token is available via
- * the VERCEL_OIDC_TOKEN environment variable when configured.
+ * Uses the @vercel/oidc package to fetch tokens dynamically.
+ * Tokens are NOT available as environment variables - they must be fetched.
  *
  * @throws {LambdaInvocationError} If OIDC token is not available
  */
 async function getVercelOIDCToken(): Promise<string> {
-  // Vercel provides OIDC token via environment
-  const token = process.env.VERCEL_OIDC_TOKEN;
-
-  if (token) {
+  try {
+    // Use Vercel's official OIDC package (same as aws-s3.ts)
+    const { getVercelOidcToken } = await import('@vercel/oidc');
+    const token = await getVercelOidcToken();
     return token;
-  }
-
-  // For local development, check for a file-based token
-  const tokenFile = process.env.AWS_WEB_IDENTITY_TOKEN_FILE;
-  if (tokenFile) {
-    const fs = await import('fs/promises');
-    try {
-      return await fs.readFile(tokenFile, 'utf-8');
-    } catch {
-      // Fall through to error
+  } catch (vercelError) {
+    // For local development, check for a file-based token
+    const tokenFile = process.env.AWS_WEB_IDENTITY_TOKEN_FILE;
+    if (tokenFile) {
+      const fs = await import('fs/promises');
+      try {
+        return await fs.readFile(tokenFile, 'utf-8');
+      } catch {
+        // Fall through to error
+      }
     }
-  }
 
-  throw new LambdaInvocationError(
-    'OIDC token not available - ensure running in Vercel environment or configure AWS_WEB_IDENTITY_TOKEN_FILE for local development',
-    'OIDC_TOKEN_MISSING'
-  );
+    throw new LambdaInvocationError(
+      'OIDC token not available - ensure running in Vercel environment or configure AWS_WEB_IDENTITY_TOKEN_FILE for local development',
+      'OIDC_TOKEN_MISSING'
+    );
+  }
 }
 
 /**
