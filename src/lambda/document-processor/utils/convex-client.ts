@@ -2,10 +2,13 @@
  * Convex Client for Document Status Updates
  *
  * Provides functions to update document processing status in Convex
- * during Lambda execution. Uses Convex's HTTP API for serverless
- * environments without persistent connections.
+ * during Lambda execution. Uses ConvexHttpClient for proper API integration.
+ *
+ * Pattern mirrors src/trigger/utils/convex-helpers.ts
  */
 
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '../../../../convex/_generated/api';
 import type {
   InvoiceStatus,
   ExpenseClaimStatus,
@@ -14,6 +17,23 @@ import type {
 
 // Convex configuration
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL;
+
+// Singleton Convex client
+let convexClient: ConvexHttpClient | null = null;
+
+function getConvexClient(): ConvexHttpClient {
+  if (!convexClient) {
+    if (!CONVEX_URL) {
+      throw new ConvexOperationError(
+        'NEXT_PUBLIC_CONVEX_URL environment variable is not configured',
+        'CONVEX_NOT_CONFIGURED'
+      );
+    }
+    convexClient = new ConvexHttpClient(CONVEX_URL);
+    console.log('[Convex-Lambda] Client initialized');
+  }
+  return convexClient;
+}
 
 /**
  * Error thrown when Convex operations fail
@@ -50,55 +70,6 @@ export const EXPENSE_CLAIM_STATUS = {
 } as const;
 
 // ============================================================================
-// Internal HTTP Client
-// ============================================================================
-
-/**
- * Make an HTTP request to Convex.
- * Uses Convex's HTTP Actions API for serverless environments.
- */
-async function convexRequest(
-  functionPath: string,
-  args: Record<string, unknown>
-): Promise<unknown> {
-  if (!CONVEX_URL) {
-    throw new ConvexOperationError(
-      'NEXT_PUBLIC_CONVEX_URL environment variable is not configured',
-      'CONVEX_UPDATE_ERROR'
-    );
-  }
-
-  // Convex HTTP API endpoint
-  const url = `${CONVEX_URL}/api/mutation`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        path: functionPath,
-        args,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
-    }
-
-    return response.json();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new ConvexOperationError(
-      `Convex request failed: ${message}`,
-      'CONVEX_UPDATE_ERROR'
-    );
-  }
-}
-
-// ============================================================================
 // Invoice Status Updates
 // ============================================================================
 
@@ -118,17 +89,16 @@ export async function updateDocumentStatus(
     currentStep?: string;
   }
 ): Promise<void> {
+  const client = getConvexClient();
+
   try {
-    await convexRequest('invoices:updateProcessingStatus', {
-      documentId,
-      status,
-      ...metadata,
-      updatedAt: new Date().toISOString(),
+    await client.mutation(api.functions.system.updateInvoiceStatus, {
+      id: documentId,
+      status: status,
+      errorMessage: metadata?.error,
     });
+    console.log(`[Convex-Lambda] Updated invoice ${documentId} status to: ${status}`);
   } catch (error) {
-    if (error instanceof ConvexOperationError) {
-      throw new ConvexOperationError(error.message, error.code, documentId);
-    }
     throw new ConvexOperationError(
       `Failed to update invoice status: ${error instanceof Error ? error.message : 'Unknown error'}`,
       'CONVEX_UPDATE_ERROR',
@@ -147,16 +117,140 @@ export async function updateInvoiceExtractionResults(
   documentId: string,
   results: ExtractionResult
 ): Promise<void> {
+  const client = getConvexClient();
+
+  // Transform line items to snake_case for UI compatibility
+  const transformedLineItems = results.lineItems?.map(item => ({
+    description: item.description,
+    quantity: item.quantity,
+    unit_price: item.unitPrice,
+    total_amount: item.totalAmount,
+    category: item.category,
+    tax_amount: item.taxAmount,
+    tax_rate: item.taxRate,
+  }));
+
+  // Invoice-specific fields (handle InvoiceExtractionResult type)
+  const invoiceResults = results as ExtractionResult & {
+    invoiceNumber?: string;
+    dueDate?: string;
+    paymentTerms?: string;
+    billingAddress?: string;
+    shippingAddress?: string;
+  };
+
   try {
-    await convexRequest('invoices:updateExtractionResults', {
-      documentId,
-      extractionResults: results,
-      status: INVOICE_STATUS.COMPLETED,
-      completedAt: new Date().toISOString(),
+    await client.mutation(api.functions.system.updateInvoiceExtraction, {
+      id: documentId,
+      // Use snake_case field names to match UI expectations
+      extractedData: {
+        vendor_name: results.vendorName,
+        total_amount: results.totalAmount,
+        currency: results.currency,
+        document_date: results.transactionDate,
+        transaction_date: results.transactionDate,  // Alias for UI fallback
+        reference_number: results.referenceNumber,
+        document_number: invoiceResults.invoiceNumber || results.referenceNumber,  // Alias
+        subtotal_amount: results.subtotalAmount,
+        tax_amount: results.taxAmount,
+        tax_rate: results.taxRate,
+        confidence: results.confidence,
+        line_items: transformedLineItems,
+        // Invoice-specific fields
+        invoice_number: invoiceResults.invoiceNumber,
+        due_date: invoiceResults.dueDate,
+        payment_terms: invoiceResults.paymentTerms,
+        billing_address: invoiceResults.billingAddress,
+        shipping_address: invoiceResults.shippingAddress,
+        // Document type for UI display
+        document_type: results.documentType || 'invoice',
+        // Extraction metadata
+        extraction_method: 'lambda-durable',
+        suggested_category: results.suggestedCategory,
+        extraction_quality: results.extractionQuality,
+        user_message: results.userMessage,
+        reasoning: results.reasoning,
+      },
+      confidenceScore: results.confidence,
+      extractionMethod: 'lambda-durable',
     });
+    console.log(`[Convex-Lambda] Updated invoice ${documentId} extraction results`);
   } catch (error) {
     throw new ConvexOperationError(
       `Failed to update invoice extraction results: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'CONVEX_UPDATE_ERROR',
+      documentId
+    );
+  }
+}
+
+/**
+ * Update invoice classification results.
+ *
+ * @param documentId - Invoice document ID
+ * @param classification - Classification results
+ */
+export async function updateInvoiceClassification(
+  documentId: string,
+  classification: {
+    isSupported: boolean;
+    documentType?: string;
+    confidenceScore?: number;
+    reasoning?: string;
+    userMessage?: string;
+  }
+): Promise<void> {
+  const client = getConvexClient();
+
+  try {
+    await client.mutation(api.functions.system.updateInvoiceClassification, {
+      id: documentId,
+      classification: {
+        isSupported: classification.isSupported,
+        documentType: classification.documentType,
+        confidenceScore: classification.confidenceScore,
+        classificationMethod: 'lambda-gemini',
+        reasoning: classification.reasoning,
+        userMessage: classification.userMessage,
+      },
+    });
+    console.log(`[Convex-Lambda] Updated invoice ${documentId} classification`);
+  } catch (error) {
+    throw new ConvexOperationError(
+      `Failed to update invoice classification: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'CONVEX_UPDATE_ERROR',
+      documentId
+    );
+  }
+}
+
+/**
+ * Update invoice converted image path.
+ *
+ * @param documentId - Invoice document ID
+ * @param convertedImagePath - S3 key for converted image
+ * @param pageCount - Number of pages
+ * @param totalSizeBytes - Total size of converted images
+ */
+export async function updateInvoiceConvertedImage(
+  documentId: string,
+  convertedImagePath: string,
+  pageCount?: number,
+  totalSizeBytes?: number
+): Promise<void> {
+  const client = getConvexClient();
+
+  try {
+    await client.mutation(api.functions.system.updateInvoiceConvertedImage, {
+      id: documentId,
+      convertedImagePath,
+      pageCount,
+      totalSizeBytes,
+    });
+    console.log(`[Convex-Lambda] Updated invoice ${documentId} converted image`);
+  } catch (error) {
+    throw new ConvexOperationError(
+      `Failed to update invoice converted image: ${error instanceof Error ? error.message : 'Unknown error'}`,
       'CONVEX_UPDATE_ERROR',
       documentId
     );
@@ -183,17 +277,16 @@ export async function updateExpenseClaimStatus(
     currentStep?: string;
   }
 ): Promise<void> {
+  const client = getConvexClient();
+
   try {
-    await convexRequest('expense_claims:updateProcessingStatus', {
-      documentId,
-      status,
-      ...metadata,
-      updatedAt: new Date().toISOString(),
+    await client.mutation(api.functions.system.updateExpenseClaimStatus, {
+      id: documentId,
+      status: status,
+      errorMessage: metadata?.error,
     });
+    console.log(`[Convex-Lambda] Updated expense claim ${documentId} status to: ${status}`);
   } catch (error) {
-    if (error instanceof ConvexOperationError) {
-      throw new ConvexOperationError(error.message, error.code, documentId);
-    }
     throw new ConvexOperationError(
       `Failed to update expense claim status: ${error instanceof Error ? error.message : 'Unknown error'}`,
       'CONVEX_UPDATE_ERROR',
@@ -212,42 +305,149 @@ export async function updateExpenseClaimExtractionResults(
   documentId: string,
   results: ExtractionResult
 ): Promise<void> {
+  const client = getConvexClient();
+
+  // Transform line items to snake_case for UI compatibility
+  const transformedLineItems = results.lineItems?.map(item => ({
+    description: item.description,
+    quantity: item.quantity,
+    unit_price: item.unitPrice,
+    total_amount: item.totalAmount,
+    category: item.category,
+    tax_amount: item.taxAmount,
+    tax_rate: item.taxRate,
+  }));
+
+  // Receipt-specific fields (handle ReceiptExtractionResult type)
+  const receiptResults = results as ExtractionResult & {
+    receiptNumber?: string;
+    storeLocation?: string;
+    paymentMethod?: string;
+    cardLastFour?: string;
+    serviceCharge?: number;
+    discountAmount?: number;
+    businessPurpose?: string;
+  };
+
   try {
-    await convexRequest('expense_claims:updateExtractionResults', {
-      documentId,
-      processingMetadata: {
+    await client.mutation(api.functions.system.updateExpenseClaimExtraction, {
+      id: documentId,
+      // Use snake_case field names to match UI expectations
+      extractedData: {
+        vendor_name: results.vendorName,
+        total_amount: results.totalAmount,
+        currency: results.currency,
+        document_date: results.transactionDate,
+        transaction_date: results.transactionDate,  // Alias for UI fallback
+        reference_number: results.referenceNumber,
+        document_number: receiptResults.receiptNumber || results.referenceNumber,  // Alias
+        subtotal_amount: results.subtotalAmount,
+        tax_amount: results.taxAmount,
+        tax_rate: results.taxRate,
+        confidence: results.confidence,
+        line_items: transformedLineItems,
+        // Receipt-specific fields
+        receipt_number: receiptResults.receiptNumber,
+        store_location: receiptResults.storeLocation,
+        payment_method: receiptResults.paymentMethod,
+        card_last_four: receiptResults.cardLastFour,
+        service_charge: receiptResults.serviceCharge,
+        discount_amount: receiptResults.discountAmount,
+        business_purpose: receiptResults.businessPurpose,
+        // Document type for UI display
+        document_type: results.documentType || 'receipt',
+        // Extraction metadata
         extraction_method: 'lambda-durable',
-        extraction_timestamp: new Date().toISOString(),
-        confidence_score: results.confidence,
-        financial_data: {
-          description: results.vendorName,
-          vendor_name: results.vendorName,
-          total_amount: results.totalAmount,
-          original_currency: results.currency,
-          transaction_date: results.transactionDate,
-          reference_number: results.referenceNumber,
-          subtotal_amount: results.subtotalAmount,
-          tax_amount: results.taxAmount,
-        },
-        line_items: results.lineItems?.map((item, index) => ({
-          item_description: item.description,
-          quantity: item.quantity,
-          unit_price: item.unitPrice,
-          total_amount: item.totalAmount,
-          currency: results.currency,
-          tax_amount: item.taxAmount,
-          tax_rate: item.taxRate,
-          item_category: item.category,
-          line_order: index + 1,
-        })),
-        raw_extraction: results,
+        suggested_category: results.suggestedCategory,
+        extraction_quality: results.extractionQuality,
+        user_message: results.userMessage,
+        reasoning: results.reasoning,
       },
-      status: EXPENSE_CLAIM_STATUS.COMPLETED,
-      completedAt: new Date().toISOString(),
+      confidenceScore: results.confidence,
+      extractionMethod: 'lambda-durable',
+      // Also update top-level fields for expense claim model
+      vendorName: results.vendorName,
+      totalAmount: results.totalAmount,
+      currency: results.currency,
+      transactionDate: results.transactionDate,
     });
+    console.log(`[Convex-Lambda] Updated expense claim ${documentId} extraction results`);
   } catch (error) {
     throw new ConvexOperationError(
       `Failed to update expense claim extraction results: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'CONVEX_UPDATE_ERROR',
+      documentId
+    );
+  }
+}
+
+/**
+ * Update expense claim classification results.
+ *
+ * @param documentId - Expense claim document ID
+ * @param classification - Classification results
+ */
+export async function updateExpenseClaimClassification(
+  documentId: string,
+  classification: {
+    isSupported: boolean;
+    documentType?: string;
+    confidenceScore?: number;
+    reasoning?: string;
+    userMessage?: string;
+  }
+): Promise<void> {
+  const client = getConvexClient();
+
+  try {
+    await client.mutation(api.functions.system.updateExpenseClaimClassification, {
+      id: documentId,
+      classification: {
+        isSupported: classification.isSupported,
+        documentType: classification.documentType,
+        confidenceScore: classification.confidenceScore,
+        classificationMethod: 'lambda-gemini',
+        reasoning: classification.reasoning,
+        userMessage: classification.userMessage,
+      },
+    });
+    console.log(`[Convex-Lambda] Updated expense claim ${documentId} classification`);
+  } catch (error) {
+    throw new ConvexOperationError(
+      `Failed to update expense claim classification: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'CONVEX_UPDATE_ERROR',
+      documentId
+    );
+  }
+}
+
+/**
+ * Update expense claim converted image path.
+ *
+ * @param documentId - Expense claim document ID
+ * @param convertedImagePath - S3 key for converted image
+ * @param pageCount - Number of pages
+ * @param totalSizeBytes - Total size of converted images
+ */
+export async function updateExpenseClaimConvertedImage(
+  documentId: string,
+  convertedImagePath: string,
+  pageCount?: number,
+  totalSizeBytes?: number
+): Promise<void> {
+  const client = getConvexClient();
+
+  try {
+    await client.mutation(api.functions.system.updateExpenseClaimConvertedImage, {
+      id: documentId,
+      convertedImagePath,
+      pageCount,
+      totalSizeBytes,
+    });
+    console.log(`[Convex-Lambda] Updated expense claim ${documentId} converted image`);
+  } catch (error) {
+    throw new ConvexOperationError(
+      `Failed to update expense claim converted image: ${error instanceof Error ? error.message : 'Unknown error'}`,
       'CONVEX_UPDATE_ERROR',
       documentId
     );

@@ -4,8 +4,11 @@
  * Provides S3 operations for reading source documents and writing
  * converted images. Uses presigned URLs for secure access.
  *
- * Storage Path Pattern: {business_id}/{user_id}/{document_type}/{document_id}/{stage}/{filename}
+ * Storage Path Pattern: {domain}/{business_id}/{user_id}/{document_id}/{stage}/{filename}
+ * Domains: invoices, expense_claims, business-profiles
  * Processing stages: raw, converted, processed
+ *
+ * Example: invoices/biz123/user456/doc789/converted/page-001.png
  */
 
 import {
@@ -18,8 +21,9 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { ConvertedImageInfo } from '../types';
 
 // Storage path types
-export type DocumentType = 'invoice' | 'receipt' | 'other';
 export type ProcessingStage = 'raw' | 'converted' | 'processed';
+// Domain prefixes for S3 path hierarchy (matches Supabase Storage folders)
+export type StorageDomain = 'invoices' | 'expense_claims' | 'business-profiles';
 
 // S3 client singleton (reused across warm invocations)
 const s3Client = new S3Client({
@@ -139,21 +143,23 @@ export async function getDocumentMetadata(key: string): Promise<{
 /**
  * Generate standardized storage path for converted images.
  *
- * Pattern: {business_id}/{user_id}/{document_type}/{document_id}/converted/{filename}
+ * Pattern: {domain}/{business_id}/{user_id}/{document_id}/{stage}/{filename}
+ * Example: invoices/biz123/user456/doc789/converted/page-001.png
  *
  * @param config - Storage path configuration
  * @returns S3 key following the standardized pattern
  */
 export function generateStoragePath(config: {
+  domain?: StorageDomain;
   businessId: string;
   userId: string;
-  documentType: DocumentType;
   documentId: string;
   stage: ProcessingStage;
   filename: string;
 }): string {
-  const { businessId, userId, documentType, documentId, stage, filename } = config;
-  return `${businessId}/${userId}/${documentType}/${documentId}/${stage}/${filename}`;
+  const { domain, businessId, userId, documentId, stage, filename } = config;
+  const basePath = `${businessId}/${userId}/${documentId}/${stage}/${filename}`;
+  return domain ? `${domain}/${basePath}` : basePath;
 }
 
 /**
@@ -172,9 +178,9 @@ export async function writeConvertedImage(
   imageBuffer: Buffer,
   metadata: { width: number; height: number },
   pathConfig?: {
+    domain?: StorageDomain;
     businessId: string;
     userId: string;
-    documentType: DocumentType;
   }
 ): Promise<string> {
   const filename = `page-${pageNumber.toString().padStart(3, '0')}.png`;
@@ -182,9 +188,9 @@ export async function writeConvertedImage(
   // Use proper hierarchical path if config provided, otherwise fallback to legacy
   const key = pathConfig
     ? generateStoragePath({
+        domain: pathConfig.domain,
         businessId: pathConfig.businessId,
         userId: pathConfig.userId,
-        documentType: pathConfig.documentType,
         documentId,
         stage: 'converted',
         filename,
@@ -234,9 +240,9 @@ export async function writeConvertedImages(
     height: number;
   }>,
   pathConfig?: {
+    domain?: StorageDomain;
     businessId: string;
     userId: string;
-    documentType: DocumentType;
   }
 ): Promise<ConvertedImageInfo[]> {
   const results: ConvertedImageInfo[] = [];

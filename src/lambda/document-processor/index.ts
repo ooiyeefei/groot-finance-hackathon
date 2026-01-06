@@ -222,8 +222,7 @@ async function processDocument(
           storagePath,
           businessId,
           userId,
-          domain === 'invoices' ? 'invoice' : 'receipt',
-          domain  // Pass domain for S3 key prefix
+          domain  // Domain for S3 path hierarchy (invoices, expense_claims, business-profiles)
         );
         console.log(`[${documentId}] PDF converted to ${images.length} image(s)`);
         return images;
@@ -355,7 +354,7 @@ async function processDocument(
 
   } catch (error) {
     // =========================================================================
-    // Error Handling
+    // Error Handling - Update Convex with failure status
     // =========================================================================
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const { code } = mapErrorToCode(error);
@@ -367,11 +366,27 @@ async function processDocument(
     state.failedStep = state.currentStep;
     state.error = { code, message: errorMessage, retryable: false };
 
-    // Update database with failure status
+    // CRITICAL: Update database with failure status so frontend shows error
+    console.log(`[${documentId}] Updating Convex with failed status...`);
     try {
       await markAsFailed(documentId, domain, errorMessage, state.currentStep);
+      console.log(`[${documentId}] ✅ Convex updated with failed status`);
     } catch (updateError) {
-      console.error(`[${documentId}] Failed to update failure status:`, updateError);
+      // Log full error details for debugging
+      const updateErrorMsg = updateError instanceof Error ? updateError.message : String(updateError);
+      console.error(`[${documentId}] ❌ Failed to update Convex status:`, updateErrorMsg);
+
+      // Report to Sentry if available
+      Sentry.captureException(updateError, {
+        tags: {
+          'error.type': 'convex_update_failed',
+          'document.id': documentId,
+        },
+        extra: {
+          originalError: errorMessage,
+          step: state.currentStep,
+        },
+      });
     }
 
     return createErrorResponse(documentId, context.executionId, code, errorMessage, state.currentStep, domain);

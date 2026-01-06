@@ -22,7 +22,7 @@ import type {
 
 // Gemini configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const MODEL_NAME = 'gemini-2.5-flash-preview-05-20';
+const MODEL_NAME = 'gemini-2.5-flash';
 
 // Singleton client (reused across warm invocations)
 let genAI: GoogleGenerativeAI | null = null;

@@ -4,17 +4,39 @@
  * Converts PDF documents to images using the Python Lambda Layer.
  * Uses child_process to invoke Python script with poppler/pdf2image.
  *
- * Storage Path Pattern: {business_id}/{user_id}/{document_type}/{document_id}/converted/{filename}
+ * Storage Path Pattern: {domain}/{business_id}/{user_id}/{document_id}/converted/{filename}
+ * Example: invoices/biz123/user456/doc789/converted/page-001.png
+ *
+ * IMPORTANT: User ID is extracted from storagePath to ensure converted images
+ * are stored in the same folder as the raw upload. This prevents the mismatch
+ * between Clerk user ID (in storagePath from upload) and Convex user ID (in document record).
  */
 
 import { spawn } from 'child_process';
-import * as path from 'path';
 import type { ConvertedImageInfo } from '../types';
 import {
   readDocument,
   writeConvertedImages,
-  type DocumentType,
+  type StorageDomain,
 } from '../utils/s3-client';
+
+/**
+ * Extract user ID from storage path.
+ *
+ * Storage path pattern: {businessId}/{userId}/{documentId}/{stage}/{filename}
+ * Example: kh7c75c0bwz3qmhqvgxh7x6x217y0tda/user_36y7i2nfev1q9jcuqbhu22mok94/kg76hc7/raw/invoice.pdf
+ *
+ * @param storagePath - The full storage path without domain prefix
+ * @returns The userId from the path, or undefined if pattern doesn't match
+ */
+function extractUserIdFromPath(storagePath: string): string | undefined {
+  // Split path: [businessId, userId, documentId, stage, filename]
+  const segments = storagePath.split('/');
+  if (segments.length >= 2) {
+    return segments[1]; // userId is second segment
+  }
+  return undefined;
+}
 
 /**
  * Error thrown when PDF conversion fails
@@ -52,7 +74,6 @@ interface PythonConversionResult {
  * @param storagePath - S3 key for the PDF document (without domain prefix)
  * @param businessId - Business ID for storage path hierarchy
  * @param userId - User ID for storage path hierarchy
- * @param documentType - Document type (invoice/receipt) for storage path
  * @param domain - Domain for S3 prefix (invoices or expense_claims)
  * @returns Array of converted image info with S3 keys
  */
@@ -61,8 +82,7 @@ export async function convertPdfToImages(
   storagePath: string,
   businessId?: string,
   userId?: string,
-  documentType?: DocumentType,
-  domain?: 'invoices' | 'expense_claims'
+  domain?: StorageDomain
 ): Promise<ConvertedImageInfo[]> {
   // Build full S3 key by prepending domain prefix
   // Database stores path without prefix, S3 needs full key with prefix
@@ -105,9 +125,21 @@ export async function convertPdfToImages(
     height: page.height,
   }));
 
-  // Build path config if all required params provided
-  const pathConfig = businessId && userId && documentType
-    ? { businessId, userId, documentType }
+  // CRITICAL: Extract userId from storagePath to ensure consistency
+  // The storagePath contains the Clerk user ID from the original upload,
+  // which may differ from the Convex user ID passed as the userId parameter.
+  // We must use the same userId for converted images as the raw upload.
+  const extractedUserId = extractUserIdFromPath(storagePath);
+
+  // Log the user ID extraction for debugging
+  if (extractedUserId && userId && extractedUserId !== userId) {
+    console.log(`[PDF Convert] User ID mismatch detected - using extracted: ${extractedUserId} (passed: ${userId})`);
+  }
+
+  // Build path config using extracted userId (not the passed one!)
+  const effectiveUserId = extractedUserId || userId;
+  const pathConfig = businessId && effectiveUserId && domain
+    ? { domain, businessId, userId: effectiveUserId }
     : undefined;
 
   // Upload converted images to S3 using proper storage path hierarchy
@@ -126,16 +158,21 @@ async function invokePythonConversion(
   pdfBuffer: Buffer
 ): Promise<PythonConversionResult> {
   return new Promise((resolve) => {
-    // Path to Python script in Lambda Layer
+    // Paths for Lambda Layer
+    const pythonBinary = '/opt/bin/python3';  // Python interpreter from layer
     const pythonScript = '/opt/python/convert_pdf.py';
     const pythonPath = '/opt/python';
+    const libPath = '/opt/lib';
+    const binPath = '/opt/bin';
 
     // Spawn Python process (use childProcess to avoid shadowing global process)
-    const childProcess = spawn('python3', [pythonScript], {
+    const childProcess = spawn(pythonBinary, [pythonScript], {
       env: {
         ...process.env,
+        PYTHONHOME: '/opt',  // Tell Python where to find its stdlib (lib64/python3.11/)
         PYTHONPATH: pythonPath,
-        PATH: `/usr/bin:${process.env.PATH}`,
+        PATH: `${binPath}:/usr/bin:${process.env.PATH || ''}`,
+        LD_LIBRARY_PATH: `${libPath}:${process.env.LD_LIBRARY_PATH || ''}`,
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     });

@@ -36,6 +36,12 @@ export default defineSchema({
       language: v.optional(v.string()),
       notifications: v.optional(v.boolean()),
     })),
+    emailPreferences: v.optional(v.object({
+      globalUnsubscribe: v.optional(v.boolean()),
+      marketingEnabled: v.optional(v.boolean()),
+      onboardingTipsEnabled: v.optional(v.boolean()),
+      productUpdatesEnabled: v.optional(v.boolean()),
+    })),
 
     // Timestamps (Convex adds _creationTime automatically)
     updatedAt: v.optional(v.number()),      // Unix timestamp
