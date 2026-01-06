@@ -137,15 +137,6 @@ interface UseInvoicesRealtimeReturn {
  * This ensures compatibility with existing components
  */
 function mapConvexInvoice(invoice: ConvexInvoice): Invoice {
-  // DEBUG: Log extractedData from Convex to trace category fields
-  if (invoice.extractedData) {
-    const ed = invoice.extractedData as Record<string, unknown>
-    console.log('[Convex Hook Debug] invoice._id:', invoice._id)
-    console.log('[Convex Hook Debug] extractedData keys:', Object.keys(ed))
-    console.log('[Convex Hook Debug] suggested_category:', ed.suggested_category)
-    console.log('[Convex Hook Debug] accounting_category:', ed.accounting_category)
-  }
-
   return {
     id: invoice._id,
     file_name: invoice.fileName,
