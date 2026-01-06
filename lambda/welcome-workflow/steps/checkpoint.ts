@@ -25,7 +25,7 @@ export async function checkpoint(params: CheckpointParams): Promise<void> {
   try {
     // Update workflow execution status in Convex
     // This mutation will be created in convex/functions/workflows.ts
-    await convex.mutation('workflows:updateWorkflowStatus' as any, {
+    await convex.mutation('functions/workflows:updateWorkflowStatus' as any, {
       executionId,
       currentStage: stage,
       status: stage === 'completed' ? 'completed' : 'running',

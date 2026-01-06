@@ -148,16 +148,16 @@ function renderSuccessPage(): string {
     </div>
 
     <div class="button-group">
-      <a href="https://finanseal.com" class="btn btn-primary">Go to FinanSEAL</a>
-      <a href="https://finanseal.com/settings/notifications" class="btn btn-secondary">Manage Preferences</a>
+      <a href="https://finance.hellogroot.com/en" class="btn btn-primary">Go to FinanSEAL</a>
+      <a href="https://finance.hellogroot.com/en/settings" class="btn btn-secondary">Manage Preferences</a>
     </div>
 
     <div class="footer">
       <p>&copy; ${new Date().getFullYear()} FinanSEAL. All rights reserved.</p>
       <p style="margin-top: 8px;">
-        <a href="https://finanseal.com/privacy" style="color: #999; text-decoration: none;">Privacy Policy</a>
+        <a href="https://finance.hellogroot.com/en/privacy" style="color: #999; text-decoration: none;">Privacy Policy</a>
         &nbsp;•&nbsp;
-        <a href="https://finanseal.com/terms" style="color: #999; text-decoration: none;">Terms of Service</a>
+        <a href="https://finance.hellogroot.com/en/terms" style="color: #999; text-decoration: none;">Terms of Service</a>
       </p>
     </div>
   </div>
