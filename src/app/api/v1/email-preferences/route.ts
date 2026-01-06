@@ -16,6 +16,7 @@ import { api } from '@/convex/_generated/api'
 
 function getConvexClient(): ConvexHttpClient {
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
+  console.log('[Email Preferences API] DEBUG: CONVEX_URL =', convexUrl)
   if (!convexUrl) {
     throw new Error('NEXT_PUBLIC_CONVEX_URL is not configured')
   }
@@ -114,9 +115,11 @@ export async function PATCH(req: NextRequest) {
     const convex = getConvexClient()
 
     // Get user by Clerk ID
+    console.log('[Email Preferences API] DEBUG: Looking up user with clerkUserId:', clerkUserId)
     const user = await convex.query(api.functions.users.getByClerkId, {
       clerkUserId
     })
+    console.log('[Email Preferences API] DEBUG: Found user:', user?._id, 'email:', user?.email)
 
     if (!user) {
       return NextResponse.json(
@@ -126,17 +129,20 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Update preferences
-    await convex.mutation(api.functions.emails.updateEmailPreferences, {
-      userId: user._id,
-      ...updates
-    })
+    const mutationArgs = { userId: user._id, ...updates }
+    console.log('[Email Preferences API] DEBUG: Calling mutation with args:', JSON.stringify(mutationArgs))
+
+    const mutationResult = await convex.mutation(api.functions.emails.updateEmailPreferences, mutationArgs)
+    console.log('[Email Preferences API] DEBUG: Mutation result:', mutationResult)
 
     console.log(`[Email Preferences API] Updated preferences for user ${user._id}:`, updates)
 
     // Return updated preferences
+    console.log('[Email Preferences API] DEBUG: Querying updated preferences...')
     const preferences = await convex.query(api.functions.emails.getEmailPreferences, {
       userId: user._id
     })
+    console.log('[Email Preferences API] DEBUG: Query result:', JSON.stringify(preferences))
 
     return NextResponse.json({
       success: true,
@@ -146,7 +152,15 @@ export async function PATCH(req: NextRequest) {
         productUpdatesEnabled: preferences.productUpdatesEnabled,
         globalUnsubscribe: preferences.globalUnsubscribe,
       },
-      message: 'Email preferences updated successfully'
+      message: 'Email preferences updated successfully',
+      // DEBUG: Remove after investigation
+      _debug: {
+        convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
+        userId: user._id,
+        requestedUpdates: updates,
+        mutationResult,
+        queriedPrefs: preferences,
+      }
     })
 
   } catch (error) {
