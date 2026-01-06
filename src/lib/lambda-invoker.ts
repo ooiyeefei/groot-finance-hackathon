@@ -17,23 +17,26 @@ import { fromWebToken } from '@aws-sdk/credential-providers';
 
 /**
  * Document processing request payload sent from Vercel API routes to Lambda.
- * This is the primary input contract for the durable function.
+ * This MUST match the Lambda's DocumentProcessingRequestSchema in contracts.ts
  */
 export interface DocumentProcessingRequest {
   // Document identification
   documentId: string;                    // UUID from Convex
-  documentType?: 'invoice' | 'receipt';  // Type hint for routing
+  domain: 'invoices' | 'expense_claims'; // Domain context for routing
 
   // Storage information
   storagePath: string;                   // S3 key for original document
   fileType: 'pdf' | 'image';             // Determines if conversion needed
 
-  // Processing context (optional - used for audit/context)
-  userId?: string;                       // For audit trail
-  businessId?: string;                   // For business-specific categories
+  // Processing context (REQUIRED for Lambda)
+  userId: string;                        // For audit trail
+  businessId: string;                    // For business-specific categories
 
   // Idempotency
   idempotencyKey: string;                // Prevents duplicate processing
+
+  // Optional hints (optimize when caller has context)
+  expectedDocumentType?: 'invoice' | 'receipt';  // Skip classification if known
 }
 
 /**

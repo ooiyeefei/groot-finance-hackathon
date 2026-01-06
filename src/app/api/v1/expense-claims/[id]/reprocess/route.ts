@@ -112,12 +112,13 @@ export async function POST(
 
       const lambdaResult = await invokeDocumentProcessor({
         documentId: expenseClaimId,
+        domain: 'expense_claims',
         storagePath: claim.storagePath,
-        documentType: 'receipt',
         fileType,
         businessId: claim.businessId,
         userId: user._id,
         idempotencyKey: `expense-${expenseClaimId}-${Date.now()}`,
+        expectedDocumentType: 'receipt',
       })
 
       // Map Lambda executionId to taskId for API compatibility
