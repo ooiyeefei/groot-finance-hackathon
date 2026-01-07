@@ -727,26 +727,25 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   const getFieldValue = (fieldName: string, fallbackField?: string): string => {
     const extractedData = document.extracted_data as any;
 
-    // DEBUG: Log the vendor/customer field access to diagnose "Not extracted" issue
-    if (fieldName.startsWith('vendor_') || fieldName.startsWith('customer_')) {
-      console.log(`[DEBUG getFieldValue] Field: ${fieldName}`, {
-        hasExtractedData: !!extractedData,
-        extractedDataKeys: extractedData ? Object.keys(extractedData) : [],
-        directValue: extractedData?.[fieldName],
-        directValueType: typeof extractedData?.[fieldName],
-      });
-    }
-
     if (!extractedData) return '';
 
     // AI stores values directly (e.g., vendor_name, total_amount, document_date)
-    if (extractedData[fieldName]) {
-      return String(extractedData[fieldName]);
+    const value = extractedData[fieldName];
+    // Handle numeric 0 correctly (it's a valid value for amounts like tax_amount, discount_amount)
+    if (typeof value === 'number') {
+      return String(value);
+    }
+    if (value) {
+      return String(value);
     }
 
     // Try fallback field if provided (e.g., document_date -> transaction_date)
-    if (fallbackField && extractedData[fallbackField]) {
-      return String(extractedData[fallbackField]);
+    const fallbackValue = fallbackField ? extractedData[fallbackField] : undefined;
+    if (typeof fallbackValue === 'number') {
+      return String(fallbackValue);
+    }
+    if (fallbackValue) {
+      return String(fallbackValue);
     }
 
     // Legacy fallback: try nested document_summary structure for backward compatibility
