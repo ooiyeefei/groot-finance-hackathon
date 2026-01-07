@@ -615,7 +615,7 @@ export async function getExpenseClaim(
           item_description: item.description || item.item_description,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          total_amount: item.total_amount
+          total_amount: item.line_total || item.total_amount || 0
         })) || []
       }
     }
