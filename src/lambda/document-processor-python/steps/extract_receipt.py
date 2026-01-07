@@ -47,7 +47,10 @@ class ReceiptData(BaseModel):
     currency: str = Field(..., description="ISO 4217 currency code (SGD, MYR, USD, etc.)")
 
     # Receipt identification
-    receipt_number: Optional[str] = Field(None, description="Receipt number")
+    receipt_number: Optional[str] = Field(
+        None,
+        description="Receipt/invoice/check number - look for: 'Receipt #', 'Invoice #', 'Check #', 'Ref #', 'No.', 'Transaction #', or any similar identifier"
+    )
 
     # Vendor details
     vendor_address: Optional[str] = Field(None, description="Store address")
@@ -91,6 +94,16 @@ class ReceiptData(BaseModel):
         description="Actionable suggestions for improving extraction quality (e.g., 'Take a clearer photo')"
     )
 
+    # AI-generated descriptive fields for expense claims
+    description: Optional[str] = Field(
+        None,
+        description="Concise description of the expense based on receipt content, e.g., 'Lunch meeting with client at Restaurant ABC' or 'Office supplies purchase - paper and ink'"
+    )
+    business_purpose: Optional[str] = Field(
+        None,
+        description="Business justification for the expense, e.g., 'Client entertainment for project discussion' or 'Office supplies for daily operations'"
+    )
+
 
 # =============================================================================
 # DSPy Signature - Updated to match Trigger.dev
@@ -120,7 +133,11 @@ class ReceiptExtractionSignature(dspy.Signature):
         subtotal, tax, tip, and payment method. For currency: determine from vendor
         location and symbols. Select expense_category from available_categories list.
         Set extraction_quality based on image clarity. If quality is 'low' or
-        critical fields are missing, provide user_message and suggestions."""
+        critical fields are missing, provide user_message and suggestions.
+
+        IMPORTANT: Generate 'description' (concise expense summary like 'Lunch at ABC Restaurant')
+        and 'business_purpose' (business justification like 'Client meeting lunch').
+        For receipt_number: Look for 'Check #', 'Invoice #', 'Receipt #', 'Ref #', 'No.' or similar."""
     )
 
 
@@ -459,9 +476,9 @@ def extract_receipt_step(
             "expense_category": expense_category,
             "category_confidence": category_confidence,
 
-            # Generated descriptive fields for Convex
-            "description": f"Receipt from {extracted.vendor_name}" if extracted.vendor_name else "Receipt expense",
-            "business_purpose": f"Business expense - {expense_category}" if expense_category else "Business expense",
+            # AI-extracted descriptive fields (with template fallbacks)
+            "description": extracted.description or (f"Receipt from {extracted.vendor_name}" if extracted.vendor_name else "Receipt expense"),
+            "business_purpose": extracted.business_purpose or (f"Business expense - {expense_category}" if expense_category else "Business expense"),
 
             # Processing metadata
             "processing_time_ms": processing_time_ms,
@@ -501,6 +518,11 @@ def extract_receipt_step(
                 "Make sure all text is readable",
                 "Try taking a photo from directly above the receipt"
             ],
+            # Fallback values to prevent empty fields in UI
+            "description": "Receipt expense - manual entry required",
+            "business_purpose": "Business expense - please specify",
+            "expense_category": None,  # Will trigger user to select manually
+            "receipt_number": None,
         }
 
 
