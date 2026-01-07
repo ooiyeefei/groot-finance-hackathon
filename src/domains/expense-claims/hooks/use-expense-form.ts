@@ -359,10 +359,17 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       // Initialize from extraction result
       setProcessingMethod(extractionResult.extractedData.processingMethod as 'ai' | 'manual_entry')
 
+      // Use AI-extracted description and business purpose, with smart fallbacks
+      const aiDescription = extractionResult.extractedData.description ||
+                           extractionResult.extractedData.lineItems?.[0]?.description ||
+                           'Business expense'
+      const aiBusinessPurpose = extractionResult.extractedData.businessPurpose ||
+                               `Business expense - ${extractionResult.extractedData.vendorName || 'vendor'}`
+
       // Set form data from extraction result
       setFormData({
-        description: extractionResult.extractedData.lineItems?.[0]?.description || 'Business expense',
-        business_purpose: '',
+        description: aiDescription,
+        business_purpose: aiBusinessPurpose,
         expense_category: inferExpenseCategory(extractionResult, categories),
         original_amount: extractionResult.extractedData.totalAmount || 0,
         original_currency: extractionResult.extractedData.currency || userHomeCurrency || 'SGD',
@@ -374,12 +381,32 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         storage_path: '', // Storage path comes from the processing pipeline, not extraction data
         tax_amount: extractionResult.extractedData.taxAmount || 0,
         subtotal_amount: extractionResult.extractedData.subtotalAmount,
-        line_items: extractionResult.extractedData.lineItems?.map(item => ({
-          description: item.description || 'Item',
-          quantity: item.quantity || 1,
-          unit_price: item.unitPrice || (item.lineTotal / (item.quantity || 1)),
-          total_amount: item.lineTotal || 0
-        })) || []
+        line_items: extractionResult.extractedData.lineItems?.map(item => {
+          // Apply same robust calculation logic as edit mode's mapLineItem
+          const qty = item.quantity || 1
+          const unitPrice = item.unitPrice || 0
+          const lineTotal = item.lineTotal || 0
+
+          // Calculate final values ensuring consistency
+          let finalUnitPrice = unitPrice
+          let finalTotal = lineTotal
+
+          if (lineTotal > 0 && unitPrice === 0 && qty > 0) {
+            // Lambda gave us lineTotal but not unitPrice → back-calculate
+            finalUnitPrice = lineTotal / qty
+            finalTotal = lineTotal
+          } else if (unitPrice > 0 && lineTotal === 0) {
+            // We have unitPrice but no lineTotal → calculate total
+            finalTotal = qty * unitPrice
+          }
+
+          return {
+            description: item.description || 'Item',
+            quantity: qty,
+            unit_price: finalUnitPrice,
+            total_amount: finalTotal
+          }
+        }) || []
       })
 
       setLoading(false)
@@ -839,10 +866,24 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   }
 }
 
-// Helper function to infer expense category (from original form)
+// Helper function to infer expense category from AI extraction
 function inferExpenseCategory(result: AIExtractionResult, availableCategories: any[]): string {
-  // AI extraction doesn't provide expense category directly
-  // We'll use vendor name or line items to infer category in future iterations
-  // For now, return the first available category or 'other' as fallback
+  // First, check if AI provided a suggested category
+  const aiSuggestedCategory = result.extractedData.suggestedCategory
+
+  if (aiSuggestedCategory && availableCategories.length > 0) {
+    // Try to match AI suggestion against available categories
+    const matchedCategory = availableCategories.find(cat =>
+      cat.id === aiSuggestedCategory ||
+      cat.category_name?.toLowerCase() === aiSuggestedCategory.toLowerCase() ||
+      cat.category_code?.toLowerCase() === aiSuggestedCategory.toLowerCase()
+    )
+
+    if (matchedCategory) {
+      return matchedCategory.id
+    }
+  }
+
+  // Fallback: return first available category or 'other'
   return availableCategories.length > 0 ? availableCategories[0].id : 'other'
 }

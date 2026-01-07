@@ -44,9 +44,10 @@ export default function DocumentStatusBadge({
           variant: 'info' as const,
           animate: true
         }
+      case 'extracting':
       case 'processing':
         return {
-          icon: Loader2,
+          icon: Brain,
           text: 'Processing',
           variant: 'info' as const,
           animate: true
@@ -55,13 +56,6 @@ export default function DocumentStatusBadge({
         return {
           icon: Brain,
           text: 'Classifying Document',
-          variant: 'info' as const,
-          animate: true
-        }
-      case 'extracting':
-        return {
-          icon: FileText,
-          text: 'Extracting Data',
           variant: 'info' as const,
           animate: true
         }
@@ -169,7 +163,7 @@ export default function DocumentStatusBadge({
       {config.text}
 
       {/* Processing stage indicator */}
-      {(status === 'analyzing' || status === 'processing' || status === 'classifying') && processingStage && (
+      {(status === 'analyzing' || status === 'processing' || status === 'extracting' || status === 'classifying') && (
         <span className="ml-1 w-1 h-1 bg-current rounded-full animate-pulse" />
       )}
     </div>

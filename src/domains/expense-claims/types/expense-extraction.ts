@@ -51,6 +51,11 @@ export interface ExtractedReceiptData {
   confidenceScore: number // 0.0 to 1.0
   missingFields: string[] // Fields that couldn't be extracted
   
+  // AI-Suggested Content (Lambda sends these from DSPy extraction)
+  suggestedCategory?: string // AI-inferred expense category
+  businessPurpose?: string // AI-generated business purpose description
+  description?: string // AI-generated description of the expense
+
   // Processing Metadata
   processingMethod: 'gemini_ocr' | 'ai' | 'manual_entry'
   modelUsed?: string // e.g., "gemini-2.5-flash"

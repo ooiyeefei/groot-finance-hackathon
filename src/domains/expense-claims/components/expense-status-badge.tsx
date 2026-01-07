@@ -37,15 +37,9 @@ export default function ExpenseStatusBadge({
           animate: true
         }
       case 'extracting':
-        return {
-          icon: FileText,
-          text: 'Extracting',
-          variant: 'info' as const,
-          animate: true
-        }
       case 'processing':
         return {
-          icon: Cog,
+          icon: Brain,
           text: 'Processing',
           variant: 'info' as const,
           animate: true
