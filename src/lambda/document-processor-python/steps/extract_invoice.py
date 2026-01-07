@@ -67,9 +67,18 @@ class InvoiceData(BaseModel):
     discount_amount: Optional[float] = Field(None, description="Total discount")
 
     # Payment info
-    payment_terms: Optional[str] = Field(None, description="Payment terms")
-    payment_method: Optional[str] = Field(None, description="Payment method")
-    bank_details: Optional[str] = Field(None, description="Bank details")
+    payment_terms: Optional[str] = Field(None, description="Payment terms (e.g., 'Net 30', 'Due on receipt', 'COD')")
+    payment_method: Optional[str] = Field(
+        None,
+        description="""Payment method - INFER from contextual clues on the invoice:
+        - 'Cheque' if mentions 'cheques should be crossed', 'payable to', or cheque instructions
+        - 'Bank Transfer' if bank account/IBAN/SWIFT details are provided for payment
+        - 'Cash' if mentions 'cash', 'COD', 'cash on delivery'
+        - 'Credit Card' if mentions card payment, credit/debit card
+        - 'E-Wallet' if mentions PayNow, DuitNow, GrabPay, QR code payment
+        Return the most likely payment method based on invoice context, or null if unclear."""
+    )
+    bank_details: Optional[str] = Field(None, description="Bank account details for payment (bank name, account number, SWIFT/IBAN)")
 
     # Line items
     line_items: List[DocumentLineItem] = Field(default_factory=list)
@@ -106,12 +115,22 @@ class InvoiceData(BaseModel):
 class InvoiceExtractionSignature(dspy.Signature):
     """Extract comprehensive structured data from invoice image with user-friendly error handling.
 
-    IMPORTANT: If the image quality is poor or critical information is missing, provide:
-    1. A clear user_message explaining the issue
-    2. Actionable suggestions for improvement (e.g., 'Upload a clearer image', 'Ensure invoice number is visible')
+    IMPORTANT EXTRACTION GUIDELINES:
 
-    For suggested_category: Select the BEST matching category from available_categories (COGS/expense categories).
-    If no good match, leave as null.
+    1. PAYMENT METHOD INFERENCE: Look for contextual clues to determine payment method:
+       - "cheques should be crossed", "payable to" → payment_method: "Cheque"
+       - Bank account/IBAN/SWIFT details for payment → payment_method: "Bank Transfer"
+       - "cash", "COD", "cash on delivery" → payment_method: "Cash"
+       - Credit/debit card references → payment_method: "Credit Card"
+       - PayNow, DuitNow, GrabPay, QR codes → payment_method: "E-Wallet"
+
+    2. BANK DETAILS: Extract the bank name and account number if present (e.g., "MAYBANK BERHAD: 5148 7906 4541")
+
+    3. ERROR HANDLING: If image quality is poor or critical information is missing:
+       - Provide a clear user_message explaining the issue
+       - Add actionable suggestions (e.g., 'Upload a clearer image')
+
+    4. CATEGORY: Select the BEST matching category from available_categories. If no good match, leave as null.
     """
 
     document_image: dspy.Image = dspy.InputField(
