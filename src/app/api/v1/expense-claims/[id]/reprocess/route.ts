@@ -1,23 +1,15 @@
 /**
  * Re-extract/reprocess expense claim API endpoint
- * Triggers Lambda Durable Function or Trigger.dev receipt extraction task
+ * Triggers Lambda document processor for receipt extraction
  *
  * MIGRATED: Database uses Convex, file storage uses AWS S3
- * UPDATED: Supports Lambda Durable Functions with feature flag
+ * UPDATED: Uses Lambda for document processing
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
-import { tasks } from '@trigger.dev/sdk/v3'
-import type { extractReceiptData } from '@/trigger/extract-receipt-data'
-import { getPresignedDownloadUrl, URL_EXPIRY } from '@/lib/aws-s3'
 import { invokeDocumentProcessor } from '@/lib/lambda-invoker'
-
-/**
- * Feature flag for Lambda vs Trigger.dev processing
- */
-const USE_LAMBDA_PROCESSING = process.env.USE_LAMBDA_PROCESSING === 'true'
 
 export async function POST(
   request: NextRequest,
@@ -57,25 +49,7 @@ export async function POST(
       )
     }
 
-    // Create signed URL for the receipt (AWS S3)
-    let signedUrl: string
-    try {
-      signedUrl = await getPresignedDownloadUrl(
-        'expense_claims',
-        claim.storagePath,
-        URL_EXPIRY.shortLived // 10 minutes
-      )
-      console.log('[Reprocess API] Generated S3 signed URL for reprocessing')
-    } catch (urlError) {
-      console.error('[Reprocess API] Failed to create signed URL:', urlError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to generate secure access to receipt' },
-        { status: 500 }
-      )
-    }
-
     // Update status to 'processing' using Convex mutation
-    // This also sets processingStartedAt automatically
     try {
       await client.mutation(api.functions.expenseClaims.updateStatus, {
         id: expenseClaimId,
@@ -84,11 +58,10 @@ export async function POST(
       console.log('[Reprocess API] Status updated to processing')
     } catch (statusError) {
       console.error('[Reprocess API] Failed to update status:', statusError)
-      // Continue anyway - status will be set by Trigger.dev job
+      // Continue anyway - status will be set by Lambda
     }
 
-    // Get user's Convex ID for the Trigger.dev task
-    // The task needs this for database operations
+    // Get user's Convex ID for Lambda
     const user = await client.query(api.functions.users.getByClerkId, {
       clerkUserId: userId,
     })
@@ -100,49 +73,26 @@ export async function POST(
       )
     }
 
-    // Use Lambda Durable Functions if feature flag enabled
-    let taskId: string
+    // Invoke Lambda for document processing
+    console.log('[Reprocess API] Invoking Lambda document processor')
 
-    if (USE_LAMBDA_PROCESSING) {
-      // Lambda Durable Function - single handler for all steps
-      console.log('[Reprocess API] Using Lambda Durable Function')
+    // Determine file type from storage path
+    const fileType: 'pdf' | 'image' = claim.storagePath.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image'
 
-      // Determine file type from storage path
-      const fileType: 'pdf' | 'image' = claim.storagePath.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image'
+    const lambdaResult = await invokeDocumentProcessor({
+      documentId: expenseClaimId,
+      domain: 'expense_claims',
+      storagePath: claim.storagePath,
+      fileType,
+      businessId: claim.businessId,
+      userId: user._id,
+      idempotencyKey: `expense-${expenseClaimId}-${Date.now()}`,
+      expectedDocumentType: 'receipt',
+    })
 
-      const lambdaResult = await invokeDocumentProcessor({
-        documentId: expenseClaimId,
-        domain: 'expense_claims',
-        storagePath: claim.storagePath,
-        fileType,
-        businessId: claim.businessId,
-        userId: user._id,
-        idempotencyKey: `expense-${expenseClaimId}-${Date.now()}`,
-        expectedDocumentType: 'receipt',
-      })
-
-      // Map Lambda executionId to taskId for API compatibility
-      taskId = lambdaResult.executionId
-      console.log('[Reprocess API] Lambda invoked:', { taskId, expenseClaimId })
-
-    } else {
-      // Legacy: Trigger.dev receipt extraction task
-      console.log('[Reprocess API] Using Trigger.dev')
-
-      const triggerResult = await tasks.trigger<typeof extractReceiptData>(
-        "extract-receipt-data",
-        {
-          expenseClaimId: expenseClaimId,
-          documentId: undefined, // No separate document ID for direct expense claims
-          userId: user._id, // Pass Convex user ID for consistency
-          documentDomain: 'expense_claims',
-          receiptImageUrl: signedUrl
-        }
-      )
-
-      taskId = triggerResult.id
-      console.log('[Reprocess API] Trigger.dev job started:', { taskId, expenseClaimId })
-    }
+    // Map Lambda executionId to taskId for API compatibility
+    const taskId = lambdaResult.executionId
+    console.log('[Reprocess API] Lambda invoked:', { taskId, expenseClaimId })
 
     return NextResponse.json({
       success: true,
