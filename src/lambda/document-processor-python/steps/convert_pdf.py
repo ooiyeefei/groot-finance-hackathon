@@ -91,7 +91,20 @@ def convert_pdf_step(
             storage_path=storage_path,
         )
 
-        # Build page metadata for Convex
+        # Build images as dicts for SDK serialization (not dataclass objects)
+        # AWS Durable SDK can only serialize JSON-compatible types
+        images_list = [
+            {
+                "page_number": img.page_number,
+                "s3_key": img.s3_key,
+                "width": img.width,
+                "height": img.height,
+                "mime_type": img.mime_type,
+            }
+            for img in converted_images
+        ]
+
+        # Page metadata for Convex (camelCase)
         page_metadata = [
             {
                 "pageNumber": img.page_number,
@@ -105,7 +118,7 @@ def convert_pdf_step(
         print(f"[{document_id}] PDF conversion complete")
         return {
             "status": "success",
-            "images": converted_images,
+            "images": images_list,  # List of dicts, not ConvertedImageInfo objects
             "total_pages": total_pages,
             "page_metadata": page_metadata,
             "first_image_path": converted_images[0].s3_key if converted_images else None,
