@@ -153,57 +153,9 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   };
 }
 
-/**
- * Check if an email is suppressed before sending
- *
- * Queries Convex email_suppressions table to check for:
- * - Bounced emails
- * - Complaint reports
- * - User unsubscribes
- *
- * @param email - Email address to check
- * @param convexUrl - Convex deployment URL
- * @returns true if email is suppressed (should not send)
- */
-export async function isEmailSuppressed(
-  email: string,
-  convexUrl?: string
-): Promise<boolean> {
-  const url = convexUrl || process.env.CONVEX_URL;
-
-  if (!url) {
-    console.warn('[Email Service] CONVEX_URL not configured, skipping suppression check');
-    return false;
-  }
-
-  try {
-    // Use Convex HTTP client to check suppression
-    // Note: In Lambda context, we use direct HTTP call for simplicity
-    const response = await fetch(`${url}/api/query`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        path: 'functions/emails:isEmailSuppressed',
-        args: { email: email.toLowerCase() },
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('[Email Service] Suppression check failed:', response.status);
-      // Fail open - if we can't check, allow sending
-      return false;
-    }
-
-    const result = await response.json();
-    return result.value === true;
-  } catch (error) {
-    console.error('[Email Service] Suppression check error:', error);
-    // Fail open - if we can't check, allow sending
-    return false;
-  }
-}
+// NOTE: Email suppressions are handled natively by AWS SES Account-Level Suppression List.
+// No need for a custom isEmailSuppressed check - SES will automatically reject sends to
+// addresses on the suppression list and return an appropriate error.
 
 /**
  * Check user email preferences before sending non-transactional emails

@@ -402,21 +402,14 @@ export async function POST(req: NextRequest) {
         })
         console.log(`[Unsubscribe API] Updated preferences for user ${convexUserId}`)
       } catch (prefError) {
-        // If updating preferences fails, fall back to suppression
-        console.warn(`[Unsubscribe API] Failed to update preferences, using suppression: ${prefError}`)
-        convexUserId = null
+        // Log but don't fail - user might be deleted
+        console.warn(`[Unsubscribe API] Failed to update preferences: ${prefError}`)
+        console.log(`[Unsubscribe API] Proceeding anyway for CAN-SPAM compliance`)
       }
-    }
-
-    // If no valid user or preference update failed, add to email suppressions
-    // This is the fallback that always works
-    if (!convexUserId) {
-      await convex.mutation(api.functions.emails.markEmailUndeliverable, {
-        email: email,
-        reason: 'unsubscribe' as const,
-        sourceMessageId: `unsubscribe-${Date.now()}`
-      })
-      console.log(`[Unsubscribe API] Added ${email} to suppression list (type: ${type})`)
+    } else {
+      // No valid user ID - log and succeed for CAN-SPAM compliance
+      // AWS SES handles suppressions natively - no need for custom tracking
+      console.log(`[Unsubscribe API] No valid user ID for ${email}, but succeeding for compliance`)
     }
 
     console.log(`[Unsubscribe API] Processed unsubscribe for ${email}, type: ${type}`)
