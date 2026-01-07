@@ -26,7 +26,6 @@ import type * as functions_systemMonitoring from "../functions/systemMonitoring.
 import type * as functions_users from "../functions/users.js";
 import type * as functions_vendors from "../functions/vendors.js";
 import type * as functions_webhooks from "../functions/webhooks.js";
-import type * as functions_workflows from "../functions/workflows.js";
 import type * as lib_resolvers from "../lib/resolvers.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as migrations from "../migrations.js";
@@ -57,7 +56,6 @@ declare const fullApi: ApiFromModules<{
   "functions/users": typeof functions_users;
   "functions/vendors": typeof functions_vendors;
   "functions/webhooks": typeof functions_webhooks;
-  "functions/workflows": typeof functions_workflows;
   "lib/resolvers": typeof lib_resolvers;
   "lib/validators": typeof lib_validators;
   migrations: typeof migrations;
