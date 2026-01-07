@@ -416,6 +416,30 @@ def extract_invoice_step(
         # Calculate processing time
         processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 
+        # Calculate due_date from transaction_date + payment_terms
+        # (Same logic as Trigger.dev version)
+        calculated_due_date = None
+        if extracted.transaction_date and extracted.payment_terms:
+            try:
+                import re
+                from datetime import timedelta
+                # Parse transaction date (YYYY-MM-DD format)
+                transaction_date = datetime.strptime(extracted.transaction_date, "%Y-%m-%d")
+                payment_terms = extracted.payment_terms.lower()
+
+                # Extract number of days from payment terms (e.g., "Net 30", "30 days")
+                days_to_add = 30  # Default Net 30
+                match = re.search(r'(\d+)', payment_terms)
+                if match:
+                    days_to_add = int(match.group(1))
+
+                # Calculate due date
+                due_date = transaction_date + timedelta(days=days_to_add)
+                calculated_due_date = due_date.strftime("%Y-%m-%d")
+                print(f"[{document_id}] Calculated due_date: {calculated_due_date} (transaction: {extracted.transaction_date} + {days_to_add} days)")
+            except Exception as e:
+                print(f"[{document_id}] Warning: Could not calculate due_date: {e}")
+
         # Build result
         result = {
             "success": True,
@@ -448,6 +472,7 @@ def extract_invoice_step(
 
             # Payment info
             "payment_terms": extracted.payment_terms or "",
+            "due_date": calculated_due_date,  # Calculated from transaction_date + payment_terms
             "payment_method": extracted.payment_method or "",
             "bank_details": extracted.bank_details or "",
 

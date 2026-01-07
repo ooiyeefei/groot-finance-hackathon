@@ -228,6 +228,28 @@ def handler(event: dict, context: DurableContext):
             ]
 
         # =================================================================
+        # Step 3b: Update Convex with converted image path (checkpointed)
+        # =================================================================
+        def update_converted_image():
+            if conversion_result.get("status") == "success" and conversion_result.get("first_image_path"):
+                print(f"[{doc_id}] Updating Convex with converted image path")
+                first_image = conversion_result.get("images", [{}])[0]
+                convex.update_converted_image(
+                    document_id=doc_id,
+                    domain=request.domain,
+                    converted_image_path=conversion_result.get("first_image_path", ""),
+                    width=first_image.get("width"),
+                    height=first_image.get("height"),
+                    page_metadata=conversion_result.get("page_metadata"),
+                    total_pages=conversion_result.get("total_pages"),
+                )
+                print(f"[{doc_id}] Converted image path updated in Convex")
+                return True
+            return False
+
+        context.step(lambda ctx: update_converted_image(), name="update_converted_image")
+
+        # =================================================================
         # Step 4: Validate document (checkpointed)
         # =================================================================
         def validate_document():
