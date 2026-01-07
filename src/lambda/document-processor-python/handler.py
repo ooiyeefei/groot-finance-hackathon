@@ -22,8 +22,8 @@ import traceback
 from typing import Any, Optional
 from dataclasses import dataclass
 
-# AWS Durable Execution SDK
-from aws_durable import durable_context, step, sleep, DurableResult
+# AWS Durable Execution SDK - correct import for aws-durable-execution-sdk-python
+from aws_durable_execution_sdk_python import durable_execution, DurableContext
 
 # Sentry for error tracking
 import sentry_sdk
@@ -85,8 +85,8 @@ def get_s3_client() -> S3Client:
 # Main Lambda Handler with Durable Execution
 # =============================================================================
 
-@durable_context
-def handler(event: dict, context: Any) -> DurableResult:
+@durable_execution
+def handler(event: dict, context: DurableContext):
     """
     Main Lambda handler for document processing with durable execution.
 
@@ -109,15 +109,15 @@ def handler(event: dict, context: Any) -> DurableResult:
         return DocumentProcessingRequest.from_dict(event)
 
     try:
-        request = step("parse_request", parse_request)
+        request = context.step(lambda ctx: parse_request(), name="parse_request")
     except Exception as e:
         error_msg = f"Invalid request: {str(e)}"
         print(f"[ERROR] {error_msg}")
-        return DurableResult({
+        return {
             "success": False,
             "error_code": ERROR_CODES["INVALID_INPUT"],
             "error_message": error_msg,
-        })
+        }
 
     doc_id = request.document_id
     print(f"[{doc_id}] Starting durable document processing workflow")
@@ -160,7 +160,7 @@ def handler(event: dict, context: Any) -> DurableResult:
                 print(f"[{doc_id}] Warning: Failed to fetch categories: {str(cat_error)}")
         return request.business_categories or []
 
-    business_categories = step("fetch_categories", fetch_categories)
+    business_categories = context.step(lambda ctx: fetch_categories(), name="fetch_categories")
 
     try:
         # =================================================================
@@ -175,7 +175,7 @@ def handler(event: dict, context: Any) -> DurableResult:
             )
             return True
 
-        step("update_status_processing", update_status_processing)
+        context.step(lambda ctx: update_status_processing(), name="update_status_processing")
 
         # =================================================================
         # Step 3: Convert PDF (checkpointed)
@@ -199,7 +199,7 @@ def handler(event: dict, context: Any) -> DurableResult:
                 print(f"[{doc_id}] PDF conversion complete: {len(result.get('images', []))} pages")
                 return result
 
-        conversion_result = step("convert_pdf", convert_pdf)
+        conversion_result = context.step(lambda ctx: convert_pdf(), name="convert_pdf")
 
         # =================================================================
         # Step 4: Validate document (checkpointed)
@@ -219,7 +219,7 @@ def handler(event: dict, context: Any) -> DurableResult:
             print(f"[{doc_id}] Validation result: {result.get('document_type')} (confidence: {result.get('confidence', 0):.2f})")
             return result
 
-        validation_result = step("validate_document", validate_document)
+        validation_result = context.step(lambda ctx: validate_document(), name="validate_document")
 
         # Check if document is supported
         if not validation_result.get("is_supported", True):
@@ -230,12 +230,12 @@ def handler(event: dict, context: Any) -> DurableResult:
                 error_code=ERROR_CODES["UNSUPPORTED_DOCUMENT"],
                 error_message=validation_result.get("reason", "Document type not supported"),
             )
-            return DurableResult({
+            return {
                 "success": False,
                 "error_code": ERROR_CODES["UNSUPPORTED_DOCUMENT"],
                 "error_message": validation_result.get("reason"),
                 "validation_result": validation_result,
-            })
+            }
 
         # =================================================================
         # Step 5: Update status to extracting (checkpointed)
@@ -249,7 +249,7 @@ def handler(event: dict, context: Any) -> DurableResult:
             )
             return True
 
-        step("update_status_extracting", update_status_extracting)
+        context.step(lambda ctx: update_status_extracting(), name="update_status_extracting")
 
         # =================================================================
         # Step 6: Extract data (checkpointed - most expensive step)
@@ -281,7 +281,7 @@ def handler(event: dict, context: Any) -> DurableResult:
             print(f"[{doc_id}] Extraction complete: {result.get('vendor_name', 'Unknown')} - {result.get('total_amount', 0)} {result.get('currency', 'USD')}")
             return result
 
-        extraction_result = step("extract_data", extract_data)
+        extraction_result = context.step(lambda ctx: extract_data(), name="extract_data")
 
         # Check extraction success
         if not extraction_result.get("success", True):
@@ -293,11 +293,11 @@ def handler(event: dict, context: Any) -> DurableResult:
                 error_code=ERROR_CODES["EXTRACTION_FAILED"],
                 error_message=error_msg,
             )
-            return DurableResult({
+            return {
                 "success": False,
                 "error_code": ERROR_CODES["EXTRACTION_FAILED"],
                 "error_message": error_msg,
-            })
+            }
 
         # =================================================================
         # Step 7: Update Convex with results (checkpointed)
@@ -323,7 +323,7 @@ def handler(event: dict, context: Any) -> DurableResult:
                 )
             return True
 
-        step("update_convex_results", update_convex_results)
+        context.step(lambda ctx: update_convex_results(), name="update_convex_results")
 
         # =================================================================
         # Step 8: Record token usage (checkpointed)
@@ -343,17 +343,17 @@ def handler(event: dict, context: Any) -> DurableResult:
                     print(f"[{doc_id}] Warning: Failed to record token usage: {str(e)}")
             return True
 
-        step("record_token_usage", record_token_usage)
+        context.step(lambda ctx: record_token_usage(), name="record_token_usage")
 
         print(f"[{doc_id}] Durable workflow completed successfully")
 
-        return DurableResult({
+        return {
             "success": True,
             "document_id": doc_id,
             "domain": request.domain,
             "extraction_result": extraction_result,
             "validation_result": validation_result,
-        })
+        }
 
     except Exception as e:
         error_msg = f"Workflow failed: {str(e)}"
@@ -375,9 +375,9 @@ def handler(event: dict, context: Any) -> DurableResult:
         except Exception as convex_error:
             print(f"[{doc_id}] Failed to update Convex with error: {convex_error}")
 
-        return DurableResult({
+        return {
             "success": False,
             "error_code": ERROR_CODES["WORKFLOW_FAILED"],
             "error_message": error_msg,
             "traceback": error_traceback,
-        })
+        }
