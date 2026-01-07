@@ -342,7 +342,7 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
               <ToggleRow
                 label="Marketing & Promotions"
                 description="Receive updates about new features and special offers"
-                checked={emailPreferences.marketingEnabled}
+                checked={emailPreferences.marketingEnabled && !emailPreferences.globalUnsubscribe}
                 onChange={() => handleEmailPrefToggle('marketingEnabled')}
                 disabled={isEmailPrefSaving || emailPreferences.globalUnsubscribe}
               />
@@ -351,7 +351,7 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
               <ToggleRow
                 label="Onboarding Tips"
                 description="Get helpful tips to make the most of FinanSEAL"
-                checked={emailPreferences.onboardingTipsEnabled}
+                checked={emailPreferences.onboardingTipsEnabled && !emailPreferences.globalUnsubscribe}
                 onChange={() => handleEmailPrefToggle('onboardingTipsEnabled')}
                 disabled={isEmailPrefSaving || emailPreferences.globalUnsubscribe}
               />
@@ -360,7 +360,7 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
               <ToggleRow
                 label="Product Updates"
                 description="Stay informed about product improvements and changes"
-                checked={emailPreferences.productUpdatesEnabled}
+                checked={emailPreferences.productUpdatesEnabled && !emailPreferences.globalUnsubscribe}
                 onChange={() => handleEmailPrefToggle('productUpdatesEnabled')}
                 disabled={isEmailPrefSaving || emailPreferences.globalUnsubscribe}
               />
