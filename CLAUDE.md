@@ -101,35 +101,55 @@ Required environment variables for Trigger.dev tasks (set in Trigger.dev Dashboa
 
 **Security Model**: Trigger.dev tasks use Convex system functions that don't require authentication. Document IDs are long random strings that only our backend knows - knowing the ID provides implicit authorization. This is a common pattern for backend-to-backend communication.
 
-### AWS Lambda Durable Functions (Migration in Progress)
+### AWS Lambda Document Processing (Production)
 
-**Status**: Migrating from Trigger.dev to AWS Lambda Durable Functions for document processing.
+**Status**: Document processing has been migrated from Trigger.dev to AWS Lambda with Python 3.11 and DSPy.
 
-**Why**: Lambda Durable Functions provide built-in checkpointing, better cost control, and native AWS integration without third-party dependencies.
+**Why**: AWS Lambda provides better cost control, native AWS integration, and direct Gemini AI integration via DSPy without third-party dependencies.
+
+**Note**: Python runtime does NOT support Lambda Durable Functions. We use standard Lambda with 15-minute timeout instead.
 
 #### Architecture Overview
 ```
-Vercel API → AWS OIDC Auth → Lambda Durable Function
+Vercel API → AWS OIDC Auth → Lambda Function (Python 3.11)
                                     │
-                                    ├── Step 1: classify-document
-                                    ├── Step 2: convert-pdf (Python Layer)
-                                    ├── Step 3: extract-data (Gemini AI)
-                                    └── Step 4: update-status (Convex)
+                                    ├── Step 1: convert-pdf (Poppler in Layer)
+                                    ├── Step 2: validate-document (Gemini)
+                                    ├── Step 3: extract-data (DSPy + Gemini)
+                                    └── Step 4: update-convex (HTTP API)
 ```
 
 #### Key Files
-- `src/lambda/document-processor/`: Lambda handler and step implementations
+- `src/lambda/document-processor-python/`: Python Lambda handler and step implementations
 - `infra/`: AWS CDK infrastructure (Lambda, Layer, IAM, CloudWatch)
-- `src/lambda/layers/python-pdf/`: Docker-based Python Layer for pdf2image
+- `src/lambda/layers/python-document-processor/`: Docker-based Python Layer (DSPy, pdf2image, Poppler)
+
+#### CDK Deployment
+Deploy with AWS profile and region:
+```bash
+cd infra
+npx cdk deploy --profile groot-finanseal --region us-west-2
+```
+
+**Important**: Always use `--profile groot-finanseal` for AWS credentials.
 
 #### Lambda Environment Variables
 | Variable | Description |
 |----------|-------------|
 | `SENTRY_DSN` | Sentry error tracking DSN |
-| `SENTRY_ENVIRONMENT` | Environment name (staging/production) |
-| `NEXT_PUBLIC_CONVEX_URL` | Convex deployment URL |
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `S3_BUCKET_NAME` | S3 bucket for document storage |
+| `SENTRY_ENVIRONMENT` | Environment name (production) |
+| `NEXT_PUBLIC_CONVEX_URL` | Convex deployment URL (uses `PROD_CONVEX_URL` in CDK) |
+| `GEMINI_API_KEY` | Google Gemini API key for DSPy |
+| `S3_BUCKET_NAME` | S3 bucket for document storage (finanseal-bucket) |
+| `POPPLER_PATH` | Path to Poppler binaries in Layer (/opt/bin) |
+| `PYTHONPATH` | Python packages path in Layer (/opt/python) |
+
+#### Lambda Resources
+- **Function ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor`
+- **Alias ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor:prod`
+- **Memory**: 1024 MB
+- **Timeout**: 15 minutes
+- **Runtime**: Python 3.11 (x86_64)
 
 #### Invocation Pattern
 - **API Routes**: Use `@aws-sdk/client-lambda` with OIDC authentication
