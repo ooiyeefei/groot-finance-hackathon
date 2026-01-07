@@ -3,9 +3,19 @@
  * Handles business invitation emails and other transactional emails
  *
  * Migrated from Resend to SES for unified email delivery.
+ *
+ * Authentication:
+ * - Vercel Deployment: Uses Vercel OIDC to assume IAM role (AWS_ROLE_ARN required)
+ * - Local Development: Uses AWS default credential chain (env vars or ~/.aws/credentials)
  */
 
 import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
+import { fromWebToken } from '@aws-sdk/credential-providers'
+import type { AwsCredentialIdentityProvider } from '@smithy/types'
+
+// Configuration from environment
+const AWS_REGION = process.env.AWS_REGION || 'us-west-2'
+const AWS_ROLE_ARN = process.env.AWS_ROLE_ARN // Set in Vercel for OIDC
 
 interface InvitationEmailData {
   email: string
@@ -22,6 +32,42 @@ interface EmailServiceConfig {
   configurationSet: string
 }
 
+// ============================================
+// CREDENTIAL PROVIDER (Vercel OIDC)
+// ============================================
+
+/**
+ * Create Vercel OIDC credential provider
+ *
+ * Fetches fresh OIDC token from Vercel for each credential request.
+ * This handles token refresh automatically since tokens expire.
+ */
+function createVercelOidcCredentialProvider(
+  roleArn: string
+): AwsCredentialIdentityProvider {
+  return async () => {
+    // Dynamic import to avoid bundling issues when not on Vercel
+    const { getVercelOidcToken } = await import('@vercel/oidc')
+
+    // Get fresh token for each credential request
+    const token = await getVercelOidcToken()
+
+    // Use fromWebToken to assume the IAM role with the OIDC token
+    const provider = fromWebToken({
+      roleArn,
+      webIdentityToken: token,
+      roleSessionName: `finanseal-ses-${Date.now()}`,
+      durationSeconds: 3600, // 1 hour session
+    })
+
+    return provider()
+  }
+}
+
+// ============================================
+// EMAIL SERVICE CLASS
+// ============================================
+
 class EmailService {
   private ses?: SESClient
   private config?: EmailServiceConfig
@@ -37,13 +83,22 @@ class EmailService {
       configurationSet: process.env.SES_CONFIGURATION_SET || 'finanseal-transactional'
     }
 
-    this.ses = new SESClient({
-      region: process.env.AWS_REGION || 'us-west-2',
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || ''
-      }
-    })
+    const clientConfig: ConstructorParameters<typeof SESClient>[0] = {
+      region: AWS_REGION,
+    }
+
+    // Use Vercel OIDC if AWS_ROLE_ARN is configured
+    if (AWS_ROLE_ARN) {
+      console.log('[EmailService] Using Vercel OIDC federation')
+      clientConfig.credentials = createVercelOidcCredentialProvider(AWS_ROLE_ARN)
+    } else {
+      console.log('[EmailService] Using default credential provider chain')
+      // No credentials specified = uses default credential provider chain
+      // This includes AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY env vars
+    }
+
+    this.ses = new SESClient(clientConfig)
+    console.log(`[EmailService] Initialized for region: ${AWS_REGION}`)
   }
 
   /**
