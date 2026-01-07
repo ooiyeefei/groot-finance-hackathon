@@ -59,7 +59,10 @@ class ReceiptData(BaseModel):
     tip_amount: Optional[float] = Field(None, description="Tip amount")
 
     # Payment
-    payment_method: Optional[str] = Field(None, description="Cash/Card/etc.")
+    payment_method: Optional[str] = Field(
+        None,
+        description="Payment method - look for: 'Cash', 'Cheque', 'Bank Transfer', 'VISA', 'Mastercard', 'AMEX', 'Debit', 'Credit Card', 'E-Wallet', 'GrabPay', 'TouchNGo', 'PayNow', 'DuitNow'"
+    )
 
     # Line items
     line_items: List[ReceiptLineItem] = Field(default_factory=list)
