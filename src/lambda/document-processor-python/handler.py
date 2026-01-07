@@ -1,8 +1,13 @@
 """
-Document Processing Lambda Handler
+Document Processing Lambda Handler with AWS Durable Functions
 
 This Lambda function processes uploaded documents (invoices/receipts) using
 DSPy for structured data extraction with Gemini AI.
+
+Uses AWS Durable Execution SDK for fault-tolerant workflow with checkpointing:
+- Each step is checkpointed and can resume after Lambda restarts
+- Supports up to 24-hour execution time
+- Automatic state persistence and recovery
 
 Workflow Steps:
 1. convert_pdf - Convert PDF to images (if needed)
@@ -16,6 +21,9 @@ import json
 import traceback
 from typing import Any, Optional
 from dataclasses import dataclass
+
+# AWS Durable Execution SDK
+from aws_durable import durable_context, step, sleep, DurableResult
 
 # Sentry for error tracking
 import sentry_sdk
@@ -57,124 +65,161 @@ class WorkflowContext:
 
 
 # =============================================================================
-# Main Lambda Handler
+# Initialize Clients (outside handler for reuse)
 # =============================================================================
 
-def handler(event: dict, context: Any) -> dict:
+def get_convex_client() -> ConvexClient:
+    """Get Convex client instance."""
+    return ConvexClient(os.environ.get("NEXT_PUBLIC_CONVEX_URL", ""))
+
+
+def get_s3_client() -> S3Client:
+    """Get S3 client instance."""
+    return S3Client(
+        bucket=os.environ.get("S3_BUCKET_NAME", "finanseal-bucket"),
+        region=os.environ.get("AWS_REGION", "us-west-2"),
+    )
+
+
+# =============================================================================
+# Main Lambda Handler with Durable Execution
+# =============================================================================
+
+@durable_context
+def handler(event: dict, context: Any) -> DurableResult:
     """
-    Main Lambda handler for document processing.
+    Main Lambda handler for document processing with durable execution.
+
+    Uses AWS Durable Execution SDK for fault-tolerant checkpointing:
+    - Each step() call is checkpointed and can resume after Lambda restarts
+    - State is automatically persisted between invocations
+    - Supports long-running workflows up to 24 hours
 
     Args:
         event: Lambda event containing DocumentProcessingRequest
         context: Lambda context
 
     Returns:
-        Workflow result with status and extracted data
+        DurableResult with workflow status and extracted data
     """
-    # Parse request
+    # =================================================================
+    # Step 0: Parse and validate request
+    # =================================================================
+    def parse_request():
+        return DocumentProcessingRequest.from_dict(event)
+
     try:
-        request = DocumentProcessingRequest.from_dict(event)
+        request = step("parse_request", parse_request)
     except Exception as e:
         error_msg = f"Invalid request: {str(e)}"
         print(f"[ERROR] {error_msg}")
-        return {
+        return DurableResult({
             "success": False,
             "error_code": ERROR_CODES["INVALID_INPUT"],
             "error_message": error_msg,
-        }
+        })
 
     doc_id = request.document_id
-    print(f"[{doc_id}] Starting document processing workflow")
+    print(f"[{doc_id}] Starting durable document processing workflow")
     print(f"[{doc_id}] Domain: {request.domain}, FileType: {request.file_type}")
 
     # Initialize clients
-    convex = ConvexClient(os.environ.get("NEXT_PUBLIC_CONVEX_URL", ""))
-    s3 = S3Client(
-        bucket=os.environ.get("S3_BUCKET_NAME", "finanseal-bucket"),
-        region=os.environ.get("AWS_REGION", "us-west-2"),
-    )
+    convex = get_convex_client()
+    s3 = get_s3_client()
 
-    # Fetch business categories from Convex for LLM categorization
-    if not request.business_categories and request.business_id:
-        try:
-            print(f"[{doc_id}] Fetching business categories for business_id: {request.business_id}")
-            categories_data = convex.get_business_categories(request.business_id)
+    # =================================================================
+    # Step 1: Fetch business categories (checkpointed)
+    # =================================================================
+    def fetch_categories():
+        if not request.business_categories and request.business_id:
+            try:
+                print(f"[{doc_id}] Fetching business categories for business_id: {request.business_id}")
+                categories_data = convex.get_business_categories(request.business_id)
 
-            if categories_data:
-                # Select appropriate categories based on domain
-                if request.domain == "invoices":
-                    raw_categories = categories_data.get("customCogsCategories", [])
-                    print(f"[{doc_id}] Using COGS categories for invoices: {len(raw_categories)} categories")
-                else:
-                    raw_categories = categories_data.get("customExpenseCategories", [])
-                    print(f"[{doc_id}] Using expense categories for expense_claims: {len(raw_categories)} categories")
+                if categories_data:
+                    if request.domain == "invoices":
+                        raw_categories = categories_data.get("customCogsCategories", [])
+                        print(f"[{doc_id}] Using COGS categories for invoices: {len(raw_categories)} categories")
+                    else:
+                        raw_categories = categories_data.get("customExpenseCategories", [])
+                        print(f"[{doc_id}] Using expense categories for expense_claims: {len(raw_categories)} categories")
 
-                # Convert to BusinessCategory objects and filter active only
-                request.business_categories = [
-                    BusinessCategory(
-                        name=cat.get("category_name", ""),
-                        code=cat.get("category_code"),
-                        keywords=cat.get("ai_keywords", []),
-                        vendor_patterns=cat.get("vendor_patterns", []),
-                    )
-                    for cat in raw_categories
-                    if cat.get("is_active", True)  # Only include active categories
-                ]
-                print(f"[{doc_id}] Loaded {len(request.business_categories)} active categories for LLM")
-            else:
-                print(f"[{doc_id}] No business categories found, will use IFRS fallback")
-        except Exception as cat_error:
-            print(f"[{doc_id}] Warning: Failed to fetch categories: {str(cat_error)}")
-            print(f"[{doc_id}] Will continue with IFRS categorization fallback")
+                    categories = [
+                        BusinessCategory(
+                            name=cat.get("category_name", ""),
+                            code=cat.get("category_code"),
+                            keywords=cat.get("ai_keywords", []),
+                            vendor_patterns=cat.get("vendor_patterns", []),
+                        )
+                        for cat in raw_categories
+                        if cat.get("is_active", True)
+                    ]
+                    print(f"[{doc_id}] Loaded {len(categories)} active categories for LLM")
+                    return categories
+            except Exception as cat_error:
+                print(f"[{doc_id}] Warning: Failed to fetch categories: {str(cat_error)}")
+        return request.business_categories or []
+
+    business_categories = step("fetch_categories", fetch_categories)
 
     try:
         # =================================================================
-        # Step 1: Convert PDF (if needed)
+        # Step 2: Update status to processing (checkpointed)
         # =================================================================
-        print(f"[{doc_id}] Step 1: PDF Conversion")
-
-        # Update status to processing
-        convex.update_status(
-            document_id=doc_id,
-            domain=request.domain,
-            status="processing",
-        )
-
-        if request.file_type != "pdf":
-            print(f"[{doc_id}] Skipping PDF conversion - file is already an image")
-            conversion_result = {
-                "status": "skipped",
-                "images": None,
-                "reason": "File is already an image",
-            }
-        else:
-            # Convert PDF to images
-            conversion_result = convert_pdf_step(
+        def update_status_processing():
+            print(f"[{doc_id}] Updating status to processing")
+            convex.update_status(
                 document_id=doc_id,
+                domain=request.domain,
+                status="processing",
+            )
+            return True
+
+        step("update_status_processing", update_status_processing)
+
+        # =================================================================
+        # Step 3: Convert PDF (checkpointed)
+        # =================================================================
+        def convert_pdf():
+            print(f"[{doc_id}] Step: PDF Conversion")
+            if request.file_type != "pdf":
+                print(f"[{doc_id}] Skipping PDF conversion - file is already an image")
+                return {
+                    "status": "skipped",
+                    "images": None,
+                    "reason": "File is already an image",
+                }
+            else:
+                result = convert_pdf_step(
+                    document_id=doc_id,
+                    storage_path=request.storage_path,
+                    domain=request.domain,
+                    s3=s3,
+                )
+                print(f"[{doc_id}] PDF conversion complete: {len(result.get('images', []))} pages")
+                return result
+
+        conversion_result = step("convert_pdf", convert_pdf)
+
+        # =================================================================
+        # Step 4: Validate document (checkpointed)
+        # =================================================================
+        def validate_document():
+            print(f"[{doc_id}] Step: Document Validation")
+            images = conversion_result.get("images") if conversion_result.get("status") == "success" else None
+
+            result = validate_document_step(
+                document_id=doc_id,
+                images=images,
                 storage_path=request.storage_path,
                 domain=request.domain,
+                expected_type=request.expected_document_type,
                 s3=s3,
             )
-            print(f"[{doc_id}] PDF conversion complete: {len(conversion_result.get('images', []))} pages")
+            print(f"[{doc_id}] Validation result: {result.get('document_type')} (confidence: {result.get('confidence', 0):.2f})")
+            return result
 
-        # =================================================================
-        # Step 2: Validate document
-        # =================================================================
-        print(f"[{doc_id}] Step 2: Document Validation")
-
-        # Get images (from conversion or original)
-        images = conversion_result.get("images") if conversion_result.get("status") == "success" else None
-
-        validation_result = validate_document_step(
-            document_id=doc_id,
-            images=images,
-            storage_path=request.storage_path,
-            domain=request.domain,
-            expected_type=request.expected_document_type,
-            s3=s3,
-        )
-
-        print(f"[{doc_id}] Validation result: {validation_result.get('document_type')} (confidence: {validation_result.get('confidence', 0):.2f})")
+        validation_result = step("validate_document", validate_document)
 
         # Check if document is supported
         if not validation_result.get("is_supported", True):
@@ -185,50 +230,58 @@ def handler(event: dict, context: Any) -> dict:
                 error_code=ERROR_CODES["UNSUPPORTED_DOCUMENT"],
                 error_message=validation_result.get("reason", "Document type not supported"),
             )
-            return {
+            return DurableResult({
                 "success": False,
                 "error_code": ERROR_CODES["UNSUPPORTED_DOCUMENT"],
                 "error_message": validation_result.get("reason"),
                 "validation_result": validation_result,
-            }
+            })
 
         # =================================================================
-        # Step 3: Extract data
+        # Step 5: Update status to extracting (checkpointed)
         # =================================================================
-        print(f"[{doc_id}] Step 3: Data Extraction")
-
-        # Update status to extracting
-        convex.update_status(
-            document_id=doc_id,
-            domain=request.domain,
-            status="extracting",
-        )
-
-        # Get images
-        images = conversion_result.get("images") if conversion_result.get("status") == "success" else None
-        document_type = validation_result.get("document_type", "invoice")
-
-        # Route to appropriate extractor
-        if document_type == "receipt":
-            extraction_result = extract_receipt_step(
+        def update_status_extracting():
+            print(f"[{doc_id}] Updating status to extracting")
+            convex.update_status(
                 document_id=doc_id,
-                images=images,
-                storage_path=request.storage_path,
                 domain=request.domain,
-                categories=request.business_categories,
-                s3=s3,
+                status="extracting",
             )
-        else:
-            extraction_result = extract_invoice_step(
-                document_id=doc_id,
-                images=images,
-                storage_path=request.storage_path,
-                domain=request.domain,
-                categories=request.business_categories,
-                s3=s3,
-            )
+            return True
 
-        print(f"[{doc_id}] Extraction complete: {extraction_result.get('vendor_name', 'Unknown')} - {extraction_result.get('total_amount', 0)} {extraction_result.get('currency', 'USD')}")
+        step("update_status_extracting", update_status_extracting)
+
+        # =================================================================
+        # Step 6: Extract data (checkpointed - most expensive step)
+        # =================================================================
+        def extract_data():
+            print(f"[{doc_id}] Step: Data Extraction")
+            images = conversion_result.get("images") if conversion_result.get("status") == "success" else None
+            document_type = validation_result.get("document_type", "invoice")
+
+            if document_type == "receipt":
+                result = extract_receipt_step(
+                    document_id=doc_id,
+                    images=images,
+                    storage_path=request.storage_path,
+                    domain=request.domain,
+                    categories=business_categories,
+                    s3=s3,
+                )
+            else:
+                result = extract_invoice_step(
+                    document_id=doc_id,
+                    images=images,
+                    storage_path=request.storage_path,
+                    domain=request.domain,
+                    categories=business_categories,
+                    s3=s3,
+                )
+
+            print(f"[{doc_id}] Extraction complete: {result.get('vendor_name', 'Unknown')} - {result.get('total_amount', 0)} {result.get('currency', 'USD')}")
+            return result
+
+        extraction_result = step("extract_data", extract_data)
 
         # Check extraction success
         if not extraction_result.get("success", True):
@@ -240,60 +293,67 @@ def handler(event: dict, context: Any) -> dict:
                 error_code=ERROR_CODES["EXTRACTION_FAILED"],
                 error_message=error_msg,
             )
-            return {
+            return DurableResult({
                 "success": False,
                 "error_code": ERROR_CODES["EXTRACTION_FAILED"],
                 "error_message": error_msg,
-            }
+            })
 
         # =================================================================
-        # Step 4: Update Convex
+        # Step 7: Update Convex with results (checkpointed)
         # =================================================================
-        print(f"[{doc_id}] Step 4: Updating Convex")
-
-        # Update extraction results based on domain
-        if request.domain == "invoices":
-            convex.update_invoice_extraction(
-                document_id=doc_id,
-                extracted_data=extraction_result,
-                confidence_score=extraction_result.get("confidence", 0.0),
-                extraction_method="dspy_gemini",
-            )
-        else:
-            convex.update_expense_claim_extraction(
-                document_id=doc_id,
-                extracted_data=extraction_result,
-                confidence_score=extraction_result.get("confidence", 0.0),
-                vendor_name=extraction_result.get("vendor_name"),
-                total_amount=extraction_result.get("total_amount"),
-                currency=extraction_result.get("currency"),
-                transaction_date=extraction_result.get("transaction_date"),
-            )
-
-        # Record token usage for billing
-        tokens_used = extraction_result.get("tokens_used")
-        if tokens_used and tokens_used.get("has_usage_data"):
-            try:
-                convex.record_ocr_usage(
-                    business_id=request.business_id,
+        def update_convex_results():
+            print(f"[{doc_id}] Step: Updating Convex with results")
+            if request.domain == "invoices":
+                convex.update_invoice_extraction(
                     document_id=doc_id,
-                    token_usage=tokens_used,
-                    credits=1,
+                    extracted_data=extraction_result,
+                    confidence_score=extraction_result.get("confidence", 0.0),
+                    extraction_method="dspy_gemini",
                 )
-                print(f"[{doc_id}] Token usage recorded: {tokens_used.get('total_tokens', 0)} tokens")
-            except Exception as e:
-                print(f"[{doc_id}] Warning: Failed to record token usage: {str(e)}")
+            else:
+                convex.update_expense_claim_extraction(
+                    document_id=doc_id,
+                    extracted_data=extraction_result,
+                    confidence_score=extraction_result.get("confidence", 0.0),
+                    vendor_name=extraction_result.get("vendor_name"),
+                    total_amount=extraction_result.get("total_amount"),
+                    currency=extraction_result.get("currency"),
+                    transaction_date=extraction_result.get("transaction_date"),
+                )
+            return True
 
-        print(f"[{doc_id}] Convex update complete")
-        print(f"[{doc_id}] Workflow completed successfully")
+        step("update_convex_results", update_convex_results)
 
-        return {
+        # =================================================================
+        # Step 8: Record token usage (checkpointed)
+        # =================================================================
+        def record_token_usage():
+            tokens_used = extraction_result.get("tokens_used")
+            if tokens_used and tokens_used.get("has_usage_data"):
+                try:
+                    convex.record_ocr_usage(
+                        business_id=request.business_id,
+                        document_id=doc_id,
+                        token_usage=tokens_used,
+                        credits=1,
+                    )
+                    print(f"[{doc_id}] Token usage recorded: {tokens_used.get('total_tokens', 0)} tokens")
+                except Exception as e:
+                    print(f"[{doc_id}] Warning: Failed to record token usage: {str(e)}")
+            return True
+
+        step("record_token_usage", record_token_usage)
+
+        print(f"[{doc_id}] Durable workflow completed successfully")
+
+        return DurableResult({
             "success": True,
             "document_id": doc_id,
             "domain": request.domain,
             "extraction_result": extraction_result,
             "validation_result": validation_result,
-        }
+        })
 
     except Exception as e:
         error_msg = f"Workflow failed: {str(e)}"
@@ -315,9 +375,9 @@ def handler(event: dict, context: Any) -> dict:
         except Exception as convex_error:
             print(f"[{doc_id}] Failed to update Convex with error: {convex_error}")
 
-        return {
+        return DurableResult({
             "success": False,
             "error_code": ERROR_CODES["WORKFLOW_FAILED"],
             "error_message": error_msg,
             "traceback": error_traceback,
-        }
+        })

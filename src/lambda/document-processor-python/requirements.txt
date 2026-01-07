@@ -1,8 +1,12 @@
-# Document Processor Lambda - Python 3.13
+# Document Processor Lambda - Python 3.11 Container Image
 # AWS Durable Execution SDK for fault-tolerant workflows
+# Note: Container images support ANY Python version with durable SDK
 
-# AWS Durable Execution SDK (requires Python 3.13+)
-aws-durable-execution-sdk-python>=1.0.0
+# AWS Durable Execution SDK (works with container images on any Python version)
+aws-durable-execution-sdk-python
+
+# Pin numpy for stability (pre-built wheels for Python 3.11)
+numpy==1.26.4
 
 # DSPy for structured LLM extraction
 dspy>=2.6.0

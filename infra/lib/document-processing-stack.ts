@@ -11,7 +11,7 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: path.join(__dirname, '../../.env.local') });
 
 export class DocumentProcessingStack extends cdk.Stack {
-  public readonly documentProcessorFunction: lambda.Function;
+  public readonly documentProcessorFunction: lambda.DockerImageFunction;
   public readonly documentProcessorAlias: lambda.Alias;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -27,27 +27,6 @@ export class DocumentProcessingStack extends cdk.Stack {
     );
 
     // ========================================================================
-    // Python Document Processor Lambda Layer
-    // Includes: DSPy, pdf2image, Poppler, httpx, boto3, sentry-sdk
-    // Built from: src/lambda/layers/python-document-processor/
-    // ========================================================================
-    const pythonDocProcessorLayer = new lambda.LayerVersion(this, 'PythonDocProcessorLayer', {
-      code: lambda.Code.fromAsset(
-        path.join(__dirname, '../../src/lambda/layers/python-document-processor/dist'),
-        {
-          // dist directory should be built via Docker before deploy:
-          // cd src/lambda/layers/python-document-processor
-          // docker build -t finanseal-doc-processor-layer .
-          // docker run --rm -v $(pwd)/dist:/dist finanseal-doc-processor-layer
-        }
-      ),
-      compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
-      compatibleArchitectures: [lambda.Architecture.X86_64],
-      description: 'DSPy, pdf2image, Poppler, httpx for Python document processing',
-      layerVersionName: 'finanseal-python-doc-processor',
-    });
-
-    // ========================================================================
     // CloudWatch Log Group with 30-day retention
     // ========================================================================
     const logGroup = new logs.LogGroup(this, 'DocumentProcessorLogs', {
@@ -57,22 +36,37 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
 
     // ========================================================================
-    // Document Processor Lambda Function - Python 3.11
-    // Standard Lambda with extended timeout for document processing
+    // Document Processor Lambda Function - Docker Container with Durable Execution
+    //
+    // Uses AWS Durable Functions for fault-tolerant workflows:
+    // - Automatic checkpointing after each step
+    // - Up to 24-hour execution time
+    // - Survives Lambda restarts and cold starts
+    //
+    // Container includes: Python 3.11, DSPy, Poppler, Sentry, Durable SDK
     // ========================================================================
-    this.documentProcessorFunction = new lambda.Function(this, 'DocumentProcessor', {
-      runtime: lambda.Runtime.PYTHON_3_11,
-      architecture: lambda.Architecture.X86_64,
-      handler: 'handler.handler',
-      code: lambda.Code.fromAsset(
-        path.join(__dirname, '../../src/lambda/document-processor-python')
+    this.documentProcessorFunction = new lambda.DockerImageFunction(this, 'DocumentProcessor', {
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, '../../src/lambda/document-processor-python'),
+        {
+          // Build arguments for Docker
+          buildArgs: {
+            // Can pass build-time args if needed
+          },
+        }
       ),
       functionName: 'finanseal-document-processor',
-      description: 'Document processing with DSPy extraction (Python 3.11)',
+      description: 'Document processing with DSPy extraction and AWS Durable Functions (Python 3.11)',
       memorySize: 1024,
-      timeout: cdk.Duration.minutes(15), // Max 15 min for document processing
-      layers: [pythonDocProcessorLayer],
+      timeout: cdk.Duration.minutes(15), // Lambda timeout (durable config extends this)
+      architecture: lambda.Architecture.X86_64,
       logGroup,
+      // AWS Durable Functions configuration
+      // Enables checkpointing for long-running workflows
+      durableConfig: {
+        executionTimeout: cdk.Duration.hours(1), // Up to 1 hour for document processing
+        retentionPeriod: cdk.Duration.days(1),   // Retain execution history for 1 day
+      },
       environment: {
         // Sentry error tracking
         SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
@@ -84,10 +78,8 @@ export class DocumentProcessingStack extends cdk.Stack {
         // S3 bucket name
         S3_BUCKET_NAME: 'finanseal-bucket',
         // Note: AWS_REGION is set automatically by Lambda runtime
-        // Poppler path for pdf2image (in Lambda Layer)
-        POPPLER_PATH: '/opt/bin',
-        // Python path for Lambda Layer packages
-        PYTHONPATH: '/opt/python',
+        // Poppler path in container (installed via yum)
+        POPPLER_PATH: '/usr/bin',
       },
     });
 
@@ -98,7 +90,6 @@ export class DocumentProcessingStack extends cdk.Stack {
     // S3 read/write permissions
     bucket.grantReadWrite(this.documentProcessorFunction);
 
-
     // ========================================================================
     // Lambda Version and Alias
     // ========================================================================
@@ -107,7 +98,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     this.documentProcessorAlias = new lambda.Alias(this, 'ProdAlias', {
       aliasName: 'prod',
       version,
-      description: 'Production alias for document processor',
+      description: 'Production alias for document processor with durable execution',
     });
 
     // ========================================================================
