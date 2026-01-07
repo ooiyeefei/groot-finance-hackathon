@@ -1,8 +1,0 @@
-# Lambda Layer dependencies for PDF processing
-# These are installed in the Lambda Layer, not in the main application
-
-# PDF to image conversion
-pdf2image==1.17.0
-
-# Image processing
-Pillow==11.0.0

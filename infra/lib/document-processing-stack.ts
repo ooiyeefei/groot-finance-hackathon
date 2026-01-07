@@ -27,20 +27,24 @@ export class DocumentProcessingStack extends cdk.Stack {
     );
 
     // ========================================================================
-    // Python dependencies Lambda Layer
+    // Python Document Processor Lambda Layer
+    // Includes: DSPy, pdf2image, Poppler, httpx, boto3, sentry-sdk
+    // Built from: src/lambda/layers/python-document-processor/
     // ========================================================================
-    const pythonPdfLayer = new lambda.LayerVersion(this, 'PythonPdfLayer', {
+    const pythonDocProcessorLayer = new lambda.LayerVersion(this, 'PythonDocProcessorLayer', {
       code: lambda.Code.fromAsset(
-        path.join(__dirname, '../../src/lambda/layers/python-pdf/dist'),
+        path.join(__dirname, '../../src/lambda/layers/python-document-processor/dist'),
         {
-          // If dist doesn't exist, use the source directory for synth validation
-          // In production, dist should be built via Docker before deploy
+          // dist directory should be built via Docker before deploy:
+          // cd src/lambda/layers/python-document-processor
+          // docker build -t finanseal-doc-processor-layer .
+          // docker run --rm -v $(pwd)/dist:/dist finanseal-doc-processor-layer
         }
       ),
-      compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
-      compatibleArchitectures: [lambda.Architecture.ARM_64],
-      description: 'pdf2image, Pillow, poppler-utils for PDF processing',
-      layerVersionName: 'finanseal-python-pdf',
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
+      compatibleArchitectures: [lambda.Architecture.X86_64],
+      description: 'DSPy, pdf2image, Poppler, httpx for Python document processing',
+      layerVersionName: 'finanseal-python-doc-processor',
     });
 
     // ========================================================================
@@ -53,38 +57,38 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
 
     // ========================================================================
-    // Document Processor Lambda Function
+    // Document Processor Lambda Function - Python 3.11
+    // Standard Lambda with extended timeout for document processing
     // ========================================================================
     this.documentProcessorFunction = new lambda.Function(this, 'DocumentProcessor', {
-      runtime: lambda.Runtime.NODEJS_22_X,
-      architecture: lambda.Architecture.ARM_64,
-      handler: 'index.handler',
+      runtime: lambda.Runtime.PYTHON_3_11,
+      architecture: lambda.Architecture.X86_64,
+      handler: 'handler.handler',
       code: lambda.Code.fromAsset(
-        path.join(__dirname, '../../src/lambda/document-processor/dist')
+        path.join(__dirname, '../../src/lambda/document-processor-python')
       ),
       functionName: 'finanseal-document-processor',
-      description: 'Document processing durable function with checkpointing',
+      description: 'Document processing with DSPy extraction (Python 3.11)',
       memorySize: 1024,
-      timeout: cdk.Duration.minutes(15), // Per-invocation timeout
-      layers: [pythonPdfLayer],
+      timeout: cdk.Duration.minutes(15), // Max 15 min for document processing
+      layers: [pythonDocProcessorLayer],
       logGroup,
       environment: {
-        NODE_ENV: 'production',
-        // Lambda uses SENTRY_DSN, but .env.local has NEXT_PUBLIC_SENTRY_DSN
+        // Sentry error tracking
         SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
         SENTRY_ENVIRONMENT: 'production',
-        // Use PROD_CONVEX_URL for production Lambda (not NEXT_PUBLIC_CONVEX_URL which is DEV)
+        // Convex - use PROD_CONVEX_URL for production
         NEXT_PUBLIC_CONVEX_URL: process.env.PROD_CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || '',
+        // Gemini API key for DSPy
         GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+        // S3 bucket name
         S3_BUCKET_NAME: 'finanseal-bucket',
-        AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',
+        // Note: AWS_REGION is set automatically by Lambda runtime
+        // Poppler path for pdf2image (in Lambda Layer)
+        POPPLER_PATH: '/opt/bin',
+        // Python path for Lambda Layer packages
+        PYTHONPATH: '/opt/python',
       },
-      // Durable execution configuration (Lambda Durable Functions)
-      // Note: This requires the durable execution feature to be enabled
-      // durableConfig: {
-      //   executionTimeout: cdk.Duration.hours(1),
-      //   retentionPeriod: cdk.Duration.days(30),
-      // },
     });
 
     // ========================================================================
@@ -94,18 +98,6 @@ export class DocumentProcessingStack extends cdk.Stack {
     // S3 read/write permissions
     bucket.grantReadWrite(this.documentProcessorFunction);
 
-    // Durable execution checkpoint permissions
-    // Note: Using '*' resource to avoid circular dependency with function ARN
-    // This is safe because the actions are Lambda-specific
-    this.documentProcessorFunction.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: [
-          'lambda:CheckpointDurableExecutions',
-          'lambda:GetDurableExecutionState',
-        ],
-        resources: ['*'],
-      })
-    );
 
     // ========================================================================
     // Lambda Version and Alias
@@ -122,8 +114,6 @@ export class DocumentProcessingStack extends cdk.Stack {
     // Vercel OIDC Invocation Permission
     // ========================================================================
     // Allow the Vercel OIDC role to invoke this Lambda via alias
-    // Using addPermission (resource-based policy) instead of grantInvoke (IAM policy)
-    // to avoid circular dependency with version/alias chain
     const vercelOidcRoleArn = 'arn:aws:iam::837224017779:role/FinanSEAL-Vercel-S3-Role';
 
     this.documentProcessorAlias.addPermission('VercelOidcInvoke', {

@@ -727,6 +727,16 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   const getFieldValue = (fieldName: string, fallbackField?: string): string => {
     const extractedData = document.extracted_data as any;
 
+    // DEBUG: Log the vendor/customer field access to diagnose "Not extracted" issue
+    if (fieldName.startsWith('vendor_') || fieldName.startsWith('customer_')) {
+      console.log(`[DEBUG getFieldValue] Field: ${fieldName}`, {
+        hasExtractedData: !!extractedData,
+        extractedDataKeys: extractedData ? Object.keys(extractedData) : [],
+        directValue: extractedData?.[fieldName],
+        directValueType: typeof extractedData?.[fieldName],
+      });
+    }
+
     if (!extractedData) return '';
 
     // AI stores values directly (e.g., vendor_name, total_amount, document_date)

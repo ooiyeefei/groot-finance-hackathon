@@ -593,6 +593,47 @@ export const listRecentInvoices = query({
   },
 });
 
+/**
+ * Debug query to inspect actual vendor/customer field values
+ * Used to diagnose why fields show as "Not extracted" in UI
+ */
+export const debugVendorCustomerFields = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 5;
+
+    const invoices = await ctx.db
+      .query("invoices")
+      .order("desc")
+      .take(limit);
+
+    return invoices.map((inv) => {
+      const data = inv.extractedData as Record<string, unknown> | undefined;
+      return {
+        _id: inv._id,
+        fileName: inv.fileName,
+        status: inv.status,
+        // Processing method to distinguish Lambda vs Trigger.dev (stored in extractedData)
+        processingMethod: data?.processing_method ?? data?.extraction_method ?? inv.processingMethod ?? "unknown",
+        backendUsed: data?.backend_used ?? "unknown",
+        // Show ALL top-level keys in extractedData to understand structure
+        extractedDataKeys: data ? Object.keys(data).slice(0, 10) : [], // Limit to first 10
+        // Vendor fields - show actual values (including empty strings)
+        vendor_name: data?.vendor_name ?? "KEY_NOT_FOUND",
+        vendor_address: data?.vendor_address ?? "KEY_NOT_FOUND",
+        vendor_contact: data?.vendor_contact ?? "KEY_NOT_FOUND",
+        vendor_tax_id: data?.vendor_tax_id ?? "KEY_NOT_FOUND",
+        // Customer fields
+        customer_name: data?.customer_name ?? "KEY_NOT_FOUND",
+        customer_address: data?.customer_address ?? "KEY_NOT_FOUND",
+        customer_contact: data?.customer_contact ?? "KEY_NOT_FOUND",
+      };
+    });
+  },
+});
+
 // ============================================
 // OCR USAGE TRACKING (for Trigger.dev)
 // ============================================

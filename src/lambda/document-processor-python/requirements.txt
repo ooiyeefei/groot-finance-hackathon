@@ -1,0 +1,29 @@
+# Document Processor Lambda - Python 3.13
+# AWS Durable Execution SDK for fault-tolerant workflows
+
+# AWS Durable Execution SDK (requires Python 3.13+)
+aws-durable-execution-sdk-python>=1.0.0
+
+# DSPy for structured LLM extraction
+dspy>=2.6.0
+
+# Pydantic for data validation
+pydantic>=2.0.0,<3.0.0
+
+# Image processing
+Pillow>=10.0.0,<12.0.0
+
+# PDF to image conversion (requires Poppler in Lambda Layer)
+pdf2image>=1.16.0
+
+# HTTP client for Convex and Gemini API calls
+httpx>=0.25.0,<1.0.0
+
+# AWS SDK (usually included in Lambda, but pin for consistency)
+boto3>=1.34.0
+
+# LiteLLM for Gemini integration (used by DSPy)
+litellm>=1.40.0,<2.0.0
+
+# Sentry for error tracking
+sentry-sdk>=2.0.0
