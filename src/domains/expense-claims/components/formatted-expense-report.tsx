@@ -22,7 +22,7 @@ interface CategoryLineItem {
 
 interface CategorySection {
   categoryName: string
-  categoryCode: string
+  categoryId: string
   accountingCategory: string
   lineItems: CategoryLineItem[]
   subtotal: number
@@ -348,7 +348,7 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
             </thead>
             <tbody>
               {categorySections.map((category, categoryIndex) => (
-                <React.Fragment key={category.categoryCode}>
+                <React.Fragment key={category.categoryId}>
                   {/* Category Header Row */}
                   <tr className="bg-gray-50">
                     <td className="border-r border-gray-400 px-2 py-2"></td>

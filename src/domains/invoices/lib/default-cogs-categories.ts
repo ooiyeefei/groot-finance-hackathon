@@ -7,7 +7,6 @@
 export interface DefaultCOGSCategory {
   id: string
   category_name: string
-  category_code: string
   description: string
   cost_type: 'direct' | 'indirect'
   is_active: boolean
@@ -25,7 +24,6 @@ export function getDefaultCOGSCategories(): DefaultCOGSCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Direct Materials",
-      category_code: "MATERIALS",
       description: "Raw materials, inventory, components, supplies, and parts directly used in production or service delivery",
       cost_type: "direct",
       is_active: true,
@@ -57,7 +55,6 @@ export function getDefaultCOGSCategories(): DefaultCOGSCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Direct Labor",
-      category_code: "LABOR",
       description: "Production wages, billable staff costs, and manufacturing labor directly attributable to goods or services produced",
       cost_type: "direct",
       is_active: true,
@@ -85,7 +82,6 @@ export function getDefaultCOGSCategories(): DefaultCOGSCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Subcontractor & External Services",
-      category_code: "SUBCONTRACT",
       description: "External contractors, freelancers, and outsourced services directly related to production or service delivery",
       cost_type: "direct",
       is_active: true,
@@ -112,7 +108,6 @@ export function getDefaultCOGSCategories(): DefaultCOGSCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Freight & Logistics",
-      category_code: "SHIPPING",
       description: "Inbound and outbound shipping, delivery, transportation, and logistics costs directly related to product delivery",
       cost_type: "direct",
       is_active: true,
@@ -141,7 +136,6 @@ export function getDefaultCOGSCategories(): DefaultCOGSCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Manufacturing & Production Overhead",
-      category_code: "OVERHEAD",
       description: "Indirect manufacturing costs including factory utilities, equipment depreciation, rent, and maintenance",
       cost_type: "indirect",
       is_active: true,
@@ -170,7 +164,6 @@ export function getDefaultCOGSCategories(): DefaultCOGSCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Other Direct Costs",
-      category_code: "OTHER",
       description: "Miscellaneous direct costs specifically attributable to cost of goods sold (use sparingly, should be <5% of total COGS)",
       cost_type: "direct",
       is_active: true,

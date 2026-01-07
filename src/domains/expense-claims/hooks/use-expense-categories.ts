@@ -8,7 +8,6 @@ import { useState, useEffect } from 'react'
 export interface DynamicExpenseCategory {
   id: string
   category_name: string
-  category_code: string
   description?: string
   vendor_patterns?: string[]
   ai_keywords?: string[]
@@ -105,7 +104,7 @@ export function useExpenseCategories(options: UseExpenseCategoriesOptions = {}):
  */
 export function formatCategoriesForSelect(categories: DynamicExpenseCategory[]) {
   return categories.map(category => ({
-    value: category.category_code,
+    value: category.id,
     label: category.category_name,
     description: category.description
   }))
@@ -115,7 +114,7 @@ export function formatCategoriesForSelect(categories: DynamicExpenseCategory[]) 
  * Utility function to find category by code
  */
 export function findCategoryByCode(categories: DynamicExpenseCategory[], code: string): DynamicExpenseCategory | undefined {
-  return categories.find(cat => cat.category_code === code)
+  return categories.find(cat => cat.id === code)
 }
 
 /**

@@ -216,11 +216,6 @@ export const expenseCategorySchema = z.object({
     .min(1, 'Category name is required')
     .max(100, 'Category name too long'),
 
-  category_code: z.string()
-    .min(1, 'Category code is required')
-    .max(50, 'Category code too long')
-    .regex(/^[A-Z_]+$/, 'Category code must be uppercase letters and underscores only'),
-
   description: z.string()
     .max(500, 'Description too long')
     .optional(),

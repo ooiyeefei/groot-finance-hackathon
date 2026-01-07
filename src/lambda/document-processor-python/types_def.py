@@ -34,9 +34,13 @@ ERROR_CODES = {
 
 @dataclass
 class BusinessCategory:
-    """Business category for expense categorization."""
+    """Business category for expense categorization.
+
+    Note: We use 'id' (Convex document ID) instead of 'category_code' for simplicity.
+    The LLM returns category_name, which we map to id for storage.
+    """
     name: str
-    code: Optional[str] = None
+    id: Optional[str] = None  # Convex document ID (e.g., "jd73a91068xsvqdbynaw2rd7v17y82ke")
     keywords: Optional[List[str]] = None
     vendor_patterns: Optional[List[str]] = None
 
@@ -44,7 +48,7 @@ class BusinessCategory:
     def from_dict(cls, data: dict) -> "BusinessCategory":
         return cls(
             name=data.get("name", ""),
-            code=data.get("code") or data.get("category_code"),
+            id=data.get("id") or data.get("_id"),  # Convex uses _id as primary key
             keywords=data.get("keywords") or data.get("ai_keywords", []),
             vendor_patterns=data.get("vendorPatterns") or data.get("vendor_patterns", []),
         )

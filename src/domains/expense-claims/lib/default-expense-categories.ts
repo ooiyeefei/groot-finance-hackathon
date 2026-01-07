@@ -6,7 +6,6 @@
 export interface DefaultExpenseCategory {
   id: string
   category_name: string
-  category_code: string
   description: string
   is_active: boolean
   is_default: boolean
@@ -29,7 +28,6 @@ export function getDefaultExpenseCategories(): DefaultExpenseCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Travel",
-      category_code: "TRAVEL",
       description: "Business travel, hotels, flights, accommodation expenses",
       is_active: true,
       is_default: true,
@@ -52,7 +50,6 @@ export function getDefaultExpenseCategories(): DefaultExpenseCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Petrol & Transportation",
-      category_code: "petrol_transport",
       description: "Fuel, parking, tolls, vehicle maintenance",
       is_active: true,
       is_default: true,
@@ -76,7 +73,6 @@ export function getDefaultExpenseCategories(): DefaultExpenseCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Entertainment & Meals",
-      category_code: "entertainment_meals",
       description: "Business meals, client entertainment, team events",
       is_active: true,
       is_default: true,
@@ -100,7 +96,6 @@ export function getDefaultExpenseCategories(): DefaultExpenseCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Office Supplies",
-      category_code: "office_supplies",
       description: "Stationery, office equipment, software, subscriptions",
       is_active: true,
       is_default: true,
@@ -124,7 +119,6 @@ export function getDefaultExpenseCategories(): DefaultExpenseCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Utilities & Communications",
-      category_code: "utilities_comms",
       description: "Internet, phone, utilities, postal services",
       is_active: true,
       is_default: true,
@@ -148,7 +142,6 @@ export function getDefaultExpenseCategories(): DefaultExpenseCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Training & Development",
-      category_code: "training_development",
       description: "Employee training, courses, conferences, seminars",
       is_active: true,
       is_default: true,
@@ -171,7 +164,6 @@ export function getDefaultExpenseCategories(): DefaultExpenseCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Marketing & Advertising",
-      category_code: "marketing_advertising",
       description: "Advertising, marketing materials, promotions",
       is_active: true,
       is_default: true,
@@ -194,7 +186,6 @@ export function getDefaultExpenseCategories(): DefaultExpenseCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Maintenance & Repairs",
-      category_code: "maintenance_repairs",
       description: "Equipment maintenance, facility repairs, cleaning",
       is_active: true,
       is_default: true,
@@ -217,7 +208,6 @@ export function getDefaultExpenseCategories(): DefaultExpenseCategory[] {
     {
       id: crypto.randomUUID(),
       category_name: "Other Business Expenses",
-      category_code: "other_business",
       description: "Miscellaneous legitimate business expenses",
       is_active: true,
       is_default: true,

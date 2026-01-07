@@ -144,10 +144,11 @@ def handler(event: dict, context: DurableContext):
                         print(f"[{doc_id}] Using expense categories for expense_claims: {len(raw_categories)} categories")
 
                     # Return as dicts for SDK serialization (convert to BusinessCategory when needed)
+                    # Note: We use 'id' (Convex document ID) instead of 'category_code'
                     categories = [
                         {
                             "name": cat.get("category_name", ""),
-                            "code": cat.get("category_code"),
+                            "id": cat.get("id") or cat.get("_id"),  # Convex document ID
                             "keywords": cat.get("ai_keywords", []),
                             "vendor_patterns": cat.get("vendor_patterns", []),
                         }
@@ -166,7 +167,7 @@ def handler(event: dict, context: DurableContext):
     business_categories = [
         BusinessCategory(
             name=cat.get("name", ""),
-            code=cat.get("code"),
+            id=cat.get("id"),  # Convex document ID
             keywords=cat.get("keywords", []),
             vendor_patterns=cat.get("vendor_patterns", []),
         )

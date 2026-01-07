@@ -479,3 +479,84 @@ export const insertMessage = mutation({
     });
   },
 });
+
+// ============================================
+// DATA CLEANUP MIGRATIONS
+// ============================================
+
+/**
+ * Remove category_code from customCogsCategories and customExpenseCategories
+ *
+ * This migration removes the deprecated category_code field from all category
+ * records. Categories now use 'id' (Convex document ID) for identification.
+ *
+ * Run via Convex Dashboard → Functions → migrations:removeCategoryCode
+ */
+export const removeCategoryCode = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const businesses = await ctx.db.query("businesses").collect();
+
+    let updatedCount = 0;
+    let cogsFieldsRemoved = 0;
+    let expenseFieldsRemoved = 0;
+
+    for (const business of businesses) {
+      let needsUpdate = false;
+
+      // Clean customCogsCategories
+      if (business.customCogsCategories && Array.isArray(business.customCogsCategories)) {
+        const cleanedCogs = business.customCogsCategories.map((cat: Record<string, unknown>) => {
+          if ('category_code' in cat) {
+            cogsFieldsRemoved++;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { category_code, ...rest } = cat;
+            return rest;
+          }
+          return cat;
+        });
+
+        if (cogsFieldsRemoved > 0) {
+          needsUpdate = true;
+          business.customCogsCategories = cleanedCogs;
+        }
+      }
+
+      // Clean customExpenseCategories
+      if (business.customExpenseCategories && Array.isArray(business.customExpenseCategories)) {
+        const cleanedExpense = business.customExpenseCategories.map((cat: Record<string, unknown>) => {
+          if ('category_code' in cat) {
+            expenseFieldsRemoved++;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { category_code, ...rest } = cat;
+            return rest;
+          }
+          return cat;
+        });
+
+        if (expenseFieldsRemoved > 0) {
+          needsUpdate = true;
+          business.customExpenseCategories = cleanedExpense;
+        }
+      }
+
+      if (needsUpdate) {
+        await ctx.db.patch(business._id, {
+          customCogsCategories: business.customCogsCategories,
+          customExpenseCategories: business.customExpenseCategories,
+          updatedAt: Date.now(),
+        });
+        updatedCount++;
+      }
+    }
+
+    return {
+      success: true,
+      businessesProcessed: businesses.length,
+      businessesUpdated: updatedCount,
+      cogsFieldsRemoved,
+      expenseFieldsRemoved,
+      message: `Migration complete. Removed category_code from ${cogsFieldsRemoved} COGS and ${expenseFieldsRemoved} expense categories across ${updatedCount} businesses.`
+    };
+  },
+});

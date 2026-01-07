@@ -29,9 +29,9 @@ const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
 
 const getAvailableCategories = (accountingEntryType: TransactionType, expenseCategories: DynamicExpenseCategory[], cogsCategories: DynamicCOGSCategory[]) => {
   if (accountingEntryType === 'Cost of Goods Sold') {
-    return cogsCategories.map(cat => cat.category_code)
+    return cogsCategories.map(cat => cat.id)
   } else if (accountingEntryType === 'Expense') {
-    return expenseCategories.map(cat => cat.category_code)
+    return expenseCategories.map(cat => cat.id)
   } else if (accountingEntryType === 'Income') {
     if (accountingEntryType in TRANSACTION_CATEGORIES) {
       return Object.keys(TRANSACTION_CATEGORIES[accountingEntryType as keyof typeof TRANSACTION_CATEGORIES])
@@ -346,15 +346,15 @@ export default function AccountingEntryFormModal({
     setLineItems(lineItems.filter((_, i) => i !== index))
   }
 
-  const formatCategoryName = (categoryCode: string, accountingEntryType: TransactionType) => {
+  const formatCategoryName = (categoryId: string, accountingEntryType: TransactionType) => {
     if (accountingEntryType === 'Cost of Goods Sold') {
-      const cogsCategory = cogsCategories.find(cat => cat.category_code === categoryCode)
-      return cogsCategory ? cogsCategory.category_name : categoryCode
+      const cogsCategory = cogsCategories.find(cat => cat.id === categoryId)
+      return cogsCategory ? cogsCategory.category_name : categoryId
     } else if (accountingEntryType === 'Expense') {
-      const expenseCategory = expenseCategories.find(cat => cat.category_code === categoryCode)
-      return expenseCategory ? expenseCategory.category_name : categoryCode
+      const expenseCategory = expenseCategories.find(cat => cat.id === categoryId)
+      return expenseCategory ? expenseCategory.category_name : categoryId
     } else {
-      return categoryCode
+      return categoryId
         .split('_')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ')

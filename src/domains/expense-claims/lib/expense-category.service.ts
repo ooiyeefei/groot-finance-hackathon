@@ -14,7 +14,6 @@ import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profil
 export interface CustomExpenseCategory {
   id?: string
   category_name: string
-  category_code: string
   description?: string
   is_active?: boolean
   parent_category_id?: string
@@ -31,7 +30,6 @@ export interface CustomExpenseCategory {
 export interface EnabledCategory {
   id: string
   category_name: string
-  category_code: string
   description?: string
   vendor_patterns?: string[]
   ai_keywords?: string[]
@@ -103,9 +101,8 @@ export async function getEnabledCategories(): Promise<EnabledCategory[]> {
 
   // Transform to EnabledCategory format
   const enabledCategories = (categories || []).map((category: any) => ({
-    id: category.id || category.category_code,
+    id: category.id,
     category_name: category.category_name,
-    category_code: category.category_code,
     description: category.description,
     vendor_patterns: category.vendor_patterns || [],
     ai_keywords: category.ai_keywords || []
@@ -144,8 +141,8 @@ export async function createCategory(body: CustomExpenseCategory) {
   }
 
   // Validate required fields
-  if (!body.category_name || !body.category_code) {
-    throw new Error('Category name and code are required')
+  if (!body.category_name) {
+    throw new Error('Category name is required')
   }
 
   // Create category using Convex mutation
@@ -153,7 +150,6 @@ export async function createCategory(body: CustomExpenseCategory) {
   const newCategory = await client.mutation(api.functions.businesses.createExpenseCategory, {
     businessId: employeeProfile.business_id,
     category_name: body.category_name,
-    category_code: body.category_code,
     description: body.description,
     ai_keywords: body.ai_keywords,
     vendor_patterns: body.vendor_patterns,
@@ -201,7 +197,6 @@ export async function updateCategory(body: CustomExpenseCategory & { id: string 
     businessId: employeeProfile.business_id,
     categoryId: body.id,
     category_name: body.category_name,
-    category_code: body.category_code,
     description: body.description,
     ai_keywords: body.ai_keywords,
     vendor_patterns: body.vendor_patterns,

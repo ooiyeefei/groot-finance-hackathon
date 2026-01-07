@@ -158,10 +158,10 @@ export class DynamicExpenseCategorizer {
       // Update best match if this category scores higher
       if (matchScore > bestMatch.confidence) {
         bestMatch = {
-          category: category.category_code,
+          category: category.id,
           confidence: Math.min(matchScore, 0.95), // Cap confidence for pattern matching
-          reasoning: matchReasons.length > 0 
-            ? `Matched ${matchReasons.join(', ')}` 
+          reasoning: matchReasons.length > 0
+            ? `Matched ${matchReasons.join(', ')}`
             : 'Pattern match detected'
         }
       }
@@ -170,7 +170,7 @@ export class DynamicExpenseCategorizer {
     // Fallback to first available category if no good matches and fallback enabled
     if (bestMatch.confidence < 0.2 && fallbackToDefault && categories.length > 0) {
       return {
-        category: categories[0].category_code,
+        category: categories[0].id,
         confidence: 0.15,
         reasoning: `Defaulted to "${categories[0].category_name}" - no clear pattern match`
       }
@@ -218,9 +218,9 @@ export class DynamicExpenseCategorizer {
     categories: DynamicExpenseCategory[]
   ): CategorySuggestion {
     const text = `${vendorName} ${description}`.toLowerCase()
-    
+
     let bestMatch: CategorySuggestion = {
-      category: categories[0]?.category_code || '',
+      category: categories[0]?.id || '',
       confidence: 0.1,
       reasoning: 'No pattern matches found'
     }
@@ -251,10 +251,10 @@ export class DynamicExpenseCategorizer {
 
       if (matchScore > bestMatch.confidence) {
         bestMatch = {
-          category: category.category_code,
+          category: category.id,
           confidence: Math.min(matchScore, 0.95),
-          reasoning: matchReasons.length > 0 
-            ? `Matched ${matchReasons.join(', ')}` 
+          reasoning: matchReasons.length > 0
+            ? `Matched ${matchReasons.join(', ')}`
             : 'Pattern match detected'
         }
       }
@@ -274,13 +274,13 @@ export class DynamicExpenseCategorizer {
    * Validate category against business rules
    */
   async validateCategory(
-    categoryCode: string,
+    categoryId: string,
     amount: number,
     currency: string = 'SGD',
     businessId?: string
   ): Promise<CategoryValidation> {
     const categories = await this.fetchCategories(businessId)
-    const category = categories.find(cat => cat.category_code === categoryCode)
+    const category = categories.find(cat => cat.id === categoryId)
     
     const warnings: string[] = []
 

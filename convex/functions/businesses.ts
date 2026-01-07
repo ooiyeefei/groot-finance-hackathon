@@ -713,7 +713,6 @@ export const getCogsCategories = query({
     return (business.customCogsCategories as Array<{
       id: string;
       category_name: string;
-      category_code?: string;
       description?: string;
       is_active: boolean;
       cost_type?: string;
@@ -767,7 +766,6 @@ export const getEnabledCogsCategories = query({
     const categories = (business.customCogsCategories as Array<{
       id: string;
       category_name: string;
-      category_code?: string;
       description?: string;
       is_active: boolean;
       cost_type?: string;
@@ -791,7 +789,6 @@ export const createCogsCategory = mutation({
   args: {
     businessId: v.string(),
     category_name: v.string(),
-    category_code: v.optional(v.string()),
     description: v.optional(v.string()),
     cost_type: v.optional(v.string()),
     ai_keywords: v.optional(v.array(v.string())),
@@ -831,7 +828,6 @@ export const createCogsCategory = mutation({
     const categories = (business.customCogsCategories as Array<{
       id: string;
       category_name: string;
-      category_code?: string;
       description?: string;
       is_active: boolean;
       cost_type?: string;
@@ -848,11 +844,11 @@ export const createCogsCategory = mutation({
     }
 
     // Create new category (matches expense categories structure)
+    // Note: Using id (auto-generated) instead of category_code for lookups
     const now = new Date().toISOString();
     const newCategory = {
       id: `cogs_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       category_name: args.category_name,
-      category_code: args.category_code || args.category_name.toUpperCase().replace(/\s+/g, '_'),
       description: args.description,
       is_active: true,
       cost_type: args.cost_type || 'direct',
@@ -885,7 +881,6 @@ export const updateCogsCategory = mutation({
     businessId: v.string(),
     categoryId: v.string(),
     category_name: v.optional(v.string()),
-    category_code: v.optional(v.string()),
     description: v.optional(v.string()),
     cost_type: v.optional(v.string()),
     ai_keywords: v.optional(v.array(v.string())),
@@ -926,7 +921,6 @@ export const updateCogsCategory = mutation({
     const categories = (business.customCogsCategories as Array<{
       id: string;
       category_name: string;
-      category_code?: string;
       description?: string;
       is_active: boolean;
       cost_type?: string;
@@ -959,7 +953,6 @@ export const updateCogsCategory = mutation({
     const updated = {
       ...categories[index],
       ...(args.category_name !== undefined && { category_name: args.category_name }),
-      ...(args.category_code !== undefined && { category_code: args.category_code }),
       ...(args.description !== undefined && { description: args.description }),
       ...(args.cost_type !== undefined && { cost_type: args.cost_type }),
       ...(args.ai_keywords !== undefined && { ai_keywords: args.ai_keywords }),
@@ -1023,7 +1016,6 @@ export const deleteCogsCategory = mutation({
     const categories = (business.customCogsCategories as Array<{
       id: string;
       category_name: string;
-      category_code?: string;
       description?: string;
       is_active: boolean;
       cost_type?: string;
@@ -1093,7 +1085,6 @@ export const getExpenseCategories = query({
     return (business.customExpenseCategories as Array<{
       id: string;
       category_name: string;
-      category_code: string;
       description?: string;
       is_active: boolean;
       ai_keywords?: string[];
@@ -1145,7 +1136,6 @@ export const getEnabledExpenseCategories = query({
     const categories = (business.customExpenseCategories as Array<{
       id: string;
       category_name: string;
-      category_code: string;
       description?: string;
       is_active: boolean;
       ai_keywords?: string[];
@@ -1168,7 +1158,6 @@ export const createExpenseCategory = mutation({
   args: {
     businessId: v.string(),
     category_name: v.string(),
-    category_code: v.string(),
     description: v.optional(v.string()),
     ai_keywords: v.optional(v.array(v.string())),
     vendor_patterns: v.optional(v.array(v.string())),
@@ -1209,7 +1198,6 @@ export const createExpenseCategory = mutation({
     const categories = (business.customExpenseCategories as Array<{
       id: string;
       category_name: string;
-      category_code: string;
       description?: string;
       is_active: boolean;
       ai_keywords?: string[];
@@ -1221,9 +1209,9 @@ export const createExpenseCategory = mutation({
       updated_at: string;
     }>) || [];
 
-    // Check for duplicate code
-    if (categories.some((c) => c.category_code.toLowerCase() === args.category_code.toLowerCase())) {
-      throw new Error("Category with this code already exists");
+    // Check for duplicate name
+    if (categories.some((c) => c.category_name.toLowerCase() === args.category_name.toLowerCase())) {
+      throw new Error("Category with this name already exists");
     }
 
     // Create new category
@@ -1231,7 +1219,6 @@ export const createExpenseCategory = mutation({
     const newCategory = {
       id: `exp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       category_name: args.category_name,
-      category_code: args.category_code,
       description: args.description,
       is_active: true,
       ai_keywords: args.ai_keywords || [],
@@ -1264,7 +1251,6 @@ export const updateExpenseCategory = mutation({
     businessId: v.string(),
     categoryId: v.string(),
     category_name: v.optional(v.string()),
-    category_code: v.optional(v.string()),
     description: v.optional(v.string()),
     ai_keywords: v.optional(v.array(v.string())),
     vendor_patterns: v.optional(v.array(v.string())),
@@ -1306,7 +1292,6 @@ export const updateExpenseCategory = mutation({
     const categories = (business.customExpenseCategories as Array<{
       id: string;
       category_name: string;
-      category_code: string;
       description?: string;
       is_active: boolean;
       ai_keywords?: string[];
@@ -1324,15 +1309,15 @@ export const updateExpenseCategory = mutation({
       throw new Error("Category not found");
     }
 
-    // Check for duplicate code if updating code
-    if (args.category_code !== undefined) {
+    // Check for duplicate name if updating name
+    if (args.category_name !== undefined) {
       const duplicate = categories.find(
         (c) =>
           c.id !== args.categoryId &&
-          c.category_code.toLowerCase() === args.category_code!.toLowerCase()
+          c.category_name.toLowerCase() === args.category_name!.toLowerCase()
       );
       if (duplicate) {
-        throw new Error("Category with this code already exists");
+        throw new Error("Category with this name already exists");
       }
     }
 
@@ -1340,7 +1325,6 @@ export const updateExpenseCategory = mutation({
     const updated = {
       ...categories[index],
       ...(args.category_name !== undefined && { category_name: args.category_name }),
-      ...(args.category_code !== undefined && { category_code: args.category_code }),
       ...(args.description !== undefined && { description: args.description }),
       ...(args.ai_keywords !== undefined && { ai_keywords: args.ai_keywords }),
       ...(args.vendor_patterns !== undefined && { vendor_patterns: args.vendor_patterns }),
@@ -1404,7 +1388,6 @@ export const deleteExpenseCategory = mutation({
     const categories = (business.customExpenseCategories as Array<{
       id: string;
       category_name: string;
-      category_code: string;
       description?: string;
       is_active: boolean;
       created_at: string;

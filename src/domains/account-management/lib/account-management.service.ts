@@ -709,7 +709,6 @@ export async function deleteInvitation(
 export interface COGSCategory {
   id: string
   category_name: string
-  category_code: string
   description?: string
   cost_type: 'direct' | 'indirect'
   is_active: boolean
@@ -722,7 +721,6 @@ export interface COGSCategory {
 
 export interface CreateCOGSCategoryRequest {
   category_name: string
-  category_code: string
   description?: string
   cost_type: 'direct' | 'indirect'
   ai_keywords?: string[]
@@ -733,7 +731,6 @@ export interface CreateCOGSCategoryRequest {
 export interface UpdateCOGSCategoryRequest {
   id: string
   category_name?: string
-  category_code?: string
   description?: string
   cost_type?: 'direct' | 'indirect'
   ai_keywords?: string[]
@@ -772,7 +769,6 @@ export async function getCOGSCategories(businessId: string): Promise<COGSCategor
     .map((cat: any) => ({
       id: cat.id,
       category_name: cat.name || cat.category_name,
-      category_code: cat.category_code || cat.id,
       description: cat.description,
       cost_type: cat.cost_type || 'direct',
       is_active: cat.is_enabled !== false,
@@ -818,7 +814,6 @@ export async function getEnabledCOGSCategories(): Promise<COGSCategory[]> {
     .map((cat: any) => ({
       id: cat.id,
       category_name: cat.name || cat.category_name,
-      category_code: cat.category_code || cat.id,
       description: cat.description,
       cost_type: cat.cost_type || 'direct',
       is_active: true,
@@ -839,11 +834,11 @@ export async function createCOGSCategory(
   businessId: string,
   request: CreateCOGSCategoryRequest
 ): Promise<COGSCategory> {
-  const { category_name, category_code, description, cost_type, ai_keywords, vendor_patterns, sort_order } = request
+  const { category_name, description, cost_type, ai_keywords, vendor_patterns, sort_order } = request
 
   // Validate required fields
-  if (!category_name || !category_code || !cost_type) {
-    throw new Error('Category name, code, and cost type are required')
+  if (!category_name || !cost_type) {
+    throw new Error('Category name and cost type are required')
   }
 
   // Validate cost_type
@@ -860,7 +855,6 @@ export async function createCOGSCategory(
   const newCategory = await client.mutation(api.functions.businesses.createCogsCategory, {
     businessId,
     category_name,
-    category_code,
     description,
     cost_type,
     ai_keywords,
@@ -868,12 +862,11 @@ export async function createCOGSCategory(
     sort_order
   })
 
-  console.log(`[COGS Service] Created category: ${category_name} (${category_code})`)
+  console.log(`[COGS Service] Created category: ${category_name}`)
 
   return {
     id: newCategory.id,
     category_name,
-    category_code,
     description: description || '',
     cost_type,
     ai_keywords: ai_keywords || [],
@@ -893,7 +886,7 @@ export async function updateCOGSCategory(
   businessId: string,
   request: UpdateCOGSCategoryRequest
 ): Promise<COGSCategory> {
-  const { id, category_name, category_code, description, cost_type, ai_keywords, vendor_patterns, sort_order, is_active } = request
+  const { id, category_name, description, cost_type, ai_keywords, vendor_patterns, sort_order, is_active } = request
 
   if (!id) {
     throw new Error('Category ID is required for updates')
@@ -914,7 +907,6 @@ export async function updateCOGSCategory(
     businessId,
     categoryId: id,
     category_name,
-    category_code,
     description,
     cost_type,
     ai_keywords,
@@ -928,7 +920,6 @@ export async function updateCOGSCategory(
   return {
     id: updatedCategory.id,
     category_name: category_name || updatedCategory.category_name,
-    category_code: category_code || updatedCategory.category_code || id,
     description: description ?? updatedCategory.description,
     cost_type: (cost_type || updatedCategory.cost_type || 'direct') as 'direct' | 'indirect',
     ai_keywords: ai_keywords || updatedCategory.ai_keywords || [],

@@ -844,5 +844,5 @@ function inferExpenseCategory(result: AIExtractionResult, availableCategories: a
   // AI extraction doesn't provide expense category directly
   // We'll use vendor name or line items to infer category in future iterations
   // For now, return the first available category or 'other' as fallback
-  return availableCategories.length > 0 ? availableCategories[0].category_code : 'other'
+  return availableCategories.length > 0 ? availableCategories[0].id : 'other'
 }

@@ -18,7 +18,6 @@ import COGSCategoryFormModal, { COGSCategoryFormData } from '@/domains/invoices/
 interface COGSCategory {
   id: string
   category_name: string
-  category_code: string
   description?: string
   cost_type: 'direct' | 'indirect'
   is_active: boolean
@@ -185,7 +184,6 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
 
   const filteredCategories = categories.filter(category =>
     category.category_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    category.category_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
     category.description?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -279,7 +277,6 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h4 className="text-foreground font-medium">{category.category_name}</h4>
-                          <p className="text-primary text-sm font-mono">{category.category_code}</p>
                           {category.description && (
                             <p className="text-muted-foreground text-sm mt-1">{category.description}</p>
                           )}

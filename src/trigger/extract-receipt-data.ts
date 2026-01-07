@@ -75,8 +75,8 @@ function sanitizeBusinessCategories(categories: any[]): any[] {
   }
 
   return categories.map(cat => ({
+    id: sanitizeTextInput(cat?.id || ''),
     category_name: sanitizeTextInput(cat?.category_name || ''),
-    category_code: sanitizeTextInput(cat?.category_code || ''),
     vendor_patterns: Array.isArray(cat?.vendor_patterns)
       ? cat.vendor_patterns.map((p: any) => sanitizeTextInput(String(p || ''))).slice(0, 10)
       : [],
@@ -634,8 +634,8 @@ export const extractReceiptData = task({
             );
 
             if (matchedByName) {
-              autoCategory = matchedByName.category_code;
-              console.log(`✅ Matched AI suggestion "${extractionResult.suggested_category}" to category: ${matchedByName.category_name} (${matchedByName.category_code})`);
+              autoCategory = matchedByName.id;
+              console.log(`✅ Matched AI suggestion "${extractionResult.suggested_category}" to category: ${matchedByName.category_name} (${matchedByName.id})`);
             } else {
               console.log(`⚠️ AI suggestion "${extractionResult.suggested_category}" not found in business categories`);
             }
@@ -653,22 +653,22 @@ export const extractReceiptData = task({
 
               // Check vendor patterns first
               if (vendorPatterns.some((pattern: string) => vendor_lower.includes(pattern.toLowerCase()))) {
-                autoCategory = category.category_code;
-                console.log(`✅ Matched vendor pattern to category: ${category.category_name} (${category.category_code})`);
+                autoCategory = category.id;
+                console.log(`✅ Matched vendor pattern to category: ${category.category_name} (${category.id})`);
                 break;
               }
 
               // Check AI keywords
               if (aiKeywords.some((keyword: string) => vendor_lower.includes(keyword.toLowerCase()))) {
-                autoCategory = category.category_code;
-                console.log(`✅ Matched AI keyword to category: ${category.category_name} (${category.category_code})`);
+                autoCategory = category.id;
+                console.log(`✅ Matched AI keyword to category: ${category.category_name} (${category.id})`);
                 break;
               }
             }
           }
 
           if (!autoCategory) {
-            console.log(`⚠️ No category match found - will use first active category: ${businessCategories[0]?.category_code || 'other_business'}`);
+            console.log(`⚠️ No category match found - will use first active category: ${businessCategories[0]?.id || 'other_business'}`);
           }
         } else {
           console.log(`⚠️ No active business categories available - will use fallback: other_business`);
@@ -710,7 +710,7 @@ export const extractReceiptData = task({
         };
 
         // Update expense claim with extracted metadata
-        console.log(`💾 Final category determined: ${autoCategory || businessCategories[0]?.category_code || 'other_business'}`);
+        console.log(`💾 Final category determined: ${autoCategory || businessCategories[0]?.id || 'other_business'}`);
         console.log(`💾 Updating expense claim ${payload.expenseClaimId} with extraction data`);
 
         // ✅ CONVEX MIGRATION: Use updateExtractionResults instead of direct Supabase
@@ -725,7 +725,7 @@ export const extractReceiptData = task({
             currency: extractionResult.currency,
             transaction_date: extractionResult.transaction_date,
             // Expense claim specific fields
-            expense_category: autoCategory || businessCategories[0]?.category_code || 'other_business',
+            expense_category: autoCategory || businessCategories[0]?.id || 'other_business',
             business_purpose: extractionResult.business_purpose || 'Business expense',
             description: extractionResult.description || extractionResult.vendor_name,
             reference_number: extractionResult.receipt_number || null,

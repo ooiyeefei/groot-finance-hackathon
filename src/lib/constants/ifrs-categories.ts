@@ -5,7 +5,7 @@
  */
 
 export interface IFRSCategory {
-  category_code: string
+  id: string
   category_name: string
   group: string
 }
@@ -19,28 +19,28 @@ export interface CategoryOption {
 // Core IFRS accounting categories for AI processing and categorization
 export const IFRS_CATEGORIES: IFRSCategory[] = [
   // Direct Expenses
-  { category_code: "cost_of_goods_sold", category_name: "Cost of Goods Sold", group: "Direct Expenses" },
+  { id: "cost_of_goods_sold", category_name: "Cost of Goods Sold", group: "Direct Expenses" },
 
   // Operating Expenses
-  { category_code: "administrative_expenses", category_name: "Administrative Expenses", group: "Operating Expenses" },
-  { category_code: "marketing_advertising", category_name: "Marketing & Advertising", group: "Operating Expenses" },
-  { category_code: "travel_entertainment", category_name: "Travel & Entertainment", group: "Operating Expenses" },
-  { category_code: "utilities_communications", category_name: "Utilities & Communications", group: "Operating Expenses" },
-  { category_code: "rent_facilities", category_name: "Rent & Facilities", group: "Operating Expenses" },
-  { category_code: "insurance", category_name: "Insurance", group: "Operating Expenses" },
-  { category_code: "taxes_licenses", category_name: "Taxes & Licenses", group: "Operating Expenses" },
-  { category_code: "software_subscriptions", category_name: "Software & Subscriptions", group: "Operating Expenses" },
-  { category_code: "professional_services", category_name: "Professional Services", group: "Operating Expenses" },
-  { category_code: "other_operating", category_name: "Other Operating Expenses", group: "Operating Expenses" },
+  { id: "administrative_expenses", category_name: "Administrative Expenses", group: "Operating Expenses" },
+  { id: "marketing_advertising", category_name: "Marketing & Advertising", group: "Operating Expenses" },
+  { id: "travel_entertainment", category_name: "Travel & Entertainment", group: "Operating Expenses" },
+  { id: "utilities_communications", category_name: "Utilities & Communications", group: "Operating Expenses" },
+  { id: "rent_facilities", category_name: "Rent & Facilities", group: "Operating Expenses" },
+  { id: "insurance", category_name: "Insurance", group: "Operating Expenses" },
+  { id: "taxes_licenses", category_name: "Taxes & Licenses", group: "Operating Expenses" },
+  { id: "software_subscriptions", category_name: "Software & Subscriptions", group: "Operating Expenses" },
+  { id: "professional_services", category_name: "Professional Services", group: "Operating Expenses" },
+  { id: "other_operating", category_name: "Other Operating Expenses", group: "Operating Expenses" },
 
   // Non-Operating Expenses
-  { category_code: "depreciation", category_name: "Depreciation", group: "Non-Operating Expenses" },
-  { category_code: "interest_expense", category_name: "Interest Expense", group: "Non-Operating Expenses" },
+  { id: "depreciation", category_name: "Depreciation", group: "Non-Operating Expenses" },
+  { id: "interest_expense", category_name: "Interest Expense", group: "Non-Operating Expenses" },
 ]
 
 // Convert IFRS categories to CategorySelector format
 export const IFRS_CATEGORY_OPTIONS: CategoryOption[] = IFRS_CATEGORIES.map(category => ({
-  value: category.category_code,
+  value: category.id,
   label: category.category_name,
   group: category.group
 }))

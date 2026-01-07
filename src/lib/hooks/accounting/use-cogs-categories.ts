@@ -10,7 +10,6 @@ import { getDefaultCOGSCategories } from '@/domains/invoices/lib/default-cogs-ca
 export interface DynamicCOGSCategory {
   id: string
   category_name: string
-  category_code: string
   description?: string
   cost_type: 'direct' | 'indirect'
   vendor_patterns?: string[]
@@ -94,7 +93,7 @@ export function useCOGSCategories(): UseCOGSCategoriesReturn {
  */
 export function formatCOGSCategoriesForSelect(categories: DynamicCOGSCategory[]) {
   return categories.map(category => ({
-    value: category.category_code,
+    value: category.id,
     label: category.category_name,
     description: category.description,
     cost_type: category.cost_type
@@ -105,5 +104,5 @@ export function formatCOGSCategoriesForSelect(categories: DynamicCOGSCategory[])
  * Utility function to find COGS category by code
  */
 export function findCOGSCategoryByCode(categories: DynamicCOGSCategory[], code: string): DynamicCOGSCategory | undefined {
-  return categories.find(cat => cat.category_code === code)
+  return categories.find(cat => cat.id === code)
 }
