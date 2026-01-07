@@ -129,24 +129,19 @@ class ConvexClient:
         Returns:
             Updated document ID
         """
+        # Build args dict - only include errorMessage if it has a value
+        # Convex v.optional() doesn't accept null, only omitted or string
+        args = {
+            "id": document_id,
+            "status": status,
+        }
+        if error_message is not None:
+            args["errorMessage"] = error_message
+
         if domain == "invoices":
-            return self._mutation(
-                "functions/system:updateInvoiceStatus",
-                {
-                    "id": document_id,
-                    "status": status,
-                    "errorMessage": error_message,
-                },
-            )
+            return self._mutation("functions/system:updateInvoiceStatus", args)
         else:
-            return self._mutation(
-                "functions/system:updateExpenseClaimStatus",
-                {
-                    "id": document_id,
-                    "status": status,
-                    "errorMessage": error_message,
-                },
-            )
+            return self._mutation("functions/system:updateExpenseClaimStatus", args)
 
     def update_invoice_extraction(
         self,
