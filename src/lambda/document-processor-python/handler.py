@@ -42,6 +42,7 @@ from types_def import (
     StepStatus,
     ERROR_CODES,
     BusinessCategory,
+    ConvertedImageInfo,
 )
 
 # Initialize Sentry
@@ -211,16 +212,30 @@ def handler(event: dict, context: DurableContext):
 
         conversion_result = context.step(lambda ctx: convert_pdf(), name="convert_pdf")
 
+        # Convert image dicts back to ConvertedImageInfo objects for downstream steps
+        # (SDK returns dicts, but steps expect ConvertedImageInfo objects)
+        converted_images = None
+        if conversion_result.get("status") == "success" and conversion_result.get("images"):
+            converted_images = [
+                ConvertedImageInfo(
+                    page_number=img.get("page_number", 1),
+                    s3_key=img.get("s3_key", ""),
+                    width=img.get("width", 0),
+                    height=img.get("height", 0),
+                    mime_type=img.get("mime_type", "image/png"),
+                )
+                for img in conversion_result.get("images", [])
+            ]
+
         # =================================================================
         # Step 4: Validate document (checkpointed)
         # =================================================================
         def validate_document():
             print(f"[{doc_id}] Step: Document Validation")
-            images = conversion_result.get("images") if conversion_result.get("status") == "success" else None
 
             result = validate_document_step(
                 document_id=doc_id,
-                images=images,
+                images=converted_images,  # Use converted ConvertedImageInfo objects
                 storage_path=request.storage_path,
                 domain=request.domain,
                 expected_type=request.expected_document_type,
@@ -266,13 +281,12 @@ def handler(event: dict, context: DurableContext):
         # =================================================================
         def extract_data():
             print(f"[{doc_id}] Step: Data Extraction")
-            images = conversion_result.get("images") if conversion_result.get("status") == "success" else None
             document_type = validation_result.get("document_type", "invoice")
 
             if document_type == "receipt":
                 result = extract_receipt_step(
                     document_id=doc_id,
-                    images=images,
+                    images=converted_images,  # Use converted ConvertedImageInfo objects
                     storage_path=request.storage_path,
                     domain=request.domain,
                     categories=business_categories,
@@ -281,7 +295,7 @@ def handler(event: dict, context: DurableContext):
             else:
                 result = extract_invoice_step(
                     document_id=doc_id,
-                    images=images,
+                    images=converted_images,  # Use converted ConvertedImageInfo objects
                     storage_path=request.storage_path,
                     domain=request.domain,
                     categories=business_categories,
