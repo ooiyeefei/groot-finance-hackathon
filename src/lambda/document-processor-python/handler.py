@@ -375,6 +375,11 @@ def handler(event: dict, context: DurableContext):
                     total_amount=extraction_result.get("total_amount"),
                     currency=extraction_result.get("currency"),
                     transaction_date=extraction_result.get("transaction_date"),
+                    # Pass category and descriptive fields to Convex
+                    expense_category=extraction_result.get("expense_category"),
+                    business_purpose=extraction_result.get("business_purpose"),
+                    description=extraction_result.get("description"),
+                    reference_number=extraction_result.get("receipt_number"),
                 )
             return True
 

@@ -156,51 +156,83 @@ export async function createAccountingEntry(
 
     // For 'Cost of Goods Sold', also include custom business COGS categories
     if (transaction_type === 'Cost of Goods Sold') {
+      console.log(`[Accounting Entries Data Access] 🔍 COGS Validation: Looking for category '${category}'`)
+      console.log(`[Accounting Entries Data Access] 🔍 Hardcoded COGS categories: ${validCategories.join(', ')}`)
+
       try {
         // Get user's business_id for COGS category lookup
         const employeeProfile = await ensureUserProfile(userId)
         if (!employeeProfile) {
-          console.warn('[Accounting Entries Data Access] Failed to get employee profile for COGS categories')
+          console.warn('[Accounting Entries Data Access] ⚠️ Failed to get employee profile for COGS categories')
         } else {
+          console.log(`[Accounting Entries Data Access] 🔍 Employee profile found, business_id: ${employeeProfile.business_id}`)
+
           // Fetch custom COGS categories from user's business
           const customCogsCategories = await client.query(api.functions.businesses.getEnabledCogsCategories, {
             businessId: employeeProfile.business_id
           })
+
+          console.log(`[Accounting Entries Data Access] 🔍 Custom COGS query returned: ${customCogsCategories?.length ?? 0} categories`)
+
           if (customCogsCategories && customCogsCategories.length > 0) {
             const customCodes = customCogsCategories.map((cat: any) => cat.category_code || cat.id)
             const customNames = customCogsCategories.map((cat: any) => cat.name || cat.category_name)
+
+            console.log(`[Accounting Entries Data Access] 🔍 Custom COGS codes: ${customCodes.join(', ')}`)
+
             validCategories = [...validCategories, ...customCodes]
             validCategoryNames = [...validCategoryNames, ...customNames]
             console.log(`[Accounting Entries Data Access] Including ${customCogsCategories.length} custom COGS categories in validation`)
+          } else {
+            console.log(`[Accounting Entries Data Access] ⚠️ No custom COGS categories found for business`)
           }
         }
       } catch (error) {
         console.warn('[Accounting Entries Data Access] Failed to fetch custom COGS categories, using defaults:', error)
       }
+
+      console.log(`[Accounting Entries Data Access] 🔍 Final valid COGS categories: ${validCategories.join(', ')}`)
     }
 
     let finalCategory = category
     let finalSubcategory = subcategory
 
-    if (!validCategories.includes(category)) {
+    // Case-insensitive category lookup helper
+    const findCategoryMatch = (searchCategory: string, categoryList: string[]): string | null => {
+      // First try exact match
+      if (categoryList.includes(searchCategory)) {
+        return searchCategory
+      }
+      // Then try case-insensitive match
+      const lowerSearch = searchCategory.toLowerCase()
+      const match = categoryList.find(c => c.toLowerCase() === lowerSearch)
+      return match || null
+    }
+
+    const matchedCategory = findCategoryMatch(category, validCategories)
+
+    if (!matchedCategory) {
       // Check if it's a subcategory in hardcoded system (fallback for legacy data)
       const typeCategories = TRANSACTION_CATEGORIES[transaction_type]
       let foundParentCategory = null
 
       if (typeCategories) {
         for (const [parentCategory, subCategories] of Object.entries(typeCategories)) {
-          if (subCategories.includes(category)) {
+          // Also do case-insensitive subcategory matching
+          const subMatch = subCategories.find((s: string) => s.toLowerCase() === category.toLowerCase())
+          if (subMatch) {
             foundParentCategory = parentCategory
             break
           }
         }
       }
 
-      if (foundParentCategory && validCategories.includes(foundParentCategory)) {
+      const matchedParent = foundParentCategory ? findCategoryMatch(foundParentCategory, validCategories) : null
+      if (matchedParent) {
         // Map subcategory to parent category
-        finalCategory = foundParentCategory
+        finalCategory = matchedParent
         finalSubcategory = category
-        console.log(`[Accounting Entries Data Access] Mapped subcategory '${category}' to parent category '${foundParentCategory}'`)
+        console.log(`[Accounting Entries Data Access] Mapped subcategory '${category}' to parent category '${matchedParent}'`)
       } else {
         // Invalid category
         console.error(`[Accounting Entries Data Access] Invalid category '${category}' for type '${transaction_type}'. Valid categories:`, validCategories)
@@ -208,6 +240,12 @@ export async function createAccountingEntry(
           success: false,
           error: `Invalid category '${category}' for accounting entry type '${transaction_type}'. Valid categories: ${validCategoryNames.join(', ')}`
         }
+      }
+    } else {
+      // Use the correctly-cased category from database
+      finalCategory = matchedCategory
+      if (matchedCategory !== category) {
+        console.log(`[Accounting Entries Data Access] ✅ Case-insensitive match: '${category}' → '${matchedCategory}'`)
       }
     }
 

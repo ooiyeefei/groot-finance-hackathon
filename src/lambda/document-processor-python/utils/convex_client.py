@@ -181,6 +181,11 @@ class ConvexClient:
         total_amount: Optional[float] = None,
         currency: Optional[str] = None,
         transaction_date: Optional[str] = None,
+        # Additional expense claim fields
+        expense_category: Optional[str] = None,
+        business_purpose: Optional[str] = None,
+        description: Optional[str] = None,
+        reference_number: Optional[str] = None,
     ) -> str:
         """
         Update expense claim with extraction results.
@@ -193,6 +198,10 @@ class ConvexClient:
             total_amount: Extracted total amount
             currency: Extracted currency code
             transaction_date: Extracted transaction date
+            expense_category: Extracted expense category
+            business_purpose: Generated business purpose
+            description: Generated description
+            reference_number: Extracted receipt/reference number
 
         Returns:
             Updated document ID
@@ -211,6 +220,15 @@ class ConvexClient:
             args["currency"] = currency
         if transaction_date is not None:
             args["transactionDate"] = transaction_date
+        # Additional expense claim fields
+        if expense_category is not None:
+            args["expenseCategory"] = expense_category
+        if business_purpose is not None:
+            args["businessPurpose"] = business_purpose
+        if description is not None:
+            args["description"] = description
+        if reference_number is not None:
+            args["referenceNumber"] = reference_number
 
         return self._mutation(
             "functions/system:updateExpenseClaimExtraction",

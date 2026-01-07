@@ -455,6 +455,10 @@ def extract_receipt_step(
             "expense_category": expense_category,
             "category_confidence": category_confidence,
 
+            # Generated descriptive fields for Convex
+            "description": f"Receipt from {extracted.vendor_name}" if extracted.vendor_name else "Receipt expense",
+            "business_purpose": f"Business expense - {expense_category}" if expense_category else "Business expense",
+
             # Processing metadata
             "processing_time_ms": processing_time_ms,
             "extracted_at": datetime.utcnow().isoformat(),

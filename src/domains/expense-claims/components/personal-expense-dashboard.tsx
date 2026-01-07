@@ -12,6 +12,7 @@ import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import ExpenseStatusBadge from './expense-status-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatBusinessDate } from '@/lib/utils'
 
@@ -688,40 +689,14 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
       {/* Status and Progress */}
       <div className="space-y-2">
         <div className="flex items-center justify-between flex-wrap gap-1">
-          {/* Primary Status Badge */}
+          {/* Primary Status Badge - Animated like invoice page */}
           <div className="flex items-center gap-2">
-            <Badge
-              variant={
-                // Use proper CVA variants for semantic design system
-                claim.status === 'submitted' ? 'success' :
-                claim.status === 'approved' ? 'success' :
-                claim.status === 'rejected' ? 'error' :
-                claim.status === 'failed' ? 'error' :  // Add explicit failed status handling
-                claim.status === 'reimbursed' ? 'success' :
-                // Unified logic with semantic colors based on status_display
-                claim.status_display?.color === 'green' ? 'success' :
-                claim.status_display?.color === 'blue' ? 'primary' :
-                claim.status_display?.color === 'yellow' ? 'warning' :
-                claim.status_display?.color === 'red' ? 'error' :
-                claim.status_display?.color === 'purple' ? 'secondary' :
-                claim.status === 'draft' ? 'primary' :
-                'default'
-              }
-            >
-              {/* Show appropriate processing icon based on status */}
-              {claim.status === 'analyzing' ? (
-                <Brain className="w-3 h-3 mr-1 text-blue-400 animate-spin" />
-              ) : claim.status_display?.isProcessing ? (
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              ) : null}
-              {/* UNIFIED PRIORITY: API status_display > unified status > fallback */}
-              {claim.status_display?.label ||
-                (claim.status === 'analyzing' ? 'AI Analyzing...' :
-                 claim.status === 'draft' ? 'Ready to Submit' :
-                 claim.status?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()))
-              }
-            </Badge>
-
+            <ExpenseStatusBadge
+              status={claim.status}
+              errorMessage={claim.error_message}
+              processingStage={claim.status_display?.isProcessing ? claim.status as any : undefined}
+              animated={true}
+            />
           </div>
 
           {claim.current_approver_name && ['submitted'].includes(claim.status) && (

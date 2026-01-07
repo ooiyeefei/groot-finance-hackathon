@@ -259,29 +259,52 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       setProcessingMethod(detectedMethod as 'ai' | 'manual_entry')
 
       // Extract line items from various sources
+      // Priority: direct line_items > transaction.line_items > processing_metadata.line_items > extracted_data.line_items
       let lineItems: Array<{ description: string; quantity: number; unit_price: number; total_amount: number }> = []
 
-      if (claim.line_items && Array.isArray(claim.line_items)) {
-        lineItems = claim.line_items.map((item: any) => ({
-          description: item.description || 'Item',
-          quantity: item.quantity || 1,
-          unit_price: item.unit_price || item.unitPrice || 0,
-          total_amount: item.total_amount || item.line_total || item.lineTotal || 0
-        }))
-      } else if (claim.transaction?.line_items && Array.isArray(claim.transaction.line_items)) {
-        lineItems = claim.transaction.line_items.map((item: any) => ({
+      // Helper to map line items with proper calculations
+      // Handles two scenarios:
+      // 1. Lambda extracts line_total but unit_price is null → back-calculate unit_price
+      // 2. Data has unit_price but line_total is missing → calculate total from qty * unit_price
+      const mapLineItem = (item: any) => {
+        const qty = item.quantity || 1
+        const unitPrice = item.unit_price || item.unitPrice || 0
+        const lineTotal = item.total_amount || item.line_total || item.lineTotal || 0
+
+        // Calculate final values ensuring consistency
+        let finalUnitPrice = unitPrice
+        let finalTotal = lineTotal
+
+        if (lineTotal > 0 && unitPrice === 0 && qty > 0) {
+          // Case 1: Lambda gave us line_total but not unit_price → back-calculate
+          finalUnitPrice = lineTotal / qty
+          finalTotal = lineTotal
+        } else if (unitPrice > 0 && lineTotal === 0) {
+          // Case 2: We have unit_price but no line_total → calculate total
+          finalTotal = qty * unitPrice
+        } else if (lineTotal === 0 && unitPrice === 0) {
+          // Case 3: Neither available → keep as 0
+          finalTotal = 0
+          finalUnitPrice = 0
+        }
+
+        return {
           description: item.description || item.item_description || 'Item',
-          quantity: item.quantity || 1,
-          unit_price: item.unit_price || item.unitPrice || 0,
-          total_amount: item.total_amount || item.line_total || item.lineTotal || 0
-        }))
+          quantity: qty,
+          unit_price: finalUnitPrice,
+          total_amount: finalTotal
+        }
+      }
+
+      if (claim.line_items && Array.isArray(claim.line_items)) {
+        lineItems = claim.line_items.map(mapLineItem)
+      } else if (claim.transaction?.line_items && Array.isArray(claim.transaction.line_items)) {
+        lineItems = claim.transaction.line_items.map(mapLineItem)
+      } else if (claim.processing_metadata?.line_items && Array.isArray(claim.processing_metadata.line_items)) {
+        // Lambda DSPy stores line_items in processing_metadata
+        lineItems = claim.processing_metadata.line_items.map(mapLineItem)
       } else if (claim.extracted_data?.line_items && Array.isArray(claim.extracted_data.line_items)) {
-        lineItems = claim.extracted_data.line_items.map((item: any) => ({
-          description: item.description || 'Item',
-          quantity: item.quantity || 1,
-          unit_price: item.unit_price || item.unitPrice || 0,
-          total_amount: item.total_amount || item.line_total || item.lineTotal || 0
-        }))
+        lineItems = claim.extracted_data.line_items.map(mapLineItem)
       }
 
       // Set receipt information
@@ -295,11 +318,14 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       })
 
       // Extract tax information from processing metadata
+      // Check multiple locations: financial_data (legacy), raw_extraction (legacy), or top-level (Lambda DSPy)
       const taxAmount = claim.processing_metadata?.financial_data?.tax_amount ||
                        claim.processing_metadata?.raw_extraction?.tax_amount ||
+                       claim.processing_metadata?.tax_amount ||
                        0
       const subtotalAmount = claim.processing_metadata?.financial_data?.subtotal_amount ||
-                            claim.processing_metadata?.raw_extraction?.subtotal_amount
+                            claim.processing_metadata?.raw_extraction?.subtotal_amount ||
+                            claim.processing_metadata?.subtotal_amount
 
       // Set form data
       setFormData({
