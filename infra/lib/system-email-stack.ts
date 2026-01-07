@@ -9,7 +9,6 @@ import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { SesDomainConstruct } from './constructs/ses-domain';
 import { DurableWorkflowConstruct } from './constructs/durable-workflow';
-import { DeliveryHandlerConstruct } from './constructs/delivery-handler';
 
 export interface SystemEmailStackProps extends cdk.StackProps {
   // Environment-specific configuration
@@ -20,7 +19,6 @@ export class SystemEmailStack extends cdk.Stack {
   public readonly emailEventsTopic: sns.Topic;
   public readonly welcomeWorkflowFunction: lambda.Function;
   public readonly welcomeWorkflowAlias: lambda.Alias;
-  public readonly deliveryHandlerFunction: lambda.Function;
 
   constructor(scope: Construct, id: string, props?: SystemEmailStackProps) {
     super(scope, id, props);
@@ -74,14 +72,6 @@ export class SystemEmailStack extends cdk.Stack {
     this.welcomeWorkflowAlias = durableWorkflow.alias;
 
     // ─────────────────────────────────────────────
-    // Delivery Handler Lambda (SNS Subscriber)
-    // ─────────────────────────────────────────────
-    const deliveryHandler = new DeliveryHandlerConstruct(this, 'DeliveryHandler', {
-      emailEventsTopic: this.emailEventsTopic,
-    });
-    this.deliveryHandlerFunction = deliveryHandler.function;
-
-    // ─────────────────────────────────────────────
     // Outputs
     // ─────────────────────────────────────────────
     new cdk.CfnOutput(this, 'WelcomeWorkflowAliasArn', {
@@ -132,21 +122,6 @@ export class SystemEmailStack extends cdk.Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
     welcomeWorkflowErrorAlarm.addAlarmAction(new cloudwatchActions.SnsAction(alarmTopic));
-
-    // Lambda Error Alarm - Delivery Handler
-    const deliveryHandlerErrorAlarm = new cloudwatch.Alarm(this, 'DeliveryHandlerErrorAlarm', {
-      alarmName: 'FinanSEAL-DeliveryHandler-Errors',
-      alarmDescription: 'Alert when Delivery Handler Lambda has errors',
-      metric: this.deliveryHandlerFunction.metricErrors({
-        period: cdk.Duration.minutes(5),
-        statistic: 'Sum',
-      }),
-      threshold: 1,
-      evaluationPeriods: 1,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
-    deliveryHandlerErrorAlarm.addAlarmAction(new cloudwatchActions.SnsAction(alarmTopic));
 
     // SES Bounce Rate Alarm (alert at 3% - SES suspends at 5%)
     const sesBounceRateAlarm = new cloudwatch.Alarm(this, 'SESBounceRateAlarm', {

@@ -117,8 +117,7 @@ export interface TriggerWorkflowResult {
  * Invokes the Lambda Durable Function to start the welcome email sequence.
  * Uses async invocation (Event) for fire-and-forget pattern.
  *
- * Idempotency: The Lambda function will check the executionId (Svix webhook ID)
- * against Convex workflow_executions table before processing.
+ * Idempotency: Lambda Durable Functions track execution state internally.
  *
  * @param payload - Welcome workflow parameters
  * @returns Result with success status
