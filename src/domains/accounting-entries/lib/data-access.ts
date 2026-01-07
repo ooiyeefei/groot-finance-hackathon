@@ -153,6 +153,8 @@ export async function createAccountingEntry(
     const categoryData = getValidCategories(transaction_type as 'Income' | 'Cost of Goods Sold' | 'Expense')
     let validCategories = [...categoryData.codes]
     let validCategoryNames = [...categoryData.names]
+    // Map from category_name -> category_code for reverse lookup
+    const nameToCodeMap = new Map<string, string>()
 
     // For 'Cost of Goods Sold', also include custom business COGS categories
     if (transaction_type === 'Cost of Goods Sold') {
@@ -166,11 +168,16 @@ export async function createAccountingEntry(
           })
 
           if (customCogsCategories && customCogsCategories.length > 0) {
-            const customCodes = customCogsCategories.map((cat: any) => cat.category_code || cat.id)
-            const customNames = customCogsCategories.map((cat: any) => cat.name || cat.category_name)
-
-            validCategories = [...validCategories, ...customCodes]
-            validCategoryNames = [...validCategoryNames, ...customNames]
+            for (const cat of customCogsCategories) {
+              const code = cat.category_code || cat.id
+              const name = cat.category_name
+              validCategories.push(code)
+              validCategoryNames.push(name)
+              // Build name→code mapping for reverse lookup when LLM suggests name
+              if (name && code) {
+                nameToCodeMap.set(name.toLowerCase(), code)
+              }
+            }
           }
         }
       } catch (error) {
@@ -193,7 +200,21 @@ export async function createAccountingEntry(
       return match || null
     }
 
-    const matchedCategory = findCategoryMatch(category, validCategories)
+    // First try to match against category codes
+    let matchedCategory = findCategoryMatch(category, validCategories)
+
+    // If no match by code, try to match by name and map to code
+    if (!matchedCategory) {
+      const matchedName = findCategoryMatch(category, validCategoryNames)
+      if (matchedName) {
+        // Found by name, map to the corresponding code
+        const mappedCode = nameToCodeMap.get(matchedName.toLowerCase())
+        if (mappedCode) {
+          matchedCategory = mappedCode
+          console.log(`[Accounting Entries Data Access] Mapped category name '${category}' to code '${mappedCode}'`)
+        }
+      }
+    }
 
     if (!matchedCategory) {
       // Check if it's a subcategory in hardcoded system (fallback for legacy data)
