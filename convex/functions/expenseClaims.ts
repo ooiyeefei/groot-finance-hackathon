@@ -731,6 +731,47 @@ export const updateStatus = mutation({
         if (args.reviewerNotes) {
           updateData.reviewerNotes = args.reviewerNotes;
         }
+
+        // ✅ IFRS COMPLIANCE: Create accounting entry when expense claim is approved
+        // Only approved expense claims create accounting entries (general ledger)
+        {
+          // Get the business to fetch homeCurrency if not set on claim
+          const business = await ctx.db.get(claim.businessId);
+          const homeCurrency = claim.homeCurrency || business?.homeCurrency || "SGD";
+
+          // Validate required fields for accounting entry
+          if (!claim.totalAmount || !claim.currency || !claim.transactionDate) {
+            throw new Error("Cannot approve claim: missing required financial data (amount, currency, or date)");
+          }
+
+          // Create the accounting entry
+          const accountingEntryId = await ctx.db.insert("accounting_entries", {
+            businessId: claim.businessId,
+            userId: claim.userId,
+            transactionType: "Expense",
+            description: claim.businessPurpose || claim.description || "Expense claim",
+            originalAmount: claim.totalAmount,
+            originalCurrency: claim.currency,
+            homeCurrency: homeCurrency,
+            homeCurrencyAmount: claim.homeCurrencyAmount || claim.totalAmount,
+            exchangeRate: claim.exchangeRate || 1,
+            transactionDate: claim.transactionDate,
+            category: claim.expenseCategory,
+            vendorName: claim.vendorName,
+            referenceNumber: claim.referenceNumber,
+            status: "pending",
+            createdByMethod: "document_extract",
+            sourceRecordId: claim._id,
+            sourceDocumentType: "expense_claim",
+            processingMetadata: claim.processingMetadata,
+            updatedAt: now,
+          });
+
+          // Link the accounting entry back to the expense claim
+          updateData.accountingEntryId = accountingEntryId;
+
+          console.log(`[Convex] Created accounting entry ${accountingEntryId} for approved expense claim ${claim._id}`);
+        }
         break;
 
       case "rejected":
@@ -755,6 +796,17 @@ export const updateStatus = mutation({
           throw new Error("Not authorized to mark as reimbursed");
         }
         updateData.paidAt = now;
+
+        // Update the linked accounting entry status to 'paid'
+        if (claim.accountingEntryId) {
+          const isoDate = new Date(now).toISOString().split("T")[0];
+          await ctx.db.patch(claim.accountingEntryId, {
+            status: "paid",
+            paymentDate: isoDate,
+            updatedAt: now,
+          });
+          console.log(`[Convex] Updated accounting entry ${claim.accountingEntryId} status to 'paid'`);
+        }
         break;
 
       case "processing":

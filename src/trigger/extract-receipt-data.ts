@@ -18,6 +18,9 @@ import {
   recordOcrUsage,
   type ExtractionResult
 } from './utils/convex-helpers';
+// Currency conversion service for home currency conversion
+import { currencyService } from '../lib/services/currency-service';
+import type { SupportedCurrency } from '../domains/accounting-entries/types';
 
 // Domain-to-table mapping for multi-domain architecture
 const DOMAIN_TABLE_MAP = {
@@ -244,6 +247,7 @@ export const extractReceiptData = task({
     // Step 1: Fetch business categories for enhanced categorization (if expense claim provided)
     let businessCategories: any[] = [];
     let expenseClaim: any = null;
+    let businessHomeCurrency: string | null = null; // User's home currency from business settings
 
     try {
 
@@ -287,6 +291,12 @@ export const extractReceiptData = task({
             }
           } else {
             console.log(`⚠️ No custom expense categories found for business ${expenseClaim.business_id}`);
+          }
+
+          // ✅ CURRENCY FIX: Store business home currency for conversion
+          if (businessCats?.homeCurrency) {
+            businessHomeCurrency = businessCats.homeCurrency;
+            console.log(`💱 Business home currency: ${businessHomeCurrency}`);
           }
         }
       }
@@ -674,6 +684,34 @@ export const extractReceiptData = task({
           console.log(`⚠️ No active business categories available - will use fallback: other_business`);
         }
 
+        // ✅ CURRENCY FIX: Perform currency conversion if receipt currency differs from home currency
+        let homeCurrency = extractionResult.currency; // Default to receipt currency
+        let homeCurrencyAmount = extractionResult.total_amount;
+        let exchangeRate = 1.0;
+
+        if (businessHomeCurrency && businessHomeCurrency !== extractionResult.currency) {
+          console.log(`💱 Converting ${extractionResult.total_amount} ${extractionResult.currency} → ${businessHomeCurrency}`);
+          try {
+            const conversion = await currencyService.convertAmount(
+              extractionResult.total_amount,
+              extractionResult.currency as SupportedCurrency,
+              businessHomeCurrency as SupportedCurrency
+            );
+            homeCurrency = businessHomeCurrency;
+            homeCurrencyAmount = conversion.converted_amount;
+            exchangeRate = conversion.exchange_rate;
+            console.log(`✅ Converted: ${homeCurrencyAmount} ${homeCurrency} (rate: ${exchangeRate})`);
+          } catch (conversionError) {
+            console.error(`⚠️ Currency conversion failed, using original currency:`, conversionError);
+            // Fallback to original currency if conversion fails
+            homeCurrency = extractionResult.currency;
+            homeCurrencyAmount = extractionResult.total_amount;
+            exchangeRate = 1.0;
+          }
+        } else {
+          console.log(`💱 No conversion needed: receipt currency (${extractionResult.currency}) matches home currency`);
+        }
+
         // Create extraction metadata for storage
         const extractionMetadata = {
           extraction_method: 'ai',
@@ -692,9 +730,9 @@ export const extractReceiptData = task({
             vendor_name: extractionResult.vendor_name,
             total_amount: extractionResult.total_amount,
             original_currency: extractionResult.currency,
-            home_currency: extractionResult.currency,
-            home_currency_amount: extractionResult.total_amount,
-            exchange_rate: 1.0,
+            home_currency: homeCurrency,
+            home_currency_amount: homeCurrencyAmount,
+            exchange_rate: exchangeRate,
             transaction_date: extractionResult.transaction_date,
             reference_number: extractionResult.receipt_number || null,
             subtotal_amount: extractionResult.subtotal_amount || null,
@@ -729,10 +767,10 @@ export const extractReceiptData = task({
             business_purpose: extractionResult.business_purpose || 'Business expense',
             description: extractionResult.description || extractionResult.vendor_name,
             reference_number: extractionResult.receipt_number || null,
-            // Currency fields (no conversion, same as original)
-            home_currency: extractionResult.currency,
-            home_currency_amount: extractionResult.total_amount,
-            exchange_rate: 1.0,
+            // Currency fields (with conversion to business home currency)
+            home_currency: homeCurrency,
+            home_currency_amount: homeCurrencyAmount,
+            exchange_rate: exchangeRate,
           },
           confidence_score: extractionResult.confidence_score || undefined,
           extraction_method: 'ai',

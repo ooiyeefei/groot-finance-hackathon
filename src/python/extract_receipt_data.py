@@ -94,7 +94,9 @@ class ExtractedReceiptData(BaseModel):
     tax_amount: Optional[float] = Field(None, description="Total tax amount")
     receipt_number: Optional[str] = Field(None, description="Receipt, invoice, or reference number")
     line_items: List[ExtractedLineItem] = Field(default_factory=list, description="Individual purchased items")
-    selected_category: Optional[str] = Field(None, description="Selected expense category name")
+    selected_category: Optional[str] = Field(None, description="REQUIRED: Select ONE category_name from available_categories JSON list. Must EXACTLY match a category_name value provided.")
+    suggested_description: Optional[str] = Field(None, description="Concise expense description (2-5 words) based on vendor and items. E.g., 'Team lunch supplies', 'Office printer ink', 'Client meeting dinner'. Do NOT include date or amounts.")
+    suggested_business_purpose: Optional[str] = Field(None, description="Professional justification for this expense (1 sentence). E.g., 'Office supplies for Q1 inventory', 'Client entertainment for project kickoff', 'Team building meal'. Be specific to visible receipt content.")
     extraction_quality: Literal['high', 'medium', 'low'] = Field(..., description="Quality assessment")
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence score")
     dspy_confidence: float = Field(..., ge=0.0, le=1.0, description="DSPy model confidence")
@@ -118,13 +120,24 @@ class ScriptResponse(BaseModel):
 # DSPy Signature for receipt extraction
 class SimpleReceiptSignature(dspy.Signature):
     """Fast structured extraction for receipts with user-friendly error handling.
-    IMPORTANT: If the image quality is poor or critical information is missing, provide:
+
+    CATEGORY SELECTION (CRITICAL):
+    - Parse available_categories JSON to get the list of valid category names
+    - For selected_category, you MUST choose exactly one category_name from the list
+    - Match the receipt vendor/items to the most appropriate expense category
+
+    DESCRIPTION & BUSINESS PURPOSE (IMPORTANT):
+    - suggested_description: Concise 2-5 word summary (e.g., 'Office supplies purchase', 'Team lunch')
+    - suggested_business_purpose: Professional 1-sentence justification based on receipt content
+
+    ERROR HANDLING:
+    If the image quality is poor or critical information is missing, provide:
     1. A clear user_message explaining the issue
     2. Actionable suggestions for improvement (e.g., 'Take a clearer photo', 'Ensure entire receipt is visible')
     """
     receipt_image: dspy.Image = dspy.InputField(desc="Receipt image for analysis")
-    available_categories: str = dspy.InputField(desc="JSON list of available expense categories")
-    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with selected category, user_message for issues, and suggestions for improvement")
+    available_categories: str = dspy.InputField(desc="JSON list of available expense categories with category_name and id fields. Select ONE category_name for categorization.")
+    extracted_data: ExtractedReceiptData = dspy.OutputField(desc="Complete structured receipt data with: selected_category from available_categories, suggested_description (2-5 words), and suggested_business_purpose (1 sentence).")
 
 
 class ReceiptExtractor(dspy.Module):
@@ -180,6 +193,7 @@ class ReceiptExtractor(dspy.Module):
                 {"category_name": "Transportation & Travel", "id": "fallback_transport"},
                 {"category_name": "Other Business Expenses", "id": "fallback_other"}
             ]
+            print(f"⚠️ No business categories provided, using {len(fallback_categories)} fallback categories", file=sys.stderr)
             return json.dumps(fallback_categories)
 
         # Format business categories for LLM - uses 'id' (Convex document ID) for lookups
@@ -190,6 +204,10 @@ class ReceiptExtractor(dspy.Module):
             }
             for cat in business_categories
         ]
+
+        # Log category names for debugging
+        category_names = [c["category_name"] for c in formatted_categories]
+        print(f"🏷️ {len(formatted_categories)} business categories available: {category_names}", file=sys.stderr)
 
         return json.dumps(formatted_categories)
 
@@ -280,6 +298,14 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
         print(f"✅ DSPy extraction completed: {extracted_data.vendor_name}, {extracted_data.total_amount} {extracted_data.currency}", file=sys.stderr)
+        print(f"🏷️ DSPy selected category: '{extracted_data.selected_category}'", file=sys.stderr)
+
+        # Use AI-generated suggestions if available, otherwise fall back to templates
+        description = extracted_data.suggested_description or f"{extracted_data.vendor_name} expense"
+        business_purpose = extracted_data.suggested_business_purpose or f"Business expense at {extracted_data.vendor_name}"
+
+        print(f"📝 AI-generated description: '{description}'", file=sys.stderr)
+        print(f"📝 AI-generated business purpose: '{business_purpose}'", file=sys.stderr)
 
         # Convert to dictionary format expected by TypeScript
         result_data = {
@@ -287,9 +313,9 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
             "total_amount": extracted_data.total_amount,
             "currency": extracted_data.currency,
             "transaction_date": extracted_data.transaction_date,
-            "description": f"{extracted_data.vendor_name} - {extracted_data.transaction_date}",
+            "description": description,
             "suggested_category": extracted_data.selected_category,
-            "business_purpose": f"Business expense at {extracted_data.vendor_name}",
+            "business_purpose": business_purpose,
             "line_items": [
                 {
                     "description": item.description,
