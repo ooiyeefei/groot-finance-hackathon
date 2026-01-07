@@ -103,13 +103,10 @@ def handler(event: dict, context: DurableContext):
         DurableResult with workflow status and extracted data
     """
     # =================================================================
-    # Step 0: Parse and validate request
+    # Step 0: Parse and validate request (no checkpointing needed - fast/deterministic)
     # =================================================================
-    def parse_request():
-        return DocumentProcessingRequest.from_dict(event)
-
     try:
-        request = context.step(lambda ctx: parse_request(), name="parse_request")
+        request = DocumentProcessingRequest.from_dict(event)
     except Exception as e:
         error_msg = f"Invalid request: {str(e)}"
         print(f"[ERROR] {error_msg}")
@@ -129,6 +126,7 @@ def handler(event: dict, context: DurableContext):
 
     # =================================================================
     # Step 1: Fetch business categories (checkpointed)
+    # Note: Returns list of dicts (not BusinessCategory) for SDK serialization
     # =================================================================
     def fetch_categories():
         if not request.business_categories and request.business_id:
@@ -144,13 +142,14 @@ def handler(event: dict, context: DurableContext):
                         raw_categories = categories_data.get("customExpenseCategories", [])
                         print(f"[{doc_id}] Using expense categories for expense_claims: {len(raw_categories)} categories")
 
+                    # Return as dicts for SDK serialization (convert to BusinessCategory when needed)
                     categories = [
-                        BusinessCategory(
-                            name=cat.get("category_name", ""),
-                            code=cat.get("category_code"),
-                            keywords=cat.get("ai_keywords", []),
-                            vendor_patterns=cat.get("vendor_patterns", []),
-                        )
+                        {
+                            "name": cat.get("category_name", ""),
+                            "code": cat.get("category_code"),
+                            "keywords": cat.get("ai_keywords", []),
+                            "vendor_patterns": cat.get("vendor_patterns", []),
+                        }
                         for cat in raw_categories
                         if cat.get("is_active", True)
                     ]
@@ -158,9 +157,20 @@ def handler(event: dict, context: DurableContext):
                     return categories
             except Exception as cat_error:
                 print(f"[{doc_id}] Warning: Failed to fetch categories: {str(cat_error)}")
-        return request.business_categories or []
+        return []  # Return empty list (SDK can serialize this)
 
-    business_categories = context.step(lambda ctx: fetch_categories(), name="fetch_categories")
+    business_categories_raw = context.step(lambda ctx: fetch_categories(), name="fetch_categories")
+
+    # Convert to BusinessCategory objects for downstream use
+    business_categories = [
+        BusinessCategory(
+            name=cat.get("name", ""),
+            code=cat.get("code"),
+            keywords=cat.get("keywords", []),
+            vendor_patterns=cat.get("vendor_patterns", []),
+        )
+        for cat in business_categories_raw
+    ]
 
     try:
         # =================================================================
