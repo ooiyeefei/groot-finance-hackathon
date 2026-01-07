@@ -58,12 +58,27 @@ export const getDashboardAnalytics = query({
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
+    console.log(`[Analytics] Query params: businessId=${args.businessId}, startDate=${args.startDate}, endDate=${args.endDate}`);
+    console.log(`[Analytics] Found ${entries.length} entries for businessId`);
+
     // Filter by date range and active status
     const transactions = entries.filter((entry) => {
-      if (entry.deletedAt) return false;
-      if (!entry.transactionDate) return false;
-      return entry.transactionDate >= args.startDate && entry.transactionDate <= args.endDate;
+      if (entry.deletedAt) {
+        console.log(`[Analytics] Entry ${entry._id} filtered: deletedAt=${entry.deletedAt}`);
+        return false;
+      }
+      if (!entry.transactionDate) {
+        console.log(`[Analytics] Entry ${entry._id} filtered: missing transactionDate`);
+        return false;
+      }
+      const inRange = entry.transactionDate >= args.startDate && entry.transactionDate <= args.endDate;
+      if (!inRange) {
+        console.log(`[Analytics] Entry ${entry._id} filtered: transactionDate=${entry.transactionDate} not in range ${args.startDate} to ${args.endDate}`);
+      }
+      return inRange;
     });
+
+    console.log(`[Analytics] After filtering: ${transactions.length} transactions in date range`);
 
     // Calculate totals
     let totalIncome = 0;
@@ -77,12 +92,16 @@ export const getDashboardAnalytics = query({
       const currency = txn.homeCurrency || txn.originalCurrency || "SGD";
       const category = txn.category || "uncategorized";
 
+      console.log(`[Analytics] Processing txn ${txn._id}: type="${txn.transactionType}", amount=${amount}, homeCurrencyAmount=${txn.homeCurrencyAmount}, originalAmount=${txn.originalAmount}`);
+
       if (txn.transactionType === "Income") {
         totalIncome += amount;
       } else if (txn.transactionType === "Expense") {
         totalExpenses += Math.abs(amount);
       } else if (txn.transactionType === "Cost of Goods Sold") {
         totalCogs += Math.abs(amount);
+      } else {
+        console.log(`[Analytics] WARNING: Unknown transactionType "${txn.transactionType}" for txn ${txn._id}`);
       }
 
       // Currency breakdown (net by currency)
@@ -102,6 +121,8 @@ export const getDashboardAnalytics = query({
     }
 
     const netProfit = totalIncome - totalExpenses - totalCogs;
+
+    console.log(`[Analytics] FINAL TOTALS: income=${totalIncome}, expenses=${totalExpenses}, cogs=${totalCogs}, netProfit=${netProfit}`);
 
     return {
       userId: user._id,

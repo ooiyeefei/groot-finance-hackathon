@@ -71,7 +71,7 @@ export function useTransactionSummary(
       const transactionCount = transactions.length
 
       console.log(`Processing ${transactions.length} transactions for summary`) // Debug log
-      
+
       for (const transaction of transactions) {
         let amount = transaction.home_currency_amount || transaction.original_amount
         console.log(`Transaction: ${transaction.description}, Type: ${transaction.transaction_type}, Amount: ${amount}`) // Debug log
@@ -83,10 +83,14 @@ export function useTransactionSummary(
           amount = transaction.home_currency_amount || transaction.original_amount
         }
 
-        if (transaction.transaction_type === 'income') {
+        // Case-insensitive comparison for transaction types
+        const txnType = (transaction.transaction_type || '').toLowerCase()
+
+        if (txnType === 'income') {
           totalIncome += amount
-        } else if (transaction.transaction_type === 'expense') {
-          totalExpense += amount
+        } else if (txnType === 'expense' || txnType === 'cost of goods sold') {
+          // Both 'Expense' and 'Cost of Goods Sold' reduce profit
+          totalExpense += Math.abs(amount)
         }
         // Note: transfers are not included in income/expense totals
       }
