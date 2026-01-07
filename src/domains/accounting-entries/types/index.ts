@@ -153,6 +153,8 @@ export interface CreateAccountingEntryRequest {
   // ✅ POLYMORPHIC FIELDS: Support both invoices and expense_claims
   source_record_id?: string  // UUID that can reference invoices.id OR expense_claims.id
   source_document_type?: 'invoice' | 'expense_claim'  // Discriminator column
+  // ✅ BUSINESS CONTEXT: Injected by API route from user profile
+  business_id?: string  // Convex business ID for multi-tenancy filtering
 }
 
 export interface CreateLineItemRequest {

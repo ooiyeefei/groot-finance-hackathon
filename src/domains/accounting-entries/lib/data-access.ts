@@ -115,7 +115,8 @@ export async function createAccountingEntry(
       reference_number,
       line_items = [],
       source_record_id,
-      source_document_type
+      source_document_type,
+      business_id
     } = data
 
     // Validate required fields
@@ -311,6 +312,7 @@ export async function createAccountingEntry(
 
     // Call Convex create mutation
     const entryId = await client.mutation(api.functions.accountingEntries.create, {
+      businessId: business_id as Id<"businesses"> | undefined,  // ✅ Pass business context for multi-tenancy
       transactionType: transaction_type,
       category: finalCategory,
       subcategory: finalSubcategory,
@@ -358,7 +360,7 @@ export async function createAccountingEntry(
           const complianceTool = new CrossBorderTaxComplianceTool()
 
           const analysisResult = await complianceTool.execute({
-            accounting_entry_id: entryId as string,
+            transaction_id: entryId as string,
             amount: original_amount,
             original_currency: original_currency,
             home_currency: homeCurrency,
