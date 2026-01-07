@@ -247,6 +247,8 @@ export const getById = query({
 
     // Check business membership if businessId exists
     if (invoice.businessId) {
+      console.log(`[getById] Invoice ${args.id} has businessId: ${invoice.businessId}, checking membership...`);
+
       const membership = await ctx.db
         .query("business_memberships")
         .withIndex("by_userId_businessId", (q) =>
@@ -255,12 +257,16 @@ export const getById = query({
         .first();
 
       if (!membership || membership.status !== "active") {
+        console.log(`[getById] ACCESS DENIED: No active membership for user ${user._id} in business ${invoice.businessId}, invoice: ${args.id}, membership: ${membership ? membership.status : 'none'}`);
         return null;
       }
 
       // Role-based access
       const role = membership.role;
+      console.log(`[getById] User ${user._id} has role '${role}' in business ${invoice.businessId}`);
+
       if (role === "employee" && invoice.userId !== user._id) {
+        console.log(`[getById] ACCESS DENIED: Employee ${user._id} cannot access invoice ${args.id} owned by ${invoice.userId}`);
         return null;
       }
 
@@ -273,13 +279,17 @@ export const getById = query({
           .first();
 
         if (!submitterMembership || submitterMembership.managerId !== user._id) {
+          console.log(`[getById] ACCESS DENIED: Manager ${user._id} not direct manager of invoice owner ${invoice.userId}, invoice: ${args.id}`);
           return null;
         }
       }
 
+      console.log(`[getById] ACCESS GRANTED via business membership for invoice ${args.id}`);
       return invoice;
     }
 
+    // No businessId set and user doesn't own invoice
+    console.log(`[getById] ACCESS DENIED: Invoice ${args.id} has no businessId and user ${user._id} doesn't own it (owner: ${invoice.userId})`);
     return null;
   },
 });
