@@ -11,9 +11,7 @@ import { api } from '@/convex/_generated/api'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/services/currency-service'
 import { StoragePathBuilder, generateUniqueFilename, type DocumentType } from '@/lib/storage-paths'
-import { tasks } from '@trigger.dev/sdk/v3'
-import type { classifyDocument } from '@/trigger/classify-document'
-import type { convertPdfToImage } from '@/trigger/convert-pdf-to-image'
+import { invokeDocumentProcessor } from '@/lib/lambda-invoker'
 import {
   ExpenseClaim,
   ExpenseClaimStatus,
@@ -373,58 +371,39 @@ export async function createExpenseClaim(
         }
       })
 
-      // Trigger processing based on file type
+      // Trigger Lambda processing for AI mode
       if (request.processing_mode === 'ai') {
         try {
-          if (request.file.type === 'application/pdf') {
-            console.log(`[PDF Processing] Triggering PDF-to-image conversion for expense claim: ${claimId}`)
+          const fileType = request.file.type === 'application/pdf' ? 'pdf' : 'image'
+          console.log(`[Lambda Processing] Triggering document processor for expense claim: ${claimId} (${fileType})`)
 
-            triggerResult = await tasks.trigger<typeof convertPdfToImage>(
-              "convert-pdf-to-image",
-              {
-                documentId: claimId,
-                pdfStoragePath: standardizedFilePath,
-                documentDomain: 'expense_claims'
-              }
-            )
+          const lambdaResult = await invokeDocumentProcessor({
+            documentId: claimId,
+            domain: 'expense_claims',
+            storagePath: standardizedFilePath,
+            fileType: fileType as 'pdf' | 'image',
+            userId: employeeProfile.user_id,
+            businessId: employeeProfile.business_id,
+            idempotencyKey: `expense-${claimId}-${Date.now()}`,
+            expectedDocumentType: 'receipt',
+          })
 
-            await convexClient.mutation(api.functions.expenseClaims.update, {
-              id: claimId,
-              processingMetadata: {
-                ...processingMetadata,
-                pdf_conversion_job_id: triggerResult.id,
-                pdf_conversion_timestamp: new Date().toISOString(),
-                processing_stage: 'pdf_conversion'
-              }
-            })
+          await convexClient.mutation(api.functions.expenseClaims.update, {
+            id: claimId,
+            processingMetadata: {
+              ...processingMetadata,
+              lambda_execution_id: lambdaResult.executionId,
+              lambda_request_id: lambdaResult.requestId,
+              processing_timestamp: new Date().toISOString(),
+              processing_stage: 'lambda_invoked'
+            }
+          })
 
-            console.log(`[PDF Processing] PDF conversion job triggered: ${triggerResult.id}`)
+          console.log(`[Lambda Processing] Lambda invoked successfully: ${lambdaResult.executionId}`)
+          triggerResult = { id: lambdaResult.executionId }
 
-          } else {
-            console.log(`[Image Processing] Triggering document classification for expense claim: ${claimId}`)
-
-            triggerResult = await tasks.trigger<typeof classifyDocument>(
-              "classify-document",
-              {
-                documentId: claimId,
-                documentDomain: 'expense_claims'
-              }
-            )
-
-            await convexClient.mutation(api.functions.expenseClaims.update, {
-              id: claimId,
-              processingMetadata: {
-                ...processingMetadata,
-                classification_job_id: triggerResult.id,
-                classification_timestamp: new Date().toISOString(),
-                processing_stage: 'classification'
-              }
-            })
-
-            console.log(`[Image Processing] Classification job triggered: ${triggerResult.id}`)
-          }
-        } catch (triggerError) {
-          console.error('Failed to trigger processing:', triggerError)
+        } catch (lambdaError) {
+          console.error('Failed to invoke Lambda:', lambdaError)
           await convexClient.mutation(api.functions.expenseClaims.updateStatus, {
             id: claimId,
             status: 'failed'
@@ -434,7 +413,7 @@ export async function createExpenseClaim(
             processingMetadata: {
               ...processingMetadata,
               status: 'failed',
-              error_message: 'Failed to trigger background processing',
+              error_message: 'Failed to invoke document processing Lambda',
               error_timestamp: new Date().toISOString()
             }
           })
