@@ -40,7 +40,6 @@ interface AccountingEntriesClientProps {
   categories?: Array<{
     id: string
     category_name: string
-    category_code: string
     is_custom: boolean
   }>
   userId: string

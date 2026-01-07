@@ -112,7 +112,7 @@ class ReceiptExtractionSignature(dspy.Signature):
     )
 
     available_categories: str = dspy.InputField(
-        desc="JSON list of available expense categories with category_name and category_code"
+        desc="JSON list of available expense categories with category_name"
     )
 
     extracted_data: ReceiptData = dspy.OutputField(
@@ -164,7 +164,7 @@ def categorize_receipt_fallback(
         categories: Business expense categories (if available)
 
     Returns:
-        Category result with code, confidence, reasoning
+        Category result with category_name (for mapping to id), confidence, reasoning
     """
     # Build search text
     line_descriptions = " ".join([item.description for item in line_items])
@@ -172,7 +172,7 @@ def categorize_receipt_fallback(
 
     # Try business categories first
     if categories:
-        best_match = {"category": "", "confidence": 0.1, "reasoning": "No match"}
+        best_match = {"category_name": "", "confidence": 0.1, "reasoning": "No match"}
 
         for cat in categories:
             match_score = 0
@@ -190,7 +190,8 @@ def categorize_receipt_fallback(
 
             if match_score > best_match["confidence"]:
                 best_match = {
-                    "category": cat.code or cat.name,
+                    "category_name": cat.name,  # Return name, TypeScript maps to id
+                    "category_id": cat.id,  # Also include id if available
                     "confidence": min(match_score, 0.95),
                     "reasoning": f"Matched {', '.join(reasons)}",
                     "type": "business_expense",
@@ -199,10 +200,9 @@ def categorize_receipt_fallback(
         if best_match["confidence"] >= 0.2:
             return best_match
 
-    # Fallback to expense patterns
+    # Fallback to expense patterns (generic categories)
     best_expense = {
-        "category": "misc",
-        "name": "Miscellaneous",
+        "category_name": "Miscellaneous",
         "confidence": 0.3,
         "reasoning": "Default category",
         "type": "expense",
@@ -216,8 +216,7 @@ def categorize_receipt_fallback(
             confidence = min(match_score * pattern["confidence_base"], 0.95)
             if confidence > best_expense["confidence"]:
                 best_expense = {
-                    "category": pattern["code"],
-                    "name": pattern["name"],
+                    "category_name": pattern["name"],  # Use name for matching
                     "confidence": confidence,
                     "reasoning": f"Expense pattern match",
                     "type": "expense",
@@ -227,21 +226,25 @@ def categorize_receipt_fallback(
 
 
 def format_categories_for_llm(categories: Optional[List[BusinessCategory]]) -> str:
-    """Format business categories as JSON for LLM input."""
+    """Format business categories as JSON for LLM input.
+
+    Note: We only send category_name to the LLM. The LLM will return the
+    selected category_name, which we then map to the category id for storage.
+    This simplifies the flow: LLM returns name → we lookup id → store id.
+    """
     if not categories:
+        # Fallback categories - these will be matched by name in data-access.ts
         fallback_categories = [
-            {"category_name": "Office Supplies", "category_code": "office_supplies"},
-            {"category_name": "Business Meals & Entertainment", "category_code": "entertainment"},
-            {"category_name": "Transportation & Travel", "category_code": "transport"},
-            {"category_name": "Other Business Expenses", "category_code": "other"}
+            {"category_name": "Office Supplies"},
+            {"category_name": "Business Meals & Entertainment"},
+            {"category_name": "Transportation & Travel"},
+            {"category_name": "Other Business Expenses"}
         ]
         return json.dumps(fallback_categories)
 
+    # Only send names to LLM - the TypeScript layer handles name→id mapping
     formatted = [
-        {
-            "category_name": cat.name,
-            "category_code": cat.code or cat.name.lower().replace(" ", "_")
-        }
+        {"category_name": cat.name}
         for cat in categories
     ]
     return json.dumps(formatted)
@@ -381,6 +384,7 @@ def extract_receipt_step(
         ]
 
         # Use LLM-selected category or fallback to pattern matching
+        # Note: expense_category is now the category_name, which TypeScript maps to id
         expense_category = extracted.expense_category
         category_confidence = 0.9  # High confidence if LLM selected
 
@@ -391,7 +395,7 @@ def extract_receipt_step(
                 line_items=line_items,
                 categories=categories,
             )
-            expense_category = category_result["category"]
+            expense_category = category_result["category_name"]  # Now uses category_name
             category_confidence = category_result["confidence"]
             print(f"[{document_id}] Category fallback: {expense_category}")
         else:

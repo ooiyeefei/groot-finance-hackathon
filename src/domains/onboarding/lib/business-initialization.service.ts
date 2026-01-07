@@ -112,7 +112,6 @@ async function generateBusinessCategories(
     return {
       cogsCategories: cogsCategoryNames.map((name, index) => ({
         category_name: name,
-        category_code: name.toUpperCase().replace(/[^A-Z0-9]+/g, '_'),
         description: `${name} category`,
         vendor_patterns: [],
         ai_keywords: [name.toLowerCase()],
@@ -121,7 +120,6 @@ async function generateBusinessCategories(
       })),
       expenseCategories: expenseCategoryNames.map((name, index) => ({
         category_name: name,
-        category_code: name.toUpperCase().replace(/[^A-Z0-9]+/g, '_'),
         description: `${name} category`,
         vendor_patterns: [],
         ai_keywords: [name.toLowerCase()],

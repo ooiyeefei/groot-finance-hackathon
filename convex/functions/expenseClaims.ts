@@ -1043,14 +1043,13 @@ export const getReportData = query({
     const customCategories = (business.customExpenseCategories as Array<{
       id: string;
       category_name: string;
-      category_code: string;
       description?: string;
     }>) || [];
 
-    // Build category lookup
+    // Build category lookup (keyed by id, returns category_name)
     const categoryLookup: Record<string, string> = {};
     for (const cat of customCategories) {
-      categoryLookup[cat.category_code] = cat.category_name;
+      categoryLookup[cat.id] = cat.category_name;
     }
 
     return {
@@ -1174,24 +1173,23 @@ export const getFormattedReportData = query({
     const customCategories = (business.customExpenseCategories as Array<{
       id: string;
       category_name: string;
-      category_code: string;
       accounting_category?: string;
     }>) || [];
 
     const categoryLookup: Record<string, { name: string; accountingCategory?: string }> = {};
     for (const cat of customCategories) {
-      categoryLookup[cat.category_code] = {
+      categoryLookup[cat.id] = {
         name: cat.category_name,
         accountingCategory: cat.accounting_category,
       };
     }
 
-    // Group by category for formatted sections
+    // Group by category for formatted sections (keyed by category id)
     const categorySections: Record<
       string,
       {
         categoryName: string;
-        categoryCode: string;
+        categoryId: string;
         accountingCategory: string;
         claims: typeof enrichedClaims;
         totalAmount: number;
@@ -1199,22 +1197,22 @@ export const getFormattedReportData = query({
     > = {};
 
     for (const claim of enrichedClaims) {
-      const categoryCode = claim.expenseCategory || "UNCATEGORIZED";
-      const categoryInfo = categoryLookup[categoryCode];
+      const categoryId = claim.expenseCategory || "UNCATEGORIZED";
+      const categoryInfo = categoryLookup[categoryId];
 
-      if (!categorySections[categoryCode]) {
-        categorySections[categoryCode] = {
+      if (!categorySections[categoryId]) {
+        categorySections[categoryId] = {
           categoryName: categoryInfo?.name || "Uncategorized",
-          categoryCode,
+          categoryId,
           accountingCategory: categoryInfo?.accountingCategory || "Expenses",
           claims: [],
           totalAmount: 0,
         };
       }
 
-      categorySections[categoryCode].claims.push(claim);
+      categorySections[categoryId].claims.push(claim);
       const amount = claim.homeCurrencyAmount ?? claim.totalAmount ?? 0;
-      categorySections[categoryCode].totalAmount += amount;
+      categorySections[categoryId].totalAmount += amount;
     }
 
     // Calculate totals
@@ -1353,13 +1351,12 @@ export const getExportClaims = query({
     const customCategories = (business.customExpenseCategories as Array<{
       id: string;
       category_name: string;
-      category_code: string;
       accounting_category?: string;
     }>) || [];
 
     const categoryLookup: Record<string, { name: string; accountingCategory?: string }> = {};
     for (const cat of customCategories) {
-      categoryLookup[cat.category_code] = {
+      categoryLookup[cat.id] = {
         name: cat.category_name,
         accountingCategory: cat.accounting_category,
       };

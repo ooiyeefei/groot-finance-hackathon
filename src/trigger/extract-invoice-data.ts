@@ -37,10 +37,10 @@ const DOMAIN_S3_PREFIX_MAP: Record<string, S3Prefix> = {
 };
 
 // Helper function to transform Convex categories to DynamicExpenseCategory format
+// Note: Categories use 'id' (Convex document ID) for identification
 function transformCategoriesToDynamic(categories: Array<{
-  id?: string;
+  id: string;
   category_name: string;
-  category_code: string;
   description?: string;
   cost_type?: string;
   vendor_patterns?: string[];
@@ -52,9 +52,8 @@ function transformCategoriesToDynamic(categories: Array<{
     .filter((category) => category.is_active !== false)
     .sort((a, b) => (a.sort_order || 99) - (b.sort_order || 99))
     .map((category) => ({
-      id: category.id || category.category_code,
+      id: category.id,
       category_name: category.category_name,
-      category_code: category.category_code,
       description: category.description,
       cost_type: category.cost_type, // COGS-specific field
       vendor_patterns: category.vendor_patterns || [],
@@ -81,9 +80,9 @@ function categorizeExpenseWithDynamicCategories(
   const industryContext = extractionData.industry_context || extractionData.document_summary?.industry_context || '';
   
   const text = `${vendorName} ${documentType} ${industryContext}`.toLowerCase();
-  
+
   let bestMatch = {
-    category: categories[0].category_code,
+    category: categories[0].id,
     confidence: 0.1,
     reasoning: 'No pattern matches found'
   };
@@ -115,9 +114,9 @@ function categorizeExpenseWithDynamicCategories(
     
     if (matchScore > bestMatch.confidence) {
       bestMatch = {
-        category: category.category_code,
+        category: category.id,
         confidence: Math.min(matchScore, 0.95),
-        reasoning: matchReasons.length > 0 
+        reasoning: matchReasons.length > 0
           ? `Matched ${matchReasons.join(', ')}`
           : 'Pattern match detected'
       };
@@ -127,7 +126,7 @@ function categorizeExpenseWithDynamicCategories(
   // Return best match with fallback
   if (bestMatch.confidence < 0.2) {
     return {
-      category: categories[0].category_code,
+      category: categories[0].id,
       confidence: 0.15,
       reasoning: `Defaulted to "${categories[0].category_name}" - no clear pattern match`
     };
@@ -139,7 +138,7 @@ function categorizeExpenseWithDynamicCategories(
 // IFRS accounting category auto-categorization using pattern matching (fallback only)
 function categorizeWithIFRSAccountingCategories(
   extractionData: any
-): { category_code: string; category_name: string; confidence: number; reasoning: string } {
+): { id: string; category_name: string; confidence: number; reasoning: string } {
   // Extract text data for pattern matching
   const vendorName = extractionData.vendor_name || extractionData.document_summary?.vendor_name || '';
   const documentType = extractionData.document_type || extractionData.document_summary?.document_type || '';
@@ -152,49 +151,49 @@ function categorizeWithIFRSAccountingCategories(
   // IFRS category patterns based on Otto's IFRS recommendations
   const ifrsPatterns = [
     {
-      category_code: 'travel_entertainment',
+      id: 'travel_entertainment',
       category_name: 'Travel & Entertainment',
       patterns: ['flight', 'airline', 'hotel', 'accommodation', 'airbnb', 'taxi', 'uber', 'grab', 'travel', 'booking', 'restaurant', 'food', 'meal', 'dining', 'cafe', 'coffee', 'lunch', 'dinner'],
       confidence_base: 0.8
     },
     {
-      category_code: 'utilities_communications',
+      id: 'utilities_communications',
       category_name: 'Utilities & Communications',
       patterns: ['electricity', 'water', 'internet', 'phone', 'telecommunications', 'utility', 'power', 'gas'],
       confidence_base: 0.85
     },
     {
-      category_code: 'marketing_advertising',
+      id: 'marketing_advertising',
       category_name: 'Marketing & Advertising',
       patterns: ['advertising', 'promotion', 'facebook', 'google ads', 'social media', 'banner', 'marketing services', 'marketing agency'],
       confidence_base: 0.8
     },
     {
-      category_code: 'software_subscriptions',
+      id: 'software_subscriptions',
       category_name: 'Software & Subscriptions',
       patterns: ['software', 'subscription', 'saas', 'cloud', 'license', 'app', 'digital'],
       confidence_base: 0.85
     },
     {
-      category_code: 'professional_services',
+      id: 'professional_services',
       category_name: 'Professional Services',
       patterns: ['consulting', 'legal', 'accounting', 'audit', 'lawyer', 'consultant', 'professional'],
       confidence_base: 0.85
     },
     {
-      category_code: 'rent_facilities',
+      id: 'rent_facilities',
       category_name: 'Rent & Facilities',
       patterns: ['rent', 'lease', 'facility', 'office space', 'warehouse'],
       confidence_base: 0.9
     },
     {
-      category_code: 'insurance',
+      id: 'insurance',
       category_name: 'Insurance',
       patterns: ['insurance', 'policy', 'coverage', 'premium'],
       confidence_base: 0.9
     },
     {
-      category_code: 'taxes_licenses',
+      id: 'taxes_licenses',
       category_name: 'Taxes & Licenses',
       patterns: ['tax', 'license', 'permit', 'registration', 'government fee'],
       confidence_base: 0.9
@@ -202,7 +201,7 @@ function categorizeWithIFRSAccountingCategories(
   ];
 
   let bestMatch = {
-    category_code: 'other_operating',
+    id: 'other_operating',
     category_name: 'Other Operating Expenses',
     confidence: 0.1,
     reasoning: 'No clear pattern match - defaulted to other operating expenses'
@@ -224,7 +223,7 @@ function categorizeWithIFRSAccountingCategories(
       const confidence = Math.min(matchScore * pattern.confidence_base, 0.95);
       if (confidence > bestMatch.confidence) {
         bestMatch = {
-          category_code: pattern.category_code,
+          id: pattern.id,
           category_name: pattern.category_name,
           confidence,
           reasoning: `Matched IFRS patterns: ${matchedTerms.join(', ')}`
@@ -398,7 +397,7 @@ export const extractInvoiceData = task({
               console.log(`🏷️ Found ${businessCategories.length} enabled COGS categories for invoice categorization`);
 
               if (businessCategories.length > 0) {
-                console.log(`🏷️ COGS Categories Overview:`, businessCategories.map(cat => `${cat.category_code}: ${cat.category_name}`).join(', '));
+                console.log(`🏷️ COGS Categories Overview:`, businessCategories.map(cat => `${cat.id}: ${cat.category_name}`).join(', '));
 
                 // Summary logging for AI processing
                 const totalKeywords = businessCategories.reduce((sum, cat) => sum + (cat.ai_keywords?.length || 0), 0);
@@ -826,7 +825,7 @@ def main():
         print("🎯 USING BUSINESS COGS CATEGORIES FOR AI SELECTION", file=sys.stderr)
         print("📋 Business Categories Details:", file=sys.stderr)
         for i, cat in enumerate(business_categories):
-            print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+            print(f"   {i+1}. {cat.get('id', 'NO-ID')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
             if cat.get('ai_keywords'):
                 print(f"      Keywords: {', '.join(cat['ai_keywords'])}", file=sys.stderr)
             if cat.get('vendor_patterns'):
@@ -883,7 +882,7 @@ def main():
                 print(f"📋 Category Type: BUSINESS COGS CATEGORIES", file=sys.stderr)
                 print(f"📋 Total Categories Sent: {len(business_categories)}", file=sys.stderr)
                 for i, cat in enumerate(business_categories):
-                    print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+                    print(f"   {i+1}. {cat.get('id', 'NO-ID')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
                     if cat.get('ai_keywords'):
                         print(f"      🔍 AI Keywords: {', '.join(cat['ai_keywords'])}", file=sys.stderr)
                     if cat.get('vendor_patterns'):
@@ -901,7 +900,7 @@ def main():
                 print(f"📋 Total Categories Sent: {len(ifrs_categories)}", file=sys.stderr)
                 print(f"📋 Reason: No business COGS categories available or non-invoice document", file=sys.stderr)
                 for i, cat in enumerate(ifrs_categories):
-                    print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+                    print(f"   {i+1}. {cat.get('id', 'NO-ID')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
                 print(f"📊 === END GEMINI CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
                 gemini_result = process_document_with_ifrs_ai(
                     document_image=document_image,  # Use dspy.Image object instead of PIL
@@ -991,7 +990,7 @@ def main():
                     print(f"📋 Category Type: BUSINESS COGS CATEGORIES", file=sys.stderr)
                     print(f"📋 Total Categories Sent: {len(business_categories)}", file=sys.stderr)
                     for i, cat in enumerate(business_categories):
-                        print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+                        print(f"   {i+1}. {cat.get('id', 'NO-ID')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
                         if cat.get('ai_keywords'):
                             print(f"      🔍 AI Keywords: {', '.join(cat['ai_keywords'])}", file=sys.stderr)
                         if cat.get('vendor_patterns'):
@@ -1009,7 +1008,7 @@ def main():
                     print(f"📋 Total Categories Sent: {len(ifrs_categories)}", file=sys.stderr)
                     print(f"📋 Reason: No business COGS categories available or non-invoice document", file=sys.stderr)
                     for i, cat in enumerate(ifrs_categories):
-                        print(f"   {i+1}. {cat.get('category_code', 'NO-CODE')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
+                        print(f"   {i+1}. {cat.get('id', 'NO-ID')}: {cat.get('category_name', 'NO-NAME')}", file=sys.stderr)
                     print(f"📊 === END VLLM CATEGORY INPUT (FALLBACK) ===", file=sys.stderr)
                     vllm_result = process_document_with_ifrs_ai(
                         document_image=document_image,  # Use dspy.Image object instead of PIL
@@ -1263,18 +1262,18 @@ print(json.dumps(result))
         // Use COGS categories for invoice categorization
         const businessCategoryResult = categorizeExpenseWithDynamicCategories(finalExtractionData, businessCategories);
         selectedCategory = {
-          category_code: businessCategoryResult.category,
-          category_name: businessCategories.find(cat => cat.category_code === businessCategoryResult.category)?.category_name || businessCategoryResult.category,
+          id: businessCategoryResult.category,
+          category_name: businessCategories.find(cat => cat.id === businessCategoryResult.category)?.category_name || businessCategoryResult.category,
           confidence: businessCategoryResult.confidence,
           reasoning: businessCategoryResult.reasoning
         };
-        console.log(`📊 COGS Category: ${selectedCategory.category_code} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
+        console.log(`📊 COGS Category: ${selectedCategory.id} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
         console.log(`📊 COGS Reasoning: ${selectedCategory.reasoning}`);
       } else {
         console.log(`📊 Performing IFRS categorization for ${payload.documentDomain}...`);
         // Use IFRS categories for non-invoice domains or when no business categories available
         selectedCategory = categorizeWithIFRSAccountingCategories(finalExtractionData);
-        console.log(`📊 IFRS Category: ${selectedCategory.category_code} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
+        console.log(`📊 IFRS Category: ${selectedCategory.id} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
         console.log(`📊 IFRS Reasoning: ${selectedCategory.reasoning}`);
       }
 
@@ -1308,7 +1307,7 @@ print(json.dumps(result))
         // Add calculated due date
         due_date: calculatedDueDate,
         // Add smart categorization (business COGS or IFRS fallback)
-        suggested_category: selectedCategory.category_code,
+        suggested_category: selectedCategory.id,
         accounting_category: selectedCategory.category_name,
         category_confidence: selectedCategory.confidence,
         category_reasoning: selectedCategory.reasoning,
@@ -1316,7 +1315,7 @@ print(json.dumps(result))
         // Store category selection metadata
         category_selection: {
           selected_category_type: payload.documentDomain === 'invoices' && businessCategories.length > 0 ? 'business_cogs' : 'ifrs',
-          category_code: selectedCategory.category_code,
+          id: selectedCategory.id,
           category_name: selectedCategory.category_name,
           confidence: selectedCategory.confidence,
           reasoning: selectedCategory.reasoning
@@ -1338,7 +1337,7 @@ print(json.dumps(result))
           requires_validation: finalExtractionData.requires_validation,
           category_suggestion: {
             selected_category_type: payload.documentDomain === 'invoices' && businessCategories.length > 0 ? 'business_cogs' : 'ifrs',
-            category: selectedCategory.category_code,
+            category: selectedCategory.id,
             accounting_category: selectedCategory.category_name,
             confidence: selectedCategory.confidence,
             reasoning: selectedCategory.reasoning
@@ -1346,7 +1345,7 @@ print(json.dumps(result))
         }
       };
 
-      console.log(`📊 Storing selected category in extracted_data: ${selectedCategory.category_code} -> ${selectedCategory.category_name}`);
+      console.log(`📊 Storing selected category in extracted_data: ${selectedCategory.id} -> ${selectedCategory.category_name}`);
 
       // ✅ CONVEX MIGRATION: Use Convex helper instead of Supabase
       const extractionResult: ExtractionResult = {
@@ -1370,7 +1369,7 @@ print(json.dumps(result))
         success: true,
         documentId: payload.documentId,
         confidence: finalExtractionData.confidence_score,
-        suggested_category: selectedCategory.category_code,
+        suggested_category: selectedCategory.id,
         accounting_category: selectedCategory.category_name,
         requiresValidation: finalExtractionData.requires_validation,
         backend: finalExtractionData.backend_used,
@@ -1653,7 +1652,7 @@ print(json.dumps(result))
           console.log(`📊 Performing standard IFRS accounting categorization (vLLM fallback)...`);
           const selectedCategory = categorizeWithIFRSAccountingCategories(vllmExtractionData);
 
-          console.log(`📊 vLLM IFRS Accounting Category: ${selectedCategory.category_code} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
+          console.log(`📊 vLLM IFRS Accounting Category: ${selectedCategory.id} -> ${selectedCategory.category_name} (${(selectedCategory.confidence * 100).toFixed(1)}%)`);
           console.log(`📊 vLLM Reasoning: ${selectedCategory.reasoning}`);
 
           // Prepare final vLLM AI result with standard IFRS categorization only
@@ -1686,7 +1685,7 @@ print(json.dumps(result))
             // Add calculated due date
             due_date: vllmCalculatedDueDate,
             // Add standard IFRS accounting categorization (Documents page - accounting purpose)
-            suggested_category: selectedCategory.category_code,
+            suggested_category: selectedCategory.id,
             accounting_category: selectedCategory.category_name,
             category_confidence: selectedCategory.confidence,
             category_reasoning: selectedCategory.reasoning,
@@ -1708,7 +1707,7 @@ print(json.dumps(result))
               requires_validation: vllmExtractionData.requires_validation,
               category_suggestion: {
                 selected_category_type: 'ifrs', // vLLM fallback typically uses IFRS categories
-                category: selectedCategory.category_code,
+                category: selectedCategory.id,
                 accounting_category: selectedCategory.category_name,
                 confidence: selectedCategory.confidence,
                 reasoning: selectedCategory.reasoning
@@ -1718,7 +1717,7 @@ print(json.dumps(result))
             }
           };
 
-          console.log(`📊 Storing vLLM fallback category in extracted_data: ${selectedCategory.category_code} -> ${selectedCategory.category_name}`);
+          console.log(`📊 Storing vLLM fallback category in extracted_data: ${selectedCategory.id} -> ${selectedCategory.category_name}`);
 
           // ✅ CONVEX MIGRATION: Use Convex helper instead of Supabase
           const vllmExtractionResult: ExtractionResult = {
@@ -1742,7 +1741,7 @@ print(json.dumps(result))
             success: true,
             documentId: payload.documentId,
             confidence: vllmExtractionData.confidence_score,
-            suggested_category: selectedCategory.category_code,
+            suggested_category: selectedCategory.id,
             accounting_category: selectedCategory.category_name,
             requiresValidation: vllmExtractionData.requires_validation,
             backend: vllmExtractionData.backend_used,

@@ -262,12 +262,12 @@ export async function updateExtractionTaskId(
 
 /**
  * Business categories returned from Convex
+ * Note: Categories use 'id' (Convex document ID) for identification
  */
 export interface BusinessCategories {
   customExpenseCategories: Array<{
-    id?: string;
+    id: string;
     category_name: string;
-    category_code: string;
     description?: string;
     vendor_patterns?: string[];
     ai_keywords?: string[];
@@ -275,9 +275,8 @@ export interface BusinessCategories {
     sort_order?: number;
   }>;
   customCogsCategories: Array<{
-    id?: string;
+    id: string;
     category_name: string;
-    category_code: string;
     description?: string;
     cost_type?: string;
     vendor_patterns?: string[];

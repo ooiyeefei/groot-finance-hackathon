@@ -113,7 +113,7 @@ export default function UnifiedExpenseDetailsModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDocument, setShowDocument] = useState(false)
-  const [categories, setCategories] = useState<Array<{business_category_code: string, business_category_name: string}>>([])
+  const [categories, setCategories] = useState<Array<{id: string, category_name: string}>>([])
   const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null)
   const [imageLoading, setImageLoading] = useState(false)
   const [approvalNotes, setApprovalNotes] = useState('')
@@ -553,7 +553,7 @@ export default function UnifiedExpenseDetailsModal({
                                 Category
                               </label>
                               <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded text-sm">
-                                {categories.find(c => c.business_category_code === (claimDetails.expense_category || claimDetails.transaction?.expense_category))?.business_category_name ||
+                                {categories.find(c => c.id === (claimDetails.expense_category || claimDetails.transaction?.expense_category))?.category_name ||
                                  claimDetails.expense_category || claimDetails.transaction?.expense_category || 'N/A'}
                               </div>
                             </div>

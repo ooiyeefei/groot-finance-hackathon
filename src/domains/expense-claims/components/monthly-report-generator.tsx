@@ -59,7 +59,7 @@ interface CategoryLineItem {
 
 interface CategorySection {
   categoryName: string
-  categoryCode: string
+  categoryId: string
   accountingCategory: string
   lineItems: CategoryLineItem[]
   subtotal: number
@@ -113,7 +113,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
     { id: 'current', name: 'My Reports' }
   ])
   const [loadingEmployees, setLoadingEmployees] = useState(false)
-  const [categories, setCategories] = useState<Array<{business_category_code: string, business_category_name: string}>>([])
+  const [categories, setCategories] = useState<Array<{id: string, category_name: string}>>([])
   const [loadingCategories, setLoadingCategories] = useState(true)
   const [activePreview, setActivePreview] = useState<'summary' | 'formatted' | null>(null)
 

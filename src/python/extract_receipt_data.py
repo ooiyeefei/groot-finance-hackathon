@@ -172,18 +172,21 @@ class ReceiptExtractor(dspy.Module):
     def _format_categories_for_llm(self, business_categories: List[Dict] = None) -> str:
         """Format business categories as JSON for LLM"""
         if not business_categories:
+            # Fallback categories when no business categories provided
+            # Note: Using 'id' instead of 'category_code' for consistency with Convex schema
             fallback_categories = [
-                {"category_name": "Office Supplies", "category_code": "office_supplies"},
-                {"category_name": "Business Meals & Entertainment", "category_code": "entertainment"},
-                {"category_name": "Transportation & Travel", "category_code": "transport"},
-                {"category_name": "Other Business Expenses", "category_code": "other"}
+                {"category_name": "Office Supplies", "id": "fallback_office_supplies"},
+                {"category_name": "Business Meals & Entertainment", "id": "fallback_entertainment"},
+                {"category_name": "Transportation & Travel", "id": "fallback_transport"},
+                {"category_name": "Other Business Expenses", "id": "fallback_other"}
             ]
             return json.dumps(fallback_categories)
 
+        # Format business categories for LLM - uses 'id' (Convex document ID) for lookups
         formatted_categories = [
             {
                 "category_name": cat.get('category_name', cat.get('name', 'Unknown')),
-                "category_code": cat.get('category_code', cat.get('code', 'other'))
+                "id": cat.get('id', cat.get('_id', 'unknown'))
             }
             for cat in business_categories
         ]

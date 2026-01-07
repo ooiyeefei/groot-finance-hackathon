@@ -62,18 +62,18 @@ export default function AccountingEntriesList({
   const formatDate = (dateString: string) => formatBusinessDate(dateString)
 
   // Format category name - supports both dynamic categories and hardcoded ones - same logic as edit form
-  const formatCategoryName = (categoryCode: string, accountingEntryType?: TransactionType) => {
-    if (!categoryCode) return 'Unknown Category'
+  const formatCategoryName = (categoryId: string, accountingEntryType?: TransactionType) => {
+    if (!categoryId) return 'Unknown Category'
 
     if (accountingEntryType === 'Cost of Goods Sold') {
-      const cogsCategory = cogsCategories.find(cat => cat.category_code === categoryCode)
-      return cogsCategory ? cogsCategory.category_name : categoryCode
+      const cogsCategory = cogsCategories.find(cat => cat.id === categoryId)
+      return cogsCategory ? cogsCategory.category_name : categoryId
     } else if (accountingEntryType === 'Expense') {
-      const expenseCategory = expenseCategories.find(cat => cat.category_code === categoryCode)
-      return expenseCategory ? expenseCategory.category_name : categoryCode
+      const expenseCategory = expenseCategories.find(cat => cat.id === categoryId)
+      return expenseCategory ? expenseCategory.category_name : categoryId
     } else {
       // Fallback to formatted hardcoded category names for Income and other types
-      return categoryCode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      return categoryId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
     }
   }
 
@@ -139,12 +139,12 @@ export default function AccountingEntriesList({
   const getDynamicCategories = () => {
     if (selectedType === 'Expense') {
       return expenseCategories.map(cat => ({
-        code: cat.category_code,
+        code: cat.id,
         name: cat.category_name
       }))
     } else if (selectedType === 'Cost of Goods Sold') {
       return cogsCategories.map(cat => ({
-        code: cat.category_code,
+        code: cat.id,
         name: cat.category_name
       }))
     } else {

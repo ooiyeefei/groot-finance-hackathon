@@ -5,8 +5,9 @@
  * auto-categorization accuracy:
  * - vendor_patterns: Common vendor name patterns for matching
  * - ai_keywords: Keywords to help AI classify expenses
- * - category_code: Auto-generated code from category name
  * - description: Brief description of what belongs in the category
+ *
+ * Note: Categories use 'id' (Convex document ID) for identification, not category_code.
  *
  * @module ai-category-generator
  *
@@ -23,7 +24,6 @@
  * console.log(metadata[0]);
  * // {
  * //   category_name: "Food Ingredients",
- * //   category_code: "FOOD_INGREDIENTS",
  * //   vendor_patterns: ["SYSCO", "*Foods*", "*Wholesale*", ...],
  * //   ai_keywords: ["flour", "rice", "vegetables", "meat", ...],
  * //   description: "Raw food materials used in meal preparation...",
@@ -38,12 +38,11 @@ import { getBusinessTypeConfig, type BusinessType } from './business-type-defaul
 
 /**
  * Category metadata enhanced with AI-generated patterns and keywords
+ * Note: Categories use Convex document ID for identification, not category_code.
  */
 export interface CategoryMetadata {
   /** Original category name provided by user */
   category_name: string
-  /** Auto-generated code in UPPER_SNAKE_CASE format */
-  category_code: string
   /** Brief description of what belongs in this category */
   description: string
   /** Common vendor name patterns for auto-categorization (5-10 patterns) */
@@ -57,26 +56,6 @@ export interface CategoryMetadata {
 }
 
 /**
- * Generate UPPER_SNAKE_CASE code from category name
- *
- * @param name - Category name (e.g., "Food Ingredients")
- * @returns Snake case code (e.g., "FOOD_INGREDIENTS")
- *
- * @example
- * ```typescript
- * generateCategoryCode("Food Ingredients"); // "FOOD_INGREDIENTS"
- * generateCategoryCode("Office Supplies & Equipment"); // "OFFICE_SUPPLIES_EQUIPMENT"
- * generateCategoryCode("Travel-Accommodation"); // "TRAVEL_ACCOMMODATION"
- * ```
- */
-export function generateCategoryCode(name: string): string {
-  return name
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_') // Replace non-alphanumeric with underscore
-    .replace(/^_+|_+$/g, '') // Remove leading/trailing underscores
-}
-
-/**
  * Generate fallback metadata when AI fails or returns invalid data
  *
  * @param categoryNames - Array of category names
@@ -87,7 +66,6 @@ function generateFallbackMetadata(categoryNames: string[]): CategoryMetadata[] {
 
   return categoryNames.map((name, index) => ({
     category_name: name,
-    category_code: generateCategoryCode(name),
     description: `${name} category`,
     vendor_patterns: [],
     ai_keywords: [name.toLowerCase()],
@@ -207,7 +185,6 @@ function parseGeminiResponse(
       if (aiData) {
         result.push({
           category_name: name,
-          category_code: generateCategoryCode(name),
           description: aiData.description,
           vendor_patterns: aiData.vendor_patterns || [],
           ai_keywords: aiData.ai_keywords || [],
@@ -219,7 +196,6 @@ function parseGeminiResponse(
         console.warn(`[AI-CategoryGenerator] Missing AI data for category: ${name}`)
         result.push({
           category_name: name,
-          category_code: generateCategoryCode(name),
           description: `${name} category`,
           vendor_patterns: [],
           ai_keywords: [name.toLowerCase()],

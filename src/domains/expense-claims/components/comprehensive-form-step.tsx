@@ -92,8 +92,8 @@ export default function ComprehensiveFormStep({
   const [activeTab, setActiveTab] = useState('basic')
   const [newAttendee, setNewAttendee] = useState('')
   const [categories, setCategories] = useState<Array<{
-    business_category_code: string
-    business_category_name: string
+    id: string
+    category_name: string
     requires_receipt: boolean
     receipt_threshold?: number
     policy_limit?: number
@@ -151,7 +151,7 @@ export default function ComprehensiveFormStep({
   }
 
   // Policy compliance check using database categories
-  const categoryInfo = categories.find(c => c.business_category_code === formData.expense_category)
+  const categoryInfo = categories.find(c => c.id === formData.expense_category)
   const exceedsLimit = categoryInfo?.policy_limit && formData.original_amount > categoryInfo.policy_limit
   // Check for receipt via business_purpose_details instead of document_id
   const hasReceipt = formData.business_purpose_details?.file_upload?.file_path
@@ -277,8 +277,8 @@ export default function ComprehensiveFormStep({
                 </SelectTrigger>
                 <SelectContent className="bg-gray-700 border-gray-600">
                   {categories.map((category) => (
-                    <SelectItem key={category.business_category_code} value={category.business_category_code} className="text-white">
-                      {category.business_category_name}
+                    <SelectItem key={category.id} value={category.id} className="text-white">
+                      {category.category_name}
                     </SelectItem>
                   ))}
                   {categories.length === 0 && !loadingCategories && (
@@ -562,7 +562,7 @@ export default function ComprehensiveFormStep({
                 <Card className="bg-gray-700 border-gray-600">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-white text-base">
-                      {categoryInfo.business_category_name} Policy
+                      {categoryInfo.category_name} Policy
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">

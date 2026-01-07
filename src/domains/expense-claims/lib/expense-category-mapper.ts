@@ -92,7 +92,7 @@ const CATEGORY_MAPPING: Record<string, string> = {
 }
 
 export interface ExpenseCategoryInfo {
-  business_category_code: string
+  business_category_id: string
   business_category_name: string
   accounting_category: string
   description?: string
@@ -145,13 +145,13 @@ export function mapExpenseCategoryToAccounting(
 }
 
 /**
- * Gets business expense category details by code
+ * Gets business expense category details by ID
  * Used for validation and enriched transaction data
  * Uses Convex to fetch business categories
  */
 export async function getBusinessExpenseCategory(
   businessId: string,
-  categoryCode: string
+  categoryId: string
 ): Promise<ExpenseCategoryInfo | null> {
   try {
     const { client } = await getAuthenticatedConvex()
@@ -169,23 +169,24 @@ export async function getBusinessExpenseCategory(
       return null
     }
 
-    // Find the specific category by code
+    // Find the specific category by id
     const category = categories.find((cat: {
-      category_code: string
+      id: string
       category_name: string
       description?: string
       requires_receipt?: boolean
       requires_manager_approval?: boolean
-    }) => cat.category_code === categoryCode)
+    }) => cat.id === categoryId)
 
     if (!category) {
       return null
     }
 
-    const accountingCategory = mapExpenseCategoryToAccounting(categoryCode)
+    // Use category_name for accounting category mapping (fallback pattern matching)
+    const accountingCategory = mapExpenseCategoryToAccounting(category.category_name)
 
     return {
-      business_category_code: category.category_code,
+      business_category_id: category.id,
       business_category_name: category.category_name,
       accounting_category: accountingCategory,
       description: category.description,
@@ -225,15 +226,15 @@ export async function getBusinessExpenseCategories(
 
     // Transform to ExpenseCategoryInfo format
     return categories.map((category: {
-      category_code: string
+      id: string
       category_name: string
       description?: string
       requires_receipt?: boolean
       requires_manager_approval?: boolean
     }) => ({
-      business_category_code: category.category_code,
+      business_category_id: category.id,
       business_category_name: category.category_name,
-      accounting_category: mapExpenseCategoryToAccounting(category.category_code),
+      accounting_category: mapExpenseCategoryToAccounting(category.category_name),
       description: category.description,
       requires_receipt: category.requires_receipt,
       requires_manager_approval: category.requires_manager_approval
@@ -246,12 +247,12 @@ export async function getBusinessExpenseCategories(
 }
 
 /**
- * Validates if a category code exists and is active for a business
+ * Validates if a category id exists and is active for a business
  */
 export async function isValidExpenseCategory(
   businessId: string,
-  categoryCode: string
+  categoryId: string
 ): Promise<boolean> {
-  const category = await getBusinessExpenseCategory(businessId, categoryCode)
+  const category = await getBusinessExpenseCategory(businessId, categoryId)
   return category !== null
 }

@@ -234,7 +234,7 @@ function ExpenseSummaryCompact({ formData, receiptInfo, categories }: ExpenseSum
         <div className="flex justify-between items-center py-0.5 text-sm border-b border-border">
           <span className="text-muted-foreground">Category</span>
           <span className="text-foreground text-sm">
-            {categories.find(c => c.category_code === formData.expense_category)?.category_name || 'Not specified'}
+            {categories.find(c => c.id === formData.expense_category)?.category_name || 'Not specified'}
           </span>
         </div>
         <div className="flex justify-between items-center py-0.5 text-sm">
@@ -395,7 +395,7 @@ export default function ExpenseFormFields({
                     </SelectItem>
                   ) : categories.length > 0 ? (
                     categories.map((category) => (
-                      <SelectItem key={category.category_code} value={category.category_code} className="text-foreground">
+                      <SelectItem key={category.id} value={category.id} className="text-foreground">
                         {category.category_name}
                       </SelectItem>
                     ))

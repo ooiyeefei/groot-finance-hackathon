@@ -120,7 +120,6 @@ export async function getEnabledCategories(businessId: string): Promise<{
   data?: Array<{
     id: string
     category_name: string
-    category_code: string
     is_custom: boolean
   }>
   error?: string
@@ -148,7 +147,6 @@ export async function getEnabledCategories(businessId: string): Promise<{
     const mappedCategories = (categories || []).map(cat => ({
       id: cat.id,
       category_name: cat.category_name,
-      category_code: cat.category_code,
       is_custom: true // Categories from customExpenseCategories are always custom
     }))
 

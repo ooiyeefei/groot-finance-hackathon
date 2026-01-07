@@ -12,7 +12,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 export interface COGSCategory {
   id: string
   category_name: string
-  category_code: string
   description?: string
   cost_type: 'direct' | 'indirect'
   is_active: boolean
@@ -23,7 +22,6 @@ export interface COGSCategory {
 
 export interface COGSCategoryFormData {
   category_name: string
-  category_code: string
   description: string
   cost_type: 'direct' | 'indirect'
   ai_keywords: string
@@ -51,7 +49,6 @@ export default function COGSCategoryFormModal({
 }: COGSCategoryFormModalProps) {
   const [formData, setFormData] = useState<COGSCategoryFormData>({
     category_name: '',
-    category_code: '',
     description: '',
     cost_type: 'direct',
     ai_keywords: '',
@@ -68,7 +65,6 @@ export default function COGSCategoryFormModal({
       if (editingCategory) {
         setFormData({
           category_name: editingCategory.category_name,
-          category_code: editingCategory.category_code,
           description: editingCategory.description || '',
           cost_type: editingCategory.cost_type,
           ai_keywords: editingCategory.ai_keywords.join(', '),
@@ -80,7 +76,6 @@ export default function COGSCategoryFormModal({
         // Reset to default values for new category
         setFormData({
           category_name: '',
-          category_code: '',
           description: '',
           cost_type: 'direct',
           ai_keywords: '',
@@ -118,10 +113,6 @@ export default function COGSCategoryFormModal({
 
     if (!formData.category_name.trim()) {
       errors.category_name = 'Category name is required'
-    }
-
-    if (!formData.category_code.trim()) {
-      errors.category_code = 'Category code is required'
     }
 
     if (formData.sort_order < 0) {
@@ -212,36 +203,19 @@ export default function COGSCategoryFormModal({
               <div className="space-y-4">
                 <h4 className="text-sm font-medium text-foreground">Basic Information</h4>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="category_name">Category Name *</Label>
-                    <Input
-                      id="category_name"
-                      value={formData.category_name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, category_name: e.target.value }))}
-                      placeholder="e.g., Materials & Supplies"
-                      className="mt-1"
-                      disabled={isLoading}
-                    />
-                    {validationErrors.category_name && (
-                      <p className="text-destructive text-xs mt-1">{validationErrors.category_name}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="category_code">Category Code *</Label>
-                    <Input
-                      id="category_code"
-                      value={formData.category_code}
-                      onChange={(e) => setFormData(prev => ({ ...prev, category_code: e.target.value }))}
-                      placeholder="e.g., 615-000"
-                      className="font-mono mt-1"
-                      disabled={isLoading}
-                    />
-                    {validationErrors.category_code && (
-                      <p className="text-destructive text-xs mt-1">{validationErrors.category_code}</p>
-                    )}
-                  </div>
+                <div>
+                  <Label htmlFor="category_name">Category Name *</Label>
+                  <Input
+                    id="category_name"
+                    value={formData.category_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, category_name: e.target.value }))}
+                    placeholder="e.g., Materials & Supplies"
+                    className="mt-1"
+                    disabled={isLoading}
+                  />
+                  {validationErrors.category_name && (
+                    <p className="text-destructive text-xs mt-1">{validationErrors.category_name}</p>
+                  )}
                 </div>
 
                 <div>

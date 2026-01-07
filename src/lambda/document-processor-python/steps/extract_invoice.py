@@ -138,7 +138,7 @@ class InvoiceExtractionSignature(dspy.Signature):
     )
 
     available_categories: str = dspy.InputField(
-        desc="JSON list of available COGS/expense categories with category_name and category_code"
+        desc="JSON list of available COGS/expense categories with category_name"
     )
 
     extracted_data: InvoiceData = dspy.OutputField(
@@ -195,7 +195,7 @@ def categorize_invoice(
         categories: Business categories (if available)
 
     Returns:
-        Category result with code, confidence, reasoning
+        Category result with category_name (for mapping to id), confidence, reasoning
     """
     # Build search text
     line_descriptions = " ".join([item.description for item in line_items])
@@ -203,7 +203,7 @@ def categorize_invoice(
 
     # Try business categories first
     if categories:
-        best_match = {"category": "", "confidence": 0.1, "reasoning": "No match"}
+        best_match = {"category_name": "", "confidence": 0.1, "reasoning": "No match"}
 
         for cat in categories:
             match_score = 0
@@ -223,7 +223,8 @@ def categorize_invoice(
 
             if match_score > best_match["confidence"]:
                 best_match = {
-                    "category": cat.code or cat.name,
+                    "category_name": cat.name,  # Return name, TypeScript maps to id
+                    "category_id": cat.id,  # Also include id if available
                     "confidence": min(match_score, 0.95),
                     "reasoning": f"Matched {', '.join(reasons)}",
                     "type": "business_cogs",
@@ -232,10 +233,9 @@ def categorize_invoice(
         if best_match["confidence"] >= 0.2:
             return best_match
 
-    # Fallback to IFRS patterns
+    # Fallback to IFRS patterns (generic categories)
     best_ifrs = {
-        "category": "other_operating",
-        "name": "Other Operating Expenses",
+        "category_name": "Other Operating Expenses",
         "confidence": 0.1,
         "reasoning": "No pattern match - defaulted",
         "type": "ifrs",
@@ -247,8 +247,7 @@ def categorize_invoice(
             confidence = min(match_score * pattern["confidence_base"], 0.95)
             if confidence > best_ifrs["confidence"]:
                 best_ifrs = {
-                    "category": pattern["code"],
-                    "name": pattern["name"],
+                    "category_name": pattern["name"],  # Use name for matching
                     "confidence": confidence,
                     "reasoning": f"IFRS pattern match",
                     "type": "ifrs",
@@ -258,23 +257,26 @@ def categorize_invoice(
 
 
 def format_categories_for_llm(categories: Optional[List[BusinessCategory]]) -> str:
-    """Format business categories as JSON for LLM input."""
+    """Format business categories as JSON for LLM input.
+
+    Note: We only send category_name to the LLM. The LLM will return the
+    selected category_name, which we then map to the category id for storage.
+    This simplifies the flow: LLM returns name → we lookup id → store id.
+    """
     if not categories:
-        # Fallback COGS categories for invoices
+        # Fallback COGS categories - matched by name in data-access.ts
         fallback_categories = [
-            {"category_name": "Cost of Goods Sold", "category_code": "cogs"},
-            {"category_name": "Office Supplies", "category_code": "office_supplies"},
-            {"category_name": "Software & Subscriptions", "category_code": "software"},
-            {"category_name": "Professional Services", "category_code": "professional_services"},
-            {"category_name": "Other Operating Expenses", "category_code": "other_operating"},
+            {"category_name": "Cost of Goods Sold"},
+            {"category_name": "Office Supplies"},
+            {"category_name": "Software & Subscriptions"},
+            {"category_name": "Professional Services"},
+            {"category_name": "Other Operating Expenses"},
         ]
         return json.dumps(fallback_categories)
 
+    # Only send names to LLM - the TypeScript layer handles name→id mapping
     formatted = [
-        {
-            "category_name": cat.name,
-            "category_code": cat.code or cat.name.lower().replace(" ", "_")
-        }
+        {"category_name": cat.name}
         for cat in categories
     ]
     return json.dumps(formatted)
@@ -416,6 +418,7 @@ def extract_invoice_step(
         ]
 
         # Use LLM-selected category or fallback to pattern matching
+        # Note: suggested_category is now the category_name, which TypeScript maps to id
         suggested_category = extracted.suggested_category
         category_confidence = 0.9  # High confidence if LLM selected
 
@@ -426,7 +429,7 @@ def extract_invoice_step(
                 line_items=line_items,
                 categories=categories,
             )
-            suggested_category = category_result["category"]
+            suggested_category = category_result["category_name"]  # Now uses category_name
             category_confidence = category_result["confidence"]
             print(f"[{document_id}] Category fallback: {suggested_category}")
         else:

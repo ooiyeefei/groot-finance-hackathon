@@ -31,7 +31,7 @@ interface CategoryLineItem {
 
 interface CategorySection {
   categoryName: string          // "TRAVELLING & ACCOMMODATION"
-  categoryCode: string          // "TRAVEL"
+  categoryId: string            // Convex document ID
   accountingCategory: string    // "travel_transport"
   lineItems: CategoryLineItem[]
   subtotal: number             // Category total
@@ -224,8 +224,8 @@ export async function GET(request: NextRequest) {
 
       categorySections.push({
         categoryName: section.categoryName,
-        categoryCode: section.categoryCode,
-        accountingCategory: section.accountingCategory || mapExpenseCategoryToAccounting(section.categoryCode),
+        categoryId: section.categoryId,
+        accountingCategory: section.accountingCategory || mapExpenseCategoryToAccounting(section.categoryId),
         lineItems,
         subtotal: section.totalAmount,
         currency: convexHeader.homeCurrency

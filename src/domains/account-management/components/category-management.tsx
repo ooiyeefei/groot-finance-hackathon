@@ -20,7 +20,6 @@ import COGSCategoryManagement from '@/domains/invoices/components/cogs-category-
 interface ExpenseCategory {
   id: string
   category_name: string
-  category_code: string
   description?: string
   is_active: boolean
   parent_category_id?: string
@@ -197,7 +196,6 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
 
   const filteredCategories = categories.filter(category =>
     category.category_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    category.category_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
     category.description?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -311,7 +309,6 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h4 className="text-white font-medium">{category.category_name}</h4>
-                          <p className="text-blue-400 text-sm font-mono">{category.category_code}</p>
                           {category.description && (
                             <p className="text-gray-400 text-sm mt-1">{category.description}</p>
                           )}
