@@ -234,10 +234,19 @@ def handler(event: dict, context: DurableContext):
             if conversion_result.get("status") == "success" and conversion_result.get("first_image_path"):
                 print(f"[{doc_id}] Updating Convex with converted image path")
                 first_image = conversion_result.get("images", [{}])[0]
+
+                # Strip domain prefix - API will add it back via buildS3Key()
+                # Lambda stores: invoices/business_id/user_id/doc_id/converted/page_1.png
+                # Convex needs: business_id/user_id/doc_id/converted/page_1.png
+                first_image_path = conversion_result.get("first_image_path", "")
+                domain_prefix = f"{request.domain}/"
+                if first_image_path.startswith(domain_prefix):
+                    first_image_path = first_image_path[len(domain_prefix):]
+
                 convex.update_converted_image(
                     document_id=doc_id,
                     domain=request.domain,
-                    converted_image_path=conversion_result.get("first_image_path", ""),
+                    converted_image_path=first_image_path,
                     width=first_image.get("width"),
                     height=first_image.get("height"),
                     page_metadata=conversion_result.get("page_metadata"),
