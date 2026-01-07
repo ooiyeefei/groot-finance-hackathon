@@ -156,42 +156,26 @@ export async function createAccountingEntry(
 
     // For 'Cost of Goods Sold', also include custom business COGS categories
     if (transaction_type === 'Cost of Goods Sold') {
-      console.log(`[Accounting Entries Data Access] 🔍 COGS Validation: Looking for category '${category}'`)
-      console.log(`[Accounting Entries Data Access] 🔍 Hardcoded COGS categories: ${validCategories.join(', ')}`)
-
       try {
         // Get user's business_id for COGS category lookup
         const employeeProfile = await ensureUserProfile(userId)
-        if (!employeeProfile) {
-          console.warn('[Accounting Entries Data Access] ⚠️ Failed to get employee profile for COGS categories')
-        } else {
-          console.log(`[Accounting Entries Data Access] 🔍 Employee profile found, business_id: ${employeeProfile.business_id}`)
-
+        if (employeeProfile) {
           // Fetch custom COGS categories from user's business
           const customCogsCategories = await client.query(api.functions.businesses.getEnabledCogsCategories, {
             businessId: employeeProfile.business_id
           })
 
-          console.log(`[Accounting Entries Data Access] 🔍 Custom COGS query returned: ${customCogsCategories?.length ?? 0} categories`)
-
           if (customCogsCategories && customCogsCategories.length > 0) {
             const customCodes = customCogsCategories.map((cat: any) => cat.category_code || cat.id)
             const customNames = customCogsCategories.map((cat: any) => cat.name || cat.category_name)
 
-            console.log(`[Accounting Entries Data Access] 🔍 Custom COGS codes: ${customCodes.join(', ')}`)
-
             validCategories = [...validCategories, ...customCodes]
             validCategoryNames = [...validCategoryNames, ...customNames]
-            console.log(`[Accounting Entries Data Access] Including ${customCogsCategories.length} custom COGS categories in validation`)
-          } else {
-            console.log(`[Accounting Entries Data Access] ⚠️ No custom COGS categories found for business`)
           }
         }
       } catch (error) {
         console.warn('[Accounting Entries Data Access] Failed to fetch custom COGS categories, using defaults:', error)
       }
-
-      console.log(`[Accounting Entries Data Access] 🔍 Final valid COGS categories: ${validCategories.join(', ')}`)
     }
 
     let finalCategory = category
@@ -234,19 +218,34 @@ export async function createAccountingEntry(
         finalSubcategory = category
         console.log(`[Accounting Entries Data Access] Mapped subcategory '${category}' to parent category '${matchedParent}'`)
       } else {
-        // Invalid category
-        console.error(`[Accounting Entries Data Access] Invalid category '${category}' for type '${transaction_type}'. Valid categories:`, validCategories)
-        return {
-          success: false,
-          error: `Invalid category '${category}' for accounting entry type '${transaction_type}'. Valid categories: ${validCategoryNames.join(', ')}`
+        // Fallback to default category instead of failing
+        // This handles cases where LLM suggests a category that doesn't exist
+        const defaultCategories: Record<string, string> = {
+          'Income': 'sales_revenue',
+          'Cost of Goods Sold': 'cost_of_goods_sold',
+          'Expense': 'other'
+        }
+        const fallbackCategory = defaultCategories[transaction_type] || validCategories[0]
+
+        if (fallbackCategory && validCategories.includes(fallbackCategory)) {
+          finalCategory = fallbackCategory
+          console.warn(`[Accounting Entries Data Access] Invalid category '${category}' - using fallback '${fallbackCategory}'`)
+        } else if (validCategories.length > 0) {
+          // Use first available category as last resort
+          finalCategory = validCategories[0]
+          console.warn(`[Accounting Entries Data Access] Invalid category '${category}' - using first available '${validCategories[0]}'`)
+        } else {
+          // No valid categories available at all
+          console.error(`[Accounting Entries Data Access] No valid categories available for type '${transaction_type}'`)
+          return {
+            success: false,
+            error: `No valid categories available for accounting entry type '${transaction_type}'`
+          }
         }
       }
     } else {
       // Use the correctly-cased category from database
       finalCategory = matchedCategory
-      if (matchedCategory !== category) {
-        console.log(`[Accounting Entries Data Access] ✅ Case-insensitive match: '${category}' → '${matchedCategory}'`)
-      }
     }
 
     // Use the submitted home currency from the form
