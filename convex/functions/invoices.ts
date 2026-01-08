@@ -130,9 +130,12 @@ export const list = query({
             )
             .first();
 
+          // Only include linked transaction if it's not soft-deleted
+          const isLinkedTransactionActive = linkedEntry && !linkedEntry.deletedAt;
+
           return {
             ...invoice,
-            linkedTransaction: linkedEntry
+            linkedTransaction: isLinkedTransactionActive
               ? {
                   id: linkedEntry._id,
                   description: linkedEntry.description || "",
@@ -188,9 +191,12 @@ export const list = query({
           )
           .first();
 
+        // Only include linked transaction if it's not soft-deleted
+        const isLinkedTransactionActive = linkedEntry && !linkedEntry.deletedAt;
+
         return {
           ...invoice,
-          linkedTransaction: linkedEntry
+          linkedTransaction: isLinkedTransactionActive
             ? {
                 id: linkedEntry._id,
                 description: linkedEntry.description || "",
