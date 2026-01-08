@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { Camera, Upload, X, Loader2, AlertCircle } from "lucide-react";
+import { ImagePlus, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { domToPng } from "modern-screenshot";
 
 interface ScreenshotButtonProps {
   onScreenshot: (file: File | null) => void;
@@ -12,70 +11,18 @@ interface ScreenshotButtonProps {
 }
 
 /**
- * ScreenshotButton - Captures screenshot or allows file upload
+ * ScreenshotButton - Upload screenshot/image attachment
  *
- * Provides two options:
- * 1. Capture current page screenshot using modern-screenshot
- * 2. Upload an image file from device
+ * Users can upload images (screenshots taken with OS tools or other images)
+ * to help illustrate their feedback.
  */
 export function ScreenshotButton({
   onScreenshot,
   currentScreenshot,
   disabled = false,
 }: ScreenshotButtonProps) {
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const captureScreenshot = useCallback(async () => {
-    setIsCapturing(true);
-    setCaptureError(null);
-
-    try {
-      // Hide any feedback UI elements during capture
-      const feedbackElements = document.querySelectorAll("[data-feedback-ui]");
-      feedbackElements.forEach((el) => {
-        (el as HTMLElement).style.visibility = "hidden";
-      });
-
-      // Capture the page using modern-screenshot
-      const dataUrl = await domToPng(document.body, {
-        scale: 1,
-        quality: 0.9,
-        filter: (element) => {
-          // Skip feedback UI elements
-          if (element instanceof HTMLElement) {
-            return !element.hasAttribute("data-feedback-ui");
-          }
-          return true;
-        },
-      });
-
-      // Restore feedback UI visibility
-      feedbackElements.forEach((el) => {
-        (el as HTMLElement).style.visibility = "visible";
-      });
-
-      // Convert data URL to File
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      const file = new File([blob], `screenshot-${Date.now()}.png`, {
-        type: "image/png",
-      });
-
-      onScreenshot(file);
-    } catch (error) {
-      console.error("[Screenshot] Capture failed:", error);
-      setCaptureError("Screenshot failed. Please upload an image instead.");
-      // Restore feedback UI visibility on error
-      const feedbackElements = document.querySelectorAll("[data-feedback-ui]");
-      feedbackElements.forEach((el) => {
-        (el as HTMLElement).style.visibility = "visible";
-      });
-    } finally {
-      setIsCapturing(false);
-    }
-  }, [onScreenshot]);
 
   const handleFileUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,17 +31,17 @@ export function ScreenshotButton({
 
       // Validate file type
       if (!file.type.startsWith("image/")) {
-        setCaptureError("Please select an image file");
+        setError("Please select an image file");
         return;
       }
 
       // Validate file size (max 2MB)
       if (file.size > 2 * 1024 * 1024) {
-        setCaptureError("Image must be under 2MB");
+        setError("Image must be under 2MB");
         return;
       }
 
-      setCaptureError(null);
+      setError(null);
       onScreenshot(file);
 
       // Reset input for re-selection
@@ -111,14 +58,14 @@ export function ScreenshotButton({
 
   const removeScreenshot = useCallback(() => {
     onScreenshot(null);
-    setCaptureError(null);
+    setError(null);
   }, [onScreenshot]);
 
   // Show attached image
   if (currentScreenshot) {
     return (
       <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-        <Camera className="h-4 w-4 text-muted-foreground" />
+        <ImagePlus className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm text-foreground flex-1 truncate">
           {currentScreenshot.name}
         </span>
@@ -142,48 +89,25 @@ export function ScreenshotButton({
   return (
     <div className="space-y-2">
       {/* Error message */}
-      {captureError && (
+      {error && (
         <div className="flex items-center gap-2 p-2 bg-destructive/10 text-destructive rounded-md text-sm">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          <span>{captureError}</span>
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Two button options */}
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={captureScreenshot}
-          disabled={disabled || isCapturing}
-          className="flex-1"
-        >
-          {isCapturing ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Capturing...
-            </>
-          ) : (
-            <>
-              <Camera className="h-4 w-4 mr-2" />
-              Screenshot
-            </>
-          )}
-        </Button>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={triggerFileUpload}
-          disabled={disabled || isCapturing}
-          className="flex-1"
-        >
-          <Upload className="h-4 w-4 mr-2" />
-          Upload Image
-        </Button>
-      </div>
+      {/* Upload button */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={triggerFileUpload}
+        disabled={disabled}
+        className="w-full"
+      >
+        <ImagePlus className="h-4 w-4 mr-2" />
+        Add Image
+      </Button>
 
       {/* Hidden file input */}
       <input
