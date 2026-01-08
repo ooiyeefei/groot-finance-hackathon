@@ -69,7 +69,7 @@ export interface DocumentContext {
   fileSize: number
   buffer: Buffer
   userId?: string
-  imageUrl?: string  // For converted PDFs stored in Supabase
+  imageUrl?: string  // For converted PDFs stored in AWS S3
 }
 
 // Processing Error with context
