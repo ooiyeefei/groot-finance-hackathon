@@ -1,7 +1,15 @@
 import createNextIntlPlugin from 'next-intl/plugin';
 import { withSentryConfig } from "@sentry/nextjs";
+import withSerwistInit from '@serwist/next';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
+
+// PWA Service Worker configuration (Task T006)
+const withSerwist = withSerwistInit({
+  swSrc: 'src/lib/pwa/sw.ts',
+  swDest: 'public/sw.js',
+  disable: process.env.NODE_ENV === 'development',
+});
 
 // Bundle analyzer - only in dev mode
 const withBundleAnalyzer = require('@next/bundle-analyzer')({
@@ -190,8 +198,9 @@ const sentryWebpackPluginOptions = {
   automaticVercelMonitors: true,
 };
 
-// Apply Sentry wrapper last to ensure source maps are processed correctly
+// Apply wrappers in order: Serwist (innermost) → NextIntl → BundleAnalyzer → Sentry (outermost)
+// Serwist processes the service worker, Sentry processes source maps last
 export default withSentryConfig(
-  withBundleAnalyzer(withNextIntl(nextConfig)),
+  withBundleAnalyzer(withNextIntl(withSerwist(nextConfig))),
   sentryWebpackPluginOptions
 );

@@ -1,6 +1,5 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { useTranslations } from 'next-intl'
 import { getTranslations } from 'next-intl/server'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
@@ -9,6 +8,7 @@ import { GeneralDisclaimer } from '@/components/ui/financial-disclaimer'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { UpgradeBanner } from '@/domains/billing/components/upgrade-banner'
+import { MobileAppShell } from '@/components/ui/mobile-app-shell'
 
 export default async function Dashboard({ params }: { params: Promise<{ locale: string }> }) {
   // Server-side authentication check
@@ -57,37 +57,39 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
 
   return (
     <ClientProviders>
-      <div className="flex h-screen bg-background">
-        {/* Sidebar */}
-        <Sidebar />
+      <MobileAppShell locale={locale}>
+        <div className="flex h-screen bg-background">
+          {/* Sidebar - hidden on mobile, visible on sm+ */}
+          <Sidebar />
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col">
-          {/* Header */}
-          <HeaderWithUser
-            title={t('title')}
-            subtitle={t('subtitle')}
-          />
+          {/* Main Content */}
+          <div className="flex-1 flex flex-col">
+            {/* Header */}
+            <HeaderWithUser
+              title={t('title')}
+              subtitle={t('subtitle')}
+            />
 
-          {/* Main Content Area */}
-          <main className="flex-1 overflow-auto p-4 sm:p-6">
-            <div className="max-w-7xl mx-auto">
-              {/* Upgrade Banner for Free Plan Users */}
-              <UpgradeBanner />
+            {/* Main Content Area - extra bottom padding on mobile for bottom nav */}
+            <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
+              <div className="max-w-7xl mx-auto">
+                {/* Upgrade Banner for Free Plan Users */}
+                <UpgradeBanner />
 
-              {/* Complete Financial Dashboard with Charts */}
-              <CompleteDashboard />
-            </div>
-          </main>
+                {/* Complete Financial Dashboard with Charts */}
+                <CompleteDashboard />
+              </div>
+            </main>
 
-          {/* Footer Disclaimer */}
-          <footer className="border-t border-border p-4">
-            <div className="max-w-7xl mx-auto">
-              <GeneralDisclaimer />
-            </div>
-          </footer>
+            {/* Footer Disclaimer - hidden on mobile to save space */}
+            <footer className="hidden sm:block border-t border-border p-4">
+              <div className="max-w-7xl mx-auto">
+                <GeneralDisclaimer />
+              </div>
+            </footer>
+          </div>
         </div>
-      </div>
+      </MobileAppShell>
     </ClientProviders>
   )
 }

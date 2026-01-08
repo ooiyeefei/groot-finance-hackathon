@@ -18,6 +18,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "FinanSEAL - Financial Co-Pilot",
   description: "Multi-modal financial assistant for Southeast Asian SMEs",
+  // PWA manifest link (Task T009)
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

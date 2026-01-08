@@ -22,6 +22,7 @@ const MonthlyReportGenerator = lazy(() => import('./monthly-report-generator'))
 const GoogleSheetsExport = lazy(() => import('./google-sheets-export'))
 const DocumentPreviewWithAnnotations = lazy(() => import('@/domains/invoices/components/document-preview-with-annotations'))
 const UnifiedExpenseDetailsModal = lazy(() => import('./unified-expense-details-modal'))
+const MobileApprovalList = lazy(() => import('./mobile-approval-list'))
 
 interface EnhancedApprovalDashboardProps {
   userId: string
@@ -487,15 +488,24 @@ function ManagementSummaryCard({ title, value, icon, variant }: {
   )
 }
 
-// Approval Tab Content - Just the approval list without duplicate stats
+// Approval Tab Content - Responsive: mobile list on small screens, desktop grid on larger
 function ApprovalTabContent({ data, onRefreshNeeded }: {
   data: ManagementDashboardData
   onRefreshNeeded: () => void
 }) {
   return (
     <div className="space-y-section-gap">
-      {/* Just the approval list - stats are already shown above */}
-      <ApprovalsList onRefreshNeeded={onRefreshNeeded} />
+      {/* Mobile: Use MobileApprovalList with swipe gestures */}
+      <div className="sm:hidden">
+        <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
+          <MobileApprovalList onRefreshNeeded={onRefreshNeeded} />
+        </Suspense>
+      </div>
+
+      {/* Desktop: Use standard ApprovalsList with grid layout */}
+      <div className="hidden sm:block">
+        <ApprovalsList onRefreshNeeded={onRefreshNeeded} />
+      </div>
     </div>
   )
 }
