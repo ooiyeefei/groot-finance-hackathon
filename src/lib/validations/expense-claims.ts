@@ -47,7 +47,9 @@ export const processingModeSchema = z.enum(['ai', 'manual'], {
  */
 export const lineItemSchema = z.object({
   item_description: z.string().min(1, 'Item description is required').max(500),
+  item_code: z.string().max(100).optional(),
   quantity: z.number().positive('Quantity must be positive'),
+  unit_measurement: z.string().max(50).optional(),
   unit_price: nonNegativeAmountSchema,
   total_amount: nonNegativeAmountSchema,
   currency: currencySchema,

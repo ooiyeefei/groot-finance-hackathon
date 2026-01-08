@@ -356,14 +356,6 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
   const vendorName = mappedData.vendor_name || 'Unknown Vendor'
   mappedData.description = `${vendorName} - ${document.file_name.replace(/\.[^/.]+$/, "")}`
 
-  // DEBUG: Log category-related fields to trace data flow
-  console.log('[Mapper Debug] document.id:', document.id)
-  console.log('[Mapper Debug] extractedData keys:', Object.keys(extractedData || {}))
-  console.log('[Mapper Debug] suggested_category:', extractedData?.suggested_category)
-  console.log('[Mapper Debug] selected_category:', extractedData?.selected_category)
-  console.log('[Mapper Debug] accounting_category:', extractedData?.accounting_category)
-  console.log('[Mapper Debug] category_confidence:', extractedData?.category_confidence)
-
   // Category assignment - prioritize AI-selected category from business definitions
   // AI should return valid business COGS category codes (MATERIALS, LABOR, SUBCONTRACT, etc.)
   if (extractedData.suggested_category) {
@@ -404,6 +396,7 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
       const itemCode = structuredItem.item_code?.value || structuredItem.item_code || undefined
       const quantity = parseFloat(structuredItem.quantity?.value || structuredItem.quantity || '1') || 1
       const unitMeasurement = structuredItem.unit_measurement?.value || structuredItem.unit_of_measure || structuredItem.unit_measurement || undefined
+
       const unitPrice = parseAmount(structuredItem.unit_price?.value || structuredItem.unit_price || '0')
       const lineTotal = parseAmount(structuredItem.line_total?.value || structuredItem.line_total || '0')
       // Calculate unit price from line total if unit price is 0 but line total exists
