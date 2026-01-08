@@ -86,6 +86,7 @@ export function FeedbackForm({
 
   const characterCount = message.length;
   const isOverLimit = characterCount > MESSAGE_MAX_LENGTH;
+  const isBelowMinimum = message.trim().length > 0 && message.trim().length < MESSAGE_MIN_LENGTH;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -135,8 +136,11 @@ export function FeedbackForm({
           className="min-h-[120px] bg-input border-border text-foreground resize-none"
         />
         <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">
-            Minimum {MESSAGE_MIN_LENGTH} characters
+          <span className={isBelowMinimum ? "text-destructive font-medium" : "text-muted-foreground"}>
+            {isBelowMinimum
+              ? `Please write at least ${MESSAGE_MIN_LENGTH} characters (${MESSAGE_MIN_LENGTH - message.trim().length} more needed)`
+              : `Minimum ${MESSAGE_MIN_LENGTH} characters`
+            }
           </span>
           <span
             className={isOverLimit ? "text-destructive" : "text-muted-foreground"}
