@@ -14,9 +14,14 @@ const AgedReceivablesWidget = lazy(() => import('./AgedReceivablesWidget'));
 const AgedPayablesWidget = lazy(() => import('./AgedPayablesWidget'));
 
 // Loading component for Suspense fallbacks
-const ComponentLoader = ({ title }: { title: string }) => (
-  <div className="bg-card text-card-foreground border rounded-lg p-card-padding">
-    <div className="flex items-center justify-center h-32">
+// CLS FIX: Height must match actual component heights to prevent layout shift
+// Chart widgets: ~340px (h-64 chart + header + padding)
+// Use min-h to reserve space while content loads
+const ComponentLoader = ({ title, height = 'chart' }: { title: string; height?: 'chart' | 'compact' }) => (
+  <div className={`bg-card text-card-foreground border rounded-lg p-card-padding ${
+    height === 'chart' ? 'min-h-[340px]' : 'min-h-[200px]'
+  }`}>
+    <div className="flex items-center justify-center h-full">
       <div className="text-center">
         <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto mb-2" />
         <p className="text-sm text-muted-foreground">Loading {title}...</p>
