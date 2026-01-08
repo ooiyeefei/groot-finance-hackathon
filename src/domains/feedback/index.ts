@@ -1,7 +1,7 @@
 // Feedback Domain - Public exports
 
 // Components
-export { FeedbackWidget, FeedbackWidgetWrapper, FeedbackModal, FeedbackForm, ScreenshotButton } from "./components";
+export { FeedbackWidget, FeedbackWidgetWrapper, FeedbackButton, FeedbackModal, FeedbackForm, ScreenshotButton } from "./components";
 
 // Hooks
 export { useFeedback } from "./hooks";
