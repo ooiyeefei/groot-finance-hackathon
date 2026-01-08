@@ -42,9 +42,22 @@ export const FEEDBACK_TYPE_LABELS: Record<FeedbackType, string> = {
 };
 
 export const FEEDBACK_TYPE_PLACEHOLDERS: Record<FeedbackType, string> = {
-  bug: "What went wrong? Tell us what happened...",
-  feature: "What would make this better? Share your idea...",
+  bug: `What happened:
+
+What I expected:
+
+Steps to reproduce (optional):`,
+  feature: `I'd like to:
+
+This would help me:`,
   general: "Tell us what's on your mind...",
+};
+
+// Short hints shown below the textarea
+export const FEEDBACK_TYPE_HINTS: Record<FeedbackType, string> = {
+  bug: "A screenshot helps us fix issues faster",
+  feature: "Tell us how this would improve your workflow",
+  general: "Any thoughts, suggestions, or comments welcome",
 };
 
 export const FEEDBACK_STATUS_LABELS: Record<FeedbackStatus, string> = {

@@ -11,6 +11,7 @@ import {
   FeedbackType,
   FEEDBACK_TYPE_LABELS,
   FEEDBACK_TYPE_PLACEHOLDERS,
+  FEEDBACK_TYPE_HINTS,
   MESSAGE_MIN_LENGTH,
   MESSAGE_MAX_LENGTH,
   MAX_SCREENSHOT_SIZE,
@@ -139,7 +140,7 @@ export function FeedbackForm({
           <span className={isBelowMinimum ? "text-destructive font-medium" : "text-muted-foreground"}>
             {isBelowMinimum
               ? `Please write at least ${MESSAGE_MIN_LENGTH} characters (${MESSAGE_MIN_LENGTH - message.trim().length} more needed)`
-              : `Minimum ${MESSAGE_MIN_LENGTH} characters`
+              : FEEDBACK_TYPE_HINTS[type]
             }
           </span>
           <span
