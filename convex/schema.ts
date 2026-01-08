@@ -11,6 +11,8 @@ import {
   expenseClaimStatusValidator,
   invoiceStatusValidator,
   messageRoleValidator,
+  feedbackTypeValidator,
+  feedbackStatusValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -507,4 +509,40 @@ export default defineSchema({
   // Note: Email preferences are stored in users.emailPreferences (embedded)
   // Note: Email suppressions rely on SES Account-Level Suppression List (native)
   // Note: Workflow tracking uses Lambda Durable Functions state (native)
+
+  // ============================================
+  // FEEDBACK DOMAIN: User Feedback Collection
+  // ============================================
+
+  feedback: defineTable({
+    // Feedback Type & Content
+    type: feedbackTypeValidator,
+    message: v.string(),
+
+    // Screenshot (optional)
+    screenshotStorageId: v.optional(v.id("_storage")),
+
+    // Context (auto-captured)
+    pageUrl: v.string(),
+    userAgent: v.string(),
+
+    // User Association
+    userId: v.optional(v.id("users")),
+    businessId: v.optional(v.id("businesses")),
+    isAnonymous: v.boolean(),
+
+    // Status Tracking
+    status: feedbackStatusValidator,
+
+    // GitHub Integration
+    githubIssueUrl: v.optional(v.string()),
+    githubIssueNumber: v.optional(v.number()),
+
+    // Timestamps
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_status", ["status"])
+    .index("by_type", ["type"])
+    .index("by_business", ["businessId"])
+    .index("by_user", ["userId"]),
 });

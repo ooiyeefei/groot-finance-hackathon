@@ -19,6 +19,8 @@ import {
   MESSAGE_ROLE_VALUES,
   SOURCE_DOCUMENT_TYPE_VALUES,
   CREATED_BY_METHOD_VALUES,
+  FEEDBACK_TYPE_VALUES,
+  FEEDBACK_STATUS_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -98,3 +100,13 @@ export const sourceDocumentTypeValidator = literalUnion(SOURCE_DOCUMENT_TYPE_VAL
  * Created by method validator
  */
 export const createdByMethodValidator = literalUnion(CREATED_BY_METHOD_VALUES);
+
+/**
+ * Feedback type validator
+ */
+export const feedbackTypeValidator = literalUnion(FEEDBACK_TYPE_VALUES);
+
+/**
+ * Feedback status validator
+ */
+export const feedbackStatusValidator = literalUnion(FEEDBACK_STATUS_VALUES);

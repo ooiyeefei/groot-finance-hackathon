@@ -8,6 +8,7 @@ import { BusinessContextProvider } from '@/contexts/business-context';
 import { ClerkProviderWrapper } from '@/components/providers/ClerkProviderWrapper';
 import { ConvexClientProvider } from '@/components/providers/ConvexClientProvider';
 import { SentryUserProvider } from '@/components/providers/SentryUserProvider';
+import { FeedbackWidgetWrapper } from '@/domains/feedback';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -62,6 +63,7 @@ export default async function LocaleLayout({
               <BusinessContextProvider>
                 <SentryUserProvider>
                   {children}
+                  <FeedbackWidgetWrapper />
                 </SentryUserProvider>
               </BusinessContextProvider>
             </NextIntlClientProvider>
