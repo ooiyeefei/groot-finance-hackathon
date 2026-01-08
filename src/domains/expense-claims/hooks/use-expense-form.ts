@@ -481,20 +481,37 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       } else if (mode === 'edit' && currentCategory) {
         // Edit mode: resolve category NAME to ID
         // The API returns category name (e.g., 'Miscellaneous'), but dropdown uses ID
-        const matchedCategory = categories.find(cat =>
-          cat.id === currentCategory ||
-          cat.category_name?.toLowerCase() === currentCategory.toLowerCase()
-        )
+        const trimmedCategory = currentCategory.trim().toLowerCase()
+
+        // Step 1: Try exact ID match
+        let matchedCategory = categories.find(cat => cat.id === currentCategory)
+
+        // Step 2: Try exact name match (case-insensitive, trimmed)
+        if (!matchedCategory) {
+          matchedCategory = categories.find(cat =>
+            cat.category_name?.trim().toLowerCase() === trimmedCategory
+          )
+        }
+
+        // Step 3: Try partial name match (contains)
+        if (!matchedCategory) {
+          matchedCategory = categories.find(cat =>
+            cat.category_name?.trim().toLowerCase().includes(trimmedCategory) ||
+            trimmedCategory.includes(cat.category_name?.trim().toLowerCase() || '')
+          )
+        }
 
         // DEBUG: Log matching attempt
         console.log('[useExpenseForm] EDIT MODE CATEGORY MATCHING:', {
           currentCategory,
+          trimmedCategory,
           matchedCategory: matchedCategory ? { id: matchedCategory.id, name: matchedCategory.category_name } : null,
-          willFallbackToFirst: !matchedCategory,
-          firstCategory: categories[0] ? { id: categories[0].id, name: categories[0].category_name } : null
+          availableCategoryNames: categories.map(c => c.category_name)
         })
 
-        resolvedCategoryId = matchedCategory?.id || categories[0]?.id || ''
+        // IMPORTANT: Do NOT fall back to first category - only use matched category
+        // If no match found, keep the original value (form validation will catch invalid categories)
+        resolvedCategoryId = matchedCategory?.id || ''
       }
 
       if (resolvedCategoryId && resolvedCategoryId !== currentCategory) {
