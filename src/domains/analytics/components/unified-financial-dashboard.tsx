@@ -50,14 +50,14 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
 
   const getTrendIcon = (trend?: number) => {
     if (trend === undefined || trend === 0) return null;
-    return trend > 0 
-      ? <TrendingUp className="w-3 h-3 text-green-400" />
-      : <TrendingDown className="w-3 h-3 text-red-400" />;
+    return trend > 0
+      ? <TrendingUp className="w-3 h-3 text-green-600 dark:text-green-400" />
+      : <TrendingDown className="w-3 h-3 text-red-600 dark:text-red-400" />;
   };
 
   const getTrendColor = (trend?: number) => {
-    if (trend === undefined || trend === 0) return 'text-gray-400';
-    return trend > 0 ? 'text-green-400' : 'text-red-400';
+    if (trend === undefined || trend === 0) return 'text-muted-foreground';
+    return trend > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
   };
 
   const getTrendText = (trend?: number) => {
@@ -91,16 +91,16 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
 
   if (error) {
     return (
-      <div className={`bg-gray-800 rounded-lg border border-gray-700 p-6 ${className}`}>
+      <div className={`bg-card rounded-lg border border-border p-6 ${className}`}>
         <div className="text-center">
-          <div className="w-12 h-12 bg-red-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
+          <div className="w-12 h-12 bg-destructive/20 rounded-full flex items-center justify-center mx-auto mb-3">
             <span className="text-xl">⚠️</span>
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">Error Loading Financial Data</h3>
-          <p className="text-gray-400 text-sm mb-4">{error}</p>
+          <h3 className="text-lg font-medium text-foreground mb-2">Error Loading Financial Data</h3>
+          <p className="text-muted-foreground text-sm mb-4">{error}</p>
           <button
             onClick={refresh}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />
             Retry
@@ -115,21 +115,21 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
       {/* Header with Period Selector */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Financial Dashboard</h2>
-          <p className="text-sm text-gray-400">
+          <h2 className="text-xl font-semibold text-foreground">Financial Dashboard</h2>
+          <p className="text-sm text-muted-foreground">
             {getPeriodDisplayName(selectedPeriod)} • Displayed in {homeCurrency}
             {lastUpdated && (
               <span className="ml-2">• Updated {lastUpdated.toLocaleTimeString()}</span>
             )}
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           {/* Period Selector */}
           <select
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value as 'month' | 'quarter' | 'year')}
-            className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-1.5 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="month">Last 60 Days</option>
             <option value="quarter">Current Quarter</option>
@@ -140,7 +140,7 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
           <button
             onClick={refresh}
             disabled={loading}
-            className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50"
+            className="p-2 bg-muted hover:bg-accent text-foreground rounded-lg transition-colors disabled:opacity-50"
             title="Refresh data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -151,16 +151,16 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
       {/* Unified Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Income Card */}
-        <div className="bg-gray-800 border border-green-700/50 bg-green-900/10 rounded-lg p-6 transition-all hover:bg-gray-750">
+        <div className="bg-card border border-green-700/50 bg-green-900/10 rounded-lg p-6 transition-all hover:bg-accent/50">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Total Income</p>
-            <PiggyBank className="w-5 h-5 text-gray-400" />
+            <p className="text-sm font-medium text-muted-foreground">Total Income</p>
+            <PiggyBank className="w-5 h-5 text-muted-foreground" />
           </div>
           <div className="mb-2">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-foreground">
                 {analytics ? formatCurrency(analytics.total_income, homeCurrency) : '-'}
               </p>
             )}
@@ -175,24 +175,24 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-muted-foreground">No trend</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-muted-foreground">vs. prev period</span>
           </div>
         </div>
 
         {/* Total Expenses Card */}
-        <div className="bg-gray-800 border border-red-700/50 bg-red-900/10 rounded-lg p-6 transition-all hover:bg-gray-750">
+        <div className="bg-card border border-red-700/50 bg-red-900/10 rounded-lg p-6 transition-all hover:bg-accent/50">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Total Expenses</p>
-            <CreditCard className="w-5 h-5 text-gray-400" />
+            <p className="text-sm font-medium text-muted-foreground">Total Expenses</p>
+            <CreditCard className="w-5 h-5 text-muted-foreground" />
           </div>
           <div className="mb-2">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-foreground">
                 {analytics ? formatCurrency(analytics.total_expenses, homeCurrency) : '-'}
               </p>
             )}
@@ -207,28 +207,28 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-muted-foreground">No trend</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-muted-foreground">vs. prev period</span>
           </div>
         </div>
 
         {/* Net Profit Card */}
-        <div className={`bg-gray-800 border rounded-lg p-6 transition-all hover:bg-gray-750 ${
-          analytics && analytics.net_profit >= 0 
-            ? 'border-green-700/50 bg-green-900/10' 
+        <div className={`bg-card border rounded-lg p-6 transition-all hover:bg-accent/50 ${
+          analytics && analytics.net_profit >= 0
+            ? 'border-green-700/50 bg-green-900/10'
             : 'border-red-700/50 bg-red-900/10'
         }`}>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Net Profit</p>
-            <DollarSign className="w-5 h-5 text-gray-400" />
+            <p className="text-sm font-medium text-muted-foreground">Net Profit</p>
+            <DollarSign className="w-5 h-5 text-muted-foreground" />
           </div>
           <div className="mb-2">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-foreground">
                 {analytics ? formatCurrency(analytics.net_profit, homeCurrency) : '-'}
               </p>
             )}
@@ -243,51 +243,51 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-muted-foreground">No trend</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-muted-foreground">vs. prev period</span>
           </div>
         </div>
 
         {/* Transaction Count Card */}
-        <div className="bg-gray-800 border border-blue-700/50 bg-blue-900/10 rounded-lg p-6 transition-all hover:bg-gray-750">
+        <div className="bg-card border border-blue-700/50 bg-blue-900/10 rounded-lg p-6 transition-all hover:bg-accent/50">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Transactions</p>
-            <Activity className="w-5 h-5 text-gray-400" />
+            <p className="text-sm font-medium text-muted-foreground">Transactions</p>
+            <Activity className="w-5 h-5 text-muted-foreground" />
           </div>
           <div className="mb-2">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-foreground">
                 {analytics ? analytics.transaction_count : '-'}
               </p>
             )}
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-1">
-              <span className="text-xs text-gray-500">Total count</span>
+              <span className="text-xs text-muted-foreground">Total count</span>
             </div>
-            <span className="text-xs text-gray-500">{getPeriodDisplayName(selectedPeriod)}</span>
+            <span className="text-xs text-muted-foreground">{getPeriodDisplayName(selectedPeriod)}</span>
           </div>
         </div>
 
         {/* Profit Margin Card */}
-        <div className={`bg-gray-800 border rounded-lg p-6 transition-all hover:bg-gray-750 ${
-          analytics && analytics.net_profit >= 0 
+        <div className={`bg-card border rounded-lg p-6 transition-all hover:bg-accent/50 ${
+          analytics && analytics.net_profit >= 0
             ? 'border-blue-700/50 bg-blue-900/10'
             : 'border-orange-700/50 bg-orange-900/10'
         }`}>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-300">Profit Margin</p>
-            <TrendingUp className="w-5 h-5 text-gray-400" />
+            <p className="text-sm font-medium text-muted-foreground">Profit Margin</p>
+            <TrendingUp className="w-5 h-5 text-muted-foreground" />
           </div>
           <div className="mb-2">
             {loading ? (
-              <div className="h-8 bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-foreground">
                 {formatCurrency(profitMargin, homeCurrency, true)}
               </p>
             )}
@@ -302,10 +302,10 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
               </div>
             ) : (
               <div className="flex items-center space-x-1">
-                <span className="text-xs text-gray-500">No trend</span>
+                <span className="text-xs text-muted-foreground">No trend</span>
               </div>
             )}
-            <span className="text-xs text-gray-500">vs. prev period</span>
+            <span className="text-xs text-muted-foreground">vs. prev period</span>
           </div>
         </div>
       </div>

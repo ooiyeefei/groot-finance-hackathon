@@ -121,7 +121,7 @@ export default function FieldSuggestion({
                 size="sm"
                 onClick={handleAccept}
                 disabled={isProcessing}
-                className="bg-green-600 dark:bg-green-500 text-white hover:bg-green-700 dark:hover:bg-green-600"
+                variant="success"
               >
                 {isProcessing ? (
                   <>
@@ -141,7 +141,6 @@ export default function FieldSuggestion({
                 variant="outline"
                 onClick={onReject}
                 disabled={isProcessing}
-                className="border-border text-muted-foreground hover:text-foreground hover:bg-muted"
               >
                 <X className="w-3 h-3 mr-1" />
                 Keep Current
@@ -252,15 +251,15 @@ export function BulkSuggestions({
   }
 
   return (
-    <Card className="bg-blue-900/20 border-blue-700 mb-6">
+    <Card className="bg-blue-500/10 border border-blue-500/30 mb-6">
       <CardContent className="p-6">
         <div className="flex items-center gap-3 mb-4">
-          <Brain className={`w-6 h-6 text-blue-400 ${processingStatus === 'processing' ? 'animate-spin' : ''}`} />
+          <Brain className={`w-6 h-6 text-blue-600 dark:text-blue-400 ${processingStatus === 'processing' ? 'animate-spin' : ''}`} />
           <div>
-            <h3 className="text-blue-300 font-semibold">
+            <h3 className="text-blue-600 dark:text-blue-400 font-semibold">
               {getStatusTitle(processingStatus)}
             </h3>
-            <p className="text-blue-200 text-sm">
+            <p className="text-blue-600 dark:text-blue-400 text-sm">
               {getStatusDescription(processingStatus, activeSuggestions.length)}
               {processingStatus === 'completed' && averageConfidence > 0 && (
                 <span className="ml-2 text-xs">
@@ -277,7 +276,7 @@ export function BulkSuggestions({
             <Button
               onClick={handleAcceptAll}
               disabled={isLocalProcessing || isProcessing}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              variant="success"
             >
               {isLocalProcessing ? (
                 <>
@@ -296,7 +295,6 @@ export function BulkSuggestions({
               variant="outline"
               onClick={onRejectAll}
               disabled={isLocalProcessing || isProcessing}
-              className="border-gray-600 text-gray-300 hover:bg-gray-700"
             >
               <X className="w-4 h-4 mr-2" />
               Keep All Current
@@ -314,7 +312,7 @@ export function BulkSuggestions({
                 // The parent component should handle this
               }}
               disabled={isProcessing}
-              className="bg-purple-600 hover:bg-purple-700 text-white"
+              variant="primary"
             >
               <Brain className="w-4 h-4 mr-2" />
               Try AI Extract Again
@@ -327,7 +325,6 @@ export function BulkSuggestions({
                 onRejectAll()
               }}
               disabled={isProcessing}
-              className="border-gray-600 text-gray-300 hover:bg-gray-700"
             >
               Continue with Current Data
             </Button>

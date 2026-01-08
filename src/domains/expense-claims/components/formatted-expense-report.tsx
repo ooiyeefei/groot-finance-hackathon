@@ -280,7 +280,7 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
         <div className="flex justify-end gap-3 no-print">
           <button
             onClick={handlePrint}
-            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm font-medium transition-colors"
+            className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm font-medium transition-colors"
           >
             <Printer className="w-4 h-4" />
             Print
@@ -288,7 +288,7 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
           <button
             onClick={handleSavePDF}
             disabled={isGeneratingPDF}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm font-medium transition-colors"
+            className="bg-primary hover:bg-primary/90 disabled:bg-primary/50 disabled:cursor-not-allowed text-primary-foreground px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm font-medium transition-colors"
           >
             <Download className="w-4 h-4" />
             {isGeneratingPDF ? 'Generating PDF...' : 'Save as PDF'}
@@ -488,13 +488,13 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
 
           {/* Summary Stats */}
           <div className="flex gap-4 mt-2">
-            <Badge variant="outline" className="text-green-600 border-green-600">
+            <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-500/30">
               Approved: {summary.statusBreakdown.approved + summary.statusBreakdown.reimbursed} claims
             </Badge>
-            <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+            <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400 border-yellow-500/30">
               Submitted: {summary.statusBreakdown.submitted} claims
             </Badge>
-            <Badge variant="outline" className="text-red-600 border-red-600">
+            <Badge variant="outline" className="text-red-600 dark:text-red-400 border-red-500/30">
               Rejected: {summary.statusBreakdown.rejected} claims
             </Badge>
           </div>

@@ -66,7 +66,7 @@ export default function BusinessManagementCards() {
   if (!canManageBusiness) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-400">
+        <p className="text-muted-foreground">
           Business management settings are available to managers and administrators only.
         </p>
       </div>
@@ -102,23 +102,23 @@ export default function BusinessManagementCards() {
                 <div className="flex items-center gap-3 mb-2">
                   <div className={`
                     p-2 rounded-lg
-                    ${card.color === 'blue' ? 'bg-blue-500/20 text-blue-300' : ''}
-                    ${card.color === 'green' ? 'bg-green-500/20 text-green-300' : ''}
-                    ${card.color === 'purple' ? 'bg-purple-500/20 text-purple-300' : ''}
-                    ${card.color === 'orange' ? 'bg-orange-500/20 text-orange-300' : ''}
+                    ${card.color === 'blue' ? 'bg-blue-500/20 text-blue-600 dark:text-blue-300' : ''}
+                    ${card.color === 'green' ? 'bg-green-500/20 text-green-600 dark:text-green-300' : ''}
+                    ${card.color === 'purple' ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : ''}
+                    ${card.color === 'orange' ? 'bg-orange-500/20 text-orange-600 dark:text-orange-300' : ''}
                   `}>
                     <IconComponent className="w-5 h-5" />
                   </div>
-                  <h4 className="text-white font-semibold">{card.title}</h4>
+                  <h4 className="text-foreground font-semibold">{card.title}</h4>
                   {card.adminOnly && (
-                    <span className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-md">
+                    <span className="px-2 py-1 bg-red-500/20 text-red-600 dark:text-red-300 text-xs rounded-md">
                       Admin
                     </span>
                   )}
                 </div>
-                <p className="text-gray-400 text-sm">{card.description}</p>
+                <p className="text-muted-foreground text-sm">{card.description}</p>
               </div>
-              <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+              <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
             </div>
           </Link>
         )

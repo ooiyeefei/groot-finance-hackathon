@@ -47,16 +47,16 @@ export default function FinancialDashboard({
 
   if (error) {
     return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+      <div className="bg-card border border-border rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-white">Financial Analytics</h2>
+          <h2 className="text-xl font-semibold text-foreground">Financial Analytics</h2>
           <ActionButton onClick={handleRefresh} variant="secondary" size="sm">
             <RefreshCw className="w-4 h-4 mr-2" />
             Retry
           </ActionButton>
         </div>
-        <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4">
-          <p className="text-red-300 text-sm">{error}</p>
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+          <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
         </div>
       </div>
     );
@@ -67,8 +67,8 @@ export default function FinancialDashboard({
       {/* Header with Period Selector and Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Financial Dashboard</h1>
-          <p className="text-gray-400 text-sm">
+          <h1 className="text-2xl font-bold text-foreground mb-1">Financial Dashboard</h1>
+          <p className="text-muted-foreground text-sm">
             {analytics ? (
               <>
                 {new Date(analytics.period_start).toLocaleDateString()} - {new Date(analytics.period_end).toLocaleDateString()}
@@ -144,8 +144,8 @@ export default function FinancialDashboard({
       </div>
 
       {/* Mobile-Specific Footer Info */}
-      <div className="sm:hidden bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
-        <div className="flex items-center justify-between text-xs text-gray-400">
+      <div className="sm:hidden bg-card/50 rounded-lg p-4 border border-border/50">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>Currency: {CURRENCY_SYMBOLS[homeCurrency]} {homeCurrency}</span>
           {analytics && (
             <span>
@@ -167,47 +167,47 @@ export function FinancialDashboardSkeleton() {
       {/* Header Skeleton */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <div className="h-8 bg-gray-700 rounded w-64 mb-2"></div>
-          <div className="h-4 bg-gray-700 rounded w-48"></div>
+          <div className="h-8 bg-muted rounded w-64 mb-2"></div>
+          <div className="h-4 bg-muted rounded w-48"></div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="h-10 bg-gray-700 rounded w-32"></div>
-          <div className="h-10 bg-gray-700 rounded w-10"></div>
+          <div className="h-10 bg-muted rounded w-32"></div>
+          <div className="h-10 bg-muted rounded w-10"></div>
         </div>
       </div>
 
       {/* Metrics Cards Skeleton */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-            <div className="h-4 bg-gray-700 rounded w-20 mb-3"></div>
-            <div className="h-8 bg-gray-700 rounded w-32 mb-2"></div>
-            <div className="h-3 bg-gray-700 rounded w-16"></div>
+          <div key={i} className="bg-card border border-border rounded-lg p-6">
+            <div className="h-4 bg-muted rounded w-20 mb-3"></div>
+            <div className="h-8 bg-muted rounded w-32 mb-2"></div>
+            <div className="h-3 bg-muted rounded w-16"></div>
           </div>
         ))}
       </div>
 
       {/* Charts Skeleton */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <div className="h-6 bg-gray-700 rounded w-40 mb-4"></div>
-          <div className="h-64 bg-gray-700 rounded"></div>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <div className="h-6 bg-muted rounded w-40 mb-4"></div>
+          <div className="h-64 bg-muted rounded"></div>
         </div>
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <div className="h-6 bg-gray-700 rounded w-40 mb-4"></div>
-          <div className="h-64 bg-gray-700 rounded"></div>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <div className="h-6 bg-muted rounded w-40 mb-4"></div>
+          <div className="h-64 bg-muted rounded"></div>
         </div>
       </div>
 
       {/* Action Center Skeleton */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <div className="h-6 bg-gray-700 rounded w-32 mb-4"></div>
+      <div className="bg-card border border-border rounded-lg p-6">
+        <div className="h-6 bg-muted rounded w-32 mb-4"></div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="bg-gray-700/50 rounded-lg p-4">
-              <div className="h-4 bg-gray-600 rounded w-3/4 mb-2"></div>
-              <div className="h-3 bg-gray-600 rounded w-full mb-3"></div>
-              <div className="h-8 bg-gray-600 rounded w-20"></div>
+            <div key={i} className="bg-muted/50 rounded-lg p-4">
+              <div className="h-4 bg-muted rounded w-3/4 mb-2"></div>
+              <div className="h-3 bg-muted rounded w-full mb-3"></div>
+              <div className="h-8 bg-muted rounded w-20"></div>
             </div>
           ))}
         </div>

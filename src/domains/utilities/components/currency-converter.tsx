@@ -107,12 +107,12 @@ export default function CurrencyConverter({
 
   if (error) {
     return (
-      <div className={`text-red-400 text-sm ${className}`}>
+      <div className={`text-destructive text-sm ${className}`}>
         <span>Conversion error</span>
         {showControls && (
           <button
             onClick={convertCurrency}
-            className="ml-2 text-red-300 hover:text-red-200"
+            className="ml-2 text-destructive/80 hover:text-destructive"
             title="Retry conversion"
           >
             <RefreshCw className="w-3 h-3" />
@@ -124,7 +124,7 @@ export default function CurrencyConverter({
 
   if (isLoading) {
     return (
-      <div className={`text-gray-400 text-sm animate-pulse ${className}`}>
+      <div className={`text-muted-foreground text-sm animate-pulse ${className}`}>
         <span>Converting...</span>
       </div>
     )
@@ -132,7 +132,7 @@ export default function CurrencyConverter({
 
   if (convertedAmount === null) {
     return (
-      <div className={`text-gray-500 text-sm ${className}`}>
+      <div className={`text-muted-foreground text-sm ${className}`}>
         <span>-</span>
       </div>
     )
@@ -143,23 +143,23 @@ export default function CurrencyConverter({
   return (
     <div className={`space-y-1 ${className}`}>
       <div className="flex items-center gap-2">
-        <span className="font-medium text-white">
+        <span className="font-medium text-foreground">
           {displayAmount}
         </span>
         {showControls && (
           <button
             onClick={convertCurrency}
             disabled={isLoading}
-            className="text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
             title="Refresh exchange rate"
           >
             <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
         )}
       </div>
-      
+
       {exchangeRate && exchangeRate !== 1 && (
-        <div className="text-xs text-gray-400 space-y-0.5">
+        <div className="text-xs text-muted-foreground space-y-0.5">
           <div className="flex items-center gap-1">
             <span>{formatCurrency(amount, fromCurrency)}</span>
             <ArrowRightLeft className="w-3 h-3" />

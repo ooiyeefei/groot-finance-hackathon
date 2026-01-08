@@ -258,10 +258,10 @@ export default function Sidebar() {
                   </span>
                   {/* Badge for notifications */}
                   {'badge' in item && (item as any).badge && (
-                    <Badge 
-                      variant="secondary" 
+                    <Badge
+                      variant="destructive"
                       className={`
-                        bg-red-600 text-white text-xs px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center
+                        text-xs px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center
                         ${isExpanded ? 'ml-2' : 'absolute -top-1 -right-1 scale-75'}
                         ${isExpanded ? 'opacity-100' : 'opacity-100'}
                       `}
@@ -283,7 +283,7 @@ export default function Sidebar() {
                         <div className="flex items-center gap-2">
                           {item.name}
                           {'badge' in item && (item as any).badge && (
-                            <Badge variant="secondary" className="bg-red-600 text-white text-xs">
+                            <Badge variant="destructive" className="text-xs">
                               {(item as any).badge}
                             </Badge>
                           )}
