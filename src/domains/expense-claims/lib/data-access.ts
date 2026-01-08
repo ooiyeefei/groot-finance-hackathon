@@ -573,6 +573,14 @@ export async function getExpenseClaim(
       id: claimId
     })
 
+    // DEBUG: Log raw Convex data
+    console.log('[getExpenseClaim] RAW CONVEX DATA:', {
+      claimId,
+      expenseCategory: claim?.expenseCategory,
+      processingMetadata_category: claim?.processingMetadata?.category_mapping?.business_category,
+      processingMetadata_expense_category: claim?.processingMetadata?.expense_category
+    })
+
     if (!claim) {
       return { success: false, error: 'Expense claim not found or access denied' }
     }

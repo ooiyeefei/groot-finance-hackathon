@@ -230,6 +230,15 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       const result = await response.json()
       const claim = result.data
 
+      // DEBUG: Log raw data from API/Convex
+      console.log('[useExpenseForm] RAW API RESPONSE:', {
+        expense_category: claim?.expense_category,
+        expenseCategory: claim?.expenseCategory,
+        transaction_expense_category: claim?.transaction?.expense_category,
+        processingMetadata_category: claim?.processing_metadata?.category_mapping?.business_category,
+        fullClaim: claim
+      })
+
       if (!claim) {
         throw new Error('Expense claim not found')
       }
@@ -331,6 +340,14 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       // Note: expense_category from API is a NAME (e.g., 'Miscellaneous'), but dropdown uses ID
       // We'll set the name here; a separate effect will resolve it to ID when categories load
       const categoryNameOrId = claim.transaction?.expense_category || claim.expense_category || ''
+
+      // DEBUG: Log category value being set
+      console.log('[useExpenseForm] CATEGORY VALUE BEING SET:', {
+        categoryNameOrId,
+        fromTransaction: claim.transaction?.expense_category,
+        fromClaim: claim.expense_category
+      })
+
       setFormData({
         description: claim.transaction?.description || claim.description || '',
         business_purpose: claim.transaction?.business_purpose || claim.business_purpose || '',
@@ -439,6 +456,14 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   // Categories fetch asynchronously, so initial form setup may have empty categories
   // Also handles edit mode where API returns category NAME but dropdown uses ID
   useEffect(() => {
+    // DEBUG: Log category resolution attempt
+    console.log('[useExpenseForm] CATEGORY RESOLUTION CHECK:', {
+      categoriesLength: categories.length,
+      categoriesLoading,
+      currentExpenseCategory: formData.expense_category,
+      availableCategories: categories.map(c => ({ id: c.id, name: c.category_name }))
+    })
+
     if (categories.length > 0 && !categoriesLoading) {
       const currentCategory = formData.expense_category
       const isCurrentCategoryValid = categories.some(cat => cat.id === currentCategory)
@@ -460,6 +485,15 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
           cat.id === currentCategory ||
           cat.category_name?.toLowerCase() === currentCategory.toLowerCase()
         )
+
+        // DEBUG: Log matching attempt
+        console.log('[useExpenseForm] EDIT MODE CATEGORY MATCHING:', {
+          currentCategory,
+          matchedCategory: matchedCategory ? { id: matchedCategory.id, name: matchedCategory.category_name } : null,
+          willFallbackToFirst: !matchedCategory,
+          firstCategory: categories[0] ? { id: categories[0].id, name: categories[0].category_name } : null
+        })
+
         resolvedCategoryId = matchedCategory?.id || categories[0]?.id || ''
       }
 
