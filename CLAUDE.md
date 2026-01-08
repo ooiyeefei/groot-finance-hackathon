@@ -1093,6 +1093,8 @@ Extensions only affect deployment, not local development. Use `external` array f
 - Convex (native) - migrating from Supabase PostgreSQL + Storage (002-convex-migration)
 - TypeScript 5.9+ (CDK & Lambda handler), Python 3.11 (Lambda Layer for pdf2image) + AWS CDK 2.x, @aws/durable-execution-sdk-js, @sentry/aws-serverless, @aws-sdk/client-lambda (004-lambda-durable-migration)
 - AWS S3 (existing finanseal-bucket), Convex (existing - unchanged) (004-lambda-durable-migration)
+- TypeScript 5.9+ with Next.js 15.4.6 App Router + React 18, Tailwind CSS, Convex, Clerk, html2canvas, @octokit/rest (001-user-feedback)
+- Convex (primary database), Convex file storage (screenshots) (001-user-feedback)
 
 ## Recent Changes
 - 001-stripe-subscription: Added TypeScript 5.9+ with Next.js 15 App Router + Stripe SDK (`stripe`), Stripe React (`@stripe/stripe-js`), Supabase Client

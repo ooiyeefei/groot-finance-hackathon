@@ -157,3 +157,29 @@ export const CREATED_BY_METHODS = {
 
 export type CreatedByMethod = typeof CREATED_BY_METHODS[keyof typeof CREATED_BY_METHODS];
 export const CREATED_BY_METHOD_VALUES = Object.values(CREATED_BY_METHODS);
+
+// ============================================
+// FEEDBACK TYPES
+// ============================================
+
+export const FEEDBACK_TYPES = {
+  BUG: "bug",
+  FEATURE: "feature",
+  GENERAL: "general",
+} as const;
+
+export type FeedbackType = typeof FEEDBACK_TYPES[keyof typeof FEEDBACK_TYPES];
+export const FEEDBACK_TYPE_VALUES = Object.values(FEEDBACK_TYPES);
+
+// ============================================
+// FEEDBACK STATUSES
+// ============================================
+
+export const FEEDBACK_STATUSES = {
+  NEW: "new",
+  REVIEWED: "reviewed",
+  RESOLVED: "resolved",
+} as const;
+
+export type FeedbackStatus = typeof FEEDBACK_STATUSES[keyof typeof FEEDBACK_STATUSES];
+export const FEEDBACK_STATUS_VALUES = Object.values(FEEDBACK_STATUSES);

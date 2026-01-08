@@ -16,6 +16,7 @@ import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_conversations from "../functions/conversations.js";
 import type * as functions_emails from "../functions/emails.js";
 import type * as functions_expenseClaims from "../functions/expenseClaims.js";
+import type * as functions_feedback from "../functions/feedback.js";
 import type * as functions_invoices from "../functions/invoices.js";
 import type * as functions_memberships from "../functions/memberships.js";
 import type * as functions_messages from "../functions/messages.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   "functions/conversations": typeof functions_conversations;
   "functions/emails": typeof functions_emails;
   "functions/expenseClaims": typeof functions_expenseClaims;
+  "functions/feedback": typeof functions_feedback;
   "functions/invoices": typeof functions_invoices;
   "functions/memberships": typeof functions_memberships;
   "functions/messages": typeof functions_messages;

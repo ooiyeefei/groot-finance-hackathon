@@ -26,6 +26,16 @@ interface InvitationEmailData {
   invitationUrl: string
 }
 
+interface FeedbackNotificationData {
+  recipientEmail: string
+  feedbackType: 'bug' | 'feature' | 'general'
+  feedbackMessage: string
+  submitterEmail?: string
+  pageUrl?: string
+  githubIssueUrl?: string
+  isAnonymous: boolean
+}
+
 interface EmailServiceConfig {
   fromEmail: string
   appUrl: string
@@ -342,6 +352,201 @@ If you didn't expect this invitation, you can safely ignore this email.
 ---
 FinanSEAL - Financial Co-Pilot for Southeast Asian SMEs
 https://finance.hellogroot.com
+    `
+  }
+
+  /**
+   * Send feedback notification email to team members
+   */
+  async sendFeedbackNotification(data: FeedbackNotificationData): Promise<{ success: boolean; error?: string; messageId?: string }> {
+    try {
+      this.initialize()
+
+      const { recipientEmail, feedbackType } = data
+
+      const typeLabels = {
+        bug: 'Bug Report',
+        feature: 'Feature Request',
+        general: 'General Feedback'
+      }
+
+      const htmlBody = this.generateFeedbackNotificationHTML(data)
+      const textBody = this.generateFeedbackNotificationText(data)
+
+      const rawMessage = this.buildRawEmail({
+        from: this.config!.fromEmail,
+        to: recipientEmail,
+        subject: `New ${typeLabels[feedbackType]} from FinanSEAL`,
+        htmlBody,
+        textBody
+      })
+
+      const command = new SendRawEmailCommand({
+        RawMessage: {
+          Data: Buffer.from(rawMessage)
+        },
+        ConfigurationSetName: this.config!.configurationSet
+      })
+
+      const response = await this.ses!.send(command)
+
+      if (!response.MessageId) {
+        console.error('[EmailService] SES did not return a MessageId')
+        return { success: false, error: 'SES did not return a MessageId' }
+      }
+
+      console.log(`[EmailService] Feedback notification sent via SES to ${recipientEmail}, MessageId: ${response.MessageId}`)
+      return { success: true, messageId: response.MessageId }
+
+    } catch (error) {
+      console.error('[EmailService] Failed to send feedback notification via SES:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown email error'
+      }
+    }
+  }
+
+  /**
+   * Generate HTML email template for feedback notification
+   */
+  private generateFeedbackNotificationHTML(data: FeedbackNotificationData): string {
+    const { feedbackType, feedbackMessage, submitterEmail, pageUrl, githubIssueUrl, isAnonymous } = data
+
+    const typeLabels = {
+      bug: 'Bug Report',
+      feature: 'Feature Request',
+      general: 'General Feedback'
+    }
+
+    const typeColors = {
+      bug: '#ef4444',
+      feature: '#3b82f6',
+      general: '#6b7280'
+    }
+
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>New ${typeLabels[feedbackType]}</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .header {
+          background: ${typeColors[feedbackType]};
+          color: white;
+          padding: 20px;
+          text-align: center;
+          border-radius: 8px 8px 0 0;
+        }
+        .content {
+          background: #ffffff;
+          padding: 20px;
+          border: 1px solid #e5e7eb;
+          border-top: none;
+        }
+        .message-box {
+          background: #f9fafb;
+          border: 1px solid #e5e7eb;
+          border-radius: 6px;
+          padding: 16px;
+          margin: 16px 0;
+          white-space: pre-wrap;
+        }
+        .meta {
+          font-size: 14px;
+          color: #6b7280;
+          margin-top: 16px;
+        }
+        .cta-button {
+          display: inline-block;
+          background: #3b82f6;
+          color: #ffffff !important;
+          padding: 10px 20px;
+          text-decoration: none;
+          border-radius: 6px;
+          font-weight: 600;
+          margin: 8px 4px 8px 0;
+        }
+        .footer {
+          background: #f9fafb;
+          padding: 16px;
+          text-align: center;
+          font-size: 14px;
+          color: #6b7280;
+          border-radius: 0 0 8px 8px;
+          border: 1px solid #e5e7eb;
+          border-top: none;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>New ${typeLabels[feedbackType]}</h1>
+      </div>
+
+      <div class="content">
+        <p>A new ${typeLabels[feedbackType].toLowerCase()} has been submitted:</p>
+
+        <div class="message-box">${feedbackMessage}</div>
+
+        <div class="meta">
+          <p><strong>Submitted by:</strong> ${isAnonymous ? 'Anonymous' : submitterEmail || 'Unknown'}</p>
+          ${pageUrl ? `<p><strong>Page URL:</strong> ${pageUrl}</p>` : ''}
+        </div>
+
+        <div style="margin-top: 20px;">
+          <a href="${this.config!.appUrl}/en/admin/feedback" class="cta-button">View in Dashboard</a>
+          ${githubIssueUrl ? `<a href="${githubIssueUrl}" class="cta-button">View GitHub Issue</a>` : ''}
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>This notification was sent from FinanSEAL Feedback System</p>
+      </div>
+    </body>
+    </html>
+    `
+  }
+
+  /**
+   * Generate plain text version of feedback notification email
+   */
+  private generateFeedbackNotificationText(data: FeedbackNotificationData): string {
+    const { feedbackType, feedbackMessage, submitterEmail, pageUrl, githubIssueUrl, isAnonymous } = data
+
+    const typeLabels = {
+      bug: 'Bug Report',
+      feature: 'Feature Request',
+      general: 'General Feedback'
+    }
+
+    return `
+New ${typeLabels[feedbackType]} from FinanSEAL
+
+A new ${typeLabels[feedbackType].toLowerCase()} has been submitted:
+
+---
+${feedbackMessage}
+---
+
+Submitted by: ${isAnonymous ? 'Anonymous' : submitterEmail || 'Unknown'}
+${pageUrl ? `Page URL: ${pageUrl}` : ''}
+${githubIssueUrl ? `GitHub Issue: ${githubIssueUrl}` : ''}
+
+View in Dashboard: ${this.config!.appUrl}/en/admin/feedback
+
+---
+FinanSEAL Feedback System
     `
   }
 
