@@ -64,13 +64,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Only create issues for bugs and features
-    if (feedback.type === "general") {
-      return NextResponse.json(
-        { success: true, message: "General feedback does not create GitHub issues" },
-        { status: 200 }
-      );
-    }
+    // All feedback types create GitHub issues
 
     // Parse repo owner and name
     const [owner, repo] = GITHUB_REPO.split("/");
@@ -127,7 +121,12 @@ export async function POST(request: NextRequest) {
  * Format issue title from feedback type and message
  */
 function formatIssueTitle(type: string, message: string): string {
-  const prefix = type === "bug" ? "[Bug]" : "[Feature Request]";
+  const prefixMap: Record<string, string> = {
+    bug: "[Bug]",
+    feature: "[Feature Request]",
+    general: "[Feedback]",
+  };
+  const prefix = prefixMap[type] || "[Feedback]";
   // Take first 80 chars of message for title
   const shortMessage = message.length > 80 ? message.substring(0, 77) + "..." : message;
   return `${prefix} ${shortMessage}`;
@@ -148,7 +147,12 @@ function formatIssueBody(feedback: {
   const sections: string[] = [];
 
   // Header
-  sections.push(`## ${feedback.type === "bug" ? "Bug Report" : "Feature Request"}`);
+  const headerMap: Record<string, string> = {
+    bug: "Bug Report",
+    feature: "Feature Request",
+    general: "User Feedback",
+  };
+  sections.push(`## ${headerMap[feedback.type] || "User Feedback"}`);
   sections.push("");
 
   // Description
@@ -192,16 +196,16 @@ function formatIssueBody(feedback: {
 }
 
 /**
- * Get appropriate labels for the issue
+ * Get appropriate label for the issue based on feedback type
  */
 function getIssueLabels(type: string): string[] {
-  const labels: string[] = ["user-feedback"];
-
-  if (type === "bug") {
-    labels.push("bug");
-  } else if (type === "feature") {
-    labels.push("enhancement");
+  switch (type) {
+    case "bug":
+      return ["bug"];
+    case "feature":
+      return ["feature-request"];
+    case "general":
+    default:
+      return ["user-feedback"];
   }
-
-  return labels;
 }
