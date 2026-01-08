@@ -660,7 +660,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
   reprocessingClaims: Set<string>
 }) {
   return (
-    <div key={`${context}-${claim.id}-${index}`} className={`p-${context === 'overview' ? '3' : '4'} bg-muted/50 rounded-lg border border-border ${context === 'history' ? 'hover:border-muted-foreground transition-colors' : ''}`}>
+    <div key={`${context}-${claim.id}-${index}`} className={`p-${context === 'overview' ? '3' : '4'} bg-muted/50 rounded-lg border border-border min-h-[140px] ${context === 'history' ? 'hover:border-muted-foreground transition-colors' : ''}`}>
       {/* Claim Header */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
@@ -1066,13 +1066,14 @@ function SummaryCard({ title, value, icon, variant }: {
 }
 
 // ✅ PERFORMANCE OPTIMIZATION: Enhanced skeleton loaders to prevent layout shifts
+// CLS FIX: Skeleton must match EXACT dimensions of loaded content
 function PersonalDashboardSkeleton() {
   return (
-    <div className="space-y-section-gap">
-      {/* Summary Cards Skeleton - Matches exact structure */}
+    <div className="space-y-section-gap" style={{ contain: 'layout' }}>
+      {/* Summary Cards Skeleton - Matches exact structure with fixed heights */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i} className="bg-card border-border">
+          <Card key={i} className="bg-card border-border min-h-[106px]">
             <CardContent className="p-6">
               <div className="flex items-center justify-between animate-pulse">
                 <div className="space-y-2">
@@ -1086,26 +1087,28 @@ function PersonalDashboardSkeleton() {
         ))}
       </div>
 
-      {/* Tabs Skeleton */}
+      {/* Tabs Skeleton - Fixed height matching TabsList */}
       <div className="space-y-4">
-        <div className="grid w-full grid-cols-3 bg-muted border border-border rounded-lg h-10 animate-pulse">
-          <div className="bg-muted rounded"></div>
+        <div className="grid w-full grid-cols-3 bg-muted border border-border rounded-lg h-10">
+          <div className="bg-primary/20 rounded-lg m-1 animate-pulse"></div>
+          <div className="bg-transparent rounded-lg m-1"></div>
+          <div className="bg-transparent rounded-lg m-1"></div>
         </div>
 
-        {/* Overview Content Skeleton */}
+        {/* Overview Content Skeleton - Fixed heights prevent CLS */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Quick Actions Card */}
-          <Card className="bg-card border-border">
-            <CardHeader>
+          {/* Quick Actions Card - min-height matches loaded content */}
+          <Card className="bg-card border-border min-h-[340px]">
+            <CardHeader className="pb-2">
               <div className="animate-pulse space-y-2">
                 <div className="h-6 bg-muted rounded w-32"></div>
                 <div className="h-4 bg-muted rounded w-48"></div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <div className="animate-pulse space-y-6">
-                {/* File Upload Zone */}
-                <div className="border-2 border-dashed border-border rounded-lg h-32 bg-muted/20"></div>
+                {/* File Upload Zone - exact height */}
+                <div className="border-2 border-dashed border-border rounded-lg h-[140px] bg-muted/20"></div>
                 {/* Buttons */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="h-10 bg-muted rounded"></div>
@@ -1115,15 +1118,15 @@ function PersonalDashboardSkeleton() {
             </CardContent>
           </Card>
 
-          {/* Recent Claims Card */}
-          <Card className="bg-card border-border">
-            <CardHeader>
+          {/* Recent Claims Card - min-height matches loaded content */}
+          <Card className="bg-card border-border min-h-[340px]">
+            <CardHeader className="pb-2">
               <div className="animate-pulse space-y-2">
                 <div className="h-6 bg-muted rounded w-40"></div>
                 <div className="h-4 bg-muted rounded w-56"></div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <div className="animate-pulse space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <ExpenseClaimCardSkeleton key={i} />
@@ -1138,9 +1141,10 @@ function PersonalDashboardSkeleton() {
 }
 
 // ✅ PERFORMANCE OPTIMIZATION: Individual expense claim card skeleton
+// CLS FIX: Fixed min-height prevents layout shift during data load
 function ExpenseClaimCardSkeleton() {
   return (
-    <div className="p-3 bg-muted/50 rounded-lg border border-border animate-pulse">
+    <div className="p-3 bg-muted/50 rounded-lg border border-border animate-pulse min-h-[140px]">
       {/* Header */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1 space-y-1">

@@ -200,18 +200,21 @@ export default function Sidebar() {
   // CRITICAL CLS FIX: Don't render sidebar until hydration determines proper width
   if (isExpanded === null) {
     // Return a stable placeholder that matches the final desktop collapsed width
+    // Uses exact same dimensions as loaded sidebar to prevent any layout shift
     return (
-      <div className="w-sidebar-collapsed bg-card border-r border-border flex flex-col relative">
-        <div className="p-4 border-b border-border">
-          <div className="w-8 h-8 bg-record-layer-2 rounded animate-pulse"></div>
+      <div className="w-sidebar-collapsed bg-card border-r border-border flex flex-col relative min-h-screen">
+        <div className="p-4 border-b border-border h-[68px] flex items-center">
+          <div className="w-8 h-8 bg-muted rounded animate-pulse"></div>
         </div>
-        <div className="flex-1 p-4">
-          <div className="space-y-2">
+        <nav className="flex-1 p-4">
+          <ul className="space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="w-8 h-8 bg-record-layer-2 rounded animate-pulse"></div>
+              <li key={i}>
+                <div className="w-8 h-8 bg-muted rounded animate-pulse"></div>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </nav>
       </div>
     )
   }

@@ -35,16 +35,16 @@ export default async function ExpenseClaimsPage() {
           {/* Sidebar */}
           <Sidebar />
 
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col">
+          {/* Main Content - CLS FIX: min-h-0 prevents flex container shift */}
+          <div className="flex-1 flex flex-col min-h-0">
             {/* Header */}
             <HeaderWithUser
               title="Expense Claims"
               subtitle=""
             />
 
-            {/* Main Content Area */}
-            <main className="flex-1 overflow-auto p-4 sm:p-card-padding">
+            {/* Main Content Area - CLS FIX: contain layout prevents reflow */}
+            <main className="flex-1 overflow-auto p-4 sm:p-card-padding" style={{ contain: 'layout' }}>
               <div className="max-w-7xl mx-auto">
                 {/* Personal Expense Dashboard */}
                 <PersonalExpenseDashboard userId={userId} />
