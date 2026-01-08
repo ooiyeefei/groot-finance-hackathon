@@ -569,6 +569,7 @@ npx cdk deploy SystemEmailStack --profile groot-finanseal --region us-west-2
 - Region: `us-west-2`
 
 ## Recent Changes
+- 005-uiux-theme-cls: Semantic design tokens & modal viewport coverage fixes
 - 004-lambda-durable-migration: Migrated document processing from Trigger.dev to AWS Lambda
 - 002-convex-migration: Migrated database from Supabase PostgreSQL to Convex
 - 001-stripe-subscription: Stripe billing integration

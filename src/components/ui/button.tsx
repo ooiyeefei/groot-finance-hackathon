@@ -24,9 +24,9 @@ const buttonVariants = cva(
           "bg-action-view text-action-view-foreground border-transparent hover:bg-action-view-hover hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
         ],
 
-        // Success/Approve actions - Green variant with white text
+        // Success/Approve actions - Green variant using action tokens
         success: [
-          "bg-green-600 text-white border-transparent hover:bg-green-700 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+          "bg-action-view text-action-view-foreground border-transparent hover:bg-action-view-hover hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
         ],
 
         // Delete/Destructive actions - Red variant

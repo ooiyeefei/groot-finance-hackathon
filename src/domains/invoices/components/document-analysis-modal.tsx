@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Languages, Eye, FileText, DollarSign, List, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
@@ -768,7 +769,10 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
     return allBoxes.filter(box => box.entityKey === hoveredEntity)
   }
 
-  return (
+  // SSR safety check
+  if (typeof globalThis.document === 'undefined') return null
+
+  return createPortal(
     <div className="fixed inset-0 bg-background z-50 flex flex-col">
       <div className="w-full h-full flex flex-col">
         {/* Modal Header */}
@@ -1685,6 +1689,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    globalThis.document.body
   )
 }

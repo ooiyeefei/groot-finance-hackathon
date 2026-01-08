@@ -7,6 +7,7 @@
 'use client'
 
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { X, Save, Send, ArrowLeft, Trash2, Loader2, AlertCircle, Receipt, FileText, Brain, DollarSign, Copy, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -262,9 +263,12 @@ export default function EditExpenseModalNew({
     return null
   }
 
-  return (
-    <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50">
-      <div className="bg-card rounded-lg w-full max-w-7xl h-[90vh] overflow-hidden relative m-4">
+  // SSR safety check
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50 p-4">
+      <div className="bg-card rounded-lg w-full max-w-7xl max-h-[95vh] overflow-hidden relative">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-border">
           <div>
@@ -280,7 +284,7 @@ export default function EditExpenseModalNew({
               <button
                 onClick={handleDeleteClick}
                 disabled={saving || submitting || isReprocessing}
-                className="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+                className="inline-flex items-center px-3 py-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
               >
                 <Trash2 className="w-4 h-4 mr-1.5" />
                 Delete
@@ -306,7 +310,7 @@ export default function EditExpenseModalNew({
             <button
               onClick={() => handleSaveWithLineItems('submit')}
               disabled={saving || submitting || isReprocessing}
-              className="inline-flex items-center px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               {submitting ? (
                 <>
@@ -419,7 +423,7 @@ export default function EditExpenseModalNew({
                                   <button
                                     onClick={handleReprocessWrapper}
                                     disabled={saving || submitting || isReprocessing}
-                                    className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50 justify-center"
+                                    className="inline-flex items-center px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50 justify-center"
                                     style={{ height: '40px', minWidth: '120px' }}
                                   >
                                     {isReprocessing ? (
@@ -471,9 +475,9 @@ export default function EditExpenseModalNew({
                     <div className="p-6 space-y-6">
                       {/* Success Alert */}
                       {showSuccess && (
-                        <Alert className="bg-green-900/20 border-green-700">
+                        <Alert className="bg-green-500/10 border border-green-500/30">
                           <CheckCircle className="w-4 h-4" />
-                          <AlertDescription className="text-green-400">
+                          <AlertDescription className="text-green-600 dark:text-green-400">
                             {successMessage}
                           </AlertDescription>
                         </Alert>
@@ -481,9 +485,9 @@ export default function EditExpenseModalNew({
 
                       {/* Save Error Alert */}
                       {saveError && (
-                        <Alert className="bg-red-900/20 border-red-700">
+                        <Alert className="bg-red-500/10 border border-red-500/30">
                           <AlertCircle className="w-4 h-4" />
-                          <AlertDescription className="text-red-400">
+                          <AlertDescription className="text-red-600 dark:text-red-400">
                             {saveError}
                           </AlertDescription>
                         </Alert>
@@ -585,6 +589,7 @@ export default function EditExpenseModalNew({
         confirmVariant="danger"
         isLoading={isDeleting}
       />
-    </div>
+    </div>,
+    document.body
   )
 }

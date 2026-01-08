@@ -11,22 +11,22 @@ export default function SkeletonLoader({
 }: SkeletonLoaderProps) {
   
   const renderCardSkeleton = () => (
-    <div className="bg-record-layer-1 border border-record-border rounded-lg p-6 animate-pulse">
-      <div className="h-4 bg-record-layer-2 rounded w-20 mb-3"></div>
-      <div className="h-8 bg-record-layer-2 rounded w-32 mb-2"></div>
-      <div className="h-3 bg-record-layer-2 rounded w-16"></div>
+    <div className="bg-card border border-border rounded-lg p-6 animate-pulse">
+      <div className="h-4 bg-muted rounded w-20 mb-3"></div>
+      <div className="h-8 bg-muted rounded w-32 mb-2"></div>
+      <div className="h-3 bg-muted rounded w-16"></div>
     </div>
   )
 
   const renderListSkeleton = () => (
-    <div className="bg-record-layer-1 border border-record-border rounded-lg p-4 animate-pulse">
+    <div className="bg-card border border-border rounded-lg p-4 animate-pulse">
       <div className="flex items-center space-x-4">
-        <div className="w-10 h-10 bg-record-layer-2 rounded"></div>
+        <div className="w-10 h-10 bg-muted rounded"></div>
         <div className="flex-1">
-          <div className="h-4 bg-record-layer-2 rounded w-32 mb-2"></div>
-          <div className="h-3 bg-record-layer-2 rounded w-20"></div>
+          <div className="h-4 bg-muted rounded w-32 mb-2"></div>
+          <div className="h-3 bg-muted rounded w-20"></div>
         </div>
-        <div className="h-6 bg-record-layer-2 rounded w-16"></div>
+        <div className="h-6 bg-muted rounded w-16"></div>
       </div>
     </div>
   )
@@ -34,10 +34,10 @@ export default function SkeletonLoader({
   const renderDashboardSkeleton = () => (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {Array.from({ length: 4 }, (_, i) => (
-        <div key={i} className="bg-record-layer-1 border border-record-border rounded-lg p-6 animate-pulse">
-          <div className="h-4 bg-record-layer-2 rounded w-20 mb-3"></div>
-          <div className="h-8 bg-record-layer-2 rounded w-32 mb-2"></div>
-          <div className="h-3 bg-record-layer-2 rounded w-16"></div>
+        <div key={i} className="bg-card border border-border rounded-lg p-6 animate-pulse">
+          <div className="h-4 bg-muted rounded w-20 mb-3"></div>
+          <div className="h-8 bg-muted rounded w-32 mb-2"></div>
+          <div className="h-3 bg-muted rounded w-16"></div>
         </div>
       ))}
     </div>
@@ -46,17 +46,17 @@ export default function SkeletonLoader({
   const renderChatSkeleton = () => (
     <div className="space-y-4 animate-pulse">
       <div className="flex items-start space-x-3">
-        <div className="w-8 h-8 bg-record-layer-2 rounded-full"></div>
-        <div className="bg-record-layer-2 rounded-lg p-4 max-w-xs">
-          <div className="h-4 bg-record-layer-3 rounded mb-2"></div>
-          <div className="h-4 bg-record-layer-3 rounded w-3/4"></div>
+        <div className="w-8 h-8 bg-muted rounded-full"></div>
+        <div className="bg-muted rounded-lg p-4 max-w-xs">
+          <div className="h-4 bg-muted-foreground/20 rounded mb-2"></div>
+          <div className="h-4 bg-muted-foreground/20 rounded w-3/4"></div>
         </div>
       </div>
       <div className="flex items-start space-x-3 justify-end">
-        <div className="bg-record-layer-2 rounded-lg p-4 max-w-xs">
-          <div className="h-4 bg-record-layer-3 rounded"></div>
+        <div className="bg-muted rounded-lg p-4 max-w-xs">
+          <div className="h-4 bg-muted-foreground/20 rounded"></div>
         </div>
-        <div className="w-8 h-8 bg-record-layer-2 rounded-full"></div>
+        <div className="w-8 h-8 bg-muted rounded-full"></div>
       </div>
     </div>
   )

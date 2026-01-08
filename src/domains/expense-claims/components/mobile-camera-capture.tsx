@@ -291,7 +291,7 @@ export default function MobileCameraCapture({
               className="w-full h-auto max-h-96 object-contain"
             />
             <div className="absolute top-4 right-4">
-              <CheckCircle className="w-8 h-8 text-green-400" />
+              <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
             </div>
           </div>
           
@@ -306,7 +306,8 @@ export default function MobileCameraCapture({
             <Button
               onClick={() => capturedFile && confirmCapture(capturedFile)}
               disabled={isProcessing || !capturedFile}
-              className="flex-1 bg-green-600 dark:bg-green-500 text-white hover:bg-green-700 dark:hover:bg-green-600"
+              variant="success"
+              className="flex-1"
             >
               {isProcessing ? 'Processing...' : 'Use Photo'}
             </Button>
@@ -372,11 +373,11 @@ export default function MobileCameraCapture({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setCameraSettings(prev => ({ 
-              ...prev, 
-              flashEnabled: !prev.flashEnabled 
+            onClick={() => setCameraSettings(prev => ({
+              ...prev,
+              flashEnabled: !prev.flashEnabled
             }))}
-            className={`${cameraSettings.flashEnabled ? 'text-yellow-400' : 'text-gray-400'}`}
+            className={`${cameraSettings.flashEnabled ? 'text-yellow-600 dark:text-yellow-400' : 'text-muted-foreground'}`}
           >
             {cameraSettings.flashEnabled ? <Zap className="w-5 h-5" /> : <ZapOff className="w-5 h-5" />}
           </Button>
@@ -385,11 +386,11 @@ export default function MobileCameraCapture({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setCameraSettings(prev => ({ 
-              ...prev, 
-              gridEnabled: !prev.gridEnabled 
+            onClick={() => setCameraSettings(prev => ({
+              ...prev,
+              gridEnabled: !prev.gridEnabled
             }))}
-            className={`${cameraSettings.gridEnabled ? 'text-blue-400' : 'text-gray-400'}`}
+            className={`${cameraSettings.gridEnabled ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground'}`}
           >
             <Grid className="w-5 h-5" />
           </Button>
@@ -399,11 +400,11 @@ export default function MobileCameraCapture({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setCameraStream(prev => ({ 
-                ...prev, 
-                facingMode: prev.facingMode === 'user' ? 'environment' : 'user' 
+              onClick={() => setCameraStream(prev => ({
+                ...prev,
+                facingMode: prev.facingMode === 'user' ? 'environment' : 'user'
               }))}
-              className="text-gray-400"
+              className="text-muted-foreground"
             >
               <RotateCw className="w-5 h-5" />
             </Button>

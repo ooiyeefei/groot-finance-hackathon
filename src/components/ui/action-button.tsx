@@ -22,11 +22,11 @@ export default function ActionButton({
   'aria-label': ariaLabel,
   ...props
 }: ActionButtonProps) {
-  const baseClasses = 'font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 rounded-lg'
-  
+  const baseClasses = 'font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background rounded-lg'
+
   const variantClasses = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white disabled:bg-blue-800 disabled:opacity-50',
-    secondary: 'bg-gray-700 hover:bg-gray-600 text-white disabled:bg-gray-800 disabled:opacity-50'
+    primary: 'bg-primary hover:bg-primary/90 text-primary-foreground disabled:bg-primary/50 disabled:opacity-50',
+    secondary: 'bg-secondary hover:bg-secondary/80 text-secondary-foreground disabled:bg-secondary/50 disabled:opacity-50'
   }
   
   const sizeClasses = {

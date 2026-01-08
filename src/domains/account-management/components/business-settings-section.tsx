@@ -25,12 +25,12 @@ export default function BusinessSettingsSection({ className }: BusinessSettingsS
 
   if (isLoadingProfile) {
     return (
-      <div className={`bg-gray-800 rounded-lg border border-gray-700 p-6 ${className}`}>
+      <div className={`bg-card rounded-lg border border-border p-6 ${className}`}>
         <div className="animate-pulse">
-          <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
+          <div className="h-6 bg-muted rounded w-48 mb-4"></div>
           <div className="space-y-4">
-            <div className="h-4 bg-gray-700 rounded w-32"></div>
-            <div className="h-10 bg-gray-700 rounded w-full"></div>
+            <div className="h-4 bg-muted rounded w-32"></div>
+            <div className="h-10 bg-muted rounded w-full"></div>
           </div>
         </div>
       </div>
@@ -78,12 +78,12 @@ export default function BusinessSettingsSection({ className }: BusinessSettingsS
     <div className={`space-y-6 ${className}`}>
       {/* Business Management Navigation Cards */}
       {canManageBusiness && (
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <div className="bg-card rounded-lg border border-border p-6">
           <div className="flex items-center gap-3 mb-6">
-            <Settings className="w-5 h-5 text-gray-400" />
+            <Settings className="w-5 h-5 text-muted-foreground" />
             <div>
-              <h3 className="text-lg font-semibold text-white">Business Management</h3>
-              <p className="text-sm text-gray-400">Quick access to advanced business settings</p>
+              <h3 className="text-lg font-semibold text-foreground">Business Management</h3>
+              <p className="text-sm text-muted-foreground">Quick access to advanced business settings</p>
             </div>
           </div>
 
@@ -115,23 +115,23 @@ export default function BusinessSettingsSection({ className }: BusinessSettingsS
                       <div className="flex items-center gap-3 mb-2">
                         <div className={`
                           p-2 rounded-lg
-                          ${card.color === 'blue' ? 'bg-blue-500/20 text-blue-300' : ''}
-                          ${card.color === 'green' ? 'bg-green-500/20 text-green-300' : ''}
-                          ${card.color === 'purple' ? 'bg-purple-500/20 text-purple-300' : ''}
-                          ${card.color === 'orange' ? 'bg-orange-500/20 text-orange-300' : ''}
+                          ${card.color === 'blue' ? 'bg-blue-500/20 text-blue-600 dark:text-blue-300' : ''}
+                          ${card.color === 'green' ? 'bg-green-500/20 text-green-600 dark:text-green-300' : ''}
+                          ${card.color === 'purple' ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : ''}
+                          ${card.color === 'orange' ? 'bg-orange-500/20 text-orange-600 dark:text-orange-300' : ''}
                         `}>
                           <IconComponent className="w-5 h-5" />
                         </div>
-                        <h4 className="text-white font-semibold">{card.title}</h4>
+                        <h4 className="text-foreground font-semibold">{card.title}</h4>
                         {card.adminOnly && (
-                          <span className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-md">
+                          <span className="px-2 py-1 bg-red-500/20 text-red-600 dark:text-red-300 text-xs rounded-md">
                             Admin
                           </span>
                         )}
                       </div>
-                      <p className="text-gray-400 text-sm">{card.description}</p>
+                      <p className="text-muted-foreground text-sm">{card.description}</p>
                     </div>
-                    <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                    <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
                   </div>
                 </Link>
               )
@@ -142,10 +142,10 @@ export default function BusinessSettingsSection({ className }: BusinessSettingsS
 
       {/* Info message for non-managers */}
       {!canManageBusiness && (
-        <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-6">
+        <div className="bg-card/50 rounded-lg border border-border p-6">
           <div className="text-center py-4">
-            <AlertCircle className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-            <p className="text-gray-400 text-sm">
+            <AlertCircle className="w-8 h-8 text-yellow-600 dark:text-yellow-400 mx-auto mb-2" />
+            <p className="text-muted-foreground text-sm">
               Business management settings are available to managers and administrators
             </p>
           </div>

@@ -191,7 +191,7 @@ export default function CompleteDashboard() {
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold text-green-900 dark:text-white">
                 {analytics ? formatCurrency(analytics.total_income, homeCurrency) : '-'}
@@ -223,7 +223,7 @@ export default function CompleteDashboard() {
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold text-red-900 dark:text-white">
                 {analytics ? formatCurrency(analytics.total_expenses, homeCurrency) : '-'}
@@ -267,7 +267,7 @@ export default function CompleteDashboard() {
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
               <p className={`text-2xl font-bold ${
                 analytics && analytics.net_profit >= 0
@@ -314,7 +314,7 @@ export default function CompleteDashboard() {
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold">
                 {analytics ? analytics.transaction_count : '-'}
@@ -341,7 +341,7 @@ export default function CompleteDashboard() {
           </div>
           <div className="mb-1">
             {loading ? (
-              <div className="h-8 bg-record-layer-2 rounded animate-pulse"></div>
+              <div className="h-8 bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold">
                 {formatCurrency(profitMargin, homeCurrency, true)}

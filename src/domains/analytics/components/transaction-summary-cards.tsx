@@ -115,7 +115,7 @@ export default function TransactionSummaryCards({
           </div>
           <div className="space-y-1">
             {isLoading ? (
-              <div className="h-6 bg-record-layer-2 rounded animate-pulse"></div>
+              <div className="h-6 bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold text-green-900 dark:text-white">
                 {summary ? formatCurrency(summary.totalIncome, homeCurrency) : '-'}
@@ -141,7 +141,7 @@ export default function TransactionSummaryCards({
           </div>
           <div className="space-y-1">
             {isLoading ? (
-              <div className="h-6 bg-record-layer-2 rounded animate-pulse"></div>
+              <div className="h-6 bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold text-red-900 dark:text-white">
                 {summary ? formatCurrency(summary.totalExpense, homeCurrency) : '-'}
@@ -191,7 +191,7 @@ export default function TransactionSummaryCards({
           </div>
           <div className="space-y-1">
             {isLoading ? (
-              <div className="h-6 bg-record-layer-2 rounded animate-pulse"></div>
+              <div className="h-6 bg-muted rounded animate-pulse"></div>
             ) : (
               <p className={`text-2xl font-bold ${
                 summary && summary.netAmount > 0
@@ -229,7 +229,7 @@ export default function TransactionSummaryCards({
           </div>
           <div className="space-y-1">
             {isLoading ? (
-              <div className="h-6 bg-record-layer-2 rounded animate-pulse"></div>
+              <div className="h-6 bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold text-primary">
                 {summary ? summary.transactionCount : '-'}

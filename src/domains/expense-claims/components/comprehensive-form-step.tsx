@@ -161,9 +161,9 @@ export default function ComprehensiveFormStep({
     <div className="space-y-6">
       {/* OCR Processing Status */}
       {processing && (
-        <Alert className="bg-blue-900/20 border-blue-700">
+        <Alert className="bg-blue-500/10 border border-blue-500/30">
           <Brain className="w-4 h-4 animate-spin" />
-          <AlertDescription className="text-blue-400">
+          <AlertDescription className="text-blue-600 dark:text-blue-400">
             AI Analyzing... This may take a few moments.
           </AlertDescription>
         </Alert>
@@ -171,9 +171,9 @@ export default function ComprehensiveFormStep({
 
       {/* Duplicate Warning */}
       {duplicateWarning?.found && (
-        <Alert className="bg-yellow-900/20 border-yellow-700">
+        <Alert className="bg-yellow-500/10 border border-yellow-500/30">
           <AlertTriangle className="w-4 h-4" />
-          <AlertDescription className="text-yellow-400">
+          <AlertDescription className="text-yellow-600 dark:text-yellow-400">
             <div className="space-y-2">
               <div className="font-medium">Potential duplicate detected!</div>
               <div className="text-sm">
@@ -183,7 +183,7 @@ export default function ComprehensiveFormStep({
               <Button
                 variant="outline"
                 size="sm"
-                className="mt-2 border-yellow-600 text-yellow-400 hover:bg-yellow-900/20"
+                className="mt-2 border-yellow-500/50 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/10"
                 onClick={() => {
                   // TODO: Show duplicate claim details modal
                   console.log('Show duplicate:', duplicateWarning.existing_claim_id)
@@ -199,10 +199,10 @@ export default function ComprehensiveFormStep({
 
       {/* OCR Results Quality Indicator */}
       {ocrResult && (
-        <Alert className={`${ocrResult.requires_validation ? 'bg-yellow-900/20 border-yellow-700' : 'bg-green-900/20 border-green-700'}`}>
+        <Alert className={`${ocrResult.requires_validation ? 'bg-yellow-500/10 border border-yellow-500/30' : 'bg-green-500/10 border border-green-500/30'}`}>
           <CheckCircle className="w-4 h-4" />
-          <AlertDescription className={ocrResult.requires_validation ? 'text-yellow-400' : 'text-green-400'}>
-            {ocrResult.requires_validation 
+          <AlertDescription className={ocrResult.requires_validation ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'}>
+            {ocrResult.requires_validation
               ? `Receipt processed with ${Math.round((ocrResult.confidence_score || 0) * 100)}% confidence. Please verify the details below.`
               : 'Receipt processed successfully! Please review the extracted details.'
             }
@@ -212,13 +212,13 @@ export default function ComprehensiveFormStep({
 
       {/* Receipt Preview */}
       {selectedFile && previewUrl && (
-        <Card className="bg-gray-700 border-gray-600">
+        <Card className="bg-card border-border">
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
               <img src={previewUrl} alt="Receipt preview" className="w-24 h-24 object-cover rounded" />
               <div className="flex-1">
-                <p className="text-white font-medium">{selectedFile.name}</p>
-                <p className="text-gray-400 text-sm">{(selectedFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                <p className="text-foreground font-medium">{selectedFile.name}</p>
+                <p className="text-muted-foreground text-sm">{(selectedFile.size / 1024 / 1024).toFixed(1)} MB</p>
                 {ocrResult && (
                   <Badge variant="secondary" className="mt-1">
                     Confidence: {Math.round((ocrResult.confidence_score || 0) * 100)}%
@@ -232,9 +232,9 @@ export default function ComprehensiveFormStep({
 
       {/* Policy Compliance Warnings */}
       {(exceedsLimit || needsReceipt) && (
-        <Alert className="bg-red-900/20 border-red-700">
+        <Alert className="bg-red-500/10 border border-red-500/30">
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription className="text-red-400">
+          <AlertDescription className="text-red-600 dark:text-red-400">
             <div className="space-y-1">
               <div className="font-medium">Policy Compliance Required</div>
               {exceedsLimit && <div>• Amount exceeds category limit of ${categoryInfo?.policy_limit}</div>}
@@ -247,17 +247,17 @@ export default function ComprehensiveFormStep({
 
       {/* Tabbed Form Interface */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 bg-gray-700 border border-gray-600">
-          <TabsTrigger value="basic" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+        <TabsList className="grid w-full grid-cols-4 bg-muted border border-border">
+          <TabsTrigger value="basic" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Basic Details
           </TabsTrigger>
-          <TabsTrigger value="items" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+          <TabsTrigger value="items" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Line Items ({formData.line_items.length})
           </TabsTrigger>
-          <TabsTrigger value="tax" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+          <TabsTrigger value="tax" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Tax & Policy
           </TabsTrigger>
-          <TabsTrigger value="additional" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+          <TabsTrigger value="additional" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Additional Info
           </TabsTrigger>
         </TabsList>
@@ -266,23 +266,23 @@ export default function ComprehensiveFormStep({
         <TabsContent value="basic" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="expense_category" className="text-white">Expense Category *</Label>
+              <Label htmlFor="expense_category" className="text-foreground">Expense Category *</Label>
               <Select
                 value={formData.expense_category}
                 onValueChange={(value) => setFormData({...formData, expense_category: value})}
                 disabled={loadingCategories}
               >
-                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                <SelectTrigger className="bg-input border-border text-foreground">
                   <SelectValue placeholder={loadingCategories ? "Loading categories..." : "Select category"} />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
+                <SelectContent className="bg-card border-border">
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id} className="text-white">
+                    <SelectItem key={category.id} value={category.id} className="text-foreground">
                       {category.category_name}
                     </SelectItem>
                   ))}
                   {categories.length === 0 && !loadingCategories && (
-                    <SelectItem value="no-categories" disabled className="text-gray-500">
+                    <SelectItem value="no-categories" disabled className="text-muted-foreground">
                       No categories available
                     </SelectItem>
                   )}
@@ -292,8 +292,8 @@ export default function ComprehensiveFormStep({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="original_amount" className="text-white">
-                Total Amount * {hasLineItems && <span className="text-yellow-400">(Auto-calculated from line items)</span>}
+              <Label htmlFor="original_amount" className="text-foreground">
+                Total Amount * {hasLineItems && <span className="text-yellow-600 dark:text-yellow-400">(Auto-calculated from line items)</span>}
               </Label>
               <Input
                 id="original_amount"
@@ -301,7 +301,7 @@ export default function ComprehensiveFormStep({
                 step="0.01"
                 value={formData.original_amount || ''}
                 onChange={(e) => setFormData({...formData, original_amount: parseFloat(e.target.value) || 0})}
-                className="bg-gray-700 border-gray-600 text-white"
+                className="bg-input border-border text-foreground"
                 placeholder="0.00"
                 disabled={hasLineItems}
               />
@@ -311,7 +311,7 @@ export default function ComprehensiveFormStep({
                   variant="outline"
                   size="sm"
                   onClick={syncAmountWithLineItems}
-                  className="border-yellow-600 text-yellow-400 hover:bg-yellow-900/20"
+                  className="border-yellow-500/50 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/10"
                 >
                   Sync with line items (${lineItemsTotal.toFixed(2)})
                 </Button>
@@ -320,36 +320,36 @@ export default function ComprehensiveFormStep({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="vendor_name" className="text-white">Vendor Name *</Label>
+            <Label htmlFor="vendor_name" className="text-foreground">Vendor Name *</Label>
             <Input
               id="vendor_name"
               value={formData.vendor_name}
               onChange={(e) => setFormData({...formData, vendor_name: e.target.value})}
-              className="bg-gray-700 border-gray-600 text-white"
+              className="bg-input border-border text-foreground"
               placeholder="Restaurant, store, or service provider name"
             />
             {errors.vendor_name && <p className="text-red-400 text-sm">{errors.vendor_name}</p>}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description" className="text-white">Description *</Label>
+            <Label htmlFor="description" className="text-foreground">Description *</Label>
             <Input
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({...formData, description: e.target.value})}
-              className="bg-gray-700 border-gray-600 text-white"
+              className="bg-input border-border text-foreground"
               placeholder="Brief description of the expense"
             />
             {errors.description && <p className="text-red-400 text-sm">{errors.description}</p>}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="business_purpose" className="text-white">Business Purpose *</Label>
+            <Label htmlFor="business_purpose" className="text-foreground">Business Purpose *</Label>
             <Textarea
               id="business_purpose"
               value={formData.business_purpose}
               onChange={(e) => setFormData({...formData, business_purpose: e.target.value})}
-              className="bg-gray-700 border-gray-600 text-white"
+              className="bg-input border-border text-foreground"
               placeholder="Explain the business reason for this expense"
               rows={3}
             />
@@ -358,41 +358,41 @@ export default function ComprehensiveFormStep({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="transaction_date" className="text-white">Transaction Date *</Label>
+              <Label htmlFor="transaction_date" className="text-foreground">Transaction Date *</Label>
               <Input
                 id="transaction_date"
                 type="date"
                 value={formData.transaction_date}
                 onChange={(e) => setFormData({...formData, transaction_date: e.target.value})}
-                className="bg-gray-700 border-gray-600 text-white"
+                className="bg-input border-border text-foreground"
               />
               {errors.transaction_date && <p className="text-red-400 text-sm">{errors.transaction_date}</p>}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="original_currency" className="text-white">Currency</Label>
-              <Select 
-                value={formData.original_currency} 
+              <Label htmlFor="original_currency" className="text-foreground">Currency</Label>
+              <Select
+                value={formData.original_currency}
                 onValueChange={(value) => setFormData({...formData, original_currency: value})}
               >
-                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                <SelectTrigger className="bg-input border-border text-foreground">
                   <SelectValue placeholder="Select currency" />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
+                <SelectContent className="bg-card border-border">
                   {['SGD', 'USD', 'EUR', 'MYR', 'THB', 'IDR', 'CNY', 'VND', 'PHP'].map(currency => (
-                    <SelectItem key={currency} value={currency} className="text-white">{currency}</SelectItem>
+                    <SelectItem key={currency} value={currency} className="text-foreground">{currency}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="receipt_number" className="text-white">Receipt Number</Label>
+              <Label htmlFor="receipt_number" className="text-foreground">Receipt Number</Label>
               <Input
                 id="receipt_number"
                 value={formData.receipt_number || ''}
                 onChange={(e) => setFormData({...formData, receipt_number: e.target.value})}
-                className="bg-gray-700 border-gray-600 text-white"
+                className="bg-input border-border text-foreground"
                 placeholder="Receipt #"
               />
             </div>
@@ -403,19 +403,19 @@ export default function ComprehensiveFormStep({
         <TabsContent value="items" className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-white">Itemized Details</h3>
-              <p className="text-gray-400 text-sm">Break down your expense into individual items</p>
+              <h3 className="text-lg font-semibold text-foreground">Itemized Details</h3>
+              <p className="text-muted-foreground text-sm">Break down your expense into individual items</p>
             </div>
-            <Button onClick={addLineItem} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={addLineItem} variant="view">
               <Plus className="w-4 h-4 mr-2" />
               Add Item
             </Button>
           </div>
 
           {formData.line_items.length === 0 ? (
-            <Card className="bg-gray-700 border-gray-600">
+            <Card className="bg-card border-border">
               <CardContent className="p-8 text-center">
-                <div className="text-gray-400">
+                <div className="text-muted-foreground">
                   <Plus className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p>No line items added</p>
                   <p className="text-sm">Add itemized details for better expense tracking</p>
@@ -425,15 +425,15 @@ export default function ComprehensiveFormStep({
           ) : (
             <div className="space-y-3">
               {formData.line_items.map((item, index) => (
-                <Card key={item.id} className="bg-gray-700 border-gray-600">
+                <Card key={item.id} className="bg-card border-border">
                   <CardContent className="p-4">
                     <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                       <div className="md:col-span-2">
-                        <Label className="text-white text-xs">Item Description *</Label>
+                        <Label className="text-foreground text-xs">Item Description *</Label>
                         <Input
                           value={item.description}
                           onChange={(e) => updateLineItem(item.id, { description: e.target.value })}
-                          className="bg-gray-600 border-gray-500 text-white text-sm"
+                          className="bg-muted border-border text-foreground text-sm"
                           placeholder="Item name"
                         />
                         {errors[`line_item_${index}_description`] && (
@@ -442,7 +442,7 @@ export default function ComprehensiveFormStep({
                       </div>
                       
                       <div>
-                        <Label className="text-white text-xs">Qty *</Label>
+                        <Label className="text-foreground text-xs">Qty *</Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -452,12 +452,12 @@ export default function ComprehensiveFormStep({
                             const total = quantity * item.unit_price
                             updateLineItem(item.id, { quantity, total_amount: total })
                           }}
-                          className="bg-gray-600 border-gray-500 text-white text-sm"
+                          className="bg-muted border-border text-foreground text-sm"
                         />
                       </div>
-                      
+
                       <div>
-                        <Label className="text-white text-xs">Unit Price *</Label>
+                        <Label className="text-foreground text-xs">Unit Price *</Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -467,26 +467,26 @@ export default function ComprehensiveFormStep({
                             const total = item.quantity * unitPrice
                             updateLineItem(item.id, { unit_price: unitPrice, total_amount: total })
                           }}
-                          className="bg-gray-600 border-gray-500 text-white text-sm"
+                          className="bg-muted border-border text-foreground text-sm"
                         />
                       </div>
-                      
+
                       <div>
-                        <Label className="text-white text-xs">Tax %</Label>
+                        <Label className="text-foreground text-xs">Tax %</Label>
                         <Input
                           type="number"
                           step="0.1"
                           value={item.tax_rate}
                           onChange={(e) => updateLineItem(item.id, { tax_rate: parseFloat(e.target.value) || 0 })}
-                          className="bg-gray-600 border-gray-500 text-white text-sm"
+                          className="bg-muted border-border text-foreground text-sm"
                           placeholder="0"
                         />
                       </div>
-                      
+
                       <div className="flex items-end gap-2">
                         <div className="flex-1">
-                          <Label className="text-white text-xs">Total</Label>
-                          <div className="bg-gray-600 border border-gray-500 rounded px-3 py-2 text-white text-sm">
+                          <Label className="text-foreground text-xs">Total</Label>
+                          <div className="bg-muted border border-border rounded px-3 py-2 text-foreground text-sm">
                             ${item.total_amount.toFixed(2)}
                           </div>
                         </div>
@@ -505,11 +505,11 @@ export default function ComprehensiveFormStep({
               ))}
               
               {/* Line Items Summary */}
-              <Card className="bg-blue-900/20 border-blue-700">
+              <Card className="bg-blue-500/10 border border-blue-500/30">
                 <CardContent className="p-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-blue-300 font-medium">Line Items Total:</span>
-                    <span className="text-blue-300 font-bold text-lg">
+                    <span className="text-blue-600 dark:text-blue-400 font-medium">Line Items Total:</span>
+                    <span className="text-blue-600 dark:text-blue-400 font-bold text-lg">
                       ${lineItemsTotal.toFixed(2)} {formData.original_currency}
                     </span>
                   </div>
@@ -522,31 +522,31 @@ export default function ComprehensiveFormStep({
         {/* Tax & Policy Tab */}
         <TabsContent value="tax" className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold text-white mb-4">Tax Information</h3>
-            
+            <h3 className="text-lg font-semibold text-foreground mb-4">Tax Information</h3>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="tax_amount" className="text-white">Tax Amount</Label>
+                <Label htmlFor="tax_amount" className="text-foreground">Tax Amount</Label>
                 <Input
                   id="tax_amount"
                   type="number"
                   step="0.01"
                   value={formData.tax_amount || ''}
                   onChange={(e) => setFormData({...formData, tax_amount: parseFloat(e.target.value) || 0})}
-                  className="bg-gray-700 border-gray-600 text-white"
+                  className="bg-input border-border text-foreground"
                   placeholder="0.00"
                 />
               </div>
-              
+
               <div className="space-y-2">
-                <Label htmlFor="tax_rate" className="text-white">Tax Rate (%)</Label>
+                <Label htmlFor="tax_rate" className="text-foreground">Tax Rate (%)</Label>
                 <Input
                   id="tax_rate"
                   type="number"
                   step="0.1"
                   value={formData.tax_rate || ''}
                   onChange={(e) => setFormData({...formData, tax_rate: parseFloat(e.target.value) || 0})}
-                  className="bg-gray-700 border-gray-600 text-white"
+                  className="bg-input border-border text-foreground"
                   placeholder="0.0"
                 />
               </div>
@@ -555,41 +555,41 @@ export default function ComprehensiveFormStep({
 
           {/* Policy Compliance Section */}
           <div>
-            <h3 className="text-lg font-semibold text-white mb-4">Policy Compliance</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-4">Policy Compliance</h3>
             
             <div className="space-y-4">
               {categoryInfo && (
-                <Card className="bg-gray-700 border-gray-600">
+                <Card className="bg-card border-border">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-white text-base">
+                    <CardTitle className="text-foreground text-base">
                       {categoryInfo.category_name} Policy
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <span className="text-gray-400">Policy Limit:</span>
-                        <div className="text-white">${categoryInfo.policy_limit || 'No limit'}</div>
+                        <span className="text-muted-foreground">Policy Limit:</span>
+                        <div className="text-foreground">${categoryInfo.policy_limit || 'No limit'}</div>
                       </div>
                       <div>
-                        <span className="text-gray-400">Receipt Required Over:</span>
-                        <div className="text-white">${categoryInfo.receipt_threshold || 0}</div>
+                        <span className="text-muted-foreground">Receipt Required Over:</span>
+                        <div className="text-foreground">${categoryInfo.receipt_threshold || 0}</div>
                       </div>
                     </div>
 
                     {exceedsLimit && (
-                      <Alert className="bg-red-900/20 border-red-700">
+                      <Alert className="bg-red-500/10 border border-red-500/30">
                         <AlertCircle className="w-4 h-4" />
-                        <AlertDescription className="text-red-400">
+                        <AlertDescription className="text-red-600 dark:text-red-400">
                           Amount exceeds policy limit. Manager approval required.
                         </AlertDescription>
                       </Alert>
                     )}
 
                     {needsReceipt && (
-                      <Alert className="bg-yellow-900/20 border-yellow-700">
+                      <Alert className="bg-yellow-500/10 border border-yellow-500/30">
                         <AlertTriangle className="w-4 h-4" />
-                        <AlertDescription className="text-yellow-400">
+                        <AlertDescription className="text-yellow-600 dark:text-yellow-400">
                           Receipt required for this amount. Please upload receipt.
                         </AlertDescription>
                       </Alert>
@@ -602,11 +602,11 @@ export default function ComprehensiveFormStep({
                 <Checkbox
                   id="requires_approval"
                   checked={formData.requires_manager_approval}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setFormData({...formData, requires_manager_approval: !!checked})
                   }
                 />
-                <Label htmlFor="requires_approval" className="text-white">
+                <Label htmlFor="requires_approval" className="text-foreground">
                   Requires manager approval
                 </Label>
               </div>
@@ -617,12 +617,12 @@ export default function ComprehensiveFormStep({
         {/* Additional Information Tab */}
         <TabsContent value="additional" className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="reference_number" className="text-white">Reference Number</Label>
+            <Label htmlFor="reference_number" className="text-foreground">Reference Number</Label>
             <Input
               id="reference_number"
               value={formData.reference_number || ''}
               onChange={(e) => setFormData({...formData, reference_number: e.target.value})}
-              className="bg-gray-700 border-gray-600 text-white"
+              className="bg-input border-border text-foreground"
               placeholder="PO number, invoice number, etc."
             />
           </div>
@@ -631,16 +631,16 @@ export default function ComprehensiveFormStep({
           {formData.expense_category === 'entertainment' && (
             <div className="space-y-4">
               <div>
-                <Label className="text-white">Client Entertainment</Label>
+                <Label className="text-foreground">Client Entertainment</Label>
                 <div className="flex items-center space-x-2 mt-2">
                   <Checkbox
                     id="client_entertainment"
                     checked={formData.client_entertainment}
-                    onCheckedChange={(checked) => 
+                    onCheckedChange={(checked) =>
                       setFormData({...formData, client_entertainment: !!checked})
                     }
                   />
-                  <Label htmlFor="client_entertainment" className="text-white">
+                  <Label htmlFor="client_entertainment" className="text-foreground">
                     This expense included client entertainment
                   </Label>
                 </div>
@@ -648,13 +648,13 @@ export default function ComprehensiveFormStep({
 
               {formData.client_entertainment && (
                 <div className="space-y-3">
-                  <Label className="text-white">Attendees *</Label>
-                  
+                  <Label className="text-foreground">Attendees *</Label>
+
                   <div className="flex gap-2">
                     <Input
                       value={newAttendee}
                       onChange={(e) => setNewAttendee(e.target.value)}
-                      className="bg-gray-700 border-gray-600 text-white"
+                      className="bg-input border-border text-foreground"
                       placeholder="Name of attendee"
                       onKeyPress={(e) => e.key === 'Enter' && addAttendee()}
                     />
@@ -666,13 +666,13 @@ export default function ComprehensiveFormStep({
                   {formData.attendees && formData.attendees.length > 0 && (
                     <div className="space-y-2">
                       {formData.attendees.map((attendee, index) => (
-                        <div key={index} className="flex items-center justify-between bg-gray-700 p-2 rounded">
-                          <span className="text-white">{attendee}</span>
+                        <div key={index} className="flex items-center justify-between bg-card p-2 rounded">
+                          <span className="text-foreground">{attendee}</span>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => removeAttendee(index)}
-                            className="text-red-400 hover:text-red-300"
+                            className="text-red-600 dark:text-red-400 hover:text-red-500"
                           >
                             <Trash2 className="w-3 h-3" />
                           </Button>
@@ -688,12 +688,12 @@ export default function ComprehensiveFormStep({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="notes" className="text-white">Additional Notes</Label>
+            <Label htmlFor="notes" className="text-foreground">Additional Notes</Label>
             <Textarea
               id="notes"
               value={formData.notes || ''}
               onChange={(e) => setFormData({...formData, notes: e.target.value})}
-              className="bg-gray-700 border-gray-600 text-white"
+              className="bg-input border-border text-foreground"
               placeholder="Any additional information or special circumstances"
               rows={4}
             />
@@ -703,10 +703,10 @@ export default function ComprehensiveFormStep({
 
       {/* Navigation Buttons */}
       <div className="flex gap-3 pt-4">
-        <Button variant="outline" onClick={onBack} className="border-gray-600 text-gray-300">
+        <Button variant="outline" onClick={onBack} className="border-border text-muted-foreground">
           Back
         </Button>
-        <Button onClick={onNext} className="flex-1 bg-blue-600 hover:bg-blue-700">
+        <Button onClick={onNext} variant="primary" className="flex-1">
           Review & Submit
         </Button>
       </div>

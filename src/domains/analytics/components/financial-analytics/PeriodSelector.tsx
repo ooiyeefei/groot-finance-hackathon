@@ -21,10 +21,10 @@ export default function PeriodSelector({
   disabled = false
 }: PeriodSelectorProps) {
   return (
-    <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg p-1">
+    <div className="flex items-center bg-muted border border-border rounded-lg p-1">
       {PERIOD_OPTIONS.map((option) => {
         const isSelected = selectedPeriod === option.value;
-        
+
         return (
           <button
             key={option.value}
@@ -32,11 +32,11 @@ export default function PeriodSelector({
             disabled={disabled}
             className={`
               px-4 py-2 text-sm font-medium rounded-md transition-all duration-200
-              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800
+              focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background
               disabled:opacity-50 disabled:cursor-not-allowed
-              ${isSelected 
-                ? 'bg-blue-600 text-white shadow-sm' 
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+              ${isSelected
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }
             `}
             title={option.description}

@@ -23,10 +23,10 @@ export default function MetricsOverview({
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="bg-gray-800 border border-gray-700 rounded-lg p-6 animate-pulse">
-            <div className="h-4 bg-gray-700 rounded w-20 mb-3"></div>
-            <div className="h-8 bg-gray-700 rounded w-32 mb-2"></div>
-            <div className="h-3 bg-gray-700 rounded w-16"></div>
+          <div key={i} className="bg-card border border-border rounded-lg p-6 animate-pulse">
+            <div className="h-4 bg-muted rounded w-20 mb-3"></div>
+            <div className="h-8 bg-muted rounded w-32 mb-2"></div>
+            <div className="h-3 bg-muted rounded w-16"></div>
           </div>
         ))}
       </div>
@@ -35,8 +35,8 @@ export default function MetricsOverview({
 
   if (!analytics) {
     return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <p className="text-gray-400 text-center">No analytics data available</p>
+      <div className="bg-card border border-border rounded-lg p-6">
+        <p className="text-muted-foreground text-center">No analytics data available</p>
       </div>
     );
   }
@@ -126,17 +126,17 @@ function MetricCard({
 
   const getTrendIcon = () => {
     if (trend === undefined || trend === 0) return null;
-    
+
     if (trend > 0) {
-      return <TrendingUp className="w-3 h-3 text-green-400" />;
+      return <TrendingUp className="w-3 h-3 text-green-600 dark:text-green-400" />;
     } else {
-      return <TrendingDown className="w-3 h-3 text-red-400" />;
+      return <TrendingDown className="w-3 h-3 text-red-600 dark:text-red-400" />;
     }
   };
 
   const getTrendColor = () => {
-    if (trend === undefined || trend === 0) return 'text-gray-400';
-    return trend > 0 ? 'text-green-400' : 'text-red-400';
+    if (trend === undefined || trend === 0) return 'text-muted-foreground';
+    return trend > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
   };
 
   const getTrendText = () => {
@@ -153,18 +153,18 @@ function MetricCard({
   };
 
   return (
-    <div className={`bg-gray-800 border border-gray-700 rounded-lg p-6 transition-all hover:bg-gray-750 ${className}`}>
+    <div className={`bg-card border border-border rounded-lg p-6 transition-all hover:bg-accent/50 ${className}`}>
       {/* Header with Title and Icon */}
       <div className="flex items-center justify-between mb-3">
-        <p className="text-sm font-medium text-gray-300">{title}</p>
+        <p className="text-sm font-medium text-muted-foreground">{title}</p>
         {Icon && (
-          <Icon className="w-5 h-5 text-gray-400" />
+          <Icon className="w-5 h-5 text-muted-foreground" />
         )}
       </div>
 
       {/* Main Value */}
       <div className="mb-2">
-        <p className="text-2xl font-bold text-white">
+        <p className="text-2xl font-bold text-foreground">
           {formatValue(value, currency)}
         </p>
       </div>
@@ -180,12 +180,12 @@ function MetricCard({
           </div>
         ) : (
           <div className="flex items-center space-x-1">
-            <Minus className="w-3 h-3 text-gray-500" />
-            <span className="text-xs text-gray-500">No trend</span>
+            <Minus className="w-3 h-3 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">No trend</span>
           </div>
         )}
-        
-        <span className="text-xs text-gray-500">vs. prev period</span>
+
+        <span className="text-xs text-muted-foreground">vs. prev period</span>
       </div>
     </div>
   );

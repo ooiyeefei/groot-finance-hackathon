@@ -1,5 +1,6 @@
 'use client'
 
+import { createPortal } from 'react-dom'
 import { X, Edit, Trash2, Calendar, Building, FileText, DollarSign, Hash, Eye, Copy, EyeOff } from 'lucide-react'
 import type { AccountingEntry } from '@/domains/accounting-entries/lib/data-access'
 import type { SupportedCurrency } from '@/domains/accounting-entries/types'
@@ -87,7 +88,10 @@ export default function AccountingEntryDetailModal({
     return transaction.line_items.reduce((sum, item) => sum + (item.total_amount || 0), 0)
   }
 
-  return (
+  // SSR safety check
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
     <div className="fixed inset-0 bg-background z-50 flex flex-col">
       <div className="w-full h-full flex flex-col">
         {/* Modal Header */}
@@ -490,6 +494,7 @@ export default function AccountingEntryDetailModal({
         confirmVariant="danger"
         isLoading={deleteConfirmation.isLoading}
       />
-    </div>
+    </div>,
+    document.body
   )
 }
