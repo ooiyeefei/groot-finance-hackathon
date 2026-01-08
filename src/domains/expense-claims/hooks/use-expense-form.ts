@@ -432,6 +432,27 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     }
   }, [userHomeCurrency])
 
+  // Re-run category inference when categories load (fixes race condition)
+  // Categories fetch asynchronously, so initial form setup may have empty categories
+  useEffect(() => {
+    if (mode === 'create' && extractionResult && categories.length > 0 && !categoriesLoading) {
+      // Only update if category is not yet set or is invalid
+      const currentCategory = formData.expense_category
+      const isCurrentCategoryValid = categories.some(cat => cat.id === currentCategory)
+
+      if (!currentCategory || currentCategory === 'other' || !isCurrentCategoryValid) {
+        const inferredCategory = inferExpenseCategory(extractionResult, categories)
+        if (inferredCategory !== currentCategory) {
+          console.log('[useExpenseForm] Re-inferring category after categories loaded:', inferredCategory)
+          setFormData(prev => ({
+            ...prev,
+            expense_category: inferredCategory
+          }))
+        }
+      }
+    }
+  }, [mode, extractionResult, categories, categoriesLoading])
+
   // Fetch exchange rate preview when currencies change
   useEffect(() => {
     if (formData.original_currency !== formData.home_currency && formData.original_amount > 0) {
