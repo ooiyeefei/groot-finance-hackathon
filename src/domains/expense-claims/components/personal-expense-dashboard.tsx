@@ -676,10 +676,9 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           <p className="text-foreground font-semibold text-sm">
             {claim.currency || 'SGD'} {parseFloat(claim.total_amount || '0').toFixed(2)}
           </p>
-          {claim.home_currency_amount &&
+          {Number(claim.home_currency_amount) > 0 &&
            claim.home_currency &&
            claim.currency !== claim.home_currency &&
-           Number(claim.home_currency_amount) > 0 &&
            Number(claim.home_currency_amount) !== Number(claim.total_amount || 0) && (
             <p className="text-muted-foreground text-xs">
               ≈ {claim.home_currency} {Number(claim.home_currency_amount).toFixed(2)}
