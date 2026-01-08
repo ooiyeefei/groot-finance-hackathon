@@ -70,13 +70,13 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
   const getSuccessMessage = () => {
     switch (submittedType) {
       case "bug":
-        return "We've logged this issue and will investigate. A GitHub issue has been created for tracking.";
+        return "We appreciate you reporting this issue. Our team will look into it and reach out to you soon with an update.";
       case "feature":
-        return "Great idea! We've added it to our feature requests. A GitHub issue has been created for tracking.";
+        return "Great idea! We appreciate your suggestion. Our team will review it and get back to you soon.";
       case "general":
-        return "Thanks for your feedback! We appreciate you taking the time to share your thoughts.";
+        return "Thank you for sharing your thoughts with us! We value your feedback and will review it carefully.";
       default:
-        return "Thanks for your feedback!";
+        return "Thank you for your feedback!";
     }
   };
 

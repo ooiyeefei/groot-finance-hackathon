@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { Camera, Upload, X, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import html2canvas from "html2canvas";
+import { domToPng } from "modern-screenshot";
 
 interface ScreenshotButtonProps {
   onScreenshot: (file: File | null) => void;
@@ -15,7 +15,7 @@ interface ScreenshotButtonProps {
  * ScreenshotButton - Captures screenshot or allows file upload
  *
  * Provides two options:
- * 1. Capture current page screenshot using html2canvas
+ * 1. Capture current page screenshot using modern-screenshot
  * 2. Upload an image file from device
  */
 export function ScreenshotButton({
@@ -38,29 +38,16 @@ export function ScreenshotButton({
         (el as HTMLElement).style.visibility = "hidden";
       });
 
-      // Capture the page with error-tolerant settings
-      const canvas = await html2canvas(document.body, {
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
+      // Capture the page using modern-screenshot
+      const dataUrl = await domToPng(document.body, {
         scale: 1,
-        ignoreElements: (element) => {
-          return element.hasAttribute("data-feedback-ui");
-        },
-        // Skip elements that cause parsing errors
-        onclone: (clonedDoc) => {
-          // Remove problematic CSS that html2canvas can't parse
-          const styleSheets = clonedDoc.styleSheets;
-          for (let i = 0; i < styleSheets.length; i++) {
-            try {
-              const rules = styleSheets[i].cssRules;
-              if (rules) {
-                // Access rules to check for errors (will throw if cross-origin)
-              }
-            } catch {
-              // Ignore cross-origin stylesheets
-            }
+        quality: 0.9,
+        filter: (element) => {
+          // Skip feedback UI elements
+          if (element instanceof HTMLElement) {
+            return !element.hasAttribute("data-feedback-ui");
           }
+          return true;
         },
       });
 
@@ -69,21 +56,9 @@ export function ScreenshotButton({
         (el as HTMLElement).style.visibility = "visible";
       });
 
-      // Convert canvas to blob then to File
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error("Failed to create screenshot blob"));
-            }
-          },
-          "image/png",
-          0.9
-        );
-      });
-
+      // Convert data URL to File
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
       const file = new File([blob], `screenshot-${Date.now()}.png`, {
         type: "image/png",
       });
