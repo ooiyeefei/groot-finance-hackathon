@@ -123,15 +123,18 @@ export const list = query({
       const invoicesWithLinks = await Promise.all(
         paginatedInvoices.map(async (invoice) => {
           // Look for accounting entry linked to this invoice
-          const linkedEntry = await ctx.db
+          // Collect all entries and find the first ACTIVE one (handles case where
+          // old entry was soft-deleted and new entry created)
+          const linkedEntries = await ctx.db
             .query("accounting_entries")
             .withIndex("by_sourceDocument", (q) =>
               q.eq("sourceDocumentType", "invoice").eq("sourceRecordId", invoice._id)
             )
-            .first();
+            .collect();
 
-          // Only include linked transaction if it's not soft-deleted
-          const isLinkedTransactionActive = linkedEntry && !linkedEntry.deletedAt;
+          // Find the first active (non-deleted) entry
+          const linkedEntry = linkedEntries.find(entry => !entry.deletedAt);
+          const isLinkedTransactionActive = !!linkedEntry;
 
           return {
             ...invoice,
@@ -184,15 +187,18 @@ export const list = query({
     const invoicesWithLinks = await Promise.all(
       paginatedInvoices.map(async (invoice) => {
         // Look for accounting entry linked to this invoice
-        const linkedEntry = await ctx.db
+        // Collect all entries and find the first ACTIVE one (handles case where
+        // old entry was soft-deleted and new entry created)
+        const linkedEntries = await ctx.db
           .query("accounting_entries")
           .withIndex("by_sourceDocument", (q) =>
             q.eq("sourceDocumentType", "invoice").eq("sourceRecordId", invoice._id)
           )
-          .first();
+          .collect();
 
-        // Only include linked transaction if it's not soft-deleted
-        const isLinkedTransactionActive = linkedEntry && !linkedEntry.deletedAt;
+        // Find the first active (non-deleted) entry
+        const linkedEntry = linkedEntries.find(entry => !entry.deletedAt);
+        const isLinkedTransactionActive = !!linkedEntry;
 
         return {
           ...invoice,
