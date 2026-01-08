@@ -11,6 +11,7 @@ import {
   FeedbackType,
   FEEDBACK_TYPE_LABELS,
   FEEDBACK_TYPE_PLACEHOLDERS,
+  FEEDBACK_TYPE_TEMPLATES,
   FEEDBACK_TYPE_HINTS,
   MESSAGE_MIN_LENGTH,
   MESSAGE_MAX_LENGTH,
@@ -40,27 +41,60 @@ const TYPE_ICONS: Record<FeedbackType, typeof Bug> = {
  * Allows users to select feedback type, enter message,
  * optionally attach a screenshot, and submit anonymously.
  */
+// Check if message is empty or matches any template
+const isTemplateOrEmpty = (msg: string): boolean => {
+  const trimmed = msg.trim();
+  if (!trimmed) return true;
+  return Object.values(FEEDBACK_TYPE_TEMPLATES).some(
+    (template) => template && trimmed === template.trim()
+  );
+};
+
 export function FeedbackForm({
   onSubmit,
   onCancel,
   isSubmitting,
 }: FeedbackFormProps) {
   const [type, setType] = useState<FeedbackType>("bug");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(FEEDBACK_TYPE_TEMPLATES.bug);
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Handle type change - swap template if user hasn't typed custom content
+  const handleTypeChange = (newType: FeedbackType) => {
+    if (isTemplateOrEmpty(message)) {
+      setMessage(FEEDBACK_TYPE_TEMPLATES[newType]);
+    }
+    setType(newType);
+  };
+
+  // Get user's actual content (excluding template text)
+  const getActualContent = (): string => {
+    const template = FEEDBACK_TYPE_TEMPLATES[type];
+    if (!template) return message.trim();
+
+    // Remove template sections and get actual user input
+    let content = message;
+    const templateLines = template.split('\n').filter(line => line.trim());
+    templateLines.forEach(line => {
+      content = content.replace(line, '');
+    });
+    return content.trim();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Validate message length
-    const trimmedMessage = message.trim();
-    if (trimmedMessage.length < MESSAGE_MIN_LENGTH) {
-      setError(`Please write at least ${MESSAGE_MIN_LENGTH} characters`);
+    // Validate actual content (not just template)
+    const actualContent = getActualContent();
+    if (actualContent.length < MESSAGE_MIN_LENGTH) {
+      setError(`Please fill in the template with at least ${MESSAGE_MIN_LENGTH} characters of content`);
       return;
     }
+
+    const trimmedMessage = message.trim();
 
     if (trimmedMessage.length > MESSAGE_MAX_LENGTH) {
       setError(`Message must be under ${MESSAGE_MAX_LENGTH} characters`);
@@ -85,9 +119,11 @@ export function FeedbackForm({
     }
   };
 
+  const actualContent = getActualContent();
   const characterCount = message.length;
   const isOverLimit = characterCount > MESSAGE_MAX_LENGTH;
-  const isBelowMinimum = message.trim().length > 0 && message.trim().length < MESSAGE_MIN_LENGTH;
+  const isBelowMinimum = actualContent.length > 0 && actualContent.length < MESSAGE_MIN_LENGTH;
+  const hasNoContent = actualContent.length === 0;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -104,7 +140,7 @@ export function FeedbackForm({
                 <button
                   key={feedbackType}
                   type="button"
-                  onClick={() => setType(feedbackType)}
+                  onClick={() => handleTypeChange(feedbackType)}
                   disabled={isSubmitting}
                   className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${
                     isSelected
@@ -202,7 +238,7 @@ export function FeedbackForm({
         </Button>
         <Button
           type="submit"
-          disabled={isSubmitting || message.trim().length < MESSAGE_MIN_LENGTH}
+          disabled={isSubmitting || hasNoContent || isBelowMinimum}
           className="flex-1"
         >
           {isSubmitting ? (

@@ -42,15 +42,27 @@ export const FEEDBACK_TYPE_LABELS: Record<FeedbackType, string> = {
 };
 
 export const FEEDBACK_TYPE_PLACEHOLDERS: Record<FeedbackType, string> = {
+  bug: "",
+  feature: "",
+  general: "Tell us what's on your mind...",
+};
+
+// Pre-filled text templates for bug and feature (actual text, not placeholders)
+export const FEEDBACK_TYPE_TEMPLATES: Record<FeedbackType, string> = {
   bug: `What happened:
+
 
 What I expected:
 
-Steps to reproduce (optional):`,
+
+Steps to reproduce (optional):
+`,
   feature: `I'd like to:
 
-This would help me:`,
-  general: "Tell us what's on your mind...",
+
+This would help me:
+`,
+  general: "",
 };
 
 // Short hints shown below the textarea
