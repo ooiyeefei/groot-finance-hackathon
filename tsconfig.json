@@ -28,8 +28,7 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    "trigger.config.ts"
+    ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "supabase/functions/**", "infra/**", "src/lambda/**", "lambda/**"]
+  "exclude": ["node_modules", "infra/**", "src/lambda/**", "lambda/**"]
 }

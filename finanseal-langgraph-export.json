@@ -167,11 +167,11 @@
         "purpose": "Workflow coordination & reasoning",
         "storage": "In-memory"
       },
-      "supabase_storage": {
+      "convex_storage": {
         "scope": "Persistent across sessions",
-        "duration": "Permanent", 
+        "duration": "Permanent",
         "purpose": "Chat history, user preferences, financial records",
-        "tables": ["conversations", "messages", "transactions", "documents"]
+        "tables": ["conversations", "messages", "accounting_entries", "invoices"]
       }
     },
     "rag_pipeline": {
@@ -197,11 +197,11 @@
       "similarity_metric": "Cosine similarity",
       "api_endpoint": "${QDRANT_URL}/collections/${COLLECTION}/points/search"
     },
-    "supabase": {
-      "purpose": "Relational data storage and user management",
-      "tables": ["conversations", "messages", "transactions", "line_items", "documents", "users"],
-      "security": "Row Level Security (RLS) policies",
-      "client": "Supabase JavaScript client"
+    "convex": {
+      "purpose": "Real-time database and user management",
+      "tables": ["conversations", "messages", "accounting_entries", "line_items", "invoices", "users"],
+      "security": "Authentication via Clerk JWT",
+      "client": "Convex React/HTTP client"
     },
     "sea_lion": {
       "purpose": "Conversational AI and text-to-SQL generation",

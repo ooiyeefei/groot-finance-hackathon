@@ -12,7 +12,7 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const nextConfig = {
   // Your other Next.js config options can go here
   
-  // Allow external images from Google Cloud Storage and Supabase Storage
+  // Allow external images from Google Cloud Storage and legacy Supabase Storage
   images: {
     remotePatterns: [
       {
@@ -20,6 +20,7 @@ const nextConfig = {
         hostname: 'storage.googleapis.com',
         pathname: '/finanseal-logo/**',
       },
+      // Legacy: Some business profile images still hosted on Supabase storage
       {
         protocol: 'https' as const,
         hostname: 'ohxwghdgsuyabgsndfzc.supabase.co',
@@ -32,12 +33,6 @@ const nextConfig = {
   webpack: (config: any, { dev, isServer }: { dev: boolean, isServer: boolean }) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-    };
-
-    // Exclude supabase functions directory from build
-    config.watchOptions = {
-      ...config.watchOptions,
-      ignored: ['**/supabase/functions/**'],
     };
 
     // ✅ PERFORMANCE OPTIMIZATION: Enhanced production optimizations
@@ -105,7 +100,6 @@ const nextConfig = {
     return config;
   },
 
-  // Exclude supabase directory from type checking
   typescript: {
     ignoreBuildErrors: false,
   },

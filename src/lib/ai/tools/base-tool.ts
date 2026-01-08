@@ -14,7 +14,7 @@ import type { ConvexHttpClient } from 'convex/browser'
 
 export interface UserContext {
   userId: string // Clerk user ID
-  supabaseUserId?: string // Database user ID (legacy name, now Convex user ID)
+  convexUserId?: string // Convex database user ID
   businessId?: string // Business ID for tenant isolation
   conversationId?: string
 }
@@ -105,7 +105,7 @@ export abstract class BaseTool {
         }
 
         // Enrich user context with business information for proper security validation
-        userContext.supabaseUserId = userProfile.user_id
+        userContext.convexUserId = userProfile.user_id
         userContext.businessId = userProfile.business_id || undefined
 
         console.log(`[${this.getToolName()}] Enhanced user context:`, {
@@ -187,7 +187,7 @@ export abstract class BaseTool {
       console.log(`[${this.getToolName()}] Checking permissions for user: ${userContext.userId}`)
 
       // SECURITY: Use enhanced user context with business validation
-      if (!userContext.supabaseUserId || !userContext.businessId) {
+      if (!userContext.convexUserId || !userContext.businessId) {
         console.warn(`[${this.getToolName()}] Missing enhanced user context - security validation failed`)
         return false
       }
@@ -195,7 +195,7 @@ export abstract class BaseTool {
       // Additional validation: User exists and has business context
       console.log(`[${this.getToolName()}] User validation passed:`, {
         clerkUserId: userContext.userId,
-        supabaseUserId: userContext.supabaseUserId,
+        convexUserId: userContext.convexUserId,
         businessId: userContext.businessId
       })
       return true

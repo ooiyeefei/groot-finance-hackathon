@@ -3,7 +3,7 @@
  *
  * Business logic for LangGraph AI agent conversations, messages, and citations.
  *
- * Migrated to Convex from Supabase
+ * Uses Convex for real-time database operations.
  *
  * North Star Architecture:
  * - All business logic centralized in service layer
@@ -65,7 +65,7 @@ export interface Message {
  */
 export async function sendChatMessage(
   userId: string,
-  supabaseUserId: string,
+  convexUserId: string,
   businessId: string,
   request: SendMessageRequest
 ): Promise<SendMessageResult> {
@@ -119,7 +119,7 @@ export async function sendChatMessage(
   // Create user context for agent
   const userContext = {
     userId: userId,
-    supabaseUserId: supabaseUserId,
+    convexUserId: convexUserId,
     businessId: businessId,
     conversationId: currentConversationId
   }
@@ -213,7 +213,7 @@ export async function sendChatMessage(
  */
 export async function listConversations(
   clerkUserId: string,
-  supabaseUserId: string,
+  convexUserId: string,
   businessId: string,
   limit: number = 50
 ): Promise<Conversation[]> {
@@ -261,7 +261,7 @@ export async function listConversations(
  */
 export async function createConversation(
   clerkUserId: string,
-  supabaseUserId: string,
+  convexUserId: string,
   businessId: string,
   language: string = 'en'
 ): Promise<{ id: string; title: string }> {
@@ -291,7 +291,7 @@ export async function createConversation(
 export async function getConversation(
   conversationId: string,
   clerkUserId: string,
-  supabaseUserId: string
+  convexUserId: string
 ): Promise<ConversationWithMessages> {
   const { client: convexClient } = await getAuthenticatedConvex()
   if (!convexClient) {
@@ -340,7 +340,7 @@ export async function getConversation(
 export async function deleteConversation(
   conversationId: string,
   clerkUserId: string,
-  supabaseUserId: string
+  convexUserId: string
 ): Promise<void> {
   const { client: convexClient } = await getAuthenticatedConvex()
   if (!convexClient) {
@@ -362,7 +362,7 @@ export async function deleteConversation(
 export async function deleteMessage(
   messageId: string,
   clerkUserId: string,
-  supabaseUserId: string
+  convexUserId: string
 ): Promise<void> {
   const { client: convexClient } = await getAuthenticatedConvex()
   if (!convexClient) {

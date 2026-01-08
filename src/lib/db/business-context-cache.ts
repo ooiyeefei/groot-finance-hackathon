@@ -127,9 +127,8 @@ export async function getCachedJWTToken(clerkUserId: string): Promise<string | n
     const { auth } = await import('@clerk/nextjs/server')
     const { getToken } = await auth()
 
-    // Get default Clerk JWT for native Supabase integration
-    // Supabase is configured to trust Clerk's JWT issuer directly
-    // See: https://clerk.com/docs/guides/development/integrations/databases/supabase
+    // Get Clerk JWT for Convex authentication
+    // Convex is configured to trust Clerk's JWT issuer
     const jwtToken = await getToken()
 
     if (jwtToken) {
