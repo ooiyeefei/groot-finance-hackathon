@@ -5,11 +5,63 @@
  *
  * Client-side hook for fetching and managing subscription state.
  * Provides real-time subscription status, usage tracking, and checkout actions.
+ *
+ * CLS FIX: Implements localStorage caching to prevent flicker on navigation.
+ * Data is cached per-business and shown immediately while fresh data loads in background.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { PlanName } from '@/lib/stripe/plans'
 import { useActiveBusiness } from '@/contexts/business-context'
+
+// ============================================================================
+// SUBSCRIPTION CACHING UTILITIES (CLS Prevention)
+// ============================================================================
+
+const SUBSCRIPTION_CACHE_KEY = 'subscription-data'
+
+/**
+ * Get cached subscription data from localStorage.
+ * Returns cached data if:
+ * - businessId is null (use any cached data during hydration)
+ * - businessId matches cached business
+ */
+function getCachedSubscription(businessId: string | null): SubscriptionData | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const cached = localStorage.getItem(SUBSCRIPTION_CACHE_KEY)
+    if (cached) {
+      const parsed = JSON.parse(cached) as SubscriptionData
+      // Use cache if:
+      // 1. businessId is null (during hydration, show cached data to prevent flicker)
+      // 2. businessId matches the cached business
+      if (!businessId || parsed.business?.id === businessId) {
+        return parsed
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null
+}
+
+/**
+ * Save subscription data to localStorage for instant hydration.
+ */
+function cacheSubscription(data: SubscriptionData | null): void {
+  if (typeof window === 'undefined') return
+
+  try {
+    if (data) {
+      localStorage.setItem(SUBSCRIPTION_CACHE_KEY, JSON.stringify(data))
+    } else {
+      localStorage.removeItem(SUBSCRIPTION_CACHE_KEY)
+    }
+  } catch {
+    // Ignore storage errors (quota exceeded, etc.)
+  }
+}
 
 export interface TrialInfo {
   isOnTrial: boolean
@@ -99,17 +151,31 @@ export interface UseSubscriptionReturn {
 }
 
 export function useSubscription(): UseSubscriptionReturn {
-  const [data, setData] = useState<SubscriptionData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false)
-
   // Get current business context - refetch when business changes
   const { businessId } = useActiveBusiness()
 
-  const fetchSubscription = useCallback(async () => {
+  // CLS FIX: Initialize from localStorage cache for instant hydration
+  const [data, setData] = useState<SubscriptionData | null>(() => {
+    return getCachedSubscription(businessId)
+  })
+
+  // CLS FIX: Only show loading if no cached data available
+  const [isLoading, setIsLoading] = useState(() => {
+    return !getCachedSubscription(businessId)
+  })
+
+  const [error, setError] = useState<string | null>(null)
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false)
+
+  // Track if we've already fetched for this businessId to prevent duplicate calls
+  const lastFetchedBusinessId = useRef<string | null>(null)
+
+  const fetchSubscription = useCallback(async (showLoading = false) => {
     try {
-      setIsLoading(true)
+      // Only show loading spinner if explicitly requested (no cached data)
+      if (showLoading) {
+        setIsLoading(true)
+      }
       setError(null)
 
       const response = await fetch('/api/v1/billing/subscription', {
@@ -126,6 +192,8 @@ export function useSubscription(): UseSubscriptionReturn {
       }
 
       setData(result.data)
+      // CLS FIX: Cache the data for instant hydration on next navigation
+      cacheSubscription(result.data)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       setError(message)
@@ -137,7 +205,30 @@ export function useSubscription(): UseSubscriptionReturn {
 
   // Fetch on mount and when business changes
   useEffect(() => {
-    fetchSubscription()
+    // Skip if businessId is null (wait for business context to hydrate)
+    // We still show cached data via useState initializer
+    if (!businessId) {
+      return
+    }
+
+    // Skip if we've already fetched for this businessId (prevents duplicate calls)
+    if (lastFetchedBusinessId.current === businessId) {
+      return
+    }
+    lastFetchedBusinessId.current = businessId
+
+    // Check if we have cached data for this business
+    const cached = getCachedSubscription(businessId)
+
+    if (cached) {
+      // Use cached data immediately, fetch fresh in background silently
+      setData(cached)
+      setIsLoading(false)
+      fetchSubscription(false) // Silent background refresh
+    } else {
+      // No cache, show loading and fetch
+      fetchSubscription(true)
+    }
   }, [fetchSubscription, businessId])
 
   /**

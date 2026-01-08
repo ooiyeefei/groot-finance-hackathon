@@ -3,9 +3,12 @@
 /**
  * Enhanced Business Display Component for Sidebar
  * Combines business profile display with multi-tenant switching capability
+ *
+ * CLS FIX: Uses React.memo for WorkspaceLogo to prevent unnecessary re-renders
+ * that cause logo flickering during navigation.
  */
 
-import React, { useState } from 'react'
+import React, { useState, memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ChevronDown, Building2, Loader2, AlertCircle, Check, PanelLeftClose, PanelLeftOpen, MoreVertical, Plus } from 'lucide-react'
@@ -28,7 +31,7 @@ import { RoleBadge } from '@/components/ui/role-badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-// Workspace Logo Component
+// Workspace Logo Component - Memoized to prevent unnecessary re-renders
 
 interface WorkspaceLogoProps {
   businessProfile: any
@@ -36,7 +39,7 @@ interface WorkspaceLogoProps {
   size?: 'standard' | 'compact'
 }
 
-function WorkspaceLogo({ businessProfile, isHydrated, size = 'standard' }: WorkspaceLogoProps) {
+const WorkspaceLogo = memo(function WorkspaceLogo({ businessProfile, isHydrated, size = 'standard' }: WorkspaceLogoProps) {
   // Logo sizes - 56px for standard, 48px for compact
   const dimensions = size === 'standard' ? { width: 56, height: 56, className: 'w-14 h-14' } : { width: 48, height: 48, className: 'w-12 h-12' }
   const { width, height, className } = dimensions
@@ -69,7 +72,7 @@ function WorkspaceLogo({ businessProfile, isHydrated, size = 'standard' }: Works
       {isHydrated ? getBusinessInitial() : 'B'}
     </div>
   )
-}
+})
 
 // Main Enhanced Business Display Component
 
