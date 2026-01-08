@@ -328,10 +328,13 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
                             claim.processing_metadata?.subtotal_amount
 
       // Set form data
+      // Note: expense_category from API is a NAME (e.g., 'Miscellaneous'), but dropdown uses ID
+      // We'll set the name here; a separate effect will resolve it to ID when categories load
+      const categoryNameOrId = claim.transaction?.expense_category || claim.expense_category || ''
       setFormData({
         description: claim.transaction?.description || claim.description || '',
         business_purpose: claim.transaction?.business_purpose || claim.business_purpose || '',
-        expense_category: claim.transaction?.expense_category || claim.expense_category || 'other',
+        expense_category: categoryNameOrId,
         original_amount: claim.transaction?.original_amount || claim.total_amount || 0,
         original_currency: claim.transaction?.original_currency || claim.currency || userHomeCurrency || 'SGD',
         home_currency: claim.transaction?.home_currency || userHomeCurrency || 'SGD',
@@ -432,26 +435,43 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     }
   }, [userHomeCurrency])
 
-  // Re-run category inference when categories load (fixes race condition)
+  // Resolve category when categories load (fixes race condition and name-to-ID mapping)
   // Categories fetch asynchronously, so initial form setup may have empty categories
+  // Also handles edit mode where API returns category NAME but dropdown uses ID
   useEffect(() => {
-    if (mode === 'create' && extractionResult && categories.length > 0 && !categoriesLoading) {
-      // Only update if category is not yet set or is invalid
+    if (categories.length > 0 && !categoriesLoading) {
       const currentCategory = formData.expense_category
       const isCurrentCategoryValid = categories.some(cat => cat.id === currentCategory)
 
-      if (!currentCategory || currentCategory === 'other' || !isCurrentCategoryValid) {
-        const inferredCategory = inferExpenseCategory(extractionResult, categories)
-        if (inferredCategory !== currentCategory) {
-          console.log('[useExpenseForm] Re-inferring category after categories loaded:', inferredCategory)
-          setFormData(prev => ({
-            ...prev,
-            expense_category: inferredCategory
-          }))
-        }
+      // Skip if category is already a valid ID
+      if (isCurrentCategoryValid) {
+        return
+      }
+
+      let resolvedCategoryId = ''
+
+      if (mode === 'create' && extractionResult) {
+        // Create mode: use AI inference
+        resolvedCategoryId = inferExpenseCategory(extractionResult, categories)
+      } else if (mode === 'edit' && currentCategory) {
+        // Edit mode: resolve category NAME to ID
+        // The API returns category name (e.g., 'Miscellaneous'), but dropdown uses ID
+        const matchedCategory = categories.find(cat =>
+          cat.id === currentCategory ||
+          cat.category_name?.toLowerCase() === currentCategory.toLowerCase()
+        )
+        resolvedCategoryId = matchedCategory?.id || categories[0]?.id || ''
+      }
+
+      if (resolvedCategoryId && resolvedCategoryId !== currentCategory) {
+        console.log('[useExpenseForm] Resolved category:', currentCategory, '->', resolvedCategoryId)
+        setFormData(prev => ({
+          ...prev,
+          expense_category: resolvedCategoryId
+        }))
       }
     }
-  }, [mode, extractionResult, categories, categoriesLoading])
+  }, [mode, extractionResult, categories, categoriesLoading, formData.expense_category])
 
   // Fetch exchange rate preview when currencies change
   useEffect(() => {
