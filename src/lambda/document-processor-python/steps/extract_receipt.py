@@ -171,75 +171,64 @@ def categorize_receipt_fallback(
     vendor_name: str,
     line_items: List[ReceiptLineItem],
     categories: Optional[List[BusinessCategory]],
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """
     Fallback categorization using pattern matching when LLM doesn't select category.
+
+    IMPORTANT: Only matches against actual business categories from Convex.
+    Returns None if no business categories available or no match found.
+    User must select category manually in the expense form UI.
 
     Args:
         vendor_name: Extracted vendor name
         line_items: Extracted line items
-        categories: Business expense categories (if available)
+        categories: Business expense categories from Convex (required)
 
     Returns:
-        Category result with category_name (for mapping to id), confidence, reasoning
+        Category result with category_name (for mapping to id) or None
     """
+    # If no business categories provided, return None - user must select manually
+    if not categories:
+        print("[Category Fallback] No business categories - user will select manually")
+        return None
+
     # Build search text
     line_descriptions = " ".join([item.description for item in line_items])
     text = f"{vendor_name} {line_descriptions}".lower()
 
-    # Try business categories first
-    if categories:
-        best_match = {"category_name": "", "confidence": 0.1, "reasoning": "No match"}
+    # Only match against actual business categories from Convex
+    best_match: Optional[Dict[str, Any]] = None
 
-        for cat in categories:
-            match_score = 0
-            reasons = []
+    for cat in categories:
+        match_score = 0
+        reasons = []
 
-            for pattern in (cat.vendor_patterns or []):
-                if pattern.lower() in text:
-                    match_score += 0.4
-                    reasons.append(f"vendor: {pattern}")
+        for pattern in (cat.vendor_patterns or []):
+            if pattern.lower() in text:
+                match_score += 0.4
+                reasons.append(f"vendor: {pattern}")
 
-            for keyword in (cat.keywords or []):
-                if keyword.lower() in text:
-                    match_score += 0.3
-                    reasons.append(f"keyword: {keyword}")
+        for keyword in (cat.keywords or []):
+            if keyword.lower() in text:
+                match_score += 0.3
+                reasons.append(f"keyword: {keyword}")
 
-            if match_score > best_match["confidence"]:
-                best_match = {
-                    "category_name": cat.name,  # Return name, TypeScript maps to id
-                    "category_id": cat.id,  # Also include id if available
-                    "confidence": min(match_score, 0.95),
-                    "reasoning": f"Matched {', '.join(reasons)}",
-                    "type": "business_expense",
-                }
+        if match_score > 0 and (best_match is None or match_score > best_match["confidence"]):
+            best_match = {
+                "category_name": cat.name,  # Return name, TypeScript maps to id
+                "category_id": cat.id,  # Also include id if available
+                "confidence": min(match_score, 0.95),
+                "reasoning": f"Matched {', '.join(reasons)}",
+                "type": "business_expense",
+            }
 
-        if best_match["confidence"] >= 0.2:
-            return best_match
+    if best_match and best_match["confidence"] >= 0.2:
+        print(f"[Category Fallback] Matched: {best_match['category_name']} (confidence: {best_match['confidence']})")
+        return best_match
 
-    # Fallback to expense patterns (generic categories)
-    best_expense = {
-        "category_name": "Miscellaneous",
-        "confidence": 0.3,
-        "reasoning": "Default category",
-        "type": "expense",
-    }
-
-    for pattern in EXPENSE_PATTERNS:
-        if not pattern["patterns"]:
-            continue
-        match_score = sum(0.35 for term in pattern["patterns"] if term in text)
-        if match_score > 0:
-            confidence = min(match_score * pattern["confidence_base"], 0.95)
-            if confidence > best_expense["confidence"]:
-                best_expense = {
-                    "category_name": pattern["name"],  # Use name for matching
-                    "confidence": confidence,
-                    "reasoning": f"Expense pattern match",
-                    "type": "expense",
-                }
-
-    return best_expense
+    # No match found - return None, user must select manually
+    print("[Category Fallback] No match in business categories - user will select manually")
+    return None
 
 
 def format_categories_for_llm(categories: Optional[List[BusinessCategory]]) -> str:
@@ -248,22 +237,23 @@ def format_categories_for_llm(categories: Optional[List[BusinessCategory]]) -> s
     Note: We only send category_name to the LLM. The LLM will return the
     selected category_name, which we then map to the category id for storage.
     This simplifies the flow: LLM returns name → we lookup id → store id.
+
+    IMPORTANT: Only use actual business categories from Convex.
+    No hardcoded fallbacks - if no categories exist, return empty list
+    and let the user select manually in the UI.
     """
     if not categories:
-        # Fallback categories - these will be matched by name in data-access.ts
-        fallback_categories = [
-            {"category_name": "Office Supplies"},
-            {"category_name": "Business Meals & Entertainment"},
-            {"category_name": "Transportation & Travel"},
-            {"category_name": "Other Business Expenses"}
-        ]
-        return json.dumps(fallback_categories)
+        # No fallback categories - return empty list
+        # User must select category manually in the expense form UI
+        print("[Categories] No business categories provided - user will select manually")
+        return json.dumps([])
 
     # Only send names to LLM - the TypeScript layer handles name→id mapping
     formatted = [
         {"category_name": cat.name}
         for cat in categories
     ]
+    print(f"[Categories] Formatted {len(formatted)} business categories for LLM")
     return json.dumps(formatted)
 
 
@@ -402,21 +392,42 @@ def extract_receipt_step(
 
         # Use LLM-selected category or fallback to pattern matching
         # Note: expense_category is now the category_name, which TypeScript maps to id
+        # IMPORTANT: Only use categories from the business's customExpenseCategories in Convex
         expense_category = extracted.expense_category
         category_confidence = 0.9  # High confidence if LLM selected
 
+        if expense_category:
+            # Verify LLM-selected category exists in business categories
+            if categories:
+                valid_category = any(cat.name == expense_category for cat in categories)
+                if not valid_category:
+                    print(f"[{document_id}] LLM selected invalid category '{expense_category}' - not in business categories")
+                    expense_category = None
+                    category_confidence = 0.0
+                else:
+                    print(f"[{document_id}] LLM selected valid category: {expense_category}")
+            else:
+                # No business categories to validate against - clear the selection
+                print(f"[{document_id}] Cannot validate LLM category - no business categories available")
+                expense_category = None
+                category_confidence = 0.0
+
         if not expense_category:
-            # Fallback to pattern matching
+            # Fallback to pattern matching against business categories only
             category_result = categorize_receipt_fallback(
                 vendor_name=extracted.vendor_name,
                 line_items=line_items,
                 categories=categories,
             )
-            expense_category = category_result["category_name"]  # Now uses category_name
-            category_confidence = category_result["confidence"]
-            print(f"[{document_id}] Category fallback: {expense_category}")
-        else:
-            print(f"[{document_id}] LLM selected category: {expense_category}")
+            if category_result:
+                expense_category = category_result["category_name"]
+                category_confidence = category_result["confidence"]
+                print(f"[{document_id}] Category fallback matched: {expense_category}")
+            else:
+                # No match - user must select manually in UI
+                expense_category = None
+                category_confidence = 0.0
+                print(f"[{document_id}] No category match - user will select manually")
 
         # Calculate processing time
         processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
