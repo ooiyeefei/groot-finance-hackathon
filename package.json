@@ -76,7 +76,6 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
     "google-spreadsheet": "^5.0.2",
-    "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.12.1",
     "i18n-iso-countries": "^7.14.0",
     "jose": "^6.1.0",
