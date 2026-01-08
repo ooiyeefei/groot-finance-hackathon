@@ -107,12 +107,16 @@ export async function POST(request: NextRequest) {
     });
 
     const origin = request.nextUrl.origin;
+    const cookieHeader = request.headers.get("cookie") || "";
 
     // Fire-and-forget GitHub issue creation for bugs and features
     if (type !== "general") {
       fetch(`${origin}/api/v1/feedback/github`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": cookieHeader,
+        },
         body: JSON.stringify({ feedbackId: feedbackId }),
       }).catch((err) => {
         console.error("[Feedback API] GitHub issue trigger failed:", err);
@@ -122,7 +126,10 @@ export async function POST(request: NextRequest) {
     // Fire-and-forget email notifications to team
     fetch(`${origin}/api/v1/feedback/notify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": cookieHeader,
+      },
       body: JSON.stringify({ feedbackId: feedbackId }),
     }).catch((err) => {
       console.error("[Feedback API] Notification trigger failed:", err);
