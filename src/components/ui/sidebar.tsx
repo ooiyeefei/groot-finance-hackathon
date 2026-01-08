@@ -31,8 +31,24 @@ export default function Sidebar() {
   const [isHydrated, setIsHydrated] = useState(false) // Track hydration completion
   const [hasInitialLoad, setHasInitialLoad] = useState(false) // Track if initial role load completed
 
-  // Initialize user role with default state to prevent hydration mismatch
-  const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, admin: false })
+  // CLS FIX: Initialize user role from localStorage cache to prevent nav expansion on load
+  // This prevents the flash where nav items appear after role loads
+  const [userRole, setUserRole] = useState<UserRole>(() => {
+    // SSR-safe: return default on server
+    if (typeof window === 'undefined') {
+      return { employee: true, manager: false, admin: false }
+    }
+    // Try to restore cached role from localStorage
+    try {
+      const cached = localStorage.getItem('sidebar-user-role')
+      if (cached) {
+        return JSON.parse(cached)
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return { employee: true, manager: false, admin: false }
+  })
 
   // CRITICAL FIX: Listen to active business context changes
   const { business, businessId } = useActiveBusiness()
@@ -139,6 +155,12 @@ export default function Sidebar() {
 
         if (roleData && roleData.permissions) {
           setUserRole(roleData.permissions)
+          // CLS FIX: Cache role in localStorage for instant restore on next page load
+          try {
+            localStorage.setItem('sidebar-user-role', JSON.stringify(roleData.permissions))
+          } catch {
+            // Ignore storage errors (quota exceeded, etc.)
+          }
         }
       } catch (error) {
         console.error('[Sidebar] Failed to load user role:', error)
@@ -165,6 +187,12 @@ export default function Sidebar() {
 
       if (roleData && roleData.permissions) {
         setUserRole(roleData.permissions)
+        // CLS FIX: Cache role in localStorage for instant restore on next page load
+        try {
+          localStorage.setItem('sidebar-user-role', JSON.stringify(roleData.permissions))
+        } catch {
+          // Ignore storage errors
+        }
       }
     } catch (error) {
       console.error('[Sidebar] Failed to fetch user role:', error)
@@ -208,7 +236,8 @@ export default function Sidebar() {
         </div>
         <nav className="flex-1 p-4">
           <ul className="space-y-2">
-            {Array.from({ length: 6 }).map((_, i) => (
+            {/* CLS FIX: Show 9 items to reserve space for manager/admin nav items */}
+        {Array.from({ length: 9 }).map((_, i) => (
               <li key={i}>
                 <div className="w-8 h-8 bg-muted rounded animate-pulse"></div>
               </li>

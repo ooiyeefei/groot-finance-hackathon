@@ -133,22 +133,30 @@ export default function EnhancedBusinessDisplay({
 
   if (!isHydrated || isLoading) {
     return (
-      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}>
-        <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
-          <div className={cn('flex items-center', isExpanded ? 'space-x-3' : 'flex-col space-y-2')}>
-            <WorkspaceLogo
-              businessProfile={businessProfile}
-              isHydrated={isHydrated}
-              size={isExpanded ? 'standard' : 'compact'}
-            />
-            {isExpanded && (
-              <div className="flex flex-col">
-                <div className="h-4 bg-record-layer-2 rounded w-24 animate-pulse"></div>
-                <div className="h-3 bg-record-layer-2 rounded w-16 mt-1 animate-pulse"></div>
+      <div className={cn('transition-all duration-300 ease-in-out')}>
+        {isExpanded ? (
+          // CLS FIX: Skeleton matches exact structure of loaded expanded state
+          <div className="p-3 relative min-h-[120px]">
+            <div className="flex items-center space-x-3 p-3">
+              {/* Logo skeleton - matches WorkspaceLogo dimensions */}
+              <div className="w-14 h-14 bg-muted rounded-xl animate-pulse flex-shrink-0"></div>
+              <div className="min-w-0 flex-1">
+                {/* Business name skeleton - matches h2 text-base font-bold */}
+                <div className="h-5 bg-muted rounded w-32 animate-pulse"></div>
+                {/* Role badge skeleton - matches RoleBadge mt-2 */}
+                <div className="h-5 bg-muted rounded w-16 mt-2 animate-pulse"></div>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        ) : (
+          // CLS FIX: Collapsed skeleton matches collapsed loaded state
+          <div className="p-1 flex flex-col items-center gap-2 min-h-[100px]">
+            <div className="p-2">
+              <div className="w-12 h-12 bg-muted rounded-xl animate-pulse"></div>
+            </div>
+            <div className="w-5 h-5 bg-muted rounded animate-pulse"></div>
+          </div>
+        )}
       </div>
     )
   }
@@ -171,48 +179,56 @@ export default function EnhancedBusinessDisplay({
   }
 
   // If no business context but still loading, show loading state instead of error
+  // CLS FIX: Reuse same skeleton structure for all loading states
   if (!business && isLoading) {
     return (
-      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}>
-        <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
-          <div className={cn('flex items-center', isExpanded ? 'space-x-3' : 'flex-col space-y-2')}>
-            <WorkspaceLogo
-              businessProfile={businessProfile}
-              isHydrated={isHydrated}
-              size={isExpanded ? 'standard' : 'compact'}
-            />
-            {isExpanded && (
-              <div className="flex flex-col">
-                <div className="h-4 bg-record-layer-2 rounded w-24 animate-pulse"></div>
-                <div className="h-3 bg-record-layer-2 rounded w-16 mt-1 animate-pulse"></div>
+      <div className={cn('transition-all duration-300 ease-in-out')}>
+        {isExpanded ? (
+          <div className="p-3 relative min-h-[120px]">
+            <div className="flex items-center space-x-3 p-3">
+              <div className="w-14 h-14 bg-muted rounded-xl animate-pulse flex-shrink-0"></div>
+              <div className="min-w-0 flex-1">
+                <div className="h-5 bg-muted rounded w-32 animate-pulse"></div>
+                <div className="h-5 bg-muted rounded w-16 mt-2 animate-pulse"></div>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-1 flex flex-col items-center gap-2 min-h-[100px]">
+            <div className="p-2">
+              <div className="w-12 h-12 bg-muted rounded-xl animate-pulse"></div>
+            </div>
+            <div className="w-5 h-5 bg-muted rounded animate-pulse"></div>
+          </div>
+        )}
       </div>
     )
   }
 
   // If no business context and not loading, this could be a genuine no-business state
   // (new user case) - still show loading to let context provider handle redirect
+  // CLS FIX: Same skeleton structure
   if (!business) {
     return (
-      <div className={cn('transition-all duration-300 ease-in-out', isExpanded ? 'p-4' : 'p-3')}>
-        <div className={cn('flex items-center', isExpanded ? 'justify-between' : 'justify-center')}>
-          <div className={cn('flex items-center', isExpanded ? 'space-x-3' : 'flex-col space-y-2')}>
-            <WorkspaceLogo
-              businessProfile={businessProfile}
-              isHydrated={isHydrated}
-              size={isExpanded ? 'standard' : 'compact'}
-            />
-            {isExpanded && (
-              <div className="flex flex-col">
-                <div className="h-4 bg-record-layer-2 rounded w-24 animate-pulse"></div>
-                <div className="h-3 bg-record-layer-2 rounded w-16 mt-1 animate-pulse"></div>
+      <div className={cn('transition-all duration-300 ease-in-out')}>
+        {isExpanded ? (
+          <div className="p-3 relative min-h-[120px]">
+            <div className="flex items-center space-x-3 p-3">
+              <div className="w-14 h-14 bg-muted rounded-xl animate-pulse flex-shrink-0"></div>
+              <div className="min-w-0 flex-1">
+                <div className="h-5 bg-muted rounded w-32 animate-pulse"></div>
+                <div className="h-5 bg-muted rounded w-16 mt-2 animate-pulse"></div>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-1 flex flex-col items-center gap-2 min-h-[100px]">
+            <div className="p-2">
+              <div className="w-12 h-12 bg-muted rounded-xl animate-pulse"></div>
+            </div>
+            <div className="w-5 h-5 bg-muted rounded animate-pulse"></div>
+          </div>
+        )}
       </div>
     )
   }
