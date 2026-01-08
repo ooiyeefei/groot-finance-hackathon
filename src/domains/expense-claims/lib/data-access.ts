@@ -150,7 +150,7 @@ export async function createExpenseClaim(
       return { success: false, error: `Unsupported currency: ${original_currency}` }
     }
 
-    // Validate expense category only if provided (trigger.dev job will determine if null)
+    // Validate expense category only if provided (Lambda job will determine if null)
     if (expense_category) {
       const isValidCategory = await isValidExpenseCategory(employeeProfile.business_id, expense_category)
       if (!isValidCategory) {

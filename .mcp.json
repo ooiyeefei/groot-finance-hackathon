@@ -11,13 +11,6 @@
         "SUPABASE_ACCESS_TOKEN": "sbp_07131cbc6c4e5eb82648b94123fb3f0477ecbecf"
       }
     },
-    "trigger": {
-      "command": "npx",
-      "args": [
-        "trigger.dev@4.0.4",
-        "mcp"
-      ]
-    },
     "supabase-finanseal": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=ohxwghdgsuyabgsndfzc"
