@@ -641,9 +641,11 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                     <span className="text-foreground font-semibold">
                       {claim.total_amount} {claim.currency}
                     </span>
-                    {claim.currency !== claim.home_currency && (
+                    {claim.home_currency_amount &&
+                     claim.currency !== claim.home_currency &&
+                     parseFloat(String(claim.home_currency_amount)) !== parseFloat(String(claim.total_amount || '0')) && (
                       <span className="text-muted-foreground text-sm">
-                        (${(claim.home_currency_amount || 0).toFixed(2)})
+                        (≈ {claim.home_currency} {parseFloat(String(claim.home_currency_amount)).toFixed(2)})
                       </span>
                     )}
                   </div>
