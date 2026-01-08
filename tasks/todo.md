@@ -341,3 +341,118 @@ CREATE OR REPLACE FUNCTION public.get_invoices_with_linked_transactions(
     ...
 )
 ```
+
+---
+
+# User Feedback Collection Feature (2025-01-07)
+
+## Implementation Summary - GitHub Issue #83
+
+### Overview
+Implemented a comprehensive user feedback collection system allowing users to submit bug reports, feature requests, and general feedback through a floating widget. The system includes screenshot capture, GitHub issue creation, email notifications, and an admin dashboard.
+
+### Phases Completed
+
+#### Phase 1: Setup ✅
+- Installed html2canvas for screenshot capture
+- Created domain structure at `src/domains/feedback/`
+
+#### Phase 2: Foundational ✅
+- Created Convex schema with feedback table and indexes
+- Implemented feedback mutations (create, updateStatus, generateUploadUrl)
+- Implemented feedback queries (list, get, getCounts)
+- Created feedback types/constants
+
+#### Phase 3-5: User Stories ✅
+- **US1 - Bug Reports**: Submit with screenshot, auto-creates GitHub issue
+- **US2 - Feature Requests**: Submit with screenshot, auto-creates GitHub issue
+- **US3 - General Feedback**: Submit with optional anonymous toggle
+
+#### Phase 6: Admin Dashboard ✅
+- Created admin page at `/[locale]/admin/feedback`
+- Stats cards showing total, new, reviewed, resolved counts
+- Filter by type and status
+- Status management (new → reviewed → resolved)
+- GitHub issue links
+
+#### Phase 7: Team Notifications ✅
+- Extended EmailService with `sendFeedbackNotification` method
+- Created notification API at `/api/v1/feedback/notify`
+- Fire-and-forget notification trigger on feedback submission
+- Environment variable `FEEDBACK_NOTIFICATION_EMAILS` for recipients
+
+#### Phase 8: Polish & Validation ✅
+- Build passes successfully
+- All TypeScript types correctly implemented
+- Error handling throughout
+
+### Files Created
+
+**Domain Structure** (`src/domains/feedback/`):
+- `types/feedback.ts` - Type definitions and constants
+- `components/screenshot-button.tsx` - html2canvas screenshot capture
+- `components/feedback-form.tsx` - Main submission form
+- `components/feedback-modal.tsx` - Modal wrapper with success state
+- `components/feedback-widget.tsx` - Floating FAB widget
+- `components/feedback-widget-wrapper.tsx` - Auth-gated wrapper
+- `components/index.ts` - Component exports
+- `hooks/use-feedback.ts` - Feedback submission hook
+- `hooks/index.ts` - Hook exports
+- `index.ts` - Domain exports
+
+**Convex Functions** (`convex/`):
+- `schema.ts` - Added feedback table with indexes
+- `functions/feedback.ts` - create, list, get, getCounts, updateStatus mutations/queries
+
+**API Routes** (`src/app/api/v1/feedback/`):
+- `route.ts` - Main POST/GET endpoints
+- `github/route.ts` - GitHub issue creation
+- `notify/route.ts` - Email notifications
+
+**Admin Page**:
+- `src/app/[locale]/admin/feedback/page.tsx` - Admin dashboard
+
+**Modified Files**:
+- `src/app/[locale]/layout.tsx` - Added FeedbackWidgetWrapper
+- `src/lib/services/email-service.ts` - Added FeedbackNotificationData and sendFeedbackNotification
+
+### Key Technical Patterns
+
+1. **Fire-and-Forget Side Effects**
+   ```typescript
+   // Non-blocking GitHub issue creation
+   fetch(`${origin}/api/v1/feedback/github`, {...}).catch(console.error);
+   // Non-blocking email notifications
+   fetch(`${origin}/api/v1/feedback/notify`, {...}).catch(console.error);
+   ```
+
+2. **Convex Query Pattern Fix**
+   - Cannot reassign query after `.withIndex()` call
+   - Restructured to use separate conditional branches
+
+3. **Auth-Gated Widget**
+   - Only shows for authenticated users via `useAuth()` hook
+
+4. **Screenshot Capture**
+   - Uses html2canvas with exclusion attribute `data-feedback-ui`
+   - Captures viewport at scale 1, converts to PNG file
+
+### Environment Variables Required
+
+```env
+# GitHub Integration
+GITHUB_TOKEN=<personal-access-token>
+GITHUB_OWNER=<org-or-username>
+GITHUB_REPO=<repository-name>
+
+# Email Notifications (comma-separated)
+FEEDBACK_NOTIFICATION_EMAILS=team@example.com,admin@example.com
+```
+
+### Build Status: ✅ PASSES
+
+---
+
+**Implementation Status**: ✅ **COMPLETE**
+**Build Status**: ✅ **PASSES**
+**Ready for Production**: ✅ **YES**

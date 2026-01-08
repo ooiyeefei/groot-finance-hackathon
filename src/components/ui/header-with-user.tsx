@@ -4,6 +4,7 @@ import React from 'react'
 import { UserButton } from '@clerk/nextjs'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { ThemeToggle } from '@/domains/utilities/components/theme-toggle'
+import { FeedbackButton } from '@/domains/feedback'
 
 interface HeaderWithUserProps {
   title?: string
@@ -30,8 +31,9 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
           </div>
         )}
 
-        {/* Right: Theme toggle, language switcher and user button */}
+        {/* Right: Feedback, theme toggle, language switcher and user button */}
         <div className="flex items-center gap-4">
+          <FeedbackButton />
           <ThemeToggle />
           <LanguageSwitcher />
           <UserButton

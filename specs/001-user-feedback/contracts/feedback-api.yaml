@@ -1,0 +1,313 @@
+openapi: 3.1.0
+info:
+  title: FinanSEAL Feedback API
+  version: 1.0.0
+  description: |
+    API endpoints for user feedback collection feature.
+    All endpoints require authentication via Clerk.
+
+servers:
+  - url: /api/v1
+    description: Production API
+
+paths:
+  /feedback:
+    post:
+      operationId: submitFeedback
+      summary: Submit user feedback
+      description: |
+        Submit a new feedback item (bug report, feature request, or general feedback).
+        Automatically triggers GitHub issue creation for bugs and feature requests.
+      tags:
+        - Feedback
+      security:
+        - ClerkAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FeedbackSubmission'
+      responses:
+        '201':
+          description: Feedback submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+        '400':
+          description: Invalid request (validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+        '429':
+          description: Rate limit exceeded (max 10 submissions per hour)
+
+    get:
+      operationId: listFeedback
+      summary: List all feedback (admin only)
+      description: Retrieve all feedback submissions with optional filtering.
+      tags:
+        - Feedback Admin
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/FeedbackType'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/FeedbackStatus'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: cursor
+          in: query
+          description: Pagination cursor (feedback ID)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of feedback items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackListResponse'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Not authorized (admin only)
+
+  /feedback/{feedbackId}:
+    get:
+      operationId: getFeedback
+      summary: Get single feedback item (admin only)
+      tags:
+        - Feedback Admin
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: feedbackId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Feedback item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackWithUser'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Not authorized (admin only)
+        '404':
+          description: Feedback not found
+
+    patch:
+      operationId: updateFeedbackStatus
+      summary: Update feedback status (admin only)
+      tags:
+        - Feedback Admin
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: feedbackId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackStatusUpdate'
+      responses:
+        '200':
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+        '400':
+          description: Invalid status transition
+        '401':
+          description: Not authenticated
+        '403':
+          description: Not authorized (admin only)
+        '404':
+          description: Feedback not found
+
+  /feedback/github:
+    post:
+      operationId: createGitHubIssue
+      summary: Create GitHub issue from feedback (internal)
+      description: |
+        Internal endpoint to create GitHub issue.
+        Called automatically after feedback submission for bugs/features.
+        Can be called manually to retry failed issue creation.
+      tags:
+        - Feedback Admin
+      security:
+        - ClerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - feedbackId
+              properties:
+                feedbackId:
+                  type: string
+                  description: ID of the feedback to create issue for
+      responses:
+        '200':
+          description: GitHub issue created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  issueUrl:
+                    type: string
+                    format: uri
+                  issueNumber:
+                    type: integer
+        '400':
+          description: Feedback type does not support GitHub issues (general)
+        '401':
+          description: Not authenticated
+        '403':
+          description: Not authorized (admin only)
+        '404':
+          description: Feedback not found
+        '502':
+          description: GitHub API error
+
+components:
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      description: Clerk JWT token
+
+  schemas:
+    FeedbackType:
+      type: string
+      enum:
+        - bug
+        - feature
+        - general
+
+    FeedbackStatus:
+      type: string
+      enum:
+        - new
+        - reviewed
+        - resolved
+
+    FeedbackSubmission:
+      type: object
+      required:
+        - type
+        - message
+      properties:
+        type:
+          $ref: '#/components/schemas/FeedbackType'
+        message:
+          type: string
+          minLength: 10
+          maxLength: 2000
+          description: User's feedback in plain language
+        screenshot:
+          type: string
+          format: binary
+          description: Optional screenshot image (PNG/JPEG, max 2MB)
+        isAnonymous:
+          type: boolean
+          default: false
+          description: Submit without user identity
+
+    FeedbackResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          $ref: '#/components/schemas/FeedbackType'
+        message:
+          type: string
+        screenshotUrl:
+          type: string
+          format: uri
+          nullable: true
+        pageUrl:
+          type: string
+        status:
+          $ref: '#/components/schemas/FeedbackStatus'
+        githubIssueUrl:
+          type: string
+          format: uri
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    FeedbackWithUser:
+      allOf:
+        - $ref: '#/components/schemas/FeedbackResponse'
+        - type: object
+          properties:
+            user:
+              type: object
+              nullable: true
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+
+    FeedbackListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedbackWithUser'
+        nextCursor:
+          type: string
+          nullable: true
+        totalCount:
+          type: integer
+
+    FeedbackStatusUpdate:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: '#/components/schemas/FeedbackStatus'
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
