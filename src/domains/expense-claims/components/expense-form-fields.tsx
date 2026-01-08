@@ -394,11 +394,13 @@ export default function ExpenseFormFields({
                       Error loading categories
                     </SelectItem>
                   ) : categories.length > 0 ? (
-                    categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id} className="text-foreground">
-                        {category.category_name}
-                      </SelectItem>
-                    ))
+                    categories
+                      .filter((category) => category.is_active !== false)
+                      .map((category) => (
+                        <SelectItem key={category.id} value={category.id} className="text-foreground">
+                          {category.category_name}
+                        </SelectItem>
+                      ))
                   ) : (
                     <SelectItem value="empty" className="text-muted-foreground" disabled>
                       No categories available
