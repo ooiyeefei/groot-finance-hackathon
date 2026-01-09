@@ -67,7 +67,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current business via authenticated query
-    const business = await client.query(api.functions.businesses.getCurrentBusiness)
+    // @ts-ignore - Convex API types cause "Type instantiation is excessively deep" error
+    const getCurrentBusinessFn = api.functions.businesses.getCurrentBusiness
+    const business = await client.query(getCurrentBusinessFn)
 
     if (!business) {
       return NextResponse.json(
@@ -107,7 +109,9 @@ export async function POST(request: NextRequest) {
       customerId = customer.id
 
       // Update business with customer ID via Convex mutation
-      await client.mutation(api.functions.businesses.updateStripeSubscription, {
+      // @ts-ignore - Convex API types cause deep type error
+      const updateStripeSubFn = api.functions.businesses.updateStripeSubscription
+      await client.mutation(updateStripeSubFn, {
         businessId: business._id,
         stripeCustomerId: customerId,
       })
