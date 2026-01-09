@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth, clerkClient } from '@clerk/nextjs/server'
 import { initializeBusiness } from '@/domains/onboarding/lib/business-initialization.service'
 
 interface InitializeBusinessRequest {
@@ -37,6 +37,25 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[Onboarding API] ✅ User authenticated:', userId)
+
+    // Step 1b: Get user details from Clerk (email required for Convex user creation)
+    console.log('[Onboarding API] Fetching user details from Clerk...')
+    const clerk = await clerkClient()
+    const clerkUser = await clerk.users.getUser(userId)
+    const userEmail = clerkUser.emailAddresses?.[0]?.emailAddress
+    const userFullName = clerkUser.firstName && clerkUser.lastName
+      ? `${clerkUser.firstName} ${clerkUser.lastName}`.trim()
+      : clerkUser.firstName || clerkUser.lastName || undefined
+
+    if (!userEmail) {
+      console.error('[Onboarding API] ❌ No email found for user')
+      return NextResponse.json(
+        { success: false, error: 'User email not found' },
+        { status: 400 }
+      )
+    }
+
+    console.log('[Onboarding API] ✅ User email:', userEmail)
 
     // Step 2: Parse and validate request body
     console.log('[Onboarding API] Parsing request body...')
@@ -99,6 +118,8 @@ export async function POST(request: NextRequest) {
 
     const result = await initializeBusiness({
       clerkUserId: userId,
+      email: userEmail,
+      fullName: userFullName,
       businessName: body.name,
       country: body.countryCode,
       currency: body.homeCurrency,

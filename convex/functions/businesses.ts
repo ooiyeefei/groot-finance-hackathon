@@ -1682,10 +1682,16 @@ export const updateSubscriptionStatusFromWebhook = mutation({
  * Initialize a new business during user onboarding
  * Called from API route - accepts clerkUserId for user resolution
  * Creates: business record, owner membership, user linkage
+ *
+ * Handles two scenarios:
+ * 1. User has no business yet → Create new business + membership
+ * 2. User has a default business from webhook → Update it with onboarding data
  */
 export const initializeBusinessFromOnboarding = mutation({
   args: {
     clerkUserId: v.string(),
+    email: v.string(),           // Required to create user if missing
+    fullName: v.optional(v.string()), // Optional for user creation
     name: v.string(),
     slug: v.string(),
     countryCode: v.string(),
@@ -1698,17 +1704,65 @@ export const initializeBusinessFromOnboarding = mutation({
     allowedCurrencies: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
+    console.log(`[initializeBusinessFromOnboarding] Starting for Clerk ID: ${args.clerkUserId}`);
+
     // Step 1: Resolve Clerk user ID to Convex user
-    const user = await ctx.db
+    let user = await ctx.db
       .query("users")
       .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", args.clerkUserId))
       .first();
 
+    // Step 1b: If user doesn't exist, create them directly
+    // This handles the case where Clerk webhook never ran or failed
     if (!user) {
-      throw new Error(`User not found for Clerk ID: ${args.clerkUserId}`);
+      console.log(`[initializeBusinessFromOnboarding] User not found, creating user for Clerk ID: ${args.clerkUserId}`);
+
+      const userId = await ctx.db.insert("users", {
+        clerkUserId: args.clerkUserId,
+        email: args.email.toLowerCase(),
+        fullName: args.fullName || args.email.split("@")[0],
+        homeCurrency: args.homeCurrency,
+        updatedAt: Date.now(),
+      });
+
+      user = await ctx.db.get(userId);
+      if (!user) {
+        throw new Error(`Failed to create user for Clerk ID: ${args.clerkUserId}`);
+      }
+
+      console.log(`[initializeBusinessFromOnboarding] Created user: ${userId}`);
     }
 
-    // Step 2: Create the business
+    console.log(`[initializeBusinessFromOnboarding] Using user: ${user._id}`);
+
+    // Step 2: Check if user already has a business from webhook auto-creation
+    if (user.businessId) {
+      console.log(`[initializeBusinessFromOnboarding] User has existing business: ${user.businessId}, updating it`);
+
+      // Update the existing business with onboarding data instead of creating new
+      await ctx.db.patch(user.businessId, {
+        name: args.name,
+        slug: args.slug,
+        countryCode: args.countryCode,
+        homeCurrency: args.homeCurrency,
+        businessType: args.businessType,
+        planName: args.planName,
+        subscriptionStatus: args.subscriptionStatus,
+        customCogsCategories: args.customCogsCategories,
+        customExpenseCategories: args.customExpenseCategories,
+        allowedCurrencies: args.allowedCurrencies || [
+          "USD", "SGD", "MYR", "THB", "IDR", "VND", "PHP", "CNY", "EUR"
+        ],
+        onboardingCompletedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      console.log(`[initializeBusinessFromOnboarding] Updated existing business: ${user.businessId}`);
+      return user.businessId;
+    }
+
+    // Step 3: Create new business (user has no business yet)
+    console.log(`[initializeBusinessFromOnboarding] Creating new business for user`);
     const businessId = await ctx.db.insert("businesses", {
       name: args.name,
       slug: args.slug,
@@ -1722,10 +1776,11 @@ export const initializeBusinessFromOnboarding = mutation({
       allowedCurrencies: args.allowedCurrencies || [
         "USD", "SGD", "MYR", "THB", "IDR", "VND", "PHP", "CNY", "EUR"
       ],
+      onboardingCompletedAt: Date.now(),
       updatedAt: Date.now(),
     });
 
-    // Step 3: Create owner membership
+    // Step 4: Create owner membership
     await ctx.db.insert("business_memberships", {
       userId: user._id,
       businessId,
@@ -1735,12 +1790,13 @@ export const initializeBusinessFromOnboarding = mutation({
       updatedAt: Date.now(),
     });
 
-    // Step 4: Update user's active business context
+    // Step 5: Update user's active business context
     await ctx.db.patch(user._id, {
       businessId,
       updatedAt: Date.now(),
     });
 
+    console.log(`[initializeBusinessFromOnboarding] Created new business: ${businessId}`);
     return businessId;
   },
 });

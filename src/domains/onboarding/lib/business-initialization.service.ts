@@ -25,6 +25,8 @@ type BusinessCategory = CategoryMetadata;
 
 export interface InitializeBusinessInput {
   clerkUserId: string;
+  email: string;  // Required for Convex user creation if webhook didn't sync
+  fullName?: string;  // Optional for user creation
   businessName: string;
   country: string;
   currency: string;
@@ -146,6 +148,8 @@ export async function initializeBusiness(
   console.log(`[BusinessInit] ========================================`);
   console.log(`[BusinessInit] Starting business initialization`);
   console.log(`[BusinessInit] Clerk User ID: ${input.clerkUserId}`);
+  console.log(`[BusinessInit] Email: ${input.email}`);
+  console.log(`[BusinessInit] Full Name: ${input.fullName || '(not provided)'}`);
   console.log(`[BusinessInit] Business Name: ${input.businessName}`);
   console.log(`[BusinessInit] Country: ${input.country}`);
   console.log(`[BusinessInit] Currency: ${input.currency}`);
@@ -173,29 +177,68 @@ export async function initializeBusiness(
 
     console.log(`[BusinessInit] ✅ Categories generated - COGS: ${cogsCategories.length}, Expense: ${expenseCategories.length}`);
 
-    // Step 3: Create business via Convex mutation
+    // Step 3: Create business via Convex mutation (with retry for race condition)
     console.log(`[BusinessInit] 🏢 Step 3: Creating business record via Convex`);
 
     const convex = getConvexClient();
 
-    const businessId = await convex.mutation(
-      api.functions.businesses.initializeBusinessFromOnboarding,
-      {
-        clerkUserId: input.clerkUserId,
-        name: sanitizedName,
-        slug: slug,
-        countryCode: input.country.toUpperCase(),
-        homeCurrency: input.currency.toUpperCase(),
-        businessType: businessType,
-        planName: input.plan,
-        subscriptionStatus: input.plan === 'trial' ? 'trialing' : 'active',
-        customCogsCategories: cogsCategories,
-        customExpenseCategories: expenseCategories,
-        allowedCurrencies: input.allowedCurrencies || [
-          'USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR'
-        ],
+    // Retry logic for race condition when user hasn't synced from Clerk yet
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 1500; // 1.5 seconds between retries
+
+    let businessId: string | null = null;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[BusinessInit] 🔄 Attempt ${attempt}/${MAX_RETRIES} to create business`);
+
+        businessId = await convex.mutation(
+          // @ts-ignore - Convex internal API types cause "Type instantiation is excessively deep" error
+          api.functions.businesses.initializeBusinessFromOnboarding,
+          {
+            clerkUserId: input.clerkUserId,
+            email: input.email,
+            fullName: input.fullName,
+            name: sanitizedName,
+            slug: slug,
+            countryCode: input.country.toUpperCase(),
+            homeCurrency: input.currency.toUpperCase(),
+            businessType: businessType,
+            planName: input.plan,
+            subscriptionStatus: input.plan === 'trial' ? 'trialing' : 'active',
+            customCogsCategories: cogsCategories,
+            customExpenseCategories: expenseCategories,
+            allowedCurrencies: input.allowedCurrencies || [
+              'USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR'
+            ],
+          }
+        );
+
+        // Success - break out of retry loop
+        console.log(`[BusinessInit] ✅ Business created on attempt ${attempt}: ${businessId}`);
+        break;
+
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        const errorMsg = lastError.message;
+
+        // Check if it's a "user not synced" error - retry for these
+        if (errorMsg.includes('USER_NOT_SYNCED') && attempt < MAX_RETRIES) {
+          console.log(`[BusinessInit] ⏳ User not synced yet, retrying in ${RETRY_DELAY_MS}ms...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+          continue;
+        }
+
+        // For other errors or max retries reached, throw immediately
+        console.error(`[BusinessInit] 💥 Error on attempt ${attempt}:`, errorMsg);
+        throw error;
       }
-    );
+    }
+
+    if (!businessId) {
+      throw lastError || new Error('Failed to create business after retries');
+    }
 
     console.log(`[BusinessInit] ✅ Business created: ${businessId}`);
 
