@@ -21,11 +21,14 @@ import { useTeamMembersRealtime, type TeamMember, type UserRole } from '@/domain
 interface PendingInvitation {
   id: string
   email: string
-  role: 'employee' | 'manager' | 'admin'
+  role: 'employee' | 'manager'  // Note: 'owner' role cannot be invited, only assigned at business creation
   invited_by: string
   invited_at: string
   status: 'pending' | 'accepted'
 }
+
+// Display role type - includes 'owner' for display but 'owner' cannot be assigned via mutations
+type DisplayRole = 'employee' | 'manager' | 'owner'
 
 interface TeamsManagementClientProps {
   userId: string
@@ -436,8 +439,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     await updateUserNameMutation.mutateAsync({ memberId, name: editingNameValue })
   }
 
-  const getRoleDisplay = (permissions: any): UserRole => {
-    if (permissions.admin) return 'admin'
+  const getRoleDisplay = (permissions: any): DisplayRole => {
+    if (permissions.admin) return 'owner'  // Users with admin permissions are owners
     if (permissions.manager) return 'manager'
     return 'employee'
   }
@@ -716,9 +719,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                     <SelectItem value="manager">
                                       Manager
                                     </SelectItem>
-                                    <SelectItem value="admin">
-                                      Admin
-                                    </SelectItem>
+                                    {/* Note: 'owner' role cannot be assigned - only set at business creation */}
                                   </SelectContent>
                                 </Select>
                               </div>

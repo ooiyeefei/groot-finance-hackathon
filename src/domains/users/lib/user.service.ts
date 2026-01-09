@@ -276,14 +276,14 @@ export async function getUserRole(): Promise<UserRoleInfo> {
 
 /**
  * Update user role (unified role management)
- * Supports: employee, manager, admin
+ * Supports: employee, manager only (owner role is assigned at business creation)
  */
 export async function updateUserRole(
   targetUserId: string,
-  role: 'employee' | 'manager' | 'admin',
+  role: 'employee' | 'manager',
   currentUserId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const validRoles = ['employee', 'manager', 'admin']
+  const validRoles = ['employee', 'manager']  // Note: 'owner' cannot be assigned via API
   if (!validRoles.includes(role)) {
     return { success: false, error: 'Invalid role specified' }
   }

@@ -12,16 +12,16 @@ interface ManagementCard {
   href: string
   color: 'blue' | 'green' | 'purple' | 'orange'
   available: boolean
-  adminOnly?: boolean
+  ownerOnly?: boolean  // Only visible to business owners
 }
 
 export default function BusinessManagementCards() {
-  const { isAdmin, isManager, isOwner } = usePermissions()
+  const { isManager, isOwner } = usePermissions()
   const params = useParams()
   const locale = params.locale as string
 
-  // Only show business management cards to owners, managers, and admins
-  const canManageBusiness = isOwner || isAdmin || isManager
+  // Only show business management cards to owners and managers
+  const canManageBusiness = isOwner || isManager
 
   // Helper function to create localized href
   const localizedHref = (path: string) => `/${locale}${path}`
@@ -51,7 +51,7 @@ export default function BusinessManagementCards() {
       href: localizedHref('/manager/teams'),
       color: 'purple',
       available: true,
-      adminOnly: true
+      ownerOnly: true  // Only business owners can manage team
     },
     {
       title: 'Approval Workflows',
@@ -76,8 +76,8 @@ export default function BusinessManagementCards() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {managementCards.map((card) => {
-        // Hide admin-only cards for non-admins
-        if (card.adminOnly && !isAdmin) return null
+        // Hide owner-only cards for non-owners
+        if (card.ownerOnly && !isOwner) return null
 
         const IconComponent = card.icon
         const colorClasses = {
@@ -110,9 +110,9 @@ export default function BusinessManagementCards() {
                     <IconComponent className="w-5 h-5" />
                   </div>
                   <h4 className="text-foreground font-semibold">{card.title}</h4>
-                  {card.adminOnly && (
-                    <span className="px-2 py-1 bg-red-500/20 text-red-600 dark:text-red-300 text-xs rounded-md">
-                      Admin
+                  {card.ownerOnly && (
+                    <span className="px-2 py-1 bg-purple-500/20 text-purple-600 dark:text-purple-300 text-xs rounded-md">
+                      Owner
                     </span>
                   )}
                 </div>

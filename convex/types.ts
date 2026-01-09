@@ -29,7 +29,7 @@ export type MessageId = Id<"messages">;
 export type StoragePath = string;  // e.g., "{businessId}/{userId}/{docType}/{docId}/{stage}/{filename}"
 
 // Enums
-export type UserRole = "owner" | "admin" | "manager" | "employee";
+export type UserRole = "owner" | "manager" | "employee";
 export type MembershipStatus = "active" | "suspended" | "pending";
 export type TransactionType = "Income" | "Cost of Goods Sold" | "Expense";
 export type TransactionStatus = "pending" | "paid" | "cancelled" | "overdue";

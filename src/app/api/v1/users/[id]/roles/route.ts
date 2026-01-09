@@ -51,46 +51,22 @@ export async function POST(
 
     const body = await request.json()
     const { id: targetUserId } = await context.params
-    const { role, manager_id, admin_key, remove_from_business } = body
+    const { role, manager_id, remove_from_business } = body
 
-    // SPECIAL CASE: SaaS owner admin assignment via master key
-    if (admin_key && role === 'admin') {
-      const validAdminKey = process.env.MASTER_ADMIN_KEY
+    // Note: 'owner' role cannot be assigned via API - only set at business creation
+    // Removed SaaS admin assignment feature as admin role has been eliminated
 
-      if (!validAdminKey || admin_key !== validAdminKey) {
-        return NextResponse.json(
-          { success: false, error: 'Invalid master admin key' },
-          { status: 403 }
-        )
-      }
-
-      const result = await updateUserRole(targetUserId, 'admin', 'saas_owner')
-
-      if (result.success) {
-        console.log(`[User Roles V1 API] Business admin assigned by SaaS owner: ${targetUserId}`)
-        return NextResponse.json({
-          success: true,
-          data: { user_id: targetUserId, role: 'admin', method: 'saas_owner_assignment' }
-        })
-      } else {
-        return NextResponse.json(
-          { success: false, error: result.error },
-          { status: 400 }
-        )
-      }
-    }
-
-    // HANDLE: Role update
+    // HANDLE: Role update (only 'employee' or 'manager' can be assigned)
     if (role) {
-      const validRoles = ['employee', 'manager', 'admin']
+      const validRoles = ['employee', 'manager']  // Note: 'owner' cannot be assigned via API
       if (!validRoles.includes(role)) {
         return NextResponse.json(
-          { success: false, error: 'Invalid role specified' },
+          { success: false, error: 'Invalid role specified. Only employee or manager roles can be assigned.' },
           { status: 400 }
         )
       }
 
-      const result = await updateUserRole(targetUserId, role as 'employee' | 'manager' | 'admin', userId)
+      const result = await updateUserRole(targetUserId, role as 'employee' | 'manager', userId)
 
       if (!result.success) {
         return NextResponse.json(

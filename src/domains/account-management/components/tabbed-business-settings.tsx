@@ -22,7 +22,7 @@ const TeamManagementTab = ({ userId }: { userId?: string }) => (
 )
 
 const TabbedBusinessSettings = memo(() => {
-  const { isAdmin, isManager, isOwner } = usePermissions()
+  const { isManager, isOwner } = usePermissions()
   const { user } = useUser()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -41,8 +41,8 @@ const TabbedBusinessSettings = memo(() => {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }, [searchParams, router, pathname])
 
-  // Only show business management tabs to owners, managers, and admins
-  const canManageBusiness = isOwner || isAdmin || isManager
+  // Only show business management tabs to owners and managers
+  const canManageBusiness = isOwner || isManager
 
   if (!canManageBusiness) {
     return (
@@ -58,7 +58,7 @@ const TabbedBusinessSettings = memo(() => {
     <div className="w-full space-y-4">
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         {/* Tab Navigation - Semantic Design System */}
-        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'} bg-muted border border-border`}>
+        <TabsList className={`grid w-full ${isOwner ? 'grid-cols-3' : 'grid-cols-2'} bg-muted border border-border`}>
           <TabsTrigger
             value="business-profile"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -73,7 +73,7 @@ const TabbedBusinessSettings = memo(() => {
             <DollarSign className="w-4 h-4 mr-2" />
             Categories
           </TabsTrigger>
-          {isAdmin && (
+          {isOwner && (
             <TabsTrigger
               value="team-management"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -112,8 +112,8 @@ const TabbedBusinessSettings = memo(() => {
           </div>
         </TabsContent>
 
-        {/* Team Management Tab Content - Admin Only */}
-        {isAdmin && (
+        {/* Team Management Tab Content - Owner Only */}
+        {isOwner && (
           <TabsContent value="team-management" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={

@@ -205,20 +205,20 @@ export const getBusinessContext = query({
     const ownerMembership = bizMemberships.find((m) => m.role === "owner");
     const isOwner = ownerMembership?.userId === user._id;
 
-    // Compute permissions based on role and ownership
-    const role = membership.role as "admin" | "manager" | "employee" | "owner";
+    // Compute permissions based on role and ownership (simplified: owner > manager > employee)
+    const role = membership.role as "manager" | "employee" | "owner";
     const permissions = {
       // Owner-only permissions (business-level)
       canDeleteBusiness: isOwner,
       canManageSubscription: isOwner,
       canTransferOwnership: isOwner,
-      // Operational permissions based on role
-      canInviteMembers: role === "owner" || role === "admin" || role === "manager",
-      canRemoveMembers: role === "owner" || role === "admin" || role === "manager",
-      canChangeSettings: role === "owner" || role === "admin",
-      canApproveExpenses: role === "owner" || role === "admin" || role === "manager",
-      canManageCategories: role === "owner" || role === "admin" || role === "manager",
-      canViewAllData: role === "owner" || role === "admin" || role === "manager",
+      // Operational permissions based on role (owner and manager)
+      canInviteMembers: role === "owner" || role === "manager",
+      canRemoveMembers: role === "owner" || role === "manager",
+      canChangeSettings: role === "owner",
+      canApproveExpenses: role === "owner" || role === "manager",
+      canManageCategories: role === "owner" || role === "manager",
+      canViewAllData: role === "owner" || role === "manager",
     };
 
     return {
@@ -375,7 +375,7 @@ export const update = mutation({
       throw new Error("Not a member of this business");
     }
 
-    if (!["owner", "admin"].includes(membership.role)) {
+    if (!["owner"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -420,7 +420,7 @@ export const updateLogo = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!membership || !["owner"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -645,7 +645,7 @@ export const updateBusinessByStringId = mutation({
       throw new Error("Not a member of this business");
     }
 
-    if (!["owner", "admin"].includes(membership.role)) {
+    if (!["owner"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -820,7 +820,7 @@ export const createCogsCategory = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+    if (!membership || !["owner", "manager"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -913,7 +913,7 @@ export const updateCogsCategory = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+    if (!membership || !["owner", "manager"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -1008,7 +1008,7 @@ export const deleteCogsCategory = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+    if (!membership || !["owner", "manager"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -1190,7 +1190,7 @@ export const createExpenseCategory = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+    if (!membership || !["owner", "manager"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -1284,7 +1284,7 @@ export const updateExpenseCategory = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+    if (!membership || !["owner", "manager"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -1380,7 +1380,7 @@ export const deleteExpenseCategory = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+    if (!membership || !["owner", "manager"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 

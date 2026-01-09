@@ -334,7 +334,7 @@ async function _updateUserAndMembership(
         await client.mutation(api.functions.memberships.updateRoleByStringIds, {
           userId: String(existingUserRecord._id),
           businessId: tokenData.businessId,
-          newRole: membershipRole as 'admin' | 'manager' | 'employee'
+          newRole: membershipRole as 'manager' | 'employee'  // Note: 'owner' cannot be assigned via invitation
         })
       }
 
@@ -356,11 +356,11 @@ async function _updateUserAndMembership(
         }
       }
 
-      // Sync role to Clerk
+      // Sync role to Clerk - invited users can only be employee or manager (not owner)
       const rolePermissions = {
         employee: true,
-        manager: membershipRole === 'manager' || membershipRole === 'admin',
-        admin: membershipRole === 'admin'
+        manager: membershipRole === 'manager',
+        admin: false  // admin permissions are for owners only
       }
 
       const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
@@ -395,11 +395,11 @@ async function _updateUserAndMembership(
         console.error('[Invitation Service] Warning: Failed to set active business:', clerkError)
       }
 
-      // Sync role to Clerk
+      // Sync role to Clerk - invited users can only be employee or manager (not owner)
       const rolePermissions = {
         employee: true,
-        manager: membershipRole === 'manager' || membershipRole === 'admin',
-        admin: membershipRole === 'admin'
+        manager: membershipRole === 'manager',
+        admin: false  // admin permissions are for owners only
       }
 
       const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
@@ -435,11 +435,11 @@ async function _updateUserAndMembership(
     fullName: finalFullName
   })
 
-  // Sync role to Clerk
+  // Sync role to Clerk - invited users can only be employee or manager (not owner)
   const rolePermissions = {
     employee: membershipRole === 'employee',
     manager: membershipRole === 'manager',
-    admin: membershipRole === 'admin'
+    admin: false  // admin permissions are for owners only
   }
 
   const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)

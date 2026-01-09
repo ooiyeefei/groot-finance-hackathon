@@ -279,8 +279,8 @@ export const markInvoiceAsFailed = mutation({
       throw new Error("Not authorized");
     }
 
-    // Only admin can manually override
-    if (!["owner", "admin"].includes(membership.role)) {
+    // Only owner can manually override
+    if (membership.role !== "owner") {
       throw new Error("Insufficient permissions");
     }
 
@@ -353,8 +353,8 @@ export const markExpenseClaimAsFailed = mutation({
       throw new Error("Not authorized");
     }
 
-    // Only admin can manually override
-    if (!["owner", "admin"].includes(membership.role)) {
+    // Only owner can manually override
+    if (membership.role !== "owner") {
       throw new Error("Insufficient permissions");
     }
 

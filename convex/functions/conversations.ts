@@ -182,7 +182,7 @@ export const getByBusinessId = query({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!membership || membership.role !== "owner") {
       return [];
     }
 

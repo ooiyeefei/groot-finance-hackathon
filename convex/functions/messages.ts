@@ -418,7 +418,7 @@ export const update = mutation({
         )
         .first();
 
-      isAdmin = membership?.role === "owner" || membership?.role === "admin";
+      isAdmin = membership?.role === "owner";
     }
 
     if (!isOwner && !isAdmin) {
@@ -478,7 +478,7 @@ export const remove = mutation({
         )
         .first();
 
-      isAdmin = membership?.role === "owner" || membership?.role === "admin";
+      isAdmin = membership?.role === "owner";
     }
 
     if (!isOwner && !isAdmin) {

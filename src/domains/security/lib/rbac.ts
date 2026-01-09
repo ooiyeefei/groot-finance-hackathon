@@ -11,7 +11,10 @@ import { api } from '@/convex/_generated/api'
 import { ensureUserProfile, UserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { getCurrentBusinessContext, checkBusinessOwnership, type BusinessContext } from '@/lib/db/business-context'
 
-export type UserRole = 'employee' | 'manager' | 'admin'
+export type UserRole = 'employee' | 'manager' | 'owner'
+
+// Roles that can be assigned via API (owner is assigned at business creation only)
+export type AssignableRole = 'employee' | 'manager'
 
 export interface RolePermissions {
   employee: boolean
@@ -79,8 +82,8 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
 
     // PERFORMANCE FIX: Skip ensureUserProfile on every call - only needed once at login/switch
     // Business membership already provides the profile data we need
-    // CRITICAL FIX: Owners have all permissions (manager + admin)
-    const isOwnerOrAdmin = businessContext.isOwner || businessContext.role === 'admin'
+    // CRITICAL FIX: Owners have all permissions (manager + admin-level)
+    const isOwnerOrAdmin = businessContext.isOwner || businessContext.role === 'owner'
     const isManagerOrAbove = isOwnerOrAdmin || businessContext.role === 'manager'
 
     const profile = {
@@ -134,7 +137,7 @@ function determineUserRoles(permissions: RolePermissions): UserRole[] {
   
   if (permissions.employee) roles.push('employee')
   if (permissions.manager) roles.push('manager')
-  if (permissions.admin) roles.push('admin')
+  if (permissions.admin) roles.push('owner')  // admin permission = owner role
   
   return roles
 }
@@ -142,10 +145,11 @@ function determineUserRoles(permissions: RolePermissions): UserRole[] {
 /**
  * Update user role in database
  * Migrated to Convex
+ * Note: 'owner' role cannot be assigned via this function - only 'employee' or 'manager'
  */
 export async function updateUserRole(
   targetUserId: string,
-  role: UserRole,
+  role: AssignableRole,
   updatedBy: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -199,6 +203,7 @@ export async function syncRoleToClerk(userId: string, permissions: RolePermissio
 
 /**
  * Convert role to permission structure
+ * Note: 'admin' in RolePermissions represents owner-level access
  */
 function roleToPermissions(role: UserRole): RolePermissions {
   switch (role) {
@@ -206,7 +211,7 @@ function roleToPermissions(role: UserRole): RolePermissions {
       return { employee: true, manager: false, admin: false }
     case 'manager':
       return { employee: true, manager: true, admin: false }
-    case 'admin':
+    case 'owner':
       return { employee: true, manager: true, admin: true }
     default:
       return { employee: true, manager: false, admin: false }

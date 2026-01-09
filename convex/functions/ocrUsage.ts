@@ -102,7 +102,7 @@ export const getUsageHistory = query({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!membership || membership.role !== "owner") {
       return [];
     }
 
@@ -228,7 +228,7 @@ export const initializeMonth = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!membership || membership.role !== "owner") {
       throw new Error("Not authorized");
     }
 
@@ -286,7 +286,7 @@ export const updatePlanLimit = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!membership || membership.role !== "owner") {
       throw new Error("Not authorized");
     }
 

@@ -75,13 +75,13 @@ export interface BusinessProfile {
 
 export interface UpdateMembershipRequest {
   status?: 'active' | 'inactive' | 'pending' | 'suspended'
-  role?: 'employee' | 'manager' | 'admin'
+  role?: 'employee' | 'manager'  // Note: 'owner' role cannot be changed via API
   reason?: string
 }
 
 export interface CreateInvitationRequest {
   email: string
-  role: 'employee' | 'manager' | 'admin'
+  role: 'employee' | 'manager'  // Note: 'owner' role cannot be invited
   employee_id?: string
   department?: string
   job_title?: string
@@ -248,7 +248,7 @@ export async function updateMembership(
 
   // Handle role update via existing Convex mutation
   if (role) {
-    const validRoles = ['employee', 'manager', 'admin'] as const
+    const validRoles = ['employee', 'manager'] as const  // Note: 'owner' cannot be assigned via API
     if (!validRoles.includes(role)) {
       throw new Error('Invalid role specified')
     }
@@ -276,8 +276,8 @@ export async function updateMembership(
     if (targetMember.clerk_user_id && !targetMember.clerk_user_id.startsWith('migrated_')) {
       const rolePermissions = {
         employee: true,
-        manager: role === 'manager' || role === 'admin',
-        admin: role === 'admin'
+        manager: role === 'manager',
+        admin: false  // admin permissions are for owners only, cannot be assigned via API
       }
       await syncRoleToClerk(targetMember.clerk_user_id, rolePermissions)
     }
@@ -467,8 +467,8 @@ export async function createInvitation(
 ): Promise<{ invitation: any; emailFailed?: boolean; warning?: string }> {
   const { email, role } = request
 
-  // Validate input
-  if (!['employee', 'manager', 'admin'].includes(role)) {
+  // Validate input - only 'employee' and 'manager' can be invited (not 'owner')
+  if (!['employee', 'manager'].includes(role)) {
     throw new Error('Invalid role specified')
   }
 
@@ -483,7 +483,7 @@ export async function createInvitation(
   const membershipId = await client.mutation(api.functions.memberships.inviteByEmail, {
     businessId: businessId as any,
     email: email.toLowerCase(),
-    role: role as 'admin' | 'manager' | 'employee'
+    role: role as 'manager' | 'employee'  // Note: 'owner' role cannot be invited
   })
 
   // Get business name for email

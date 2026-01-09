@@ -357,7 +357,7 @@ export const getFinancialSummary = query({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!membership || membership.role !== "owner") {
       return null;
     }
 
@@ -638,7 +638,7 @@ export const update = mutation({
         )
         .first();
 
-      if (!membership || !["owner", "admin"].includes(membership.role)) {
+      if (!membership || membership.role !== "owner") {
         throw new Error("Not authorized to update this entry");
       }
     }
@@ -784,7 +784,7 @@ export const softDelete = mutation({
         )
         .first();
 
-      if (!membership || !["owner", "admin"].includes(membership.role)) {
+      if (!membership || membership.role !== "owner") {
         throw new Error("Not authorized to delete this entry");
       }
     }
@@ -1036,7 +1036,7 @@ export const voidEntry = mutation({
         )
         .first();
 
-      if (!membership || !["owner", "admin"].includes(membership.role)) {
+      if (!membership || membership.role !== "owner") {
         throw new Error("Not authorized to void entries");
       }
     }

@@ -325,8 +325,8 @@ export const ensureUserWithBusiness = mutation({
             role: membership.role,
             role_permissions: {
               employee: true,
-              manager: membership.role === "admin" || membership.role === "manager" || membership.role === "owner",
-              admin: membership.role === "admin" || membership.role === "owner",
+              manager: membership.role === "manager" || membership.role === "owner",
+              admin: membership.role === "owner",
             },
             created_at: new Date(membership._creationTime).toISOString(),
             updated_at: membership.updatedAt
@@ -358,8 +358,8 @@ export const ensureUserWithBusiness = mutation({
             role: anyMembership.role,
             role_permissions: {
               employee: true,
-              manager: anyMembership.role === "admin" || anyMembership.role === "manager" || anyMembership.role === "owner",
-              admin: anyMembership.role === "admin" || anyMembership.role === "owner",
+              manager: anyMembership.role === "manager" || anyMembership.role === "owner",
+              admin: anyMembership.role === "owner",
             },
             created_at: new Date(anyMembership._creationTime).toISOString(),
             updated_at: anyMembership.updatedAt
@@ -391,8 +391,8 @@ export const ensureUserWithBusiness = mutation({
             role: anyMembership.role,
             role_permissions: {
               employee: true,
-              manager: anyMembership.role === "admin" || anyMembership.role === "manager" || anyMembership.role === "owner",
-              admin: anyMembership.role === "admin" || anyMembership.role === "owner",
+              manager: anyMembership.role === "manager" || anyMembership.role === "owner",
+              admin: anyMembership.role === "owner",
             },
             created_at: new Date(anyMembership._creationTime).toISOString(),
             updated_at: anyMembership.updatedAt
@@ -457,8 +457,8 @@ export const ensureUserWithBusiness = mutation({
             role: pendingMembership.role,
             role_permissions: {
               employee: true,
-              manager: pendingMembership.role === "admin" || pendingMembership.role === "manager",
-              admin: pendingMembership.role === "admin",
+              manager: pendingMembership.role === "manager" || pendingMembership.role === "owner",
+              admin: pendingMembership.role === "owner",
             },
             created_at: new Date(pendingMembership._creationTime).toISOString(),
             updated_at: new Date().toISOString(),
@@ -482,8 +482,8 @@ export const ensureUserWithBusiness = mutation({
             role: activeMembership.role,
             role_permissions: {
               employee: true,
-              manager: activeMembership.role === "admin" || activeMembership.role === "manager" || activeMembership.role === "owner",
-              admin: activeMembership.role === "admin" || activeMembership.role === "owner",
+              manager: activeMembership.role === "manager" || activeMembership.role === "owner",
+              admin: activeMembership.role === "owner",
             },
             created_at: new Date(activeMembership._creationTime).toISOString(),
             updated_at: activeMembership.updatedAt

@@ -52,7 +52,7 @@ export interface TeamMember {
   manager_user_id_field?: string
 }
 
-export type UserRole = 'employee' | 'manager' | 'admin'
+export type UserRole = 'employee' | 'manager'  // Note: 'owner' role is assigned at business creation, cannot be changed via this mutation
 
 interface UseTeamMembersRealtimeOptions {
   businessId?: string

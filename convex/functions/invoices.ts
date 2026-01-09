@@ -386,7 +386,7 @@ export const getProcessingStats = query({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!membership || membership.role !== "owner") {
       return null;
     }
 
@@ -538,7 +538,7 @@ export const update = mutation({
         )
         .first();
 
-      if (!membership || !["owner", "admin"].includes(membership.role)) {
+      if (!membership || membership.role !== "owner") {
         throw new Error("Not authorized to update this invoice");
       }
     }
@@ -720,7 +720,7 @@ export const softDelete = mutation({
         )
         .first();
 
-      if (!membership || !["owner", "admin"].includes(membership.role)) {
+      if (!membership || membership.role !== "owner") {
         throw new Error("Not authorized to delete this invoice");
       }
     }
@@ -1219,8 +1219,8 @@ export const forceFailInvoice = mutation({
       throw new Error("Not authorized");
     }
 
-    if (!["owner", "admin"].includes(membership.role)) {
-      throw new Error("Admin role required for manual override");
+    if (membership.role !== "owner") {
+      throw new Error("Owner role required for manual override");
     }
 
     // Get the invoice

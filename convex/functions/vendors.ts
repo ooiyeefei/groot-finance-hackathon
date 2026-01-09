@@ -400,8 +400,8 @@ export const deactivate = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
-      throw new Error("Only admins and owners can deactivate vendors");
+    if (!membership || membership.role !== "owner") {
+      throw new Error("Only owners can deactivate vendors");
     }
 
     await ctx.db.patch(vendor._id, {
@@ -442,8 +442,8 @@ export const reactivate = mutation({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
-      throw new Error("Only admins and owners can reactivate vendors");
+    if (!membership || membership.role !== "owner") {
+      throw new Error("Only owners can reactivate vendors");
     }
 
     await ctx.db.patch(vendor._id, {

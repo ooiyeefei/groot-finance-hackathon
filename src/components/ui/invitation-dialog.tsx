@@ -16,7 +16,7 @@ interface InvitationDialogProps {
 
 export interface InvitationFormData {
   email: string
-  role: 'employee' | 'manager' | 'admin'
+  role: 'employee' | 'manager'  // Note: 'owner' role cannot be invited, only assigned during business creation
   employee_id?: string
   department?: string
   job_title?: string
@@ -151,7 +151,7 @@ export default function InvitationDialog({
               </Label>
               <Select
                 value={formData.role}
-                onValueChange={(value: 'employee' | 'manager' | 'admin') => 
+                onValueChange={(value: 'employee' | 'manager') =>
                   setFormData({ ...formData, role: value })
                 }
                 disabled={isLoading}
@@ -165,9 +165,6 @@ export default function InvitationDialog({
                   </SelectItem>
                   <SelectItem value="manager" className="text-white hover:bg-gray-600">
                     Manager
-                  </SelectItem>
-                  <SelectItem value="admin" className="text-white hover:bg-gray-600">
-                    Admin
                   </SelectItem>
                 </SelectContent>
               </Select>

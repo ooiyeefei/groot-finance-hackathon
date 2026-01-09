@@ -11,10 +11,9 @@ import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
-// Role hierarchy for permission checks
+// Role hierarchy for permission checks (simplified: owner > manager > employee)
 const ROLE_HIERARCHY: Record<string, number> = {
-  owner: 4,
-  admin: 3,
+  owner: 3,
   manager: 2,
   employee: 1,
 };
@@ -181,7 +180,7 @@ export const getPendingInvitations = query({
       )
       .first();
 
-    if (!callerMembership || !["owner", "admin"].includes(callerMembership.role)) {
+    if (!callerMembership || !["owner", "manager"].includes(callerMembership.role)) {
       return [];
     }
 
@@ -222,7 +221,6 @@ export const inviteByEmail = mutation({
     businessId: v.id("businesses"),
     email: v.string(),
     role: v.union(
-      v.literal("admin"),
       v.literal("manager"),
       v.literal("employee")
     ),
@@ -238,7 +236,7 @@ export const inviteByEmail = mutation({
       throw new Error("User not found");
     }
 
-    // Check inviter's permission
+    // Check inviter's permission (owner and managers can invite)
     const inviterMembership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -246,7 +244,7 @@ export const inviteByEmail = mutation({
       )
       .first();
 
-    if (!inviterMembership || !["owner", "admin"].includes(inviterMembership.role)) {
+    if (!inviterMembership || !["owner", "manager"].includes(inviterMembership.role)) {
       throw new Error("Insufficient permissions to invite");
     }
 
@@ -392,7 +390,7 @@ export const declineInvitation = mutation({
         )
         .first();
 
-      if (!callerMembership || !["owner", "admin"].includes(callerMembership.role)) {
+      if (!callerMembership || !["owner", "manager"].includes(callerMembership.role)) {
         throw new Error("Insufficient permissions");
       }
     }
@@ -403,13 +401,12 @@ export const declineInvitation = mutation({
 });
 
 /**
- * Update member role
+ * Update member role (owner only)
  */
 export const updateRole = mutation({
   args: {
     membershipId: v.id("business_memberships"),
     newRole: v.union(
-      v.literal("admin"),
       v.literal("manager"),
       v.literal("employee")
     ),
@@ -430,7 +427,7 @@ export const updateRole = mutation({
       throw new Error("Membership not found");
     }
 
-    // Get caller's membership
+    // Get caller's membership (only owner can change roles)
     const callerMembership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -438,8 +435,8 @@ export const updateRole = mutation({
       )
       .first();
 
-    if (!callerMembership || !["owner", "admin"].includes(callerMembership.role)) {
-      throw new Error("Insufficient permissions");
+    if (!callerMembership || callerMembership.role !== "owner") {
+      throw new Error("Only owner can change member roles");
     }
 
     // Can't change owner role
@@ -498,7 +495,7 @@ export const removeMember = mutation({
         )
         .first();
 
-      if (!callerMembership || !["owner", "admin"].includes(callerMembership.role)) {
+      if (!callerMembership || !["owner", "manager"].includes(callerMembership.role)) {
         throw new Error("Insufficient permissions");
       }
 
@@ -547,6 +544,7 @@ export const suspendMember = mutation({
       throw new Error("Cannot suspend business owner");
     }
 
+    // Only owner can suspend members
     const callerMembership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -554,8 +552,8 @@ export const suspendMember = mutation({
       )
       .first();
 
-    if (!callerMembership || !["owner", "admin"].includes(callerMembership.role)) {
-      throw new Error("Insufficient permissions");
+    if (!callerMembership || callerMembership.role !== "owner") {
+      throw new Error("Only owner can suspend members");
     }
 
     if (!canManageRole(callerMembership.role, targetMembership.role)) {
@@ -572,7 +570,7 @@ export const suspendMember = mutation({
 });
 
 /**
- * Reactivate suspended member
+ * Reactivate suspended member (owner only)
  */
 export const reactivateMember = mutation({
   args: { membershipId: v.id("business_memberships") },
@@ -592,6 +590,7 @@ export const reactivateMember = mutation({
       throw new Error("Suspended membership not found");
     }
 
+    // Only owner can reactivate members
     const callerMembership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -599,8 +598,8 @@ export const reactivateMember = mutation({
       )
       .first();
 
-    if (!callerMembership || !["owner", "admin"].includes(callerMembership.role)) {
-      throw new Error("Insufficient permissions");
+    if (!callerMembership || callerMembership.role !== "owner") {
+      throw new Error("Only owner can reactivate members");
     }
 
     await ctx.db.patch(args.membershipId, {
@@ -619,14 +618,13 @@ export const reactivateMember = mutation({
 /**
  * Update member role by string user ID and business ID
  * Accepts both Convex IDs and legacy UUIDs
- * Used by rbac.ts during Supabase→Convex migration
+ * Used by rbac.ts - only owner can change roles
  */
 export const updateRoleByStringIds = mutation({
   args: {
     userId: v.string(),
     businessId: v.string(),
     newRole: v.union(
-      v.literal("admin"),
       v.literal("manager"),
       v.literal("employee")
     ),
@@ -666,7 +664,7 @@ export const updateRoleByStringIds = mutation({
       throw new Error("Membership not found");
     }
 
-    // Get caller's membership for permission check
+    // Get caller's membership for permission check (only owner can change roles)
     const callerMembership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -674,8 +672,8 @@ export const updateRoleByStringIds = mutation({
       )
       .first();
 
-    if (!callerMembership || !["owner", "admin"].includes(callerMembership.role)) {
-      throw new Error("Insufficient permissions");
+    if (!callerMembership || callerMembership.role !== "owner") {
+      throw new Error("Only owner can change member roles");
     }
 
     // Can't change owner role
@@ -733,8 +731,8 @@ export const getBusinessUsersByStringId = query({
       return [];
     }
 
-    // Only admin/owner can list all users
-    if (!["owner", "admin"].includes(callerMembership.role)) {
+    // Only owner/manager can list all users
+    if (!["owner", "manager"].includes(callerMembership.role)) {
       return [];
     }
 
@@ -755,8 +753,8 @@ export const getBusinessUsersByStringId = query({
           role: membership.role,
           role_permissions: {
             employee: true,
-            manager: membership.role === "admin" || membership.role === "manager",
-            admin: membership.role === "admin",
+            manager: membership.role === "owner" || membership.role === "manager",
+            admin: membership.role === "owner",
           },
           status: membership.status,
           created_at: new Date(membership._creationTime).toISOString(),
@@ -852,8 +850,8 @@ export const getTeamMembersWithManagers = query({
           role: membership.role,
           role_permissions: {
             employee: true,
-            manager: membership.role === "admin" || membership.role === "manager" || membership.role === "owner",
-            admin: membership.role === "admin" || membership.role === "owner",
+            manager: membership.role === "owner" || membership.role === "manager",
+            admin: membership.role === "owner",
           },
           status: membership.status,
           full_name: memberUser?.fullName || null,
@@ -977,7 +975,7 @@ export const assignManager = mutation({
       throw new Error("Business not found");
     }
 
-    // Verify caller has admin/owner permission
+    // Verify caller has owner permission (only owner can assign managers)
     const callerMembership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -985,8 +983,8 @@ export const assignManager = mutation({
       )
       .first();
 
-    if (!callerMembership || !["owner", "admin"].includes(callerMembership.role)) {
-      throw new Error("Insufficient permissions - admin or owner required");
+    if (!callerMembership || callerMembership.role !== "owner") {
+      throw new Error("Only owner can assign managers");
     }
 
     // Resolve employee user
@@ -1027,8 +1025,8 @@ export const assignManager = mutation({
         throw new Error("Manager membership not found or not active");
       }
 
-      if (!["owner", "admin", "manager"].includes(managerMembership.role)) {
-        throw new Error("Assigned user must have manager, admin, or owner role");
+      if (!["owner", "manager"].includes(managerMembership.role)) {
+        throw new Error("Assigned user must have manager or owner role");
       }
 
       managerUserId = manager._id;

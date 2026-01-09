@@ -62,8 +62,8 @@ export const list = query({
       return { events: [], nextCursor: null, totalCount: 0 };
     }
 
-    // Only admins/owners can view audit logs
-    if (!["owner", "admin"].includes(membership.role)) {
+    // Only owners can view audit logs
+    if (membership.role !== "owner") {
       return { events: [], nextCursor: null, totalCount: 0 };
     }
 
@@ -171,8 +171,8 @@ export const getById = query({
       return null;
     }
 
-    // Only admins/owners can view audit logs
-    if (!["owner", "admin"].includes(membership.role)) {
+    // Only owners can view audit logs
+    if (membership.role !== "owner") {
       return null;
     }
 

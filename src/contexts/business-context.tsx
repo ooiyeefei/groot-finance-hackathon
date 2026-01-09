@@ -680,9 +680,9 @@ export function usePermissions() {
     canManageCategories: permissions?.canManageCategories === true,
     canViewAllData: permissions?.canViewAllData === true,
 
-    // Role-based convenience checks
-    isAdmin: activeContext?.role === 'admin',
-    isManager: activeContext?.role === 'manager' || activeContext?.role === 'admin',
+    // Role-based convenience checks (owner replaces admin)
+    isAdmin: activeContext?.role === 'owner',  // owner has admin-level permissions
+    isManager: activeContext?.role === 'manager' || activeContext?.role === 'owner',
     isOwner: activeContext?.isOwner === true
   }
 }
