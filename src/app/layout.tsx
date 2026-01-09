@@ -50,7 +50,7 @@ export default function RootLayout({
   return (
     <html suppressHydrationWarning>
       <head>
-        <link rel="icon" href="https://ohxwghdgsuyabgsndfzc.supabase.co/storage/v1/object/public/business-profiles/cc5fdbbc-1459-43ad-9736-3cc65649d23b/logo_1760635116031.png" />
+        <link rel="icon" href="https://finanseal-public.s3.us-west-2.amazonaws.com/favicon.svg" type="image/svg+xml" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
         <WebVitalsReporter />
