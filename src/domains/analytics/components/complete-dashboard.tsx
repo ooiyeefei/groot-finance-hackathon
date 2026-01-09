@@ -149,14 +149,13 @@ export default function CompleteDashboard() {
   return (
     <div className="space-y-section-gap">
       {/* Header with Period Selector */}
-      <div className="flex items-center justify-between">
+      {/* CLS FIX: Fixed height header to prevent shift when lastUpdated appears */}
+      <div className="flex items-center justify-between min-h-[52px]">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Financial Dashboard</h2>
           <p className="text-sm text-muted-foreground">
             {getPeriodDisplayName(selectedPeriod)} • Converted to {homeCurrency}
-            {lastUpdated && (
-              <span className="ml-2">• Updated {lastUpdated.toLocaleTimeString()}</span>
-            )}
+            <span className="ml-2">• Updated {lastUpdated ? lastUpdated.toLocaleTimeString() : '--:--:--'}</span>
           </p>
         </div>
 
@@ -189,22 +188,25 @@ export default function CompleteDashboard() {
         {/* Top Row: Primary Financial Health Metrics (3 cards) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-card-gap">
         {/* Total Income Card - Translucent green for both light and dark modes */}
+        {/* CLS FIX: Fixed internal heights to prevent layout shift */}
         <div className="bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50 rounded-lg p-card-padding transition-all shadow-sm min-h-[120px]">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 h-5">
             <p className="text-sm font-medium text-green-900 dark:text-gray-300">Total Income</p>
             <PiggyBank className="w-4 h-4 text-green-700 dark:text-gray-400" />
           </div>
-          <div className="mb-1">
+          <div className="mb-1 h-9 flex items-center">
             {loading ? (
-              <div className="h-8 bg-muted rounded animate-pulse"></div>
+              <div className="h-8 w-full bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-green-900 dark:text-white">
+              <p className="text-2xl font-bold text-green-900 dark:text-white leading-tight">
                 {analytics ? formatCurrency(analytics.total_income, homeCurrency) : '-'}
               </p>
             )}
           </div>
-          <div className="flex items-center justify-between">
-            {trends?.income_change !== undefined ? (
+          <div className="flex items-center justify-between h-4">
+            {loading ? (
+              <div className="h-3 w-20 bg-muted rounded animate-pulse"></div>
+            ) : trends?.income_change !== undefined ? (
               <div className="flex items-center space-x-1">
                 {getTrendIcon(trends.income_change)}
                 <span className={`text-xs font-medium ${getTrendColor(trends.income_change)}`}>
@@ -221,22 +223,25 @@ export default function CompleteDashboard() {
         </div>
 
         {/* Total Expenses Card - Translucent red for both light and dark modes */}
+        {/* CLS FIX: Fixed internal heights to prevent layout shift */}
         <div className="bg-red-50 dark:bg-gray-800 dark:bg-red-900/10 border border-red-200 dark:border-red-700/50 rounded-lg p-card-padding transition-all shadow-sm min-h-[120px]">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 h-5">
             <p className="text-sm font-medium text-red-900 dark:text-gray-300">Total Expenses</p>
             <CreditCard className="w-4 h-4 text-red-700 dark:text-gray-400" />
           </div>
-          <div className="mb-1">
+          <div className="mb-1 h-9 flex items-center">
             {loading ? (
-              <div className="h-8 bg-muted rounded animate-pulse"></div>
+              <div className="h-8 w-full bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold text-red-900 dark:text-white">
+              <p className="text-2xl font-bold text-red-900 dark:text-white leading-tight">
                 {analytics ? formatCurrency(analytics.total_expenses, homeCurrency) : '-'}
               </p>
             )}
           </div>
-          <div className="flex items-center justify-between">
-            {trends?.expenses_change !== undefined ? (
+          <div className="flex items-center justify-between h-4">
+            {loading ? (
+              <div className="h-3 w-20 bg-muted rounded animate-pulse"></div>
+            ) : trends?.expenses_change !== undefined ? (
               <div className="flex items-center space-x-1">
                 {getTrendIcon(trends.expenses_change, 'expenses')}
                 <span className={`text-xs font-medium ${getTrendColor(trends.expenses_change, 'expenses')}`}>
@@ -253,12 +258,13 @@ export default function CompleteDashboard() {
         </div>
 
           {/* Net Profit Card - Dynamic translucent background based on positive/negative */}
+        {/* CLS FIX: Fixed internal heights to prevent layout shift */}
         <div className={`border rounded-lg p-card-padding transition-all shadow-sm min-h-[120px] ${
           analytics && analytics.net_profit >= 0
             ? 'bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border-green-200 dark:border-green-700/50'
             : 'bg-red-50 dark:bg-gray-800 dark:bg-red-900/10 border-red-200 dark:border-red-700/50'
         }`}>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 h-5">
             <p className={`text-sm font-medium ${
               analytics && analytics.net_profit >= 0
                 ? 'text-green-900 dark:text-gray-300'
@@ -270,11 +276,11 @@ export default function CompleteDashboard() {
                 : 'text-red-700 dark:text-gray-400'
             }`} />
           </div>
-          <div className="mb-1">
+          <div className="mb-1 h-9 flex items-center">
             {loading ? (
-              <div className="h-8 bg-muted rounded animate-pulse"></div>
+              <div className="h-8 w-full bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className={`text-2xl font-bold ${
+              <p className={`text-2xl font-bold leading-tight ${
                 analytics && analytics.net_profit >= 0
                   ? 'text-green-900 dark:text-white'
                   : 'text-red-900 dark:text-white'
@@ -283,8 +289,10 @@ export default function CompleteDashboard() {
               </p>
             )}
           </div>
-          <div className="flex items-center justify-between">
-            {trends?.profit_change !== undefined ? (
+          <div className="flex items-center justify-between h-4">
+            {loading ? (
+              <div className="h-3 w-20 bg-muted rounded animate-pulse"></div>
+            ) : trends?.profit_change !== undefined ? (
               <div className="flex items-center space-x-1">
                 {getTrendIcon(trends.profit_change)}
                 <span className={`text-xs font-medium ${getTrendColor(trends.profit_change)}`}>
@@ -312,21 +320,22 @@ export default function CompleteDashboard() {
         {/* Bottom Row: Operational Metrics (2 cards) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-card-gap max-w-2xl">
         {/* Transaction Count Card */}
+        {/* CLS FIX: Fixed internal heights to prevent layout shift */}
         <div className="bg-card text-card-foreground border rounded-lg p-card-padding transition-all shadow-sm min-h-[120px]">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 h-5">
             <p className="text-sm font-medium opacity-80">Transactions</p>
             <Activity className="w-4 h-4 opacity-60" />
           </div>
-          <div className="mb-1">
+          <div className="mb-1 h-9 flex items-center">
             {loading ? (
-              <div className="h-8 bg-muted rounded animate-pulse"></div>
+              <div className="h-8 w-full bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold">
+              <p className="text-2xl font-bold leading-tight">
                 {analytics ? analytics.transaction_count : '-'}
               </p>
             )}
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between h-4">
             <div className="flex items-center space-x-1">
               <span className="text-xs opacity-60">Total count</span>
             </div>
@@ -335,26 +344,29 @@ export default function CompleteDashboard() {
         </div>
 
         {/* Profit Margin Card */}
+        {/* CLS FIX: Fixed internal heights to prevent layout shift */}
         <div className={`border rounded-lg p-card-padding transition-all shadow-sm min-h-[120px] ${
           analytics && analytics.net_profit >= 0
             ? 'bg-card text-card-foreground'
             : 'bg-warning text-warning-foreground dark:bg-[var(--warning-translucent)] dark:border-yellow-700/30'
         }`}>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 h-5">
             <p className="text-sm font-medium opacity-80">Profit Margin</p>
             <TrendingUp className="w-4 h-4 opacity-60" />
           </div>
-          <div className="mb-1">
+          <div className="mb-1 h-9 flex items-center">
             {loading ? (
-              <div className="h-8 bg-muted rounded animate-pulse"></div>
+              <div className="h-8 w-full bg-muted rounded animate-pulse"></div>
             ) : (
-              <p className="text-2xl font-bold">
+              <p className="text-2xl font-bold leading-tight">
                 {formatCurrency(profitMargin, homeCurrency, true)}
               </p>
             )}
           </div>
-          <div className="flex items-center justify-between">
-            {marginTrend !== undefined ? (
+          <div className="flex items-center justify-between h-4">
+            {loading ? (
+              <div className="h-3 w-20 bg-muted rounded animate-pulse"></div>
+            ) : marginTrend !== undefined ? (
               <div className="flex items-center space-x-1">
                 {getTrendIcon(marginTrend)}
                 <span className={`text-xs font-medium ${getTrendColor(marginTrend)}`}>
