@@ -71,8 +71,8 @@ export class DocumentProcessingStack extends cdk.Stack {
         // Sentry error tracking
         SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
         SENTRY_ENVIRONMENT: 'production',
-        // Convex - use PROD_CONVEX_URL for production
-        NEXT_PUBLIC_CONVEX_URL: process.env.PROD_CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || '',
+        // Convex production URL (hardcoded for reliability)
+        NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
         // Gemini API key for DSPy
         GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
         // S3 bucket name
