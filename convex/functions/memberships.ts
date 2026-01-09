@@ -618,13 +618,19 @@ export const reactivateMember = mutation({
 /**
  * Update member role by string user ID and business ID
  * Accepts both Convex IDs and legacy UUIDs
- * Used by rbac.ts - only owner can change roles
+ *
+ * IAM Rules (Principle of Least Privilege):
+ * - Only owners can change roles
+ * - Owners can assign any role (employee, manager, owner) to others
+ * - Owners can demote themselves UNLESS they are the last owner
+ * - Last owner protection: Cannot demote if you're the only owner
  */
 export const updateRoleByStringIds = mutation({
   args: {
     userId: v.string(),
     businessId: v.string(),
     newRole: v.union(
+      v.literal("owner"),
       v.literal("manager"),
       v.literal("employee")
     ),
@@ -676,14 +682,26 @@ export const updateRoleByStringIds = mutation({
       throw new Error("Only owner can change member roles");
     }
 
-    // Can't change owner role
-    if (targetMembership.role === "owner") {
-      throw new Error("Cannot change owner role");
+    // Last owner protection: Cannot demote the last owner
+    if (targetMembership.role === "owner" && args.newRole !== "owner") {
+      // Count how many owners exist in this business
+      const allMemberships = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+        .collect();
+
+      const ownerCount = allMemberships.filter(
+        (m) => m.role === "owner" && m.status === "active"
+      ).length;
+
+      if (ownerCount <= 1) {
+        throw new Error("Cannot demote the last owner. Transfer ownership first.");
+      }
     }
 
-    // Can only assign roles lower than your own
-    if (!canManageRole(callerMembership.role, args.newRole)) {
-      throw new Error("Cannot assign role equal or higher than your own");
+    // No role change needed if same role
+    if (targetMembership.role === args.newRole) {
+      return targetMembership._id;
     }
 
     await ctx.db.patch(targetMembership._id, {

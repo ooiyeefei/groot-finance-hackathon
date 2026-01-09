@@ -52,7 +52,9 @@ export interface TeamMember {
   manager_user_id_field?: string
 }
 
-export type UserRole = 'employee' | 'manager'  // Note: 'owner' role is assigned at business creation, cannot be changed via this mutation
+// UserRole includes 'owner' for full role management
+// IAM rules in the frontend determine who can assign which roles
+export type UserRole = 'employee' | 'manager' | 'owner'
 
 interface UseTeamMembersRealtimeOptions {
   businessId?: string

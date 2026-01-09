@@ -445,6 +445,65 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     return 'employee'
   }
 
+  // IAM: Get the current user's role for permission checks
+  const getCurrentUserRole = (): DisplayRole => {
+    if (!userRole) return 'employee'
+    if (userRole.admin) return 'owner'
+    if (userRole.manager) return 'manager'
+    return 'employee'
+  }
+
+  // IAM: Count owners in the business (for last owner protection)
+  const getOwnerCount = (): number => {
+    return teamMembers.filter(m => m.role_permissions.admin).length
+  }
+
+  // IAM: Determine what roles the current user can assign to a target member
+  // Follows principle of least privilege
+  const getAssignableRoles = (targetMember: TeamMember): DisplayRole[] => {
+    const currentUserRole = getCurrentUserRole()
+    const targetCurrentRole = getRoleDisplay(targetMember.role_permissions)
+    const isTargetSelf = targetMember.clerk_user?.id === userId
+    const ownerCount = getOwnerCount()
+
+    // Employees cannot assign any roles
+    if (currentUserRole === 'employee') {
+      return []
+    }
+
+    // Manager: can only assign 'employee' role to those below or equal to them
+    // Managers cannot promote anyone to manager or above
+    if (currentUserRole === 'manager') {
+      // Managers cannot change other managers or owners
+      if (targetCurrentRole === 'manager' || targetCurrentRole === 'owner') {
+        return []
+      }
+      // Managers cannot change their own role
+      if (isTargetSelf) {
+        return []
+      }
+      return ['employee']
+    }
+
+    // Owner: can assign any role to others
+    if (currentUserRole === 'owner') {
+      // If targeting self and they're the last owner, cannot demote
+      if (isTargetSelf && ownerCount <= 1) {
+        return [] // Cannot change - last owner protection
+      }
+      // Owner can assign any role to others (or demote themselves if not last owner)
+      return ['employee', 'manager', 'owner']
+    }
+
+    return []
+  }
+
+  // IAM: Check if role dropdown should be disabled for a member
+  const isRoleDropdownDisabled = (member: TeamMember): boolean => {
+    const assignableRoles = getAssignableRoles(member)
+    return assignableRoles.length === 0 || updating.has(member.id)
+  }
+
   const getInvitationStatusColor = (status: string) => {
     switch (status) {
       case 'accepted': return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30'
@@ -540,14 +599,15 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
               </ul>
             </div>
 
-            <div className="p-4 bg-primary/10 rounded-lg">
+            <div className="p-4 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
               <div className="flex items-center gap-2 mb-2">
-                <Crown className="w-4 h-4 text-primary" />
-                <h4 className="font-medium text-foreground">Admin</h4>
+                <Crown className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                <h4 className="font-medium text-foreground">Owner</h4>
               </div>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• All manager permissions</li>
                 <li>• Manage user roles</li>
+                <li>• Assign owner role to others</li>
                 <li>• Send invitations</li>
                 <li>• Full system access</li>
               </ul>
@@ -673,7 +733,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   <div className="flex items-center gap-2">
                                     <RoleBadge roleType={currentRole} />
                                     {member.clerk_user?.id === userId && (
-                                      <RoleBadge roleType="owner" />
+                                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 text-xs">
+                                        You
+                                      </Badge>
                                     )}
                                   </div>
                                 </div>
@@ -704,24 +766,45 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                             <div className="flex items-end gap-4">
                               <div className="flex flex-col">
                                 <span className="text-xs text-muted-foreground mb-1.5">Role</span>
-                                <Select
-                                  value={currentRole}
-                                  onValueChange={(newRole: UserRole) => handleUpdateRole(member.id, newRole)}
-                                  disabled={isUpdating}
-                                >
-                                  <SelectTrigger className="bg-input border border-border text-foreground h-9 min-w-[110px]">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-popover border-border">
-                                    <SelectItem value="employee">
-                                      Employee
-                                    </SelectItem>
-                                    <SelectItem value="manager">
-                                      Manager
-                                    </SelectItem>
-                                    {/* Note: 'owner' role cannot be assigned - only set at business creation */}
-                                  </SelectContent>
-                                </Select>
+                                {(() => {
+                                  const assignableRoles = getAssignableRoles(member)
+                                  const isDisabled = isRoleDropdownDisabled(member)
+                                  const isLastOwner = member.clerk_user?.id === userId && currentRole === 'owner' && getOwnerCount() <= 1
+
+                                  return (
+                                    <Select
+                                      value={currentRole}
+                                      onValueChange={(newRole: DisplayRole) => handleUpdateRole(member.id, newRole as UserRole)}
+                                      disabled={isDisabled}
+                                    >
+                                      <SelectTrigger
+                                        className={`bg-input border border-border text-foreground h-9 min-w-[110px] ${isDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                        title={isLastOwner ? 'Cannot change role - you are the last owner' : undefined}
+                                      >
+                                        <SelectValue>
+                                          {currentRole === 'owner' ? 'Owner' : currentRole === 'manager' ? 'Manager' : 'Employee'}
+                                        </SelectValue>
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-popover border-border">
+                                        {assignableRoles.includes('employee') && (
+                                          <SelectItem value="employee">Employee</SelectItem>
+                                        )}
+                                        {assignableRoles.includes('manager') && (
+                                          <SelectItem value="manager">Manager</SelectItem>
+                                        )}
+                                        {assignableRoles.includes('owner') && (
+                                          <SelectItem value="owner">Owner</SelectItem>
+                                        )}
+                                        {/* Show current role if not in assignable list (read-only display) */}
+                                        {assignableRoles.length === 0 && (
+                                          <SelectItem value={currentRole} disabled>
+                                            {currentRole === 'owner' ? 'Owner' : currentRole === 'manager' ? 'Manager' : 'Employee'}
+                                          </SelectItem>
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  )
+                                })()}
                               </div>
 
                               <div className="flex flex-col">
