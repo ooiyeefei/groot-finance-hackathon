@@ -909,10 +909,24 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
           </>
         )}
 
+        {/* Delete button for processing/stuck states */}
+        {['uploading', 'analyzing', 'classifying', 'processing'].includes(claim.status) && (
+          <Button
+            onClick={() => deleteClaim(claim.id)}
+            variant="destructive"
+            size="sm"
+          >
+            <Trash2 className="w-4 h-4 mr-1.5" />
+            Delete
+          </Button>
+        )}
+
         {/* View Details button for all non-draft claims (except processing or failed states) */}
         {claim.status !== 'draft' &&
          claim.status !== 'analyzing' &&
          claim.status !== 'uploading' &&
+         claim.status !== 'classifying' &&
+         claim.status !== 'processing' &&
          claim.status !== 'failed' &&
          claim.status !== 'classification_failed' && (
           <Button
