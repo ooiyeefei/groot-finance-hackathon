@@ -5,10 +5,20 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import * as dotenv from 'dotenv';
 
 // Load environment variables from parent project's .env.local
 dotenv.config({ path: path.join(__dirname, '../../.env.local') });
+
+/**
+ * Generate a short hash from environment variables to force new Lambda versions
+ * when env vars change (CDK only auto-versions on code changes by default)
+ */
+function generateEnvHash(envVars: Record<string, string>): string {
+  const sorted = Object.keys(envVars).sort().map(k => `${k}=${envVars[k]}`).join('|');
+  return crypto.createHash('sha256').update(sorted).digest('hex').substring(0, 8);
+}
 
 export class DocumentProcessingStack extends cdk.Stack {
   public readonly documentProcessorFunction: lambda.DockerImageFunction;
@@ -34,6 +44,25 @@ export class DocumentProcessingStack extends cdk.Stack {
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
+
+    // ========================================================================
+    // Lambda Environment Variables
+    // ========================================================================
+    // Define env vars separately so we can hash them for versioning
+    const lambdaEnvVars: Record<string, string> = {
+      // Sentry error tracking
+      SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
+      SENTRY_ENVIRONMENT: 'production',
+      // Convex production URL (hardcoded for reliability)
+      NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
+      // Gemini API key for DSPy
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+      // S3 bucket name
+      S3_BUCKET_NAME: 'finanseal-bucket',
+      // Note: AWS_REGION is set automatically by Lambda runtime
+      // Poppler path in container (installed via yum)
+      POPPLER_PATH: '/usr/bin',
+    };
 
     // ========================================================================
     // Document Processor Lambda Function - Docker Container with Durable Execution
@@ -67,20 +96,7 @@ export class DocumentProcessingStack extends cdk.Stack {
         executionTimeout: cdk.Duration.hours(1), // Up to 1 hour for document processing
         retentionPeriod: cdk.Duration.days(1),   // Retain execution history for 1 day
       },
-      environment: {
-        // Sentry error tracking
-        SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
-        SENTRY_ENVIRONMENT: 'production',
-        // Convex production URL (hardcoded for reliability)
-        NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
-        // Gemini API key for DSPy
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-        // S3 bucket name
-        S3_BUCKET_NAME: 'finanseal-bucket',
-        // Note: AWS_REGION is set automatically by Lambda runtime
-        // Poppler path in container (installed via yum)
-        POPPLER_PATH: '/usr/bin',
-      },
+      environment: lambdaEnvVars,
     });
 
     // ========================================================================
@@ -93,7 +109,15 @@ export class DocumentProcessingStack extends cdk.Stack {
     // ========================================================================
     // Lambda Version and Alias
     // ========================================================================
-    const version = this.documentProcessorFunction.currentVersion;
+    // Generate hash from env vars to force new version when they change
+    // (CDK only auto-versions on code changes, not env var changes)
+    const envHash = generateEnvHash(lambdaEnvVars);
+
+    const version = new lambda.Version(this, `Version-${envHash}`, {
+      lambda: this.documentProcessorFunction,
+      description: `Auto-versioned with env hash: ${envHash}`,
+      removalPolicy: cdk.RemovalPolicy.RETAIN, // Keep old versions for rollback
+    });
 
     this.documentProcessorAlias = new lambda.Alias(this, 'ProdAlias', {
       aliasName: 'prod',
