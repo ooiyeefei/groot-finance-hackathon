@@ -42,12 +42,14 @@ export const BUSINESS_TYPE_CONFIG = {
       'Beverages',
       'Packaging',
       'Kitchen Supplies',
+      'Other',
     ],
     suggestedExpenses: [
       'Staff Meals',
       'Kitchen Equipment',
       'Food Delivery',
       'Cleaning Supplies',
+      'Other',
     ],
   },
 
@@ -61,12 +63,14 @@ export const BUSINESS_TYPE_CONFIG = {
       'Merchandise',
       'Packaging',
       'Shipping Materials',
+      'Other',
     ],
     suggestedExpenses: [
       'Store Rent',
       'Point of Sale',
       'Inventory Storage',
       'Security',
+      'Other',
     ],
   },
 
@@ -80,12 +84,14 @@ export const BUSINESS_TYPE_CONFIG = {
       'Subcontractors',
       'Software Licenses',
       'Project Materials',
+      'Other',
     ],
     suggestedExpenses: [
       'Office Supplies',
       'Client Entertainment',
       'Professional Development',
       'Travel',
+      'Other',
     ],
   },
 
@@ -100,12 +106,14 @@ export const BUSINESS_TYPE_CONFIG = {
       'Components',
       'Machinery Parts',
       'Packaging',
+      'Other',
     ],
     suggestedExpenses: [
       'Factory Rent',
       'Equipment Maintenance',
       'Safety Equipment',
       'Utilities',
+      'Other',
     ],
   },
 
@@ -115,8 +123,8 @@ export const BUSINESS_TYPE_CONFIG = {
   other: {
     label: 'Other',
     description: 'Other business types requiring custom category setup',
-    suggestedCOGS: [],
-    suggestedExpenses: [],
+    suggestedCOGS: ['Other'],
+    suggestedExpenses: ['Other'],
   },
 } as const;
 
