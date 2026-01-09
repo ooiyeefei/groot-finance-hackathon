@@ -10,6 +10,7 @@
 
 import type * as functions_accountingEntries from "../functions/accountingEntries.js";
 import type * as functions_admin from "../functions/admin.js";
+import type * as functions_admin_resetDatabase from "../functions/admin/resetDatabase.js";
 import type * as functions_analytics from "../functions/analytics.js";
 import type * as functions_audit from "../functions/audit.js";
 import type * as functions_businesses from "../functions/businesses.js";
@@ -41,6 +42,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "functions/accountingEntries": typeof functions_accountingEntries;
   "functions/admin": typeof functions_admin;
+  "functions/admin/resetDatabase": typeof functions_admin_resetDatabase;
   "functions/analytics": typeof functions_analytics;
   "functions/audit": typeof functions_audit;
   "functions/businesses": typeof functions_businesses;

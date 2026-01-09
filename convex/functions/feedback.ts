@@ -71,15 +71,10 @@ export const list = query({
           }
         }
 
-        let screenshotUrl = null;
-        if (item.screenshotStorageId) {
-          screenshotUrl = await ctx.storage.getUrl(item.screenshotStorageId);
-        }
-
         return {
           ...item,
           user,
-          screenshotUrl,
+          // screenshotUrl is now stored directly as S3 URL
         };
       })
     );
@@ -122,16 +117,10 @@ export const get = query({
       }
     }
 
-    // Get screenshot URL
-    let screenshotUrl = null;
-    if (feedback.screenshotStorageId) {
-      screenshotUrl = await ctx.storage.getUrl(feedback.screenshotStorageId);
-    }
-
     return {
       ...feedback,
       user,
-      screenshotUrl,
+      // screenshotUrl is now stored directly in feedback record as S3 URL
     };
   },
 });
@@ -178,20 +167,8 @@ export const getCounts = query({
 // MUTATIONS
 // ============================================
 
-/**
- * Generate upload URL for screenshot
- * Called before uploading screenshot to Convex storage
- */
-export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-    return await ctx.storage.generateUploadUrl();
-  },
-});
+// Note: Screenshot uploads now go directly to S3 via /api/v1/feedback/upload-url
+// The generateUploadUrl function has been removed as we no longer use Convex storage
 
 /**
  * Create new feedback submission
@@ -200,7 +177,7 @@ export const create = mutation({
   args: {
     type: feedbackTypeValidator,
     message: v.string(),
-    screenshotStorageId: v.optional(v.id("_storage")),
+    screenshotUrl: v.optional(v.string()), // S3 URL for permanent hosting
     pageUrl: v.string(),
     userAgent: v.string(),
     isAnonymous: v.boolean(),
@@ -226,7 +203,7 @@ export const create = mutation({
     const feedbackId = await ctx.db.insert("feedback", {
       type: args.type,
       message: args.message,
-      screenshotStorageId: args.screenshotStorageId,
+      screenshotUrl: args.screenshotUrl, // Permanent S3 URL
       pageUrl: args.pageUrl,
       userAgent: args.userAgent,
       userId,

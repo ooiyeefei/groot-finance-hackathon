@@ -8,7 +8,22 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedConvex } from "@/lib/convex";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { v4 as uuidv4 } from "uuid";
+
+// S3 configuration for feedback screenshots
+const S3_BUCKET = "finanseal-public";
+const S3_REGION = "us-west-2";
+const S3_PREFIX = "feedback-screenshots";
+
+// Initialize S3 client
+const s3Client = new S3Client({
+  region: S3_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+});
 
 /**
  * POST /api/v1/feedback
@@ -61,8 +76,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upload screenshot if provided
-    let screenshotStorageId: Id<"_storage"> | undefined = undefined;
+    // Upload screenshot to S3 if provided
+    let screenshotUrl: string | undefined = undefined;
     if (screenshot && screenshot.size > 0) {
       // Validate screenshot
       if (screenshot.size > 2 * 1024 * 1024) {
@@ -79,20 +94,32 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Get upload URL and upload screenshot
-      const uploadUrl = await client.mutation(api.functions.feedback.generateUploadUrl);
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": screenshot.type },
-        body: screenshot,
-      });
+      try {
+        // Generate unique filename
+        const extension = screenshot.type.split("/")[1] || "png";
+        const filename = `${uuidv4()}.${extension}`;
+        const key = `${S3_PREFIX}/${filename}`;
 
-      if (!uploadResponse.ok) {
-        console.error("[Feedback API] Screenshot upload failed:", uploadResponse.statusText);
+        // Convert File to Buffer
+        const arrayBuffer = await screenshot.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // Upload to S3
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: S3_BUCKET,
+            Key: key,
+            Body: buffer,
+            ContentType: screenshot.type,
+          })
+        );
+
+        // Set permanent public URL
+        screenshotUrl = `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
+        console.log(`[Feedback API] Screenshot uploaded to S3: ${screenshotUrl}`);
+      } catch (uploadError) {
+        console.error("[Feedback API] S3 screenshot upload failed:", uploadError);
         // Continue without screenshot - graceful degradation
-      } else {
-        const { storageId } = await uploadResponse.json();
-        screenshotStorageId = storageId;
       }
     }
 
@@ -100,7 +127,7 @@ export async function POST(request: NextRequest) {
     const feedbackId = await client.mutation(api.functions.feedback.create, {
       type,
       message: message.trim(),
-      screenshotStorageId,
+      screenshotUrl, // Permanent S3 URL
       pageUrl: request.headers.get("referer") || "",
       userAgent: request.headers.get("user-agent") || "",
       isAnonymous,

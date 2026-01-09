@@ -519,8 +519,8 @@ export default defineSchema({
     type: feedbackTypeValidator,
     message: v.string(),
 
-    // Screenshot (optional)
-    screenshotStorageId: v.optional(v.id("_storage")),
+    // Screenshot (optional) - S3 URL for permanent hosting
+    screenshotUrl: v.optional(v.string()),
 
     // Context (auto-captured)
     pageUrl: v.string(),
