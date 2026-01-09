@@ -52,11 +52,11 @@ export const handleUserCreated = action({
     console.log(`[Webhook Action] Processing user.created for Clerk ID: ${args.clerkUserId}`);
 
     // Check if user already exists by Clerk ID
-    // Note: Cast to Function to avoid "Type instantiation is excessively deep" error
-    const existingUser = await (ctx.runMutation as Function)(
+    // @ts-expect-error - Convex internal API types cause "Type instantiation is excessively deep" error
+    const existingUser: Doc<"users"> | null = await ctx.runMutation(
       internal.functions.users.getByClerkIdInternal,
       { clerkUserId: args.clerkUserId }
-    ) as Doc<"users"> | null;
+    );
 
     if (existingUser) {
       console.log(`[Webhook Action] User already exists with Clerk ID: ${args.clerkUserId}`);
@@ -64,16 +64,18 @@ export const handleUserCreated = action({
     }
 
     // Check for pending invitation
-    const pendingInvitation = await (ctx.runMutation as Function)(
+    // @ts-expect-error - Convex internal API types cause deep type error
+    const pendingInvitation: (Doc<"users"> & { role?: string }) | null = await ctx.runMutation(
       internal.functions.users.findPendingInvitationByEmail,
       { email: email }
-    ) as (Doc<"users"> & { role?: string }) | null;
+    );
 
     if (pendingInvitation) {
       console.log(`[Webhook Action] Found pending invitation for ${email}`);
 
       // Link invitation to Clerk user
-      await (ctx.runMutation as Function)(internal.functions.users.linkInvitationToClerk, {
+      // @ts-expect-error - Convex internal API types cause deep type error
+      await ctx.runMutation(internal.functions.users.linkInvitationToClerk, {
         userId: pendingInvitation._id,
         clerkUserId: args.clerkUserId,
         fullName: args.fullName,
@@ -81,7 +83,8 @@ export const handleUserCreated = action({
 
       // Create employee profile if business exists
       if (pendingInvitation.businessId) {
-        await (ctx.runMutation as Function)(internal.functions.users.createEmployeeProfileInternal, {
+        // @ts-expect-error - Convex internal API types cause deep type error
+        await ctx.runMutation(internal.functions.users.createEmployeeProfileInternal, {
           userId: pendingInvitation._id,
           businessId: pendingInvitation.businessId,
           role: pendingInvitation.role || "employee",
@@ -100,10 +103,11 @@ export const handleUserCreated = action({
     // Direct signup - create new user with business
     console.log(`[Webhook Action] Creating new user from direct signup: ${email}`);
 
-    const result = await (ctx.runMutation as Function)(
+    // @ts-expect-error - Convex internal API types cause deep type error
+    const result: { userId: Id<"users">; businessId: Id<"businesses"> } = await ctx.runMutation(
       internal.functions.users.createUserWithBusinessInternal,
       { clerkUserId: args.clerkUserId, email: email, fullName: args.fullName }
-    ) as { userId: Id<"users">; businessId: Id<"businesses"> };
+    );
 
     console.log(`[Webhook Action] Created user ${result.userId} with business ${result.businessId}`);
     return {
@@ -128,10 +132,11 @@ export const handleUserUpdated = action({
   handler: async (ctx, args): Promise<WebhookUserUpdatedResult> => {
     console.log(`[Webhook Action] Processing user.updated for Clerk ID: ${args.clerkUserId}`);
 
-    const userId = await (ctx.runMutation as Function)(
+    // @ts-expect-error - Convex internal API types cause deep type error
+    const userId: Id<"users"> | null = await ctx.runMutation(
       internal.functions.users.updateUserInternal,
       { clerkUserId: args.clerkUserId, email: args.email.toLowerCase(), fullName: args.fullName }
-    ) as Id<"users"> | null;
+    );
 
     if (!userId) {
       console.log(`[Webhook Action] User not found for update: ${args.clerkUserId}`);
@@ -154,7 +159,8 @@ export const handleUserDeleted = action({
   handler: async (ctx, args): Promise<WebhookUserDeletedResult> => {
     console.log(`[Webhook Action] Processing user.deleted for Clerk ID: ${args.clerkUserId}`);
 
-    await (ctx.runMutation as Function)(internal.functions.users.softDeleteUser, {
+    // @ts-expect-error - Convex internal API types cause deep type error
+    await ctx.runMutation(internal.functions.users.softDeleteUser, {
       clerkUserId: args.clerkUserId,
     });
 
