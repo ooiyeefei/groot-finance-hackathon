@@ -45,7 +45,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Get current business via authenticated query
-    const business = await client.query(api.functions.businesses.getCurrentBusiness)
+    // @ts-ignore - Convex API types cause "Type instantiation is excessively deep" error
+    const getCurrentBusinessFn = api.functions.businesses.getCurrentBusiness
+    const business = await client.query(getCurrentBusinessFn)
 
     if (!business) {
       return NextResponse.json(
@@ -60,7 +62,9 @@ export async function GET(request: NextRequest) {
     // Get current month usage from Convex
     let currentUsage = 0
     try {
-      const usageData = await client.query(api.functions.ocrUsage.getCurrentUsage, {
+      // @ts-ignore - Convex API types cause "Type instantiation is excessively deep" error
+      const getCurrentUsageFn = api.functions.ocrUsage.getCurrentUsage
+      const usageData = await client.query(getCurrentUsageFn, {
         businessId: business._id as Id<"businesses">
       })
       currentUsage = usageData?.creditsUsed ?? 0
@@ -130,7 +134,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current business via authenticated query
-    const business = await client.query(api.functions.businesses.getCurrentBusiness)
+    // @ts-ignore - Convex API types cause "Type instantiation is excessively deep" error
+    const getCurrentBusinessFn2 = api.functions.businesses.getCurrentBusiness
+    const business = await client.query(getCurrentBusinessFn2)
 
     if (!business) {
       return NextResponse.json(
@@ -144,7 +150,9 @@ export async function POST(request: NextRequest) {
     // Get current usage from Convex
     let currentUsage = 0
     try {
-      const usageData = await client.query(api.functions.ocrUsage.getCurrentUsage, {
+      // @ts-ignore - Convex API types cause "Type instantiation is excessively deep" error
+      const getCurrentUsageFn2 = api.functions.ocrUsage.getCurrentUsage
+      const usageData = await client.query(getCurrentUsageFn2, {
         businessId: business._id as Id<"businesses">
       })
       currentUsage = usageData?.creditsUsed ?? 0
@@ -170,7 +178,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Record usage via Convex mutation
-    const result = await client.mutation(api.functions.ocrUsage.recordUsageFromApi, {
+    // @ts-ignore - Convex API types cause "Type instantiation is excessively deep" error
+    const recordUsageFn = api.functions.ocrUsage.recordUsageFromApi
+    const result = await client.mutation(recordUsageFn, {
       businessId: business._id as Id<"businesses">,
       credits,
       documentId,
