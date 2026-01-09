@@ -18,7 +18,26 @@ import { auth } from '@clerk/nextjs/server'
 // Server-side Convex client for API routes and server actions
 // This client does NOT support real-time subscriptions
 // Use for one-shot queries/mutations from the server
-export const convexClient = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+// Note: Lazy initialization to avoid build-time errors when env var isn't available
+let _convexClient: ConvexHttpClient | null = null
+
+export function getConvexClient(): ConvexHttpClient {
+  if (!_convexClient) {
+    if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
+      throw new Error('NEXT_PUBLIC_CONVEX_URL environment variable is not set')
+    }
+    _convexClient = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL)
+  }
+  return _convexClient
+}
+
+// Legacy export for backward compatibility (deprecated)
+// @deprecated Use getConvexClient() instead
+export const convexClient = {
+  get query() { return getConvexClient().query.bind(getConvexClient()) },
+  get mutation() { return getConvexClient().mutation.bind(getConvexClient()) },
+  get action() { return getConvexClient().action.bind(getConvexClient()) },
+}
 
 /**
  * Get the Convex deployment URL

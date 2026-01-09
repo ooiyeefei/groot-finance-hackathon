@@ -12,7 +12,7 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { internal } from "../_generated/api";
-import { Id } from "../_generated/dataModel";
+import { Id, Doc } from "../_generated/dataModel";
 
 // ============================================
 // RETURN TYPES
@@ -52,9 +52,10 @@ export const handleUserCreated = action({
     console.log(`[Webhook Action] Processing user.created for Clerk ID: ${args.clerkUserId}`);
 
     // Check if user already exists by Clerk ID
+    // Note: Explicit type annotation to avoid "Type instantiation is excessively deep" error
     const existingUser = await ctx.runMutation(internal.functions.users.getByClerkIdInternal, {
       clerkUserId: args.clerkUserId,
-    });
+    }) as Doc<"users"> | null;
 
     if (existingUser) {
       console.log(`[Webhook Action] User already exists with Clerk ID: ${args.clerkUserId}`);
@@ -64,13 +65,13 @@ export const handleUserCreated = action({
     // Check for pending invitation
     const pendingInvitation = await ctx.runMutation(internal.functions.users.findPendingInvitationByEmail, {
       email: email,
-    });
+    }) as (Doc<"users"> & { role?: string }) | null;
 
     if (pendingInvitation) {
       console.log(`[Webhook Action] Found pending invitation for ${email}`);
 
       // Link invitation to Clerk user
-      await ctx.runMutation(internal.functions.users.linkInvitationToClerk, {
+      await (ctx.runMutation as Function)(internal.functions.users.linkInvitationToClerk, {
         userId: pendingInvitation._id,
         clerkUserId: args.clerkUserId,
         fullName: args.fullName,
@@ -78,7 +79,7 @@ export const handleUserCreated = action({
 
       // Create employee profile if business exists
       if (pendingInvitation.businessId) {
-        await ctx.runMutation(internal.functions.users.createEmployeeProfileInternal, {
+        await (ctx.runMutation as Function)(internal.functions.users.createEmployeeProfileInternal, {
           userId: pendingInvitation._id,
           businessId: pendingInvitation.businessId,
           role: pendingInvitation.role || "employee",
@@ -101,7 +102,7 @@ export const handleUserCreated = action({
       clerkUserId: args.clerkUserId,
       email: email,
       fullName: args.fullName,
-    });
+    }) as { userId: Id<"users">; businessId: Id<"businesses"> };
 
     console.log(`[Webhook Action] Created user ${result.userId} with business ${result.businessId}`);
     return {
@@ -130,7 +131,7 @@ export const handleUserUpdated = action({
       clerkUserId: args.clerkUserId,
       email: args.email.toLowerCase(),
       fullName: args.fullName,
-    });
+    }) as Id<"users"> | null;
 
     if (!userId) {
       console.log(`[Webhook Action] User not found for update: ${args.clerkUserId}`);
@@ -153,7 +154,7 @@ export const handleUserDeleted = action({
   handler: async (ctx, args): Promise<WebhookUserDeletedResult> => {
     console.log(`[Webhook Action] Processing user.deleted for Clerk ID: ${args.clerkUserId}`);
 
-    await ctx.runMutation(internal.functions.users.softDeleteUser, {
+    await (ctx.runMutation as Function)(internal.functions.users.softDeleteUser, {
       clerkUserId: args.clerkUserId,
     });
 

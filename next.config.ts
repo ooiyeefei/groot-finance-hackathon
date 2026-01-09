@@ -12,19 +12,32 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const nextConfig = {
   // Your other Next.js config options can go here
   
-  // Allow external images from Google Cloud Storage and legacy Supabase Storage
+  // Allow external images from AWS S3 and Google Cloud Storage
   images: {
     remotePatterns: [
+      // Public assets bucket (favicon, logos, brand assets)
+      {
+        protocol: 'https' as const,
+        hostname: 'finanseal-public.s3.us-west-2.amazonaws.com',
+        pathname: '/**',
+      },
+      // Private bucket for documents (presigned URLs)
+      {
+        protocol: 'https' as const,
+        hostname: 'finanseal-bucket.s3.us-west-2.amazonaws.com',
+        pathname: '/**',
+      },
+      // Alternative S3 URL format
+      {
+        protocol: 'https' as const,
+        hostname: 's3.us-west-2.amazonaws.com',
+        pathname: '/finanseal-bucket/**',
+      },
+      // GCS for brand assets (legacy)
       {
         protocol: 'https' as const,
         hostname: 'storage.googleapis.com',
         pathname: '/finanseal-logo/**',
-      },
-      // Legacy: Some business profile images still hosted on Supabase storage
-      {
-        protocol: 'https' as const,
-        hostname: 'ohxwghdgsuyabgsndfzc.supabase.co',
-        pathname: '/storage/v1/object/public/business-profiles/**',
       },
     ],
   },
