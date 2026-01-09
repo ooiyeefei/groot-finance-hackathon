@@ -1,7 +1,7 @@
 """
 Document Validation Step
 
-Uses Gemini 2.0 Flash for visual validation of document type.
+Uses Gemini 2.5 Flash for visual validation of document type.
 Determines if a document is an invoice, receipt, or unsupported type.
 """
 
@@ -24,7 +24,7 @@ def validate_document_step(
     s3: S3Client,
 ) -> Dict[str, Any]:
     """
-    Validate document type using Gemini 2.0 Flash.
+    Validate document type using Gemini 2.5 Flash.
 
     Args:
         document_id: Document ID for logging
@@ -96,7 +96,7 @@ def _classify_with_gemini(
     expected_type: Optional[str],
 ) -> Dict[str, Any]:
     """
-    Classify document using Gemini 2.0 Flash.
+    Classify document using Gemini 2.5 Flash.
 
     Args:
         document_id: Document ID for logging
@@ -134,8 +134,8 @@ Respond in JSON format:
     "reasoning": "Brief explanation"
 }"""
 
-    # Gemini API endpoint
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}"
+    # Gemini API endpoint - use gemini-2.5-flash (consistent with rest of codebase)
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
 
     # Build request payload
     payload = {
