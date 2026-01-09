@@ -106,79 +106,78 @@ export default function ExpenseCategoriesStep({
   );
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6">
+    <div className="w-full max-w-lg mx-auto space-y-3">
       {/* Header */}
-      <div className="text-center space-y-2">
-        <h2 className="text-2xl font-semibold text-foreground">
-          Customize your expense categories
+      <div className="text-center space-y-1">
+        <h2 className="text-lg font-semibold text-foreground">
+          Customize expense categories
         </h2>
-        <p className="text-muted-foreground">
-          Add categories to track your business operating expenses like rent, utilities, marketing, and staff costs.
-          These help you monitor where your money goes each month.
+        <p className="text-muted-foreground text-xs">
+          Add categories for operating expenses like rent, utilities, marketing
         </p>
       </div>
 
       {/* Main Card */}
       <Card className="bg-card border-border">
-        <div className="p-6 space-y-6">
+        <div className="p-3 space-y-3">
           {/* Input Section */}
-          <div className="space-y-3">
-            <label className="text-sm font-medium text-foreground">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">
               Add Expense Categories
             </label>
             <div className="flex gap-2">
               <Input
                 type="text"
-                placeholder="e.g., Office Rent, Marketing, Utilities"
+                placeholder="e.g., Office Rent, Marketing..."
                 value={inputValue}
                 onChange={(e) => {
                   setInputValue(e.target.value);
                   setError('');
                 }}
                 onKeyDown={handleKeyDown}
-                className="flex-1 bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-ring"
+                className="flex-1 bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-ring h-8 text-sm"
                 disabled={categories.length >= MAX_CATEGORIES}
               />
               <Button
                 type="button"
                 onClick={handleAddCategory}
                 disabled={!inputValue.trim() || categories.length >= MAX_CATEGORIES}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                size="sm"
               >
-                <Plus className="w-4 h-4 mr-1" />
+                <Plus className="w-3.5 h-3.5 mr-1" />
                 Add
               </Button>
             </div>
             {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">
+              <p className="text-xs text-red-600 dark:text-red-400">
                 {error}
               </p>
             )}
-            <p className="text-xs text-muted-foreground">
-              {categories.length}/{MAX_CATEGORIES} categories added
+            <p className="text-[10px] text-muted-foreground">
+              {categories.length}/{MAX_CATEGORIES} categories
             </p>
           </div>
 
           {/* Current Categories */}
           {categories.length > 0 && (
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-foreground">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">
                 Your Categories
               </label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {categories.map((category) => (
                   <Badge
                     key={category}
-                    className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 pl-2.5 pr-1.5 py-1 text-sm inline-flex items-center gap-1"
+                    className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 px-2 py-0.5 text-xs inline-flex items-center gap-1"
                   >
                     {category}
                     <button
                       type="button"
                       onClick={() => handleRemoveCategory(category)}
-                      className="ml-1 hover:bg-orange-500/20 rounded-full p-0.5 transition-colors"
+                      className="hover:bg-orange-500/20 rounded-full transition-colors"
                       aria-label={`Remove ${category}`}
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-2.5 h-2.5" />
                     </button>
                   </Badge>
                 ))}
@@ -188,17 +187,17 @@ export default function ExpenseCategoriesStep({
 
           {/* Suggested Categories */}
           {availableSuggestions.length > 0 && (
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-foreground flex items-center gap-1">
-                <Sparkles className="w-4 h-4 text-orange-500" />
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-orange-500" />
                 Suggested for your business
               </label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {availableSuggestions.map((suggested) => (
                   <Badge
                     key={suggested}
                     onClick={() => handleAddSuggested(suggested)}
-                    className="bg-muted text-muted-foreground hover:bg-orange-500/10 hover:text-orange-600 dark:hover:text-orange-400 hover:border-orange-500/30 cursor-pointer transition-colors"
+                    className="bg-muted text-muted-foreground hover:bg-orange-500/10 hover:text-orange-600 dark:hover:text-orange-400 hover:border-orange-500/30 cursor-pointer transition-colors px-2 py-0.5 text-xs"
                   >
                     {suggested}
                   </Badge>
@@ -210,43 +209,26 @@ export default function ExpenseCategoriesStep({
       </Card>
 
       {/* Footer Actions */}
-      <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
-        {/* Back Button */}
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onBack}
-          className="text-foreground hover:bg-muted order-1 sm:order-1"
-        >
-          <ArrowLeft className="w-4 h-4 mr-1" />
+      <div className="flex justify-between items-center pt-2">
+        <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+          <ArrowLeft className="w-3.5 h-3.5 mr-1" />
           Back
         </Button>
 
-        {/* Right Side Actions */}
-        <div className="flex flex-col sm:flex-row gap-2 order-2 sm:order-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleSkip}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            Skip for now
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={handleSkip}>
+            Skip
           </Button>
           {suggestedCategories.length > 0 && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleUseDefaults}
-              className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={handleUseDefaults}>
               Use Defaults
             </Button>
           )}
           <Button
             type="button"
+            size="sm"
             onClick={handleContinue}
             disabled={categories.length === 0}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             Continue
           </Button>

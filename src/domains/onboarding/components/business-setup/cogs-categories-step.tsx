@@ -116,26 +116,23 @@ export default function COGSCategoriesStep({
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
-      {/* Header Card */}
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-foreground text-2xl">
-            Customize your COGS categories
-          </CardTitle>
-          <p className="text-muted-foreground text-sm mt-2">
-            Cost of Goods Sold (COGS) represents the direct costs of producing your products or services.
-            Add categories that match your business operations, or use our suggested categories based on your business type.
-          </p>
-        </CardHeader>
-      </Card>
+    <div className="w-full max-w-lg mx-auto space-y-3">
+      {/* Header */}
+      <div className="text-center space-y-1">
+        <h2 className="text-lg font-semibold text-foreground">
+          Customize COGS categories
+        </h2>
+        <p className="text-muted-foreground text-xs">
+          Add categories for direct costs of producing your products/services
+        </p>
+      </div>
 
       {/* Category Input Card */}
       <Card className="bg-card border-border">
-        <CardContent className="pt-6 space-y-4">
+        <CardContent className="p-3 space-y-3">
           {/* Input Area */}
-          <div className="space-y-2">
-            <label htmlFor="category-input" className="text-foreground font-medium text-sm">
+          <div className="space-y-1.5">
+            <label htmlFor="category-input" className="text-foreground font-medium text-xs">
               Add new category
             </label>
             <div className="flex gap-2">
@@ -145,52 +142,50 @@ export default function COGSCategoriesStep({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type category name and press Enter..."
-                className="flex-1 bg-input border-border text-foreground focus:ring-ring"
+                placeholder="Type category name..."
+                className="flex-1 bg-input border-border text-foreground focus:ring-ring h-8 text-sm"
               />
               <Button
                 onClick={handleAddCategory}
                 disabled={!inputValue.trim() || categories.length >= MAX_CATEGORIES}
                 variant="primary"
-                size="default"
+                size="sm"
               >
-                <Plus className="w-4 h-4 mr-2" />
+                <Plus className="w-3.5 h-3.5 mr-1" />
                 Add
               </Button>
             </div>
             {showLimitWarning && (
-              <div className="flex items-center gap-2 text-warning-foreground text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>Maximum of {MAX_CATEGORIES} categories reached</span>
+              <div className="flex items-center gap-1.5 text-warning-foreground text-xs">
+                <AlertCircle className="w-3 h-3" />
+                <span>Maximum {MAX_CATEGORIES} categories reached</span>
               </div>
             )}
           </div>
 
           {/* Current Categories */}
           {categories.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-foreground font-medium text-sm">
-                  Your categories ({categories.length}/{MAX_CATEGORIES})
-                </label>
-              </div>
-              <div className="flex flex-wrap gap-2">
+            <div className="space-y-1.5">
+              <label className="text-foreground font-medium text-xs">
+                Your categories ({categories.length}/{MAX_CATEGORIES})
+              </label>
+              <div className="flex flex-wrap gap-1.5">
                 {categories.map((category) => (
                   <Badge
                     key={category}
                     className={cn(
                       "bg-primary/10 text-primary border border-primary/30",
-                      "px-3 py-1.5 text-sm font-medium",
+                      "px-2 py-0.5 text-xs font-medium",
                       "hover:bg-primary/20 transition-colors"
                     )}
                   >
                     <span>{category}</span>
                     <button
                       onClick={() => handleRemoveCategory(category)}
-                      className="ml-2 hover:text-primary-foreground transition-colors"
+                      className="ml-1.5 hover:text-primary-foreground transition-colors"
                       aria-label={`Remove ${category}`}
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-2.5 h-2.5" />
                     </button>
                   </Badge>
                 ))}
@@ -203,14 +198,11 @@ export default function COGSCategoriesStep({
       {/* Suggested Categories Card */}
       {suggestedCategories.length > 0 && (
         <Card className="bg-card border-border">
-          <CardContent className="pt-6 space-y-3">
-            <label className="text-foreground font-medium text-sm">
-              Suggested categories for your business type
+          <CardContent className="p-3 space-y-2">
+            <label className="text-foreground font-medium text-xs">
+              Suggested for your business
             </label>
-            <p className="text-muted-foreground text-xs">
-              Click on a suggestion to add it to your categories
-            </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {suggestedCategories.map((suggestion) => {
                 const isAlreadyAdded = categories.some(
                   cat => cat.toLowerCase() === suggestion.toLowerCase()
@@ -224,11 +216,11 @@ export default function COGSCategoriesStep({
                       isAlreadyAdded
                         ? "bg-muted text-muted-foreground border border-border opacity-50 cursor-not-allowed"
                         : "bg-muted text-muted-foreground border border-border hover:bg-primary/10 hover:text-primary hover:border-primary/30 cursor-pointer",
-                      "px-3 py-1.5 text-sm font-medium transition-all"
+                      "px-2 py-0.5 text-xs font-medium transition-all"
                     )}
                   >
                     {suggestion}
-                    {isAlreadyAdded && <span className="ml-1">✓</span>}
+                    {isAlreadyAdded && <span className="ml-0.5">✓</span>}
                   </Badge>
                 )
               })}
@@ -238,39 +230,23 @@ export default function COGSCategoriesStep({
       )}
 
       {/* Footer Actions */}
-      <div className="flex items-center justify-between gap-4 pt-4">
-        <Button
-          onClick={onBack}
-          variant="outline"
-          size="default"
-        >
+      <div className="flex items-center justify-between gap-2 pt-2">
+        <Button onClick={onBack} variant="ghost" size="sm">
           Back
         </Button>
 
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={onSkip}
-            variant="outline"
-            size="default"
-          >
+        <div className="flex items-center gap-2">
+          <Button onClick={onSkip} variant="outline" size="sm">
             Skip
           </Button>
 
           {suggestedCategories.length > 0 && categories.length === 0 && (
-            <Button
-              onClick={onUseDefaults}
-              variant="secondary"
-              size="default"
-            >
+            <Button onClick={onUseDefaults} variant="secondary" size="sm">
               Use Defaults
             </Button>
           )}
 
-          <Button
-            onClick={onNext}
-            variant="primary"
-            size="default"
-          >
+          <Button onClick={onNext} variant="primary" size="sm">
             Continue
           </Button>
         </div>
