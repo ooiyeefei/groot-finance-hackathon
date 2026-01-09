@@ -403,6 +403,7 @@ export default function BusinessOnboardingModal({
                 {/* Navigation */}
                 <div className="flex justify-end pt-3">
                   <Button
+                    variant="primary"
                     onClick={goToNextStep}
                     disabled={!wizardData.businessName?.trim()}
                     size="sm"
@@ -624,7 +625,7 @@ export default function BusinessOnboardingModal({
                     <ArrowLeft className="w-3.5 h-3.5 mr-1" />
                     Back
                   </Button>
-                  <Button size="sm" onClick={handleFinalSubmit} disabled={isCreating || isSubmitting}>
+                  <Button variant="primary" size="sm" onClick={handleFinalSubmit} disabled={isCreating || isSubmitting}>
                     {isCreating ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />

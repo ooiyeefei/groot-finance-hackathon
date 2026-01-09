@@ -226,6 +226,7 @@ export default function ExpenseCategoriesStep({
           )}
           <Button
             type="button"
+            variant="primary"
             size="sm"
             onClick={handleContinue}
             disabled={categories.length === 0}

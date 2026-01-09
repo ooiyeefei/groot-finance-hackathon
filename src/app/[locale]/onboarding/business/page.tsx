@@ -406,6 +406,7 @@ export default function BusinessOnboarding() {
                     Back
                   </Button>
                   <Button
+                    variant="primary"
                     size="sm"
                     onClick={goToNextStep}
                     disabled={!wizardData.businessName?.trim()}
@@ -587,6 +588,7 @@ export default function BusinessOnboarding() {
                     Back
                   </Button>
                   <Button
+                    variant="primary"
                     size="sm"
                     onClick={handleFinalSubmit}
                     disabled={isSubmitting}
