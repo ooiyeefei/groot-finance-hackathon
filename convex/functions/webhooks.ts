@@ -52,10 +52,11 @@ export const handleUserCreated = action({
     console.log(`[Webhook Action] Processing user.created for Clerk ID: ${args.clerkUserId}`);
 
     // Check if user already exists by Clerk ID
-    // Note: Explicit type annotation to avoid "Type instantiation is excessively deep" error
-    const existingUser = await ctx.runMutation(internal.functions.users.getByClerkIdInternal, {
-      clerkUserId: args.clerkUserId,
-    }) as Doc<"users"> | null;
+    // Note: Cast to Function to avoid "Type instantiation is excessively deep" error
+    const existingUser = await (ctx.runMutation as Function)(
+      internal.functions.users.getByClerkIdInternal,
+      { clerkUserId: args.clerkUserId }
+    ) as Doc<"users"> | null;
 
     if (existingUser) {
       console.log(`[Webhook Action] User already exists with Clerk ID: ${args.clerkUserId}`);
@@ -63,9 +64,10 @@ export const handleUserCreated = action({
     }
 
     // Check for pending invitation
-    const pendingInvitation = await ctx.runMutation(internal.functions.users.findPendingInvitationByEmail, {
-      email: email,
-    }) as (Doc<"users"> & { role?: string }) | null;
+    const pendingInvitation = await (ctx.runMutation as Function)(
+      internal.functions.users.findPendingInvitationByEmail,
+      { email: email }
+    ) as (Doc<"users"> & { role?: string }) | null;
 
     if (pendingInvitation) {
       console.log(`[Webhook Action] Found pending invitation for ${email}`);
@@ -98,11 +100,10 @@ export const handleUserCreated = action({
     // Direct signup - create new user with business
     console.log(`[Webhook Action] Creating new user from direct signup: ${email}`);
 
-    const result = await ctx.runMutation(internal.functions.users.createUserWithBusinessInternal, {
-      clerkUserId: args.clerkUserId,
-      email: email,
-      fullName: args.fullName,
-    }) as { userId: Id<"users">; businessId: Id<"businesses"> };
+    const result = await (ctx.runMutation as Function)(
+      internal.functions.users.createUserWithBusinessInternal,
+      { clerkUserId: args.clerkUserId, email: email, fullName: args.fullName }
+    ) as { userId: Id<"users">; businessId: Id<"businesses"> };
 
     console.log(`[Webhook Action] Created user ${result.userId} with business ${result.businessId}`);
     return {
@@ -127,11 +128,10 @@ export const handleUserUpdated = action({
   handler: async (ctx, args): Promise<WebhookUserUpdatedResult> => {
     console.log(`[Webhook Action] Processing user.updated for Clerk ID: ${args.clerkUserId}`);
 
-    const userId = await ctx.runMutation(internal.functions.users.updateUserInternal, {
-      clerkUserId: args.clerkUserId,
-      email: args.email.toLowerCase(),
-      fullName: args.fullName,
-    }) as Id<"users"> | null;
+    const userId = await (ctx.runMutation as Function)(
+      internal.functions.users.updateUserInternal,
+      { clerkUserId: args.clerkUserId, email: args.email.toLowerCase(), fullName: args.fullName }
+    ) as Id<"users"> | null;
 
     if (!userId) {
       console.log(`[Webhook Action] User not found for update: ${args.clerkUserId}`);
