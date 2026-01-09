@@ -150,9 +150,12 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder
+     * - public folder assets (images, icons, sw.js, manifest.json)
+     *
+     * NOTE: sw.js and manifest.json MUST be excluded or PWA registration fails
+     * with "Service worker script is behind a redirect" error
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|icons/.*|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
     '/(api|trpc)(.*)',
   ],
 }

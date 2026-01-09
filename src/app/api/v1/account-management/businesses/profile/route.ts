@@ -82,11 +82,36 @@ export async function GET(request: NextRequest) {
     }
 
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+
+    // Handle expected pre-onboarding states gracefully (not 500)
+    // These are expected for users who haven't completed onboarding yet
+    const isNoBusinessError =
+      errorMessage.includes('No business found') ||
+      errorMessage.includes('User has no business') ||
+      errorMessage.includes('not found') ||
+      errorMessage.includes('Failed to get business profile')
+
+    if (isNoBusinessError) {
+      // Return 404 with clear message for pre-onboarding users
+      console.log('[Business Profile V1 API] User has no business - expected for pre-onboarding')
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No business profile found',
+          code: 'NO_BUSINESS',
+          message: 'Please complete onboarding to set up your business'
+        },
+        { status: 404 }
+      )
+    }
+
+    // Unexpected errors - log and return 500
     console.error('[Business Profile V1 API] GET error:', error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error'
+        error: errorMessage
       },
       { status: 500 }
     )

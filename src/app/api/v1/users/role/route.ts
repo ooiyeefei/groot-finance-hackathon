@@ -62,15 +62,41 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[User Role V1 API] Unexpected error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-    if (error instanceof Error && error.message.includes('not authenticated')) {
+    // Handle authentication errors
+    if (errorMessage.includes('not authenticated')) {
       return NextResponse.json(
         { success: false, error: 'User not authenticated' },
         { status: 401 }
       )
     }
 
+    // Handle pre-onboarding state gracefully (user has no business/role yet)
+    // These are expected errors for users who haven't completed onboarding
+    const isPreOnboardingError =
+      errorMessage.includes('No business found') ||
+      errorMessage.includes('User has no business') ||
+      errorMessage.includes('not found') ||
+      errorMessage.includes('No role found') ||
+      errorMessage.includes('membership')
+
+    if (isPreOnboardingError) {
+      // Return 404 with clear code - expected for pre-onboarding users
+      console.log('[User Role V1 API] User has no role/business - expected for pre-onboarding')
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No role found',
+          code: 'NO_BUSINESS',
+          message: 'Please complete onboarding to set up your business'
+        },
+        { status: 404 }
+      )
+    }
+
+    // Unexpected errors - log and return 500
+    console.error('[User Role V1 API] Unexpected error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

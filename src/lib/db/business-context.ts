@@ -39,7 +39,7 @@ export interface BusinessWithOwnership {
 export interface BusinessContext {
   businessId: string
   businessName: string
-  role: 'admin' | 'manager' | 'employee'
+  role: 'owner' | 'admin' | 'manager' | 'employee'
   isOwner: boolean
   permissions: {
     canDeleteBusiness: boolean

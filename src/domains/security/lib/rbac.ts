@@ -79,6 +79,10 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
 
     // PERFORMANCE FIX: Skip ensureUserProfile on every call - only needed once at login/switch
     // Business membership already provides the profile data we need
+    // CRITICAL FIX: Owners have all permissions (manager + admin)
+    const isOwnerOrAdmin = businessContext.isOwner || businessContext.role === 'admin'
+    const isManagerOrAbove = isOwnerOrAdmin || businessContext.role === 'manager'
+
     const profile = {
       id: `membership_${businessContext.businessId}`,
       user_id: userId,
@@ -86,18 +90,19 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
       role: businessContext.role,
       role_permissions: {
         employee: true,
-        manager: businessContext.role === 'manager' || businessContext.role === 'admin',
-        admin: businessContext.role === 'admin'
+        manager: isManagerOrAbove,
+        admin: isOwnerOrAdmin
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
 
     // Use business context permissions from business_memberships
+    // CRITICAL FIX: Owners get all permissions (they own the business!)
     const permissions: RolePermissions = {
       employee: true,
-      manager: businessContext.role === 'manager' || businessContext.role === 'admin',
-      admin: businessContext.role === 'admin'
+      manager: isManagerOrAbove,
+      admin: isOwnerOrAdmin
     }
 
     const roles = determineUserRoles(permissions)

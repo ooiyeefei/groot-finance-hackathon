@@ -153,6 +153,9 @@ export async function fetchUserRoleWithCache(): Promise<any> {
 /**
  * Prefetch user role early (before component mounting)
  * Call this as soon as authentication is available
+ *
+ * Note: For pre-onboarding users without a business, this will return null
+ * (expected behavior - 404 is not an error, it means onboarding needed)
  */
 export function prefetchUserRole(): Promise<any> {
   // Return cached data immediately if available
@@ -163,7 +166,19 @@ export function prefetchUserRole(): Promise<any> {
 
   // Start prefetching in background
   return fetchUserRoleWithCache().catch(error => {
-    console.warn('[CacheUtils] Prefetch failed, will retry on component mount:', error)
+    // Silently handle expected pre-onboarding states (401, 404)
+    // These are not errors - user just needs to complete onboarding
+    const errorMsg = String(error.message || error)
+    const isExpectedPreOnboarding =
+      errorMsg.includes('401') ||
+      errorMsg.includes('404') ||
+      errorMsg.includes('NO_BUSINESS') ||
+      errorMsg.includes('not authenticated')
+
+    if (!isExpectedPreOnboarding) {
+      // Only log unexpected errors
+      console.warn('[CacheUtils] Prefetch failed:', error)
+    }
     return null
   })
 }
