@@ -230,44 +230,44 @@ export default function BusinessOnboarding() {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
       style={{ margin: 0, padding: 0 }}
     >
-      {/* Modal Container - 80% of screen */}
+      {/* Modal Container - Portrait oriented */}
       <div
         className="bg-card rounded-xl border border-border shadow-2xl overflow-hidden flex flex-col"
         style={{
-          width: '80vw',
-          height: '80vh',
-          maxWidth: '1200px',
-          maxHeight: '900px'
+          width: '90vw',
+          height: '85vh',
+          maxWidth: '580px',
+          maxHeight: '750px'
         }}
       >
-        {/* Modal Header */}
-        <div className="flex-shrink-0 px-8 pt-6 pb-4 border-b border-border bg-card">
+        {/* Modal Header - Compact */}
+        <div className="flex-shrink-0 px-5 pt-4 pb-3 border-b border-border bg-card">
           {/* Header */}
-          <div className="text-center space-y-2">
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Building2 className="h-7 w-7 text-primary" />
+          <div className="text-center space-y-1">
+            <div className="flex items-center justify-center mb-2">
+              <div className="p-1.5 bg-primary/10 rounded-lg">
+                <Building2 className="h-5 w-5 text-primary" />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-foreground">
+            <h1 className="text-lg font-semibold text-foreground">
               Set Up Your Business
             </h1>
-            <p className="text-muted-foreground text-sm">
-              Complete these steps to get started with FinanSEAL
+            <p className="text-muted-foreground text-xs">
+              Complete these steps to get started
             </p>
           </div>
 
-          {/* Progress Indicator */}
-          <div className="w-full mt-6">
+          {/* Progress Indicator - Compact */}
+          <div className="w-full mt-3">
             {/* Progress bar */}
-            <div className="h-2 bg-muted rounded-full overflow-hidden mb-4">
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
               <div
                 className="h-full bg-primary transition-all duration-300"
                 style={{ width: `${stepProgress}%` }}
               />
             </div>
 
-            {/* Step indicators */}
+            {/* Step indicators - Compact */}
             <div className="flex justify-between">
               {WIZARD_STEPS.map((step) => {
                 const isActive = step.id === currentStep
@@ -277,7 +277,7 @@ export default function BusinessOnboarding() {
                   <div key={step.id} className="flex flex-col items-center">
                     <div
                       className={cn(
-                        'w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-colors',
+                        'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium transition-colors',
                         isActive &&
                           'bg-primary text-primary-foreground ring-2 ring-primary/30',
                         isCompleted && 'bg-green-500 text-white',
@@ -287,15 +287,15 @@ export default function BusinessOnboarding() {
                       )}
                     >
                       {isCompleted ? (
-                        <Check className="w-4 h-4" />
+                        <Check className="w-3 h-3" />
                       ) : (
                         step.id
                       )}
                     </div>
-                    <div className="text-center mt-1 hidden sm:block">
+                    <div className="text-center mt-0.5">
                       <div
                         className={cn(
-                          'text-xs font-medium',
+                          'text-[10px] font-medium',
                           isActive && 'text-primary',
                           isCompleted && 'text-green-500',
                           !isActive && !isCompleted && 'text-muted-foreground'
@@ -311,22 +311,22 @@ export default function BusinessOnboarding() {
           </div>
         </div>
 
-        {/* Scrollable Content Area */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
             {/* Step 1: Business Details */}
             {currentStep === 1 && (
-              <div className="space-y-6">
-                <div className="text-center space-y-2 mb-8">
-                  <h2 className="text-2xl font-semibold text-foreground">
+              <div className="space-y-4">
+                <div className="text-center space-y-1 mb-4">
+                  <h2 className="text-lg font-semibold text-foreground">
                     Business Details
                   </h2>
-                  <p className="text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Tell us about your business
                   </p>
                 </div>
 
                 {/* Business Name */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label
                     htmlFor="businessName"
                     className="text-sm font-medium text-foreground"
@@ -341,13 +341,13 @@ export default function BusinessOnboarding() {
                     onChange={(e) =>
                       updateWizardData({ businessName: e.target.value })
                     }
-                    className="bg-input border-border text-foreground"
+                    className="bg-input border-border text-foreground h-9"
                     required
                   />
                 </div>
 
                 {/* Country */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label className="text-sm font-medium text-foreground">
                     Country
                   </Label>
@@ -355,15 +355,15 @@ export default function BusinessOnboarding() {
                     value={wizardData.countryCode || 'SG'}
                     onValueChange={handleCountryChange}
                   >
-                    <SelectTrigger className="bg-input border-border text-foreground">
+                    <SelectTrigger className="bg-input border-border text-foreground h-9">
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
-                    <SelectContent className="bg-card border-border max-h-[300px]">
+                    <SelectContent className="bg-card border-border max-h-[200px]">
                       {COUNTRIES.map((country) => (
                         <SelectItem
                           key={country.code}
                           value={country.code}
-                          className="text-foreground focus:bg-muted"
+                          className="text-foreground focus:bg-muted text-sm"
                         >
                           {country.name} ({country.code})
                         </SelectItem>
@@ -373,20 +373,20 @@ export default function BusinessOnboarding() {
                 </div>
 
                 {/* Currency */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label className="text-sm font-medium text-foreground">
                     Home Currency
                   </Label>
                   <Select value={homeCurrency} onValueChange={setHomeCurrency}>
-                    <SelectTrigger className="bg-input border-border text-foreground">
+                    <SelectTrigger className="bg-input border-border text-foreground h-9">
                       <SelectValue placeholder="Select currency" />
                     </SelectTrigger>
-                    <SelectContent className="bg-card border-border max-h-[300px]">
+                    <SelectContent className="bg-card border-border max-h-[200px]">
                       {CURRENCIES.map((currency) => (
                         <SelectItem
                           key={currency.code}
                           value={currency.code}
-                          className="text-foreground focus:bg-muted"
+                          className="text-foreground focus:bg-muted text-sm"
                         >
                           {currency.code} - {currency.name}
                         </SelectItem>
@@ -396,15 +396,17 @@ export default function BusinessOnboarding() {
                 </div>
 
                 {/* Navigation */}
-                <div className="flex justify-between pt-6">
+                <div className="flex justify-between pt-4">
                   <Button
                     variant="ghost"
+                    size="sm"
                     onClick={() => router.push('/onboarding/plan-selection')}
                   >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    <ArrowLeft className="w-3.5 h-3.5 mr-1" />
                     Back
                   </Button>
                   <Button
+                    size="sm"
                     onClick={goToNextStep}
                     disabled={!wizardData.businessName?.trim()}
                   >
@@ -476,23 +478,23 @@ export default function BusinessOnboarding() {
 
             {/* Step 5: Review */}
             {currentStep === 5 && (
-              <div className="space-y-6">
-                <div className="text-center space-y-2 mb-6">
-                  <h2 className="text-xl font-semibold text-foreground">
+              <div className="space-y-3">
+                <div className="text-center space-y-1 mb-3">
+                  <h2 className="text-lg font-semibold text-foreground">
                     Review Your Setup
                   </h2>
                   <p className="text-muted-foreground text-sm">
-                    Confirm your business details before creating
+                    Confirm your business details
                   </p>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-2">
                   {/* Business Details */}
-                  <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-                    <h3 className="font-medium text-foreground">
+                  <div className="p-3 bg-muted/50 rounded-md space-y-2">
+                    <h3 className="text-sm font-medium text-foreground">
                       Business Details
                     </h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                       <div>
                         <span className="text-muted-foreground">Name:</span>
                         <p className="font-medium text-foreground">
@@ -503,7 +505,7 @@ export default function BusinessOnboarding() {
                         <span className="text-muted-foreground">Type:</span>
                         <p className="font-medium text-foreground capitalize">
                           {wizardData.businessType === 'fnb'
-                            ? 'Food & Beverage'
+                            ? 'F&B'
                             : wizardData.businessType}
                         </p>
                       </div>
@@ -525,46 +527,46 @@ export default function BusinessOnboarding() {
                   </div>
 
                   {/* COGS Categories */}
-                  <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-                    <h3 className="font-medium text-foreground">
+                  <div className="p-3 bg-muted/50 rounded-md space-y-1.5">
+                    <h3 className="text-sm font-medium text-foreground">
                       COGS Categories ({wizardData.customCOGSNames?.length || 0})
                     </h3>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {(wizardData.customCOGSNames || []).map((cat, i) => (
                         <span
                           key={i}
-                          className="px-2 py-1 bg-primary/10 text-primary text-sm rounded-md"
+                          className="px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded"
                         >
                           {cat}
                         </span>
                       ))}
                       {(!wizardData.customCOGSNames ||
                         wizardData.customCOGSNames.length === 0) && (
-                        <span className="text-muted-foreground text-sm">
-                          No custom categories (AI will generate defaults)
+                        <span className="text-muted-foreground text-xs">
+                          AI will generate defaults
                         </span>
                       )}
                     </div>
                   </div>
 
                   {/* Expense Categories */}
-                  <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-                    <h3 className="font-medium text-foreground">
+                  <div className="p-3 bg-muted/50 rounded-md space-y-1.5">
+                    <h3 className="text-sm font-medium text-foreground">
                       Expense Categories ({wizardData.customExpenseNames?.length || 0})
                     </h3>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {(wizardData.customExpenseNames || []).map((cat, i) => (
                         <span
                           key={i}
-                          className="px-2 py-1 bg-orange-500/10 text-orange-600 dark:text-orange-400 text-sm rounded-md"
+                          className="px-1.5 py-0.5 bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs rounded"
                         >
                           {cat}
                         </span>
                       ))}
                       {(!wizardData.customExpenseNames ||
                         wizardData.customExpenseNames.length === 0) && (
-                        <span className="text-muted-foreground text-sm">
-                          No custom categories (AI will generate defaults)
+                        <span className="text-muted-foreground text-xs">
+                          AI will generate defaults
                         </span>
                       )}
                     </div>
@@ -573,25 +575,26 @@ export default function BusinessOnboarding() {
 
                 {/* Error Display */}
                 {error && (
-                  <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
-                    <p className="text-sm text-destructive">{error}</p>
+                  <div className="p-2 bg-destructive/10 border border-destructive/30 rounded">
+                    <p className="text-xs text-destructive">{error}</p>
                   </div>
                 )}
 
                 {/* Navigation */}
-                <div className="flex justify-between pt-6">
-                  <Button variant="ghost" onClick={goToPreviousStep}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
+                <div className="flex justify-between pt-3">
+                  <Button variant="ghost" size="sm" onClick={goToPreviousStep}>
+                    <ArrowLeft className="w-3.5 h-3.5 mr-1" />
                     Back
                   </Button>
                   <Button
+                    size="sm"
                     onClick={handleFinalSubmit}
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Creating Business...
+                        <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                        Creating...
                       </>
                     ) : (
                       'Create Business'
