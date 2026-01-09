@@ -9,11 +9,16 @@ import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import PersonalExpenseDashboard from '@/domains/expense-claims/components/personal-expense-dashboard'
 import { ClientProviders } from '@/components/providers/client-providers'
+import { MobileAppShellConnected } from '@/components/ui/mobile-app-shell-connected'
 
+interface ExpenseClaimsPageProps {
+  params: Promise<{ locale: string }>
+}
 
-export default async function ExpenseClaimsPage() {
+export default async function ExpenseClaimsPage({ params }: ExpenseClaimsPageProps) {
   // Server-side authentication check
   const { userId } = await auth()
+  const { locale } = await params
 
   if (!userId) {
     redirect('/sign-in')
@@ -30,9 +35,9 @@ export default async function ExpenseClaimsPage() {
 
   return (
     <ClientProviders>
-      
+      <MobileAppShellConnected locale={locale}>
         <div className="flex h-screen bg-background">
-          {/* Sidebar */}
+          {/* Sidebar - hidden on mobile */}
           <Sidebar />
 
           {/* Main Content - CLS FIX: min-h-0 prevents flex container shift */}
@@ -43,8 +48,8 @@ export default async function ExpenseClaimsPage() {
               subtitle=""
             />
 
-            {/* Main Content Area - CLS FIX: contain layout prevents reflow */}
-            <main className="flex-1 overflow-auto p-4 sm:p-card-padding" style={{ contain: 'layout' }}>
+{/* Main Content Area - CLS FIX + bottom padding for mobile nav */}
+            <main className="flex-1 overflow-auto p-4 sm:p-card-padding pb-24 sm:pb-4" style={{ contain: 'layout' }}>
               <div className="max-w-7xl mx-auto">
                 {/* Personal Expense Dashboard */}
                 <PersonalExpenseDashboard userId={userId} />
@@ -52,7 +57,7 @@ export default async function ExpenseClaimsPage() {
             </main>
           </div>
         </div>
-      
+      </MobileAppShellConnected>
     </ClientProviders>
   )
 }
