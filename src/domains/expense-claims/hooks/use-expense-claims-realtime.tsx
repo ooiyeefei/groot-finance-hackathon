@@ -110,6 +110,7 @@ export function useExpenseClaimsRealtime(
       reference_number: claim.referenceNumber,
       expense_category: claim.expenseCategory,
       storage_path: claim.storagePath,
+      converted_image_path: claim.convertedImagePath,
       file_name: claim.fileName,
       file_type: claim.fileType,
       file_size: claim.fileSize,
