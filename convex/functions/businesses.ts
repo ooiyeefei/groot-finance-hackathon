@@ -1705,7 +1705,10 @@ export const initializeBusinessFromOnboarding = mutation({
     forceCreateNew: v.optional(v.boolean()), // When true, always create new business (for modal)
   },
   handler: async (ctx, args) => {
+    console.log(`[initializeBusinessFromOnboarding] ========================================`);
     console.log(`[initializeBusinessFromOnboarding] Starting for Clerk ID: ${args.clerkUserId}`);
+    console.log(`[initializeBusinessFromOnboarding] forceCreateNew: ${args.forceCreateNew} (type: ${typeof args.forceCreateNew})`);
+    console.log(`[initializeBusinessFromOnboarding] Business name: ${args.name}`);
 
     // Step 1: Resolve Clerk user ID to Convex user
     let user = await ctx.db
@@ -1734,19 +1737,25 @@ export const initializeBusinessFromOnboarding = mutation({
       console.log(`[initializeBusinessFromOnboarding] Created user: ${userId}`);
     }
 
-    console.log(`[initializeBusinessFromOnboarding] Using user: ${user._id}`);
+    console.log(`[initializeBusinessFromOnboarding] Using user: ${user._id}, existing businessId: ${user.businessId || 'none'}`);
 
-    // Step 2: Check if user has an existing business that needs onboarding completion
-    // Only update if: (1) user has a businessId AND (2) that business hasn't completed onboarding
-    // AND (3) forceCreateNew is NOT set (modal always creates new)
-    // This handles the webhook auto-creation case where business was created but not configured
-    // For users creating ADDITIONAL businesses via modal, we always create a new one
-    if (user.businessId && !args.forceCreateNew) {
+    // ========================================
+    // CRITICAL: forceCreateNew === true means ALWAYS create a new business
+    // This is used by the "Create New Business" modal
+    // ========================================
+    if (args.forceCreateNew === true) {
+      console.log(`[initializeBusinessFromOnboarding] *** FORCE CREATE NEW MODE ***`);
+      console.log(`[initializeBusinessFromOnboarding] Will create NEW business row regardless of existing businesses`);
+      // Fall through to Step 3 - create new business
+    } else if (user.businessId) {
+      // Check if user has an existing business that needs onboarding completion
+      // This handles the webhook auto-creation case where business was created but not configured
       const existingBusiness = await ctx.db.get(user.businessId);
+      console.log(`[initializeBusinessFromOnboarding] Found existing business: ${user.businessId}, onboardingCompletedAt: ${existingBusiness?.onboardingCompletedAt || 'not set'}`);
 
       // Only update if business exists and hasn't completed onboarding yet
       if (existingBusiness && !existingBusiness.onboardingCompletedAt) {
-        console.log(`[initializeBusinessFromOnboarding] User has incomplete business: ${user.businessId}, completing onboarding`);
+        console.log(`[initializeBusinessFromOnboarding] Completing onboarding for existing placeholder business`);
 
         // Update the existing business with onboarding data
         await ctx.db.patch(user.businessId, {
@@ -1766,17 +1775,19 @@ export const initializeBusinessFromOnboarding = mutation({
           updatedAt: Date.now(),
         });
 
-        console.log(`[initializeBusinessFromOnboarding] Completed onboarding for business: ${user.businessId}`);
+        console.log(`[initializeBusinessFromOnboarding] ✅ Completed onboarding for existing business: ${user.businessId}`);
         return user.businessId;
-      } else {
-        // User has an existing business that already completed onboarding
-        // This means they're creating an ADDITIONAL business - proceed to create new one
-        console.log(`[initializeBusinessFromOnboarding] User creating additional business (existing: ${user.businessId})`);
       }
+
+      // User has an existing business that already completed onboarding
+      // This means they're creating an ADDITIONAL business - proceed to create new one
+      console.log(`[initializeBusinessFromOnboarding] Existing business already completed, will create additional business`);
     }
 
-    // Step 3: Create new business (either first business or additional business)
-    console.log(`[initializeBusinessFromOnboarding] Creating new business for user`);
+    // Step 3: Create NEW business row in the database
+    // This runs when: (1) forceCreateNew === true, OR (2) user has no business, OR (3) existing business already completed onboarding
+    console.log(`[initializeBusinessFromOnboarding] 📝 Step 3: INSERTING new business row into database...`);
+
     const businessId = await ctx.db.insert("businesses", {
       name: args.name,
       slug: args.slug,
@@ -1794,8 +1805,12 @@ export const initializeBusinessFromOnboarding = mutation({
       updatedAt: Date.now(),
     });
 
-    // Step 4: Create owner membership
-    await ctx.db.insert("business_memberships", {
+    console.log(`[initializeBusinessFromOnboarding] ✅ Step 3 COMPLETE: New business created with ID: ${businessId}`);
+
+    // Step 4: Create owner membership for the NEW business
+    console.log(`[initializeBusinessFromOnboarding] 📝 Step 4: Creating owner membership for business ${businessId}...`);
+
+    const membershipId = await ctx.db.insert("business_memberships", {
       userId: user._id,
       businessId,
       role: "owner",
@@ -1804,13 +1819,21 @@ export const initializeBusinessFromOnboarding = mutation({
       updatedAt: Date.now(),
     });
 
-    // Step 5: Update user's active business context
+    console.log(`[initializeBusinessFromOnboarding] ✅ Step 4 COMPLETE: Membership created with ID: ${membershipId}`);
+
+    // Step 5: Update user's active business context to the NEW business
+    console.log(`[initializeBusinessFromOnboarding] 📝 Step 5: Setting user's active business to ${businessId}...`);
+
     await ctx.db.patch(user._id, {
       businessId,
       updatedAt: Date.now(),
     });
 
-    console.log(`[initializeBusinessFromOnboarding] Created new business: ${businessId}`);
+    console.log(`[initializeBusinessFromOnboarding] ✅ Step 5 COMPLETE: User's active business updated`);
+    console.log(`[initializeBusinessFromOnboarding] ========================================`);
+    console.log(`[initializeBusinessFromOnboarding] 🎉 SUCCESS: Created NEW business: ${businessId}`);
+    console.log(`[initializeBusinessFromOnboarding] ========================================`);
+
     return businessId;
   },
 });
