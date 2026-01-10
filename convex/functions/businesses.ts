@@ -1735,33 +1735,45 @@ export const initializeBusinessFromOnboarding = mutation({
 
     console.log(`[initializeBusinessFromOnboarding] Using user: ${user._id}`);
 
-    // Step 2: Check if user already has a business from webhook auto-creation
+    // Step 2: Check if user has an existing business that needs onboarding completion
+    // Only update if: (1) user has a businessId AND (2) that business hasn't completed onboarding
+    // This handles the webhook auto-creation case where business was created but not configured
+    // For users creating ADDITIONAL businesses, we always create a new one
     if (user.businessId) {
-      console.log(`[initializeBusinessFromOnboarding] User has existing business: ${user.businessId}, updating it`);
+      const existingBusiness = await ctx.db.get(user.businessId);
 
-      // Update the existing business with onboarding data instead of creating new
-      await ctx.db.patch(user.businessId, {
-        name: args.name,
-        slug: args.slug,
-        countryCode: args.countryCode,
-        homeCurrency: args.homeCurrency,
-        businessType: args.businessType,
-        planName: args.planName,
-        subscriptionStatus: args.subscriptionStatus,
-        customCogsCategories: args.customCogsCategories,
-        customExpenseCategories: args.customExpenseCategories,
-        allowedCurrencies: args.allowedCurrencies || [
-          "USD", "SGD", "MYR", "THB", "IDR", "VND", "PHP", "CNY", "EUR"
-        ],
-        onboardingCompletedAt: Date.now(),
-        updatedAt: Date.now(),
-      });
+      // Only update if business exists and hasn't completed onboarding yet
+      if (existingBusiness && !existingBusiness.onboardingCompletedAt) {
+        console.log(`[initializeBusinessFromOnboarding] User has incomplete business: ${user.businessId}, completing onboarding`);
 
-      console.log(`[initializeBusinessFromOnboarding] Updated existing business: ${user.businessId}`);
-      return user.businessId;
+        // Update the existing business with onboarding data
+        await ctx.db.patch(user.businessId, {
+          name: args.name,
+          slug: args.slug,
+          countryCode: args.countryCode,
+          homeCurrency: args.homeCurrency,
+          businessType: args.businessType,
+          planName: args.planName,
+          subscriptionStatus: args.subscriptionStatus,
+          customCogsCategories: args.customCogsCategories,
+          customExpenseCategories: args.customExpenseCategories,
+          allowedCurrencies: args.allowedCurrencies || [
+            "USD", "SGD", "MYR", "THB", "IDR", "VND", "PHP", "CNY", "EUR"
+          ],
+          onboardingCompletedAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+
+        console.log(`[initializeBusinessFromOnboarding] Completed onboarding for business: ${user.businessId}`);
+        return user.businessId;
+      } else {
+        // User has an existing business that already completed onboarding
+        // This means they're creating an ADDITIONAL business - proceed to create new one
+        console.log(`[initializeBusinessFromOnboarding] User creating additional business (existing: ${user.businessId})`);
+      }
     }
 
-    // Step 3: Create new business (user has no business yet)
+    // Step 3: Create new business (either first business or additional business)
     console.log(`[initializeBusinessFromOnboarding] Creating new business for user`);
     const businessId = await ctx.db.insert("businesses", {
       name: args.name,

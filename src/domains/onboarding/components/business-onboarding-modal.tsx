@@ -501,30 +501,9 @@ export default function BusinessOnboardingModal({
                       {BREWING_MESSAGES[brewingMessageIndex].text}
                     </p>
 
-                    {/* Progress dots */}
-                    <div className="flex gap-1.5 mt-4">
-                      {BREWING_MESSAGES.map((_, idx) => (
-                        <div
-                          key={idx}
-                          className={cn(
-                            'w-1.5 h-1.5 rounded-full transition-all duration-300',
-                            idx === brewingMessageIndex
-                              ? 'bg-primary w-4'
-                              : 'bg-muted-foreground/30'
-                          )}
-                        />
-                      ))}
-                    </div>
-
-                    {/* Subtle loading bar */}
-                    <div className="w-32 h-0.5 bg-muted rounded-full mt-4 overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full animate-pulse"
-                        style={{
-                          width: `${((brewingMessageIndex + 1) / BREWING_MESSAGES.length) * 100}%`,
-                          transition: 'width 0.5s ease-out'
-                        }}
-                      />
+                    {/* Continuous loading spinner */}
+                    <div className="mt-4">
+                      <Loader2 className="w-5 h-5 text-primary animate-spin" />
                     </div>
                   </div>
                 )}

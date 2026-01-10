@@ -1,83 +1,78 @@
-# User Story 5 (US5) - Mobile Dashboard Experience Implementation Plan
+# Task: Fix Business Creation Flow & Multi-Tenancy
 
-**Goal**: Business owners can scan key financial metrics in under 10 seconds on mobile
+## Overview
+Two fixes requested by user:
+1. Loading animation during business creation feels like "step progress" - dots going back to 1 is weird
+2. **CRITICAL**: Multi-tenancy broken - creating 2nd business overrides 1st instead of creating new
 
-**Priority**: P2
+## Root Cause Analysis
 
-**Working Directory**: /home/fei/fei/code/finanseal-cc/mobile-pwa
+### Issue 1: Loading Animation UX
+- **Location**: `src/app/[locale]/onboarding/business/page.tsx` and `business-onboarding-modal.tsx`
+- **Problem**: Progress dots cycling back to dot 1 felt like regression
+- **Fix**: Replaced step-based progress dots/bar with simple continuous Loader2 spinner
 
----
+### Issue 2: Multi-Tenancy Bug (CRITICAL)
+- **Location**: `convex/functions/businesses.ts:1739-1761`
+- **Problem**: `initializeBusinessFromOnboarding` always updated existing business instead of creating new one
+- **Root Cause**: Code checked if `user.businessId` existed, and if so, always patched that business
+- **Fix**: Added check for `onboardingCompletedAt` to distinguish:
+  1. Business created by webhook but not onboarded → Complete onboarding (update)
+  2. Business already onboarded → Create NEW business (additional business)
 
-## Implementation Tasks
+## Todo Items
 
-### Task T046 - Audit Existing Dashboard Mobile Responsiveness
-- [ ] Test `unified-financial-dashboard.tsx` at 320px viewport (iPhone SE)
-- [ ] Identify hardcoded colors (bg-gray-700, text-white, etc.)
-- [ ] Check grid layout: Currently `grid-cols-1 sm:grid-cols-2 lg:grid-cols-5`
-- [ ] Document horizontal scrolling issues
-- [ ] Verify metrics visibility above the fold on mobile
-- [ ] Document findings in audit report section below
-
-**Key File**: `src/domains/analytics/components/unified-financial-dashboard.tsx`
-
-### Task T047 - Convert Dashboard to Semantic Tokens
-- [ ] Replace all hardcoded colors with semantic tokens
-- [ ] Update grid layout for mobile stacking
-- [ ] Ensure no horizontal scrolling on 320px viewport
-- [ ] Test light and dark mode rendering
-
-### Task T048 - Create Bottom Navigation Component
-- [ ] Create `src/components/ui/bottom-nav.tsx`
-- [ ] Fixed position at bottom with 44x44px touch targets
-- [ ] Use semantic tokens for all colors
-- [ ] Active state with primary color
-
-### Task T049 - Touch-Friendly Chart Tooltips (Conditional)
-- [ ] Check if charts exist in dashboard
-- [ ] If yes: Implement larger tap targets
-- [ ] If no charts: Skip and document
-
-### Task T050 - Integrate Bottom Navigation
-- [ ] Add bottom-nav to mobile layout
-- [ ] Navigation items: Dashboard, Expenses, Invoices, Settings
-- [ ] Add padding-bottom to main content
-- [ ] Mobile-only display (block sm:hidden)
-
-### Task T051 - Touch Target Audit
-- [ ] Audit all interactive elements
-- [ ] Ensure minimum 44x44px for all touchable items
-- [ ] Add padding/margin where needed
-
-### Task T052 - Mobile Testing & Documentation
-- [ ] Test at 320px, 375px, 390px viewports
-- [ ] Verify no horizontal scrolling
-- [ ] Run `npm run build`
-- [ ] Document findings
-
----
-
-## Audit Report (T046)
-
-### Issues Found in unified-financial-dashboard.tsx:
-
-1. **Hardcoded Dark Mode Colors** - Extensive use throughout
-2. **Grid Layout** - `grid-cols-1 sm:grid-cols-2 lg:grid-cols-5` (works well)
-3. **Color-Coded Borders** - Need semantic equivalents
-4. **Loading States** - Use `bg-gray-700` instead of `bg-muted`
-5. **Hover States** - Use non-existent `bg-gray-750`
-6. **Trend Colors** - Hardcoded green/red/gray
-7. **No Light Mode Support** - Component designed only for dark mode
-
----
+- [x] Fix loading animation in page component - replace step-based with continuous loader
+- [x] Investigate multi-tenancy bug - why 2nd business overrides 1st
+- [x] Fix initializeBusinessFromOnboarding mutation to create NEW business for additional businesses
+- [x] Update modal component loading animation to match page
+- [x] Run build verification
 
 ## Review Section
 
-(To be filled after implementation)
+### Changes Made
 
----
+**1. Loading Animation Fix** (`src/app/[locale]/onboarding/business/page.tsx`)
+- Replaced progress dots and bar with simple `Loader2` spinner
+- Keeps fun rotating messages with icons but removes step-based progress indicator
 
-## Build Validation
+**2. Loading Animation Fix** (`business-onboarding-modal.tsx`)
+- Same fix applied to modal component
+- Replaced lines 504-528 (progress dots + loading bar) with continuous spinner
 
-- [ ] `npm run build` passes
-- [ ] TypeScript compilation successful
-- [ ] Light and dark mode tested
+**3. Multi-Tenancy Fix** (`convex/functions/businesses.ts`)
+- Modified `initializeBusinessFromOnboarding` mutation
+- Key logic change:
+  ```typescript
+  // Before (BUG): Always update if businessId exists
+  if (user.businessId) {
+    await ctx.db.patch(user.businessId, {...});
+    return user.businessId;
+  }
+
+  // After (FIX): Only update if NOT yet onboarded
+  if (user.businessId) {
+    const existingBusiness = await ctx.db.get(user.businessId);
+    if (existingBusiness && !existingBusiness.onboardingCompletedAt) {
+      // Complete onboarding for webhook-created business
+      await ctx.db.patch(user.businessId, {...});
+      return user.businessId;
+    }
+    // Otherwise fall through to create NEW business
+  }
+  // Create new business (first or additional)
+  ```
+
+### Key Insights
+
+- The `onboardingCompletedAt` timestamp serves as the discriminator:
+  - `null/undefined` = Business created by webhook, needs onboarding completion
+  - Set = Business fully onboarded, user is creating additional business
+- Multi-tenancy for invited users should still work because business_memberships table correctly links users to multiple businesses
+- User's active `businessId` in users table is updated to the newly created business
+
+### Testing
+Users should now be able to:
+1. See continuous loading animation (not step-based progress)
+2. Create additional businesses without overwriting existing ones
+3. Each new business gets its own trial period and data

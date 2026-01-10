@@ -19,6 +19,10 @@ import {
   ArrowLeft,
   Loader2,
   Check,
+  Sparkles,
+  Wand2,
+  Rocket,
+  Settings,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -61,6 +65,14 @@ const WIZARD_STEPS = [
   { id: 5, label: 'Review', description: 'Confirm setup' },
 ]
 
+// Fun loading messages for the "brewing" animation
+const BREWING_MESSAGES = [
+  { text: 'Brewing your workspace magic...', icon: Sparkles },
+  { text: 'Setting up your financial command center...', icon: Settings },
+  { text: 'Configuring AI-powered features...', icon: Wand2 },
+  { text: 'Almost there! Preparing your dashboard...', icon: Rocket },
+]
+
 export default function BusinessOnboarding() {
   const router = useRouter()
   const { isLoaded, isSignedIn } = useAuth()
@@ -87,6 +99,10 @@ export default function BusinessOnboarding() {
   const [homeCurrency, setHomeCurrency] = useState('SGD')
   const [isMounted, setIsMounted] = useState(false)
   const [isCheckingExistingBusinesses, setIsCheckingExistingBusinesses] = useState(true)
+
+  // Brewing animation state for Create Business button
+  const [isCreating, setIsCreating] = useState(false)
+  const [brewingMessageIndex, setBrewingMessageIndex] = useState(0)
 
   // Initialize currency from country
   useEffect(() => {
@@ -139,6 +155,20 @@ export default function BusinessOnboarding() {
     }
   }, [isMounted, isLoaded, isSignedIn, router])
 
+  // Cycle through brewing messages during creation
+  useEffect(() => {
+    if (!isCreating) {
+      setBrewingMessageIndex(0)
+      return
+    }
+
+    const interval = setInterval(() => {
+      setBrewingMessageIndex((prev) => (prev + 1) % BREWING_MESSAGES.length)
+    }, 2000) // Change message every 2 seconds
+
+    return () => clearInterval(interval)
+  }, [isCreating])
+
   // Loading state - also wait for existing business check
   if (!isMounted || !isLoaded || isCheckingExistingBusinesses) {
     return (
@@ -164,6 +194,8 @@ export default function BusinessOnboarding() {
 
   // Final submission handler - creates business and starts trial if needed
   const handleFinalSubmit = async () => {
+    setIsCreating(true)
+
     try {
       const selectedPlan = wizardData.selectedPlan || 'trial'
 
@@ -217,6 +249,7 @@ export default function BusinessOnboarding() {
       router.push('/')
     } catch (err) {
       console.error('[BusinessOnboarding] Error:', err)
+      setIsCreating(false)
       // Show error in UI via the hook's error state
       if (err instanceof Error) {
         // The error will be displayed via the error state from useOnboardingFlow
@@ -395,16 +428,8 @@ export default function BusinessOnboarding() {
                   </Select>
                 </div>
 
-                {/* Navigation */}
-                <div className="flex justify-between pt-4">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => router.push('/onboarding/plan-selection')}
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-                    Back
-                  </Button>
+                {/* Navigation - No Back button on first step */}
+                <div className="flex justify-end pt-4">
                   <Button
                     variant="primary"
                     size="sm"
@@ -479,7 +504,42 @@ export default function BusinessOnboarding() {
 
             {/* Step 5: Review */}
             {currentStep === 5 && (
-              <div className="space-y-3">
+              <div className="space-y-3 relative">
+                {/* Brewing Animation Overlay */}
+                {isCreating && (
+                  <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-lg">
+                    {/* Animated Icon Container */}
+                    <div className="relative mb-4">
+                      {/* Pulsing background ring */}
+                      <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" style={{ animationDuration: '2s' }} />
+                      <div className="absolute inset-0 rounded-full bg-primary/10 animate-pulse" />
+
+                      {/* Icon with bounce animation */}
+                      <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 flex items-center justify-center">
+                        {(() => {
+                          const CurrentIcon = BREWING_MESSAGES[brewingMessageIndex].icon
+                          return (
+                            <CurrentIcon
+                              className="w-7 h-7 text-primary animate-bounce"
+                              style={{ animationDuration: '1s' }}
+                            />
+                          )
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Message with smooth transition */}
+                    <p className="text-sm font-medium text-foreground text-center px-4 transition-all duration-300">
+                      {BREWING_MESSAGES[brewingMessageIndex].text}
+                    </p>
+
+                    {/* Continuous loading spinner */}
+                    <div className="mt-4">
+                      <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                    </div>
+                  </div>
+                )}
+
                 <div className="text-center space-y-1 mb-3">
                   <h2 className="text-lg font-semibold text-foreground">
                     Review Your Setup
@@ -583,7 +643,7 @@ export default function BusinessOnboarding() {
 
                 {/* Navigation */}
                 <div className="flex justify-between pt-3">
-                  <Button variant="ghost" size="sm" onClick={goToPreviousStep}>
+                  <Button variant="ghost" size="sm" onClick={goToPreviousStep} disabled={isCreating}>
                     <ArrowLeft className="w-3.5 h-3.5 mr-1" />
                     Back
                   </Button>
@@ -591,12 +651,12 @@ export default function BusinessOnboarding() {
                     variant="primary"
                     size="sm"
                     onClick={handleFinalSubmit}
-                    disabled={isSubmitting}
+                    disabled={isCreating || isSubmitting}
                   >
-                    {isSubmitting ? (
+                    {isCreating ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                        Creating...
+                        Setting up...
                       </>
                     ) : (
                       'Create Business'
