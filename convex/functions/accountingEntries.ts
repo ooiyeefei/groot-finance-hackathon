@@ -527,6 +527,7 @@ export const create = mutation({
       }
     }
 
+    const now = Date.now();
     const entryId = await ctx.db.insert("accounting_entries", {
       businessId: args.businessId,
       userId: user._id,
@@ -555,16 +556,74 @@ export const create = mutation({
       processingMetadata: args.processingMetadata,
       documentMetadata: args.documentMetadata,
       lineItems: args.lineItems,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
 
-    // Promote vendor from "prospective" to "active" if vendorId provided
-    // This happens when a document becomes a confirmed accounting entry
+    // ============================================
+    // PHASE 2: Line items table population
+    // Insert line items into normalized line_items table
+    // This ensures invoice line items are properly indexed
+    // ============================================
+    if (args.lineItems && args.lineItems.length > 0) {
+      for (const item of args.lineItems) {
+        await ctx.db.insert("line_items", {
+          accountingEntryId: entryId,
+          itemDescription: item.itemDescription,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalAmount: item.totalAmount,
+          currency: item.currency,
+          taxAmount: item.taxAmount,
+          taxRate: item.taxRate,
+          lineOrder: item.lineOrder,
+          itemCode: item.itemCode,
+          unitMeasurement: item.unitMeasurement,
+          updatedAt: now,
+        });
+      }
+      console.log(`[Convex] Inserted ${args.lineItems.length} records into line_items table for accounting entry ${entryId}`);
+    }
+
+    // ============================================
+    // PHASE 2: Vendor activation
+    // Link vendor to accounting entry and promote from prospective to active
+    // ============================================
     if (args.vendorId) {
-      // @ts-expect-error - Suppress circular type inference in Convex generated API types
+      // VendorId explicitly provided - just promote
+      // @ts-ignore - Convex internal API types cause "Type instantiation is excessively deep" error
       await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
         vendorId: args.vendorId,
       });
+    } else if (args.vendorName && args.businessId) {
+      // No vendorId but vendorName provided - look up vendor by name
+      // This handles invoices where vendor was created during OCR extraction as "prospective"
+      const vendor = await ctx.runQuery(internal.functions.vendors.getByName, {
+        businessId: args.businessId,
+        vendorName: args.vendorName,
+      });
+
+      if (vendor) {
+        // Update accounting entry with vendorId
+        await ctx.db.patch(entryId, {
+          vendorId: vendor._id,
+        });
+
+        // Promote vendor from "prospective" to "active" (first accounting entry)
+        // @ts-ignore - Convex internal API types cause "Type instantiation is excessively deep" error
+        const promotionResult = await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
+          vendorId: vendor._id,
+        });
+
+        if (promotionResult.promoted) {
+          console.log(`[Convex] Promoted vendor ${vendor._id} to active status`);
+        } else {
+          // Type narrowing: when promoted === false, currentStatus exists
+          const result = promotionResult as { promoted: false; currentStatus: string };
+          console.log(`[Convex] Vendor ${vendor._id} already ${result.currentStatus}, not promoted`);
+        }
+      } else {
+        console.log(`[Convex] No vendor found for name "${args.vendorName}" - skipping vendor linking`);
+      }
     }
 
     return entryId;

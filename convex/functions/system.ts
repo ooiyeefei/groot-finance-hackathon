@@ -14,6 +14,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { resolveById } from "../lib/resolvers";
+import { internal } from "../_generated/api";
 
 // ============================================
 // INVOICE SYSTEM FUNCTIONS (for Trigger.dev)
@@ -772,6 +773,62 @@ export const fixupClearStaleErrors = mutation({
 
     console.log(`[Fixup] Cleared stale error fields from invoice ${args.invoiceId}`);
     return { success: true };
+  },
+});
+
+// ============================================
+// VENDOR INTEGRATION SYSTEM FUNCTIONS
+// ============================================
+
+/**
+ * Process vendor from invoice extraction (system access)
+ * Called by Lambda after successful invoice data extraction to:
+ * 1. Create/upsert vendor in vendors table (with "prospective" status)
+ * 2. Record price history observations from line items
+ *
+ * Security: Uses document ID as implicit authorization (only backend knows IDs)
+ */
+export const processVendorFromInvoiceExtraction = mutation({
+  args: {
+    invoiceId: v.string(),
+  },
+  handler: async (ctx, args): Promise<
+    | { success: false; reason: string }
+    | { success: true; vendorId: string; vendorCreated: boolean; priceObservationsCount: number }
+  > => {
+    console.log(`[System] Processing vendor from invoice extraction: ${args.invoiceId}`);
+
+    // Call the internal mutation that handles vendor upsert and price history
+    const result = await ctx.runMutation(
+      internal.functions.invoices.internalProcessVendorFromExtraction,
+      { invoiceId: args.invoiceId }
+    );
+
+    return result;
+  },
+});
+
+/**
+ * Process vendor from expense claim extraction (system access)
+ * Called by Lambda after successful expense claim data extraction
+ */
+export const processVendorFromExpenseClaimExtraction = mutation({
+  args: {
+    claimId: v.string(),
+  },
+  handler: async (ctx, args): Promise<
+    | { success: false; reason: string }
+    | { success: true; vendorId: string; vendorCreated: boolean; priceObservationsCount: number }
+  > => {
+    console.log(`[System] Processing vendor from expense claim extraction: ${args.claimId}`);
+
+    // Call the internal mutation that handles vendor upsert and price history
+    const result = await ctx.runMutation(
+      internal.functions.expenseClaims.internalProcessVendorFromExtraction,
+      { claimId: args.claimId }
+    );
+
+    return result;
   },
 });
 

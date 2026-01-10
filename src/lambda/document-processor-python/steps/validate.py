@@ -159,31 +159,78 @@ Respond in JSON format:
         },
     }
 
-    # Call Gemini API
-    print(f"[{document_id}] Calling Gemini for classification...")
-    response = httpx.post(
-        api_url,
-        json=payload,
-        timeout=60.0,
-        headers={"Content-Type": "application/json"},
-    )
-    response.raise_for_status()
-
-    # Parse response
-    result = response.json()
-    candidates = result.get("candidates", [])
-    if not candidates:
-        raise ValueError("No candidates in Gemini response")
-
-    content = candidates[0].get("content", {})
-    parts = content.get("parts", [])
-    if not parts:
-        raise ValueError("No parts in Gemini response")
-
-    # Parse JSON from response text
+    # Call Gemini API with retry logic for transient failures
     import json
-    response_text = parts[0].get("text", "{}")
-    classification = json.loads(response_text)
+    import time
+    from json_repair import repair_json
+
+    max_retries = 3
+    classification = None
+
+    for attempt in range(max_retries):
+        try:
+            print(f"[{document_id}] Calling Gemini for classification (attempt {attempt + 1}/{max_retries})...")
+            response = httpx.post(
+                api_url,
+                json=payload,
+                timeout=60.0,
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
+
+            # Parse response
+            result = response.json()
+            candidates = result.get("candidates", [])
+            if not candidates:
+                raise ValueError("No candidates in Gemini response")
+
+            # Check finish reason for potential issues
+            finish_reason = candidates[0].get("finishReason", "STOP")
+            if finish_reason != "STOP":
+                print(f"[{document_id}] Warning: Gemini finish_reason={finish_reason}")
+
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
+            if not parts:
+                raise ValueError("No parts in Gemini response")
+
+            # Parse JSON from response text
+            response_text = parts[0].get("text", "{}")
+
+            try:
+                classification = json.loads(response_text)
+            except json.JSONDecodeError as e:
+                print(f"[{document_id}] JSON parse error: {e}")
+                print(f"[{document_id}] Raw response (first 200 chars): {response_text[:200]}")
+
+                # Try json_repair for malformed JSON
+                repaired_text = repair_json(response_text, return_objects=False)
+                classification = json.loads(repaired_text)
+                print(f"[{document_id}] JSON repaired successfully")
+
+            # Validate response has required fields with reasonable values
+            confidence = classification.get("confidence", 0.0)
+            doc_type = classification.get("document_type", "unknown")
+
+            # If confidence is 0.0 and doc_type is valid, this looks like truncation - retry
+            if confidence == 0.0 and doc_type in ["invoice", "receipt", "bill"]:
+                if attempt < max_retries - 1:
+                    print(f"[{document_id}] Suspicious response (valid doc_type but confidence=0), retrying...")
+                    time.sleep(1)  # Brief delay before retry
+                    continue
+                else:
+                    # Final attempt: if doc_type is valid, use conservative confidence
+                    print(f"[{document_id}] Final attempt: using default confidence 0.7 for valid doc_type")
+                    classification["confidence"] = 0.7
+
+            break  # Success - exit retry loop
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"[{document_id}] Attempt {attempt + 1} failed: {e}, retrying...")
+                time.sleep(1)
+            else:
+                raise  # Re-raise on final attempt
 
     print(f"[{document_id}] Classification: {classification.get('document_type')} (confidence: {classification.get('confidence', 0):.2f})")
 

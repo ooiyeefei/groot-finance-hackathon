@@ -379,6 +379,10 @@ def extract_receipt_step(
         print(f"[{document_id}] Extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
         print(f"[{document_id}] Quality: {extracted.extraction_quality}, Confidence: {extracted.confidence_score}")
 
+        # DEBUG: Log description and business_purpose from DSPy
+        print(f"[{document_id}] DSPy description (raw): '{extracted.description}'")
+        print(f"[{document_id}] DSPy business_purpose (raw): '{extracted.business_purpose}'")
+
         # Convert line items
         line_items = [
             ReceiptLineItem(
@@ -498,6 +502,10 @@ def extract_receipt_step(
             # Token usage for billing
             "tokens_used": token_data,
         }
+
+        # DEBUG: Log final description and business_purpose values
+        print(f"[{document_id}] Final description: '{result['description']}'")
+        print(f"[{document_id}] Final business_purpose: '{result['business_purpose']}'")
 
         print(f"[{document_id}] Receipt extraction complete (quality: {extracted.extraction_quality})")
         if extracted.user_message:

@@ -810,6 +810,62 @@ export const updateStatus = mutation({
           updateData.accountingEntryId = accountingEntryId;
 
           console.log(`[Convex] Created accounting entry ${accountingEntryId} for approved expense claim ${claim._id} with ${lineItems.length} line items`);
+
+          // ============================================
+          // PHASE 2: Line items table population
+          // Insert line items into normalized line_items table
+          // ============================================
+          if (lineItems.length > 0) {
+            for (const item of lineItems) {
+              await ctx.db.insert("line_items", {
+                accountingEntryId: accountingEntryId,
+                itemDescription: item.itemDescription,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalAmount: item.totalAmount,
+                currency: item.currency,
+                taxAmount: item.taxAmount,
+                taxRate: item.taxRate,
+                lineOrder: item.lineOrder,
+                itemCode: item.itemCode,
+                unitMeasurement: item.unitMeasurement,
+                updatedAt: now,
+              });
+            }
+            console.log(`[Convex] Inserted ${lineItems.length} records into line_items table for accounting entry ${accountingEntryId}`);
+          }
+
+          // ============================================
+          // PHASE 2: Vendor activation
+          // Link vendor to accounting entry and promote from prospective to active
+          // ============================================
+          if (claim.vendorName) {
+            // Look up vendor by name (created during extraction as "prospective")
+            const vendor = await ctx.runQuery(internal.functions.vendors.getByName, {
+              businessId: claim.businessId,
+              vendorName: claim.vendorName,
+            });
+
+            if (vendor) {
+              // Update accounting entry with vendorId
+              await ctx.db.patch(accountingEntryId, {
+                vendorId: vendor._id,
+              });
+
+              // Promote vendor from "prospective" to "active" (first accounting entry)
+              const promotionResult = await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
+                vendorId: vendor._id,
+              });
+
+              if (promotionResult.promoted) {
+                console.log(`[Convex] Promoted vendor ${vendor._id} to active status`);
+              } else {
+                console.log(`[Convex] Vendor ${vendor._id} already ${promotionResult.currentStatus}, not promoted`);
+              }
+            } else {
+              console.log(`[Convex] No vendor found for name "${claim.vendorName}" - skipping vendor linking`);
+            }
+          }
         }
         break;
 

@@ -107,6 +107,16 @@ class InvoiceData(BaseModel):
         description="Actionable suggestions for improving extraction quality (e.g., 'Upload a clearer image')"
     )
 
+    # AI-generated descriptive fields for expense claims
+    description: Optional[str] = Field(
+        None,
+        description="Concise description of the expense based on document content, e.g., 'Office supplies from ABC Stationery' or 'Software subscription for project management'"
+    )
+    business_purpose: Optional[str] = Field(
+        None,
+        description="Business justification for the expense, e.g., 'Office supplies for daily operations' or 'Software tools for team productivity'"
+    )
+
 
 # =============================================================================
 # DSPy Signature - Updated to match Trigger.dev
@@ -148,7 +158,10 @@ class InvoiceExtractionSignature(dspy.Signature):
         For currency: analyze vendor location and symbols to determine ISO code.
         Select suggested_category from available_categories list.
         Set extraction_quality based on image clarity. If quality is 'low' or
-        critical fields are missing, provide user_message and suggestions."""
+        critical fields are missing, provide user_message and suggestions.
+
+        IMPORTANT: Generate 'description' (concise expense summary like 'Purchase from ABC Store')
+        and 'business_purpose' (business justification like 'Office supplies for operations')."""
     )
 
 
@@ -404,6 +417,10 @@ def extract_invoice_step(
         print(f"[{document_id}] Extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
         print(f"[{document_id}] Quality: {extracted.extraction_quality}, Confidence: {extracted.confidence_score}")
 
+        # DEBUG: Log description and business_purpose from DSPy
+        print(f"[{document_id}] DSPy description (raw): '{extracted.description}'")
+        print(f"[{document_id}] DSPy business_purpose (raw): '{extracted.business_purpose}'")
+
         # Convert line items
         line_items = [
             DocumentLineItem(
@@ -527,6 +544,10 @@ def extract_invoice_step(
             "suggested_category": suggested_category,
             "category_confidence": category_confidence,
 
+            # AI-extracted descriptive fields (with template fallbacks)
+            "description": extracted.description or (f"Purchase from {extracted.vendor_name}" if extracted.vendor_name else "Invoice expense"),
+            "business_purpose": extracted.business_purpose or (f"Business expense - {suggested_category}" if suggested_category else "Business expense"),
+
             # Processing metadata
             "processing_time_ms": processing_time_ms,
             "extracted_at": datetime.utcnow().isoformat(),
@@ -534,6 +555,10 @@ def extract_invoice_step(
             # Token usage for billing
             "tokens_used": token_data,
         }
+
+        # DEBUG: Log final description and business_purpose values
+        print(f"[{document_id}] Final description: '{result['description']}'")
+        print(f"[{document_id}] Final business_purpose: '{result['business_purpose']}'")
 
         print(f"[{document_id}] Invoice extraction complete (quality: {extracted.extraction_quality})")
         if extracted.user_message:
@@ -565,6 +590,10 @@ def extract_invoice_step(
                 "Make sure all text is readable",
                 "Try taking a photo from directly above the document"
             ],
+            # Fallback values to prevent empty fields in UI
+            "description": "Invoice expense - manual entry required",
+            "business_purpose": "Business expense - please specify",
+            "suggested_category": None,
         }
 
 

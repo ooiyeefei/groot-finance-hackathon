@@ -404,6 +404,47 @@ class ConvexClient:
             args,
         )
 
+    # =========================================================================
+    # Vendor Integration Functions
+    # =========================================================================
+
+    def process_vendor_from_extraction(
+        self,
+        document_id: str,
+        domain: str,
+    ) -> Dict[str, Any]:
+        """
+        Process vendor data from document extraction.
+
+        Creates/upserts vendor in vendors table (with "prospective" status)
+        and records price history observations from line items.
+
+        Should be called after successful extraction to populate vendor
+        master data and price history.
+
+        Args:
+            document_id: Document ID (invoice or expense claim)
+            domain: 'invoices' or 'expense_claims'
+
+        Returns:
+            Dict with:
+            - success: bool
+            - vendorId: str (if success)
+            - vendorCreated: bool (if success)
+            - priceObservationsCount: int (if success)
+            - reason: str (if not success)
+        """
+        if domain == "invoices":
+            return self._mutation(
+                "functions/system:processVendorFromInvoiceExtraction",
+                {"invoiceId": document_id},
+            )
+        else:
+            return self._mutation(
+                "functions/system:processVendorFromExpenseClaimExtraction",
+                {"claimId": document_id},
+            )
+
     def close(self):
         """Close the HTTP client."""
         self._client.close()

@@ -313,26 +313,50 @@ def handler(event: dict, context: DurableContext):
         # =================================================================
         def extract_data():
             print(f"[{doc_id}] Step: Data Extraction")
-            document_type = validation_result.get("document_type", "invoice")
 
-            if document_type == "receipt":
+            # IMPORTANT: Use domain to determine extraction path, NOT LLM classification
+            # - expense_claims domain → always use receipt extraction (optimized for receipts)
+            # - invoices domain → use LLM classification to choose invoice vs receipt
+            #
+            # Why: Expense claims are uploaded from the expense claims page, so we already
+            # know the context. The LLM validation often misclassifies receipts as "invoice"
+            # because they're similar financial documents, but expense claims should always
+            # use the receipt extraction path which is optimized for simpler documents.
+
+            if request.domain == "expense_claims":
+                # Expense claims always use receipt extraction
+                print(f"[{doc_id}] Using receipt extraction (domain: expense_claims)")
                 result = extract_receipt_step(
                     document_id=doc_id,
-                    images=converted_images,  # Use converted ConvertedImageInfo objects
+                    images=converted_images,
                     storage_path=request.storage_path,
                     domain=request.domain,
                     categories=business_categories,
                     s3=s3,
                 )
             else:
-                result = extract_invoice_step(
-                    document_id=doc_id,
-                    images=converted_images,  # Use converted ConvertedImageInfo objects
-                    storage_path=request.storage_path,
-                    domain=request.domain,
-                    categories=business_categories,
-                    s3=s3,
-                )
+                # Invoices domain: use LLM classification to choose extraction method
+                document_type = validation_result.get("document_type", "invoice")
+                print(f"[{doc_id}] Using {document_type} extraction (domain: invoices, classified as: {document_type})")
+
+                if document_type == "receipt":
+                    result = extract_receipt_step(
+                        document_id=doc_id,
+                        images=converted_images,
+                        storage_path=request.storage_path,
+                        domain=request.domain,
+                        categories=business_categories,
+                        s3=s3,
+                    )
+                else:
+                    result = extract_invoice_step(
+                        document_id=doc_id,
+                        images=converted_images,
+                        storage_path=request.storage_path,
+                        domain=request.domain,
+                        categories=business_categories,
+                        s3=s3,
+                    )
 
             print(f"[{doc_id}] Extraction complete: {result.get('vendor_name', 'Unknown')} - {result.get('total_amount', 0)} {result.get('currency', 'USD')}")
             return result
@@ -360,6 +384,12 @@ def handler(event: dict, context: DurableContext):
         # =================================================================
         def update_convex_results():
             print(f"[{doc_id}] Step: Updating Convex with results")
+
+            # DEBUG: Log description and business_purpose being passed to Convex
+            print(f"[{doc_id}] Extraction result keys: {list(extraction_result.keys())}")
+            print(f"[{doc_id}] Passing to Convex - description: '{extraction_result.get('description')}'")
+            print(f"[{doc_id}] Passing to Convex - business_purpose: '{extraction_result.get('business_purpose')}'")
+
             if request.domain == "invoices":
                 convex.update_invoice_extraction(
                     document_id=doc_id,
@@ -385,6 +415,31 @@ def handler(event: dict, context: DurableContext):
             return True
 
         context.step(lambda ctx: update_convex_results(), name="update_convex_results")
+
+        # =================================================================
+        # Step 7b: Process vendor from extraction (checkpointed)
+        # Creates/upserts vendor and records price history observations
+        # =================================================================
+        def process_vendor():
+            print(f"[{doc_id}] Step: Processing vendor from extraction")
+            try:
+                result = convex.process_vendor_from_extraction(
+                    document_id=doc_id,
+                    domain=request.domain,
+                )
+                if result.get("success"):
+                    print(f"[{doc_id}] Vendor processed: vendorId={result.get('vendorId')}, "
+                          f"created={result.get('vendorCreated')}, "
+                          f"priceObservations={result.get('priceObservationsCount')}")
+                else:
+                    print(f"[{doc_id}] Vendor processing skipped: {result.get('reason')}")
+                return result
+            except Exception as e:
+                # Non-fatal: vendor processing failure shouldn't fail the document
+                print(f"[{doc_id}] Warning: Failed to process vendor: {str(e)}")
+                return {"success": False, "reason": str(e)}
+
+        context.step(lambda ctx: process_vendor(), name="process_vendor")
 
         # =================================================================
         # Step 8: Record token usage (checkpointed)
