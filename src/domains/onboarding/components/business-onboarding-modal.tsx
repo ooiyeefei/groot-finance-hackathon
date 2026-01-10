@@ -224,7 +224,7 @@ export default function BusinessOnboardingModal({
         }
       }
 
-      // Step 3: Refresh business context and close modal
+      // Step 3: Refresh business context
       console.log('[BusinessOnboardingModal] Refreshing business context...')
       await refreshMemberships()
       await refreshContext()
@@ -232,11 +232,25 @@ export default function BusinessOnboardingModal({
       // Call success callback if provided
       onSuccess?.()
 
-      // Close modal
+      // Close modal first
       onClose()
 
-      // Optionally refresh the page to load new business data
-      router.refresh()
+      // CRITICAL: Clear localStorage caches before reload
+      // This ensures the page loads with fresh data from the server
+      try {
+        localStorage.removeItem('business-profile')
+        localStorage.removeItem('user-role-cache')
+        console.log('[BusinessOnboardingModal] Cleared localStorage caches')
+      } catch (cacheError) {
+        console.warn('[BusinessOnboardingModal] Failed to clear caches:', cacheError)
+      }
+
+      // CRITICAL: Force full page reload to clear ALL caches
+      // router.refresh() is a soft refresh that doesn't clear React Query,
+      // Convex subscriptions, or localStorage caches. A full reload ensures
+      // the business switcher and all pages show the new business.
+      console.log('[BusinessOnboardingModal] Triggering full page reload...')
+      window.location.reload()
     } catch (err) {
       console.error('[BusinessOnboardingModal] Error:', err)
       setSubmitError(err instanceof Error ? err.message : 'Failed to create business')
