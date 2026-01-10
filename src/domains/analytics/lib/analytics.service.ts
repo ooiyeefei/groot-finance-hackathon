@@ -22,6 +22,7 @@ import {
 } from '@/domains/analytics/lib/engine'
 import { calculateRiskScore, TransactionRiskContext, DEFAULT_RISK_CONFIG } from '@/domains/analytics/lib/risk-scoring'
 import { withCache, CACHE_TTL } from '@/lib/cache/api-cache'
+import { currencyService } from '@/lib/services/currency-service'
 
 // ==========================================
 // Type Definitions
@@ -70,12 +71,106 @@ export const DEFAULT_MONITORING_CONFIG: MonitoringConfig = {
 }
 
 // ==========================================
+// Currency Conversion Helpers
+// ==========================================
+
+/**
+ * Convert analytics amounts from source currency to target currency
+ * Used when user's preferred display currency differs from business's home currency
+ */
+async function convertAnalyticsCurrency(
+  analytics: FinancialAnalytics,
+  fromCurrency: SupportedCurrency,
+  toCurrency: SupportedCurrency
+): Promise<FinancialAnalytics> {
+  if (fromCurrency === toCurrency) {
+    return analytics
+  }
+
+  console.log(`[Analytics Service] Converting analytics from ${fromCurrency} to ${toCurrency}`)
+
+  try {
+    const rate = await currencyService.getCurrentRate(fromCurrency, toCurrency)
+
+    // Helper to convert a number
+    const convert = (amount: number): number => {
+      return Number((amount * rate).toFixed(2))
+    }
+
+    // Convert main metrics
+    const converted: FinancialAnalytics = {
+      ...analytics,
+      total_income: convert(analytics.total_income),
+      total_expenses: convert(analytics.total_expenses),
+      net_profit: convert(analytics.net_profit),
+
+      // Convert aged receivables
+      aged_receivables: {
+        ...analytics.aged_receivables,
+        current: convert(analytics.aged_receivables.current),
+        late_31_60: convert(analytics.aged_receivables.late_31_60),
+        late_61_90: convert(analytics.aged_receivables.late_61_90),
+        late_90_plus: convert(analytics.aged_receivables.late_90_plus),
+        total_outstanding: convert(analytics.aged_receivables.total_outstanding),
+      },
+
+      // Convert aged payables
+      aged_payables: {
+        ...analytics.aged_payables,
+        current: convert(analytics.aged_payables.current),
+        late_31_60: convert(analytics.aged_payables.late_31_60),
+        late_61_90: convert(analytics.aged_payables.late_61_90),
+        late_90_plus: convert(analytics.aged_payables.late_90_plus),
+        total_outstanding: convert(analytics.aged_payables.total_outstanding),
+      },
+
+      // Note: currency_breakdown and category_breakdown are already in various currencies
+      // They show the original currency distribution, so we keep them as-is
+    }
+
+    console.log(`[Analytics Service] Conversion complete. Rate: ${rate} ${fromCurrency}→${toCurrency}`)
+    return converted
+  } catch (error) {
+    console.error('[Analytics Service] Currency conversion failed:', error)
+    // Return unconverted data rather than failing completely
+    return analytics
+  }
+}
+
+/**
+ * Get business's home currency from Convex
+ */
+async function getBusinessHomeCurrency(businessId: string): Promise<SupportedCurrency> {
+  try {
+    const { client } = await getAuthenticatedConvex()
+    if (!client) {
+      console.warn('[Analytics Service] No Convex client, defaulting to SGD')
+      return 'SGD'
+    }
+
+    const businessProfile = await client.query(api.functions.businesses.getBusinessProfileByStringId, {
+      businessId
+    })
+
+    return (businessProfile?.home_currency as SupportedCurrency) || 'SGD'
+  } catch (error) {
+    console.error('[Analytics Service] Failed to get business currency:', error)
+    return 'SGD'
+  }
+}
+
+// ==========================================
 // Dashboard Analytics Functions
 // ==========================================
 
 /**
  * Calculate comprehensive financial analytics for dashboard
  * Delegates to analytics engine with security and caching
+ *
+ * Currency Flow:
+ * 1. Convex returns data in business's home currency
+ * 2. If user's preferred currency differs, we convert the amounts
+ * 3. This allows users to view dashboards in their preferred currency
  */
 export async function calculateFinancialAnalytics(
   clerkUserId: string,
@@ -83,17 +178,45 @@ export async function calculateFinancialAnalytics(
   periodEnd: Date,
   options: AnalyticsCalculationOptions = {}
 ): Promise<FinancialAnalytics> {
+  const targetCurrency = options.homeCurrency || 'SGD'
+
+  // Get user profile to find their business ID
+  const userProfile = await ensureUserProfile(clerkUserId)
+  if (!userProfile || !userProfile.business_id) {
+    throw new Error('No business context found')
+  }
+
+  // Get the business's actual home currency (what Convex returns data in)
+  const businessCurrency = await getBusinessHomeCurrency(userProfile.business_id)
+
+  // Determine cache key - include both currencies for proper caching
+  const cacheParams = {
+    periodStart: periodStart.toISOString().split('T')[0],
+    periodEnd: periodEnd.toISOString().split('T')[0],
+    businessCurrency,
+    targetCurrency
+  }
+
   // Cache analytics results since they're expensive to calculate
   return await withCache(
     clerkUserId,
     'dashboard-analytics',
-    async () => await calculateAnalyticsEngine(clerkUserId, periodStart, periodEnd, options),
+    async () => {
+      // Calculate analytics in business currency
+      const analytics = await calculateAnalyticsEngine(clerkUserId, periodStart, periodEnd, {
+        ...options,
+        homeCurrency: businessCurrency // Engine calculates in business currency
+      })
+
+      // Convert to user's preferred currency if different
+      if (targetCurrency !== businessCurrency) {
+        return await convertAnalyticsCurrency(analytics, businessCurrency, targetCurrency)
+      }
+
+      return analytics
+    },
     {
-      params: {
-        periodStart: periodStart.toISOString().split('T')[0],
-        periodEnd: periodEnd.toISOString().split('T')[0],
-        homeCurrency: options.homeCurrency || 'SGD'
-      },
+      params: cacheParams,
       ttlMs: CACHE_TTL.DASHBOARD_ANALYTICS,
       skipCache: options.forceRefresh || false
     }

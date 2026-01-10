@@ -3,7 +3,7 @@
 import { useState, Suspense, lazy } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw, PiggyBank, CreditCard, Loader2 } from 'lucide-react';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
-import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency';
+import { useHomeCurrency, updateHomeCurrency, SUPPORTED_CURRENCIES } from '@/domains/users/hooks/use-home-currency';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
 
 // Lazy load heavy components to improve initial page load
@@ -32,7 +32,26 @@ const ComponentLoader = ({ title, height = 'chart' }: { title: string; height?: 
 
 export default function CompleteDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
+  const [isCurrencyChanging, setIsCurrencyChanging] = useState(false);
   const { currency: homeCurrency } = useHomeCurrency();
+
+  // Handle currency change
+  const handleCurrencyChange = async (newCurrency: SupportedCurrency) => {
+    if (newCurrency === homeCurrency) return;
+
+    setIsCurrencyChanging(true);
+    try {
+      const success = await updateHomeCurrency(newCurrency);
+      if (success) {
+        // Force refresh analytics with new currency
+        refresh();
+      }
+    } catch (error) {
+      console.error('Failed to update currency:', error);
+    } finally {
+      setIsCurrencyChanging(false);
+    }
+  };
 
   const { analytics, trends, loading, error, refresh, lastUpdated } = useFinancialAnalytics({
     period: selectedPeriod,
@@ -160,6 +179,21 @@ export default function CompleteDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Currency Selector */}
+          <select
+            value={homeCurrency}
+            onChange={(e) => handleCurrencyChange(e.target.value as SupportedCurrency)}
+            disabled={isCurrencyChanging}
+            className="px-3 py-1.5 bg-muted text-foreground border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            title="Display currency"
+          >
+            {SUPPORTED_CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {CURRENCY_SYMBOLS[c.code]} {c.code}
+              </option>
+            ))}
+          </select>
+
           {/* Period Selector */}
           <select
             value={selectedPeriod}
@@ -174,11 +208,11 @@ export default function CompleteDashboard() {
           {/* Refresh Button */}
           <button
             onClick={refresh}
-            disabled={loading}
+            disabled={loading || isCurrencyChanging}
             className="p-2 bg-muted hover:bg-accent text-foreground rounded-lg transition-colors disabled:opacity-50"
             title="Refresh data"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loading || isCurrencyChanging ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
