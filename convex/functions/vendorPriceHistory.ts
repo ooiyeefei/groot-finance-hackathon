@@ -260,12 +260,17 @@ export const recordPriceObservation = internalMutation({
     sourceType: v.union(v.literal("invoice"), v.literal("expense_claim")),
     sourceId: v.string(),
     observedAt: v.string(),
+    // DSPy extraction fields
+    taxAmount: v.optional(v.number()),
+    taxRate: v.optional(v.number()),
+    itemCategory: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const trimmedDescription = args.itemDescription.trim();
     const priceHistoryId = await ctx.db.insert("vendor_price_history", {
       businessId: args.businessId,
       vendorId: args.vendorId,
-      itemDescription: args.itemDescription.trim(),
+      itemDescription: trimmedDescription,
       itemCode: args.itemCode,
       unitPrice: args.unitPrice,
       currency: args.currency,
@@ -274,6 +279,11 @@ export const recordPriceObservation = internalMutation({
       sourceId: args.sourceId,
       observedAt: args.observedAt,
       isConfirmed: false,
+      // DSPy extraction fields
+      taxAmount: args.taxAmount,
+      taxRate: args.taxRate,
+      itemCategory: args.itemCategory,
+      normalizedDescription: trimmedDescription.toLowerCase(),
       updatedAt: Date.now(),
     });
 
@@ -298,16 +308,21 @@ export const recordPriceObservationsBatch = internalMutation({
       unitPrice: v.number(),
       currency: v.string(),
       quantity: v.number(),
+      // DSPy extraction fields
+      taxAmount: v.optional(v.number()),
+      taxRate: v.optional(v.number()),
+      itemCategory: v.optional(v.string()),
     })),
   },
   handler: async (ctx, args) => {
     const priceHistoryIds: Id<"vendor_price_history">[] = [];
 
     for (const item of args.lineItems) {
+      const trimmedDescription = item.itemDescription.trim();
       const id = await ctx.db.insert("vendor_price_history", {
         businessId: args.businessId,
         vendorId: args.vendorId,
-        itemDescription: item.itemDescription.trim(),
+        itemDescription: trimmedDescription,
         itemCode: item.itemCode,
         unitPrice: item.unitPrice,
         currency: item.currency,
@@ -316,6 +331,11 @@ export const recordPriceObservationsBatch = internalMutation({
         sourceId: args.sourceId,
         observedAt: args.observedAt,
         isConfirmed: false,
+        // DSPy extraction fields
+        taxAmount: item.taxAmount,
+        taxRate: item.taxRate,
+        itemCategory: item.itemCategory,
+        normalizedDescription: trimmedDescription.toLowerCase(),
         updatedAt: Date.now(),
       });
       priceHistoryIds.push(id);

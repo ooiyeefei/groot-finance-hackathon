@@ -744,7 +744,45 @@ export const updateStatus = mutation({
             throw new Error("Cannot approve claim: missing required financial data (amount, currency, or date)");
           }
 
-          // Create the accounting entry
+          // Extract and transform line items from processingMetadata
+          const processingMetadata = claim.processingMetadata as {
+            line_items?: Array<{
+              item_description?: string;
+              description?: string;
+              item_code?: string;
+              unit_price?: number;
+              quantity?: number;
+              total_amount?: number;
+              currency?: string;
+              tax_amount?: number;
+              tax_rate?: number;
+              item_category?: string;
+              unit_measurement?: string;
+              line_order?: number;
+            }>;
+          } | null;
+
+          const rawLineItems = processingMetadata?.line_items ?? [];
+          const lineItems = rawLineItems
+            .filter((item) => {
+              const desc = item.item_description || item.description;
+              return desc && desc.trim().length > 0;
+            })
+            .map((item, index) => ({
+              itemDescription: (item.item_description || item.description || "Item")!,
+              quantity: item.quantity ?? 1,
+              unitPrice: item.unit_price ?? 0,
+              totalAmount: item.total_amount ?? (item.unit_price ?? 0) * (item.quantity ?? 1),
+              currency: item.currency || claim.currency || "MYR",
+              taxAmount: item.tax_amount,
+              taxRate: item.tax_rate,
+              itemCategory: item.item_category,
+              itemCode: item.item_code,
+              unitMeasurement: item.unit_measurement,
+              lineOrder: item.line_order ?? index + 1,
+            }));
+
+          // Create the accounting entry with line items
           const accountingEntryId = await ctx.db.insert("accounting_entries", {
             businessId: claim.businessId,
             userId: claim.userId,
@@ -764,13 +802,14 @@ export const updateStatus = mutation({
             sourceRecordId: claim._id,
             sourceDocumentType: "expense_claim",
             processingMetadata: claim.processingMetadata,
+            lineItems: lineItems.length > 0 ? lineItems : undefined,
             updatedAt: now,
           });
 
           // Link the accounting entry back to the expense claim
           updateData.accountingEntryId = accountingEntryId;
 
-          console.log(`[Convex] Created accounting entry ${accountingEntryId} for approved expense claim ${claim._id}`);
+          console.log(`[Convex] Created accounting entry ${accountingEntryId} for approved expense claim ${claim._id} with ${lineItems.length} line items`);
         }
         break;
 
@@ -1672,6 +1711,10 @@ export const internalProcessVendorFromExtraction = internalMutation({
         unit_price?: number;
         quantity?: number;
         currency?: string;
+        // DSPy extraction fields
+        tax_amount?: number;
+        tax_rate?: number;
+        item_category?: string;
       }>;
     } | null;
 
@@ -1688,6 +1731,10 @@ export const internalProcessVendorFromExtraction = internalMutation({
         unitPrice: item.unit_price!,
         currency: item.currency || defaultCurrency,
         quantity: item.quantity ?? 1,
+        // DSPy extraction fields
+        taxAmount: item.tax_amount,
+        taxRate: item.tax_rate,
+        itemCategory: item.item_category,
       }));
 
     // If no line items but we have a total, record as single item
@@ -1699,6 +1746,10 @@ export const internalProcessVendorFromExtraction = internalMutation({
         unitPrice: claim.totalAmount,
         currency: defaultCurrency,
         quantity: 1,
+        // No DSPy extraction fields for fallback total-only observation
+        taxAmount: undefined,
+        taxRate: undefined,
+        itemCategory: undefined,
       });
     }
 

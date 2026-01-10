@@ -464,6 +464,12 @@ export default defineSchema({
     currency: v.string(),
     quantity: v.number(),
 
+    // DSPy Extraction Fields (tax and categorization)
+    taxAmount: v.optional(v.number()),
+    taxRate: v.optional(v.number()),
+    itemCategory: v.optional(v.string()),
+    normalizedDescription: v.optional(v.string()), // Lowercase for fast case-insensitive search
+
     // Source Document Tracking
     sourceType: v.union(v.literal("invoice"), v.literal("expense_claim")),
     sourceId: v.string(),              // ID of the source document (invoice or expense_claim)
@@ -480,7 +486,8 @@ export default defineSchema({
     .index("by_businessId_item", ["businessId", "itemDescription"])
     .index("by_vendor_item", ["vendorId", "itemDescription"])
     .index("by_source", ["sourceType", "sourceId"])
-    .index("by_businessId", ["businessId"]),
+    .index("by_businessId", ["businessId"])
+    .index("by_vendor_normalized", ["vendorId", "normalizedDescription"]),
 
   stripe_events: defineTable({
     // Identity
