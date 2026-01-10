@@ -161,6 +161,31 @@ FinanSEAL implements a **Layer 1-2-3 Semantic Design System** for consistent the
 - App patterns: `src/app/CLAUDE.md`
 - Semantic tokens: `src/app/globals.css`
 
+### Number Formatting Rules
+
+**Rule: Always Format Large Numbers with Comma Separators**
+
+All financial amounts and large numbers displayed in the UI must use comma separators for readability:
+- `101596428` → `101,596,428`
+- `1234.56` → `1,234.56`
+
+**Implementation:**
+- Use `formatNumber()` utility from `@/lib/utils/format-number` for all numeric displays
+- Apply to: invoices, expense claims, accounting records, analytics dashboards
+- Preserve decimal places as needed (e.g., currency amounts: 2 decimals)
+
+**Usage:**
+```typescript
+import { formatNumber, formatCurrency } from '@/lib/utils/format-number'
+
+// Basic number formatting
+formatNumber(101596428)  // "101,596,428"
+
+// Currency formatting
+formatCurrency(1234.56, 'USD')  // "$1,234.56"
+formatCurrency(1234.56, 'THB')  // "฿1,234.56"
+```
+
 ### Document Processing Workflow
 
 1. **File Upload**: Client uploads PDF/images → AWS S3

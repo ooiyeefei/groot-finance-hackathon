@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { X, Languages, Eye, FileText, DollarSign, List, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
+import { formatNumber } from '@/lib/utils/format-number'
 
 interface Document {
   id: string
@@ -214,10 +215,9 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   const [translatedText, setTranslatedText] = useState('')
   const [isTranslating, setIsTranslating] = useState(false)
   const [showRawJson, setShowRawJson] = useState(false)
-  const [documentImageUrl, setDocumentImageUrl] = useState<string | null>(null)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [pageImageUrls, setPageImageUrls] = useState<string[]>([])
   const [totalPages, setTotalPages] = useState(1)
-  const [isLoadingPage, setIsLoadingPage] = useState(false)
+  const [isLoadingPages, setIsLoadingPages] = useState(false)
   const [highlightedBox, setHighlightedBox] = useState<{
     x1: number
     y1: number
@@ -228,18 +228,12 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   } | null>(null)
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null)
 
-  // Function to fetch a specific page
-  const fetchDocumentPage = async (pageNumber: number = 1) => {
-    setIsLoadingPage(true)
+  // Function to fetch all pages
+  const fetchAllPages = async () => {
+    setIsLoadingPages(true)
     try {
-      // Fetching document page image
-
-      // Single API call with automatic path resolution on the backend
-      const params = new URLSearchParams({
-        pageNumber: pageNumber.toString()
-      })
-
-      // Pass stored converted image path if available
+      // First, fetch page 1 to get total page count
+      const params = new URLSearchParams({ pageNumber: '1' })
       if (document.converted_image_path) {
         params.set('storagePath', document.converted_image_path)
       }
@@ -248,42 +242,53 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
         method: 'GET'
       })
 
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success && result.data?.imageUrl) {
-          // Successfully loaded document page
-          setDocumentImageUrl(result.data.imageUrl)
-          setCurrentPage(result.data.currentPage || pageNumber)
-          setTotalPages(result.data.totalPages || 1)
-          return
+      if (!response.ok) return
+
+      const result = await response.json()
+      if (!result.success || !result.data?.imageUrl) return
+
+      const total = result.data.totalPages || 1
+      setTotalPages(total)
+
+      // If only 1 page, we already have it
+      if (total === 1) {
+        setPageImageUrls([result.data.imageUrl])
+        return
+      }
+
+      // Fetch all pages in parallel
+      const pagePromises = []
+      for (let page = 1; page <= total; page++) {
+        if (page === 1) {
+          // Already have page 1
+          pagePromises.push(Promise.resolve(result.data.imageUrl))
+        } else {
+          const pageParams = new URLSearchParams({ pageNumber: page.toString() })
+          if (document.converted_image_path) {
+            pageParams.set('storagePath', document.converted_image_path)
+          }
+          pagePromises.push(
+            fetch(`/api/v1/invoices/${document.id}/image-url?${pageParams}`)
+              .then(res => res.json())
+              .then(data => data.success ? data.data?.imageUrl : null)
+              .catch(() => null)
+          )
         }
       }
 
-      // Failed to load document page
+      const urls = await Promise.all(pagePromises)
+      setPageImageUrls(urls.filter((url): url is string => url !== null))
     } catch (error) {
-      console.error('[Document Preview] Failed to fetch document image:', error)
+      console.error('[Document Preview] Failed to fetch document images:', error)
     } finally {
-      setIsLoadingPage(false)
+      setIsLoadingPages(false)
     }
   }
 
-    // Fetch initial page on component mount
-    useEffect(() => {
-      fetchDocumentPage(1)
-    }, [document])
-
-    // Page navigation handlers
-    const handlePreviousPage = () => {
-      if (currentPage > 1) {
-        fetchDocumentPage(currentPage - 1)
-      }
-    }
-
-    const handleNextPage = () => {
-      if (currentPage < totalPages) {
-        fetchDocumentPage(currentPage + 1)
-      }
-    }
+  // Fetch all pages on component mount
+  useEffect(() => {
+    fetchAllPages()
+  }, [document])
 
   const handleTranslate = async () => {
     if (!document.extracted_data) return
@@ -805,48 +810,43 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 <h4 className="text-sm font-medium text-foreground flex items-center">
                   <FileText className="w-4 h-4 mr-2" />
                   Document Preview
-                </h4>
-
-                {/* Page Navigation - Only show if more than 1 page */}
-                {totalPages > 1 && (
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      onClick={handlePreviousPage}
-                      disabled={currentPage === 1 || isLoadingPage}
-                      variant="secondary"
-                      size="sm"
-                    >
-                      ◀ Previous
-                    </Button>
-                    <span className="text-xs text-muted-foreground px-2">
-                      {isLoadingPage ? 'Loading...' : `Page ${currentPage} of ${totalPages}`}
+                  {totalPages > 1 && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      ({totalPages} pages)
                     </span>
-                    <Button
-                      onClick={handleNextPage}
-                      disabled={currentPage === totalPages || isLoadingPage}
-                      variant="secondary"
-                      size="sm"
-                    >
-                      Next ▶
-                    </Button>
-                  </div>
+                  )}
+                </h4>
+                {isLoadingPages && (
+                  <span className="text-xs text-muted-foreground">Loading pages...</span>
                 )}
               </div>
 
-              {/* Document Preview with Fixed Height (50% of screen) */}
-              <div className="mb-6" style={{ height: '50vh', minHeight: '400px' }}>
-                <DocumentPreviewWithAnnotations
-                  imageUrl={documentImageUrl || undefined}
-                  fileName={document.file_name}
-                  fileType={document.file_type}
-                  fileSize={document.file_size}
-                  boundingBoxes={getFilteredBoundingBoxes()}
-                  onBoxHover={setHighlightedBox}
-                  onBoxClick={(box) => {
-                    // Clicked bounding box
-                    // TODO: Highlight corresponding text in extracted content
-                  }}
-                />
+              {/* Scrollable Document Preview - All Pages */}
+              <div className="mb-6 space-y-4" style={{ maxHeight: '55vh', overflowY: 'auto' }}>
+                {pageImageUrls.length > 0 ? (
+                  pageImageUrls.map((imageUrl, index) => (
+                    <div key={index} className="relative">
+                      {totalPages > 1 && (
+                        <div className="absolute top-2 left-2 z-10 bg-background/80 text-foreground text-xs px-2 py-1 rounded">
+                          Page {index + 1}
+                        </div>
+                      )}
+                      <DocumentPreviewWithAnnotations
+                        imageUrl={imageUrl}
+                        fileName={document.file_name}
+                        fileType={document.file_type}
+                        fileSize={document.file_size}
+                        boundingBoxes={index === 0 ? getFilteredBoundingBoxes() : []}
+                        onBoxHover={index === 0 ? setHighlightedBox : undefined}
+                        onBoxClick={index === 0 ? () => {} : undefined}
+                      />
+                    </div>
+                  ))
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-muted-foreground">
+                    {isLoadingPages ? 'Loading document...' : 'No preview available'}
+                  </div>
+                )}
               </div>
 
             {/* Translation Feature */}
@@ -1040,7 +1040,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                         >
                           <div className="text-xs text-muted-foreground mb-1">Amount</div>
                           <div className="text-sm text-foreground font-medium">
-                            {getFieldValue('currency') || 'SGD'} {getFieldValue('total_amount')}
+                            {getFieldValue('currency') || 'SGD'} {formatNumber(getFieldValue('total_amount'), 2)}
                           </div>
                         </div>
                       )}

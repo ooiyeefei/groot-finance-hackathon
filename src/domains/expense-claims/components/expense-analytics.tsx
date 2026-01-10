@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { formatNumber } from '@/lib/utils/format-number'
 
 interface ExpenseAnalyticsProps {
   scope: 'personal' | 'department' | 'company'
@@ -311,7 +312,7 @@ function ExpensePieChart({ categories, currency }: ExpensePieChartProps) {
       {/* Center text */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <div className="text-foreground text-lg font-bold">
-          {currency === 'SGD' ? 'S$' : '$'}{categories.reduce((sum, cat) => sum + cat.total_amount, 0).toFixed(0)}
+          {currency === 'SGD' ? 'S$' : '$'}{formatNumber(categories.reduce((sum, cat) => sum + cat.total_amount, 0), 2)}
         </div>
         <div className="text-muted-foreground text-xs">Total</div>
       </div>

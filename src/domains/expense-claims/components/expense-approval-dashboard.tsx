@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatBusinessDate } from '@/lib/utils'
+import { formatNumber } from '@/lib/utils/format-number'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
@@ -649,13 +650,13 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                   <div className="flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-muted-foreground" />
                     <span className="text-foreground font-semibold">
-                      {claim.total_amount} {claim.currency}
+                      {formatNumber(claim.total_amount, 2)} {claim.currency}
                     </span>
                     {claim.home_currency_amount &&
                      claim.currency !== claim.home_currency &&
                      parseFloat(String(claim.home_currency_amount)) !== parseFloat(String(claim.total_amount || '0')) && (
                       <span className="text-muted-foreground text-sm">
-                        (≈ {claim.home_currency} {parseFloat(String(claim.home_currency_amount)).toFixed(2)})
+                        (≈ {claim.home_currency} {formatNumber(claim.home_currency_amount, 2)})
                       </span>
                     )}
                   </div>

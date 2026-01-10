@@ -316,12 +316,11 @@ def handler(event: dict, context: DurableContext):
 
             # IMPORTANT: Use domain to determine extraction path, NOT LLM classification
             # - expense_claims domain → always use receipt extraction (optimized for receipts)
-            # - invoices domain → use LLM classification to choose invoice vs receipt
+            # - invoices domain → always use invoice extraction (uploaded from invoice page)
             #
-            # Why: Expense claims are uploaded from the expense claims page, so we already
-            # know the context. The LLM validation often misclassifies receipts as "invoice"
-            # because they're similar financial documents, but expense claims should always
-            # use the receipt extraction path which is optimized for simpler documents.
+            # Why: The upload context (which page the user is on) is more reliable than
+            # LLM classification. Validation step still runs for quality checks and
+            # rejecting unsupported documents.
 
             if request.domain == "expense_claims":
                 # Expense claims always use receipt extraction
@@ -335,28 +334,16 @@ def handler(event: dict, context: DurableContext):
                     s3=s3,
                 )
             else:
-                # Invoices domain: use LLM classification to choose extraction method
-                document_type = validation_result.get("document_type", "invoice")
-                print(f"[{doc_id}] Using {document_type} extraction (domain: invoices, classified as: {document_type})")
-
-                if document_type == "receipt":
-                    result = extract_receipt_step(
-                        document_id=doc_id,
-                        images=converted_images,
-                        storage_path=request.storage_path,
-                        domain=request.domain,
-                        categories=business_categories,
-                        s3=s3,
-                    )
-                else:
-                    result = extract_invoice_step(
-                        document_id=doc_id,
-                        images=converted_images,
-                        storage_path=request.storage_path,
-                        domain=request.domain,
-                        categories=business_categories,
-                        s3=s3,
-                    )
+                # Invoices domain: always use invoice extraction (skip LLM classification routing)
+                print(f"[{doc_id}] Using invoice extraction (domain: invoices)")
+                result = extract_invoice_step(
+                    document_id=doc_id,
+                    images=converted_images,
+                    storage_path=request.storage_path,
+                    domain=request.domain,
+                    categories=business_categories,
+                    s3=s3,
+                )
 
             print(f"[{doc_id}] Extraction complete: {result.get('vendor_name', 'Unknown')} - {result.get('total_amount', 0)} {result.get('currency', 'USD')}")
             return result

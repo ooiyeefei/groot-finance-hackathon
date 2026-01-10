@@ -28,6 +28,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatBusinessDate } from '@/lib/utils'
+import { formatNumber } from '@/lib/utils/format-number'
 import { hapticApprove, hapticReject, hapticTap, hapticPress } from '@/lib/utils/haptics'
 
 // Swipe threshold in pixels
@@ -82,7 +83,7 @@ export function MobileApprovalCard({
   // Extract display values
   const employeeName = claim.employee?.full_name || claim.employee_name || `Employee ${claim.employee_id?.slice(0, 8) || 'Unknown'}`
   const amount = parseFloat(String(claim.home_currency_amount || claim.total_amount || 0))
-  const formattedAmount = `$${amount.toFixed(0)}`
+  const formattedAmount = `$${formatNumber(amount, 2)}`
   const category = claim.expense_category?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Uncategorized'
 
   // Handle touch start

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatNumber } from '@/lib/utils/format-number'
 
 interface ExtractedInfoTagsProps {
   extractedData: any
@@ -92,7 +93,7 @@ const ExtractedInfoTags = ({ extractedData, className = '' }: ExtractedInfoTagsP
       {totalAmount && (
         <div className="badge-info-metadata inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
           <span className="font-medium">Amount:</span>
-          <span className="ml-1">{totalAmount} {currency}</span>
+          <span className="ml-1">{formatNumber(totalAmount, 2)} {currency}</span>
         </div>
       )}
 
