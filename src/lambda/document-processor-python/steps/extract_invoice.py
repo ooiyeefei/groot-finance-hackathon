@@ -123,28 +123,34 @@ class InvoiceData(BaseModel):
 # =============================================================================
 
 class InvoiceExtractionSignature(dspy.Signature):
-    """Extract comprehensive structured data from invoice image with user-friendly error handling.
+    """Extract comprehensive structured data from invoice image(s) with user-friendly error handling.
 
     IMPORTANT EXTRACTION GUIDELINES:
 
-    1. PAYMENT METHOD INFERENCE: Look for contextual clues to determine payment method:
+    1. MULTI-PAGE HANDLING: If multiple images are provided, they are consecutive pages of the SAME invoice.
+       - Use PAGE 1 for: vendor name, vendor address, vendor contact, vendor tax ID, customer details, invoice number, date
+       - COMBINE from ALL PAGES: line items (concatenate all line items from all pages)
+       - Use LAST PAGE for: total_amount, subtotal_amount, tax_amount, discount_amount (final totals)
+       - Payment terms and bank details may appear on any page - extract from wherever found
+
+    2. PAYMENT METHOD INFERENCE: Look for contextual clues to determine payment method:
        - "cheques should be crossed", "payable to" → payment_method: "Cheque"
        - Bank account/IBAN/SWIFT details for payment → payment_method: "Bank Transfer"
        - "cash", "COD", "cash on delivery" → payment_method: "Cash"
        - Credit/debit card references → payment_method: "Credit Card"
        - PayNow, DuitNow, GrabPay, QR codes → payment_method: "E-Wallet"
 
-    2. BANK DETAILS: Extract the bank name and account number if present (e.g., "MAYBANK BERHAD: 5148 7906 4541")
+    3. BANK DETAILS: Extract the bank name and account number if present (e.g., "MAYBANK BERHAD: 5148 7906 4541")
 
-    3. ERROR HANDLING: If image quality is poor or critical information is missing:
+    4. ERROR HANDLING: If image quality is poor or critical information is missing:
        - Provide a clear user_message explaining the issue
        - Add actionable suggestions (e.g., 'Upload a clearer image')
 
-    4. CATEGORY: Select the BEST matching category from available_categories. If no good match, leave as null.
+    5. CATEGORY: Select the BEST matching category from available_categories. If no good match, leave as null.
     """
 
-    document_image: dspy.Image = dspy.InputField(
-        desc="Invoice image for multimodal analysis"
+    document_images: List[dspy.Image] = dspy.InputField(
+        desc="Invoice image(s) for multimodal analysis. If multiple images, they are consecutive pages of the same invoice."
     )
 
     available_categories: str = dspy.InputField(
@@ -372,12 +378,20 @@ def extract_invoice_step(
     token_data = None
 
     try:
-        # Get image data
+        # Get ALL page images (multi-page PDF support)
+        all_image_bytes = []
         if images and len(images) > 0:
-            image_url = s3.get_presigned_url(images[0].s3_key)
-            image_bytes = _fetch_image_bytes(image_url)
+            print(f"[{document_id}] Processing {len(images)} page(s)...")
+            for idx, img_info in enumerate(images):
+                image_url = s3.get_presigned_url(img_info.s3_key)
+                img_bytes = _fetch_image_bytes(image_url)
+                all_image_bytes.append(img_bytes)
+                print(f"[{document_id}] Fetched page {idx + 1}/{len(images)}")
         else:
+            # Single image (not from PDF conversion)
             image_bytes, _ = get_image_from_s3(s3, storage_path, domain)
+            all_image_bytes.append(image_bytes)
+            print(f"[{document_id}] Processing single image")
 
         # Configure DSPy with Gemini
         gemini_api_key = os.environ.get("GEMINI_API_KEY")
@@ -393,26 +407,31 @@ def extract_invoice_step(
         )
         dspy.settings.configure(lm=gemini_lm, adapter=dspy.JSONAdapter(), track_usage=True)
 
-        # Convert to DSPy image
-        pil_image = Image.open(io.BytesIO(image_bytes))
-        document_image = dspy.Image.from_PIL(pil_image)
-        print(f"[{document_id}] Image: {pil_image.size}")
+        # Convert ALL pages to DSPy images
+        document_images = []
+        for idx, img_bytes in enumerate(all_image_bytes):
+            pil_image = Image.open(io.BytesIO(img_bytes))
+            dspy_image = dspy.Image.from_PIL(pil_image)
+            document_images.append(dspy_image)
+            print(f"[{document_id}] Page {idx + 1} size: {pil_image.size}")
+
+        print(f"[{document_id}] Total pages to process: {len(document_images)}")
 
         # Format categories for LLM
         categories_json = format_categories_for_llm(categories)
         print(f"[{document_id}] Categories: {len(categories or [])} available")
 
-        # Run DSPy extraction with ChainOfThought
-        print(f"[{document_id}] Running DSPy ChainOfThought...")
+        # Run DSPy extraction with ChainOfThought (all pages in single call)
+        print(f"[{document_id}] Running DSPy ChainOfThought with {len(document_images)} page(s)...")
         processor = dspy.ChainOfThought(InvoiceExtractionSignature)
         prediction = processor(
-            document_image=document_image,
+            document_images=document_images,
             available_categories=categories_json
         )
         extracted = prediction.extracted_data
 
-        # Log token usage for billing
-        token_data = log_token_usage(gemini_lm, "gemini-2.5-flash", image_count=1)
+        # Log token usage for billing (include actual image count)
+        token_data = log_token_usage(gemini_lm, "gemini-2.5-flash", image_count=len(document_images))
 
         print(f"[{document_id}] Extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
         print(f"[{document_id}] Quality: {extracted.extraction_quality}, Confidence: {extracted.confidence_score}")

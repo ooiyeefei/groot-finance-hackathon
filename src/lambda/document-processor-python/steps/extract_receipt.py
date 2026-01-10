@@ -112,16 +112,24 @@ class ReceiptData(BaseModel):
 class ReceiptExtractionSignature(dspy.Signature):
     """Fast structured extraction for receipts with user-friendly error handling.
 
-    IMPORTANT: If the image quality is poor or critical information is missing, provide:
-    1. A clear user_message explaining the issue
-    2. Actionable suggestions for improvement (e.g., 'Take a clearer photo', 'Ensure entire receipt is visible')
+    IMPORTANT EXTRACTION GUIDELINES:
 
-    For expense_category: Select the BEST matching category from available_categories.
-    If no good match, leave as null.
+    1. MULTI-PAGE HANDLING: If multiple images are provided, they are consecutive pages of the SAME receipt.
+       - Use PAGE 1 for: vendor name, vendor address, vendor contact, receipt number, date
+       - COMBINE from ALL PAGES: line items (concatenate all line items from all pages)
+       - Use LAST PAGE for: total_amount, subtotal_amount, tax_amount, tip_amount (final totals)
+       - Payment method may appear on any page - extract from wherever found
+
+    2. ERROR HANDLING: If image quality is poor or critical information is missing, provide:
+       - A clear user_message explaining the issue
+       - Actionable suggestions for improvement (e.g., 'Take a clearer photo', 'Ensure entire receipt is visible')
+
+    3. CATEGORY: Select the BEST matching category from available_categories.
+       If no good match, leave as null.
     """
 
-    receipt_image: dspy.Image = dspy.InputField(
-        desc="Receipt image for multimodal analysis"
+    receipt_images: List[dspy.Image] = dspy.InputField(
+        desc="Receipt image(s) for multimodal analysis. If multiple images, they are consecutive pages of the same receipt."
     )
 
     available_categories: str = dspy.InputField(
@@ -334,12 +342,20 @@ def extract_receipt_step(
     token_data = None
 
     try:
-        # Get image data
+        # Get ALL page images (multi-page PDF support)
+        all_image_bytes = []
         if images and len(images) > 0:
-            image_url = s3.get_presigned_url(images[0].s3_key)
-            image_bytes = _fetch_image_bytes(image_url)
+            print(f"[{document_id}] Processing {len(images)} page(s)...")
+            for idx, img_info in enumerate(images):
+                image_url = s3.get_presigned_url(img_info.s3_key)
+                img_bytes = _fetch_image_bytes(image_url)
+                all_image_bytes.append(img_bytes)
+                print(f"[{document_id}] Fetched page {idx + 1}/{len(images)}")
         else:
+            # Single image (not from PDF conversion)
             image_bytes, _ = get_image_from_s3(s3, storage_path, domain)
+            all_image_bytes.append(image_bytes)
+            print(f"[{document_id}] Processing single image")
 
         # Configure DSPy with Gemini
         gemini_api_key = os.environ.get("GEMINI_API_KEY")
@@ -355,26 +371,31 @@ def extract_receipt_step(
         )
         dspy.settings.configure(lm=gemini_lm, adapter=dspy.JSONAdapter(), track_usage=True)
 
-        # Convert to DSPy image
-        pil_image = Image.open(io.BytesIO(image_bytes))
-        document_image = dspy.Image.from_PIL(pil_image)
-        print(f"[{document_id}] Image: {pil_image.size}")
+        # Convert ALL pages to DSPy images
+        receipt_images = []
+        for idx, img_bytes in enumerate(all_image_bytes):
+            pil_image = Image.open(io.BytesIO(img_bytes))
+            dspy_image = dspy.Image.from_PIL(pil_image)
+            receipt_images.append(dspy_image)
+            print(f"[{document_id}] Page {idx + 1} size: {pil_image.size}")
+
+        print(f"[{document_id}] Total pages to process: {len(receipt_images)}")
 
         # Format categories for LLM
         categories_json = format_categories_for_llm(categories)
         print(f"[{document_id}] Categories: {len(categories or [])} available")
 
-        # Run DSPy extraction
-        print(f"[{document_id}] Running DSPy ChainOfThought...")
+        # Run DSPy extraction (all pages in single call)
+        print(f"[{document_id}] Running DSPy ChainOfThought with {len(receipt_images)} page(s)...")
         processor = dspy.ChainOfThought(ReceiptExtractionSignature)
         prediction = processor(
-            receipt_image=document_image,
+            receipt_images=receipt_images,
             available_categories=categories_json
         )
         extracted = prediction.extracted_data
 
-        # Log token usage for billing
-        token_data = log_token_usage(gemini_lm, "gemini-2.5-flash", image_count=1)
+        # Log token usage for billing (include actual image count)
+        token_data = log_token_usage(gemini_lm, "gemini-2.5-flash", image_count=len(receipt_images))
 
         print(f"[{document_id}] Extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
         print(f"[{document_id}] Quality: {extracted.extraction_quality}, Confidence: {extracted.confidence_score}")
