@@ -183,3 +183,16 @@ export const FEEDBACK_STATUSES = {
 
 export type FeedbackStatus = typeof FEEDBACK_STATUSES[keyof typeof FEEDBACK_STATUSES];
 export const FEEDBACK_STATUS_VALUES = Object.values(FEEDBACK_STATUSES);
+
+// ============================================
+// VENDOR STATUSES
+// ============================================
+
+export const VENDOR_STATUSES = {
+  PROSPECTIVE: "prospective",  // Created from OCR/extraction, no confirmed transactions yet
+  ACTIVE: "active",            // Has at least one confirmed accounting entry
+  INACTIVE: "inactive",        // Manually deactivated by user
+} as const;
+
+export type VendorStatus = typeof VENDOR_STATUSES[keyof typeof VENDOR_STATUSES];
+export const VENDOR_STATUS_VALUES = Object.values(VENDOR_STATUSES);

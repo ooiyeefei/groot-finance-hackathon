@@ -26,6 +26,7 @@ import type * as functions_stripeEvents from "../functions/stripeEvents.js";
 import type * as functions_system from "../functions/system.js";
 import type * as functions_systemMonitoring from "../functions/systemMonitoring.js";
 import type * as functions_users from "../functions/users.js";
+import type * as functions_vendorPriceHistory from "../functions/vendorPriceHistory.js";
 import type * as functions_vendors from "../functions/vendors.js";
 import type * as functions_webhooks from "../functions/webhooks.js";
 import type * as lib_resolvers from "../lib/resolvers.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   "functions/system": typeof functions_system;
   "functions/systemMonitoring": typeof functions_systemMonitoring;
   "functions/users": typeof functions_users;
+  "functions/vendorPriceHistory": typeof functions_vendorPriceHistory;
   "functions/vendors": typeof functions_vendors;
   "functions/webhooks": typeof functions_webhooks;
   "lib/resolvers": typeof lib_resolvers;

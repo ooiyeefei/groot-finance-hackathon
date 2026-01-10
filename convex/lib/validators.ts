@@ -21,6 +21,7 @@ import {
   CREATED_BY_METHOD_VALUES,
   FEEDBACK_TYPE_VALUES,
   FEEDBACK_STATUS_VALUES,
+  VENDOR_STATUS_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -110,3 +111,9 @@ export const feedbackTypeValidator = literalUnion(FEEDBACK_TYPE_VALUES);
  * Feedback status validator
  */
 export const feedbackStatusValidator = literalUnion(FEEDBACK_STATUS_VALUES);
+
+/**
+ * Vendor status validator
+ * Lifecycle: prospective (from OCR) → active (has transactions) → inactive (user deactivated)
+ */
+export const vendorStatusValidator = literalUnion(VENDOR_STATUS_VALUES);

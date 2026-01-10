@@ -13,6 +13,7 @@ import {
   messageRoleValidator,
   feedbackTypeValidator,
   feedbackStatusValidator,
+  vendorStatusValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -198,6 +199,7 @@ export default defineSchema({
   })
     .index("by_businessId", ["businessId"])
     .index("by_userId", ["userId"])
+    .index("by_vendorId", ["vendorId"])
     .index("by_transactionDate", ["transactionDate"])
     .index("by_category", ["category"])
     .index("by_status", ["status"])
@@ -429,16 +431,56 @@ export default defineSchema({
     address: v.optional(v.string()),
     taxId: v.optional(v.string()),
 
-    // Classification
+    // Business-Specific Codes
+    supplierCode: v.optional(v.string()),  // Business's internal vendor/supplier code
+
+    // Classification & Status
     category: v.optional(v.string()),
-    isActive: v.optional(v.boolean()),
+    status: v.optional(vendorStatusValidator),  // prospective → active → inactive
 
     // Timestamps
     updatedAt: v.optional(v.number()),
   })
     .index("by_businessId", ["businessId"])
+    .index("by_businessId_name", ["businessId", "name"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_businessId_supplierCode", ["businessId", "supplierCode"])
     .index("by_name", ["name"])
     .index("by_legacyId", ["legacyId"]),
+
+  // Vendor Price History - Tracks ALL price observations from documents
+  // Used for price trend analysis, even for documents that don't become transactions
+  vendor_price_history: defineTable({
+    // Relationships
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+
+    // Item Identification
+    itemDescription: v.string(),
+    itemCode: v.optional(v.string()),
+
+    // Price Data
+    unitPrice: v.number(),
+    currency: v.string(),
+    quantity: v.number(),
+
+    // Source Document Tracking
+    sourceType: v.union(v.literal("invoice"), v.literal("expense_claim")),
+    sourceId: v.string(),              // ID of the source document (invoice or expense_claim)
+    observedAt: v.string(),            // Date from the document (ISO date string)
+
+    // Confirmation Status
+    isConfirmed: v.boolean(),          // true if linked to an accounting entry
+    accountingEntryId: v.optional(v.id("accounting_entries")),
+
+    // Timestamps
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_vendorId", ["vendorId"])
+    .index("by_businessId_item", ["businessId", "itemDescription"])
+    .index("by_vendor_item", ["vendorId", "itemDescription"])
+    .index("by_source", ["sourceType", "sourceId"])
+    .index("by_businessId", ["businessId"]),
 
   stripe_events: defineTable({
     // Identity

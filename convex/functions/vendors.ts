@@ -22,7 +22,7 @@ import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 export const list = query({
   args: {
     businessId: v.id("businesses"),
-    isActive: v.optional(v.boolean()),
+    status: v.optional(v.union(v.literal("prospective"), v.literal("active"), v.literal("inactive"))),
     category: v.optional(v.string()),
     limit: v.optional(v.number()),
     cursor: v.optional(v.string()),
@@ -58,9 +58,9 @@ export const list = query({
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
-    // Apply active filter
-    if (args.isActive !== undefined) {
-      vendors = vendors.filter((v) => v.isActive === args.isActive);
+    // Apply status filter
+    if (args.status !== undefined) {
+      vendors = vendors.filter((v) => v.status === args.status);
     }
 
     // Apply category filter
@@ -166,10 +166,10 @@ export const searchByName = query({
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
-    // Filter by search term (case-insensitive)
+    // Filter by search term (case-insensitive) - exclude inactive vendors
     const matchingVendors = vendors
       .filter((v) =>
-        v.isActive !== false &&
+        v.status !== "inactive" &&
         v.name.toLowerCase().includes(searchLower)
       )
       .slice(0, limit);
@@ -240,7 +240,7 @@ export const create = mutation({
     address: v.optional(v.string()),
     taxId: v.optional(v.string()),
     category: v.optional(v.string()),
-    isActive: v.optional(v.boolean()),
+    supplierCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -279,6 +279,7 @@ export const create = mutation({
       throw new Error(`Vendor "${args.name}" already exists`);
     }
 
+    // Manually created vendors are "active" (confirmed business relationship)
     const vendorId = await ctx.db.insert("vendors", {
       businessId: args.businessId,
       name: args.name,
@@ -287,7 +288,8 @@ export const create = mutation({
       address: args.address,
       taxId: args.taxId,
       category: args.category,
-      isActive: args.isActive ?? true,
+      supplierCode: args.supplierCode,
+      status: "active",
       updatedAt: Date.now(),
     });
 
@@ -308,7 +310,7 @@ export const update = mutation({
     address: v.optional(v.string()),
     taxId: v.optional(v.string()),
     category: v.optional(v.string()),
-    isActive: v.optional(v.boolean()),
+    supplierCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -363,7 +365,7 @@ export const update = mutation({
     if (updates.address !== undefined) updateData.address = updates.address;
     if (updates.taxId !== undefined) updateData.taxId = updates.taxId;
     if (updates.category !== undefined) updateData.category = updates.category;
-    if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
+    if (updates.supplierCode !== undefined) updateData.supplierCode = updates.supplierCode;
 
     await ctx.db.patch(vendor._id, updateData);
     return vendor._id;
@@ -405,7 +407,7 @@ export const deactivate = mutation({
     }
 
     await ctx.db.patch(vendor._id, {
-      isActive: false,
+      status: "inactive",
       updatedAt: Date.now(),
     });
 
@@ -414,7 +416,7 @@ export const deactivate = mutation({
 });
 
 /**
- * Reactivate a deactivated vendor
+ * Reactivate a deactivated vendor (sets status back to active)
  */
 export const reactivate = mutation({
   args: { id: v.string() },
@@ -447,7 +449,7 @@ export const reactivate = mutation({
     }
 
     await ctx.db.patch(vendor._id, {
-      isActive: true,
+      status: "active",
       updatedAt: Date.now(),
     });
 
@@ -507,5 +509,174 @@ export const remove = mutation({
 
     await ctx.db.delete(vendor._id);
     return true;
+  },
+});
+
+// ============================================
+// INTERNAL MUTATIONS (for system use)
+// ============================================
+
+import { internalMutation, internalQuery } from "../_generated/server";
+
+/**
+ * Upsert vendor by name (internal - for OCR/extraction pipelines)
+ *
+ * Creates a new vendor if not found, returns existing vendorId if found.
+ * Case-insensitive exact match on name.
+ * Does NOT change status of existing vendors.
+ *
+ * @param businessId - The business ID
+ * @param vendorName - The vendor name to upsert
+ * @param metadata - Optional vendor metadata (email, phone, address, taxId)
+ * @returns vendorId and whether it was newly created
+ */
+export const upsertByName = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    vendorName: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    address: v.optional(v.string()),
+    taxId: v.optional(v.string()),
+    category: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const normalizedName = args.vendorName.trim();
+
+    if (!normalizedName) {
+      throw new Error("Vendor name is required");
+    }
+
+    // Search for existing vendor (case-insensitive exact match)
+    const existingVendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const existingVendor = existingVendors.find(
+      (v) => v.name.toLowerCase().trim() === normalizedName.toLowerCase()
+    );
+
+    if (existingVendor) {
+      // Vendor exists - return existing ID without changing status
+      return {
+        vendorId: existingVendor._id,
+        created: false,
+        status: existingVendor.status,
+      };
+    }
+
+    // Create new vendor with "prospective" status
+    const vendorId = await ctx.db.insert("vendors", {
+      businessId: args.businessId,
+      name: normalizedName,
+      email: args.email,
+      phone: args.phone,
+      address: args.address,
+      taxId: args.taxId,
+      category: args.category,
+      status: "prospective",
+      updatedAt: Date.now(),
+    });
+
+    return {
+      vendorId,
+      created: true,
+      status: "prospective" as const,
+    };
+  },
+});
+
+/**
+ * Promote vendor from prospective to active (internal)
+ *
+ * Called when first accounting entry is created for a vendor.
+ * Only promotes if current status is "prospective".
+ * Does not change "active" or "inactive" vendors.
+ *
+ * @param vendorId - The vendor ID to promote
+ * @returns Whether promotion occurred
+ */
+export const promoteIfProspective = internalMutation({
+  args: {
+    vendorId: v.id("vendors"),
+  },
+  handler: async (ctx, args): Promise<
+    | { promoted: true; newStatus: "active" }
+    | { promoted: false; currentStatus: string | undefined }
+  > => {
+    const vendor = await ctx.db.get(args.vendorId);
+
+    if (!vendor) {
+      throw new Error("Vendor not found");
+    }
+
+    // Only promote if currently prospective
+    if (vendor.status === "prospective") {
+      await ctx.db.patch(args.vendorId, {
+        status: "active",
+        updatedAt: Date.now(),
+      });
+      return { promoted: true, newStatus: "active" as const };
+    }
+
+    // Vendor is already active or inactive - don't change
+    return { promoted: false, currentStatus: vendor.status };
+  },
+});
+
+/**
+ * Get vendor by name (internal query)
+ *
+ * Case-insensitive exact match lookup.
+ * Returns null if not found.
+ */
+export const getByName = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    vendorName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedName = args.vendorName.trim().toLowerCase();
+
+    if (!normalizedName) {
+      return null;
+    }
+
+    const vendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    return vendors.find(
+      (v) => v.name.toLowerCase().trim() === normalizedName
+    ) || null;
+  },
+});
+
+/**
+ * Set vendor status (internal - for system operations)
+ *
+ * Allows setting vendor status directly without authentication checks.
+ * Used for system operations like batch updates.
+ */
+export const setStatus = internalMutation({
+  args: {
+    vendorId: v.id("vendors"),
+    status: v.union(v.literal("prospective"), v.literal("active"), v.literal("inactive")),
+  },
+  handler: async (ctx, args) => {
+    const vendor = await ctx.db.get(args.vendorId);
+
+    if (!vendor) {
+      throw new Error("Vendor not found");
+    }
+
+    await ctx.db.patch(args.vendorId, {
+      status: args.status,
+      updatedAt: Date.now(),
+    });
+
+    return { vendorId: args.vendorId, status: args.status };
   },
 });

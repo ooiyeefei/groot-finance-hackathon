@@ -10,6 +10,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
+import { Id } from "../_generated/dataModel";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // Processing status values for invoices
@@ -842,6 +843,7 @@ export const retryProcessing = mutation({
 // ============================================
 
 import { internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 
 /**
  * Internal: Get invoice by ID (no auth required)
@@ -998,6 +1000,111 @@ export const internalUpdateClassification = internalMutation({
     await ctx.db.patch(invoice._id, updateData);
     console.log(`[Convex Internal] Updated invoice ${args.id} classification`);
     return invoice._id;
+  },
+});
+
+/**
+ * Internal: Create vendor and record price history from extracted data
+ * Called after invoice extraction completes to populate vendor master data
+ */
+export const internalProcessVendorFromExtraction = internalMutation({
+  args: {
+    invoiceId: v.string(),
+  },
+  handler: async (ctx, args): Promise<
+    | { success: false; reason: string }
+    | { success: true; vendorId: Id<"vendors">; vendorCreated: boolean; priceObservationsCount: number }
+  > => {
+    const invoice = await resolveById(ctx.db, "invoices", args.invoiceId);
+    if (!invoice) {
+      throw new Error(`Invoice not found: ${args.invoiceId}`);
+    }
+
+    if (!invoice.businessId) {
+      console.log(`[Vendor Integration] Skipping - no businessId on invoice ${args.invoiceId}`);
+      return { success: false, reason: "no_business_id" };
+    }
+
+    const extractedData = invoice.extractedData as {
+      vendor_name?: string;
+      vendor_address?: string;
+      vendor_contact?: string;
+      vendor_tax_id?: string;
+      vendor_email?: string;
+      vendor_phone?: string;
+      line_items?: Array<{
+        item_description?: string;
+        description?: string;
+        item_code?: string;
+        unit_price?: number;
+        quantity?: number;
+        currency?: string;
+        total_amount?: number;
+      }>;
+      transaction_date?: string;
+      invoice_date?: string;
+      currency?: string;
+    } | null;
+
+    if (!extractedData) {
+      console.log(`[Vendor Integration] Skipping - no extractedData on invoice ${args.invoiceId}`);
+      return { success: false, reason: "no_extracted_data" };
+    }
+
+    const vendorName = extractedData.vendor_name?.trim();
+    if (!vendorName) {
+      console.log(`[Vendor Integration] Skipping - no vendor name in extraction for ${args.invoiceId}`);
+      return { success: false, reason: "no_vendor_name" };
+    }
+
+    // Upsert vendor - creates if new (prospective status), returns existing if found
+    const vendorResult = await ctx.runMutation(internal.functions.vendors.upsertByName, {
+      businessId: invoice.businessId,
+      vendorName: vendorName,
+      email: extractedData.vendor_email,
+      phone: extractedData.vendor_phone,
+      address: extractedData.vendor_address,
+      taxId: extractedData.vendor_tax_id,
+    });
+
+    console.log(`[Vendor Integration] Vendor upserted for invoice ${args.invoiceId}: ${vendorResult.vendorId} (created: ${vendorResult.created})`);
+
+    // Record price observations from line items
+    const lineItems = extractedData.line_items ?? [];
+    const observedAt = extractedData.transaction_date || extractedData.invoice_date || new Date().toISOString().split("T")[0];
+    const defaultCurrency = extractedData.currency || "MYR";
+
+    const priceObservations = lineItems
+      .filter((item) => {
+        const desc = item.item_description || item.description;
+        return desc && item.unit_price !== undefined && item.unit_price > 0;
+      })
+      .map((item) => ({
+        itemDescription: (item.item_description || item.description)!,
+        itemCode: item.item_code,
+        unitPrice: item.unit_price!,
+        currency: item.currency || defaultCurrency,
+        quantity: item.quantity ?? 1,
+      }));
+
+    if (priceObservations.length > 0) {
+      await ctx.runMutation(internal.functions.vendorPriceHistory.recordPriceObservationsBatch, {
+        businessId: invoice.businessId,
+        vendorId: vendorResult.vendorId,
+        sourceType: "invoice",
+        sourceId: args.invoiceId,
+        observedAt,
+        lineItems: priceObservations,
+      });
+      console.log(`[Vendor Integration] Recorded ${priceObservations.length} price observations for invoice ${args.invoiceId}`);
+    }
+
+    return {
+      success: true,
+      vendorId: vendorResult.vendorId,
+      vendorCreated: vendorResult.created,
+      priceObservationsCount: priceObservations.length,
+    };
   },
 });
 

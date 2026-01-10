@@ -11,6 +11,8 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
+import { internal } from "../_generated/api";
+import { Id } from "../_generated/dataModel";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // Transaction types for accounting entries
@@ -500,7 +502,7 @@ export const create = mutation({
       )
     ),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Id<"accounting_entries">> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Not authenticated");
@@ -555,6 +557,15 @@ export const create = mutation({
       lineItems: args.lineItems,
       updatedAt: Date.now(),
     });
+
+    // Promote vendor from "prospective" to "active" if vendorId provided
+    // This happens when a document becomes a confirmed accounting entry
+    if (args.vendorId) {
+      // @ts-expect-error - Suppress circular type inference in Convex generated API types
+      await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
+        vendorId: args.vendorId,
+      });
+    }
 
     return entryId;
   },

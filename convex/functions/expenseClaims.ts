@@ -1431,6 +1431,7 @@ export const getExportClaims = query({
 // ============================================
 
 import { internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 
 /**
  * Internal: Get expense claim by ID (no auth required)
@@ -1622,6 +1623,103 @@ export const internalSoftDelete = internalMutation({
 
     console.log(`[Convex Internal] Soft-deleted expense claim ${args.id}`);
     return claim._id;
+  },
+});
+
+/**
+ * Internal: Create vendor and record price history from extracted data
+ * Called after expense claim extraction completes to populate vendor master data
+ */
+export const internalProcessVendorFromExtraction = internalMutation({
+  args: {
+    claimId: v.string(),
+  },
+  handler: async (ctx, args): Promise<
+    | { success: false; reason: string }
+    | { success: true; vendorId: Id<"vendors">; vendorCreated: boolean; priceObservationsCount: number }
+  > => {
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim) {
+      throw new Error(`Expense claim not found: ${args.claimId}`);
+    }
+
+    const vendorName = claim.vendorName?.trim();
+    if (!vendorName) {
+      console.log(`[Vendor Integration] Skipping - no vendor name on expense claim ${args.claimId}`);
+      return { success: false, reason: "no_vendor_name" };
+    }
+
+    // Upsert vendor - creates if new (prospective status), returns existing if found
+    const vendorResult = await ctx.runMutation(internal.functions.vendors.upsertByName, {
+      businessId: claim.businessId,
+      vendorName: vendorName,
+    });
+
+    console.log(`[Vendor Integration] Vendor upserted for expense claim ${args.claimId}: ${vendorResult.vendorId} (created: ${vendorResult.created})`);
+
+    // Record price observation from the expense claim total
+    // Expense claims typically don't have detailed line items like invoices
+    const processingMetadata = claim.processingMetadata as {
+      financial_data?: {
+        description?: string;
+        vendor_name?: string;
+        total_amount?: number;
+        original_currency?: string;
+        transaction_date?: string;
+      };
+      line_items?: Array<{
+        item_description?: string;
+        unit_price?: number;
+        quantity?: number;
+        currency?: string;
+      }>;
+    } | null;
+
+    const lineItems = processingMetadata?.line_items ?? [];
+    const observedAt = claim.transactionDate || new Date().toISOString().split("T")[0];
+    const defaultCurrency = claim.currency || "MYR";
+
+    // If we have line items, record each one
+    const priceObservations = lineItems
+      .filter((item) => item.item_description && item.unit_price !== undefined && item.unit_price > 0)
+      .map((item) => ({
+        itemDescription: item.item_description!,
+        itemCode: undefined,
+        unitPrice: item.unit_price!,
+        currency: item.currency || defaultCurrency,
+        quantity: item.quantity ?? 1,
+      }));
+
+    // If no line items but we have a total, record as single item
+    if (priceObservations.length === 0 && claim.totalAmount && claim.totalAmount > 0) {
+      const description = processingMetadata?.financial_data?.description || claim.businessPurpose || "Expense";
+      priceObservations.push({
+        itemDescription: description,
+        itemCode: undefined,
+        unitPrice: claim.totalAmount,
+        currency: defaultCurrency,
+        quantity: 1,
+      });
+    }
+
+    if (priceObservations.length > 0) {
+      await ctx.runMutation(internal.functions.vendorPriceHistory.recordPriceObservationsBatch, {
+        businessId: claim.businessId,
+        vendorId: vendorResult.vendorId,
+        sourceType: "expense_claim",
+        sourceId: args.claimId,
+        observedAt,
+        lineItems: priceObservations,
+      });
+      console.log(`[Vendor Integration] Recorded ${priceObservations.length} price observations for expense claim ${args.claimId}`);
+    }
+
+    return {
+      success: true,
+      vendorId: vendorResult.vendorId,
+      vendorCreated: vendorResult.created,
+      priceObservationsCount: priceObservations.length,
+    };
   },
 });
 
