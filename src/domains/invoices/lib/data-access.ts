@@ -309,7 +309,8 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
 
         const iendMarker = [0x49, 0x45, 0x4E, 0x44]
         let hasIend = false
-        for (let i = fileSize - 12; i >= Math.max(0, fileSize - 100); i--) {
+        // Search for IEND in last 1000 bytes (some PNGs have metadata/padding after IEND)
+        for (let i = fileSize - 12; i >= Math.max(0, fileSize - 1000); i--) {
           if (iendMarker.every((byte, index) => uint8Array[i + index] === byte)) {
             hasIend = true
             break
