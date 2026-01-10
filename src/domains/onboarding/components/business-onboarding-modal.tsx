@@ -177,7 +177,9 @@ export default function BusinessOnboardingModal({
       const selectedPlan = wizardData.selectedPlan || 'trial'
 
       // Step 1: Create business (synchronous call)
-      console.log('[BusinessOnboardingModal] Creating business...')
+      // forceCreateNew: true ensures we ALWAYS create a new business from the modal
+      // (rather than completing an existing placeholder from webhook)
+      console.log('[BusinessOnboardingModal] Creating NEW business (forceCreateNew: true)...')
       const response = await fetch('/api/v1/onboarding/initialize-business', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -189,6 +191,7 @@ export default function BusinessOnboardingModal({
           customCOGSNames: wizardData.customCOGSNames || [],
           customExpenseNames: wizardData.customExpenseNames || [],
           selectedPlan: selectedPlan,
+          forceCreateNew: true,  // Always create new from modal
         }),
       })
 

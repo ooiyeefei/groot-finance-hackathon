@@ -20,6 +20,7 @@ interface InitializeBusinessRequest {
   customCOGSNames: string[]
   customExpenseNames: string[]
   selectedPlan: 'trial' | 'starter' | 'pro' | 'enterprise'
+  forceCreateNew?: boolean  // When true, always create new business (for modal)
 }
 
 export async function POST(request: NextRequest) {
@@ -125,6 +126,7 @@ export async function POST(request: NextRequest) {
       currency: body.homeCurrency,
       businessType: body.businessType,
       plan: body.selectedPlan,
+      forceCreateNew: body.forceCreateNew,
     })
 
     if (!result.success) {

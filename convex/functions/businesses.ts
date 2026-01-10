@@ -1702,6 +1702,7 @@ export const initializeBusinessFromOnboarding = mutation({
     customCogsCategories: v.optional(v.any()),
     customExpenseCategories: v.optional(v.any()),
     allowedCurrencies: v.optional(v.array(v.string())),
+    forceCreateNew: v.optional(v.boolean()), // When true, always create new business (for modal)
   },
   handler: async (ctx, args) => {
     console.log(`[initializeBusinessFromOnboarding] Starting for Clerk ID: ${args.clerkUserId}`);
@@ -1737,9 +1738,10 @@ export const initializeBusinessFromOnboarding = mutation({
 
     // Step 2: Check if user has an existing business that needs onboarding completion
     // Only update if: (1) user has a businessId AND (2) that business hasn't completed onboarding
+    // AND (3) forceCreateNew is NOT set (modal always creates new)
     // This handles the webhook auto-creation case where business was created but not configured
-    // For users creating ADDITIONAL businesses, we always create a new one
-    if (user.businessId) {
+    // For users creating ADDITIONAL businesses via modal, we always create a new one
+    if (user.businessId && !args.forceCreateNew) {
       const existingBusiness = await ctx.db.get(user.businessId);
 
       // Only update if business exists and hasn't completed onboarding yet

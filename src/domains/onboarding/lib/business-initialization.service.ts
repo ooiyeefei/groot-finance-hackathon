@@ -33,6 +33,7 @@ export interface InitializeBusinessInput {
   businessType?: BusinessType;
   plan: 'trial' | 'starter' | 'pro' | 'enterprise';
   allowedCurrencies?: string[];
+  forceCreateNew?: boolean;  // When true, always create new business (for modal)
 }
 
 export interface InitializeBusinessResult {
@@ -212,6 +213,7 @@ export async function initializeBusiness(
             allowedCurrencies: input.allowedCurrencies || [
               'USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR'
             ],
+            forceCreateNew: input.forceCreateNew,
           }
         );
 
