@@ -895,6 +895,12 @@ else:
 
 ## Verification
 - [x] Build passes (`npm run build` successful)
-- [ ] Deploy Lambda via CDK
+- [x] Deploy Lambda via CDK (commit `4df0fb0b`, deployed 2026-01-11)
 - [ ] Test with expense claim (verify ~5-8s target)
 - [ ] Test invoice extraction still works (full mode)
+
+## Deployment Details
+- **Commit**: `4df0fb0b` - "feat(lambda): add fast mode for expense claim extraction"
+- **Lambda ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor`
+- **Alias ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor:prod`
+- **Docker Image**: Pushed to ECR with updated extraction logic
