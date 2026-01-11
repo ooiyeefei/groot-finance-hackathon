@@ -40,6 +40,8 @@ class ReceiptLineItem(BaseModel):
 
 # =============================================================================
 # Fast Mode Schema - Simplified for speed (saves ~3-5s)
+# Keeps: line_items, subtotal, tax, tip (essential for expense claims)
+# Removes: vendor_address, vendor_contact, payment_method, missing_fields, suggestions
 # =============================================================================
 
 class FastReceiptData(BaseModel):
@@ -52,6 +54,14 @@ class FastReceiptData(BaseModel):
 
     # Useful identifiers
     receipt_number: Optional[str] = Field(None, description="Receipt/invoice number")
+
+    # Financial breakdown (essential for expense claims)
+    subtotal_amount: Optional[float] = Field(None, description="Subtotal before tax")
+    tax_amount: Optional[float] = Field(None, description="Tax amount")
+    tip_amount: Optional[float] = Field(None, description="Tip amount if applicable")
+
+    # Line items (essential for expense claims)
+    line_items: List[ReceiptLineItem] = Field(default_factory=list, description="Line items from receipt")
 
     # Category - selected from available_categories
     expense_category: Optional[str] = Field(
@@ -193,9 +203,10 @@ class FastReceiptExtractionSignature(dspy.Signature):
     """Quick extraction for simple receipts - essential fields only.
 
     Extract: vendor_name, transaction_date, total_amount, currency, receipt_number,
+    line_items, subtotal_amount, tax_amount, tip_amount,
     expense_category, description, business_purpose, confidence_score, extraction_quality.
 
-    Skip: line_items, vendor_address, vendor_contact, subtotal, tax, tip, payment_method.
+    Skip: vendor_address, vendor_contact, payment_method (verbose/optional fields).
     """
 
     receipt_image: dspy.Image = dspy.InputField(
@@ -207,8 +218,9 @@ class FastReceiptExtractionSignature(dspy.Signature):
     )
 
     extracted_data: FastReceiptData = dspy.OutputField(
-        desc="""Extract essential receipt data only: vendor_name, transaction_date,
-        total_amount, currency, receipt_number, expense_category.
+        desc="""Extract essential receipt data: vendor_name, transaction_date,
+        total_amount, currency, receipt_number, line_items, subtotal_amount,
+        tax_amount, tip_amount, expense_category.
         Generate 'description' and 'business_purpose' for the expense claim.
         Set confidence_score and extraction_quality based on image clarity."""
     )
@@ -469,8 +481,16 @@ def extract_receipt_step(
                 available_categories=categories_json
             )
             extracted = prediction.extracted_data
-            # Fast mode has no line_items
-            line_items = []
+            # Fast mode now includes line_items
+            line_items = [
+                ReceiptLineItem(
+                    description=item.description,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    line_total=item.line_total,
+                )
+                for item in (extracted.line_items or [])
+            ]
         else:
             print(f"[{document_id}] Running DSPy ChainOfThought (FULL mode) with {len(receipt_images)} page(s)...")
             processor = dspy.ChainOfThought(ReceiptExtractionSignature)
@@ -479,7 +499,7 @@ def extract_receipt_step(
                 available_categories=categories_json
             )
             extracted = prediction.extracted_data
-            # Convert line items (full mode only)
+            # Convert line items (full mode)
             line_items = [
                 ReceiptLineItem(
                     description=item.description,
@@ -487,7 +507,7 @@ def extract_receipt_step(
                     unit_price=item.unit_price,
                     line_total=item.line_total,
                 )
-                for item in extracted.line_items
+                for item in (extracted.line_items or [])
             ]
 
         # Log token usage for billing (include actual image count)
@@ -570,19 +590,19 @@ def extract_receipt_step(
             "transaction_date": extracted.transaction_date,
             "receipt_number": getattr(extracted, 'receipt_number', None) or "",
 
-            # Vendor details (full mode only - default empty for fast mode)
+            # Vendor details (full mode only - skipped in fast mode)
             "vendor_address": getattr(extracted, 'vendor_address', None) or "",
             "vendor_contact": getattr(extracted, 'vendor_contact', None) or "",
 
-            # Financial breakdown (full mode only - default 0 for fast mode)
+            # Financial breakdown (both modes - essential for expense claims)
             "subtotal_amount": getattr(extracted, 'subtotal_amount', None) or 0.0,
             "tax_amount": getattr(extracted, 'tax_amount', None) or 0.0,
             "tip_amount": getattr(extracted, 'tip_amount', None) or 0.0,
 
-            # Payment (full mode only)
+            # Payment (full mode only - skipped in fast mode)
             "payment_method": getattr(extracted, 'payment_method', None) or "",
 
-            # Line items (full mode only - empty list for fast mode)
+            # Line items (both modes - essential for expense claims)
             "line_items": [
                 {
                     "description": item.description,
@@ -601,7 +621,7 @@ def extract_receipt_step(
             "missing_fields": getattr(extracted, 'missing_fields', []) or [],
             "requires_validation": extracted.confidence_score < 0.8,
 
-            # User feedback - for UX (full mode only)
+            # User feedback - for UX (full mode only - skipped in fast mode)
             "user_message": getattr(extracted, 'user_message', None),
             "suggestions": getattr(extracted, 'suggestions', []) or [],
 

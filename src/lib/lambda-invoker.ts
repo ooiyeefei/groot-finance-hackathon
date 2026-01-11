@@ -37,6 +37,9 @@ export interface DocumentProcessingRequest {
 
   // Optional hints (optimize when caller has context)
   expectedDocumentType?: 'invoice' | 'receipt';  // Skip classification if known
+
+  // Performance optimization
+  fastMode?: boolean;                    // Skip validation + use simplified extraction (5-8s vs 20s)
 }
 
 /**

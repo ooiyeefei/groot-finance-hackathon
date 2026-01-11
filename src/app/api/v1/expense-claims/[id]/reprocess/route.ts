@@ -88,6 +88,7 @@ export async function POST(
       userId: user._id,
       idempotencyKey: `expense-${expenseClaimId}-${Date.now()}`,
       expectedDocumentType: 'receipt',
+      fastMode: true, // Skip validation + use simplified extraction (5-8s vs 20s)
     })
 
     // Map Lambda executionId to taskId for API compatibility
