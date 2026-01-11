@@ -64,6 +64,59 @@ src/domains/
 - **Qdrant Cloud**: Vector embeddings for semantic search
 - **Exchange Rate APIs**: Real-time currency conversion
 
+## AI Model Usage (Gemini 3 Flash)
+
+**CRITICAL: Always use Gemini 3 Flash Preview for all document processing and AI extraction tasks.**
+
+### Model IDs
+
+| Context | Model ID | Notes |
+|---------|----------|-------|
+| **Python (DSPy)** | `gemini/gemini-3-flash-preview` | Used in Lambda document processing |
+| **TypeScript (Direct API)** | `gemini-3-flash-preview` | Used in gemini-ocr-service.ts |
+
+### Why Gemini 3 Flash?
+- **67% faster inference** compared to previous Gemini models
+- **Better multimodal understanding** for receipt/invoice extraction
+- **Cost-effective** for high-volume document processing
+
+### Key Files Using Gemini 3
+
+**Lambda Python (Production Document Processing):**
+- `src/lambda/document-processor-python/steps/extract_invoice.py` - Invoice extraction
+- `src/lambda/document-processor-python/steps/extract_receipt.py` - Receipt extraction
+- `src/lambda/document-processor-python/steps/validate.py` - Document validation
+
+**TypeScript Services:**
+- `src/lib/services/gemini-ocr-service.ts` - Direct Gemini API integration
+- `src/lib/ai/config/ai-config.ts` - AI configuration constants
+
+### Model Configuration Examples
+
+**Python (DSPy):**
+```python
+import dspy
+
+lm = dspy.LM(model="gemini/gemini-3-flash-preview", api_key=api_key)
+dspy.configure(lm=lm)
+```
+
+**TypeScript:**
+```typescript
+this.config = {
+  model: 'gemini-3-flash-preview',
+  timeoutMs: 60000,
+  temperature: 0.1,
+  // ...
+}
+```
+
+### Important Notes
+- **Never downgrade** to older Gemini models (e.g., gemini-1.5-flash-latest)
+- **Environment variable**: `GEMINI_API_KEY` must be set in all environments
+- **Timeout**: Use 60+ seconds for complex documents
+- **Temperature**: Use 0.1 for consistent extraction results
+
 ## AWS Lambda Document Processing
 
 ### Architecture
