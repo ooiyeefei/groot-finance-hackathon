@@ -36,6 +36,7 @@ interface BusinessProfile {
   name: string
   logo_url?: string
   logo_fallback_color?: string
+  home_currency?: string
 }
 
 interface BusinessContextState {

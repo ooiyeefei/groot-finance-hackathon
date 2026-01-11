@@ -904,3 +904,188 @@ else:
 - **Lambda ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor`
 - **Alias ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor:prod`
 - **Docker Image**: Pushed to ECR with updated extraction logic
+
+---
+
+# Investigation: Dashboard Currency Dropdown Business Update Bug (2026-01-11)
+
+## Reported Bug
+**User Report:** Changing the dashboard currency dropdown allegedly updates the business-level currency setting. Expected behavior is that dashboard dropdown should be session-only (temporary), not persisting any changes.
+
+## Investigation Summary
+
+**FINDING: NO BUG FOUND IN CODE**
+
+After exhaustive code analysis, I could NOT find any code path that would update business-level currency when changing the dashboard dropdown.
+
+## Code Analysis
+
+### 1. Dashboard Component (`complete-dashboard.tsx`)
+```typescript
+// Lines 38-39: Session-only state
+const [displayCurrency, setDisplayCurrency] = useState<SupportedCurrency>('SGD');
+
+// Lines 63-67: Handler ONLY updates local React state
+const handleCurrencyChange = (newCurrency: SupportedCurrency) => {
+  if (newCurrency === displayCurrency) return;
+  setDisplayCurrency(newCurrency);  // ← ONLY local state, NO API call
+  // TanStack Query will auto-refetch when displayCurrency changes
+};
+```
+**Conclusion:** Dashboard dropdown changes ONLY affect session state. No API calls.
+
+### 2. Analytics Hook (`use-financial-analytics.tsx`)
+- Only does GET requests to `/api/v1/analytics/dashboards`
+- Passes `homeCurrency` as query parameter for conversion
+- Does NOT write any currency settings
+
+### 3. Analytics API (`route.ts`)
+- Read-only operation
+- Calculates and returns data converted to requested currency
+- Does NOT update any database records
+
+### 4. Business Update Mutation (`businesses.ts`)
+- `updateBusinessByStringId` ACCEPTS `home_currency` parameter
+- **BUT no code paths found that call this with currency from dashboard**
+
+### 5. Business Settings Currency Dropdown (`business-profile-settings.tsx`)
+- Calls `updateHomeCurrency()` which updates **USER's** preferred_currency
+- Does NOT update business-level currency
+
+### Search Results Summary
+| Search | Result |
+|--------|--------|
+| `updateBusiness.*homeCurrency` | No matches |
+| `patch.*businesses.*homeCurrency` | No matches |
+| `ctx.db.patch.*homeCurrency` (businesses) | Only in create/onboarding flows |
+| Convex crons/triggers | None found |
+| Currency sync webhooks | None found |
+
+## Three-Tier Currency Architecture (Working Correctly)
+
+1. **Business-level currency** (`businesses.homeCurrency`)
+   - Set during onboarding
+   - Only changeable by owner in business settings
+   - **No code found that updates this from dashboard**
+
+2. **User-level preferred currency** (`users.homeCurrency` / `preferred_currency`)
+   - Set in user profile settings
+   - Used as default for dashboard display
+   - Updated via `updateHomeCurrency()` function
+
+3. **Session-level display currency** (`displayCurrency` state)
+   - Local React state only
+   - Resets to user preferred currency on page refresh
+   - **This is what dashboard dropdown controls**
+
+## Possible Explanations for User Report
+
+1. **Browser Cache/State Issue**: Old cached data showing stale business currency
+2. **UI Confusion**: User may be confusing business settings currency dropdown with dashboard dropdown
+3. **Race Condition**: Unlikely but possible state management timing issue
+4. **Already Fixed**: The dashboard currency dropdown was previously fixed (commit `de6331a5`) for a DIFFERENT issue (persistence not working)
+
+## Verification Needed
+
+To confirm, user should:
+1. Open browser DevTools Network tab
+2. Change dashboard currency dropdown
+3. Check if any PUT/PATCH requests are made to business profile API
+4. If no requests → Bug is not in code (possibly browser issue)
+5. If requests are made → Need to identify which component is making them
+
+## Files Investigated
+
+| File | Result |
+|------|--------|
+| `src/domains/analytics/components/complete-dashboard.tsx` | ✅ Session-only state |
+| `src/domains/analytics/hooks/use-financial-analytics.tsx` | ✅ Read-only |
+| `src/app/api/v1/analytics/dashboards/route.ts` | ✅ Read-only |
+| `convex/functions/businesses.ts` | ✅ No dashboard-triggered updates |
+| `src/domains/account-management/lib/account-management.service.ts` | ✅ Does not accept currency |
+| `src/domains/users/hooks/use-home-currency.ts` | ✅ Updates USER only |
+
+## Review Conclusion
+
+**Status: No code fix needed**
+
+The codebase correctly implements the three-tier currency architecture. If the user is still experiencing the bug, it's likely:
+- A browser-specific issue (cache, extension)
+- A misunderstanding of which dropdown is being used
+- An edge case not reproducible through code analysis
+
+**Recommended Next Steps:**
+1. Ask user to provide browser network logs when reproducing the bug
+2. Have user clear browser cache and retry
+3. Verify user is using dashboard dropdown, not business settings dropdown
+
+---
+
+# Business Profile Settings Currency Bug Fix (2026-01-11)
+
+## Bug Summary
+**Issue:** The Business Profile Settings page currency dropdown was incorrectly updating the USER's preferred currency (`users.homeCurrency`) instead of the BUSINESS's home currency (`businesses.homeCurrency`).
+
+**User Report:** "the business level settings should only be updated by admin/manager that is to set business table currency... the 'settings' page by each user is only to update users' preferred currency column"
+
+## Root Cause
+In `business-profile-settings.tsx`, the currency dropdown used `useHomeCurrency()` hook which manages USER preferences:
+- Line 9: Imported `useHomeCurrency, updateHomeCurrency` from user hook
+- Line 21: Used `useHomeCurrency()` hook (reads USER's currency)
+- Lines 83-111: `handleCurrencyChange` called `updateHomeCurrency()` (updates USER's currency)
+- Line 368: Dropdown used `value={homeCurrency}` (USER's currency)
+
+## Solution
+Replaced all usages of the user preference hook with business profile data:
+1. Read business currency from `profile?.home_currency` (from `useBusinessProfile()` context)
+2. Update business currency via business profile API endpoint
+
+## Files Modified
+
+1. **`src/domains/account-management/components/business-profile-settings.tsx`**
+   - Changed import to only get `SUPPORTED_CURRENCIES` constant
+   - Removed `useHomeCurrency()` hook call
+   - Rewrote `handleCurrencyChange` to call business profile PUT API with CSRF token
+   - Updated dropdown `value` to use `profile?.home_currency`
+   - Updated info text to use `profile?.home_currency`
+
+2. **`src/contexts/business-context.tsx`**
+   - Added `home_currency?: string` to `BusinessProfile` interface
+
+3. **`src/domains/account-management/lib/account-management.service.ts`** (from previous session)
+   - Added `home_currency: string` to `BusinessProfile` interface
+   - Added `home_currency` parameter to `updateBusinessProfile()` function
+
+## Key Changes
+
+```typescript
+// BEFORE (Bug):
+const { currency: homeCurrency } = useHomeCurrency()
+const handleCurrencyChange = async (newCurrency) => {
+  await updateHomeCurrency(newCurrency)  // ← Updates USER's currency
+}
+<select value={homeCurrency}>  // ← Shows USER's currency
+
+// AFTER (Fix):
+const { profile } = useBusinessProfile()
+const handleCurrencyChange = async (newCurrency) => {
+  await fetch('/api/v1/account-management/businesses/profile', {
+    method: 'PUT',
+    body: JSON.stringify({ home_currency: newCurrency })  // ← Updates BUSINESS's currency
+  })
+}
+<select value={profile?.home_currency}>  // ← Shows BUSINESS's currency
+```
+
+## Three-Tier Currency Architecture (Clarified)
+
+| Tier | Table | Field | Purpose | Updated By |
+|------|-------|-------|---------|------------|
+| Business | `businesses` | `homeCurrency` | Operational currency for the business | Admin/Manager in Business Settings |
+| User | `users` | `homeCurrency` / `preferred_currency` | Display preference for dashboard | Any user in their own User Settings |
+| Session | React state | `displayCurrency` | Temporary dashboard view | Session-only, resets on refresh |
+
+## Verification
+- [x] Build passes (`npm run build` successful)
+- [ ] Manual test: Business Settings currency dropdown updates `businesses.homeCurrency`
+- [ ] Manual test: User Settings currency dropdown still updates `users.homeCurrency`

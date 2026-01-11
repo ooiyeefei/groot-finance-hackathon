@@ -71,6 +71,7 @@ export interface BusinessProfile {
   name: string
   logo_url: string | null
   logo_fallback_color: string
+  home_currency: string
 }
 
 export interface UpdateMembershipRequest {
@@ -393,7 +394,8 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
       id: user.businessId,
       name: 'Business',
       logo_url: null,
-      logo_fallback_color: '#3b82f6'
+      logo_fallback_color: '#3b82f6',
+      home_currency: 'SGD'
     }
   }
 
@@ -401,7 +403,8 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
     id: profile.id,
     name: profile.name || 'Business',
     logo_url: profile.logo_url || null,
-    logo_fallback_color: profile.logo_fallback_color || '#3b82f6'
+    logo_fallback_color: profile.logo_fallback_color || '#3b82f6',
+    home_currency: profile.home_currency || 'SGD'
   }
 }
 
@@ -411,9 +414,9 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
  */
 export async function updateBusinessProfile(
   clerkUserId: string,
-  updates: { name?: string; logo_url?: string; logo_fallback_color?: string }
+  updates: { name?: string; logo_url?: string; logo_fallback_color?: string; home_currency?: string }
 ): Promise<BusinessProfile> {
-  const { name, logo_url, logo_fallback_color } = updates
+  const { name, logo_url, logo_fallback_color, home_currency } = updates
 
   // Validate input
   if (name !== undefined && (!name || name.trim().length === 0)) {
@@ -436,7 +439,8 @@ export async function updateBusinessProfile(
     businessId: user.businessId,
     name: name?.trim(),
     logo_url,
-    logo_fallback_color
+    logo_fallback_color,
+    home_currency
   })
 
   // Fetch updated profile
@@ -448,7 +452,8 @@ export async function updateBusinessProfile(
     id: profile?.id || user.businessId,
     name: profile?.name || name || 'Business',
     logo_url: profile?.logo_url || logo_url || null,
-    logo_fallback_color: profile?.logo_fallback_color || logo_fallback_color || '#3b82f6'
+    logo_fallback_color: profile?.logo_fallback_color || logo_fallback_color || '#3b82f6',
+    home_currency: profile?.home_currency || home_currency || 'SGD'
   }
 }
 

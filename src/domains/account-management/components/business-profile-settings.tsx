@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { useToast } from '@/components/ui/toast'
 import { useBusinessProfile } from '@/contexts/business-context'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
-import { useHomeCurrency, updateHomeCurrency } from '@/domains/users/hooks/use-home-currency'
+import { SUPPORTED_CURRENCIES } from '@/domains/users/hooks/use-home-currency'
 
 export default function BusinessProfileSettings() {
   const { profile, isLoading, updateProfile } = useBusinessProfile()
@@ -17,8 +17,6 @@ export default function BusinessProfileSettings() {
   const [lastCurrencySaved, setLastCurrencySaved] = useState<Date | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
-
-  const { currency: homeCurrency, isLoading: isCurrencyLoading, supportedCurrencies } = useHomeCurrency()
 
   useEffect(() => {
     if (profile) {
@@ -81,29 +79,52 @@ export default function BusinessProfileSettings() {
   }
 
   const handleCurrencyChange = async (newCurrency: SupportedCurrency) => {
-    if (newCurrency === homeCurrency) return
+    if (newCurrency === profile?.home_currency) return
 
     try {
       setIsCurrencySaving(true)
 
-      const success = await updateHomeCurrency(newCurrency)
+      // Get CSRF token
+      const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
+      const csrfData = await csrfResponse.json()
+      if (!csrfData.success) {
+        throw new Error(csrfData.error || 'Failed to get CSRF token')
+      }
 
-      if (success) {
+      // Update business profile with new home currency
+      const response = await fetch('/api/v1/account-management/businesses/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfData.data.csrfToken
+        },
+        body: JSON.stringify({
+          home_currency: newCurrency
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        updateProfile(result.data)
         setLastCurrencySaved(new Date())
         addToast({
           type: 'success',
           title: 'Currency updated',
-          description: `Home currency changed to ${newCurrency}`
+          description: `Business home currency changed to ${newCurrency}`
         })
       } else {
-        throw new Error('Failed to update currency')
+        throw new Error(result.error || 'Failed to update currency')
       }
     } catch (error) {
       console.error('[Business Settings] Failed to update currency:', error)
       addToast({
         type: 'error',
         title: 'Failed to update currency',
-        description: 'Unable to save currency preference'
+        description: 'Unable to save business currency'
       })
     } finally {
       setIsCurrencySaving(false)
@@ -365,12 +386,12 @@ export default function BusinessProfileSettings() {
               This currency will be used for dashboard summaries and conversions throughout the app.
             </p>
             <select
-              value={homeCurrency}
+              value={profile?.home_currency || 'SGD'}
               onChange={(e) => handleCurrencyChange(e.target.value as SupportedCurrency)}
-              disabled={isCurrencyLoading || isCurrencySaving}
+              disabled={isLoading || isCurrencySaving}
               className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
             >
-              {supportedCurrencies.map(currency => (
+              {SUPPORTED_CURRENCIES.map(currency => (
                 <option key={currency.code} value={currency.code}>
                   {currency.name}
                 </option>
@@ -394,7 +415,7 @@ export default function BusinessProfileSettings() {
                 <div>
                   <h4 className="text-sm font-medium text-foreground mb-1">Currency Conversion</h4>
                   <p className="text-sm text-muted-foreground">
-                    Transactions in other currencies will be converted to {homeCurrency} for dashboard summaries.
+                    Transactions in other currencies will be converted to {profile?.home_currency || 'SGD'} for dashboard summaries.
                     Original amounts and currencies are always preserved.
                   </p>
                 </div>
