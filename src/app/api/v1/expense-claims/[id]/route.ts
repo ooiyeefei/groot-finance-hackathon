@@ -9,6 +9,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getExpenseClaim, updateExpenseClaim, deleteExpenseClaim } from '@/domains/expense-claims/lib/data-access'
 import { UpdateExpenseClaimRequest } from '@/domains/expense-claims/types'
+import { apiCache } from '@/lib/cache/api-cache'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -102,6 +103,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       message = `Expense claim status changed to ${updateRequest.status}`
     }
 
+    // Invalidate expense claims cache after successful update
+    // This ensures dashboard shows fresh data immediately
+    apiCache.invalidate(userId, 'expense-claims')
+
     return NextResponse.json({
       success: true,
       data: result.data,
@@ -155,6 +160,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         { status: 500 }
       )
     }
+
+    // Invalidate expense claims cache after successful deletion
+    apiCache.invalidate(userId, 'expense-claims')
 
     return NextResponse.json({
       success: true,
