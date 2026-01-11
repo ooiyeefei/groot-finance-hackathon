@@ -24,6 +24,7 @@ export type { Invoice };
 export type Document = Invoice;
 
 export interface DocumentFilters {
+  businessId?: string;
   search?: string;
   status?: string;
   file_type?: string;
@@ -62,6 +63,7 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
     totalCount,
     hasMore,
   } = useInvoicesRealtime({
+    businessId: filters.businessId,
     status: filters.status,
     limit: 50,
   });

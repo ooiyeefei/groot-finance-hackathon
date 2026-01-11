@@ -59,6 +59,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   }
   const { addToast } = useToast()
   // Use the unified documents hook for data fetching
+  // CRITICAL: Pass businessId for multi-tenant data isolation
   const {
     documents,
     loading,
@@ -68,7 +69,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     deleteDocument,
     processingDocuments,
     deletingDocuments
-  } = useDocuments()
+  } = useDocuments({ businessId: businessId ?? undefined })
 
   // Note: useDocumentPolling removed - use-documents hook handles polling for invoices
 
