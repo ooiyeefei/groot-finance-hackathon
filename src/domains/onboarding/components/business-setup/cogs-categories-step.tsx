@@ -46,6 +46,8 @@ interface COGSCategoriesStepProps {
   onSkip: () => void
   /** Callback when user clicks Use Defaults */
   onUseDefaults: () => void
+  /** Optional className for flex-grow behavior */
+  className?: string
 }
 
 const MAX_CATEGORIES = 20
@@ -58,6 +60,7 @@ export default function COGSCategoriesStep({
   onBack,
   onSkip,
   onUseDefaults,
+  className,
 }: COGSCategoriesStepProps) {
   const [inputValue, setInputValue] = React.useState('')
   const [showLimitWarning, setShowLimitWarning] = React.useState(false)
@@ -116,7 +119,7 @@ export default function COGSCategoriesStep({
   }
 
   return (
-    <div className="w-full max-w-lg mx-auto space-y-3">
+    <div className={cn("w-full space-y-3", className)}>
       {/* Header */}
       <div className="text-center space-y-1">
         <h2 className="text-lg font-semibold text-foreground">
@@ -228,6 +231,9 @@ export default function COGSCategoriesStep({
           </CardContent>
         </Card>
       )}
+
+      {/* Spacer to push navigation to bottom */}
+      <div className="flex-1" />
 
       {/* Footer Actions */}
       <div className="flex items-center justify-between gap-2 pt-2">

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { X, Plus, Sparkles, ArrowLeft } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ExpenseCategoriesStepProps {
   categories: string[];
@@ -15,6 +16,8 @@ interface ExpenseCategoriesStepProps {
   onBack: () => void;
   onSkip: () => void;
   onUseDefaults: () => void;
+  /** Optional className for flex-grow behavior */
+  className?: string;
 }
 
 const MAX_CATEGORIES = 20;
@@ -27,6 +30,7 @@ export default function ExpenseCategoriesStep({
   onBack,
   onSkip,
   onUseDefaults,
+  className,
 }: ExpenseCategoriesStepProps) {
   const [inputValue, setInputValue] = useState('');
   const [error, setError] = useState('');
@@ -106,7 +110,7 @@ export default function ExpenseCategoriesStep({
   );
 
   return (
-    <div className="w-full max-w-lg mx-auto space-y-3">
+    <div className={cn("w-full space-y-3", className)}>
       {/* Header */}
       <div className="text-center space-y-1">
         <h2 className="text-lg font-semibold text-foreground">
@@ -207,6 +211,9 @@ export default function ExpenseCategoriesStep({
           )}
         </div>
       </Card>
+
+      {/* Spacer to push navigation to bottom */}
+      <div className="flex-1" />
 
       {/* Footer Actions */}
       <div className="flex justify-between items-center pt-2">

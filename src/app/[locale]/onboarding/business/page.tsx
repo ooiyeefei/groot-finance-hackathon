@@ -277,9 +277,9 @@ export default function BusinessOnboarding() {
         onClick={handleClose}
       />
 
-      {/* Modal Content - 33% larger (max-w-4xl = 896px) - Matches modal component */}
-      <div className="relative w-full max-w-4xl max-h-[96vh] overflow-hidden m-4">
-        <Card className="bg-card border-border shadow-2xl">
+      {/* Modal Content - More square/portrait (max-w-3xl = 768px, min-h-[85vh]) */}
+      <div className="relative w-full max-w-3xl min-h-[85vh] max-h-[96vh] overflow-hidden m-4 flex flex-col">
+        <Card className="bg-card border-border shadow-2xl flex flex-col h-full">
           {/* Header with close button - Matches modal */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div className="flex items-center gap-4">
@@ -347,11 +347,11 @@ export default function BusinessOnboarding() {
             </div>
           </div>
 
-          {/* Scrollable content */}
-          <CardContent className="px-6 py-5 overflow-y-auto max-h-[calc(96vh-180px)]">
+          {/* Scrollable content - flex-grow to fill available space */}
+          <CardContent className="px-6 py-5 overflow-y-auto flex-1 flex flex-col">
             {/* Step 1: Business Details */}
             {currentStep === 1 && (
-              <div className="space-y-5">
+              <div className="flex-1 flex flex-col space-y-5">
                 <div className="text-center space-y-2 mb-5">
                   <h3 className="text-xl font-semibold text-foreground">
                     Business Details
@@ -422,6 +422,9 @@ export default function BusinessOnboarding() {
                   </Select>
                 </div>
 
+                {/* Spacer to push navigation to bottom */}
+                <div className="flex-1" />
+
                 {/* Navigation */}
                 <div className="flex justify-end pt-4">
                   <Button
@@ -437,67 +440,76 @@ export default function BusinessOnboarding() {
 
             {/* Step 2: Business Type */}
             {currentStep === 2 && (
-              <BusinessTypeStep
-                selectedType={(wizardData.businessType as BusinessType) || null}
-                customTypeDescription={wizardData.customTypeDescription || ''}
-                onSelect={(type) => updateWizardData({ businessType: type })}
-                onCustomTypeChange={(description) => updateWizardData({ customTypeDescription: description })}
-                onNext={goToNextStep}
-                onBack={goToPreviousStep}
-                onSkip={() => {
-                  updateWizardData({ businessType: 'other' })
-                  skipCurrentStep()
-                }}
-              />
+              <div className="flex-1 flex flex-col">
+                <BusinessTypeStep
+                  selectedType={(wizardData.businessType as BusinessType) || null}
+                  customTypeDescription={wizardData.customTypeDescription || ''}
+                  onSelect={(type) => updateWizardData({ businessType: type })}
+                  onCustomTypeChange={(description) => updateWizardData({ customTypeDescription: description })}
+                  onNext={goToNextStep}
+                  onBack={goToPreviousStep}
+                  onSkip={() => {
+                    updateWizardData({ businessType: 'other' })
+                    skipCurrentStep()
+                  }}
+                  className="flex-1 flex flex-col"
+                />
+              </div>
             )}
 
             {/* Step 3: COGS Categories */}
             {currentStep === 3 && (
-              <COGSCategoriesStep
-                categories={[...(wizardData.customCOGSNames || [])]}
-                suggestedCategories={
-                  wizardData.businessType
-                    ? [...getSuggestedCategories(wizardData.businessType, 'cogs')]
-                    : []
-                }
-                onChange={(categories) =>
-                  updateWizardData({ customCOGSNames: categories })
-                }
-                onNext={goToNextStep}
-                onBack={goToPreviousStep}
-                onSkip={skipCurrentStep}
-                onUseDefaults={() => {
-                  applyDefaults(3)
-                  goToNextStep()
-                }}
-              />
+              <div className="flex-1 flex flex-col">
+                <COGSCategoriesStep
+                  categories={[...(wizardData.customCOGSNames || [])]}
+                  suggestedCategories={
+                    wizardData.businessType
+                      ? [...getSuggestedCategories(wizardData.businessType, 'cogs')]
+                      : []
+                  }
+                  onChange={(categories) =>
+                    updateWizardData({ customCOGSNames: categories })
+                  }
+                  onNext={goToNextStep}
+                  onBack={goToPreviousStep}
+                  onSkip={skipCurrentStep}
+                  onUseDefaults={() => {
+                    applyDefaults(3)
+                    goToNextStep()
+                  }}
+                  className="flex-1 flex flex-col"
+                />
+              </div>
             )}
 
             {/* Step 4: Expense Categories */}
             {currentStep === 4 && (
-              <ExpenseCategoriesStep
-                categories={[...(wizardData.customExpenseNames || [])]}
-                suggestedCategories={
-                  wizardData.businessType
-                    ? [...getSuggestedCategories(wizardData.businessType, 'expense')]
-                    : []
-                }
-                onChange={(categories) =>
-                  updateWizardData({ customExpenseNames: categories })
-                }
-                onNext={goToNextStep}
-                onBack={goToPreviousStep}
-                onSkip={skipCurrentStep}
-                onUseDefaults={() => {
-                  applyDefaults(4)
-                  goToNextStep()
-                }}
-              />
+              <div className="flex-1 flex flex-col">
+                <ExpenseCategoriesStep
+                  categories={[...(wizardData.customExpenseNames || [])]}
+                  suggestedCategories={
+                    wizardData.businessType
+                      ? [...getSuggestedCategories(wizardData.businessType, 'expense')]
+                      : []
+                  }
+                  onChange={(categories) =>
+                    updateWizardData({ customExpenseNames: categories })
+                  }
+                  onNext={goToNextStep}
+                  onBack={goToPreviousStep}
+                  onSkip={skipCurrentStep}
+                  onUseDefaults={() => {
+                    applyDefaults(4)
+                    goToNextStep()
+                  }}
+                  className="flex-1 flex flex-col"
+                />
+              </div>
             )}
 
             {/* Step 5: Review */}
             {currentStep === 5 && (
-              <div className="space-y-4 relative">
+              <div className="flex-1 flex flex-col space-y-4 relative">
                 {/* Brewing Animation Overlay */}
                 {isCreating && (
                   <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-lg">
@@ -622,6 +634,9 @@ export default function BusinessOnboarding() {
                     <p className="text-sm text-destructive">{error}</p>
                   </div>
                 )}
+
+                {/* Spacer to push navigation to bottom */}
+                <div className="flex-1" />
 
                 {/* Navigation */}
                 <div className="flex justify-between pt-3">

@@ -27,6 +27,7 @@ interface BusinessTypeStepProps {
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
+  className?: string;
 }
 
 // Icon mapping for business types
@@ -46,6 +47,7 @@ export default function BusinessTypeStep({
   onNext,
   onBack,
   onSkip,
+  className,
 }: BusinessTypeStepProps) {
   const [localCustomType, setLocalCustomType] = useState(customTypeDescription);
 
@@ -74,7 +76,7 @@ export default function BusinessTypeStep({
     (selectedType !== 'other' || localCustomType.trim().length > 0);
 
   return (
-    <div className="w-full max-w-lg mx-auto space-y-4">
+    <div className={cn("w-full space-y-4", className)}>
       {/* Header */}
       <div className="text-center space-y-1">
         <h2 className="text-lg font-semibold text-foreground">
@@ -156,6 +158,9 @@ export default function BusinessTypeStep({
           />
         </div>
       )}
+
+      {/* Spacer to push navigation to bottom */}
+      <div className="flex-1" />
 
       {/* Footer Actions */}
       <div className="flex items-center justify-between pt-2">
