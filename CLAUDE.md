@@ -136,6 +136,17 @@ Vercel API → AWS OIDC Auth → Lambda Function (Python 3.11)
    - All changes must be committed and pushed to GitHub.
    - Use git author `grootdev-ai <dev@hellogroot.com>` for all commits.
 
+7. **Rule: Convex Deployment (CRITICAL)**
+   - **Two environments exist**: Dev (`harmless-panther-50`) and Prod (`kindhearted-lynx-129`)
+   - **Local `npx convex dev`** syncs to dev environment ONLY
+   - **Production deployment** happens automatically during Vercel build via `convex:deploy:ci`
+   - **Manual prod deploy**: Run `npx convex deploy --yes` after ANY Convex schema/function changes
+   - **ALWAYS verify prod is synced** before testing in production:
+     ```bash
+     npx convex deploy --yes
+     ```
+   - Common failure: Changing `convex/` files locally, pushing to GitHub, but forgetting to deploy to Convex prod
+
 ### Design System Rules
 
 FinanSEAL implements a **Layer 1-2-3 Semantic Design System** for consistent theming.
