@@ -60,12 +60,19 @@ class ConvexClient:
             result = response.json()
 
             if result.get("status") == "error":
-                raise ConvexError(result.get("errorMessage", "Unknown error"))
+                error_msg = result.get("errorMessage", "Unknown error")
+                error_data = result.get("errorData")
+                full_error = f"{error_msg}"
+                if error_data:
+                    full_error += f" | Data: {error_data}"
+                raise ConvexError(full_error)
 
             return result.get("value")
 
         except httpx.HTTPStatusError as e:
-            raise ConvexError(f"HTTP error: {e.response.status_code} - {e.response.text}")
+            raise ConvexError(f"HTTP error: {e.response.status_code} - {e.response.text[:500]}")
+        except ConvexError:
+            raise  # Re-raise ConvexError as-is
         except Exception as e:
             raise ConvexError(f"Request failed: {str(e)}")
 

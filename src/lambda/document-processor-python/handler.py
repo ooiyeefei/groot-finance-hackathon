@@ -447,14 +447,22 @@ def handler(event: dict, context: DurableContext):
             # Update Convex with line_items and mark as 'complete'
             if phase2_result.get("success"):
                 try:
+                    line_items = phase2_result.get("line_items", [])
+                    # Debug: Log line items being sent to Convex
+                    import json
+                    print(f"[{doc_id}] Phase 2 DEBUG: Sending {len(line_items)} line_items to Convex:")
+                    print(f"[{doc_id}] Phase 2 DEBUG: {json.dumps(line_items[:3], indent=2)}")  # First 3 items
+
                     convex.update_expense_claim_line_items(
                         document_id=doc_id,
-                        line_items=phase2_result.get("line_items", []),
+                        line_items=line_items,
                         line_items_status="complete",
                     )
                     print(f"[{doc_id}] Phase 2: Updated Convex with line_items (status='complete')")
                 except Exception as e:
+                    import traceback
                     print(f"[{doc_id}] Warning: Failed to update line_items: {str(e)}")
+                    print(f"[{doc_id}] Phase 2 ERROR traceback: {traceback.format_exc()}")
                     # Non-fatal - Phase 1 data is already saved
             else:
                 # Phase 2 failed - mark as skipped, don't fail the whole workflow

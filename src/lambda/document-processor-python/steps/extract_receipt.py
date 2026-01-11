@@ -1086,16 +1086,21 @@ def extract_receipt_phase2_step(
         # Log token usage
         token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=1)
 
-        # Convert line items to dict format
-        line_items = [
-            {
-                "description": item.description,
-                "quantity": item.quantity,
-                "unit_price": item.unit_price,
-                "line_total": item.line_total,
-            }
-            for item in (extracted.line_items or [])
-        ]
+        # Convert line items to dict format with defensive None handling
+        # Convex requires: description (string), line_total (number), quantity/unit_price (optional number)
+        line_items = []
+        for item in (extracted.line_items or []):
+            # Skip items with missing required fields
+            if not item.description or item.line_total is None:
+                print(f"[{document_id}] Skipping invalid line item: description={item.description}, line_total={item.line_total}")
+                continue
+
+            line_items.append({
+                "description": str(item.description),  # Ensure string
+                "quantity": float(item.quantity) if item.quantity is not None else None,
+                "unit_price": float(item.unit_price) if item.unit_price is not None else None,
+                "line_total": float(item.line_total),  # Ensure number, required
+            })
 
         processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 

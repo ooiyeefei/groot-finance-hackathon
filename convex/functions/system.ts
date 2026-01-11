@@ -493,18 +493,25 @@ export const updateExpenseClaimLineItems = mutation({
   },
   handler: async (ctx, args): Promise<string> => {
     console.log(`[System] Updating expense claim ${args.id} line items (${args.lineItems.length} items)`);
+    console.log(`[System] Line items sample:`, JSON.stringify(args.lineItems.slice(0, 2)));
 
-    // Call internal mutation that handles merging line_items into processingMetadata
-    await ctx.runMutation(
-      internal.functions.expenseClaims.internalUpdateLineItems,
-      {
-        id: args.id,
-        lineItems: args.lineItems,
-        lineItemsStatus: args.lineItemsStatus,
-      }
-    );
+    try {
+      // Call internal mutation that handles merging line_items into processingMetadata
+      await ctx.runMutation(
+        internal.functions.expenseClaims.internalUpdateLineItems,
+        {
+          id: args.id,
+          lineItems: args.lineItems,
+          lineItemsStatus: args.lineItemsStatus,
+        }
+      );
 
-    return args.id;
+      console.log(`[System] Successfully updated expense claim ${args.id} with line items`);
+      return args.id;
+    } catch (error) {
+      console.error(`[System] ERROR updating expense claim ${args.id}:`, error);
+      throw error;
+    }
   },
 });
 
