@@ -30,6 +30,9 @@ let cachedCurrency: SupportedCurrency | null = null
 let cacheTimestamp = 0
 const CACHE_DURATION = 30 * 60 * 1000 // 30 minutes
 
+// Custom event name for same-tab currency updates
+const CURRENCY_CHANGE_EVENT = 'finanseal:currency-change'
+
 /**
  * Hook to get and set user's home currency preference
  *
@@ -107,7 +110,7 @@ export function useHomeCurrency() {
 
     loadCurrency()
 
-    // Listen for changes from other tabs/windows
+    // Listen for changes from other tabs/windows (via storage event)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'homeCurrency' && e.newValue) {
         const newCurrency = e.newValue as SupportedCurrency
@@ -119,9 +122,21 @@ export function useHomeCurrency() {
       }
     }
 
+    // Listen for changes from same tab (via custom event)
+    const handleCurrencyChange = (e: CustomEvent<SupportedCurrency>) => {
+      const newCurrency = e.detail
+      if (SUPPORTED_CURRENCIES.some(c => c.code === newCurrency)) {
+        setCurrency(newCurrency)
+      }
+    }
+
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', handleStorageChange)
-      return () => window.removeEventListener('storage', handleStorageChange)
+      window.addEventListener(CURRENCY_CHANGE_EVENT, handleCurrencyChange as EventListener)
+      return () => {
+        window.removeEventListener('storage', handleStorageChange)
+        window.removeEventListener(CURRENCY_CHANGE_EVENT, handleCurrencyChange as EventListener)
+      }
     }
   }, [isAuthLoaded, isSignedIn])
 
@@ -157,6 +172,10 @@ export async function updateHomeCurrency(newCurrency: SupportedCurrency): Promis
 
     if (typeof window !== 'undefined') {
       localStorage.setItem('homeCurrency', newCurrency)
+
+      // Dispatch custom event to notify same-tab hook instances
+      // (storage events only fire for other tabs)
+      window.dispatchEvent(new CustomEvent(CURRENCY_CHANGE_EVENT, { detail: newCurrency }))
     }
 
     return true

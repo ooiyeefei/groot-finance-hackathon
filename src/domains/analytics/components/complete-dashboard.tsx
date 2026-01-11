@@ -36,16 +36,18 @@ export default function CompleteDashboard() {
   const { currency: homeCurrency } = useHomeCurrency();
 
   // Handle currency change
+  // Note: We don't need to manually call refresh() here because:
+  // 1. updateHomeCurrency dispatches a custom event
+  // 2. useHomeCurrency hook receives event and updates React state (homeCurrency)
+  // 3. TanStack Query in useFinancialAnalytics watches homeCurrency in queryKey
+  // 4. When homeCurrency changes, TanStack Query auto-refetches with new currency
   const handleCurrencyChange = async (newCurrency: SupportedCurrency) => {
     if (newCurrency === homeCurrency) return;
 
     setIsCurrencyChanging(true);
     try {
-      const success = await updateHomeCurrency(newCurrency);
-      if (success) {
-        // Force refresh analytics with new currency
-        refresh();
-      }
+      await updateHomeCurrency(newCurrency);
+      // TanStack Query will auto-refetch when homeCurrency state updates
     } catch (error) {
       console.error('Failed to update currency:', error);
     } finally {
