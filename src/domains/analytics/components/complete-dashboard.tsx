@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw, PiggyBank, CreditCard, Loader2 } from 'lucide-react';
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
-import { useHomeCurrency, SUPPORTED_CURRENCIES } from '@/domains/users/hooks/use-home-currency';
+import { SUPPORTED_CURRENCIES } from '@/domains/users/hooks/use-home-currency';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
 
 // Lazy load heavy components to improve initial page load
@@ -32,32 +32,43 @@ const ComponentLoader = ({ title, height = 'chart' }: { title: string; height?: 
 
 export default function CompleteDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
-  const { currency: userPreferredCurrency } = useHomeCurrency();
 
   // Session-only display currency - resets to user's preferred currency on page refresh
-  // This is a temporary view preference, not saved to backend
-  const [displayCurrency, setDisplayCurrency] = useState<SupportedCurrency | null>(null);
+  // Fetch user's actual preferred currency from API (bypass localStorage cache)
+  const [displayCurrency, setDisplayCurrency] = useState<SupportedCurrency>('SGD');
+  const [currencyInitialized, setCurrencyInitialized] = useState(false);
 
-  // Initialize display currency from user's preferred currency once it loads
+  // Fetch user's preferred currency directly from API on mount (bypass localStorage)
   useEffect(() => {
-    if (userPreferredCurrency && !displayCurrency) {
-      setDisplayCurrency(userPreferredCurrency);
-    }
-  }, [userPreferredCurrency, displayCurrency]);
+    const fetchUserPreferredCurrency = async () => {
+      try {
+        const response = await fetch('/api/v1/users/profile');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data?.preferred_currency) {
+            setDisplayCurrency(data.data.preferred_currency as SupportedCurrency);
+          }
+        }
+      } catch (error) {
+        console.error('[Dashboard] Failed to fetch user currency preference:', error);
+      } finally {
+        setCurrencyInitialized(true);
+      }
+    };
 
-  // Use display currency if set, otherwise fall back to user's preferred currency
-  const activeCurrency = displayCurrency || userPreferredCurrency;
+    fetchUserPreferredCurrency();
+  }, []); // Only run on mount
 
   // Handle currency change - session-only, does NOT update user's permanent preference
   const handleCurrencyChange = (newCurrency: SupportedCurrency) => {
-    if (newCurrency === activeCurrency) return;
+    if (newCurrency === displayCurrency) return;
     setDisplayCurrency(newCurrency);
-    // TanStack Query will auto-refetch when activeCurrency changes
+    // TanStack Query will auto-refetch when displayCurrency changes
   };
 
   const { analytics, trends, loading, error, refresh, lastUpdated } = useFinancialAnalytics({
     period: selectedPeriod,
-    homeCurrency: activeCurrency,
+    homeCurrency: displayCurrency,
     includeTrends: true
   });
 
@@ -175,7 +186,7 @@ export default function CompleteDashboard() {
         <div>
           <h2 className="text-xl font-semibold text-foreground">Financial Dashboard</h2>
           <p className="text-sm text-muted-foreground">
-            {getPeriodDisplayName(selectedPeriod)} • Converted to {activeCurrency}
+            {getPeriodDisplayName(selectedPeriod)} • Converted to {displayCurrency}
             <span className="ml-2">• Updated {lastUpdated ? lastUpdated.toLocaleTimeString() : '--:--:--'}</span>
           </p>
         </div>
@@ -183,7 +194,7 @@ export default function CompleteDashboard() {
         <div className="flex items-center gap-3">
           {/* Currency Selector */}
           <select
-            value={activeCurrency}
+            value={displayCurrency}
             onChange={(e) => handleCurrencyChange(e.target.value as SupportedCurrency)}
             disabled={loading}
             className="px-3 py-1.5 bg-muted text-foreground border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
@@ -235,7 +246,7 @@ export default function CompleteDashboard() {
               <div className="h-8 w-full bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold text-green-900 dark:text-white leading-tight">
-                {analytics ? formatCurrency(analytics.total_income, activeCurrency) : '-'}
+                {analytics ? formatCurrency(analytics.total_income, displayCurrency) : '-'}
               </p>
             )}
           </div>
@@ -270,7 +281,7 @@ export default function CompleteDashboard() {
               <div className="h-8 w-full bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold text-red-900 dark:text-white leading-tight">
-                {analytics ? formatCurrency(analytics.total_expenses, activeCurrency) : '-'}
+                {analytics ? formatCurrency(analytics.total_expenses, displayCurrency) : '-'}
               </p>
             )}
           </div>
@@ -321,7 +332,7 @@ export default function CompleteDashboard() {
                   ? 'text-green-900 dark:text-white'
                   : 'text-red-900 dark:text-white'
               }`}>
-                {analytics ? formatCurrency(analytics.net_profit, activeCurrency) : '-'}
+                {analytics ? formatCurrency(analytics.net_profit, displayCurrency) : '-'}
               </p>
             )}
           </div>
@@ -395,7 +406,7 @@ export default function CompleteDashboard() {
               <div className="h-8 w-full bg-muted rounded animate-pulse"></div>
             ) : (
               <p className="text-2xl font-bold leading-tight">
-                {formatCurrency(profitMargin, activeCurrency, true)}
+                {formatCurrency(profitMargin, displayCurrency, true)}
               </p>
             )}
           </div>
@@ -435,7 +446,7 @@ export default function CompleteDashboard() {
               average_risk_score: 0,
               high_risk_transactions: 0
             }}
-            homeCurrency={activeCurrency}
+            homeCurrency={displayCurrency}
             loading={loading}
           />
         </Suspense>
@@ -453,7 +464,7 @@ export default function CompleteDashboard() {
               average_risk_score: 0,
               high_risk_transactions: 0
             }}
-            homeCurrency={activeCurrency}
+            homeCurrency={displayCurrency}
             loading={loading}
           />
         </Suspense>
@@ -462,7 +473,7 @@ export default function CompleteDashboard() {
         <Suspense fallback={<ComponentLoader title="Currency Analysis" />}>
           <CurrencyBreakdown
             currencyData={analytics?.currency_breakdown || {}}
-            homeCurrency={activeCurrency}
+            homeCurrency={displayCurrency}
             loading={loading}
           />
         </Suspense>
@@ -471,7 +482,7 @@ export default function CompleteDashboard() {
         <Suspense fallback={<ComponentLoader title="Category Analysis" />}>
           <CategoryAnalysis
             categoryData={analytics?.category_breakdown || {}}
-            homeCurrency={activeCurrency}
+            homeCurrency={displayCurrency}
             loading={loading}
           />
         </Suspense>
