@@ -225,6 +225,11 @@ export async function calculateFinancialAnalytics(
 
 /**
  * Compare current period with previous period for trend analysis
+ *
+ * Currency Flow:
+ * 1. Engine returns data in business's home currency
+ * 2. If user's preferred currency differs, we convert the amounts
+ * 3. Trends (percentage changes) are calculated BEFORE conversion (same currency)
  */
 export async function calculateAnalyticsTrends(
   clerkUserId: string,
@@ -239,7 +244,41 @@ export async function calculateAnalyticsTrends(
     profit_change: number
   }
 }> {
-  return await calculateTrendsEngine(clerkUserId, currentPeriod, options)
+  const targetCurrency = options.homeCurrency || 'SGD'
+
+  // Get user profile to find their business ID
+  const userProfile = await ensureUserProfile(clerkUserId)
+  if (!userProfile || !userProfile.business_id) {
+    throw new Error('No business context found')
+  }
+
+  // Get the business's actual home currency (what Convex returns data in)
+  const businessCurrency = await getBusinessHomeCurrency(userProfile.business_id)
+
+  // Get raw analytics from engine (in business currency)
+  // Pass businessCurrency to engine so trends are calculated in same currency
+  const engineResult = await calculateTrendsEngine(clerkUserId, currentPeriod, {
+    ...options,
+    homeCurrency: businessCurrency
+  })
+
+  // Convert to user's preferred currency if different
+  if (targetCurrency !== businessCurrency) {
+    console.log(`[Analytics Service] Converting trends from ${businessCurrency} to ${targetCurrency}`)
+
+    const [convertedCurrent, convertedPrevious] = await Promise.all([
+      convertAnalyticsCurrency(engineResult.current, businessCurrency, targetCurrency),
+      convertAnalyticsCurrency(engineResult.previous, businessCurrency, targetCurrency)
+    ])
+
+    return {
+      current: convertedCurrent,
+      previous: convertedPrevious,
+      trends: engineResult.trends // Trends are percentages, no conversion needed
+    }
+  }
+
+  return engineResult
 }
 
 // ==========================================
