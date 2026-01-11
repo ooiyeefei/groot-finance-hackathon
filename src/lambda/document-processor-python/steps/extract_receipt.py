@@ -23,6 +23,7 @@ from PIL import Image
 
 from utils.s3_client import S3Client, ConvertedImageInfo
 from steps.convert_pdf import get_image_from_s3
+from steps.dspy_config import ensure_dspy_configured, get_lm
 from types_def import BusinessCategory
 
 
@@ -484,21 +485,12 @@ def extract_receipt_step(
             all_image_bytes.append(image_bytes)
             print(f"[{document_id}] Processing single image")
 
-        # Configure DSPy with Gemini
-        gemini_api_key = os.environ.get("GEMINI_API_KEY")
-        if not gemini_api_key:
-            raise ValueError("GEMINI_API_KEY not set")
+        # Ensure DSPy is configured (module-level, thread-safe)
+        # This avoids threading issues with AWS Durable Execution SDK
+        if not ensure_dspy_configured():
+            raise ValueError("GEMINI_API_KEY not set - cannot configure DSPy")
 
-        print(f"[{document_id}] Configuring DSPy with Gemini 3 Flash...")
-        # Use lower max_tokens in fast mode (simpler output)
-        max_tokens = 4096 if fast_mode else 8192
-        gemini_lm = dspy.LM(
-            "gemini/gemini-3-flash-preview",  # Upgraded from 2.5 - 67% faster (4.5s vs 13.8s)
-            api_key=gemini_api_key,
-            temperature=0.1,
-            max_tokens=max_tokens,
-        )
-        dspy.settings.configure(lm=gemini_lm, adapter=dspy.JSONAdapter(), track_usage=True)
+        print(f"[{document_id}] Using pre-configured DSPy with Gemini 3 Flash...")
 
         # Convert pages to DSPy images
         receipt_images = []
@@ -557,7 +549,7 @@ def extract_receipt_step(
             ]
 
         # Log token usage for billing (include actual image count)
-        token_data = log_token_usage(gemini_lm, "gemini-3-flash-preview", image_count=len(receipt_images))
+        token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=len(receipt_images))
 
         print(f"[{document_id}] Extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
         print(f"[{document_id}] Quality: {extracted.extraction_quality}, Confidence: {extracted.confidence_score}")

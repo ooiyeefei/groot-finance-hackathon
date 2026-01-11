@@ -30,6 +30,10 @@ import sentry_sdk
 from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
 
 # Local imports
+# IMPORTANT: Import dspy_config FIRST to configure DSPy at Lambda cold start
+# This avoids threading issues when AWS Durable Execution SDK resumes on different threads
+from steps.dspy_config import ensure_dspy_configured
+
 from steps.convert_pdf import convert_pdf_step
 from steps.validate import validate_document_step
 from steps.extract_invoice import extract_invoice_step

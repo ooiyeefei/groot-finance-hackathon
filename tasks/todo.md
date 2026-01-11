@@ -1089,3 +1089,37 @@ const handleCurrencyChange = async (newCurrency) => {
 - [x] Build passes (`npm run build` successful)
 - [ ] Manual test: Business Settings currency dropdown updates `businesses.homeCurrency`
 - [ ] Manual test: User Settings currency dropdown still updates `users.homeCurrency`
+
+---
+
+# Fix DSPy Threading Issue in Lambda Document Processor (2026-01-11)
+
+## Bug Summary
+**Issue:** Expense claims processing fails with error:
+```
+EXTRACTION_FAILED: Receipt extraction failed: dspy.settings can only be changed by the thread that initially configured it.
+```
+
+## Root Cause
+- DSPy's `dspy.settings` is a global singleton with thread affinity
+- Both `extract_receipt.py` (line 501) and `extract_invoice.py` (line 485) call `dspy.settings.configure()` inside extraction functions
+- AWS Durable Execution SDK checkpoints Lambda state and may resume on different threads
+- When extraction functions try to reconfigure DSPy on a different thread, it throws the error
+
+## Solution
+Move DSPy configuration to module-level initialization that happens once when the module is loaded, before any checkpointed steps run.
+
+## Todo Items
+- [ ] Create shared DSPy configuration module `steps/dspy_config.py`
+- [ ] Update `extract_receipt.py` to use module-level DSPy config
+- [ ] Update `extract_invoice.py` to use module-level DSPy config
+- [ ] Deploy Lambda via CDK
+- [ ] Test with expense claim upload
+
+## Files to Modify
+1. `src/lambda/document-processor-python/steps/dspy_config.py` (NEW)
+2. `src/lambda/document-processor-python/steps/extract_receipt.py`
+3. `src/lambda/document-processor-python/steps/extract_invoice.py`
+
+## Review Section
+(To be completed after implementation)
