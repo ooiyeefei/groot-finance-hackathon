@@ -696,7 +696,7 @@ The Lambda already has access to categories with both `name` and `id`. We just n
 - [x] Investigate category selection issue
 - [x] Fix Lambda receipt extraction to map name→ID
 - [x] Fix Lambda invoice extraction to map name→ID
-- [ ] Deploy Lambda
+- [x] Deploy Lambda (2026-01-11)
 - [ ] Test with new expense claim
 
 ## Review Section (2026-01-11)
@@ -784,3 +784,117 @@ Also removed premature `refresh()` call in dashboard - TanStack Query auto-refet
 - [x] Build passes (`npm run build` successful)
 - [x] Changes pushed to main (commit `de6331a5`)
 - [ ] Manual test: Dashboard currency selector properly changes display currency
+
+---
+
+# Fast Mode Optimization for Expense Claims (2026-01-11)
+
+## Goal
+Reduce document processing time from ~20.2 seconds to 5-8 seconds for simple expense claims.
+
+## Performance Breakdown (Before)
+| Step | Time | Optimization |
+|------|------|--------------|
+| PDF Conversion | 3.7s | Keep (required) |
+| Validation | 3.7s | **Skip for expense_claims** |
+| Extraction | 12.8s | **Use dspy.Predict + simplified schema** |
+| Total | ~20.2s | Target: 5-8s |
+
+## Implementation Summary
+
+### 1. Fast Mode Flag Infrastructure
+**`types_def.py`**: Added `fast_mode: bool = False` to `DocumentProcessingRequest`
+
+### 2. Skip Validation for Expense Claims
+**`handler.py`** (lines 267-277):
+```python
+skip_validation = request.domain == "expense_claims" or request.fast_mode
+
+if skip_validation:
+    validation_result = {
+        "is_supported": True,
+        "document_type": "receipt",
+        "confidence": 1.0,
+        "reasoning": "Validation skipped - domain-based routing",
+        "skipped": True,
+    }
+```
+
+### 3. Simplified Fast Mode Schemas
+
+**`extract_receipt.py`** - `FastReceiptData`:
+- KEEP: vendor_name, transaction_date, total_amount, currency, receipt_number
+- KEEP: expense_category, description, business_purpose
+- KEEP: confidence_score, extraction_quality
+- REMOVE: line_items, vendor_address, vendor_contact, subtotal_amount, tax_amount, tip_amount, payment_method, missing_fields, suggestions
+
+**`extract_invoice.py`** - `FastInvoiceData`:
+- KEEP: vendor_name, transaction_date, total_amount, currency, document_number
+- KEEP: suggested_category, description, business_purpose
+- KEEP: confidence_score, extraction_quality
+- REMOVE: line_items, vendor/customer details, financial breakdown, payment info
+
+### 4. Fast Extraction with dspy.Predict
+
+**Fast mode** uses `dspy.Predict` (direct prediction):
+```python
+if fast_mode:
+    processor = dspy.Predict(FastReceiptExtractionSignature)
+    prediction = processor(
+        receipt_image=receipt_images[0],  # Single page only
+        available_categories=categories_json
+    )
+```
+
+**Full mode** uses `dspy.ChainOfThought` (reasoning steps):
+```python
+else:
+    processor = dspy.ChainOfThought(ReceiptExtractionSignature)
+    prediction = processor(
+        receipt_images=receipt_images,  # All pages
+        available_categories=categories_json
+    )
+```
+
+### 5. Single Page Processing in Fast Mode
+- Fast mode: `pages_to_fetch = 1`
+- Full mode: `pages_to_fetch = len(images)` (all pages)
+
+## Files Modified
+
+1. **`src/lambda/document-processor-python/types_def.py`**
+   - Added `fast_mode: bool = False` to DocumentProcessingRequest
+
+2. **`src/lambda/document-processor-python/handler.py`**
+   - Skip validation for expense_claims or fast_mode
+   - Pass fast_mode to extraction functions
+
+3. **`src/lambda/document-processor-python/steps/extract_receipt.py`**
+   - Added `FastReceiptData` Pydantic model (simplified)
+   - Added `FastReceiptExtractionSignature` DSPy signature
+   - Updated function to accept `fast_mode` parameter
+   - Conditional extraction logic (Predict vs ChainOfThought)
+
+4. **`src/lambda/document-processor-python/steps/extract_invoice.py`**
+   - Added `FastInvoiceData` Pydantic model (simplified)
+   - Added `FastInvoiceExtractionSignature` DSPy signature
+   - Updated function to accept `fast_mode` parameter
+   - Conditional extraction logic
+
+## Expected Performance Gains
+
+| Optimization | Estimated Savings |
+|--------------|-------------------|
+| Skip validation | ~3.7s |
+| dspy.Predict vs ChainOfThought | ~3-5s |
+| Simplified schema | ~1-2s |
+| Single page only | ~1s per additional page |
+| **Total Expected Savings** | **~8-11s** |
+
+**Expected Processing Time**: 9-12s (down from 20.2s)
+
+## Verification
+- [x] Build passes (`npm run build` successful)
+- [ ] Deploy Lambda via CDK
+- [ ] Test with expense claim (verify ~5-8s target)
+- [ ] Test invoice extraction still works (full mode)

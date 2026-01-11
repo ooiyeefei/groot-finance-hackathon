@@ -70,6 +70,7 @@ class DocumentProcessingRequest:
     idempotency_key: str
     expected_document_type: Optional[str] = None  # 'invoice' | 'receipt'
     business_categories: Optional[List[BusinessCategory]] = None
+    fast_mode: bool = False  # Skip validation + use simplified extraction for speed
 
     @classmethod
     def from_dict(cls, data: dict) -> "DocumentProcessingRequest":
@@ -87,6 +88,7 @@ class DocumentProcessingRequest:
             idempotency_key=data["idempotencyKey"],
             expected_document_type=data.get("expectedDocumentType"),
             business_categories=categories,
+            fast_mode=data.get("fastMode", False),
         )
 
 

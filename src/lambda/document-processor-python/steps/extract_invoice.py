@@ -40,6 +40,42 @@ class DocumentLineItem(BaseModel):
     line_total: float = Field(..., description="Total for this line")
 
 
+# =============================================================================
+# Fast Mode Schema - Simplified for speed (saves ~3-5s)
+# =============================================================================
+
+class FastInvoiceData(BaseModel):
+    """Simplified invoice extraction for fast mode - essential fields only."""
+    # Core fields (required)
+    vendor_name: str = Field(..., description="Merchant/vendor name")
+    transaction_date: str = Field(..., description="Date in YYYY-MM-DD format")
+    total_amount: float = Field(..., description="Final total amount")
+    currency: str = Field(..., description="ISO 4217 currency code (SGD, MYR, USD, etc.)")
+
+    # Useful identifiers
+    document_number: Optional[str] = Field(None, description="Invoice number")
+
+    # Category - selected from available_categories (COGS categories)
+    suggested_category: Optional[str] = Field(
+        None,
+        description="Selected category name from available_categories list"
+    )
+
+    # AI-generated descriptive fields
+    description: Optional[str] = Field(
+        None,
+        description="Concise expense summary, e.g., 'Office supplies from ABC Store'"
+    )
+    business_purpose: Optional[str] = Field(
+        None,
+        description="Business justification, e.g., 'Office supplies for operations'"
+    )
+
+    # Quality (minimal)
+    confidence_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence")
+    extraction_quality: Literal['high', 'medium', 'low'] = Field(..., description="Quality assessment")
+
+
 class InvoiceData(BaseModel):
     """Complete invoice extraction result - matches Trigger.dev ExtractedInvoiceData."""
     # Core fields
@@ -168,6 +204,36 @@ class InvoiceExtractionSignature(dspy.Signature):
 
         IMPORTANT: Generate 'description' (concise expense summary like 'Purchase from ABC Store')
         and 'business_purpose' (business justification like 'Office supplies for operations')."""
+    )
+
+
+# =============================================================================
+# Fast Mode DSPy Signature - Simplified for speed
+# =============================================================================
+
+class FastInvoiceExtractionSignature(dspy.Signature):
+    """Quick extraction for simple invoices - essential fields only.
+
+    Extract: vendor_name, transaction_date, total_amount, currency, document_number,
+    suggested_category, description, business_purpose, confidence_score, extraction_quality.
+
+    Skip: line_items, vendor_address, vendor_contact, vendor_tax_id, customer details,
+    subtotal, tax, discount, payment_terms, payment_method, bank_details.
+    """
+
+    document_image: dspy.Image = dspy.InputField(
+        desc="Invoice image for quick extraction"
+    )
+
+    available_categories: str = dspy.InputField(
+        desc="JSON list of COGS categories"
+    )
+
+    extracted_data: FastInvoiceData = dspy.OutputField(
+        desc="""Extract essential invoice data only: vendor_name, transaction_date,
+        total_amount, currency, document_number, suggested_category.
+        Generate 'description' and 'business_purpose' for the expense.
+        Set confidence_score and extraction_quality based on image clarity."""
     )
 
 
@@ -358,6 +424,7 @@ def extract_invoice_step(
     domain: str,
     categories: Optional[List[BusinessCategory]],
     s3: S3Client,
+    fast_mode: bool = False,
 ) -> Dict[str, Any]:
     """
     Extract structured data from invoice using DSPy with Gemini.
@@ -369,24 +436,28 @@ def extract_invoice_step(
         domain: 'invoices' or 'expense_claims'
         categories: Business categories for COGS categorization
         s3: S3 client instance
+        fast_mode: If True, use simplified extraction (dspy.Predict) for speed
 
     Returns:
         Dict with extracted invoice data including user_message, suggestions, and token usage
     """
-    print(f"[{document_id}] Extracting invoice data with DSPy")
+    mode_label = "FAST" if fast_mode else "FULL"
+    print(f"[{document_id}] Extracting invoice data with DSPy ({mode_label} mode)")
     start_time = datetime.utcnow()
     token_data = None
 
     try:
-        # Get ALL page images (multi-page PDF support)
+        # Get page images - in fast mode, only fetch first page
         all_image_bytes = []
         if images and len(images) > 0:
-            print(f"[{document_id}] Processing {len(images)} page(s)...")
-            for idx, img_info in enumerate(images):
+            pages_to_fetch = 1 if fast_mode else len(images)
+            print(f"[{document_id}] Processing {pages_to_fetch} of {len(images)} page(s) ({mode_label} mode)...")
+            for idx in range(pages_to_fetch):
+                img_info = images[idx]
                 image_url = s3.get_presigned_url(img_info.s3_key)
                 img_bytes = _fetch_image_bytes(image_url)
                 all_image_bytes.append(img_bytes)
-                print(f"[{document_id}] Fetched page {idx + 1}/{len(images)}")
+                print(f"[{document_id}] Fetched page {idx + 1}")
         else:
             # Single image (not from PDF conversion)
             image_bytes, _ = get_image_from_s3(s3, storage_path, domain)
@@ -399,15 +470,17 @@ def extract_invoice_step(
             raise ValueError("GEMINI_API_KEY not set")
 
         print(f"[{document_id}] Configuring DSPy with Gemini...")
+        # Use lower max_tokens in fast mode (simpler output)
+        max_tokens = 4096 if fast_mode else 16384
         gemini_lm = dspy.LM(
             "gemini/gemini-2.5-flash",
             api_key=gemini_api_key,
-            temperature=0.1,  # Slight temperature for better user_message generation
-            max_tokens=16384,
+            temperature=0.1,
+            max_tokens=max_tokens,
         )
         dspy.settings.configure(lm=gemini_lm, adapter=dspy.JSONAdapter(), track_usage=True)
 
-        # Convert ALL pages to DSPy images
+        # Convert pages to DSPy images
         document_images = []
         for idx, img_bytes in enumerate(all_image_bytes):
             pil_image = Image.open(io.BytesIO(img_bytes))
@@ -421,14 +494,40 @@ def extract_invoice_step(
         categories_json = format_categories_for_llm(categories)
         print(f"[{document_id}] Categories: {len(categories or [])} available")
 
-        # Run DSPy extraction with ChainOfThought (all pages in single call)
-        print(f"[{document_id}] Running DSPy ChainOfThought with {len(document_images)} page(s)...")
-        processor = dspy.ChainOfThought(InvoiceExtractionSignature)
-        prediction = processor(
-            document_images=document_images,
-            available_categories=categories_json
-        )
-        extracted = prediction.extracted_data
+        # =================================================================
+        # FAST MODE: Use dspy.Predict with simplified schema (saves ~3-5s)
+        # FULL MODE: Use dspy.ChainOfThought with complete schema
+        # =================================================================
+        if fast_mode:
+            print(f"[{document_id}] Running DSPy Predict (FAST mode) with 1 image...")
+            processor = dspy.Predict(FastInvoiceExtractionSignature)
+            prediction = processor(
+                document_image=document_images[0],  # Single image only
+                available_categories=categories_json
+            )
+            extracted = prediction.extracted_data
+            # Fast mode has no line_items
+            line_items = []
+        else:
+            print(f"[{document_id}] Running DSPy ChainOfThought (FULL mode) with {len(document_images)} page(s)...")
+            processor = dspy.ChainOfThought(InvoiceExtractionSignature)
+            prediction = processor(
+                document_images=document_images,
+                available_categories=categories_json
+            )
+            extracted = prediction.extracted_data
+            # Convert line items (full mode only)
+            line_items = [
+                DocumentLineItem(
+                    description=item.description,
+                    item_code=item.item_code,
+                    quantity=item.quantity,
+                    unit_measurement=item.unit_measurement,
+                    unit_price=item.unit_price,
+                    line_total=item.line_total,
+                )
+                for item in extracted.line_items
+            ]
 
         # Log token usage for billing (include actual image count)
         token_data = log_token_usage(gemini_lm, "gemini-2.5-flash", image_count=len(document_images))
@@ -439,19 +538,6 @@ def extract_invoice_step(
         # DEBUG: Log description and business_purpose from DSPy
         print(f"[{document_id}] DSPy description (raw): '{extracted.description}'")
         print(f"[{document_id}] DSPy business_purpose (raw): '{extracted.business_purpose}'")
-
-        # Convert line items
-        line_items = [
-            DocumentLineItem(
-                description=item.description,
-                item_code=item.item_code,
-                quantity=item.quantity,
-                unit_measurement=item.unit_measurement,
-                unit_price=item.unit_price,
-                line_total=item.line_total,
-            )
-            for item in extracted.line_items
-        ]
 
         # Use LLM-selected category or fallback to pattern matching
         # Note: suggested_category is now the category_name, which we map to category_id for storage
@@ -506,20 +592,20 @@ def extract_invoice_step(
         # Calculate processing time
         processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 
-        # Calculate due_date from transaction_date + payment_terms
-        # (Same logic as Trigger.dev version)
+        # Calculate due_date from transaction_date + payment_terms (full mode only)
         calculated_due_date = None
-        if extracted.transaction_date and extracted.payment_terms:
+        payment_terms = getattr(extracted, 'payment_terms', None)
+        if not fast_mode and extracted.transaction_date and payment_terms:
             try:
                 import re
                 from datetime import timedelta
                 # Parse transaction date (YYYY-MM-DD format)
                 transaction_date = datetime.strptime(extracted.transaction_date, "%Y-%m-%d")
-                payment_terms = extracted.payment_terms.lower()
+                pt_lower = payment_terms.lower()
 
                 # Extract number of days from payment terms (e.g., "Net 30", "30 days")
                 days_to_add = 30  # Default Net 30
-                match = re.search(r'(\d+)', payment_terms)
+                match = re.search(r'(\d+)', pt_lower)
                 if match:
                     days_to_add = int(match.group(1))
 
@@ -530,43 +616,44 @@ def extract_invoice_step(
             except Exception as e:
                 print(f"[{document_id}] Warning: Could not calculate due_date: {e}")
 
-        # Build result
+        # Build result - handle fast mode (fewer fields extracted)
         result = {
             "success": True,
             "backend_used": "dspy_gemini",
-            "processing_method": "dspy",
+            "processing_method": "dspy_fast" if fast_mode else "dspy",
             "document_type": "invoice",
             "model_used": "gemini-2.5-flash",
+            "fast_mode": fast_mode,
 
-            # Core fields
+            # Core fields (always present)
             "vendor_name": extracted.vendor_name,
             "total_amount": extracted.total_amount,
             "currency": extracted.currency,
             "transaction_date": extracted.transaction_date,
-            "document_number": extracted.document_number or "",
+            "document_number": getattr(extracted, 'document_number', None) or "",
 
-            # Vendor details
-            "vendor_address": extracted.vendor_address or "",
-            "vendor_contact": extracted.vendor_contact or "",
-            "vendor_tax_id": extracted.vendor_tax_id or "",
+            # Vendor details (full mode only - default empty for fast mode)
+            "vendor_address": getattr(extracted, 'vendor_address', None) or "",
+            "vendor_contact": getattr(extracted, 'vendor_contact', None) or "",
+            "vendor_tax_id": getattr(extracted, 'vendor_tax_id', None) or "",
 
-            # Customer details
-            "customer_name": extracted.customer_name or "",
-            "customer_address": extracted.customer_address or "",
-            "customer_contact": extracted.customer_contact or "",
+            # Customer details (full mode only)
+            "customer_name": getattr(extracted, 'customer_name', None) or "",
+            "customer_address": getattr(extracted, 'customer_address', None) or "",
+            "customer_contact": getattr(extracted, 'customer_contact', None) or "",
 
-            # Financial breakdown
-            "subtotal_amount": extracted.subtotal_amount or 0.0,
-            "tax_amount": extracted.tax_amount or 0.0,
-            "discount_amount": extracted.discount_amount or 0.0,
+            # Financial breakdown (full mode only - default 0 for fast mode)
+            "subtotal_amount": getattr(extracted, 'subtotal_amount', None) or 0.0,
+            "tax_amount": getattr(extracted, 'tax_amount', None) or 0.0,
+            "discount_amount": getattr(extracted, 'discount_amount', None) or 0.0,
 
-            # Payment info
-            "payment_terms": extracted.payment_terms or "",
-            "due_date": calculated_due_date,  # Calculated from transaction_date + payment_terms
-            "payment_method": extracted.payment_method or "",
-            "bank_details": extracted.bank_details or "",
+            # Payment info (full mode only)
+            "payment_terms": payment_terms or "",
+            "due_date": calculated_due_date,
+            "payment_method": getattr(extracted, 'payment_method', None) or "",
+            "bank_details": getattr(extracted, 'bank_details', None) or "",
 
-            # Line items
+            # Line items (full mode only - empty list for fast mode)
             "line_items": [
                 {
                     "description": item.description,
@@ -576,20 +663,20 @@ def extract_invoice_step(
                     "unit_price": item.unit_price,
                     "line_total": item.line_total,
                 }
-                for item in extracted.line_items
+                for item in line_items
             ],
 
-            # Quality - LLM determined
+            # Quality - LLM determined (both modes)
             "confidence": extracted.confidence_score,
             "confidence_score": extracted.confidence_score,
             "extraction_confidence": extracted.confidence_score,
             "extraction_quality": extracted.extraction_quality,
-            "missing_fields": extracted.missing_fields,
+            "missing_fields": getattr(extracted, 'missing_fields', []) or [],
             "requires_validation": extracted.confidence_score < 0.8,
 
-            # User feedback - for UX
-            "user_message": extracted.user_message,
-            "suggestions": extracted.suggestions or [],
+            # User feedback - for UX (full mode only)
+            "user_message": getattr(extracted, 'user_message', None),
+            "suggestions": getattr(extracted, 'suggestions', []) or [],
 
             # Category - suggested_category is now the ID (for frontend form), suggested_category_name is for display
             "suggested_category": suggested_category,  # ID - what frontend form uses
