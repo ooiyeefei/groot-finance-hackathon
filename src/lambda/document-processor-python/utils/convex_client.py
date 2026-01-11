@@ -419,6 +419,65 @@ class ConvexClient:
         )
 
     # =========================================================================
+    # Two-Phase Extraction Functions (Invoices)
+    # =========================================================================
+
+    def update_invoice_line_items(
+        self,
+        document_id: str,
+        line_items: list,
+        line_items_status: str,
+    ) -> str:
+        """
+        Update invoice with Phase 2 line items extraction results.
+
+        Called after Phase 1 (core fields) completes. Updates the invoice
+        with extracted line items and sets the lineItemsStatus to 'complete'.
+
+        Args:
+            document_id: Invoice document ID
+            line_items: List of line item dicts with description, quantity, unit_price, line_total
+            line_items_status: Status after update ('complete' or 'skipped')
+
+        Returns:
+            Updated document ID
+        """
+        return self._mutation(
+            "functions/system:updateInvoiceLineItems",
+            {
+                "id": document_id,
+                "lineItems": line_items,
+                "lineItemsStatus": line_items_status,
+            },
+        )
+
+    def update_invoice_line_items_status(
+        self,
+        document_id: str,
+        line_items_status: str,
+    ) -> str:
+        """
+        Update invoice lineItemsStatus only (for state transitions).
+
+        Called to mark lineItemsStatus as 'extracting' before Phase 2 starts,
+        or 'skipped' if line items extraction is not needed.
+
+        Args:
+            document_id: Invoice document ID
+            line_items_status: New status ('pending', 'extracting', 'complete', 'skipped')
+
+        Returns:
+            Updated document ID
+        """
+        return self._mutation(
+            "functions/system:updateInvoiceLineItemsStatus",
+            {
+                "id": document_id,
+                "lineItemsStatus": line_items_status,
+            },
+        )
+
+    # =========================================================================
     # Two-Phase Extraction Functions (Expense Claims)
     # =========================================================================
 

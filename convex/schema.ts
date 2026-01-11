@@ -343,6 +343,15 @@ export default defineSchema({
     errorMessage: v.optional(v.any()),
     requiresReview: v.optional(v.boolean()),
 
+    // Two-Phase Extraction: Line items status
+    // Phase 1 extracts core fields (~3-4s), Phase 2 extracts line items (~3-4s)
+    lineItemsStatus: v.optional(v.union(
+      v.literal("pending"),     // Phase 1 complete, Phase 2 not started
+      v.literal("extracting"),  // Phase 2 in progress
+      v.literal("complete"),    // Line items extracted
+      v.literal("skipped")      // Line items extraction skipped
+    )),
+
     // Timestamps
     processingStartedAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),

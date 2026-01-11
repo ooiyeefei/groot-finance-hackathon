@@ -546,6 +546,92 @@ export const updateExpenseClaimLineItemsStatus = mutation({
 });
 
 // ============================================
+// INVOICE TWO-PHASE EXTRACTION SYSTEM FUNCTIONS
+// Phase 1: Core fields → immediate render
+// Phase 2: Line items → real-time update
+// ============================================
+
+/**
+ * Update invoice line items (system access)
+ * Used by Lambda during two-phase extraction - Phase 2 updates line items only
+ *
+ * Two-Phase Extraction Flow:
+ * - Phase 1: Extract core fields → Convex update → frontend renders immediately (~3-4s)
+ * - Phase 2: Extract line items → this mutation → frontend updates via real-time (~3-4s)
+ */
+export const updateInvoiceLineItems = mutation({
+  args: {
+    id: v.string(),
+    lineItems: v.array(
+      v.object({
+        description: v.string(),
+        quantity: v.optional(v.number()),
+        unit_price: v.optional(v.number()),
+        line_total: v.number(),
+      })
+    ),
+    lineItemsStatus: v.union(
+      v.literal("pending"),
+      v.literal("extracting"),
+      v.literal("complete"),
+      v.literal("skipped")
+    ),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    console.log(`[System] Updating invoice ${args.id} line items (${args.lineItems.length} items)`);
+    console.log(`[System] Line items sample:`, JSON.stringify(args.lineItems.slice(0, 2)));
+
+    try {
+      // Call internal mutation that handles merging line_items into extractedData
+      await ctx.runMutation(
+        internal.functions.invoices.internalUpdateLineItems,
+        {
+          id: args.id,
+          lineItems: args.lineItems,
+          lineItemsStatus: args.lineItemsStatus,
+        }
+      );
+
+      console.log(`[System] Successfully updated invoice ${args.id} with line items`);
+      return args.id;
+    } catch (error) {
+      console.error(`[System] ERROR updating invoice ${args.id}:`, error);
+      throw error;
+    }
+  },
+});
+
+/**
+ * Update invoice line items status only (system access)
+ * Used by Lambda to mark lineItemsStatus as 'extracting' before Phase 2 starts
+ */
+export const updateInvoiceLineItemsStatus = mutation({
+  args: {
+    id: v.string(),
+    lineItemsStatus: v.union(
+      v.literal("pending"),
+      v.literal("extracting"),
+      v.literal("complete"),
+      v.literal("skipped")
+    ),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    console.log(`[System] Updating invoice ${args.id} lineItemsStatus to: ${args.lineItemsStatus}`);
+
+    // Call internal mutation that updates only lineItemsStatus
+    await ctx.runMutation(
+      internal.functions.invoices.internalUpdateLineItemsStatus,
+      {
+        id: args.id,
+        lineItemsStatus: args.lineItemsStatus,
+      }
+    );
+
+    return args.id;
+  },
+});
+
+// ============================================
 // PDF CONVERSION SYSTEM FUNCTIONS (for Trigger.dev)
 // ============================================
 

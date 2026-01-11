@@ -36,7 +36,11 @@ from steps.dspy_config import ensure_dspy_configured
 
 from steps.convert_pdf import convert_pdf_step
 from steps.validate import validate_document_step
-from steps.extract_invoice import extract_invoice_step
+from steps.extract_invoice import (
+    extract_invoice_step,
+    extract_invoice_phase1_step,
+    extract_invoice_phase2_step,
+)
 from steps.extract_receipt import (
     extract_receipt_step,
     extract_receipt_phase1_step,
@@ -130,7 +134,7 @@ def handler(event: dict, context: DurableContext):
     doc_id = request.document_id
     print(f"[{doc_id}] Starting durable document processing workflow")
     print(f"[{doc_id}] Domain: {request.domain}, FileType: {request.file_type}")
-    print(f"[{doc_id}] fast_mode={request.fast_mode}, test_mode={request.test_mode}")
+    print(f"[{doc_id}] test_mode={request.test_mode}")
 
     # Initialize clients
     convex = get_convex_client()
@@ -296,17 +300,15 @@ def handler(event: dict, context: DurableContext):
 
         # =================================================================
         # Step 5: Extract data (checkpointed - most expensive step)
-        # For expense_claims: Uses TWO-PHASE extraction for faster perceived performance
+        # TWO-PHASE extraction for faster perceived performance:
         #   - Phase 1: Core fields only (~3-4s) → Convex update → UI renders immediately
         #   - Phase 2: Line items only (~3-4s) → Convex update → UI updates via real-time
-        # For invoices: Uses single-phase extraction (full data)
         # =================================================================
         def extract_data():
-            print(f"[{doc_id}] Step: Data Extraction (fast_mode={request.fast_mode})")
+            print(f"[{doc_id}] Step: Data Extraction (TWO-PHASE)")
 
             # IMPORTANT: Use domain to determine extraction path, NOT LLM classification
-            # - expense_claims domain → use two-phase extraction (Phase 1 only here)
-            # - invoices domain → use full invoice extraction
+            # Both domains now use two-phase extraction for consistent performance
 
             if request.domain == "expense_claims":
                 # Two-Phase Extraction for expense claims:
@@ -323,17 +325,19 @@ def handler(event: dict, context: DurableContext):
                 )
                 print(f"[{doc_id}] Phase 1 complete in {result.get('processing_time_ms', 0)}ms")
             else:
-                # Invoices domain: use full invoice extraction (single phase)
-                print(f"[{doc_id}] Using invoice extraction (domain: invoices)")
-                result = extract_invoice_step(
+                # Two-Phase Extraction for invoices:
+                # Phase 1 (here): Extract core fields WITHOUT line_items for fast initial render
+                # Phase 2 (separate step): Extract line_items → Convex real-time update
+                print(f"[{doc_id}] Using TWO-PHASE invoice extraction (Phase 1: core fields only)")
+                result = extract_invoice_phase1_step(
                     document_id=doc_id,
                     images=converted_images,
                     storage_path=request.storage_path,
                     domain=request.domain,
                     categories=business_categories,
                     s3=s3,
-                    fast_mode=request.fast_mode,  # Enable fast extraction
                 )
+                print(f"[{doc_id}] Phase 1 complete in {result.get('processing_time_ms', 0)}ms")
 
             print(f"[{doc_id}] Extraction complete: {result.get('vendor_name', 'Unknown')} - {result.get('total_amount', 0)} {result.get('currency', 'USD')}")
             return result
@@ -407,21 +411,20 @@ def handler(event: dict, context: DurableContext):
         context.step(lambda ctx: update_convex_results(), name="update_convex_results")
 
         # =================================================================
-        # Step 7a: Phase 2 Line Items Extraction (expense_claims only)
+        # Step 7a: Phase 2 Line Items Extraction (expense_claims)
         # Runs AFTER Phase 1 results are saved → frontend renders immediately
         # Phase 2 extracts line_items → Convex real-time update → frontend updates
         # =================================================================
-        def extract_phase2_line_items():
-            # Only run Phase 2 for expense_claims (two-phase extraction)
+        def extract_expense_claims_phase2():
+            # Only run Phase 2 for expense_claims
             if request.domain != "expense_claims":
-                print(f"[{doc_id}] SKIPPING Phase 2 - not expense_claims domain")
                 return {"skipped": True, "reason": "not_expense_claims"}
 
             if request.test_mode:
-                print(f"[{doc_id}] SKIPPING Phase 2 line items (test_mode=True)")
+                print(f"[{doc_id}] SKIPPING expense_claims Phase 2 (test_mode=True)")
                 return {"skipped": True, "reason": "test_mode"}
 
-            print(f"[{doc_id}] Phase 2: Starting line items extraction")
+            print(f"[{doc_id}] expense_claims Phase 2: Starting line items extraction")
 
             # Mark lineItemsStatus as 'extracting' before starting
             try:
@@ -429,7 +432,7 @@ def handler(event: dict, context: DurableContext):
                     document_id=doc_id,
                     line_items_status="extracting",
                 )
-                print(f"[{doc_id}] Phase 2: Marked lineItemsStatus='extracting'")
+                print(f"[{doc_id}] expense_claims Phase 2: Marked lineItemsStatus='extracting'")
             except Exception as e:
                 print(f"[{doc_id}] Warning: Failed to update lineItemsStatus: {str(e)}")
 
@@ -442,31 +445,27 @@ def handler(event: dict, context: DurableContext):
                 s3=s3,
             )
 
-            print(f"[{doc_id}] Phase 2 complete: {phase2_result.get('line_items_count', 0)} items in {phase2_result.get('processing_time_ms', 0)}ms")
+            print(f"[{doc_id}] expense_claims Phase 2 complete: {phase2_result.get('line_items_count', 0)} items in {phase2_result.get('processing_time_ms', 0)}ms")
 
             # Update Convex with line_items and mark as 'complete'
             if phase2_result.get("success"):
                 try:
                     line_items = phase2_result.get("line_items", [])
-                    # Debug: Log line items being sent to Convex
-                    import json
-                    print(f"[{doc_id}] Phase 2 DEBUG: Sending {len(line_items)} line_items to Convex:")
-                    print(f"[{doc_id}] Phase 2 DEBUG: {json.dumps(line_items[:3], indent=2)}")  # First 3 items
+                    print(f"[{doc_id}] expense_claims Phase 2: Sending {len(line_items)} line_items to Convex")
 
                     convex.update_expense_claim_line_items(
                         document_id=doc_id,
                         line_items=line_items,
                         line_items_status="complete",
                     )
-                    print(f"[{doc_id}] Phase 2: Updated Convex with line_items (status='complete')")
+                    print(f"[{doc_id}] expense_claims Phase 2: Updated Convex (status='complete')")
                 except Exception as e:
                     import traceback
                     print(f"[{doc_id}] Warning: Failed to update line_items: {str(e)}")
                     print(f"[{doc_id}] Phase 2 ERROR traceback: {traceback.format_exc()}")
-                    # Non-fatal - Phase 1 data is already saved
             else:
                 # Phase 2 failed - mark as skipped, don't fail the whole workflow
-                print(f"[{doc_id}] Phase 2 failed: {phase2_result.get('error', 'unknown')}")
+                print(f"[{doc_id}] expense_claims Phase 2 failed: {phase2_result.get('error', 'unknown')}")
                 try:
                     convex.update_expense_claim_line_items_status(
                         document_id=doc_id,
@@ -477,10 +476,77 @@ def handler(event: dict, context: DurableContext):
 
             return phase2_result
 
-        context.step(lambda ctx: extract_phase2_line_items(), name="extract_phase2_line_items")
+        context.step(lambda ctx: extract_expense_claims_phase2(), name="extract_expense_claims_phase2")
 
         # =================================================================
-        # Step 7b: Process vendor from extraction (checkpointed)
+        # Step 7b: Phase 2 Line Items Extraction (invoices)
+        # Same pattern as expense_claims - extracts line_items after core data saved
+        # =================================================================
+        def extract_invoices_phase2():
+            # Only run Phase 2 for invoices
+            if request.domain != "invoices":
+                return {"skipped": True, "reason": "not_invoices"}
+
+            if request.test_mode:
+                print(f"[{doc_id}] SKIPPING invoices Phase 2 (test_mode=True)")
+                return {"skipped": True, "reason": "test_mode"}
+
+            print(f"[{doc_id}] invoices Phase 2: Starting line items extraction")
+
+            # Mark lineItemsStatus as 'extracting' before starting
+            try:
+                convex.update_invoice_line_items_status(
+                    document_id=doc_id,
+                    line_items_status="extracting",
+                )
+                print(f"[{doc_id}] invoices Phase 2: Marked lineItemsStatus='extracting'")
+            except Exception as e:
+                print(f"[{doc_id}] Warning: Failed to update lineItemsStatus: {str(e)}")
+
+            # Run Phase 2 extraction (line items only)
+            phase2_result = extract_invoice_phase2_step(
+                document_id=doc_id,
+                images=converted_images,
+                storage_path=request.storage_path,
+                domain=request.domain,
+                s3=s3,
+            )
+
+            print(f"[{doc_id}] invoices Phase 2 complete: {len(phase2_result.get('line_items', []))} items in {phase2_result.get('processing_time_ms', 0)}ms")
+
+            # Update Convex with line_items and mark as 'complete'
+            if phase2_result.get("success"):
+                try:
+                    line_items = phase2_result.get("line_items", [])
+                    print(f"[{doc_id}] invoices Phase 2: Sending {len(line_items)} line_items to Convex")
+
+                    convex.update_invoice_line_items(
+                        document_id=doc_id,
+                        line_items=line_items,
+                        line_items_status="complete",
+                    )
+                    print(f"[{doc_id}] invoices Phase 2: Updated Convex (status='complete')")
+                except Exception as e:
+                    import traceback
+                    print(f"[{doc_id}] Warning: Failed to update line_items: {str(e)}")
+                    print(f"[{doc_id}] Phase 2 ERROR traceback: {traceback.format_exc()}")
+            else:
+                # Phase 2 failed - mark as skipped, don't fail the whole workflow
+                print(f"[{doc_id}] invoices Phase 2 failed: {phase2_result.get('error', 'unknown')}")
+                try:
+                    convex.update_invoice_line_items_status(
+                        document_id=doc_id,
+                        line_items_status="skipped",
+                    )
+                except Exception as e:
+                    print(f"[{doc_id}] Warning: Failed to mark lineItemsStatus as skipped: {str(e)}")
+
+            return phase2_result
+
+        context.step(lambda ctx: extract_invoices_phase2(), name="extract_invoices_phase2")
+
+        # =================================================================
+        # Step 7c: Process vendor from extraction (checkpointed)
         # Creates/upserts vendor and records price history observations
         # =================================================================
         def process_vendor():

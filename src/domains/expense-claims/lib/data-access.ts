@@ -388,7 +388,6 @@ export async function createExpenseClaim(
             businessId: employeeProfile.business_id,
             idempotencyKey: `expense-${claimId}-${Date.now()}`,
             expectedDocumentType: 'receipt',
-            fastMode: true, // Skip validation + use simplified extraction (5-8s vs 20s)
           })
 
           await convexClient.mutation(api.functions.expenseClaims.update, {

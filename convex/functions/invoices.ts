@@ -1289,6 +1289,95 @@ export const markStuckInvoicesFailed = mutation({
   },
 });
 
+// ============================================
+// TWO-PHASE EXTRACTION INTERNAL MUTATIONS
+// Phase 1: Core fields → immediate render
+// Phase 2: Line items → real-time update
+// ============================================
+
+/**
+ * Internal: Update invoice line items (Phase 2 of two-phase extraction)
+ * Called by system.updateInvoiceLineItems after Phase 1 completes
+ *
+ * Merges line_items into extractedData and updates lineItemsStatus
+ */
+export const internalUpdateLineItems = internalMutation({
+  args: {
+    id: v.string(),
+    lineItems: v.array(
+      v.object({
+        description: v.string(),
+        quantity: v.optional(v.number()),
+        unit_price: v.optional(v.number()),
+        line_total: v.number(),
+      })
+    ),
+    lineItemsStatus: v.union(
+      v.literal("pending"),
+      v.literal("extracting"),
+      v.literal("complete"),
+      v.literal("skipped")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await resolveById(ctx.db, "invoices", args.id);
+    if (!invoice) {
+      throw new Error(`Invoice not found: ${args.id}`);
+    }
+
+    const now = Date.now();
+
+    // Merge line_items into existing extractedData
+    const existingData = (invoice.extractedData as Record<string, unknown>) || {};
+    const updatedExtractedData = {
+      ...existingData,
+      line_items: args.lineItems,
+    };
+
+    await ctx.db.patch(invoice._id, {
+      extractedData: updatedExtractedData,
+      lineItemsStatus: args.lineItemsStatus,
+      updatedAt: now,
+    });
+
+    console.log(`[Convex Internal] Updated invoice ${args.id} with ${args.lineItems.length} line items (status: ${args.lineItemsStatus})`);
+    return invoice._id;
+  },
+});
+
+/**
+ * Internal: Update invoice lineItemsStatus only (for state transitions)
+ * Called by system.updateInvoiceLineItemsStatus
+ *
+ * Used to mark lineItemsStatus as 'extracting' before Phase 2 starts,
+ * or 'skipped' if line items extraction is not needed
+ */
+export const internalUpdateLineItemsStatus = internalMutation({
+  args: {
+    id: v.string(),
+    lineItemsStatus: v.union(
+      v.literal("pending"),
+      v.literal("extracting"),
+      v.literal("complete"),
+      v.literal("skipped")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await resolveById(ctx.db, "invoices", args.id);
+    if (!invoice) {
+      throw new Error(`Invoice not found: ${args.id}`);
+    }
+
+    await ctx.db.patch(invoice._id, {
+      lineItemsStatus: args.lineItemsStatus,
+      updatedAt: Date.now(),
+    });
+
+    console.log(`[Convex Internal] Updated invoice ${args.id} lineItemsStatus to: ${args.lineItemsStatus}`);
+    return invoice._id;
+  },
+});
+
 /**
  * Force-fail a single invoice/document (admin override)
  * Used by: POST /api/v1/system/monitor-stuck-records

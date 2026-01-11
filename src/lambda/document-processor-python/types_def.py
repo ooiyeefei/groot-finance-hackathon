@@ -181,7 +181,7 @@ class DocumentProcessingRequest:
     idempotency_key: str
     expected_document_type: Optional[str] = None  # 'invoice' | 'receipt'
     business_categories: Optional[List[BusinessCategory]] = None
-    fast_mode: bool = False  # Skip validation + use simplified extraction for speed
+    fast_mode: bool = False  # DEPRECATED: Two-phase extraction now handles speed (kept for backward compatibility)
     test_mode: bool = False  # If true, don't update Convex (for testing)
     skip_validation: bool = False  # Explicit validation skip (for testing)
 
