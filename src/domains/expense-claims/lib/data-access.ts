@@ -523,8 +523,15 @@ export async function listExpenseClaims(
 
     // Add summary for management dashboard
     if (params.approver === 'me' && (isAdmin || isManager)) {
+      // Pre-submission statuses to exclude from manager analytics
+      // These claims haven't entered the approval workflow yet
+      const preSubmissionStatuses = ['draft', 'uploading', 'processing', 'failed']
+      const submittedClaims = transformedClaims.filter(
+        (c: any) => !preSubmissionStatuses.includes(c.status)
+      )
+
       const summary = {
-        total_claims: totalCount,
+        total_claims: submittedClaims.length,
         pending_approval: transformedClaims.filter((c: any) => c.status === 'submitted').length,
         approved_amount: transformedClaims
           .filter((c: any) => c.status === 'approved' || c.status === 'reimbursed')
