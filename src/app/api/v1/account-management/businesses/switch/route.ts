@@ -12,7 +12,8 @@ import { createErrorResponse, createValidationErrorResponse, ERROR_CODES, withEr
 import { z } from 'zod'
 
 const SwitchBusinessSchema = z.object({
-  businessId: z.string().uuid('Invalid business ID format')
+  // Accept both Convex IDs (alphanumeric) and legacy UUIDs for backward compatibility
+  businessId: z.string().min(1, 'Business ID is required')
 })
 
 export const POST = withErrorSanitization(async (request: NextRequest) => {

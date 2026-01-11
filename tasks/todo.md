@@ -202,6 +202,41 @@ Added a `forceCreateNew` parameter to distinguish between:
 - [ ] Create second business from modal - should create NEW business, not override
 - [ ] Business switcher should show both businesses
 
+## Second Fix (2026-01-10) - Membership But No Business Row Bug
+
+### Problem
+After the first fix, the bug persisted. Creating a second business from the modal:
+- Created membership records correctly
+- BUT did NOT create new row in `businesses` table
+- User had 2 owner memberships pointing to 1 business + 1 non-existent business
+
+### Root Cause
+The condition `user.businessId && !args.forceCreateNew` was correct, but the code structure was confusing. The execution path for `forceCreateNew === true` wasn't explicit.
+
+### Fix Applied (commit ffb64f74)
+Restructured logic to be explicit about `forceCreateNew === true`:
+
+```typescript
+// NOW: Check forceCreateNew FIRST, explicitly
+if (args.forceCreateNew === true) {
+  console.log(`*** FORCE CREATE NEW MODE ***`);
+  // Fall through to Step 3
+} else if (user.businessId) {
+  // Only check onboarding for non-force-create case
+}
+// Step 3: Create NEW business row
+```
+
+### Key Changes
+1. Explicit `args.forceCreateNew === true` check as FIRST condition
+2. Added detailed logging at Steps 3, 4, 5 with emojis
+3. Clear documentation of when each step runs
+
+### Verification
+- [x] Build passes
+- [x] Changes pushed to main (commit ffb64f74)
+- [ ] Manual test: Create second business from modal
+
 ---
 
 # Dashboard Currency Display Fix (2026-01-10)
