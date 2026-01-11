@@ -29,6 +29,117 @@ ERROR_CODES = {
 
 
 # =============================================================================
+# User-Friendly Error Messages
+# =============================================================================
+
+# Map error codes to user-friendly messages
+USER_FRIENDLY_MESSAGES = {
+    "INVALID_INPUT": "The document could not be processed. Please ensure you've uploaded a valid file.",
+    "DOCUMENT_NOT_FOUND": "The document was not found. Please try uploading again.",
+    "PDF_CONVERSION_FAILED": "We couldn't convert this PDF. Please try a different file or ensure it's not password-protected.",
+    "VALIDATION_FAILED": "This doesn't appear to be a valid invoice or receipt. Please upload a clear image of your document.",
+    "UNSUPPORTED_DOCUMENT": "This document type is not supported. Please upload an invoice or receipt.",
+    "EXTRACTION_FAILED": "We couldn't extract data from this document. Please try uploading a clearer image.",
+    "CONVEX_UPDATE_FAILED": "We processed your document but couldn't save the results. Please try again.",
+    "WORKFLOW_FAILED": "Something went wrong while processing your document. Please try again.",
+    "S3_ERROR": "There was an issue accessing the document. Please try uploading again.",
+    "TIMEOUT": "Processing took too long. Please try uploading a simpler document or a clearer image.",
+}
+
+# Technical error patterns mapped to user-friendly messages
+# These patterns are matched against the technical error message
+TECHNICAL_ERROR_PATTERNS = [
+    # DSPy/Threading errors
+    ("dspy.settings can only be changed by the thread",
+     "We encountered a temporary issue. Please try again in a moment."),
+    ("thread",
+     "We encountered a temporary issue. Please try again."),
+
+    # API/Network errors
+    ("GEMINI_API_KEY",
+     "The AI service is temporarily unavailable. Please try again later."),
+    ("api_key",
+     "The AI service is temporarily unavailable. Please try again later."),
+    ("rate limit",
+     "Our AI service is busy. Please wait a moment and try again."),
+    ("quota exceeded",
+     "Service capacity reached. Please try again in a few minutes."),
+    ("timeout",
+     "Processing took too long. Please try a clearer or simpler document."),
+    ("connection",
+     "Network issue occurred. Please check your connection and try again."),
+
+    # Document/Image errors
+    ("image",
+     "There was an issue reading your image. Please upload a clearer photo."),
+    ("pdf",
+     "There was an issue with this PDF. Please ensure it's not corrupted or password-protected."),
+    ("corrupt",
+     "The file appears to be damaged. Please try uploading a different copy."),
+    ("empty",
+     "The document appears to be empty. Please upload a document with content."),
+
+    # Extraction errors
+    ("extract",
+     "We couldn't read all the information from this document. Please try a clearer image."),
+    ("parse",
+     "We had trouble understanding this document format. Please upload a standard invoice or receipt."),
+
+    # S3/Storage errors
+    ("s3",
+     "File storage issue. Please try uploading again."),
+    ("presigned",
+     "File access issue. Please try uploading again."),
+
+    # Generic fallbacks
+    ("failed",
+     "Processing failed. Please try again with a clearer image."),
+    ("error",
+     "An unexpected issue occurred. Please try again."),
+]
+
+
+def get_user_friendly_error(error_code: str, technical_error: str = "") -> str:
+    """
+    Convert a technical error into a user-friendly message.
+
+    Args:
+        error_code: The error code (from ERROR_CODES)
+        technical_error: The raw technical error message (for pattern matching)
+
+    Returns:
+        A user-friendly error message suitable for display in the UI
+    """
+    # First, try to match technical error patterns
+    if technical_error:
+        technical_lower = technical_error.lower()
+        for pattern, friendly_msg in TECHNICAL_ERROR_PATTERNS:
+            if pattern.lower() in technical_lower:
+                return friendly_msg
+
+    # Fall back to error code message
+    if error_code in USER_FRIENDLY_MESSAGES:
+        return USER_FRIENDLY_MESSAGES[error_code]
+
+    # Ultimate fallback
+    return "We couldn't process this document. Please try again or contact support if the issue persists."
+
+
+def format_error_for_logging(error_code: str, technical_error: str) -> str:
+    """
+    Format error for logging (includes technical details).
+
+    Args:
+        error_code: The error code
+        technical_error: The raw technical error message
+
+    Returns:
+        Formatted string for logging
+    """
+    return f"[{error_code}] {technical_error}"
+
+
+# =============================================================================
 # Business Category
 # =============================================================================
 

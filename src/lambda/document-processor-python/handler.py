@@ -47,6 +47,8 @@ from types_def import (
     ERROR_CODES,
     BusinessCategory,
     ConvertedImageInfo,
+    get_user_friendly_error,
+    format_error_for_logging,
 )
 
 # Initialize Sentry
@@ -335,18 +337,26 @@ def handler(event: dict, context: DurableContext):
 
         # Check extraction success
         if not extraction_result.get("success", True):
-            error_msg = extraction_result.get("error", "Extraction failed")
-            print(f"[{doc_id}] Extraction failed: {error_msg}")
+            technical_error = extraction_result.get("error", "Extraction failed")
+            error_code = ERROR_CODES["EXTRACTION_FAILED"]
+
+            # Log technical details for debugging
+            print(f"[{doc_id}] {format_error_for_logging(error_code, technical_error)}")
+
+            # Get user-friendly message for frontend display
+            user_friendly_msg = get_user_friendly_error(error_code, technical_error)
+
             convex.mark_as_failed(
                 document_id=doc_id,
                 domain=request.domain,
-                error_code=ERROR_CODES["EXTRACTION_FAILED"],
-                error_message=error_msg,
+                error_code=error_code,
+                error_message=user_friendly_msg,  # User sees this
             )
             return {
                 "success": False,
-                "error_code": ERROR_CODES["EXTRACTION_FAILED"],
-                "error_message": error_msg,
+                "error_code": error_code,
+                "error_message": user_friendly_msg,
+                "technical_error": technical_error,  # For debugging only
             }
 
         # =================================================================
@@ -451,28 +461,35 @@ def handler(event: dict, context: DurableContext):
         }
 
     except Exception as e:
-        error_msg = f"Workflow failed: {str(e)}"
+        technical_error = f"Workflow failed: {str(e)}"
         error_traceback = traceback.format_exc()
-        print(f"[{doc_id}] {error_msg}")
+        error_code = ERROR_CODES["WORKFLOW_FAILED"]
+
+        # Log technical details for debugging (visible in CloudWatch)
+        print(f"[{doc_id}] {format_error_for_logging(error_code, technical_error)}")
         print(f"[{doc_id}] Traceback: {error_traceback}")
 
-        # Report to Sentry
+        # Report to Sentry with full technical details
         sentry_sdk.capture_exception(e)
 
-        # Update Convex with failure
+        # Get user-friendly message for frontend display
+        user_friendly_msg = get_user_friendly_error(error_code, str(e))
+
+        # Update Convex with user-friendly message
         try:
             convex.mark_as_failed(
                 document_id=doc_id,
                 domain=request.domain,
-                error_code=ERROR_CODES["WORKFLOW_FAILED"],
-                error_message=error_msg,
+                error_code=error_code,
+                error_message=user_friendly_msg,  # User sees this
             )
         except Exception as convex_error:
             print(f"[{doc_id}] Failed to update Convex with error: {convex_error}")
 
         return {
             "success": False,
-            "error_code": ERROR_CODES["WORKFLOW_FAILED"],
-            "error_message": error_msg,
-            "traceback": error_traceback,
+            "error_code": error_code,
+            "error_message": user_friendly_msg,
+            "technical_error": technical_error,  # For debugging only
+            "traceback": error_traceback,  # For debugging only
         }

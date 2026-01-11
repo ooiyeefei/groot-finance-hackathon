@@ -24,7 +24,7 @@ from PIL import Image
 from utils.s3_client import S3Client, ConvertedImageInfo
 from steps.convert_pdf import get_image_from_s3
 from steps.dspy_config import ensure_dspy_configured, get_lm
-from types_def import BusinessCategory
+from types_def import BusinessCategory, get_user_friendly_error, ERROR_CODES
 
 
 # =============================================================================
@@ -710,21 +710,30 @@ def extract_invoice_step(
 
     except Exception as e:
         import traceback
-        error_msg = f"Invoice extraction failed: {str(e)}"
-        print(f"[{document_id}] {error_msg}")
+        technical_error = f"Invoice extraction failed: {str(e)}"
+
+        # Log technical details for debugging (visible in CloudWatch)
+        print(f"[{document_id}] {technical_error}")
         print(f"[{document_id}] Traceback: {traceback.format_exc()}")
 
         # Calculate processing time even for failures
         processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 
+        # Get user-friendly message for frontend display
+        user_friendly_msg = get_user_friendly_error(
+            ERROR_CODES["EXTRACTION_FAILED"],
+            str(e)
+        )
+
         return {
             "success": False,
-            "error": error_msg,
+            "error": technical_error,  # Kept for debugging/logging
+            "error_message": user_friendly_msg,  # For frontend display
             "backend_used": "dspy_gemini_failed",
             "processing_time_ms": processing_time_ms,
             "tokens_used": token_data,  # Include if API was called before failure
             # User-friendly error for UX
-            "user_message": "We couldn't process this invoice. Please try again or upload a clearer image.",
+            "user_message": user_friendly_msg,
             "suggestions": [
                 "Ensure the invoice is well-lit and in focus",
                 "Make sure all text is readable",
