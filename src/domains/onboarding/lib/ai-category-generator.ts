@@ -58,12 +58,26 @@ export interface CategoryMetadata {
 }
 
 /**
- * Generate a unique category ID
- * Format: exp_{timestamp}_{random} for expenses, cogs_{timestamp}_{random} for COGS
- * This matches the ID format used in businesses.ts createExpenseCategory/createCogsCategory
+ * Slugify category name for use in ID
+ * Converts "Travel & Entertainment" → "travel_and_entertainment"
  */
-function generateCategoryId(prefix: 'exp' | 'cogs'): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+function slugifyName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')  // trim leading/trailing underscores
+}
+
+/**
+ * Generate a unique category ID
+ * Format: {category_slug}_{6_random_chars}
+ * Examples: travel_and_entertainment_h82g3f, office_supplies_x9d4k2
+ */
+function generateCategoryId(categoryName: string): string {
+  const slug = slugifyName(categoryName)
+  const random = Math.random().toString(36).substring(2, 8)  // 6 chars
+  return `${slug}_${random}`
 }
 
 /**
@@ -74,14 +88,12 @@ function generateCategoryId(prefix: 'exp' | 'cogs'): string {
  * @returns Array of basic category metadata without AI enhancements
  */
 function generateFallbackMetadata(
-  categoryNames: string[],
-  categoryType: 'cogs' | 'expense'
+  categoryNames: string[]
 ): CategoryMetadata[] {
   console.log(`[AI-CategoryGenerator] Generating fallback metadata for ${categoryNames.length} categories`)
-  const prefix = categoryType === 'cogs' ? 'cogs' : 'exp'
 
   return categoryNames.map((name, index) => ({
-    id: generateCategoryId(prefix),
+    id: generateCategoryId(name),
     category_name: name,
     description: `${name} category`,
     vendor_patterns: [],
@@ -155,13 +167,11 @@ IMPORTANT: Return ONLY the JSON array, no other text.`
  *
  * @param content - Raw response content from Gemini
  * @param categoryNames - Original category names for validation
- * @param categoryType - Type of category (cogs or expense)
  * @returns Parsed category metadata array or null if invalid
  */
 function parseGeminiResponse(
   content: string,
-  categoryNames: string[],
-  categoryType: 'cogs' | 'expense'
+  categoryNames: string[]
 ): CategoryMetadata[] | null {
   try {
     // Remove markdown code blocks if present
@@ -196,7 +206,6 @@ function parseGeminiResponse(
 
     // Add generated fields and ensure all categories are present
     const result: CategoryMetadata[] = []
-    const prefix = categoryType === 'cogs' ? 'cogs' : 'exp'
 
     for (let i = 0; i < categoryNames.length; i++) {
       const name = categoryNames[i]
@@ -204,7 +213,7 @@ function parseGeminiResponse(
 
       if (aiData) {
         result.push({
-          id: generateCategoryId(prefix),
+          id: generateCategoryId(name),
           category_name: name,
           description: aiData.description,
           vendor_patterns: aiData.vendor_patterns || [],
@@ -216,7 +225,7 @@ function parseGeminiResponse(
         // AI didn't return data for this category, use fallback
         console.warn(`[AI-CategoryGenerator] Missing AI data for category: ${name}`)
         result.push({
-          id: generateCategoryId(prefix),
+          id: generateCategoryId(name),
           category_name: name,
           description: `${name} category`,
           vendor_patterns: [],
@@ -309,16 +318,16 @@ export async function generateCategoryMetadata(
     if (!response.success || !response.content) {
       console.error(`[AI-CategoryGenerator] Gemini API error:`, response.error)
       console.warn(`[AI-CategoryGenerator] Falling back to basic metadata`)
-      return generateFallbackMetadata(categoryNames, categoryType)
+      return generateFallbackMetadata(categoryNames)
     }
 
     // Parse and validate response
-    const metadata = parseGeminiResponse(response.content, categoryNames, categoryType)
+    const metadata = parseGeminiResponse(response.content, categoryNames)
 
     if (!metadata) {
       console.warn(`[AI-CategoryGenerator] Failed to parse Gemini response, using fallback`)
       console.log(`[AI-CategoryGenerator] Raw response:`, response.content)
-      return generateFallbackMetadata(categoryNames, categoryType)
+      return generateFallbackMetadata(categoryNames)
     }
 
     console.log(`[AI-CategoryGenerator] ✅ Successfully generated metadata for ${metadata.length} categories in ${elapsed}ms`)
@@ -334,6 +343,6 @@ export async function generateCategoryMetadata(
     const elapsed = Date.now() - startTime
     console.error(`[AI-CategoryGenerator] Unexpected error after ${elapsed}ms:`, error)
     console.warn(`[AI-CategoryGenerator] Falling back to basic metadata`)
-    return generateFallbackMetadata(categoryNames, categoryType)
+    return generateFallbackMetadata(categoryNames)
   }
 }

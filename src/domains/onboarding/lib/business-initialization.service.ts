@@ -112,9 +112,13 @@ async function generateBusinessCategories(
     const cogsCategoryNames = [...getSuggestedCategories(businessType, 'cogs')];
     const expenseCategoryNames = [...getSuggestedCategories(businessType, 'expense')];
 
+    // Helper to generate readable category IDs: category_slug_6random
+    const slugify = (name: string) => name.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+    const genId = (name: string) => `${slugify(name)}_${Math.random().toString(36).substring(2, 8)}`
+
     return {
       cogsCategories: cogsCategoryNames.map((name, index) => ({
-        id: `cogs_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        id: genId(name),
         category_name: name,
         description: `${name} category`,
         vendor_patterns: [],
@@ -123,7 +127,7 @@ async function generateBusinessCategories(
         sort_order: index + 1
       })),
       expenseCategories: expenseCategoryNames.map((name, index) => ({
-        id: `exp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        id: genId(name),
         category_name: name,
         description: `${name} category`,
         vendor_patterns: [],
