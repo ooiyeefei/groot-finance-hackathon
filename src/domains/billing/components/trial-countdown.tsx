@@ -67,11 +67,11 @@ export function TrialCountdown({
     return 'text-foreground'
   }
 
-  // Compact mode for sidebar - blue gradient themed box
+  // Compact mode for collapsed sidebar - icon only with progress
   if (compact) {
     return (
       <div className={cn(
-        'p-2 rounded-lg space-y-1.5',
+        'p-2 rounded-lg flex flex-col items-center gap-1.5',
         isExpired || isUrgent
           ? 'bg-gradient-to-r from-red-500/20 to-red-600/10'
           : isWarning
@@ -79,51 +79,25 @@ export function TrialCountdown({
             : 'bg-gradient-to-r from-blue-500/20 to-indigo-500/10',
         className
       )}>
-        <div className="flex items-center justify-between text-xs">
-          <span className={cn(
-            'flex items-center gap-1 font-medium',
+        <Clock className={cn(
+          'w-4 h-4',
+          isExpired || isUrgent
+            ? 'text-red-600 dark:text-red-400'
+            : isWarning
+              ? 'text-yellow-600 dark:text-yellow-400'
+              : 'text-blue-600 dark:text-blue-400'
+        )} />
+        <Progress
+          value={progressPercentage}
+          className={cn(
+            'h-1 w-full',
             isExpired || isUrgent
-              ? 'text-red-600 dark:text-red-400'
+              ? '[&>div]:bg-red-500'
               : isWarning
-                ? 'text-yellow-600 dark:text-yellow-400'
-                : 'text-blue-600 dark:text-blue-400'
-          )}>
-            <Clock className="w-3 h-3" />
-            Trial
-          </span>
-          <span className={cn(
-            'font-semibold',
-            isExpired || isUrgent
-              ? 'text-red-600 dark:text-red-400'
-              : isWarning
-                ? 'text-yellow-600 dark:text-yellow-400'
-                : 'text-blue-600 dark:text-blue-400'
-          )}>
-            {isExpired ? 'Expired' : `${daysRemaining}d`}
-          </span>
-        </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="cursor-pointer">
-                <Progress
-                  value={progressPercentage}
-                  className={cn(
-                    'h-1',
-                    isExpired || isUrgent
-                      ? '[&>div]:bg-red-500'
-                      : isWarning
-                        ? '[&>div]:bg-yellow-500'
-                        : '[&>div]:bg-blue-500'
-                  )}
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="font-medium">Day {daysUsed}/{TRIAL_DURATION_DAYS}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+                ? '[&>div]:bg-yellow-500'
+                : '[&>div]:bg-blue-500'
+          )}
+        />
       </div>
     )
   }
