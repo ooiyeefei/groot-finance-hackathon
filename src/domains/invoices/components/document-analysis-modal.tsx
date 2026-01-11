@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Languages, Eye, FileText, DollarSign, List, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -227,6 +227,42 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
     text: string
   } | null>(null)
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  // Refs for scroll-based page tracking
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  // Scroll handler to detect current visible page
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current || pageRefs.current.length === 0) return
+
+    const container = scrollContainerRef.current
+    const containerTop = container.scrollTop
+    const containerHeight = container.clientHeight
+    const containerCenter = containerTop + containerHeight / 2
+
+    // Find which page is most visible (closest to center)
+    let closestPage = 1
+    let closestDistance = Infinity
+
+    pageRefs.current.forEach((pageRef, index) => {
+      if (!pageRef) return
+      const pageTop = pageRef.offsetTop
+      const pageHeight = pageRef.offsetHeight
+      const pageCenter = pageTop + pageHeight / 2
+      const distance = Math.abs(containerCenter - pageCenter)
+
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestPage = index + 1
+      }
+    })
+
+    if (closestPage !== currentPage) {
+      setCurrentPage(closestPage)
+    }
+  }, [currentPage])
 
   // Function to fetch all pages
   const fetchAllPages = async () => {
@@ -821,32 +857,50 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 )}
               </div>
 
-              {/* Scrollable Document Preview - All Pages */}
-              <div className="mb-6 space-y-4" style={{ maxHeight: '55vh', overflowY: 'auto' }}>
-                {pageImageUrls.length > 0 ? (
-                  pageImageUrls.map((imageUrl, index) => (
-                    <div key={index} className="relative">
-                      {totalPages > 1 && (
-                        <div className="absolute top-2 left-2 z-10 bg-background/80 text-foreground text-xs px-2 py-1 rounded">
-                          Page {index + 1}
-                        </div>
-                      )}
-                      <DocumentPreviewWithAnnotations
-                        imageUrl={imageUrl}
-                        fileName={document.file_name}
-                        fileType={document.file_type}
-                        fileSize={document.file_size}
-                        boundingBoxes={index === 0 ? getFilteredBoundingBoxes() : []}
-                        onBoxHover={index === 0 ? setHighlightedBox : undefined}
-                        onBoxClick={index === 0 ? () => {} : undefined}
-                      />
+              {/* Scrollable Document Preview - Single Canvas with Continuous Scroll */}
+              <div className="mb-6 relative">
+                {/* Floating Page Indicator (Adobe-style) */}
+                {totalPages > 1 && pageImageUrls.length > 0 && (
+                  <div className="sticky top-0 z-20 flex justify-center pointer-events-none">
+                    <div className="bg-background/90 backdrop-blur-sm text-foreground text-xs px-3 py-1.5 rounded-full shadow-md border border-border pointer-events-auto">
+                      Page {currentPage} of {totalPages}
                     </div>
-                  ))
-                ) : (
-                  <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    {isLoadingPages ? 'Loading document...' : 'No preview available'}
                   </div>
                 )}
+
+                {/* Single Scrollable Container */}
+                <div
+                  ref={scrollContainerRef}
+                  onScroll={handleScroll}
+                  className="overflow-y-auto bg-muted/30 rounded-lg"
+                  style={{ maxHeight: '55vh' }}
+                >
+                  {pageImageUrls.length > 0 ? (
+                    <div className="space-y-1">
+                      {pageImageUrls.map((imageUrl, index) => (
+                        <div
+                          key={index}
+                          ref={(el) => { pageRefs.current[index] = el }}
+                          className="relative"
+                        >
+                          <DocumentPreviewWithAnnotations
+                            imageUrl={imageUrl}
+                            fileName={document.file_name}
+                            fileType={document.file_type}
+                            fileSize={document.file_size}
+                            boundingBoxes={index === 0 ? getFilteredBoundingBoxes() : []}
+                            onBoxHover={index === 0 ? setHighlightedBox : undefined}
+                            onBoxClick={index === 0 ? () => {} : undefined}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="h-64 flex items-center justify-center text-muted-foreground">
+                      {isLoadingPages ? 'Loading document...' : 'No preview available'}
+                    </div>
+                  )}
+                </div>
               </div>
 
             {/* Translation Feature */}
