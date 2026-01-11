@@ -191,8 +191,8 @@ export async function GET(request: NextRequest) {
           employeeNames.add(claim.employee.fullName)
         }
 
-        // Calculate amount
-        const claimAmount = claim.homeCurrencyAmount ?? claim.totalAmount ?? 0
+        // Calculate amount (use || to handle homeCurrencyAmount: 0 case)
+        const claimAmount = claim.homeCurrencyAmount || claim.totalAmount || 0
         totalAmount += claimAmount
 
         // Count by status

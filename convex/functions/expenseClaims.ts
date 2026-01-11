@@ -431,7 +431,8 @@ export const getAnalytics = query({
       }
 
       // Amount totals (use home currency amount if available)
-      const amount = claim.homeCurrencyAmount ?? claim.totalAmount ?? 0;
+      // Use || to handle homeCurrencyAmount: 0 case (falls back to totalAmount)
+      const amount = claim.homeCurrencyAmount || claim.totalAmount || 0;
       totalAmount += amount;
 
       if (claim.status === "approved" || claim.status === "reimbursed") {
@@ -1192,8 +1193,8 @@ export const getReportData = query({
 
       categoryGroups[category].claims.push(claim);
 
-      // Use home currency amount if available
-      const amount = claim.homeCurrencyAmount ?? claim.totalAmount ?? 0;
+      // Use || to handle homeCurrencyAmount: 0 case (falls back to totalAmount)
+      const amount = claim.homeCurrencyAmount || claim.totalAmount || 0;
       categoryGroups[category].totalAmount += amount;
 
       // Track status counts
@@ -1229,7 +1230,9 @@ export const getReportData = query({
  * Get formatted report data with detailed claims for PDF generation
  * Used by: /api/v1/expense-claims/reports/formatted/route.ts
  *
- * Filters by transactionDate (when expense occurred) instead of submittedAt
+ * Filters by approvedAt timestamp (when expense was approved/reimbursed)
+ * This is appropriate for expense claim reporting where you want to see
+ * "what was reimbursed in a given month" rather than "what expenses occurred"
  */
 export const getFormattedReportData = query({
   args: {
@@ -1268,34 +1271,57 @@ export const getFormattedReportData = query({
     const isAdmin = role === "owner" || role === "admin";
     const isManager = role === "manager";
 
-    // Parse month to date range
+    // Parse month to Unix timestamp range for filtering by approvedAt
     const [year, monthNum] = args.month.split("-").map(Number);
-    const startDate = new Date(year, monthNum - 1, 1);
-    const endDate = new Date(year, monthNum, 1);
-    const startDateStr = startDate.toISOString().split("T")[0];
-    const endDateStr = endDate.toISOString().split("T")[0];
+    // Create start timestamp (first day of month at 00:00:00 UTC)
+    const startTimestamp = new Date(Date.UTC(year, monthNum - 1, 1, 0, 0, 0)).getTime();
+    // Create end timestamp (first day of next month at 00:00:00 UTC)
+    const endTimestamp = new Date(Date.UTC(year, monthNum, 1, 0, 0, 0)).getTime();
 
-    // Get claims and filter by transactionDate
+    // Get claims and filter by approvedAt timestamp
     let claims = await ctx.db
       .query("expense_claims")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
       .collect();
 
+    // Debug: Log date range and claims before filtering
+    console.log(`[Report Debug] Timestamp range: ${startTimestamp} to ${endTimestamp} (${new Date(startTimestamp).toISOString()} to ${new Date(endTimestamp).toISOString()})`);
+    console.log(`[Report Debug] Total claims in business before date filter: ${claims.length}`);
+    console.log(`[Report Debug] Claims approvedAt: ${claims.map(c => c.approvedAt ? new Date(c.approvedAt).toISOString() : 'NULL').join(', ')}`);
+
+    // Filter by approvedAt timestamp - only include approved/reimbursed claims
     claims = claims.filter((claim) => {
-      if (!claim.transactionDate) return false;
-      return claim.transactionDate >= startDateStr && claim.transactionDate < endDateStr;
+      // Must be approved or reimbursed to appear in reports
+      if (!["approved", "reimbursed"].includes(claim.status)) return false;
+      // Must have approvedAt timestamp
+      if (!claim.approvedAt) return false;
+      // Check if approvedAt falls within the month range
+      return claim.approvedAt >= startTimestamp && claim.approvedAt < endTimestamp;
     });
 
+    console.log(`[Report Debug] Claims after date filter: ${claims.length}`);
+
     claims = claims.filter((claim) => !claim.deletedAt);
+    console.log(`[Report Debug] Claims after deletedAt filter: ${claims.length}`);
 
     // Apply RBAC filtering
     if (args.employeeId) {
       if (!isAdmin && !isManager) {
         return { error: "Only managers and admins can filter by employee ID" };
       }
+      console.log(`[Report Debug] employeeId received: ${args.employeeId}`);
+      console.log(`[Report Debug] Claims before employee filter: ${claims.length}`);
+      console.log(`[Report Debug] Claim userIds: ${claims.map(c => c.userId).join(', ')}`);
+
       const filterUser = await resolveById(ctx.db, "users", args.employeeId);
+      console.log(`[Report Debug] resolveById result: ${filterUser ? filterUser._id : 'null'}`);
+
       if (filterUser) {
+        console.log(`[Report Debug] Filtering by userId: ${filterUser._id}`);
         claims = claims.filter((claim) => claim.userId === filterUser._id);
+        console.log(`[Report Debug] Claims after employee filter: ${claims.length}`);
+      } else {
+        console.log(`[Report Debug] WARNING: filterUser is null, no filter applied`);
       }
     } else {
       if (isAdmin) {
@@ -1374,7 +1400,8 @@ export const getFormattedReportData = query({
       }
 
       categorySections[categoryId].claims.push(claim);
-      const amount = claim.homeCurrencyAmount ?? claim.totalAmount ?? 0;
+      // Use || to handle homeCurrencyAmount: 0 case (falls back to totalAmount)
+      const amount = claim.homeCurrencyAmount || claim.totalAmount || 0;
       categorySections[categoryId].totalAmount += amount;
     }
 
