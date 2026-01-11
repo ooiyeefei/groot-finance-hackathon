@@ -416,9 +416,19 @@ export const getAnalytics = query({
     let pendingAmount = 0;
     const categoryTotals: Record<string, number> = {};
 
+    // Pre-submission statuses that should be excluded from manager analytics
+    // These are claims that haven't entered the approval workflow yet
+    const preSubmissionStatuses = ["draft", "uploading", "processing", "failed"];
+
     for (const claim of claims) {
-      // Status counts
+      // Status counts (include all for visibility)
       statusCounts[claim.status] = (statusCounts[claim.status] || 0) + 1;
+
+      // Skip pre-submission claims for amount/category analytics
+      // Manager analytics should only reflect submitted claims onwards
+      if (preSubmissionStatuses.includes(claim.status)) {
+        continue;
+      }
 
       // Amount totals (use home currency amount if available)
       const amount = claim.homeCurrencyAmount ?? claim.totalAmount ?? 0;
@@ -438,14 +448,20 @@ export const getAnalytics = query({
       }
     }
 
+    // Count only claims in the approval workflow (excludes drafts/pre-submission)
+    const submittedClaims = claims.filter(
+      (c) => !preSubmissionStatuses.includes(c.status)
+    );
+
     return {
-      totalClaims: claims.length,
+      totalClaims: submittedClaims.length,
       statusCounts,
       totalAmount,
       approvedAmount,
       pendingAmount,
       categoryTotals,
-      averageAmount: claims.length > 0 ? totalAmount / claims.length : 0,
+      averageAmount:
+        submittedClaims.length > 0 ? totalAmount / submittedClaims.length : 0,
     };
   },
 });
