@@ -269,73 +269,24 @@ def handler(event: dict, context: DurableContext):
         context.step(lambda ctx: update_converted_image(), name="update_converted_image")
 
         # =================================================================
-        # Step 4: Validate document (checkpointed) - SKIP for expense_claims or fast_mode
+        # Step 4: Validate document - ALWAYS SKIP (domain-based routing)
         # =================================================================
-        # Skip validation for expense_claims (we know it's a receipt) or when fast_mode is enabled
-        # This saves ~3-4 seconds per document
-        skip_validation = request.domain == "expense_claims" or request.fast_mode
-
-        if skip_validation:
-            print(f"[{doc_id}] SKIPPING validation (domain={request.domain}, fast_mode={request.fast_mode})")
-            validation_result = {
-                "is_supported": True,
-                "document_type": "receipt" if request.domain == "expense_claims" else "invoice",
-                "confidence": 1.0,
-                "reasoning": "Validation skipped - domain-based routing",
-                "skipped": True,
-            }
-        else:
-            def validate_document():
-                print(f"[{doc_id}] Step: Document Validation")
-
-                result = validate_document_step(
-                    document_id=doc_id,
-                    images=converted_images,  # Use converted ConvertedImageInfo objects
-                    storage_path=request.storage_path,
-                    domain=request.domain,
-                    expected_type=request.expected_document_type,
-                    s3=s3,
-                )
-                print(f"[{doc_id}] Validation result: {result.get('document_type')} (confidence: {result.get('confidence', 0):.2f})")
-                return result
-
-            validation_result = context.step(lambda ctx: validate_document(), name="validate_document")
-
-            # Check if document is supported
-            if not validation_result.get("is_supported", True):
-                print(f"[{doc_id}] Document not supported: {validation_result.get('reason')}")
-                convex.mark_as_failed(
-                    document_id=doc_id,
-                    domain=request.domain,
-                    error_code=ERROR_CODES["UNSUPPORTED_DOCUMENT"],
-                    error_message=validation_result.get("reason", "Document type not supported"),
-                )
-                return {
-                    "success": False,
-                    "error_code": ERROR_CODES["UNSUPPORTED_DOCUMENT"],
-                    "error_message": validation_result.get("reason"),
-                    "validation_result": validation_result,
-                }
+        # Skip validation for ALL domains - the upload context (which page user is on)
+        # is more reliable than LLM classification. Saves ~4 seconds per document.
+        # - invoices domain → document is an invoice
+        # - expense_claims domain → document is a receipt
+        print(f"[{doc_id}] SKIPPING validation (domain-based routing: {request.domain})")
+        validation_result = {
+            "is_supported": True,
+            "document_type": "receipt" if request.domain == "expense_claims" else "invoice",
+            "confidence": 1.0,
+            "reasoning": "Validation skipped - domain-based routing",
+            "skipped": True,
+        }
 
         # =================================================================
-        # Step 5: Update status to extracting (checkpointed)
-        # =================================================================
-        def update_status_extracting():
-            if request.test_mode:
-                print(f"[{doc_id}] SKIPPING status update to extracting (test_mode=True)")
-                return True
-            print(f"[{doc_id}] Updating status to extracting")
-            convex.update_status(
-                document_id=doc_id,
-                domain=request.domain,
-                status="extracting",
-            )
-            return True
-
-        context.step(lambda ctx: update_status_extracting(), name="update_status_extracting")
-
-        # =================================================================
-        # Step 6: Extract data (checkpointed - most expensive step)
+        # Step 5: Extract data (checkpointed - most expensive step)
+        # Note: "extracting" status update removed to save ~1s (processing → done)
         # =================================================================
         def extract_data():
             print(f"[{doc_id}] Step: Data Extraction (fast_mode={request.fast_mode})")

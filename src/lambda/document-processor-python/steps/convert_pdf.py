@@ -20,7 +20,7 @@ def convert_pdf_step(
     storage_path: str,
     domain: str,
     s3: S3Client,
-    dpi: int = 200,
+    dpi: int = 150,
     max_pages: int = 10,
 ) -> Dict[str, Any]:
     """
@@ -31,7 +31,7 @@ def convert_pdf_step(
         storage_path: S3 path to PDF (without domain prefix)
         domain: 'invoices' or 'expense_claims'
         s3: S3 client instance
-        dpi: DPI for image conversion (default 200 for OCR balance)
+        dpi: DPI for image conversion (default 150 - good balance of quality vs speed)
         max_pages: Maximum pages to convert
 
     Returns:
