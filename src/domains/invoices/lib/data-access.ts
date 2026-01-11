@@ -1,6 +1,6 @@
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { auth } from '@clerk/nextjs/server'
-import { randomUUID } from 'crypto'
+// Removed: randomUUID - now using Convex ID for storage paths
 import { invokeDocumentProcessor } from '@/lib/lambda-invoker'
 import { generateStoragePath, type DocumentType } from '@/lib/storage-paths'
 import {
@@ -183,6 +183,7 @@ export interface CreateInvoiceRequest {
 
 export interface UpdateDocumentRequest {
   status?: 'pending' | 'uploading' | 'analyzing' | 'paid' | 'overdue' | 'disputed' | 'failed' | 'cancelled' | 'classifying' | 'classification_failed' | 'extracting' | 'processing' | 'completed'
+  storage_path?: string  // Storage path in S3 (without domain prefix)
   extracted_data?: unknown
   error_message?: ErrorDetails | null
   confidence_score?: number
@@ -393,9 +394,14 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
  * Create a new invoice with file upload
  * Database: Convex, Storage: AWS S3 (hybrid approach)
  *
- * IMPORTANT: Uses Convex user ID (not Clerk ID) for storage path.
- * This ensures all downstream processing (Lambda, converted images)
- * uses consistent user IDs throughout the pipeline.
+ * Flow:
+ * 1. Validate file
+ * 2. Create Convex record (status: 'uploading')
+ * 3. Generate storage path using Convex ID
+ * 4. Upload file to S3
+ * 5. Update Convex record with storagePath (status: 'pending')
+ *
+ * Pattern: {bucket}/invoices/{businessId}/{userId}/{convexId}/raw/{convexId}.{ext}
  */
 export async function createInvoice({ file, businessId }: CreateInvoiceRequest): Promise<Invoice> {
   const { client } = await getAuthenticatedConvex()
@@ -409,7 +415,6 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
   }
 
   // Get the current user's Convex ID (not Clerk ID!)
-  // This ensures storage paths use the same user ID as all database records
   const currentUser = await client.query(api.functions.users.getCurrentUser, {})
   if (!currentUser) {
     throw new Error('User not found in database')
@@ -428,35 +433,34 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
     throw new Error(fileContentValidation.error!)
   }
 
-  // Generate storage path using Convex user ID
-  const invoiceId = randomUUID()
-  const fileExtension = file.name.split('.').pop() || 'unknown'
-  const filename = `${invoiceId}.${fileExtension}`
-
-  const storagePath = generateStoragePath({
-    businessId,
-    userId: convexUserId,  // Use Convex user ID, NOT Clerk user ID
-    documentType: 'invoice' as DocumentType,
-    stage: 'raw',
-    filename,
-    documentId: invoiceId
-  })
-
-  // Create invoice record in Convex
+  // Step 1: Create invoice record in Convex FIRST (no storagePath yet)
   const convexInvoiceId = await client.mutation(api.functions.invoices.create, {
     businessId: businessId as Id<"businesses">,
     fileName: file.name,
     fileType: file.type,
     fileSize: file.size,
-    storagePath: storagePath,
-    status: 'pending'
+    status: 'uploading'  // Will update to 'pending' after upload
   })
 
-  // Log the ID for debugging - helps trace ID format issues
-  console.log(`[Invoice] Created invoice record: ${convexInvoiceId} (type: ${typeof convexInvoiceId})`)
+  console.log(`[Invoice] Created invoice record: ${convexInvoiceId}`)
 
   try {
-    // Upload to AWS S3
+    // Step 2: Generate storage path using Convex ID
+    const fileExtension = file.name.split('.').pop() || 'unknown'
+    const filename = `${convexInvoiceId}.${fileExtension}`
+
+    const storagePath = generateStoragePath({
+      businessId,
+      userId: convexUserId,
+      documentType: 'invoice' as DocumentType,
+      stage: 'raw',
+      filename,
+      documentId: convexInvoiceId  // Use Convex ID for consistent paths
+    })
+
+    console.log(`[Invoice] Storage path: invoices/${storagePath}`)
+
+    // Step 3: Upload to AWS S3
     const uploadResult = await uploadFile(
       'invoices',
       storagePath,
@@ -466,32 +470,32 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
 
     if (!uploadResult.success) {
       console.error('[Storage] Upload failed:', uploadResult.error)
-      // Don't clean up here - let the catch block handle it to avoid double cleanup
       throw new Error(`Storage upload failed: ${uploadResult.error}`)
     }
 
-    // Note: PDF conversion is handled by Lambda during processDocument()
-    // No eager conversion on upload - saves resources until processing is triggered
+    // Step 4: Update Convex record with storagePath and status
+    await updateDocument(convexInvoiceId, {
+      storage_path: storagePath,
+      status: 'pending'
+    })
+
+    console.log(`[Invoice] Updated invoice with storagePath: ${convexInvoiceId}`)
 
     // Fetch the created invoice to return
-    console.log(`[Invoice] Fetching created invoice: ${convexInvoiceId}`)
     const invoice = await client.query(api.functions.invoices.getById, { id: convexInvoiceId })
     if (!invoice) {
-      // This shouldn't happen - we just created the invoice
-      // Could indicate auth mismatch between mutation and query
-      throw new Error(`Failed to fetch created invoice: ${convexInvoiceId} - this may indicate an auth or access control issue`)
+      throw new Error(`Failed to fetch created invoice: ${convexInvoiceId}`)
     }
 
     return mapConvexInvoiceToResponse(invoice)
 
   } catch (error) {
-    // Clean up on any failure - but don't let cleanup errors mask the original error
+    // Clean up on any failure
     console.error(`[Invoice] Error during upload flow for ${convexInvoiceId}:`, error)
     try {
       await client.mutation(api.functions.invoices.softDelete, { id: convexInvoiceId })
       console.log(`[Invoice] Cleaned up invoice record: ${convexInvoiceId}`)
     } catch (cleanupError) {
-      // Log cleanup error but don't let it mask the original error
       console.error(`[Invoice] Failed to clean up invoice ${convexInvoiceId}:`, cleanupError)
     }
     throw error
@@ -545,9 +549,10 @@ export async function updateDocument(documentId: string, updates: UpdateDocument
     }
 
     // Update other fields via Convex
-    if (updates.extracted_data !== undefined || updates.confidence_score !== undefined) {
+    if (updates.extracted_data !== undefined || updates.confidence_score !== undefined || updates.storage_path !== undefined) {
       await client.mutation(api.functions.invoices.update, {
         id: documentId,
+        storagePath: updates.storage_path,
         extractedData: updates.extracted_data,
         confidenceScore: updates.confidence_score
       })

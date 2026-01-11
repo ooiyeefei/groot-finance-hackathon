@@ -454,9 +454,32 @@ def extract_invoice_step(
         ]
 
         # Use LLM-selected category or fallback to pattern matching
-        # Note: suggested_category is now the category_name, which TypeScript maps to id
+        # Note: suggested_category is now the category_name, which we map to category_id for storage
         suggested_category = extracted.suggested_category
         category_confidence = 0.9  # High confidence if LLM selected
+
+        # Track both name (for logging/metadata) and ID (for frontend)
+        suggested_category_name = None
+        suggested_category_id = None
+
+        if suggested_category:
+            # Verify LLM-selected category exists in business categories
+            if categories:
+                # Find matching category to get its ID
+                matching_cat = next((cat for cat in categories if cat.name == suggested_category), None)
+                if not matching_cat:
+                    print(f"[{document_id}] LLM selected invalid category '{suggested_category}' - not in business categories")
+                    suggested_category = None
+                    category_confidence = 0.0
+                else:
+                    suggested_category_name = matching_cat.name
+                    suggested_category_id = matching_cat.id
+                    print(f"[{document_id}] LLM selected valid category: {suggested_category_name} (id: {suggested_category_id})")
+            else:
+                # No business categories to validate against - clear the selection
+                print(f"[{document_id}] Cannot validate LLM category - no business categories available")
+                suggested_category = None
+                category_confidence = 0.0
 
         if not suggested_category:
             # Fallback to pattern matching (IFRS)
@@ -465,11 +488,20 @@ def extract_invoice_step(
                 line_items=line_items,
                 categories=categories,
             )
-            suggested_category = category_result["category_name"]  # Now uses category_name
-            category_confidence = category_result["confidence"]
-            print(f"[{document_id}] Category fallback: {suggested_category}")
-        else:
-            print(f"[{document_id}] LLM selected category: {suggested_category}")
+            if category_result:
+                suggested_category_name = category_result["category_name"]
+                suggested_category_id = category_result.get("category_id")  # Already includes ID from fallback
+                category_confidence = category_result["confidence"]
+                print(f"[{document_id}] Category fallback matched: {suggested_category_name} (id: {suggested_category_id})")
+            else:
+                # No match - user must select manually in UI
+                suggested_category_name = None
+                suggested_category_id = None
+                category_confidence = 0.0
+                print(f"[{document_id}] No category match - user will select manually")
+
+        # Use category ID for storage (frontend expects ID), name for display/logging
+        suggested_category = suggested_category_id
 
         # Calculate processing time
         processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
@@ -559,13 +591,14 @@ def extract_invoice_step(
             "user_message": extracted.user_message,
             "suggestions": extracted.suggestions or [],
 
-            # Category
-            "suggested_category": suggested_category,
+            # Category - suggested_category is now the ID (for frontend form), suggested_category_name is for display
+            "suggested_category": suggested_category,  # ID - what frontend form uses
+            "suggested_category_name": suggested_category_name,  # Name - for display/logging
             "category_confidence": category_confidence,
 
             # AI-extracted descriptive fields (with template fallbacks)
             "description": extracted.description or (f"Purchase from {extracted.vendor_name}" if extracted.vendor_name else "Invoice expense"),
-            "business_purpose": extracted.business_purpose or (f"Business expense - {suggested_category}" if suggested_category else "Business expense"),
+            "business_purpose": extracted.business_purpose or (f"Business expense - {suggested_category_name}" if suggested_category_name else "Business expense"),
 
             # Processing metadata
             "processing_time_ms": processing_time_ms,

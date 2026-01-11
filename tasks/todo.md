@@ -429,7 +429,7 @@ Standardize the welcome onboarding flow across both entry points (new users and 
 
 ## Review Section
 
-### Implementation Complete (2026-01-11)
+### Implementation Complete (2026-01-11) - Phase 1
 
 **Approach Used: Unified Component Styling**
 
@@ -477,6 +477,57 @@ Both entry points now share identical visual appearance with 33% larger sizing.
 - [ ] Manual test: "Create New Business" modal from business switcher looks identical
 - [ ] Manual test: X button on new user flow navigates to plan selection
 - [ ] Manual test: Brewing animation scales correctly
+
+### Phase 2 Update (2026-01-11) - Portrait Layout with Vertical Fill
+
+**User Feedback**: Modal was "still not maximized" - should be "less landscape wide, more square or portrait" with step selection areas maximizing vertically.
+
+### Additional Changes Made
+
+1. **`src/domains/onboarding/components/business-onboarding-modal.tsx`**
+   - Changed from `max-w-4xl` (896px) to `max-w-3xl` (768px) - narrower, more portrait
+   - Added `min-h-[85vh]` to fill vertical viewport space
+   - Added `flex flex-col` to outer container and Card for flex layout
+   - Updated CardContent to use `flex-1 flex flex-col` for vertical fill
+   - Wrapped Steps 2-4 in flex containers with className prop
+   - Added spacer `<div className="flex-1" />` before navigation in Steps 1 and 5
+
+2. **`src/app/[locale]/onboarding/business/page.tsx`**
+   - Same portrait layout changes as modal
+   - Updated all steps to use flex containers and spacers
+
+3. **`src/domains/onboarding/components/business-setup/business-type-step.tsx`**
+   - Added `className?: string` prop to interface
+   - Updated outer div to use `cn("w-full space-y-4", className)`
+   - Added spacer div before footer actions
+
+4. **`src/domains/onboarding/components/business-setup/cogs-categories-step.tsx`**
+   - Added `className?: string` prop to interface
+   - Updated outer div to use `cn("w-full space-y-3", className)`
+   - Added spacer div before footer actions
+
+5. **`src/domains/onboarding/components/business-setup/expense-categories-step.tsx`**
+   - Added `className?: string` prop to interface
+   - Imported `cn` utility from `@/lib/utils`
+   - Updated outer div to use `cn("w-full space-y-3", className)`
+   - Added spacer div before footer actions
+
+### Key Layout Changes (Phase 2)
+
+| Element | Phase 1 | Phase 2 |
+|---------|---------|---------|
+| Container width | 896px (max-w-4xl) | 768px (max-w-3xl) |
+| Min height | None | 85vh (min-h-[85vh]) |
+| Layout mode | Block | Flexbox (flex flex-col) |
+| Content fill | Fixed height | Flex-grow (flex-1) |
+| Navigation position | After content | Pushed to bottom via spacer |
+
+### Verification (Phase 2)
+- [x] Build passes (`npm run build` successful)
+- [x] Changes pushed to main (commit `ac040080`)
+- [ ] Manual test: Modal fills 85% of viewport height
+- [ ] Manual test: Step content expands to fill available space
+- [ ] Manual test: Navigation buttons pushed to bottom
 
 ---
 
@@ -603,6 +654,88 @@ Where `invoiceTableId` = Convex ID (consistent across upload and conversion)
 ## Review Section
 
 (To be completed after implementation)
+
+---
+
+# Expense Category Name-to-ID Mapping Fix (2026-01-11)
+
+## Bug Summary
+**Issue:** Lambda stores expense category **name** ("Other") but frontend expects category **ID** (Convex document ID). This causes the category dropdown to show empty in the prefilled form.
+
+**Root Cause:**
+1. Lambda receives categories with both `name` and `id` fields
+2. Lambda maps category by name and stores the NAME (e.g., "Other")
+3. Frontend `<SelectItem value={category.id}>` expects ID to match
+4. "Other" (name) ≠ "jd71xyz..." (id) → No match → Empty dropdown
+
+## Why Gemini Chose "Other"
+
+The receipt was: "Meal at Strong Flour restaurant including pasta, pizza, and coffee."
+
+**Staff Meals keywords** require staff-specific terms:
+- "staff food", "employee meal", "team lunch", "daily meal", "worker food"
+
+**Receipt contains none of these!** → Gemini correctly defaulted to "Other"
+
+## Solution
+
+**Fix Lambda to map category name → ID before storing.**
+
+The Lambda already has access to categories with both `name` and `id`. We just need to:
+1. After LLM selects category by name
+2. Look up the matching category's ID
+3. Store the ID instead of the name
+
+## Files to Modify
+
+1. `src/lambda/document-processor-python/steps/extract_receipt.py` - Map name→ID after selection
+2. `src/lambda/document-processor-python/steps/extract_invoice.py` - Same fix
+
+## Todo Items
+
+- [x] Investigate category selection issue
+- [x] Fix Lambda receipt extraction to map name→ID
+- [x] Fix Lambda invoice extraction to map name→ID
+- [ ] Deploy Lambda
+- [ ] Test with new expense claim
+
+## Review Section (2026-01-11)
+
+### Fix Applied
+Both `extract_receipt.py` and `extract_invoice.py` now map category name → ID before storing.
+
+### Key Changes
+
+**`extract_receipt.py` (lines 421-467):**
+```python
+# Track both name (for logging/metadata) and ID (for frontend)
+expense_category_name = None
+expense_category_id = None
+
+if expense_category:
+    # Find matching category to get its ID
+    matching_cat = next((cat for cat in categories if cat.name == expense_category), None)
+    if matching_cat:
+        expense_category_name = matching_cat.name
+        expense_category_id = matching_cat.id
+
+# Use category ID for storage (frontend expects ID)
+expense_category = expense_category_id
+```
+
+**`extract_invoice.py` (lines 461-504):**
+Same pattern - tracks `suggested_category_name` and `suggested_category_id`, stores ID for frontend.
+
+### Result Dictionary Changes
+Both files now return:
+- `expense_category` / `suggested_category`: The ID (for frontend form)
+- `expense_category_name` / `suggested_category_name`: The name (for logging/display)
+
+### Why "Other" was selected
+The receipt "Meal at Strong Flour restaurant including pasta, pizza, and coffee" didn't match "Staff Meals" keywords which require staff-specific terms like:
+- "staff food", "employee meal", "team lunch", "daily meal", "worker food"
+
+This is correct behavior - the receipt is a general meal, not specifically a staff meal.
 
 ---
 

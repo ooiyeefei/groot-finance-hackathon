@@ -152,20 +152,28 @@ class S3Client:
         filename: str,
     ) -> str:
         """
-        Build standardized S3 storage path.
+        Build standardized S3 storage path (full S3 key).
 
         Pattern: {domain}/{business_id}/{user_id}/{document_id}/{stage}/{filename}
 
+        This creates the complete S3 key including the domain prefix.
+        Used by Lambda when writing converted images directly to S3.
+
+        Aligned with TypeScript pattern:
+        - TypeScript storage path (Convex): {bid}/{uid}/{docId}/{stage}/{filename}
+        - TypeScript S3 key: {domain}/{bid}/{uid}/{docId}/{stage}/{filename}
+        - Lambda S3 key: same as TypeScript S3 key
+
         Args:
             domain: 'invoices' or 'expense_claims'
-            business_id: Business ID
-            user_id: User ID
-            document_id: Document ID
-            stage: Processing stage (e.g., 'converted', 'annotated')
-            filename: File name
+            business_id: Business ID (Convex ID)
+            user_id: User ID (Convex ID)
+            document_id: Document ID (Convex ID)
+            stage: Processing stage ('raw', 'converted', 'processed')
+            filename: File name (e.g., 'page_1.png')
 
         Returns:
-            S3 key path
+            Full S3 key path
         """
         return f"{domain}/{business_id}/{user_id}/{document_id}/{stage}/{filename}"
 
@@ -192,7 +200,8 @@ class S3Client:
 
         for page_num, (img_bytes, width, height) in enumerate(images, start=1):
             # Extract path components from original storage path
-            # Format: {business_id}/{user_id}/{document_id}/{filename}
+            # Format: {business_id}/{user_id}/{document_id}/raw/{filename}
+            # Note: storage_path from Convex doesn't include domain prefix
             path_parts = storage_path.split("/")
 
             if len(path_parts) >= 3:

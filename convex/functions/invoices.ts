@@ -447,7 +447,7 @@ export const create = mutation({
     fileName: v.string(),
     fileType: v.string(),
     fileSize: v.number(),
-    storagePath: v.string(),
+    storagePath: v.optional(v.string()), // Optional - set after upload with Convex ID
     status: v.optional(
       v.union(v.literal("pending"), v.literal("uploading"))
     ),
@@ -483,8 +483,8 @@ export const create = mutation({
       fileName: args.fileName,
       fileType: args.fileType,
       fileSize: args.fileSize,
-      storagePath: args.storagePath,
-      status: args.status ?? "pending",
+      storagePath: args.storagePath ?? "", // Empty string if not provided
+      status: args.status ?? "uploading", // Default to 'uploading' when creating
       updatedAt: Date.now(),
     });
 
@@ -498,6 +498,7 @@ export const create = mutation({
 export const update = mutation({
   args: {
     id: v.string(),
+    storagePath: v.optional(v.string()),  // S3 storage path (without domain prefix)
     convertedImagePath: v.optional(v.string()),
     convertedImageWidth: v.optional(v.number()),
     convertedImageHeight: v.optional(v.number()),
@@ -548,6 +549,8 @@ export const update = mutation({
     const updateData: Record<string, unknown> = { updatedAt: Date.now() };
 
     // Only include provided fields
+    if (updates.storagePath !== undefined)
+      updateData.storagePath = updates.storagePath;
     if (updates.convertedImagePath !== undefined)
       updateData.convertedImagePath = updates.convertedImagePath;
     if (updates.convertedImageWidth !== undefined)

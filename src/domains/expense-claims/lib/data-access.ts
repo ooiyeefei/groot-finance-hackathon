@@ -10,7 +10,7 @@ import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/services/currency-service'
-import { StoragePathBuilder, generateUniqueFilename, type DocumentType } from '@/lib/storage-paths'
+import { StoragePathBuilder, type DocumentType } from '@/lib/storage-paths'
 import { invokeDocumentProcessor } from '@/lib/lambda-invoker'
 import {
   ExpenseClaim,
@@ -318,14 +318,16 @@ export async function createExpenseClaim(
 
     // Handle file upload if present (using AWS S3)
     if (request.file && documentId) {
-      // Generate storage path
+      // Generate storage path using Convex ID for consistent paths
+      // Pattern: expense_claims/{businessId}/{userId}/{claimId}/raw/{claimId}.{ext}
       const storageBuilder = new StoragePathBuilder(
         employeeProfile.business_id,
         employeeProfile.user_id,
         claimId
       )
-      const uniqueFilename = generateUniqueFilename(request.file.name)
-      standardizedFilePath = storageBuilder.forDocument('expense_receipts' as DocumentType).raw(uniqueFilename)
+      const fileExtension = request.file.name.split('.').pop() || 'unknown'
+      const filename = `${claimId}.${fileExtension}`
+      standardizedFilePath = storageBuilder.forDocument('expense_receipts' as DocumentType).raw(filename)
 
       // Upload file to AWS S3
       const uploadResult = await uploadFile(

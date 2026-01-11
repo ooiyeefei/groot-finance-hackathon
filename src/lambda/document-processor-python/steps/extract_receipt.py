@@ -421,16 +421,23 @@ def extract_receipt_step(
         expense_category = extracted.expense_category
         category_confidence = 0.9  # High confidence if LLM selected
 
+        # Track both name (for logging/metadata) and ID (for frontend)
+        expense_category_name = None
+        expense_category_id = None
+
         if expense_category:
             # Verify LLM-selected category exists in business categories
             if categories:
-                valid_category = any(cat.name == expense_category for cat in categories)
-                if not valid_category:
+                # Find matching category to get its ID
+                matching_cat = next((cat for cat in categories if cat.name == expense_category), None)
+                if not matching_cat:
                     print(f"[{document_id}] LLM selected invalid category '{expense_category}' - not in business categories")
                     expense_category = None
                     category_confidence = 0.0
                 else:
-                    print(f"[{document_id}] LLM selected valid category: {expense_category}")
+                    expense_category_name = matching_cat.name
+                    expense_category_id = matching_cat.id
+                    print(f"[{document_id}] LLM selected valid category: {expense_category_name} (id: {expense_category_id})")
             else:
                 # No business categories to validate against - clear the selection
                 print(f"[{document_id}] Cannot validate LLM category - no business categories available")
@@ -445,14 +452,19 @@ def extract_receipt_step(
                 categories=categories,
             )
             if category_result:
-                expense_category = category_result["category_name"]
+                expense_category_name = category_result["category_name"]
+                expense_category_id = category_result.get("category_id")  # Already includes ID
                 category_confidence = category_result["confidence"]
-                print(f"[{document_id}] Category fallback matched: {expense_category}")
+                print(f"[{document_id}] Category fallback matched: {expense_category_name} (id: {expense_category_id})")
             else:
                 # No match - user must select manually in UI
-                expense_category = None
+                expense_category_name = None
+                expense_category_id = None
                 category_confidence = 0.0
                 print(f"[{document_id}] No category match - user will select manually")
+
+        # Use category ID for storage (frontend expects ID), name for display/logging
+        expense_category = expense_category_id
 
         # Calculate processing time
         processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
@@ -507,14 +519,15 @@ def extract_receipt_step(
             "user_message": extracted.user_message,
             "suggestions": extracted.suggestions or [],
 
-            # Category
-            "suggested_category": expense_category,
-            "expense_category": expense_category,
+            # Category - expense_category is now the ID (for frontend form), expense_category_name is for display
+            "suggested_category": expense_category,  # ID
+            "expense_category": expense_category,  # ID - what frontend form uses
+            "expense_category_name": expense_category_name,  # Name - for display/logging
             "category_confidence": category_confidence,
 
             # AI-extracted descriptive fields (with template fallbacks)
             "description": extracted.description or (f"Receipt from {extracted.vendor_name}" if extracted.vendor_name else "Receipt expense"),
-            "business_purpose": extracted.business_purpose or (f"Business expense - {expense_category}" if expense_category else "Business expense"),
+            "business_purpose": extracted.business_purpose or (f"Business expense - {expense_category_name}" if expense_category_name else "Business expense"),
 
             # Processing metadata
             "processing_time_ms": processing_time_ms,

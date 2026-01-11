@@ -35,22 +35,30 @@ export interface LegacyPathInfo {
 
 /**
  * Generate standardized storage path for new documents
+ *
+ * Pattern: {businessId}/{userId}/{documentId}/{stage}/{filename}
+ *
+ * Note: documentType is NOT included in the path - it's part of the S3 prefix
+ * (e.g., 'invoices/' or 'expense_claims/') added by aws-s3.ts uploadFile()
+ *
+ * Full S3 key example: invoices/{businessId}/{userId}/{documentId}/raw/{filename}
  */
 export function generateStoragePath(config: StoragePathConfig & { documentId?: string }): string {
-  const { businessId, userId, documentType, stage, filename, documentId } = config
+  const { businessId, userId, stage, filename, documentId } = config
 
   // Sanitize components
   const cleanBusinessId = sanitizePathComponent(businessId)
   const cleanUserId = sanitizePathComponent(userId)
   const cleanFilename = sanitizeFilename(filename)
 
-  // For all documents, if documentId is provided, create unique document folder
+  // Standard pattern: {businessId}/{userId}/{documentId}/{stage}/{filename}
   if (documentId) {
-    return `${cleanBusinessId}/${cleanUserId}/${documentType}/${documentId}/${stage}/${cleanFilename}`
+    const cleanDocumentId = sanitizePathComponent(documentId)
+    return `${cleanBusinessId}/${cleanUserId}/${cleanDocumentId}/${stage}/${cleanFilename}`
   }
 
-  // Fallback to original structure (without documentId) for backward compatibility
-  return `${cleanBusinessId}/${cleanUserId}/${documentType}/${stage}/${cleanFilename}`
+  // Fallback without documentId (legacy compatibility)
+  return `${cleanBusinessId}/${cleanUserId}/${stage}/${cleanFilename}`
 }
 
 /**
