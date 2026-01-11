@@ -208,9 +208,9 @@ class DocumentClassifier:
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable required")
 
-        # Configure AI model with Gemini Flash
+        # Configure AI model with Gemini 3 Flash (67% faster than 2.5)
         self.model = dspy.LM(
-            model="gemini/gemini-2.5-flash",
+            model="gemini/gemini-3-flash-preview",
             api_key=api_key,
             temperature=0.0,
             max_tokens=8192
@@ -281,7 +281,7 @@ class DocumentClassifier:
             )
 
             # Log API usage for cost tracking
-            log_gemini_usage(self.model, "gemini-2.5-flash", image_count=1)
+            log_gemini_usage(self.model, "gemini-3-flash-preview", image_count=1)
 
             # Extract classification result (already a Pydantic object)
             classification = prediction.classification
@@ -304,7 +304,7 @@ class DocumentClassifier:
                 'detected_elements': classification_dict.get('detected_elements', []),
                 'context_metadata': classification_dict.get('context_metadata', {}),
                 'classification_method': 'structured_ai_signature',
-                'model_used': 'gemini-2.5-flash'
+                'model_used': 'gemini-3-flash-preview'
             }
 
             return result

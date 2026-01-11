@@ -125,7 +125,7 @@ Based on the 10-point MVP Launch Checklist and verification on 2026-01-09, Finan
 ```typescript
 // From gemini-ocr-service.ts
 config = {
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3-flash-preview',
   timeoutMs: 60000,
   retryAttempts: 3,
   confidenceThreshold: 0.7,

@@ -33,7 +33,7 @@ export class GeminiOCRService {
 
     this.genAI = new GoogleGenAI({ apiKey })
     this.config = {
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       timeoutMs: 60000, // Increased to 60 seconds for complex documents
       retryAttempts: 3,
       confidenceThreshold: 0.7,

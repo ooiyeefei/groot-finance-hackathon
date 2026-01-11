@@ -58,7 +58,7 @@ export interface ExtractedReceiptData {
 
   // Processing Metadata
   processingMethod: 'gemini_ocr' | 'ai' | 'manual_entry'
-  modelUsed?: string // e.g., "gemini-2.5-flash"
+  modelUsed?: string // e.g., "gemini-3-flash-preview"
   processingTimestamp: string // ISO 8601
   documentId?: string // Link to uploaded document
 }

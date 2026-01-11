@@ -9,7 +9,7 @@ The Expense Claims Processing Module is a comprehensive system for managing empl
 ### Core Components
 - **Frontend**: React components with mobile-first design
 - **Backend**: Next.js API routes with serverless functions
-- **AI Processing**: Google Gemini 2.5-flash for OCR and categorization
+- **AI Processing**: Google Gemini 3-flash-preview for OCR and categorization
 - **Background Jobs**: Trigger.dev v3 with Node.js runtime
 - **Database**: Supabase PostgreSQL with Row Level Security
 
@@ -354,7 +354,7 @@ interface OCRResult {
 **Location:** `src/lib/services/gemini-ocr-service.ts`
 
 **Features:**
-- Google Gemini 2.5-flash integration
+- Google Gemini 3-flash-preview integration
 - Structured prompt engineering
 - Retry logic with exponential backoff
 - JSON response validation
@@ -471,7 +471,7 @@ FormData {
 **Configuration:**
 ```typescript
 {
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3-flash-preview',
   confidenceThreshold: 0.7,
   timeoutMs: 45000,
   retryAttempts: 2

@@ -30,7 +30,7 @@ Architecture: TypeScript Orchestrator + Python AI Engine
   Responsibilities:
   - Accepts CLI arguments (image URL, expected type, slot context)
   - Downloads image from signed URL
-  - Uses DSPy + Gemini 2.5 Flash for multimodal classification
+  - Uses DSPy + Gemini 3 Flash for multimodal classification
   - Returns structured JSON output with classification results
   - Handles AI errors and confidence scoring
 
@@ -57,7 +57,7 @@ Architecture: TypeScript Orchestrator + Python AI Engine
   │         │ (classify_document.py)            │             │
   │         ├───────────────────────────────────┤             │
   │         │ • Downloads image                 │             │
-  │         │ • Runs DSPy + Gemini 2.5 Flash    │             │
+  │         │ • Runs DSPy + Gemini 3 Flash    │             │
   │         │ • Returns JSON classification     │             │
   │         └───────────────────────────────────┘             │
   │                         ↓                                   │

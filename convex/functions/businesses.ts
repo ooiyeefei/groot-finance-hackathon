@@ -1879,3 +1879,129 @@ export const migrateCogsCategoriesToCorrectField = internalMutation({
     return { migratedCount, skippedCount, totalBusinesses: businesses.length };
   },
 });
+
+/**
+ * Backfill category IDs for existing categories that were created before
+ * the fix in commit bdf9e64b (which added id field to generated categories).
+ *
+ * Run from Convex dashboard for specific businesses:
+ * - jd73mkpjea2mrmpeq9k8xtcga97yyn9c
+ * - jd71hq81cknfzx9qs9116ntc9h7yz73b
+ * - jd7668t3nmmg3wpz7bfz8x5hch7yy9pr
+ */
+export const backfillCategoryIds = internalMutation({
+  args: {
+    businessIds: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    // Helper: Generate slug from category name
+    const slugifyName = (name: string): string => {
+      return name
+        .toLowerCase()
+        .replace(/&/g, 'and')
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_|_$/g, '');
+    };
+
+    // Helper: Generate category ID in format: {slug}_{random}
+    const generateCategoryId = (categoryName: string): string => {
+      const slug = slugifyName(categoryName);
+      const random = Math.random().toString(36).substring(2, 8);
+      return `${slug}_${random}`;
+    };
+
+    // Get businesses to process
+    let businesses;
+    if (args.businessIds && args.businessIds.length > 0) {
+      // Fetch specific businesses by ID
+      businesses = await Promise.all(
+        args.businessIds.map(async (id) => {
+          const business = await ctx.db
+            .query("businesses")
+            .filter((q) => q.eq(q.field("_id"), id))
+            .first();
+          return business;
+        })
+      );
+      businesses = businesses.filter(Boolean);
+    } else {
+      // Process all businesses
+      businesses = await ctx.db.query("businesses").collect();
+    }
+
+    let updatedBusinesses = 0;
+    let updatedExpenseCategories = 0;
+    let updatedCogsCategories = 0;
+
+    for (const business of businesses) {
+      if (!business) continue;
+
+      let needsUpdate = false;
+
+      // Process expense categories
+      const expenseCategories = (business.customExpenseCategories as Array<{
+        id?: string;
+        category_name?: string;
+        name?: string;
+        [key: string]: unknown;
+      }>) || [];
+
+      const updatedExpense = expenseCategories.map((cat) => {
+        if (!cat.id) {
+          const categoryName = cat.category_name || cat.name || 'category';
+          const newId = generateCategoryId(categoryName);
+          console.log(`[Backfill] Business ${business._id}: Added ID "${newId}" to expense category "${categoryName}"`);
+          needsUpdate = true;
+          updatedExpenseCategories++;
+          return { ...cat, id: newId };
+        }
+        return cat;
+      });
+
+      // Process COGS categories
+      const cogsCategories = (business.customCogsCategories as Array<{
+        id?: string;
+        category_name?: string;
+        name?: string;
+        [key: string]: unknown;
+      }>) || [];
+
+      const updatedCogs = cogsCategories.map((cat) => {
+        if (!cat.id) {
+          const categoryName = cat.category_name || cat.name || 'category';
+          const newId = generateCategoryId(categoryName);
+          console.log(`[Backfill] Business ${business._id}: Added ID "${newId}" to COGS category "${categoryName}"`);
+          needsUpdate = true;
+          updatedCogsCategories++;
+          return { ...cat, id: newId };
+        }
+        return cat;
+      });
+
+      // Update business if any categories were modified
+      if (needsUpdate) {
+        await ctx.db.patch(business._id, {
+          customExpenseCategories: updatedExpense,
+          customCogsCategories: updatedCogs,
+          updatedAt: Date.now(),
+        });
+        updatedBusinesses++;
+        console.log(`[Backfill] ✅ Updated business: ${business._id} (${business.name})`);
+      } else {
+        console.log(`[Backfill] ⏭️ Skipped business: ${business._id} - all categories already have IDs`);
+      }
+    }
+
+    console.log(`[Backfill] Complete.`);
+    console.log(`[Backfill] - Businesses updated: ${updatedBusinesses}`);
+    console.log(`[Backfill] - Expense categories updated: ${updatedExpenseCategories}`);
+    console.log(`[Backfill] - COGS categories updated: ${updatedCogsCategories}`);
+
+    return {
+      updatedBusinesses,
+      updatedExpenseCategories,
+      updatedCogsCategories,
+      totalBusinessesProcessed: businesses.length,
+    };
+  },
+});

@@ -103,7 +103,7 @@
       "total_amount"
     ],
     "classification_method": "structured_ai_signature",
-    "model_used": "gemini-2.5-flash",
+    "model_used": "gemini-3-flash-preview",
     "confidence_score": 0.95,
     // Additional context metadata from classification
     "context_metadata": {
@@ -168,7 +168,7 @@
       "reasoning": "Document contains invoice header, vendor details, line items, and total
   amount",
       "detected_elements": ["invoice_header", "vendor_name", "line_items", "total_amount"],
-      "model_used": "gemini-2.5-flash",
+      "model_used": "gemini-3-flash-preview",
       "confidence_score": 0.98
     }'::jsonb
   WHERE id = 'doc-uuid-123';
@@ -202,7 +202,7 @@
       "reasoning": "Document appears to be a receipt with simple itemization, not a formal
   invoice",
       "detected_elements": ["receipt_header", "items", "total"],
-      "model_used": "gemini-2.5-flash",
+      "model_used": "gemini-3-flash-preview",
       "confidence_score": 0.96
     }'::jsonb
   WHERE id = 'doc-uuid-456';
