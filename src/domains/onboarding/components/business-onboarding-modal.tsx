@@ -272,17 +272,17 @@ export default function BusinessOnboardingModal({
         onClick={onClose}
       />
 
-      {/* Modal Content */}
-      <div className="relative w-full max-w-2xl max-h-[96vh] overflow-hidden m-4">
+      {/* Modal Content - 33% larger (max-w-4xl = 896px) */}
+      <div className="relative w-full max-w-4xl max-h-[96vh] overflow-hidden m-4">
         <Card className="bg-card border-border shadow-2xl">
           {/* Header with close button */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Building2 className="h-5 w-5 text-primary" />
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div className="flex items-center gap-4">
+              <div className="p-2.5 bg-primary/10 rounded-lg">
+                <Building2 className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">
+                <h2 className="text-xl font-semibold text-foreground">
                   Create New Business
                 </h2>
                 <p className="text-sm text-muted-foreground">
@@ -294,41 +294,41 @@ export default function BusinessOnboardingModal({
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="h-8 w-8 p-0"
+              className="h-9 w-9 p-0"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </Button>
           </div>
 
           {/* Progress bar */}
-          <div className="px-4 pt-3">
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+          <div className="px-6 pt-4">
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary transition-all duration-300"
                 style={{ width: `${stepProgress}%` }}
               />
             </div>
-            {/* Step indicators (compact) */}
-            <div className="flex justify-between mt-1.5 mb-1">
+            {/* Step indicators */}
+            <div className="flex justify-between mt-2 mb-2">
               {WIZARD_STEPS.map((step) => {
                 const isActive = step.id === currentStep
                 const isCompleted = step.id < currentStep
 
                 return (
-                  <div key={step.id} className="flex items-center gap-1">
+                  <div key={step.id} className="flex items-center gap-1.5">
                     <div
                       className={cn(
-                        'w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium transition-colors',
-                        isActive && 'bg-primary text-primary-foreground',
+                        'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-colors',
+                        isActive && 'bg-primary text-primary-foreground ring-2 ring-primary/30',
                         isCompleted && 'bg-green-500 text-white',
                         !isActive && !isCompleted && 'bg-muted text-muted-foreground'
                       )}
                     >
-                      {isCompleted ? <Check className="w-2.5 h-2.5" /> : step.id}
+                      {isCompleted ? <Check className="w-3 h-3" /> : step.id}
                     </div>
                     <span
                       className={cn(
-                        'text-[10px] hidden sm:inline',
+                        'text-xs hidden sm:inline',
                         isActive && 'text-primary font-medium',
                         isCompleted && 'text-green-500',
                         !isActive && !isCompleted && 'text-muted-foreground'
@@ -343,12 +343,12 @@ export default function BusinessOnboardingModal({
           </div>
 
           {/* Scrollable content */}
-          <CardContent className="px-4 py-4 overflow-y-auto max-h-[calc(96vh-140px)]">
+          <CardContent className="px-6 py-5 overflow-y-auto max-h-[calc(96vh-180px)]">
             {/* Step 1: Business Details */}
             {currentStep === 1 && (
-              <div className="space-y-4">
-                <div className="text-center space-y-1 mb-4">
-                  <h3 className="text-lg font-semibold text-foreground">
+              <div className="space-y-5">
+                <div className="text-center space-y-2 mb-5">
+                  <h3 className="text-xl font-semibold text-foreground">
                     Business Details
                   </h3>
                   <p className="text-sm text-muted-foreground">
@@ -357,7 +357,7 @@ export default function BusinessOnboardingModal({
                 </div>
 
                 {/* Business Name */}
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <Label htmlFor="businessName" className="text-sm font-medium text-foreground">
                     Business Name <span className="text-destructive">*</span>
                   </Label>
@@ -367,27 +367,27 @@ export default function BusinessOnboardingModal({
                     placeholder="e.g. Acme Trading Pte Ltd"
                     value={wizardData.businessName || ''}
                     onChange={(e) => updateWizardData({ businessName: e.target.value })}
-                    className="bg-input border-border text-foreground h-9"
+                    className="bg-input border-border text-foreground h-10"
                     required
                   />
                 </div>
 
                 {/* Country */}
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <Label className="text-sm font-medium text-foreground">Country</Label>
                   <Select
                     value={wizardData.countryCode || 'SG'}
                     onValueChange={handleCountryChange}
                   >
-                    <SelectTrigger className="bg-input border-border text-foreground h-9">
+                    <SelectTrigger className="bg-input border-border text-foreground h-10">
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
-                    <SelectContent className="bg-card border-border max-h-[200px]">
+                    <SelectContent className="bg-card border-border max-h-[240px]">
                       {COUNTRIES.map((country) => (
                         <SelectItem
                           key={country.code}
                           value={country.code}
-                          className="text-foreground focus:bg-muted text-sm"
+                          className="text-foreground focus:bg-muted"
                         >
                           {country.name} ({country.code})
                         </SelectItem>
@@ -397,18 +397,18 @@ export default function BusinessOnboardingModal({
                 </div>
 
                 {/* Currency */}
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <Label className="text-sm font-medium text-foreground">Home Currency</Label>
                   <Select value={homeCurrency} onValueChange={setHomeCurrency}>
-                    <SelectTrigger className="bg-input border-border text-foreground h-9">
+                    <SelectTrigger className="bg-input border-border text-foreground h-10">
                       <SelectValue placeholder="Select currency" />
                     </SelectTrigger>
-                    <SelectContent className="bg-card border-border max-h-[200px]">
+                    <SelectContent className="bg-card border-border max-h-[240px]">
                       {CURRENCIES.map((currency) => (
                         <SelectItem
                           key={currency.code}
                           value={currency.code}
-                          className="text-foreground focus:bg-muted text-sm"
+                          className="text-foreground focus:bg-muted"
                         >
                           {currency.code} - {currency.name}
                         </SelectItem>
@@ -418,12 +418,11 @@ export default function BusinessOnboardingModal({
                 </div>
 
                 {/* Navigation */}
-                <div className="flex justify-end pt-3">
+                <div className="flex justify-end pt-4">
                   <Button
                     variant="primary"
                     onClick={goToNextStep}
                     disabled={!wizardData.businessName?.trim()}
-                    size="sm"
                   >
                     Continue
                   </Button>
@@ -489,23 +488,23 @@ export default function BusinessOnboardingModal({
 
             {/* Step 5: Review */}
             {currentStep === 5 && (
-              <div className="space-y-3 relative">
+              <div className="space-y-4 relative">
                 {/* Brewing Animation Overlay */}
                 {isCreating && (
                   <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-lg">
                     {/* Animated Icon Container */}
-                    <div className="relative mb-4">
+                    <div className="relative mb-5">
                       {/* Pulsing background ring */}
                       <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" style={{ animationDuration: '2s' }} />
                       <div className="absolute inset-0 rounded-full bg-primary/10 animate-pulse" />
 
                       {/* Icon with bounce animation */}
-                      <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 flex items-center justify-center">
+                      <div className="relative w-18 h-18 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 flex items-center justify-center" style={{ width: '72px', height: '72px' }}>
                         {(() => {
                           const CurrentIcon = BREWING_MESSAGES[brewingMessageIndex].icon
                           return (
                             <CurrentIcon
-                              className="w-7 h-7 text-primary animate-bounce"
+                              className="w-9 h-9 text-primary animate-bounce"
                               style={{ animationDuration: '1s' }}
                             />
                           )
@@ -514,19 +513,19 @@ export default function BusinessOnboardingModal({
                     </div>
 
                     {/* Message with smooth transition */}
-                    <p className="text-sm font-medium text-foreground text-center px-4 transition-all duration-300">
+                    <p className="text-base font-medium text-foreground text-center px-6 transition-all duration-300">
                       {BREWING_MESSAGES[brewingMessageIndex].text}
                     </p>
 
                     {/* Continuous loading spinner */}
-                    <div className="mt-4">
-                      <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                    <div className="mt-5">
+                      <Loader2 className="w-6 h-6 text-primary animate-spin" />
                     </div>
                   </div>
                 )}
 
-                <div className="text-center space-y-1 mb-3">
-                  <h3 className="text-lg font-semibold text-foreground">
+                <div className="text-center space-y-2 mb-4">
+                  <h3 className="text-xl font-semibold text-foreground">
                     Review Your Setup
                   </h3>
                   <p className="text-sm text-muted-foreground">
@@ -534,11 +533,11 @@ export default function BusinessOnboardingModal({
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {/* Business Details */}
-                  <div className="p-3 bg-muted/50 rounded-md space-y-2">
+                  <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <h4 className="text-sm font-medium text-foreground">Business Details</h4>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                       <div>
                         <span className="text-muted-foreground">Name:</span>
                         <p className="font-medium text-foreground">{wizardData.businessName}</p>
@@ -564,21 +563,21 @@ export default function BusinessOnboardingModal({
                   </div>
 
                   {/* COGS Categories */}
-                  <div className="p-3 bg-muted/50 rounded-md space-y-1.5">
+                  <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <h4 className="text-sm font-medium text-foreground">
                       COGS Categories ({wizardData.customCOGSNames?.length || 0})
                     </h4>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-2">
                       {(wizardData.customCOGSNames || []).map((cat, i) => (
                         <span
                           key={i}
-                          className="px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded"
+                          className="px-2 py-1 bg-primary/10 text-primary text-sm rounded"
                         >
                           {cat}
                         </span>
                       ))}
                       {(!wizardData.customCOGSNames || wizardData.customCOGSNames.length === 0) && (
-                        <span className="text-muted-foreground text-xs">
+                        <span className="text-muted-foreground text-sm">
                           AI will generate defaults
                         </span>
                       )}
@@ -586,21 +585,21 @@ export default function BusinessOnboardingModal({
                   </div>
 
                   {/* Expense Categories */}
-                  <div className="p-3 bg-muted/50 rounded-md space-y-1.5">
+                  <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <h4 className="text-sm font-medium text-foreground">
                       Expense Categories ({wizardData.customExpenseNames?.length || 0})
                     </h4>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-2">
                       {(wizardData.customExpenseNames || []).map((cat, i) => (
                         <span
                           key={i}
-                          className="px-1.5 py-0.5 bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs rounded"
+                          className="px-2 py-1 bg-orange-500/10 text-orange-600 dark:text-orange-400 text-sm rounded"
                         >
                           {cat}
                         </span>
                       ))}
                       {(!wizardData.customExpenseNames || wizardData.customExpenseNames.length === 0) && (
-                        <span className="text-muted-foreground text-xs">
+                        <span className="text-muted-foreground text-sm">
                           AI will generate defaults
                         </span>
                       )}
@@ -610,21 +609,21 @@ export default function BusinessOnboardingModal({
 
                 {/* Error Display */}
                 {(error || submitError) && (
-                  <div className="p-2 bg-destructive/10 border border-destructive/30 rounded">
-                    <p className="text-xs text-destructive">{error || submitError}</p>
+                  <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
+                    <p className="text-sm text-destructive">{error || submitError}</p>
                   </div>
                 )}
 
                 {/* Navigation */}
-                <div className="flex justify-between pt-2">
-                  <Button variant="ghost" size="sm" onClick={goToPreviousStep} disabled={isCreating}>
-                    <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                <div className="flex justify-between pt-3">
+                  <Button variant="ghost" onClick={goToPreviousStep} disabled={isCreating}>
+                    <ArrowLeft className="w-4 h-4 mr-1.5" />
                     Back
                   </Button>
-                  <Button variant="primary" size="sm" onClick={handleFinalSubmit} disabled={isCreating || isSubmitting}>
+                  <Button variant="primary" onClick={handleFinalSubmit} disabled={isCreating || isSubmitting}>
                     {isCreating ? (
                       <>
-                        <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                        <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
                         Setting up...
                       </>
                     ) : (

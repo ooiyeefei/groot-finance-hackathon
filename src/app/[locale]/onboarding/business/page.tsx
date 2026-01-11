@@ -23,6 +23,7 @@ import {
   Wand2,
   Rocket,
   Settings,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -258,112 +259,111 @@ export default function BusinessOnboarding() {
     }
   }
 
+  // Handle close - go back to plan selection
+  const handleClose = () => {
+    router.push('/en/onboarding/plan-selection')
+  }
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      style={{ margin: 0, padding: 0 }}
-    >
-      {/* Modal Container - Portrait oriented */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
       <div
-        className="bg-card rounded-xl border border-border shadow-2xl overflow-hidden flex flex-col"
+        className="fixed inset-0 transition-opacity"
         style={{
-          width: '90vw',
-          height: '85vh',
-          maxWidth: '580px',
-          maxHeight: '750px'
+          backgroundColor: 'rgba(0, 0, 0, 0.4)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}
-      >
-        {/* Modal Header - Compact */}
-        <div className="flex-shrink-0 px-5 pt-4 pb-3 border-b border-border bg-card">
-          {/* Header */}
-          <div className="text-center space-y-1">
-            <div className="flex items-center justify-center mb-2">
-              <div className="p-1.5 bg-primary/10 rounded-lg">
-                <Building2 className="h-5 w-5 text-primary" />
+        onClick={handleClose}
+      />
+
+      {/* Modal Content - 33% larger (max-w-4xl = 896px) - Matches modal component */}
+      <div className="relative w-full max-w-4xl max-h-[96vh] overflow-hidden m-4">
+        <Card className="bg-card border-border shadow-2xl">
+          {/* Header with close button - Matches modal */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div className="flex items-center gap-4">
+              <div className="p-2.5 bg-primary/10 rounded-lg">
+                <Building2 className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-foreground">
+                  Create New Business
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Step {currentStep} of {WIZARD_STEPS.length}
+                </p>
               </div>
             </div>
-            <h1 className="text-lg font-semibold text-foreground">
-              Set Up Your Business
-            </h1>
-            <p className="text-muted-foreground text-xs">
-              Complete these steps to get started
-            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClose}
+              className="h-9 w-9 p-0"
+            >
+              <X className="h-5 w-5" />
+            </Button>
           </div>
 
-          {/* Progress Indicator - Compact */}
-          <div className="w-full mt-3">
-            {/* Progress bar */}
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
+          {/* Progress bar */}
+          <div className="px-6 pt-4">
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary transition-all duration-300"
                 style={{ width: `${stepProgress}%` }}
               />
             </div>
-
-            {/* Step indicators - Compact */}
-            <div className="flex justify-between">
+            {/* Step indicators */}
+            <div className="flex justify-between mt-2 mb-2">
               {WIZARD_STEPS.map((step) => {
                 const isActive = step.id === currentStep
                 const isCompleted = step.id < currentStep
 
                 return (
-                  <div key={step.id} className="flex flex-col items-center">
+                  <div key={step.id} className="flex items-center gap-1.5">
                     <div
                       className={cn(
-                        'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium transition-colors',
-                        isActive &&
-                          'bg-primary text-primary-foreground ring-2 ring-primary/30',
+                        'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-colors',
+                        isActive && 'bg-primary text-primary-foreground ring-2 ring-primary/30',
                         isCompleted && 'bg-green-500 text-white',
-                        !isActive &&
-                          !isCompleted &&
-                          'bg-muted text-muted-foreground'
+                        !isActive && !isCompleted && 'bg-muted text-muted-foreground'
                       )}
                     >
-                      {isCompleted ? (
-                        <Check className="w-3 h-3" />
-                      ) : (
-                        step.id
+                      {isCompleted ? <Check className="w-3 h-3" /> : step.id}
+                    </div>
+                    <span
+                      className={cn(
+                        'text-xs hidden sm:inline',
+                        isActive && 'text-primary font-medium',
+                        isCompleted && 'text-green-500',
+                        !isActive && !isCompleted && 'text-muted-foreground'
                       )}
-                    </div>
-                    <div className="text-center mt-0.5">
-                      <div
-                        className={cn(
-                          'text-[10px] font-medium',
-                          isActive && 'text-primary',
-                          isCompleted && 'text-green-500',
-                          !isActive && !isCompleted && 'text-muted-foreground'
-                        )}
-                      >
-                        {step.label}
-                      </div>
-                    </div>
+                    >
+                      {step.label}
+                    </span>
                   </div>
                 )
               })}
             </div>
           </div>
-        </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {/* Scrollable content */}
+          <CardContent className="px-6 py-5 overflow-y-auto max-h-[calc(96vh-180px)]">
             {/* Step 1: Business Details */}
             {currentStep === 1 && (
-              <div className="space-y-4">
-                <div className="text-center space-y-1 mb-4">
-                  <h2 className="text-lg font-semibold text-foreground">
+              <div className="space-y-5">
+                <div className="text-center space-y-2 mb-5">
+                  <h3 className="text-xl font-semibold text-foreground">
                     Business Details
-                  </h2>
-                  <p className="text-muted-foreground text-sm">
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
                     Tell us about your business
                   </p>
                 </div>
 
                 {/* Business Name */}
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="businessName"
-                    className="text-sm font-medium text-foreground"
-                  >
+                <div className="space-y-2">
+                  <Label htmlFor="businessName" className="text-sm font-medium text-foreground">
                     Business Name <span className="text-destructive">*</span>
                   </Label>
                   <Input
@@ -371,32 +371,28 @@ export default function BusinessOnboarding() {
                     type="text"
                     placeholder="e.g. Acme Trading Pte Ltd"
                     value={wizardData.businessName || ''}
-                    onChange={(e) =>
-                      updateWizardData({ businessName: e.target.value })
-                    }
-                    className="bg-input border-border text-foreground h-9"
+                    onChange={(e) => updateWizardData({ businessName: e.target.value })}
+                    className="bg-input border-border text-foreground h-10"
                     required
                   />
                 </div>
 
                 {/* Country */}
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium text-foreground">
-                    Country
-                  </Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-foreground">Country</Label>
                   <Select
                     value={wizardData.countryCode || 'SG'}
                     onValueChange={handleCountryChange}
                   >
-                    <SelectTrigger className="bg-input border-border text-foreground h-9">
+                    <SelectTrigger className="bg-input border-border text-foreground h-10">
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
-                    <SelectContent className="bg-card border-border max-h-[200px]">
+                    <SelectContent className="bg-card border-border max-h-[240px]">
                       {COUNTRIES.map((country) => (
                         <SelectItem
                           key={country.code}
                           value={country.code}
-                          className="text-foreground focus:bg-muted text-sm"
+                          className="text-foreground focus:bg-muted"
                         >
                           {country.name} ({country.code})
                         </SelectItem>
@@ -406,20 +402,18 @@ export default function BusinessOnboarding() {
                 </div>
 
                 {/* Currency */}
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium text-foreground">
-                    Home Currency
-                  </Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-foreground">Home Currency</Label>
                   <Select value={homeCurrency} onValueChange={setHomeCurrency}>
-                    <SelectTrigger className="bg-input border-border text-foreground h-9">
+                    <SelectTrigger className="bg-input border-border text-foreground h-10">
                       <SelectValue placeholder="Select currency" />
                     </SelectTrigger>
-                    <SelectContent className="bg-card border-border max-h-[200px]">
+                    <SelectContent className="bg-card border-border max-h-[240px]">
                       {CURRENCIES.map((currency) => (
                         <SelectItem
                           key={currency.code}
                           value={currency.code}
-                          className="text-foreground focus:bg-muted text-sm"
+                          className="text-foreground focus:bg-muted"
                         >
                           {currency.code} - {currency.name}
                         </SelectItem>
@@ -428,11 +422,10 @@ export default function BusinessOnboarding() {
                   </Select>
                 </div>
 
-                {/* Navigation - No Back button on first step */}
+                {/* Navigation */}
                 <div className="flex justify-end pt-4">
                   <Button
                     variant="primary"
-                    size="sm"
                     onClick={goToNextStep}
                     disabled={!wizardData.businessName?.trim()}
                   >
@@ -504,23 +497,23 @@ export default function BusinessOnboarding() {
 
             {/* Step 5: Review */}
             {currentStep === 5 && (
-              <div className="space-y-3 relative">
+              <div className="space-y-4 relative">
                 {/* Brewing Animation Overlay */}
                 {isCreating && (
                   <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-lg">
                     {/* Animated Icon Container */}
-                    <div className="relative mb-4">
+                    <div className="relative mb-5">
                       {/* Pulsing background ring */}
                       <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" style={{ animationDuration: '2s' }} />
                       <div className="absolute inset-0 rounded-full bg-primary/10 animate-pulse" />
 
                       {/* Icon with bounce animation */}
-                      <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 flex items-center justify-center">
+                      <div className="relative w-18 h-18 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 flex items-center justify-center" style={{ width: '72px', height: '72px' }}>
                         {(() => {
                           const CurrentIcon = BREWING_MESSAGES[brewingMessageIndex].icon
                           return (
                             <CurrentIcon
-                              className="w-7 h-7 text-primary animate-bounce"
+                              className="w-9 h-9 text-primary animate-bounce"
                               style={{ animationDuration: '1s' }}
                             />
                           )
@@ -529,81 +522,71 @@ export default function BusinessOnboarding() {
                     </div>
 
                     {/* Message with smooth transition */}
-                    <p className="text-sm font-medium text-foreground text-center px-4 transition-all duration-300">
+                    <p className="text-base font-medium text-foreground text-center px-6 transition-all duration-300">
                       {BREWING_MESSAGES[brewingMessageIndex].text}
                     </p>
 
                     {/* Continuous loading spinner */}
-                    <div className="mt-4">
-                      <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                    <div className="mt-5">
+                      <Loader2 className="w-6 h-6 text-primary animate-spin" />
                     </div>
                   </div>
                 )}
 
-                <div className="text-center space-y-1 mb-3">
-                  <h2 className="text-lg font-semibold text-foreground">
+                <div className="text-center space-y-2 mb-4">
+                  <h3 className="text-xl font-semibold text-foreground">
                     Review Your Setup
-                  </h2>
-                  <p className="text-muted-foreground text-sm">
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
                     Confirm your business details
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {/* Business Details */}
-                  <div className="p-3 bg-muted/50 rounded-md space-y-2">
-                    <h3 className="text-sm font-medium text-foreground">
-                      Business Details
-                    </h3>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                  <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                    <h4 className="text-sm font-medium text-foreground">Business Details</h4>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                       <div>
                         <span className="text-muted-foreground">Name:</span>
-                        <p className="font-medium text-foreground">
-                          {wizardData.businessName}
-                        </p>
+                        <p className="font-medium text-foreground">{wizardData.businessName}</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Type:</span>
                         <p className="font-medium text-foreground capitalize">
-                          {wizardData.businessType === 'fnb'
-                            ? 'F&B'
-                            : wizardData.businessType}
+                          {wizardData.businessType === 'fnb' ? 'F&B' : wizardData.businessType}
                         </p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Country:</span>
                         <p className="font-medium text-foreground">
                           {COUNTRIES.find((c) => c.code === wizardData.countryCode)?.name ||
-                            wizardData.countryCode ||
-                            'Singapore'}
+                            wizardData.countryCode || 'Singapore'}
                         </p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Currency:</span>
-                        <p className="font-medium text-foreground">
-                          {homeCurrency}
-                        </p>
+                        <p className="font-medium text-foreground">{homeCurrency}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* COGS Categories */}
-                  <div className="p-3 bg-muted/50 rounded-md space-y-1.5">
-                    <h3 className="text-sm font-medium text-foreground">
+                  <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                    <h4 className="text-sm font-medium text-foreground">
                       COGS Categories ({wizardData.customCOGSNames?.length || 0})
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5">
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
                       {(wizardData.customCOGSNames || []).map((cat, i) => (
                         <span
                           key={i}
-                          className="px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded"
+                          className="px-2 py-1 bg-primary/10 text-primary text-sm rounded"
                         >
                           {cat}
                         </span>
                       ))}
-                      {(!wizardData.customCOGSNames ||
-                        wizardData.customCOGSNames.length === 0) && (
-                        <span className="text-muted-foreground text-xs">
+                      {(!wizardData.customCOGSNames || wizardData.customCOGSNames.length === 0) && (
+                        <span className="text-muted-foreground text-sm">
                           AI will generate defaults
                         </span>
                       )}
@@ -611,22 +594,21 @@ export default function BusinessOnboarding() {
                   </div>
 
                   {/* Expense Categories */}
-                  <div className="p-3 bg-muted/50 rounded-md space-y-1.5">
-                    <h3 className="text-sm font-medium text-foreground">
+                  <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                    <h4 className="text-sm font-medium text-foreground">
                       Expense Categories ({wizardData.customExpenseNames?.length || 0})
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5">
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
                       {(wizardData.customExpenseNames || []).map((cat, i) => (
                         <span
                           key={i}
-                          className="px-1.5 py-0.5 bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs rounded"
+                          className="px-2 py-1 bg-orange-500/10 text-orange-600 dark:text-orange-400 text-sm rounded"
                         >
                           {cat}
                         </span>
                       ))}
-                      {(!wizardData.customExpenseNames ||
-                        wizardData.customExpenseNames.length === 0) && (
-                        <span className="text-muted-foreground text-xs">
+                      {(!wizardData.customExpenseNames || wizardData.customExpenseNames.length === 0) && (
+                        <span className="text-muted-foreground text-sm">
                           AI will generate defaults
                         </span>
                       )}
@@ -636,26 +618,21 @@ export default function BusinessOnboarding() {
 
                 {/* Error Display */}
                 {error && (
-                  <div className="p-2 bg-destructive/10 border border-destructive/30 rounded">
-                    <p className="text-xs text-destructive">{error}</p>
+                  <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
+                    <p className="text-sm text-destructive">{error}</p>
                   </div>
                 )}
 
                 {/* Navigation */}
                 <div className="flex justify-between pt-3">
-                  <Button variant="ghost" size="sm" onClick={goToPreviousStep} disabled={isCreating}>
-                    <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                  <Button variant="ghost" onClick={goToPreviousStep} disabled={isCreating}>
+                    <ArrowLeft className="w-4 h-4 mr-1.5" />
                     Back
                   </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleFinalSubmit}
-                    disabled={isCreating || isSubmitting}
-                  >
+                  <Button variant="primary" onClick={handleFinalSubmit} disabled={isCreating || isSubmitting}>
                     {isCreating ? (
                       <>
-                        <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                        <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
                         Setting up...
                       </>
                     ) : (
@@ -665,7 +642,8 @@ export default function BusinessOnboarding() {
                 </div>
               </div>
             )}
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

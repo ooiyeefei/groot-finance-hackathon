@@ -334,3 +334,146 @@ USD, SGD, MYR, THB, IDR, VND, PHP, CNY, EUR, INR
 - [ ] Test currency selector changes display currency
 - [ ] Test amounts convert correctly (SGD → USD)
 - [ ] Test business currency preserved in database
+
+---
+
+# Edit Record Currency Bug Fix (2026-01-11)
+
+## Bug Summary
+**Issue:** Edit Record modal shows user's preferred currency (USD) as "Home Currency" instead of business's actual home currency (SGD).
+
+**User Observation:**
+- Accounting Records List: Shows "≈ SGD 43.23" ✓ (correct)
+- Record Details (View): Shows "Home Currency: SGD 43.23" ✓ (correct)
+- Edit Record: Shows "Home Currency: USD" with conversion preview ❌ (wrong)
+
+## Root Cause
+In `accounting-entry-edit-modal.tsx`, the `useEffect` hook (lines 90-107) was **always** overwriting `formData.home_currency` to `userHomeCurrency` when the hook loaded, ignoring the existing transaction's `home_currency`.
+
+```typescript
+// BUG: Always overwrites to user preference
+useEffect(() => {
+  if (userHomeCurrency) {
+    setFormData(prev => ({
+      ...prev,
+      home_currency: userHomeCurrency  // ← ALWAYS overwrites!
+    }))
+  }
+}, [userHomeCurrency, ...])
+```
+
+## Solution
+Preserve existing transaction's `home_currency` for edit mode. Only use user's preferred currency for NEW records.
+
+```typescript
+// FIX: Preserve existing home_currency for edits
+const existingHomeCurrency = transaction?.home_currency || prefilledData?.home_currency
+home_currency: existingHomeCurrency || userHomeCurrency
+```
+
+## File Modified
+`src/domains/accounting-entries/components/accounting-entry-edit-modal.tsx` - Lines 90-111
+
+## Verification
+- [x] Build passes
+- [x] Changes pushed to main (commit `228a0f09`)
+- [ ] Manual test: Edit existing record shows SGD (business currency)
+- [ ] Manual test: Create new record defaults to USD (user preference)
+
+---
+
+# Task: Unify Business Creation Onboarding UI/UX (2026-01-11)
+
+## Goal
+Standardize the welcome onboarding flow across both entry points (new users and existing users creating a new business), and increase the modal/window size by 33%.
+
+## Requirements
+1. Both entry points should look identical
+2. Increase size from ~672px to ~896px (33% larger)
+3. Keep blurred backdrop
+4. Use "Create New Business" header style with close X button for both
+5. Keep all existing functionality (brewing animation, loading states, step flow)
+
+## Todo Items
+
+- [ ] Update `business-onboarding-modal.tsx` - increase width to max-w-4xl (896px)
+- [ ] Update `business/page.tsx` (full-page wizard) - match modal styling exactly
+- [ ] Ensure both use same:
+  - Header layout (icon + "Create New Business" + X button)
+  - Step indicator styling
+  - Content area sizing
+  - Loading/brewing animation
+- [ ] Run build and verify no errors
+
+## Files to Modify
+1. `src/domains/onboarding/components/business-onboarding-modal.tsx`
+2. `src/app/[locale]/onboarding/business/page.tsx`
+
+## Design Specifications
+
+### New Unified Size
+- Width: `max-w-4xl` (896px) - up from max-w-2xl (672px)
+- Height: `max-h-[96vh]` (unchanged)
+- Content height: `max-h-[calc(96vh-180px)]` (adjusted for larger header)
+
+### Header
+- Left: Building2 icon in primary/10 background + "Create New Business" title + step counter
+- Right: X close button (for both flows)
+
+### Step Indicators
+- Same compact horizontal layout from modal
+- Numbers with checkmarks for completed steps
+
+### Backdrop
+- `bg-black/40 backdrop-blur-sm` (unchanged)
+
+## Review Section
+
+### Implementation Complete (2026-01-11)
+
+**Approach Used: Unified Component Styling**
+
+Both entry points now share identical visual appearance with 33% larger sizing.
+
+### Files Modified
+
+1. **`src/domains/onboarding/components/business-onboarding-modal.tsx`**
+   - Changed container from `max-w-2xl` to `max-w-4xl` (672px → 896px)
+   - Increased padding: `px-4` → `px-6`, `py-3/4` → `py-4/5`
+   - Scaled icons: `h-5 w-5` → `h-6 w-6` for Building2, `h-4 w-4` → `h-5 w-5` for X button
+   - Increased progress bar height: `h-1.5` → `h-2`
+   - Scaled step indicators: `w-5 h-5` → `w-6 h-6`, text `text-[10px]` → `text-xs`
+   - Increased brewing animation icon container: 56px → 72px
+   - Scaled form inputs: `h-9` → `h-10`
+   - Increased category badge padding: `px-1.5 py-0.5` → `px-2 py-1`
+   - Content max-height: `max-h-[calc(96vh-140px)]` → `max-h-[calc(96vh-180px)]`
+
+2. **`src/app/[locale]/onboarding/business/page.tsx`**
+   - Added `X` icon import from lucide-react
+   - Added `handleClose()` function to navigate to plan selection
+   - Changed header from centered "Set Up Your Business" to left-aligned "Create New Business" + X button
+   - Matched container sizing to modal (`max-w-4xl max-h-[96vh]`)
+   - Matched backdrop styling with separate backdrop div
+   - Applied same scaling changes as modal component
+   - Unified step indicator styling (horizontal with labels)
+
+### Key Changes Summary
+
+| Element | Before | After |
+|---------|--------|-------|
+| Container width | 580px (page) / 672px (modal) | 896px (both) |
+| Header title | "Set Up Your Business" (page) / "Create New Business" (modal) | "Create New Business" (both) |
+| Close button | Modal only | Both flows |
+| Progress bar height | 1.5 (6px) | 2 (8px) |
+| Step indicator size | 5/6 (20/24px) | 6 (24px) |
+| Icon sizes | 5 (20px) | 6 (24px) |
+| Input height | 9 (36px) | 10 (40px) |
+| Brewing icon | 56px | 72px |
+| Padding | px-4/5 | px-6 |
+
+### Verification
+- [x] Build passes (`npm run build` successful)
+- [ ] Manual test: New user onboarding flow appears at 896px width
+- [ ] Manual test: "Create New Business" modal from business switcher looks identical
+- [ ] Manual test: X button on new user flow navigates to plan selection
+- [ ] Manual test: Brewing animation scales correctly

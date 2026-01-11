@@ -891,6 +891,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             boundingBoxes={index === 0 ? getFilteredBoundingBoxes() : []}
                             onBoxHover={index === 0 ? setHighlightedBox : undefined}
                             onBoxClick={index === 0 ? () => {} : undefined}
+                            hideRegionsCount={true}
                           />
                         </div>
                       ))}

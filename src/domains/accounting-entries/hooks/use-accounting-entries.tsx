@@ -447,8 +447,12 @@ export function formatCurrency(amount: number | null | undefined, currency: Supp
   }
 
   try {
-    // Use explicit currency code format for better clarity (e.g., "SGD 108.61")
-    return `${currency} ${amount.toFixed(2)}`;
+    // Use explicit currency code format with comma separators (e.g., "SGD 108.61" or "IDR 101,596,428.00")
+    const formattedAmount = amount.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    return `${currency} ${formattedAmount}`;
   } catch {
     // Fallback for unsupported currencies
     return `0.00 ${currency}`;
