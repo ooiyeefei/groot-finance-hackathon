@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Languages, Eye, FileText, DollarSign, List, Copy } from 'lucide-react'
+import { X, Languages, Eye, FileText, DollarSign, List, Copy, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
 import { formatNumber } from '@/lib/utils/format-number'
+import { useInvoiceRealtime } from '../hooks/use-invoices-realtime'
 
 interface Document {
   id: string
@@ -193,6 +194,8 @@ interface Document {
     }
   }
   confidence_score?: number
+  // Line items status for two-phase extraction real-time updates
+  line_items_status?: 'pending' | 'extracting' | 'complete' | 'skipped'
 }
 
 interface DocumentAnalysisModalProps {
@@ -209,7 +212,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'zh', name: 'Chinese' }
 ]
 
-export default function DocumentAnalysisModal({ document, onClose }: DocumentAnalysisModalProps) {
+export default function DocumentAnalysisModal({ document: initialDocument, onClose }: DocumentAnalysisModalProps) {
   const [sourceLanguage, setSourceLanguage] = useState('auto')
   const [targetLanguage, setTargetLanguage] = useState('en')
   const [translatedText, setTranslatedText] = useState('')
@@ -232,6 +235,25 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
   // Refs for scroll-based page tracking
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  // Real-time subscription for line items updates (Phase 2 completion)
+  // This enables automatic UI updates when Lambda completes line items extraction
+  const { invoice: realtimeInvoice } = useInvoiceRealtime(initialDocument.id)
+
+  // Merge real-time data with initial document
+  // Real-time updates take priority when available
+  const document = useMemo((): Document => {
+    if (!realtimeInvoice) return initialDocument
+
+    return {
+      ...initialDocument,
+      // Override with real-time data when available
+      extracted_data: realtimeInvoice.extracted_data as Document['extracted_data'] ?? initialDocument.extracted_data,
+      status: realtimeInvoice.status as Document['status'] ?? initialDocument.status,
+      line_items_status: realtimeInvoice.line_items_status ?? initialDocument.line_items_status,
+      confidence_score: realtimeInvoice.confidence_score ?? initialDocument.confidence_score,
+    }
+  }, [initialDocument, realtimeInvoice])
 
   // Scroll handler to detect current visible page
   const handleScroll = useCallback(() => {
@@ -1505,11 +1527,31 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                 )}
 
                 {/* Line Items Table */}
-                {document.extracted_data?.line_items && document.extracted_data.line_items.length > 0 && (
+                {/* Show section if line items exist OR if extraction is in progress */}
+                {((document.extracted_data?.line_items && document.extracted_data.line_items.length > 0) ||
+                  document.line_items_status === 'extracting' ||
+                  document.line_items_status === 'pending') && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-foreground mb-4 flex items-center">
                       <List className="w-4 h-4 mr-2" />
-                      Line Items ({document.extracted_data.line_items.length})
+                      Line Items {document.extracted_data?.line_items?.length ? `(${document.extracted_data.line_items.length})` : ''}
+                      {/* Real-time extraction status indicator */}
+                      {document.line_items_status === 'extracting' && (
+                        <span className="ml-3 flex items-center text-xs text-amber-500">
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Extracting line items...
+                        </span>
+                      )}
+                      {document.line_items_status === 'pending' && (
+                        <span className="ml-3 text-xs text-muted-foreground">
+                          (Pending extraction)
+                        </span>
+                      )}
+                      {document.line_items_status === 'complete' && (
+                        <span className="ml-3 text-xs text-green-500">
+                          ✓ Complete
+                        </span>
+                      )}
                     </h4>
                     
                     <div className="bg-card rounded-lg overflow-hidden">
@@ -1527,7 +1569,7 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border">
-                            {document.extracted_data.line_items.map((item, index) => (
+                            {document.extracted_data?.line_items?.map((item, index) => (
                               <tr key={index} className="hover:bg-muted/80">
                                 <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
                                 <td
@@ -1623,6 +1665,19 @@ export default function DocumentAnalysisModal({ document, onClose }: DocumentAna
                           </tbody>
                         </table>
                       </div>
+                      {/* Show loading placeholder when extracting but no items yet */}
+                      {(!document.extracted_data?.line_items || document.extracted_data.line_items.length === 0) &&
+                        (document.line_items_status === 'extracting' || document.line_items_status === 'pending') && (
+                        <div className="p-6 text-center text-muted-foreground">
+                          <Loader2 className="w-5 h-5 mx-auto mb-2 animate-spin text-primary" />
+                          <p className="text-sm">
+                            {document.line_items_status === 'extracting'
+                              ? 'Extracting line items from document...'
+                              : 'Line items extraction pending...'}
+                          </p>
+                          <p className="text-xs mt-1">This will update automatically when complete</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

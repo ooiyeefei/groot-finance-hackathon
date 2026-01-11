@@ -87,6 +87,8 @@ interface ConvexInvoice {
   failedAt?: number
   deletedAt?: number
   updatedAt?: number
+  // Line items status for two-phase extraction
+  lineItemsStatus?: 'pending' | 'extracting' | 'complete' | 'skipped'
   // Joined from accounting_entries via Convex query
   linkedTransaction?: ConvexLinkedTransaction | null
 }
@@ -107,6 +109,8 @@ export interface Invoice {
   error_message?: ErrorDetails | string | null
   extracted_data?: ExtractedData | null
   confidence_score?: number
+  // Line items status for two-phase extraction real-time updates
+  line_items_status?: 'pending' | 'extracting' | 'complete' | 'skipped'
   // Linked transaction data (joined from accounting_entries)
   linked_transaction?: {
     id: string
@@ -152,6 +156,8 @@ function mapConvexInvoice(invoice: ConvexInvoice): Invoice {
     error_message: invoice.errorMessage as ErrorDetails | string | null | undefined,
     extracted_data: invoice.extractedData as ExtractedData | null | undefined,
     confidence_score: invoice.confidenceScore,
+    // Line items status for two-phase extraction real-time updates
+    line_items_status: invoice.lineItemsStatus,
     // Map linked transaction from Convex query join
     linked_transaction: invoice.linkedTransaction
       ? {
@@ -202,5 +208,31 @@ export function useInvoicesRealtime(options: UseInvoicesRealtimeOptions = {}): U
     totalCount: result?.totalCount ?? 0,
     hasMore: result?.nextCursor !== null,
     nextCursor: result?.nextCursor ?? null,
+  }
+}
+
+/**
+ * Hook for getting a single invoice with real-time updates
+ *
+ * This enables real-time line items sync when Lambda Phase 2 completes extraction.
+ * The modal can subscribe to this hook to receive updates without refreshing.
+ */
+export function useInvoiceRealtime(invoiceId: string | null) {
+  const invoice = useQuery(
+    api.functions.invoices.getById,
+    invoiceId ? { id: invoiceId } : 'skip'
+  )
+
+  // Map to snake_case for compatibility with existing components
+  const mappedInvoice = useMemo(() => {
+    if (!invoice) return null
+
+    return mapConvexInvoice(invoice as ConvexInvoice)
+  }, [invoice])
+
+  return {
+    invoice: mappedInvoice,
+    isLoading: invoice === undefined,
+    error: null,
   }
 }
