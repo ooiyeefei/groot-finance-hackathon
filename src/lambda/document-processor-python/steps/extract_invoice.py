@@ -436,18 +436,22 @@ def extract_invoice_step(
         domain: 'invoices' or 'expense_claims'
         categories: Business categories for COGS categorization
         s3: S3 client instance
-        fast_mode: If True, use simplified extraction (dspy.Predict) for speed
+        fast_mode: If True, use simplified schema (FastInvoiceData) for speed
 
     Returns:
         Dict with extracted invoice data including user_message, suggestions, and token usage
     """
-    mode_label = "FAST" if fast_mode else "FULL"
+    # Determine mode label for logging
+    if fast_mode:
+        mode_label = "FAST"  # Fast mode: Predict with simplified FastInvoiceData schema
+    else:
+        mode_label = "PREDICT"  # Default: Predict with full InvoiceData schema
     print(f"[{document_id}] Extracting invoice data with DSPy ({mode_label} mode)")
     start_time = datetime.utcnow()
     token_data = None
 
     try:
-        # Get page images - in fast mode, only fetch first page
+        # Get page images - in fast mode, only fetch first page for speed
         all_image_bytes = []
         if images and len(images) > 0:
             pages_to_fetch = 1 if fast_mode else len(images)
@@ -470,7 +474,7 @@ def extract_invoice_step(
             raise ValueError("GEMINI_API_KEY not set")
 
         print(f"[{document_id}] Configuring DSPy with Gemini...")
-        # Use lower max_tokens in fast mode (simpler output)
+        # Use lower max_tokens in fast mode (simplified schema)
         max_tokens = 4096 if fast_mode else 16384
         gemini_lm = dspy.LM(
             "gemini/gemini-2.5-flash",
@@ -495,10 +499,12 @@ def extract_invoice_step(
         print(f"[{document_id}] Categories: {len(categories or [])} available")
 
         # =================================================================
-        # FAST MODE: Use dspy.Predict with simplified schema (saves ~3-5s)
-        # FULL MODE: Use dspy.ChainOfThought with complete schema
+        # EXTRACTION MODES:
+        # 1. fast_mode=True: FAST - dspy.Predict with simplified FastInvoiceData schema
+        # 2. Default: dspy.Predict with full InvoiceData schema
         # =================================================================
         if fast_mode:
+            # FAST MODE: Simplified schema for speed
             print(f"[{document_id}] Running DSPy Predict (FAST mode) with 1 image...")
             processor = dspy.Predict(FastInvoiceExtractionSignature)
             prediction = processor(
@@ -509,14 +515,15 @@ def extract_invoice_step(
             # Fast mode has no line_items
             line_items = []
         else:
-            print(f"[{document_id}] Running DSPy ChainOfThought (FULL mode) with {len(document_images)} page(s)...")
-            processor = dspy.ChainOfThought(InvoiceExtractionSignature)
+            # DEFAULT: Full schema with dspy.Predict (faster than ChainOfThought, same quality)
+            print(f"[{document_id}] Running DSPy Predict with {len(document_images)} page(s)...")
+            processor = dspy.Predict(InvoiceExtractionSignature)
             prediction = processor(
                 document_images=document_images,
                 available_categories=categories_json
             )
             extracted = prediction.extracted_data
-            # Convert line items (full mode only)
+            # Convert line items (full mode)
             line_items = [
                 DocumentLineItem(
                     description=item.description,
@@ -620,7 +627,7 @@ def extract_invoice_step(
         result = {
             "success": True,
             "backend_used": "dspy_gemini",
-            "processing_method": "dspy_fast" if fast_mode else "dspy",
+            "processing_method": "dspy_fast" if fast_mode else "dspy_predict",
             "document_type": "invoice",
             "model_used": "gemini-2.5-flash",
             "fast_mode": fast_mode,
@@ -700,10 +707,12 @@ def extract_invoice_step(
         print(f"[{document_id}] Final business_purpose: '{result['business_purpose']}'")
 
         print(f"[{document_id}] Invoice extraction complete (quality: {extracted.extraction_quality})")
-        if extracted.user_message:
-            print(f"[{document_id}] User message: {extracted.user_message}")
-        if extracted.suggestions:
-            print(f"[{document_id}] Suggestions: {extracted.suggestions}")
+        user_msg = getattr(extracted, 'user_message', None)
+        suggestions = getattr(extracted, 'suggestions', None)
+        if user_msg:
+            print(f"[{document_id}] User message: {user_msg}")
+        if suggestions:
+            print(f"[{document_id}] Suggestions: {suggestions}")
 
         return result
 

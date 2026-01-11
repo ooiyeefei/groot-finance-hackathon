@@ -109,20 +109,21 @@ export class DocumentProcessingStack extends cdk.Stack {
     // ========================================================================
     // Lambda Version and Alias
     // ========================================================================
-    // Generate hash from env vars to force new version when they change
-    // (CDK only auto-versions on code changes, not env var changes)
-    const envHash = generateEnvHash(lambdaEnvVars);
+    // Use currentVersion which auto-creates new versions when:
+    // 1. Docker image changes (code changes)
+    // 2. Function configuration changes
+    //
+    // Note: currentVersion uses a hash of the function configuration,
+    // so any code or config change triggers a new version automatically.
+    const currentVersion = this.documentProcessorFunction.currentVersion;
 
-    const version = new lambda.Version(this, `Version-${envHash}`, {
-      lambda: this.documentProcessorFunction,
-      description: `Auto-versioned with env hash: ${envHash}`,
-      removalPolicy: cdk.RemovalPolicy.RETAIN, // Keep old versions for rollback
-    });
+    // Generate env hash for tracking purposes (included in alias description)
+    const envHash = generateEnvHash(lambdaEnvVars);
 
     this.documentProcessorAlias = new lambda.Alias(this, 'ProdAlias', {
       aliasName: 'prod',
-      version,
-      description: 'Production alias for document processor with durable execution',
+      version: currentVersion,
+      description: `Production alias (env: ${envHash})`,
     });
 
     // ========================================================================

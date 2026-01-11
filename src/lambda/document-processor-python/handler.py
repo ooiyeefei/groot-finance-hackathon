@@ -120,6 +120,7 @@ def handler(event: dict, context: DurableContext):
     doc_id = request.document_id
     print(f"[{doc_id}] Starting durable document processing workflow")
     print(f"[{doc_id}] Domain: {request.domain}, FileType: {request.file_type}")
+    print(f"[{doc_id}] fast_mode={request.fast_mode}, test_mode={request.test_mode}")
 
     # Initialize clients
     convex = get_convex_client()
@@ -177,8 +178,12 @@ def handler(event: dict, context: DurableContext):
     try:
         # =================================================================
         # Step 2: Update status to processing (checkpointed)
+        # Skip in test_mode to avoid touching non-existent documents
         # =================================================================
         def update_status_processing():
+            if request.test_mode:
+                print(f"[{doc_id}] SKIPPING status update to processing (test_mode=True)")
+                return True
             print(f"[{doc_id}] Updating status to processing")
             convex.update_status(
                 document_id=doc_id,
@@ -230,8 +235,12 @@ def handler(event: dict, context: DurableContext):
 
         # =================================================================
         # Step 3b: Update Convex with converted image path (checkpointed)
+        # Skip in test_mode to avoid touching non-existent documents
         # =================================================================
         def update_converted_image():
+            if request.test_mode:
+                print(f"[{doc_id}] SKIPPING converted image update (test_mode=True)")
+                return True
             if conversion_result.get("status") == "success" and conversion_result.get("first_image_path"):
                 print(f"[{doc_id}] Updating Convex with converted image path")
                 first_image = conversion_result.get("images", [{}])[0]
@@ -312,6 +321,9 @@ def handler(event: dict, context: DurableContext):
         # Step 5: Update status to extracting (checkpointed)
         # =================================================================
         def update_status_extracting():
+            if request.test_mode:
+                print(f"[{doc_id}] SKIPPING status update to extracting (test_mode=True)")
+                return True
             print(f"[{doc_id}] Updating status to extracting")
             convex.update_status(
                 document_id=doc_id,
@@ -384,8 +396,13 @@ def handler(event: dict, context: DurableContext):
 
         # =================================================================
         # Step 7: Update Convex with results (checkpointed)
+        # Skip in test_mode to avoid modifying production data
         # =================================================================
         def update_convex_results():
+            if request.test_mode:
+                print(f"[{doc_id}] SKIPPING Convex update (test_mode=True)")
+                return True
+
             print(f"[{doc_id}] Step: Updating Convex with results")
 
             # DEBUG: Log description and business_purpose being passed to Convex
@@ -424,6 +441,10 @@ def handler(event: dict, context: DurableContext):
         # Creates/upserts vendor and records price history observations
         # =================================================================
         def process_vendor():
+            if request.test_mode:
+                print(f"[{doc_id}] SKIPPING vendor processing (test_mode=True)")
+                return {"success": True, "reason": "test_mode"}
+
             print(f"[{doc_id}] Step: Processing vendor from extraction")
             try:
                 result = convex.process_vendor_from_extraction(

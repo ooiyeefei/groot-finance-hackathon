@@ -316,6 +316,51 @@ def categorize_receipt_fallback(
     return None
 
 
+def find_fallback_category(categories: Optional[List[BusinessCategory]]) -> Optional[BusinessCategory]:
+    """
+    Find a generic fallback category like 'Miscellaneous' or 'Other' from business categories.
+
+    This is used as a last resort when:
+    1. LLM doesn't select a category
+    2. Pattern matching doesn't find a match
+
+    Args:
+        categories: Business expense categories from Convex
+
+    Returns:
+        A fallback BusinessCategory if found, None otherwise
+    """
+    if not categories:
+        return None
+
+    # List of common fallback category names (case-insensitive)
+    fallback_names = [
+        "miscellaneous",
+        "other",
+        "general",
+        "uncategorized",
+        "misc",
+        "others",
+    ]
+
+    # First pass: exact match (case-insensitive)
+    for cat in categories:
+        if cat.name.lower() in fallback_names:
+            print(f"[Fallback Category] Found exact match: {cat.name}")
+            return cat
+
+    # Second pass: partial match (contains)
+    for cat in categories:
+        cat_name_lower = cat.name.lower()
+        for fallback_name in fallback_names:
+            if fallback_name in cat_name_lower or cat_name_lower in fallback_name:
+                print(f"[Fallback Category] Found partial match: {cat.name}")
+                return cat
+
+    print("[Fallback Category] No fallback category found in business categories")
+    return None
+
+
 def format_categories_for_llm(categories: Optional[List[BusinessCategory]]) -> str:
     """Format business categories as JSON for LLM input.
 
@@ -416,7 +461,7 @@ def extract_receipt_step(
     Returns:
         Dict with extracted receipt data including user_message, suggestions, and token usage
     """
-    mode_label = "FAST" if fast_mode else "FULL"
+    mode_label = "FAST" if fast_mode else "PREDICT"
     print(f"[{document_id}] Extracting receipt data with DSPy ({mode_label} mode)")
     start_time = datetime.utcnow()
     token_data = None
@@ -492,8 +537,9 @@ def extract_receipt_step(
                 for item in (extracted.line_items or [])
             ]
         else:
-            print(f"[{document_id}] Running DSPy ChainOfThought (FULL mode) with {len(receipt_images)} page(s)...")
-            processor = dspy.ChainOfThought(ReceiptExtractionSignature)
+            # DEFAULT: Full schema with dspy.Predict (faster than ChainOfThought, same quality)
+            print(f"[{document_id}] Running DSPy Predict with {len(receipt_images)} page(s)...")
+            processor = dspy.Predict(ReceiptExtractionSignature)
             prediction = processor(
                 receipt_images=receipt_images,
                 available_categories=categories_json
@@ -562,11 +608,19 @@ def extract_receipt_step(
                 category_confidence = category_result["confidence"]
                 print(f"[{document_id}] Category fallback matched: {expense_category_name} (id: {expense_category_id})")
             else:
-                # No match - user must select manually in UI
-                expense_category_name = None
-                expense_category_id = None
-                category_confidence = 0.0
-                print(f"[{document_id}] No category match - user will select manually")
+                # Fallback to 'Miscellaneous' or 'Other' category if available
+                fallback_category = find_fallback_category(categories)
+                if fallback_category:
+                    expense_category_name = fallback_category.name
+                    expense_category_id = fallback_category.id
+                    category_confidence = 0.5  # Medium confidence for fallback
+                    print(f"[{document_id}] Using fallback category: {expense_category_name} (id: {expense_category_id})")
+                else:
+                    # No fallback category found - user must select manually in UI
+                    expense_category_name = None
+                    expense_category_id = None
+                    category_confidence = 0.0
+                    print(f"[{document_id}] No category match and no fallback - user will select manually")
 
         # Use category ID for storage (frontend expects ID), name for display/logging
         expense_category = expense_category_id
@@ -648,10 +702,12 @@ def extract_receipt_step(
         print(f"[{document_id}] Final business_purpose: '{result['business_purpose']}'")
 
         print(f"[{document_id}] Receipt extraction complete (quality: {extracted.extraction_quality})")
-        if extracted.user_message:
-            print(f"[{document_id}] User message: {extracted.user_message}")
-        if extracted.suggestions:
-            print(f"[{document_id}] Suggestions: {extracted.suggestions}")
+        user_msg = getattr(extracted, 'user_message', None)
+        suggestions = getattr(extracted, 'suggestions', None)
+        if user_msg:
+            print(f"[{document_id}] User message: {user_msg}")
+        if suggestions:
+            print(f"[{document_id}] Suggestions: {suggestions}")
 
         return result
 

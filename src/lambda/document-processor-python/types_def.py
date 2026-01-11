@@ -71,6 +71,8 @@ class DocumentProcessingRequest:
     expected_document_type: Optional[str] = None  # 'invoice' | 'receipt'
     business_categories: Optional[List[BusinessCategory]] = None
     fast_mode: bool = False  # Skip validation + use simplified extraction for speed
+    test_mode: bool = False  # If true, don't update Convex (for testing)
+    skip_validation: bool = False  # Explicit validation skip (for testing)
 
     @classmethod
     def from_dict(cls, data: dict) -> "DocumentProcessingRequest":
@@ -89,6 +91,8 @@ class DocumentProcessingRequest:
             expected_document_type=data.get("expectedDocumentType"),
             business_categories=categories,
             fast_mode=data.get("fastMode", False),
+            test_mode=data.get("testMode", False),
+            skip_validation=data.get("skipValidation", False),
         )
 
 
