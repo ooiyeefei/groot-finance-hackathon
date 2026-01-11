@@ -8,8 +8,21 @@
  * - plan_key: 'starter' | 'pro' | 'enterprise'
  * - ocr_limit: number (-1 for unlimited)
  * - team_limit: number (-1 for unlimited)
- * - features: JSON string array
  * - is_custom_pricing: 'true' | 'false'
+ *
+ * Feature Metadata (individual boolean fields):
+ * - feature_custom_categories: 'true' | 'false'
+ * - feature_ai_categorization: 'true' | 'false'
+ * - feature_approval_workflow: 'true' | 'false'
+ * - feature_multi_currency: 'true' | 'false'
+ * - feature_rbac: 'true' | 'false'
+ * - feature_ai_chat: 'true' | 'false'
+ * - feature_multi_tenancy: 'true' | 'false'
+ * - feature_vendor_management: 'true' | 'false'
+ * - feature_dedicated_manager: 'true' | 'false'
+ * - feature_custom_integrations: 'true' | 'false'
+ * - feature_sla_guarantee: 'true' | 'false'
+ * - feature_on_premise: 'true' | 'false'
  *
  * @see https://docs.stripe.com/products-prices/how-products-and-prices-work
  */
@@ -42,6 +55,26 @@ export interface CatalogData {
 // In-memory cache with TTL (1 hour)
 const CACHE_TTL_MS = 60 * 60 * 1000
 let catalogCache: CatalogData | null = null
+
+/**
+ * Feature metadata key to display name mapping
+ * Keys match Stripe metadata fields (feature_*)
+ */
+const FEATURE_METADATA_MAP: Record<string, string> = {
+  feature_custom_categories: 'Custom business categories',
+  feature_ai_categorization: 'AI auto categorization',
+  feature_approval_workflow: 'Advanced approval workflow',
+  feature_multi_currency: 'Multi-currency tracking',
+  feature_rbac: 'Role-based access control',
+  feature_ai_chat: 'AI chat assistant',
+  feature_multi_tenancy: 'Multi-tenancy support',
+  feature_vendor_management: 'Vendor management',
+  feature_dedicated_manager: 'Dedicated account manager',
+  feature_custom_integrations: 'Custom integrations',
+  feature_sla_guarantee: 'SLA guarantee',
+  feature_on_premise: 'On-premise option',
+  feature_unlimited_ocr: 'Unlimited OCR scans',
+}
 
 // Default trial plan (not in Stripe)
 // Trial gives access to Starter-level features
@@ -122,6 +155,7 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
     teamLimit: -1,
     features: [
       'Everything in Pro',
+      'Vendor management',
       'Unlimited OCR scans',
       'Dedicated account manager',
       'Custom integrations',
@@ -149,20 +183,30 @@ function parseProductMetadata(
     return null
   }
 
-  // Parse features from JSON or use empty array
-  let features: string[] = []
-  if (metadata.features) {
-    try {
-      features = JSON.parse(metadata.features)
-    } catch {
-      console.warn(`Product ${product.id} has invalid features JSON`)
-      features = []
+  // Parse numeric limits first (needed for dynamic feature text)
+  const ocrLimit = metadata.ocr_limit ? parseInt(metadata.ocr_limit, 10) : -1
+  const teamLimit = metadata.team_limit ? parseInt(metadata.team_limit, 10) : -1
+
+  // Build features array from individual metadata fields
+  const features: string[] = []
+
+  // Check each feature metadata field
+  for (const [metadataKey, displayName] of Object.entries(FEATURE_METADATA_MAP)) {
+    if (metadata[metadataKey] === 'true') {
+      features.push(displayName)
     }
   }
 
-  // Parse numeric limits
-  const ocrLimit = metadata.ocr_limit ? parseInt(metadata.ocr_limit, 10) : -1
-  const teamLimit = metadata.team_limit ? parseInt(metadata.team_limit, 10) : -1
+  // Add dynamic features based on limits (if not already added via feature_unlimited_ocr)
+  if (ocrLimit > 0 && !features.includes('Unlimited OCR scans')) {
+    features.push(`${ocrLimit} OCR scans/month`)
+  }
+  if (teamLimit > 0) {
+    features.push(`Up to ${teamLimit} team members`)
+  } else if (teamLimit === -1) {
+    features.push('Unlimited team members')
+  }
+
   const isCustomPricing = metadata.is_custom_pricing === 'true'
 
   // Extract price info
