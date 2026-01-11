@@ -477,3 +477,177 @@ Both entry points now share identical visual appearance with 33% larger sizing.
 - [ ] Manual test: "Create New Business" modal from business switcher looks identical
 - [ ] Manual test: X button on new user flow navigates to plan selection
 - [ ] Manual test: Brewing animation scales correctly
+
+---
+
+# Investigation: S3 Storage Path Pattern Inconsistency (2026-01-11)
+
+## Issue Summary
+
+The S3 storage paths for invoices are inconsistent between upload and conversion:
+
+**Current Upload Path** (from `storage-paths.ts` + `data-access.ts`):
+```
+invoices/{businessId}/{userId}/invoice/{randomUUID}/raw/{randomUUID}.pdf
+```
+
+**Current Conversion Path** (from Lambda `s3_client.py`):
+```
+invoices/{businessId}/{userId}/{convexId}/converted/page_X.png
+```
+
+**Problems Identified:**
+1. **Different folder structures**: Upload has `/invoice/` (documentType) folder, conversion does not
+2. **Different document IDs**: Upload uses `randomUUID()`, conversion uses Convex ID
+3. **Orphaned folders**: Creates separate folder trees for same document
+
+## Root Cause Analysis
+
+### Upload Flow (`src/domains/invoices/lib/data-access.ts:400-499`)
+
+```typescript
+// Line 432: Generate random UUID BEFORE Convex record exists
+const invoiceId = randomUUID()  // e.g., "b1e99523-6c60-4be3-a718-43169416cadc"
+
+// Line 436-443: Build path with this UUID
+const storagePath = generateStoragePath({
+  businessId,
+  userId: convexUserId,
+  documentType: 'invoice',  // ← Creates /invoice/ folder
+  stage: 'raw',
+  filename: `${invoiceId}.${fileExtension}`,
+  documentId: invoiceId     // ← Uses random UUID
+})
+// Result: {businessId}/{userId}/invoice/{UUID}/raw/{UUID}.pdf
+```
+
+### Storage Path Builder (`src/lib/storage-paths.ts:39-54`)
+
+```typescript
+// Line 48-50: If documentId provided, creates folder for it
+if (documentId) {
+  return `${businessId}/${userId}/${documentType}/${documentId}/${stage}/${filename}`
+  //                     ↑ includes documentType folder
+}
+```
+
+### Lambda Conversion (`src/lambda/document-processor-python/utils/s3_client.py:145-170`)
+
+```typescript
+// Line 157: Pattern WITHOUT documentType
+def build_storage_path(domain, business_id, user_id, document_id, stage, filename):
+    return f"{domain}/{business_id}/{user_id}/{document_id}/{stage}/{filename}"
+    //              ↑ NO documentType folder!
+```
+
+### Lambda receives Convex ID (`data-access.ts:669-680`)
+
+```typescript
+// Line 670: Uses document.id which is the CONVEX ID
+documentId: document.id,  // e.g., "js7b2v53b2wheqscbdtkrdsqa97yyrag"
+storagePath: document.storage_path,  // Contains the UUID path
+```
+
+## Desired Pattern (User Request)
+
+Standardized pattern:
+```
+invoices/{businessId}/{userId}/{invoiceTableId}/raw/{invoiceTableId}.pdf
+invoices/{businessId}/{userId}/{invoiceTableId}/converted/page_X.png
+```
+
+Where `invoiceTableId` = Convex ID (consistent across upload and conversion)
+
+## Proposed Solutions
+
+### Option A: Create Convex Record First, Then Upload (Recommended)
+1. Create invoice record in Convex first (status: 'uploading')
+2. Use Convex ID for storage path
+3. Upload file to S3
+4. Update Convex record with storage_path (status: 'pending')
+
+**Pros**: Clean, consistent IDs everywhere
+**Cons**: Requires restructuring upload flow, orphan records if upload fails
+
+### Option B: Remove documentType Folder
+1. Update `generateStoragePath()` to NOT include documentType folder
+2. Keep UUID pattern but align folder structure
+
+**Pros**: Minimal code change
+**Cons**: Still has UUID vs Convex ID mismatch
+
+### Option C: Move/Rename After Upload
+1. Keep current upload flow
+2. After Convex record created, move S3 file to new path with Convex ID
+3. Update Convex record with new path
+
+**Pros**: No flow restructure needed
+**Cons**: Extra S3 operations, race conditions
+
+## Files Involved
+
+1. `src/lib/storage-paths.ts` - Path generation logic
+2. `src/domains/invoices/lib/data-access.ts` - Upload flow
+3. `src/lambda/document-processor-python/utils/s3_client.py` - Lambda path builder
+4. `src/domains/expense-claims/lib/data-access.ts` - Similar pattern for expense claims
+
+## Todo Items
+
+- [ ] Decide on approach (A, B, or C)
+- [ ] Update storage path generation to remove `/invoice/` folder from pattern
+- [ ] Align Lambda path builder with TypeScript path builder
+- [ ] Test invoice upload and conversion paths align
+- [ ] Test expense claims upload paths
+- [ ] Migration plan for existing S3 files (optional)
+
+## Review Section
+
+(To be completed after implementation)
+
+---
+
+# Dashboard Currency Dropdown Fix (2026-01-11)
+
+## Bug Summary
+**Issue:** When user changed the dashboard currency dropdown from SGD to USD (or any other currency), the selection wasn't persisting. The API logs showed `Currency: SGD` even when USD was selected.
+
+**User Observation:**
+- Dropdown selection changed visually
+- API returned 200 OK for preference update
+- But dashboard kept showing data in SGD (the old currency)
+
+## Root Cause
+In `use-home-currency.ts`, the `updateHomeCurrency()` function updated:
+1. Module-level `cachedCurrency` variable ✓
+2. `localStorage` ✓
+3. Backend API ✓
+
+But **React state in `useHomeCurrency` hook** didn't update because:
+- `localStorage` storage events **only fire for OTHER tabs**, not the same tab
+- The hook's `useState(currency)` stayed at old value
+- When dashboard called `refresh()`, it used the OLD `homeCurrency` from React state
+
+## Solution
+Added **custom event pattern** for same-tab synchronization:
+
+```typescript
+// Custom event name for same-tab currency updates
+const CURRENCY_CHANGE_EVENT = 'finanseal:currency-change'
+
+// In updateHomeCurrency():
+window.dispatchEvent(new CustomEvent(CURRENCY_CHANGE_EVENT, { detail: newCurrency }))
+
+// In useHomeCurrency hook:
+window.addEventListener(CURRENCY_CHANGE_EVENT, handleCurrencyChange)
+```
+
+Also removed premature `refresh()` call in dashboard - TanStack Query auto-refetches when `homeCurrency` changes in queryKey.
+
+## Files Modified
+1. `src/domains/users/hooks/use-home-currency.ts` - Added custom event dispatch and listener
+2. `src/domains/analytics/components/complete-dashboard.tsx` - Removed manual refresh() call
+
+## Verification
+- [x] Build passes (`npm run build` successful)
+- [x] Changes pushed to main (commit `de6331a5`)
+- [ ] Manual test: Dashboard currency selector properly changes display currency
