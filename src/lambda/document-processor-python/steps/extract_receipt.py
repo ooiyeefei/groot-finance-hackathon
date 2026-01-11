@@ -1,7 +1,7 @@
 """
 Receipt Extraction Step
 
-Uses DSPy with Gemini 2.5 Flash for structured receipt data extraction.
+Uses DSPy with Gemini 3 Flash for structured receipt data extraction.
 Receipts have simpler structure than invoices - optimized for expense claims.
 
 Updated to match Trigger.dev implementation:
@@ -489,11 +489,11 @@ def extract_receipt_step(
         if not gemini_api_key:
             raise ValueError("GEMINI_API_KEY not set")
 
-        print(f"[{document_id}] Configuring DSPy with Gemini...")
+        print(f"[{document_id}] Configuring DSPy with Gemini 3 Flash...")
         # Use lower max_tokens in fast mode (simpler output)
         max_tokens = 4096 if fast_mode else 8192
         gemini_lm = dspy.LM(
-            "gemini/gemini-2.5-flash",
+            "gemini/gemini-3-flash-preview",  # Upgraded from 2.5 - 67% faster (4.5s vs 13.8s)
             api_key=gemini_api_key,
             temperature=0.1,
             max_tokens=max_tokens,
@@ -557,7 +557,7 @@ def extract_receipt_step(
             ]
 
         # Log token usage for billing (include actual image count)
-        token_data = log_token_usage(gemini_lm, "gemini-2.5-flash", image_count=len(receipt_images))
+        token_data = log_token_usage(gemini_lm, "gemini-3-flash-preview", image_count=len(receipt_images))
 
         print(f"[{document_id}] Extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
         print(f"[{document_id}] Quality: {extracted.extraction_quality}, Confidence: {extracted.confidence_score}")
@@ -634,7 +634,7 @@ def extract_receipt_step(
             "backend_used": "dspy_gemini",
             "processing_method": "dspy_fast" if fast_mode else "dspy",
             "document_type": "receipt",
-            "model_used": "gemini-2.5-flash",
+            "model_used": "gemini-3-flash-preview",
             "fast_mode": fast_mode,
 
             # Core fields (always present)

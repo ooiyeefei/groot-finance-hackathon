@@ -134,8 +134,8 @@ Respond in JSON format:
     "reasoning": "Brief explanation"
 }"""
 
-    # Gemini API endpoint - use gemini-2.5-flash (consistent with rest of codebase)
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    # Gemini API endpoint - use gemini-3-flash-preview (67% faster than 2.5)
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={api_key}"
 
     # Build request payload
     payload = {
