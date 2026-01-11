@@ -1642,6 +1642,89 @@ export const internalUpdateExtraction = internalMutation({
 });
 
 /**
+ * Internal: Update line items after Phase 2 extraction (no auth required)
+ * Used by Lambda after two-phase extraction - Phase 2 updates line items only
+ *
+ * Two-Phase Extraction Flow:
+ * - Phase 1: Extract core fields → Convex update → frontend renders immediately (~3-4s)
+ * - Phase 2: Extract line items → this mutation → frontend updates via real-time (~3-4s)
+ */
+export const internalUpdateLineItems = internalMutation({
+  args: {
+    id: v.string(),
+    lineItems: v.array(
+      v.object({
+        description: v.string(),
+        quantity: v.optional(v.number()),
+        unit_price: v.optional(v.number()),
+        line_total: v.number(),
+      })
+    ),
+    lineItemsStatus: v.union(
+      v.literal("pending"),
+      v.literal("extracting"),
+      v.literal("complete"),
+      v.literal("skipped")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const claim = await resolveById(ctx.db, "expense_claims", args.id);
+    if (!claim) {
+      throw new Error(`Expense claim not found: ${args.id}`);
+    }
+
+    const now = Date.now();
+
+    // Merge line_items into existing processingMetadata
+    const existingMetadata = (claim.processingMetadata || {}) as Record<string, unknown>;
+    const updatedMetadata = {
+      ...existingMetadata,
+      line_items: args.lineItems,
+      line_items_extracted_at: new Date(now).toISOString(),
+    };
+
+    await ctx.db.patch(claim._id, {
+      processingMetadata: updatedMetadata,
+      lineItemsStatus: args.lineItemsStatus,
+      updatedAt: now,
+    });
+
+    console.log(`[Convex Internal] Updated expense claim ${args.id} with ${args.lineItems.length} line items (status: ${args.lineItemsStatus})`);
+    return claim._id;
+  },
+});
+
+/**
+ * Internal: Update line items status only (for state transitions)
+ * Used by Lambda to mark lineItemsStatus as 'extracting' before Phase 2 starts
+ */
+export const internalUpdateLineItemsStatus = internalMutation({
+  args: {
+    id: v.string(),
+    lineItemsStatus: v.union(
+      v.literal("pending"),
+      v.literal("extracting"),
+      v.literal("complete"),
+      v.literal("skipped")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const claim = await resolveById(ctx.db, "expense_claims", args.id);
+    if (!claim) {
+      throw new Error(`Expense claim not found: ${args.id}`);
+    }
+
+    await ctx.db.patch(claim._id, {
+      lineItemsStatus: args.lineItemsStatus,
+      updatedAt: Date.now(),
+    });
+
+    console.log(`[Convex Internal] Updated expense claim ${args.id} lineItemsStatus to: ${args.lineItemsStatus}`);
+    return claim._id;
+  },
+});
+
+/**
  * Internal: Update classification results (no auth required)
  * Used by Trigger.dev after document classification
  */

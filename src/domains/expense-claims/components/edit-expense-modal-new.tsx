@@ -83,6 +83,9 @@ export default function EditExpenseModalNew({
     // Status info
     claimStatus,
 
+    // Line items status (for two-phase extraction)
+    lineItemsStatus,
+
     // Processing method detection
     processingMethod,
     isManualEntry,
@@ -550,6 +553,7 @@ export default function EditExpenseModalNew({
                             variant="compact"
                             taxAmount={formData.tax_amount || 0}
                             subtotalAmount={formData.subtotal_amount}
+                            lineItemsStatus={lineItemsStatus}
                           />
                         </CardContent>
                       </Card>

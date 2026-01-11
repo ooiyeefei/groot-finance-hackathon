@@ -16,6 +16,9 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LineItem } from '@/domains/accounting-entries/hooks/use-line-items'
 
+// Line items extraction status (from two-phase extraction)
+export type LineItemsStatus = 'pending' | 'extracting' | 'complete' | 'skipped' | undefined
+
 // Props interface
 export interface LineItemTableProps {
   // Line items data
@@ -39,6 +42,42 @@ export interface LineItemTableProps {
   // Styling options
   className?: string
   variant?: 'default' | 'compact'
+
+  // Two-phase extraction: show skeleton when line items are being extracted
+  lineItemsStatus?: LineItemsStatus
+}
+
+// Skeleton row for loading state
+function SkeletonRow({ isCompact }: { isCompact: boolean }) {
+  return (
+    <div
+      className={`grid gap-1 items-center bg-muted/50 p-1 rounded-lg border border-border animate-pulse ${
+        isCompact ? 'grid-cols-11' : 'grid-cols-12'
+      }`}
+    >
+      <div className="col-span-1 flex justify-center">
+        <div className="h-5 w-5 bg-muted-foreground/20 rounded" />
+      </div>
+      <div className={isCompact ? 'col-span-3' : 'col-span-4'}>
+        <div className="h-10 bg-muted-foreground/20 rounded" />
+      </div>
+      <div className="col-span-1">
+        <div className="h-10 bg-muted-foreground/20 rounded" />
+      </div>
+      <div className={isCompact ? 'col-span-1' : 'col-span-2'}>
+        <div className="h-10 bg-muted-foreground/20 rounded" />
+      </div>
+      <div className="col-span-2">
+        <div className="h-10 bg-muted-foreground/20 rounded" />
+      </div>
+      <div className={isCompact ? 'col-span-2' : 'col-span-2'}>
+        <div className="h-10 bg-muted-foreground/20 rounded" />
+      </div>
+      <div className="col-span-1">
+        <div className="h-8 w-8 bg-muted-foreground/20 rounded mx-auto" />
+      </div>
+    </div>
+  )
 }
 
 export default function LineItemTable({
@@ -53,10 +92,17 @@ export default function LineItemTable({
   taxAmount = 0,
   subtotalAmount,
   className = '',
-  variant = 'default'
+  variant = 'default',
+  lineItemsStatus
 }: LineItemTableProps) {
 
   const isCompact = variant === 'compact'
+
+  // Determine if we should show skeleton loading
+  const isLoading = lineItemsStatus === 'pending' || lineItemsStatus === 'extracting'
+
+  // Determine if items just loaded (for fade-in animation)
+  const hasItems = lineItems.length > 0
 
   return (
     <Card className={`bg-card border-border ${className}`}>
@@ -64,9 +110,14 @@ export default function LineItemTable({
         <CardTitle className="text-foreground text-base flex items-center justify-between">
           <div className="flex items-center gap-2">
             <DollarSign className="w-5 h-5" />
-            Line Items ({lineItems.length})
+            Line Items ({isLoading ? '...' : lineItems.length})
+            {isLoading && (
+              <span className="text-xs text-muted-foreground font-normal ml-2 animate-pulse">
+                Extracting line items...
+              </span>
+            )}
           </div>
-          {showAddButton && (
+          {showAddButton && !isLoading && (
             <Button
               type="button"
               onClick={addLineItem}
@@ -81,7 +132,28 @@ export default function LineItemTable({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {lineItems.length > 0 ? (
+        {/* Skeleton loading state */}
+        {isLoading ? (
+          <div className="space-y-3">
+            {/* Line Items Table Header */}
+            <div className={`grid gap-0 text-sm font-small text-muted-foreground tracking-wide border-b border-border pb-1 ${
+              isCompact ? 'grid-cols-11' : 'grid-cols-12'
+            }`}>
+              <span className="col-span-1 text-center">#</span>
+              <span className={isCompact ? 'col-span-3 text-center' : 'col-span-4 text-center'}>Description</span>
+              <span className="col-span-1 text-center">Qty</span>
+              <span className="col-span-1 text-center">Currency</span>
+              <span className="col-span-2 text-center">Unit Price</span>
+              <span className={isCompact ? 'col-span-2 text-center' : 'col-span-3 text-center'}>Total</span>
+              <span className="col-span-1 text-center">Actions</span>
+            </div>
+
+            {/* Skeleton Rows - show 3 placeholder rows */}
+            <SkeletonRow isCompact={isCompact} />
+            <SkeletonRow isCompact={isCompact} />
+            <SkeletonRow isCompact={isCompact} />
+          </div>
+        ) : lineItems.length > 0 ? (
           <div className="space-y-3">
             {/* Line Items Table Header */}
             <div className={`grid gap-0 text-sm font-small text-muted-foreground tracking-wide border-b border-border pb-1 ${
@@ -102,7 +174,7 @@ export default function LineItemTable({
                 key={index}
                 className={`grid gap-1 items-center bg-muted/50 p-1 rounded-lg border border-border ${
                   isCompact ? 'grid-cols-11' : 'grid-cols-12'
-                }`}
+                } ${lineItemsStatus === 'complete' ? 'animate-fade-in-up' : ''}`}
               >
                 {/* Item Number */}
                 <div className="col-span-1 flex justify-center items-center">

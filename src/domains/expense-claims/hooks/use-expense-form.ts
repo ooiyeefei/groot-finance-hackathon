@@ -114,6 +114,9 @@ export interface UseExpenseFormReturn {
   claimStatus: string
   processingStatus: string
 
+  // Line items status (for two-phase extraction)
+  lineItemsStatus: 'pending' | 'extracting' | 'complete' | 'skipped' | undefined
+
   // Processing method detection
   processingMethod: 'ai' | 'manual_entry'
   isManualEntry: boolean
@@ -180,6 +183,9 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   const [claimStatus, setClaimStatus] = useState<string>('')
   const [processingStatusState, setProcessingStatusState] = useState<string>('')
 
+  // Line items status for two-phase extraction
+  const [lineItemsStatus, setLineItemsStatus] = useState<'pending' | 'extracting' | 'complete' | 'skipped' | undefined>(undefined)
+
   // Currency conversion
   const [previewAmount, setPreviewAmount] = useState<number | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
@@ -245,6 +251,11 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
 
       // Set status information - separate workflow and AI processing status
       setClaimStatus(claim.status || '') // Workflow status (draft, submitted, approved, etc.)
+
+      // Set line items status for two-phase extraction UI
+      // This comes from the lineItemsStatus field set by Lambda Phase 2
+      const extractedLineItemsStatus = claim.line_items_status || claim.lineItemsStatus
+      setLineItemsStatus(extractedLineItemsStatus as 'pending' | 'extracting' | 'complete' | 'skipped' | undefined)
 
       // Extract AI processing status from processing_metadata
       let aiProcessingStatus = 'idle' // Default status
@@ -938,6 +949,9 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     // Status info
     claimStatus,
     processingStatus: processingStatusState,
+
+    // Line items status (for two-phase extraction)
+    lineItemsStatus,
 
     // Processing method detection
     processingMethod,

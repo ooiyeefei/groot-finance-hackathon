@@ -40,9 +40,55 @@ class ReceiptLineItem(BaseModel):
 
 
 # =============================================================================
-# Fast Mode Schema - Simplified for speed (saves ~3-5s)
-# Keeps: line_items, subtotal, tax, tip (essential for expense claims)
-# Removes: vendor_address, vendor_contact, payment_method, missing_fields, suggestions
+# Two-Phase Extraction Schemas
+# Phase 1 (CoreReceiptData): Core fields only - NO line_items (~3-4s)
+# Phase 2 (LineItemsOnlyData): Line items only (~3-4s)
+# =============================================================================
+
+class CoreReceiptData(BaseModel):
+    """Phase 1: Core receipt fields only - NO line_items for fast initial render."""
+    # Core fields (required)
+    vendor_name: str = Field(..., description="Store/merchant name")
+    transaction_date: str = Field(..., description="Date in YYYY-MM-DD format")
+    total_amount: float = Field(..., description="Final total amount")
+    currency: str = Field(..., description="ISO 4217 currency code (SGD, MYR, USD, etc.)")
+
+    # Useful identifiers
+    receipt_number: Optional[str] = Field(None, description="Receipt/invoice number")
+
+    # Financial breakdown
+    subtotal_amount: Optional[float] = Field(None, description="Subtotal before tax")
+    tax_amount: Optional[float] = Field(None, description="Tax amount")
+    tip_amount: Optional[float] = Field(None, description="Tip amount if applicable")
+
+    # Category - selected from available_categories
+    expense_category: Optional[str] = Field(
+        None,
+        description="Selected expense category name from available_categories list"
+    )
+
+    # AI-generated descriptive fields
+    description: Optional[str] = Field(
+        None,
+        description="Concise expense summary, e.g., 'Lunch at ABC Restaurant'"
+    )
+    business_purpose: Optional[str] = Field(
+        None,
+        description="Business justification, e.g., 'Client meeting lunch'"
+    )
+
+    # Quality
+    confidence_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence")
+    extraction_quality: Literal['high', 'medium', 'low'] = Field(..., description="Quality assessment")
+
+
+class LineItemsOnlyData(BaseModel):
+    """Phase 2: Line items extraction only - runs after core data is sent to frontend."""
+    line_items: List[ReceiptLineItem] = Field(default_factory=list, description="Line items from receipt")
+
+
+# =============================================================================
+# Fast Mode Schema (Legacy - kept for backward compatibility)
 # =============================================================================
 
 class FastReceiptData(BaseModel):
@@ -224,6 +270,61 @@ class FastReceiptExtractionSignature(dspy.Signature):
         tax_amount, tip_amount, expense_category.
         Generate 'description' and 'business_purpose' for the expense claim.
         Set confidence_score and extraction_quality based on image clarity."""
+    )
+
+
+# =============================================================================
+# Two-Phase Extraction DSPy Signatures
+# Phase 1: Core fields only (~3-4s) - renders immediately
+# Phase 2: Line items only (~3-4s) - updates via Convex real-time
+# =============================================================================
+
+class CoreReceiptExtractionSignature(dspy.Signature):
+    """Phase 1: Fast extraction of core receipt fields WITHOUT line_items.
+
+    This is optimized for speed - extracts only essential fields so frontend
+    can render immediately while Phase 2 extracts line items in background.
+
+    Extract: vendor_name, transaction_date, total_amount, currency, receipt_number,
+    subtotal_amount, tax_amount, tip_amount, expense_category, description,
+    business_purpose, confidence_score, extraction_quality.
+
+    DO NOT extract: line_items (Phase 2 handles this separately).
+    """
+
+    receipt_image: dspy.Image = dspy.InputField(
+        desc="Receipt image for core field extraction"
+    )
+
+    available_categories: str = dspy.InputField(
+        desc="JSON list of expense categories"
+    )
+
+    extracted_data: CoreReceiptData = dspy.OutputField(
+        desc="""Extract CORE receipt data only (NO line_items):
+        vendor_name, transaction_date, total_amount, currency, receipt_number,
+        subtotal_amount, tax_amount, tip_amount, expense_category.
+        Generate 'description' and 'business_purpose' for the expense claim.
+        Set confidence_score and extraction_quality based on image clarity.
+        IMPORTANT: Do NOT extract line_items - that happens in Phase 2."""
+    )
+
+
+class LineItemsExtractionSignature(dspy.Signature):
+    """Phase 2: Extract line items only from receipt image.
+
+    This runs AFTER Phase 1 has already extracted core fields.
+    Focus solely on identifying and extracting individual line items.
+    """
+
+    receipt_image: dspy.Image = dspy.InputField(
+        desc="Receipt image for line items extraction"
+    )
+
+    extracted_data: LineItemsOnlyData = dspy.OutputField(
+        desc="""Extract ONLY the line items from the receipt.
+        For each item: description, quantity (if shown), unit_price (if shown), line_total.
+        Be thorough - capture all individual items/products listed on the receipt."""
     )
 
 
@@ -748,3 +849,279 @@ def _fetch_image_bytes(url: str) -> bytes:
     response = httpx.get(url, timeout=30.0)
     response.raise_for_status()
     return response.content
+
+
+# =============================================================================
+# Two-Phase Extraction Functions
+# Phase 1: Core fields only (~3-4s) → frontend renders immediately
+# Phase 2: Line items only (~3-4s) → Convex real-time update
+# =============================================================================
+
+def extract_receipt_phase1_step(
+    document_id: str,
+    images: Optional[List[ConvertedImageInfo]],
+    storage_path: str,
+    domain: str,
+    categories: Optional[List[BusinessCategory]],
+    s3: S3Client,
+) -> Dict[str, Any]:
+    """
+    Phase 1: Extract core receipt fields WITHOUT line items.
+
+    This provides fast initial rendering (~3-4s) while Phase 2 extracts
+    line items in parallel. Uses CoreReceiptExtractionSignature.
+
+    Args:
+        document_id: Document ID for logging
+        images: Converted image info (for PDFs) or None
+        storage_path: S3 path to original document
+        domain: 'invoices' or 'expense_claims'
+        categories: Business categories for categorization
+        s3: S3 client instance
+
+    Returns:
+        Dict with core receipt data (no line_items), ready for Convex update
+    """
+    print(f"[{document_id}] Phase 1: Extracting core receipt fields (NO line_items)")
+    start_time = datetime.utcnow()
+    token_data = None
+
+    try:
+        # Fetch first page only for Phase 1 (core fields are on first page)
+        all_image_bytes = []
+        if images and len(images) > 0:
+            print(f"[{document_id}] Phase 1: Fetching first page only...")
+            img_info = images[0]
+            image_url = s3.get_presigned_url(img_info.s3_key)
+            img_bytes = _fetch_image_bytes(image_url)
+            all_image_bytes.append(img_bytes)
+        else:
+            # Single image (not from PDF conversion)
+            image_bytes, _ = get_image_from_s3(s3, storage_path, domain)
+            all_image_bytes.append(image_bytes)
+
+        # Ensure DSPy is configured
+        if not ensure_dspy_configured():
+            raise ValueError("GEMINI_API_KEY not set - cannot configure DSPy")
+
+        # Convert to DSPy image
+        pil_image = Image.open(io.BytesIO(all_image_bytes[0]))
+        dspy_image = dspy.Image.from_PIL(pil_image)
+        print(f"[{document_id}] Phase 1: Image size: {pil_image.size}")
+
+        # Format categories for LLM
+        categories_json = format_categories_for_llm(categories)
+
+        # Run Phase 1 extraction - CoreReceiptExtractionSignature (NO line_items)
+        print(f"[{document_id}] Phase 1: Running DSPy Predict (core fields only)...")
+        processor = dspy.Predict(CoreReceiptExtractionSignature)
+        prediction = processor(
+            receipt_image=dspy_image,
+            available_categories=categories_json
+        )
+        extracted = prediction.extracted_data
+
+        # Log token usage
+        token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=1)
+
+        print(f"[{document_id}] Phase 1 extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
+
+        # Process category (same logic as main function)
+        expense_category = extracted.expense_category
+        category_confidence = 0.9
+        expense_category_name = None
+        expense_category_id = None
+
+        if expense_category and categories:
+            matching_cat = next((cat for cat in categories if cat.name == expense_category), None)
+            if matching_cat:
+                expense_category_name = matching_cat.name
+                expense_category_id = matching_cat.id
+            else:
+                expense_category = None
+                category_confidence = 0.0
+
+        if not expense_category:
+            # Pattern matching fallback
+            category_result = categorize_receipt_fallback(
+                vendor_name=extracted.vendor_name,
+                line_items=[],  # No line items in Phase 1
+                categories=categories,
+            )
+            if category_result:
+                expense_category_name = category_result["category_name"]
+                expense_category_id = category_result.get("category_id")
+                category_confidence = category_result["confidence"]
+            else:
+                fallback_category = find_fallback_category(categories)
+                if fallback_category:
+                    expense_category_name = fallback_category.name
+                    expense_category_id = fallback_category.id
+                    category_confidence = 0.5
+
+        expense_category = expense_category_id
+
+        processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+        result = {
+            "success": True,
+            "phase": 1,
+            "backend_used": "dspy_gemini_phase1",
+            "processing_method": "dspy_two_phase",
+            "document_type": "receipt",
+            "model_used": "gemini-3-flash-preview",
+
+            # Core fields
+            "vendor_name": extracted.vendor_name,
+            "total_amount": extracted.total_amount,
+            "currency": extracted.currency,
+            "transaction_date": extracted.transaction_date,
+            "receipt_number": extracted.receipt_number or "",
+
+            # Financial breakdown
+            "subtotal_amount": extracted.subtotal_amount or 0.0,
+            "tax_amount": extracted.tax_amount or 0.0,
+            "tip_amount": extracted.tip_amount or 0.0,
+
+            # Quality
+            "confidence": extracted.confidence_score,
+            "confidence_score": extracted.confidence_score,
+            "extraction_quality": extracted.extraction_quality,
+
+            # Category
+            "expense_category": expense_category,
+            "expense_category_name": expense_category_name,
+            "category_confidence": category_confidence,
+
+            # AI-generated fields
+            "description": extracted.description or (f"Receipt from {extracted.vendor_name}" if extracted.vendor_name else "Receipt expense"),
+            "business_purpose": extracted.business_purpose or (f"Business expense - {expense_category_name}" if expense_category_name else "Business expense"),
+
+            # Processing metadata
+            "processing_time_ms": processing_time_ms,
+            "extracted_at": datetime.utcnow().isoformat(),
+            "tokens_used": token_data,
+
+            # Phase 1 does NOT include line_items - they come in Phase 2
+            "line_items": [],  # Empty - Phase 2 will populate
+        }
+
+        print(f"[{document_id}] Phase 1 complete in {processing_time_ms}ms")
+        return result
+
+    except Exception as e:
+        import traceback
+        print(f"[{document_id}] Phase 1 failed: {str(e)}")
+        print(f"[{document_id}] Traceback: {traceback.format_exc()}")
+
+        processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+        user_friendly_msg = get_user_friendly_error(ERROR_CODES["EXTRACTION_FAILED"], str(e))
+
+        return {
+            "success": False,
+            "phase": 1,
+            "error": f"Phase 1 extraction failed: {str(e)}",
+            "error_message": user_friendly_msg,
+            "backend_used": "dspy_gemini_phase1_failed",
+            "processing_time_ms": processing_time_ms,
+            "tokens_used": token_data,
+        }
+
+
+def extract_receipt_phase2_step(
+    document_id: str,
+    images: Optional[List[ConvertedImageInfo]],
+    storage_path: str,
+    domain: str,
+    s3: S3Client,
+) -> Dict[str, Any]:
+    """
+    Phase 2: Extract line items only from receipt.
+
+    Called AFTER Phase 1 has already updated Convex with core fields.
+    This runs in parallel with frontend rendering and updates Convex
+    via real-time when complete.
+
+    Args:
+        document_id: Document ID for logging
+        images: Converted image info (for PDFs) or None
+        storage_path: S3 path to original document
+        domain: 'invoices' or 'expense_claims'
+        s3: S3 client instance
+
+    Returns:
+        Dict with line_items only, ready for Convex update
+    """
+    print(f"[{document_id}] Phase 2: Extracting line items only")
+    start_time = datetime.utcnow()
+    token_data = None
+
+    try:
+        # Fetch first page (line items typically on same page as totals)
+        all_image_bytes = []
+        if images and len(images) > 0:
+            print(f"[{document_id}] Phase 2: Fetching first page for line items...")
+            img_info = images[0]
+            image_url = s3.get_presigned_url(img_info.s3_key)
+            img_bytes = _fetch_image_bytes(image_url)
+            all_image_bytes.append(img_bytes)
+        else:
+            image_bytes, _ = get_image_from_s3(s3, storage_path, domain)
+            all_image_bytes.append(image_bytes)
+
+        # Ensure DSPy is configured
+        if not ensure_dspy_configured():
+            raise ValueError("GEMINI_API_KEY not set - cannot configure DSPy")
+
+        # Convert to DSPy image
+        pil_image = Image.open(io.BytesIO(all_image_bytes[0]))
+        dspy_image = dspy.Image.from_PIL(pil_image)
+
+        # Run Phase 2 extraction - LineItemsExtractionSignature (line_items only)
+        print(f"[{document_id}] Phase 2: Running DSPy Predict (line items only)...")
+        processor = dspy.Predict(LineItemsExtractionSignature)
+        prediction = processor(receipt_image=dspy_image)
+        extracted = prediction.extracted_data
+
+        # Log token usage
+        token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=1)
+
+        # Convert line items to dict format
+        line_items = [
+            {
+                "description": item.description,
+                "quantity": item.quantity,
+                "unit_price": item.unit_price,
+                "line_total": item.line_total,
+            }
+            for item in (extracted.line_items or [])
+        ]
+
+        processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+        print(f"[{document_id}] Phase 2 extracted {len(line_items)} line items in {processing_time_ms}ms")
+
+        return {
+            "success": True,
+            "phase": 2,
+            "line_items": line_items,
+            "line_items_count": len(line_items),
+            "processing_time_ms": processing_time_ms,
+            "tokens_used": token_data,
+        }
+
+    except Exception as e:
+        import traceback
+        print(f"[{document_id}] Phase 2 failed: {str(e)}")
+        print(f"[{document_id}] Traceback: {traceback.format_exc()}")
+
+        processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+        return {
+            "success": False,
+            "phase": 2,
+            "error": f"Phase 2 extraction failed: {str(e)}",
+            "line_items": [],  # Empty on failure
+            "processing_time_ms": processing_time_ms,
+            "tokens_used": token_data,
+        }

@@ -1121,5 +1121,214 @@ Move DSPy configuration to module-level initialization that happens once when th
 2. `src/lambda/document-processor-python/steps/extract_receipt.py`
 3. `src/lambda/document-processor-python/steps/extract_invoice.py`
 
+## Review Section (2026-01-11)
+
+### Fix Applied
+Created module-level DSPy configuration to avoid threading issues with AWS Durable Execution SDK.
+
+### Key Changes
+
+**New file: `steps/dspy_config.py`**
+- Configures DSPy once at module import time (Lambda cold start)
+- Thread-safe with lock-protected initialization
+- Exports `ensure_dspy_configured()`, `get_lm()`, `is_configured()`
+- Auto-configures on import if `GEMINI_API_KEY` is available
+
+**`extract_receipt.py` changes:**
+- Added import: `from steps.dspy_config import ensure_dspy_configured, get_lm`
+- Replaced ~15 lines of DSPy config code with single `ensure_dspy_configured()` call
+- Updated token logging to use `get_lm()` instead of local `gemini_lm` variable
+
+**`extract_invoice.py` changes:**
+- Same pattern as extract_receipt.py
+
+**`handler.py` changes:**
+- Added early import: `from steps.dspy_config import ensure_dspy_configured`
+- This ensures DSPy is configured at Lambda cold start, before any durable steps run
+
+**`steps/__init__.py` changes:**
+- Added exports for dspy_config functions
+
+### Why This Works
+1. DSPy settings are configured ONCE when the module is first imported (Lambda cold start)
+2. The main thread that imports the module "owns" the DSPy settings
+3. When AWS Durable Execution SDK checkpoints and resumes on a different thread:
+   - The extraction functions call `ensure_dspy_configured()` which is a no-op (already configured)
+   - No attempt to reconfigure → no threading error
+
+### Deployment
+- **Commit**: `b80d6465` - "fix(lambda): resolve DSPy threading issue with AWS Durable Execution SDK"
+- **Lambda ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor`
+- **Alias ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor:prod`
+- **Docker Image**: Pushed to ECR with updated configuration
+
+### Verification
+- [x] Code changes committed and pushed to main
+- [x] Lambda deployed via CDK
+- [ ] Manual test: Upload expense claim and verify processing succeeds
+
+---
+
+# User-Friendly Error Handling for Document Processing (2026-01-11)
+
+## Goal
+Show user-friendly error messages to end users instead of raw technical errors like "dspy.settings can only be changed by the thread that initially configured it."
+
+## Implementation Summary
+
+### Error Handling Architecture
+
+```
+Lambda Error Occurs
+        │
+        ▼
+┌───────────────────────────────────────┐
+│ get_user_friendly_error(code, error)  │
+│                                       │
+│ 1. Pattern match technical error      │
+│ 2. Fall back to error code mapping    │
+│ 3. Return generic friendly message    │
+└───────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────┐  ┌────────────────────────┐
+│ CloudWatch Logs         │  │ Convex / Frontend      │
+│ (Technical details)     │  │ (User-friendly message)│
+│                         │  │                        │
+│ [EXTRACTION_FAILED]     │  │ "We couldn't extract   │
+│ Receipt extraction      │  │ data from this         │
+│ failed: dspy.settings...│  │ document..."           │
+└─────────────────────────┘  └────────────────────────┘
+```
+
+### Files Modified
+
+1. **`types_def.py`** - Added centralized error handling utilities:
+   - `USER_FRIENDLY_MESSAGES`: Maps error codes to friendly messages
+   - `TECHNICAL_ERROR_PATTERNS`: Pattern matches technical errors to specific messages
+   - `get_user_friendly_error()`: Main function to convert errors
+   - `format_error_for_logging()`: Format for CloudWatch logs
+
+2. **`handler.py`** - Updated to use friendly errors:
+   - Import error utilities
+   - Log technical errors to CloudWatch
+   - Send user-friendly messages to Convex (what users see)
+
+3. **`extract_receipt.py`** - Updated exception handler:
+   - Returns both `error` (technical) and `error_message`/`user_message` (friendly)
+
+4. **`extract_invoice.py`** - Same updates as receipt extraction
+
+### Error Pattern Examples
+
+| Technical Error | User-Friendly Message |
+|----------------|----------------------|
+| `dspy.settings can only be changed by the thread...` | "We encountered a temporary issue. Please try again in a moment." |
+| `GEMINI_API_KEY not set` | "The AI service is temporarily unavailable. Please try again later." |
+| `rate limit` | "Our AI service is busy. Please wait a moment and try again." |
+| `image corrupt` | "There was an issue reading your image. Please upload a clearer photo." |
+
+### Deployment
+- **Commit**: `b0945d71` - "feat(lambda): add user-friendly error messages for document processing"
+- **Lambda ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor`
+- **Alias ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor:prod`
+
+### Verification
+- [x] Build passes
+- [x] Code committed and pushed to main
+- [x] Lambda deployed via CDK
+- [ ] Manual test: Trigger error and verify friendly message shown to user
+
+---
+
+# Two-Phase Expense Claim Extraction (2026-01-11)
+
+## Goal
+Improve perceived performance by splitting Gemini extraction into two phases:
+1. **Phase 1 (Fast)**: Extract core fields → update Convex → frontend renders immediately (~3-4s)
+2. **Phase 2 (Background)**: Extract line items → update Convex → frontend updates via real-time
+
+## Motivation
+Current FAST mode still takes ~6-7s because it extracts `line_items`. By deferring line items to Phase 2, users see results in ~3-4s while line items load in background.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                       TWO-PHASE EXTRACTION                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Upload → Lambda → Gemini Phase 1 (core) → Convex → Frontend        │
+│                         ~3-4s              ↓        (renders!)       │
+│                                            │                         │
+│                    Gemini Phase 2 (line items) → Convex update      │
+│                         ~3-4s                      ↓                 │
+│                                            Frontend updates (reactive)│
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## Phase 1 Schema (Core Fields Only)
+- vendor_name, transaction_date, total_amount, currency
+- receipt_number, expense_category, description, business_purpose
+- subtotal_amount, tax_amount, tip_amount
+- confidence_score, extraction_quality
+- **NO line_items**
+
+## Phase 2 Schema (Line Items Only)
+- line_items: List[ReceiptLineItem]
+
+## Implementation Plan
+
+### Step 1: Create Core-Only Schema
+- [ ] **1.1** Create `CoreReceiptData` Pydantic model (no line_items)
+- [ ] **1.2** Create `CoreReceiptExtractionSignature` DSPy signature
+- [ ] **1.3** Create `LineItemsExtractionSignature` DSPy signature
+
+### Step 2: Update Convex Schema
+- [ ] **2.1** Add `line_items_status` field to expense_claims table
+  - Values: `'pending' | 'extracting' | 'complete' | 'skipped'`
+- [ ] **2.2** Create `updateExpenseClaimLineItems` mutation for Phase 2 update
+
+### Step 3: Update Lambda Two-Phase Logic
+- [ ] **3.1** Modify `extract_receipt_step()` to support two-phase mode
+- [ ] **3.2** Phase 1: Extract core → call `update_expense_claim_extraction`
+- [ ] **3.3** Phase 2: Extract line items → call new `updateExpenseClaimLineItems`
+- [ ] **3.4** Update handler.py to orchestrate two phases
+
+### Step 4: Update Frontend
+- [ ] **4.1** Update expense claim form to handle `line_items_status`
+- [ ] **4.2** Show loading skeleton for line items while `line_items_status === 'extracting'`
+- [ ] **4.3** Convex `useQuery` will auto-update when line items arrive
+
+### Step 5: Deploy & Test
+- [ ] **5.1** Run `npm run build` to verify no TypeScript errors
+- [ ] **5.2** Deploy Convex schema changes
+- [ ] **5.3** Deploy Lambda via CDK
+- [ ] **5.4** Test expense claim upload - verify two-phase timing
+
+## Files to Modify
+
+**Lambda:**
+1. `src/lambda/document-processor-python/steps/extract_receipt.py` - Two-phase schemas
+2. `src/lambda/document-processor-python/handler.py` - Orchestration
+3. `src/lambda/document-processor-python/utils/convex_client.py` - New mutation call
+
+**Convex:**
+4. `convex/schema.ts` - Add `line_items_status` field
+5. `convex/functions/expense-claims.ts` - Add `updateExpenseClaimLineItems` mutation
+
+**Frontend:**
+6. `src/domains/expense-claims/components/expense-claim-form.tsx` - Loading state
+
+## Expected Performance
+
+| Phase | Fields | Time | User Sees |
+|-------|--------|------|-----------|
+| Phase 1 | Core fields | ~3-4s | Form populated, can start editing |
+| Phase 2 | Line items | ~3-4s | Line items appear (auto-update) |
+| **Total** | All | ~6-8s | But user productive after 3-4s |
+
 ## Review Section
+
 (To be completed after implementation)

@@ -465,6 +465,79 @@ export const updateExpenseClaimClassification = mutation({
   },
 });
 
+/**
+ * Update expense claim line items (system access)
+ * Used by Lambda during two-phase extraction - Phase 2 updates line items only
+ *
+ * Two-Phase Extraction Flow:
+ * - Phase 1: Extract core fields → Convex update → frontend renders immediately (~3-4s)
+ * - Phase 2: Extract line items → this mutation → frontend updates via real-time (~3-4s)
+ */
+export const updateExpenseClaimLineItems = mutation({
+  args: {
+    id: v.string(),
+    lineItems: v.array(
+      v.object({
+        description: v.string(),
+        quantity: v.optional(v.number()),
+        unit_price: v.optional(v.number()),
+        line_total: v.number(),
+      })
+    ),
+    lineItemsStatus: v.union(
+      v.literal("pending"),
+      v.literal("extracting"),
+      v.literal("complete"),
+      v.literal("skipped")
+    ),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    console.log(`[System] Updating expense claim ${args.id} line items (${args.lineItems.length} items)`);
+
+    // Call internal mutation that handles merging line_items into processingMetadata
+    await ctx.runMutation(
+      internal.functions.expenseClaims.internalUpdateLineItems,
+      {
+        id: args.id,
+        lineItems: args.lineItems,
+        lineItemsStatus: args.lineItemsStatus,
+      }
+    );
+
+    return args.id;
+  },
+});
+
+/**
+ * Update expense claim line items status only (system access)
+ * Used by Lambda to mark lineItemsStatus as 'extracting' before Phase 2 starts
+ */
+export const updateExpenseClaimLineItemsStatus = mutation({
+  args: {
+    id: v.string(),
+    lineItemsStatus: v.union(
+      v.literal("pending"),
+      v.literal("extracting"),
+      v.literal("complete"),
+      v.literal("skipped")
+    ),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    console.log(`[System] Updating expense claim ${args.id} lineItemsStatus to: ${args.lineItemsStatus}`);
+
+    // Call internal mutation that updates only lineItemsStatus
+    await ctx.runMutation(
+      internal.functions.expenseClaims.internalUpdateLineItemsStatus,
+      {
+        id: args.id,
+        lineItemsStatus: args.lineItemsStatus,
+      }
+    );
+
+    return args.id;
+  },
+});
+
 // ============================================
 // PDF CONVERSION SYSTEM FUNCTIONS (for Trigger.dev)
 // ============================================

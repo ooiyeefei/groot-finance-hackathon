@@ -268,6 +268,12 @@ export default defineSchema({
     confidenceScore: v.optional(v.number()),
     processingMetadata: v.optional(v.any()),      // JSONB from Supabase
     errorMessage: v.optional(v.any()),
+    lineItemsStatus: v.optional(v.union(
+      v.literal("pending"),     // Phase 1 complete, Phase 2 not started
+      v.literal("extracting"),  // Phase 2 in progress
+      v.literal("complete"),    // Line items extracted
+      v.literal("skipped")      // Line items extraction skipped
+    )),
 
     // Approval Workflow
     reviewerNotes: v.optional(v.string()),
