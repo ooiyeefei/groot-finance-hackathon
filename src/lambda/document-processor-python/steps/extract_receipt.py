@@ -1088,6 +1088,7 @@ def extract_receipt_phase2_step(
 
         # Convert line items to dict format with defensive None handling
         # Convex requires: description (string), line_total (number), quantity/unit_price (optional number)
+        # IMPORTANT: Convex v.optional() expects undefined, not null. Omit keys with None values.
         line_items = []
         for item in (extracted.line_items or []):
             # Skip items with missing required fields
@@ -1095,12 +1096,17 @@ def extract_receipt_phase2_step(
                 print(f"[{document_id}] Skipping invalid line item: description={item.description}, line_total={item.line_total}")
                 continue
 
-            line_items.append({
+            line_item = {
                 "description": str(item.description),  # Ensure string
-                "quantity": float(item.quantity) if item.quantity is not None else None,
-                "unit_price": float(item.unit_price) if item.unit_price is not None else None,
                 "line_total": float(item.line_total),  # Ensure number, required
-            })
+            }
+            # Only include optional fields if they have values (omit = undefined in Convex)
+            if item.quantity is not None:
+                line_item["quantity"] = float(item.quantity)
+            if item.unit_price is not None:
+                line_item["unit_price"] = float(item.unit_price)
+
+            line_items.append(line_item)
 
         processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 

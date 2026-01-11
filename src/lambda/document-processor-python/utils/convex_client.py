@@ -390,7 +390,7 @@ class ConvexClient:
         Args:
             business_id: Business ID
             document_id: Document ID
-            token_usage: Token usage details
+            token_usage: Token usage details (snake_case from Python)
             credits: Credits to charge
 
         Returns:
@@ -404,7 +404,14 @@ class ConvexClient:
         if document_id is not None:
             args["documentId"] = document_id
         if token_usage is not None:
-            args["tokenUsage"] = token_usage
+            # Convert snake_case keys to camelCase for Convex
+            args["tokenUsage"] = {
+                "hasUsageData": token_usage.get("has_usage_data"),
+                "totalTokens": token_usage.get("total_tokens"),
+                "promptTokens": token_usage.get("prompt_tokens"),
+                "completionTokens": token_usage.get("completion_tokens"),
+                "model": token_usage.get("model"),
+            }
 
         return self._mutation(
             "functions/system:recordOcrUsage",
