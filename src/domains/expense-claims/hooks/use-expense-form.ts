@@ -4,8 +4,9 @@
  * Uses discriminated unions for type safety between create and edit modes
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useExpenseCategories, validateCategorySelection } from './use-expense-categories'
+import { useExpenseClaimRealtime } from './use-expense-claims-realtime'
 import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
@@ -208,6 +209,14 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   const onSuccess = props.onSuccess
   const onDelete = props.onDelete
   const onClose = props.onClose
+
+  // Real-time subscription for line items updates (edit mode only)
+  // This enables real-time UI updates when Lambda Phase 2 completes line items extraction
+  const realtimeClaimId = mode === 'edit' ? expenseClaimId : null
+  const { claim: realtimeClaim } = useExpenseClaimRealtime(realtimeClaimId ?? null)
+
+  // Track previous line items status to detect changes
+  const prevLineItemsStatusRef = useRef<string | undefined>(undefined)
 
   // Load expense claim for edit mode
   const loadExpenseClaim = useCallback(async () => {
@@ -539,6 +548,75 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       }
     }
   }, [mode, extractionResult, categories, categoriesLoading, formData.expense_category])
+
+  // Real-time line items sync: Update form when Convex pushes new line items (Phase 2 completion)
+  // This effect enables the edit modal to receive real-time updates without refreshing
+  useEffect(() => {
+    if (mode !== 'edit' || !realtimeClaim) return
+
+    const newStatus = realtimeClaim.line_items_status as 'pending' | 'extracting' | 'complete' | 'skipped' | undefined
+    const prevStatus = prevLineItemsStatusRef.current
+
+    // Update the lineItemsStatus state to reflect real-time changes
+    if (newStatus && newStatus !== lineItemsStatus) {
+      console.log(`[useExpenseForm] Real-time lineItemsStatus update: ${lineItemsStatus} → ${newStatus}`)
+      setLineItemsStatus(newStatus)
+    }
+
+    // When line items extraction completes, sync the new line items to form data
+    if (newStatus === 'complete' && prevStatus !== 'complete') {
+      console.log('[useExpenseForm] Real-time: Line items extraction completed, syncing to form')
+
+      // Extract line items from processing_metadata (where Lambda stores them)
+      const processingMetadata = realtimeClaim.processing_metadata as {
+        line_items?: Array<{
+          description?: string;
+          item_description?: string;
+          quantity?: number;
+          unit_price?: number;
+          total_amount?: number;
+          line_total?: number;
+        }>;
+      } | null
+
+      const rawLineItems = processingMetadata?.line_items ?? []
+
+      if (rawLineItems.length > 0) {
+        // Map line items with proper calculations (same logic as initial load)
+        const mappedLineItems = rawLineItems.map((item) => {
+          const qty = item.quantity || 1
+          const unitPrice = item.unit_price || 0
+          const lineTotal = item.total_amount || item.line_total || 0
+
+          let finalUnitPrice = unitPrice
+          let finalTotal = lineTotal
+
+          if (lineTotal > 0 && unitPrice === 0 && qty > 0) {
+            finalUnitPrice = lineTotal / qty
+            finalTotal = lineTotal
+          } else if (unitPrice > 0 && lineTotal === 0) {
+            finalTotal = qty * unitPrice
+          }
+
+          return {
+            description: item.description || item.item_description || 'Item',
+            quantity: qty,
+            unit_price: finalUnitPrice,
+            total_amount: finalTotal
+          }
+        })
+
+        console.log(`[useExpenseForm] Real-time: Syncing ${mappedLineItems.length} line items to form`)
+        setFormData(prev => ({
+          ...prev,
+          line_items: mappedLineItems
+        }))
+      }
+    }
+
+    // Update the ref for next comparison
+    prevLineItemsStatusRef.current = newStatus
+  }, [mode, realtimeClaim, lineItemsStatus])
 
   // Fetch exchange rate preview when currencies change
   useEffect(() => {

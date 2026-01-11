@@ -262,6 +262,8 @@ export function useExpenseClaimRealtime(claimId: string | null) {
       reviewer: claim.reviewer,
       approver: claim.approver,
       accounting_entry: claim.accountingEntry,
+      // Line items status for two-phase extraction real-time updates
+      line_items_status: claim.lineItemsStatus,
     };
   }, [claim]);
 
