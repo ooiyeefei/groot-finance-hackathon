@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatBusinessDate } from '@/lib/utils'
 import { formatNumber } from '@/lib/utils/format-number'
+import { useExpenseCategories, getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
@@ -50,6 +51,9 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
   const [activeTab, setActiveTab] = useState('overview')
   const [dashboardData, setDashboardData] = useState<ManagementDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Fetch expense categories for displaying category names instead of IDs
+  const { categories } = useExpenseCategories({ includeDisabled: true })
 
   // Fetch management dashboard data
   const fetchDashboardData = useCallback(async () => {
@@ -156,7 +160,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          <ManagementOverviewContent data={dashboardData} setActiveTab={setActiveTab} />
+          <ManagementOverviewContent data={dashboardData} categories={categories} setActiveTab={setActiveTab} />
         </TabsContent>
 
         <TabsContent value="approvals" className="space-y-4">
@@ -178,8 +182,9 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 }
 
 // Management Overview Content - 2:1 layout with Company Analytics (left, 2/3) and Priority Approvals (right, 1/3)
-function ManagementOverviewContent({ data, setActiveTab }: {
+function ManagementOverviewContent({ data, categories, setActiveTab }: {
   data: ManagementDashboardData
+  categories: DynamicExpenseCategory[]
   setActiveTab: (tab: string) => void
 }) {
   return (
@@ -240,7 +245,7 @@ function ManagementOverviewContent({ data, setActiveTab }: {
                         }
                       </p>
                       <p className="text-muted-foreground text-xs">
-                        {claim.expense_category?.replace('_', ' ').split(' ').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                        {getCategoryName(claim.expense_category, categories)}
                       </p>
                     </div>
                     <div className="text-right ml-2">
@@ -520,6 +525,9 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
   const [approvalNotes, setApprovalNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
 
+  // Fetch expense categories for displaying category names instead of IDs
+  const { categories } = useExpenseCategories({ includeDisabled: true })
+
 
   useEffect(() => {
     fetchPendingClaims()
@@ -663,7 +671,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                   <div className="flex items-center gap-2">
                     <Tag className="w-4 h-4 text-muted-foreground" />
                     <span className="text-foreground">
-                      {claim.expense_category?.replace('_', ' ').split(' ').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                      {getCategoryName(claim.expense_category, categories)}
                     </span>
                   </div>
                 </div>

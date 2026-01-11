@@ -118,6 +118,20 @@ export function findCategoryByCode(categories: DynamicExpenseCategory[], code: s
 }
 
 /**
+ * Utility function to get category name from ID
+ * Returns the category name or fallback text if not found
+ */
+export function getCategoryName(
+  categoryId: string | undefined | null,
+  categories: DynamicExpenseCategory[],
+  fallback: string = 'Uncategorized'
+): string {
+  if (!categoryId) return fallback
+  const category = categories.find(cat => cat.id === categoryId)
+  return category?.category_name || fallback
+}
+
+/**
  * Utility function to check if a category is disabled
  */
 export function isCategoryDisabled(category: DynamicExpenseCategory): boolean {

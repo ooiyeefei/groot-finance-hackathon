@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button'
 import { formatBusinessDate } from '@/lib/utils'
 import { formatNumber } from '@/lib/utils/format-number'
 import { hapticApprove, hapticReject, hapticTap, hapticPress } from '@/lib/utils/haptics'
+import { getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
 
 // Swipe threshold in pixels
 const SWIPE_THRESHOLD = 80
@@ -57,6 +58,7 @@ interface ExpenseClaim {
 
 interface MobileApprovalCardProps {
   claim: ExpenseClaim
+  categories: DynamicExpenseCategory[]
   onApprove: (claimId: string) => Promise<void>
   onReject: (claimId: string) => Promise<void>
   onViewDetails: (claim: ExpenseClaim) => void
@@ -65,6 +67,7 @@ interface MobileApprovalCardProps {
 
 export function MobileApprovalCard({
   claim,
+  categories,
   onApprove,
   onReject,
   onViewDetails,
@@ -84,7 +87,7 @@ export function MobileApprovalCard({
   const employeeName = claim.employee?.full_name || claim.employee_name || `Employee ${claim.employee_id?.slice(0, 8) || 'Unknown'}`
   const amount = parseFloat(String(claim.home_currency_amount || claim.total_amount || 0))
   const formattedAmount = `$${formatNumber(amount, 2)}`
-  const category = claim.expense_category?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Uncategorized'
+  const category = getCategoryName(claim.expense_category, categories)
 
   // Handle touch start
   const handleTouchStart = useCallback((e: React.TouchEvent) => {

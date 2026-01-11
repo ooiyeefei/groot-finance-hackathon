@@ -19,6 +19,7 @@ import { formatBusinessDate } from '@/lib/utils'
 // ✅ CONVEX REAL-TIME: Import hooks for automatic real-time updates
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useExpenseClaimsRealtime } from '../hooks/use-expense-claims-realtime'
+import { useExpenseCategories, getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseSubmissionFlow = lazy(() => import('./expense-submission-flow'))
@@ -57,6 +58,9 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     deleteClaim: convexDeleteClaim,
     deleting: convexDeleting,
   } = useExpenseClaimsRealtime(businessId, { limit: 10 })
+
+  // Fetch expense categories for displaying category names instead of IDs
+  const { categories, loading: categoriesLoading } = useExpenseCategories({ includeDisabled: true })
 
   const [activeTab, setActiveTab] = useState('overview')
   const [showSubmissionForm, setShowSubmissionForm] = useState(false)
@@ -325,6 +329,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         <TabsContent value="overview" className="space-y-4">
           <PersonalOverviewContent
             data={dashboardData}
+            categories={categories}
             onNewClaim={(mode: 'camera' | 'manual' = 'camera') => {
               setSubmissionMode(mode)
               setShowSubmissionForm(true)
@@ -347,6 +352,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         <TabsContent value="history" className="space-y-4">
           <PersonalHistoryContent
             data={dashboardData}
+            categories={categories}
             setEditingClaimId={setEditingClaimId}
             setShowEditModal={setShowEditModal}
             setDetailsClaimId={setDetailsClaimId}
@@ -519,8 +525,9 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 }
 
 // Personal Overview Content
-function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboardData, setShowSubmissionForm, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
+function PersonalOverviewContent({ data, categories, onNewClaim, setActiveTab, fetchDashboardData, setShowSubmissionForm, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
   data: PersonalDashboardData
+  categories: DynamicExpenseCategory[]
   onNewClaim: (mode: 'camera' | 'manual') => void
   setActiveTab: (tab: string) => void
   fetchDashboardData: () => void
@@ -612,6 +619,7 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
                   claim={claim}
                   index={index}
                   context="overview"
+                  categories={categories}
                   setEditingClaimId={setEditingClaimId}
                   setShowEditModal={setShowEditModal}
                   setDetailsClaimId={setDetailsClaimId}
@@ -644,10 +652,11 @@ function PersonalOverviewContent({ data, onNewClaim, setActiveTab, fetchDashboar
 }
 
 // Unified Expense Claim Card Component
-function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
+function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
   claim: any
   index: number
   context: 'overview' | 'history'
+  categories: DynamicExpenseCategory[]
   setEditingClaimId: (id: string | null) => void
   setShowEditModal: (show: boolean) => void
   setDetailsClaimId: (id: string | null) => void
@@ -668,7 +677,7 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
             {claim.transaction?.description || claim.description || 'Expense Claim'}
           </p>
           <p className="text-muted-foreground text-xs">
-            {claim.expense_category?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} •
+            {getCategoryName(claim.expense_category, categories)} •
             {formatBusinessDate(claim.transaction?.transaction_date || claim.created_at)}
           </p>
         </div>
@@ -947,8 +956,9 @@ function ExpenseClaimCard({ claim, index, context, setEditingClaimId, setShowEdi
 }
 
 // Personal History Content - Now uses unified card
-function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
+function PersonalHistoryContent({ data, categories, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
   data: PersonalDashboardData
+  categories: DynamicExpenseCategory[]
   setEditingClaimId: (id: string | null) => void
   setShowEditModal: (show: boolean) => void
   setDetailsClaimId: (id: string | null) => void
@@ -981,6 +991,7 @@ function PersonalHistoryContent({ data, setEditingClaimId, setShowEditModal, set
                 claim={claim}
                 index={index}
                 context="history"
+                categories={categories}
                 setEditingClaimId={setEditingClaimId}
                 setShowEditModal={setShowEditModal}
                 setDetailsClaimId={setDetailsClaimId}

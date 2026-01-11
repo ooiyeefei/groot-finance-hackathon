@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { CheckCircle, Clock, XCircle, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { MobileApprovalCard } from './mobile-approval-card'
+import { useExpenseCategories } from '../hooks/use-expense-categories'
 
 // Lazy load the details modal (heavy component)
 const UnifiedExpenseDetailsModal = lazy(() => import('./unified-expense-details-modal'))
@@ -50,6 +51,9 @@ export function MobileApprovalList({ onRefreshNeeded }: MobileApprovalListProps)
   const [error, setError] = useState<string | null>(null)
   const [processingClaims, setProcessingClaims] = useState<Set<string>>(new Set())
   const [selectedClaim, setSelectedClaim] = useState<ExpenseClaim | null>(null)
+
+  // Fetch expense categories for displaying category names
+  const { categories } = useExpenseCategories({ includeDisabled: true })
 
   // Fetch pending claims
   const fetchPendingClaims = useCallback(async () => {
@@ -288,6 +292,7 @@ export function MobileApprovalList({ onRefreshNeeded }: MobileApprovalListProps)
           <MobileApprovalCard
             key={claim.id}
             claim={claim}
+            categories={categories}
             onApprove={handleApprove}
             onReject={handleReject}
             onViewDetails={handleViewDetails}
