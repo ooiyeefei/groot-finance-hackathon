@@ -378,7 +378,7 @@ export default function ExpenseFormFields({
                 Category *
               </Label>
               <Select
-                value={formData.expense_category}
+                value={formData.expense_category || undefined}
                 onValueChange={(value) => setFormData({...formData, expense_category: value})}
               >
                 <SelectTrigger className="bg-input border-border text-foreground text-left">
