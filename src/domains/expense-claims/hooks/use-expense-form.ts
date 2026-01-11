@@ -510,15 +510,20 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         })
 
         // IMPORTANT: Do NOT fall back to first category - only use matched category
-        // If no match found, keep the original value (form validation will catch invalid categories)
+        // If no match found, clear the value so Select shows placeholder (not buggy multi-select)
         resolvedCategoryId = matchedCategory?.id || ''
       }
 
-      if (resolvedCategoryId && resolvedCategoryId !== currentCategory) {
-        console.log('[useExpenseForm] Resolved category:', currentCategory, '->', resolvedCategoryId)
+      // FIX: Update form if:
+      // 1. We found a valid ID and it's different from current value, OR
+      // 2. Current value is NOT a valid ID (it's a NAME that couldn't be matched - clear it to prevent Select bug)
+      const currentIsInvalidName = currentCategory && !categories.some(cat => cat.id === currentCategory)
+
+      if ((resolvedCategoryId && resolvedCategoryId !== currentCategory) || currentIsInvalidName) {
+        console.log('[useExpenseForm] Resolved category:', currentCategory, '->', resolvedCategoryId || '(cleared - no match)')
         setFormData(prev => ({
           ...prev,
-          expense_category: resolvedCategoryId
+          expense_category: resolvedCategoryId  // Empty string if no match - Select will show placeholder
         }))
       }
     }
