@@ -90,10 +90,14 @@ export default function AccountingEntryFormModal({
   useEffect(() => {
     if (userHomeCurrency) {
       setFormData(prev => {
+        // For existing transactions, preserve business's home_currency (e.g., SGD)
+        // Only use user's preferred currency for NEW records without existing home_currency
+        const existingHomeCurrency = transaction?.home_currency || prefilledData?.home_currency
+
         const newFormData = {
           ...prev,
           original_currency: transaction?.original_currency || prefilledData?.original_currency || userHomeCurrency,
-          home_currency: userHomeCurrency
+          home_currency: existingHomeCurrency || userHomeCurrency
         }
 
         if (newFormData.original_currency === newFormData.home_currency) {
@@ -104,7 +108,7 @@ export default function AccountingEntryFormModal({
         return newFormData
       })
     }
-  }, [userHomeCurrency, transaction?.original_currency, prefilledData?.original_currency])
+  }, [userHomeCurrency, transaction?.original_currency, prefilledData?.original_currency, transaction?.home_currency, prefilledData?.home_currency])
 
   // Fix race condition: When COGS categories finish loading, re-apply the prefilled category
   // This ensures the controlled <select> properly shows the value that was set before options loaded
