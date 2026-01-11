@@ -114,6 +114,7 @@ async function generateBusinessCategories(
 
     return {
       cogsCategories: cogsCategoryNames.map((name, index) => ({
+        id: `cogs_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         category_name: name,
         description: `${name} category`,
         vendor_patterns: [],
@@ -122,6 +123,7 @@ async function generateBusinessCategories(
         sort_order: index + 1
       })),
       expenseCategories: expenseCategoryNames.map((name, index) => ({
+        id: `exp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         category_name: name,
         description: `${name} category`,
         vendor_patterns: [],
