@@ -72,9 +72,11 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
       try {
         const response = await fetch('/api/v1/users/profile')
         if (response.ok) {
-          const data = await response.json()
-          setPreferredCurrency(data.preferred_currency || 'USD')
-          setTimezone(data.timezone || 'Asia/Singapore')
+          const result = await response.json()
+          if (result.success && result.data) {
+            setPreferredCurrency(result.data.preferred_currency || 'USD')
+            setTimezone(result.data.timezone || 'Asia/Singapore')
+          }
         }
       } catch (error) {
         console.error('Error loading user preferences:', error)
