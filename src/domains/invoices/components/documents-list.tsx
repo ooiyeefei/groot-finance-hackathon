@@ -633,20 +633,22 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         </Suspense>
       )}
 
-      {/* Standardized Delete Confirmation Dialog */}
-      <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-6 h-6 animate-spin text-primary-foreground" /></div>}>
-        <ConfirmationDialog
-          isOpen={deleteConfirmation.isOpen}
-          onClose={handleDeleteCancel}
-          onConfirm={handleDeleteConfirm}
-          title="Delete Document"
-          message="Are you sure you want to delete this document? This action cannot be undone."
-          confirmText="Delete"
-          cancelText="Cancel"
-          confirmVariant="danger"
-          isLoading={deleteConfirmation.isLoading}
-        />
-      </Suspense>
+      {/* Standardized Delete Confirmation Dialog - wrapped in conditional to prevent Suspense flash on page load */}
+      {deleteConfirmation.isOpen && (
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-6 h-6 animate-spin text-primary-foreground" /></div>}>
+          <ConfirmationDialog
+            isOpen={deleteConfirmation.isOpen}
+            onClose={handleDeleteCancel}
+            onConfirm={handleDeleteConfirm}
+            title="Delete Document"
+            message="Are you sure you want to delete this document? This action cannot be undone."
+            confirmText="Delete"
+            cancelText="Cancel"
+            confirmVariant="danger"
+            isLoading={deleteConfirmation.isLoading}
+          />
+        </Suspense>
+      )}
     </div>
   )
 })
