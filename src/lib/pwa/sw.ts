@@ -6,7 +6,7 @@
  * Handles:
  * - Precaching of static assets
  * - Runtime caching strategies (defaultCache)
- * - Offline fallback
+ * - Offline fallback for navigation requests
  */
 
 import { defaultCache } from '@serwist/next/worker';
@@ -22,6 +22,9 @@ declare global {
 
 declare const self: ServiceWorkerGlobalScope;
 
+// Offline fallback page URL
+const OFFLINE_FALLBACK_PAGE = '/offline.html';
+
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
   skipWaiting: true,
@@ -29,6 +32,24 @@ const serwist = new Serwist({
   navigationPreload: true,
   // Next.js optimized cache strategies
   runtimeCaching: defaultCache,
+  // Offline fallback configuration
+  fallbacks: {
+    entries: [
+      {
+        url: OFFLINE_FALLBACK_PAGE,
+        matcher: ({ request }) => request.mode === 'navigate',
+      },
+    ],
+  },
 });
 
 serwist.addEventListeners();
+
+// Precache the offline fallback page during install
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open('offline-fallback-v1').then((cache) => {
+      return cache.add(OFFLINE_FALLBACK_PAGE);
+    })
+  );
+});
