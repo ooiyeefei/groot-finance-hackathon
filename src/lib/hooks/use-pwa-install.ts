@@ -166,8 +166,11 @@ export function usePWAInstall(): UsePWAInstallReturn {
 
     // Listen for the beforeinstallprompt event (Android/Chrome)
     const handleBeforeInstallPrompt = (e: Event) => {
-      // Prevent the mini-infobar from appearing
-      e.preventDefault();
+      // Only prevent default on mobile where we show our custom prompt
+      // On desktop, let Chrome show its native install icon in address bar
+      if (isMobileDevice()) {
+        e.preventDefault();
+      }
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
