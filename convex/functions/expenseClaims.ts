@@ -415,6 +415,7 @@ export const getAnalytics = query({
     let approvedAmount = 0;
     let pendingAmount = 0;
     const categoryTotals: Record<string, number> = {};
+    const categoryCounts: Record<string, number> = {};
 
     // Pre-submission statuses that should be excluded from manager analytics
     // These are claims that haven't entered the approval workflow yet
@@ -442,10 +443,12 @@ export const getAnalytics = query({
         pendingAmount += amount;
       }
 
-      // Category totals
+      // Category totals and counts
       if (claim.expenseCategory) {
         categoryTotals[claim.expenseCategory] =
           (categoryTotals[claim.expenseCategory] || 0) + amount;
+        categoryCounts[claim.expenseCategory] =
+          (categoryCounts[claim.expenseCategory] || 0) + 1;
       }
     }
 
@@ -461,6 +464,7 @@ export const getAnalytics = query({
       approvedAmount,
       pendingAmount,
       categoryTotals,
+      categoryCounts,
       averageAmount:
         submittedClaims.length > 0 ? totalAmount / submittedClaims.length : 0,
     };

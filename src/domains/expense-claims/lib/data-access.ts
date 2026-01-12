@@ -975,6 +975,21 @@ export async function getExpenseAnalytics(
       businessId: employeeProfile.business_id
     })
 
+    // Fetch expense categories for name resolution
+    const expenseCategories = await convexClient.query(api.functions.businesses.getExpenseCategories, {
+      businessId: employeeProfile.business_id
+    })
+
+    // Build category name lookup map
+    const categoryNameMap: Record<string, string> = {}
+    if (Array.isArray(expenseCategories)) {
+      for (const cat of expenseCategories) {
+        if (cat.id && cat.category_name) {
+          categoryNameMap[cat.id] = cat.category_name
+        }
+      }
+    }
+
     if (!analytics) {
       return {
         success: true,
@@ -1006,8 +1021,9 @@ export async function getExpenseAnalytics(
       monthly_trends: [],
       category_breakdown: Object.entries(analytics.categoryTotals || {}).map(([category, amount]) => ({
         category,
+        category_name: categoryNameMap[category] || category, // Resolve name or fallback to ID
         total_amount: amount,
-        claims_count: 0,
+        claims_count: analytics.categoryCounts?.[category] || 0, // Use actual count from Convex
         approved_amount: 0,
         percentage: analytics.totalAmount ? ((amount as number) / analytics.totalAmount) * 100 : 0
       })),
