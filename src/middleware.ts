@@ -60,8 +60,9 @@ async function checkTrialExpiration(clerkUserId: string): Promise<{
 
     // Query Convex for trial status using the middleware-specific query
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const queryFn = api.functions.businesses.getTrialStatusByClerkId
     const result = await convex.query(
-      api.functions.businesses.getTrialStatusByClerkId as any,
+      queryFn as any,
       { clerkUserId }
     ) as { isExpired: boolean; businessId: string | null }
 

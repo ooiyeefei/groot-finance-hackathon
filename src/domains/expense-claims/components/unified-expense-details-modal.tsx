@@ -32,6 +32,7 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
+import { getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
 
 interface UnifiedExpenseDetailsModalProps {
   claimId: string
@@ -113,7 +114,7 @@ export default function UnifiedExpenseDetailsModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDocument, setShowDocument] = useState(false)
-  const [categories, setCategories] = useState<Array<{id: string, category_name: string}>>([])
+  const [categories, setCategories] = useState<DynamicExpenseCategory[]>([])
   const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null)
   const [imageLoading, setImageLoading] = useState(false)
   const [approvalNotes, setApprovalNotes] = useState('')
@@ -553,8 +554,7 @@ export default function UnifiedExpenseDetailsModal({
                                 Category
                               </label>
                               <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded text-sm">
-                                {categories.find(c => c.id === (claimDetails.expense_category || claimDetails.transaction?.expense_category))?.category_name ||
-                                 claimDetails.expense_category || claimDetails.transaction?.expense_category || 'N/A'}
+                                {getCategoryName(claimDetails.expense_category || claimDetails.transaction?.expense_category, categories)}
                               </div>
                             </div>
                             {(claimDetails.reference_number || claimDetails.transaction?.reference_number) && (
