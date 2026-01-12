@@ -1463,3 +1463,77 @@ export const forceFailInvoice = mutation({
     };
   },
 });
+
+/**
+ * Reset stuck lineItemsStatus to 'skipped' (admin override)
+ * Used when Phase 2 extraction gets stuck at 'extracting' status
+ */
+export const resetStuckLineItemsStatus = mutation({
+  args: {
+    businessId: v.string(),
+    invoiceId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Resolve business
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      throw new Error("Business not found");
+    }
+
+    // Verify membership and admin/owner role
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not authorized");
+    }
+
+    if (!["owner", "admin"].includes(membership.role)) {
+      throw new Error("Admin or owner role required");
+    }
+
+    // Get the invoice
+    const invoice = await resolveById(ctx.db, "invoices", args.invoiceId);
+    if (!invoice) {
+      throw new Error("Invoice not found");
+    }
+
+    // Verify invoice belongs to this business
+    if (invoice.businessId !== business._id) {
+      throw new Error("Invoice not found in this business");
+    }
+
+    const originalStatus = invoice.lineItemsStatus;
+
+    // Reset lineItemsStatus to 'skipped'
+    await ctx.db.patch(invoice._id, {
+      lineItemsStatus: "skipped",
+      updatedAt: Date.now(),
+    });
+
+    console.log(
+      `[Convex] Admin ${user._id} reset lineItemsStatus for invoice ${args.invoiceId}: ${originalStatus} → skipped`
+    );
+
+    return {
+      invoiceId: invoice._id,
+      originalLineItemsStatus: originalStatus,
+      newLineItemsStatus: "skipped",
+      fileName: invoice.fileName,
+    };
+  },
+});
