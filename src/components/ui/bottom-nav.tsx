@@ -57,7 +57,15 @@ export function BottomNav({ items, className }: BottomNavProps) {
         paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)'
       }}
     >
-      <div className="flex items-center justify-around h-16">
+      {/* Horizontally scrollable container for overflow items */}
+      <div
+        className="flex items-center h-16 overflow-x-auto scrollbar-hide"
+        style={{
+          // Hide scrollbar but allow scrolling
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
         {items.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
           const Icon = item.icon
@@ -70,10 +78,10 @@ export function BottomNav({ items, className }: BottomNavProps) {
               className={cn(
                 // Base styles
                 'flex flex-col items-center justify-center',
-                // Minimum touch target 44x44px
-                'min-w-[44px] min-h-[44px] w-full h-full',
+                // Fixed width for each nav item (allows scrolling)
+                'min-w-[72px] w-[72px] h-full flex-shrink-0',
                 // Padding for tap area
-                'px-2 py-1',
+                'px-1 py-1',
                 // Transition
                 'transition-colors duration-200',
                 // Focus state
@@ -113,8 +121,8 @@ export function BottomNav({ items, className }: BottomNavProps) {
               {/* Label */}
               <span
                 className={cn(
-                  'text-xs mt-0.5 font-medium',
-                  'truncate max-w-full'
+                  'text-[10px] mt-0.5 font-medium',
+                  'truncate max-w-full text-center'
                 )}
               >
                 {item.label}

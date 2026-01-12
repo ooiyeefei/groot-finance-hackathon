@@ -9,6 +9,7 @@ import { ClerkProviderWrapper } from '@/components/providers/ClerkProviderWrappe
 import { ConvexClientProvider } from '@/components/providers/ConvexClientProvider';
 import { SentryUserProvider } from '@/components/providers/SentryUserProvider';
 import { PWAProvider } from '@/components/providers/PWAProvider';
+import { MobileAppShellConnected } from '@/components/ui/mobile-app-shell-connected';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -63,7 +64,9 @@ export default async function LocaleLayout({
               <BusinessContextProvider>
                 <SentryUserProvider>
                   <PWAProvider>
-                    {children}
+                    <MobileAppShellConnected>
+                      {children}
+                    </MobileAppShellConnected>
                   </PWAProvider>
                 </SentryUserProvider>
               </BusinessContextProvider>
