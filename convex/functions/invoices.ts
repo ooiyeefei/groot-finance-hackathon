@@ -1310,6 +1310,9 @@ export const internalUpdateLineItems = internalMutation({
         quantity: v.optional(v.number()),
         unit_price: v.optional(v.number()),
         line_total: v.number(),
+        // Additional fields from Lambda extraction
+        item_code: v.optional(v.string()),
+        unit_measurement: v.optional(v.string()),
       })
     ),
     lineItemsStatus: v.union(
