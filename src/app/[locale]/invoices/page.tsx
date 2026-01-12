@@ -28,7 +28,7 @@ export default async function DocumentsPage() {
           />
 
           {/* Main Content Area */}
-          <main className="flex-1 overflow-auto p-card-padding">
+          <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
             <DocumentsContainer />
           </main>
         </div>

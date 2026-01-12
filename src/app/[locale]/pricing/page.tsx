@@ -31,7 +31,7 @@ export default async function PricingPage() {
           />
 
           {/* Main Content Area */}
-          <main className="flex-1 p-6 overflow-auto">
+          <main className="flex-1 p-6 overflow-auto pb-24 sm:pb-6">
             <div className="max-w-5xl mx-auto">
               {/* Back Button */}
               <div className="mb-6">

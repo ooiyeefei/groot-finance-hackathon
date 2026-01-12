@@ -225,7 +225,7 @@ export default function AIAssistantPage() {
               title="AI Assistant"
               subtitle="Get intelligent financial guidance powered by LLM"
             />
-            <main className="flex-1 overflow-auto p-6">
+            <main className="flex-1 overflow-auto p-6 pb-24 sm:pb-6">
               <div className="h-[calc(100vh-160px)] max-w-6xl mx-auto">
                 <SkeletonLoader variant="chat" className="mt-8" />
               </div>
@@ -291,7 +291,7 @@ export default function AIAssistantPage() {
             />
 
             {/* Main Content Area */}
-            <main className="flex-1 overflow-auto p-6">
+            <main className="flex-1 overflow-auto p-6 pb-24 sm:pb-6">
               {/* Chat Interface */}
               <div className="h-[calc(100vh-160px)] max-w-6xl mx-auto">
                 {loading ? (

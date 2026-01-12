@@ -32,7 +32,7 @@ export default async function SettingsPage() {
           />
 
           {/* Main Content Area */}
-          <main className="flex-1 p-6 overflow-auto">
+          <main className="flex-1 p-6 overflow-auto pb-24 sm:pb-6">
             <div className="max-w-2xl mx-auto">
               {/* Single Consolidated Section */}
               <div className="space-y-6">

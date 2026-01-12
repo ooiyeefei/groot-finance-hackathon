@@ -49,7 +49,7 @@ export default async function TeamsManagementPage() {
           />
 
           {/* Main Content Area */}
-          <main className="flex-1 overflow-auto p-4 sm:p-6">
+          <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
             <div className="max-w-7xl mx-auto">
               {/* Teams Management Client Component */}
               <Suspense fallback={

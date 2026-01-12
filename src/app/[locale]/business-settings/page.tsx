@@ -49,7 +49,7 @@ export default async function BusinessSettingsPage() {
           />
 
           {/* Main Content Area - Full Width Tabbed Interface */}
-          <main className="flex-1 overflow-auto p-4 sm:p-6">
+          <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
             <div className="w-full max-w-none">
               <Suspense fallback={
                 <div className="flex items-center justify-center p-8">
