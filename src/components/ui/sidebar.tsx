@@ -229,8 +229,9 @@ export default function Sidebar() {
   if (isExpanded === null) {
     // Return a stable placeholder that matches the final desktop collapsed width
     // Uses exact same dimensions as loaded sidebar to prevent any layout shift
+    // Hidden on mobile - mobile uses bottom nav instead
     return (
-      <div className="w-sidebar-collapsed bg-card border-r border-border flex flex-col relative min-h-screen">
+      <div className="hidden sm:flex w-sidebar-collapsed bg-card border-r border-border flex-col relative min-h-screen">
         <div className="p-4 border-b border-border h-[68px] flex items-center">
           <div className="w-8 h-8 bg-muted rounded animate-pulse"></div>
         </div>
@@ -248,6 +249,10 @@ export default function Sidebar() {
     )
   }
 
+  // Mobile: hide sidebar when collapsed (users use bottom nav)
+  // Desktop: always show sidebar
+  const shouldHideSidebar = isMobile && !isExpanded
+
   return (
     <TooltipProvider>
       <div className={`
@@ -255,6 +260,7 @@ export default function Sidebar() {
         bg-card border-r border-border flex flex-col
         transition-all duration-300 ease-in-out
         ${isMobile ? 'fixed left-0 top-0 h-full z-50' : 'relative'}
+        ${shouldHideSidebar ? '-translate-x-full' : 'translate-x-0'}
       `}>
         {/* Material Design Workspace Header */}
         <EnhancedBusinessDisplay
