@@ -807,7 +807,7 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
       )}
 
       {/* Action buttons - Unified row for all claim states */}
-      <div className="mt-3 flex items-center space-x-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         {/* Draft claim actions */}
         {claim.status === 'draft' && (
           <>

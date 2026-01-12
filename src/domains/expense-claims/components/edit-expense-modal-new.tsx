@@ -282,48 +282,48 @@ export default function EditExpenseModalNew({
           </div>
 
           {/* Action Buttons in Header */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center flex-wrap gap-2">
             {onDelete && (
               <button
                 onClick={handleDeleteClick}
                 disabled={saving || submitting || isReprocessing}
                 className="inline-flex items-center px-3 py-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
               >
-                <Trash2 className="w-4 h-4 mr-1.5" />
-                Delete
+                <Trash2 className="w-4 h-4 md:mr-1.5" />
+                <span className="hidden md:inline">Delete</span>
               </button>
             )}
             <button
               onClick={() => handleSaveWithLineItems('draft')}
               disabled={saving || submitting || isReprocessing}
-              className="inline-flex items-center px-4 py-1.5 bg-secondary hover:bg-secondary/80 text-secondary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-3 md:px-4 py-1.5 bg-secondary hover:bg-secondary/80 text-secondary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               {saving ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                  Saving...
+                  <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
+                  <span className="hidden md:inline">Saving...</span>
                 </>
               ) : (
                 <>
-                  <Save className="w-4 h-4 mr-1.5" />
-                  Save Draft
+                  <Save className="w-4 h-4 md:mr-1.5" />
+                  <span className="hidden md:inline">Save Draft</span>
                 </>
               )}
             </button>
             <button
               onClick={() => handleSaveWithLineItems('submit')}
               disabled={saving || submitting || isReprocessing}
-              className="inline-flex items-center px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-3 md:px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               {submitting ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                  Submitting...
+                  <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
+                  <span className="hidden md:inline">Submitting...</span>
                 </>
               ) : (
                 <>
-                  <Send className="w-4 h-4 mr-1.5" />
-                  Submit
+                  <Send className="w-4 h-4 md:mr-1.5" />
+                  <span className="hidden md:inline">Submit</span>
                 </>
               )}
             </button>
@@ -361,35 +361,25 @@ export default function EditExpenseModalNew({
               <div className="flex flex-col h-full">
                 {/* Top Banner - Expense Summary (compact height) */}
                 <div className="bg-muted p-3 border-b border-border">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-0 mb-3">
                     {/* Left side - Status and key info */}
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-primary/10 text-primary border border-primary/30 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
-                          {claimStatus.toWellFormed() || 'Draft'}
-                        </span>
-                      </div>
+                    <div className="flex flex-wrap items-center gap-2 md:gap-4">
+                      <span className="bg-primary/10 text-primary border border-primary/30 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
+                        {claimStatus.toWellFormed() || 'Draft'}
+                      </span>
 
-                      {/* Key expense summary info - Enhanced prominence */}
-                      <div className="flex items-center gap-8 text-foreground">
-                        <div className="flex items-center gap-3">
-                          <span className="font-semibold text-lg text-success">
-                            {formData.original_currency} {formData.original_amount.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-semibold text-lg">{formData.vendor_name || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-semibold text-lg">
-                            {formData.transaction_date ? formatBusinessDate(formData.transaction_date) : 'N/A'}
-                          </span>
-                        </div>
-                      </div>
+                      {/* Key expense summary info - stacks on mobile */}
+                      <span className="font-semibold text-base md:text-lg text-success">
+                        {formData.original_currency} {formData.original_amount.toFixed(2)}
+                      </span>
+                      <span className="font-semibold text-base md:text-lg text-foreground">{formData.vendor_name || 'N/A'}</span>
+                      <span className="font-semibold text-base md:text-lg text-foreground">
+                        {formData.transaction_date ? formatBusinessDate(formData.transaction_date) : 'N/A'}
+                      </span>
                     </div>
 
-                    {/* Right side - Progress indicator for drafts */}
-                    <div className="text-right text-muted-foreground flex items-center gap-4">
+                    {/* Right side - Progress indicator - hidden on mobile */}
+                    <div className="hidden md:flex text-right text-muted-foreground items-center gap-4">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-lg">10%</span>
                         <div className="w-16 bg-muted-foreground/30 rounded-full h-2">
@@ -400,10 +390,10 @@ export default function EditExpenseModalNew({
                   </div>
                 </div>
 
-                {/* Bottom Section - 40/60 Split */}
-                <div className="flex flex-1 overflow-hidden">
-                  {/* Left Panel - Receipt Preview (40%) */}
-                  <div className="w-2/5 border-r border-border flex flex-col">
+                {/* Bottom Section - Stacked on mobile, 40/60 Split on desktop */}
+                <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+                  {/* Left Panel - Receipt Preview (full width mobile, 40% desktop) */}
+                  <div className="w-full md:w-2/5 border-b md:border-b-0 md:border-r border-border flex flex-col h-48 md:h-auto">
                     <div className="flex-1 bg-muted p-4 overflow-hidden">
                       {receiptInfo.hasReceipt ? (
                         <div className="h-full flex flex-col">
@@ -473,8 +463,8 @@ export default function EditExpenseModalNew({
                     </div>
                   </div>
 
-                  {/* Right Panel - Editable Details (60%) */}
-                  <div className="w-3/5 overflow-y-auto">
+                  {/* Right Panel - Editable Details (full width mobile, 60% desktop) */}
+                  <div className="w-full md:w-3/5 overflow-y-auto">
                     <div className="p-6 space-y-6">
                       {/* Success Alert */}
                       {showSuccess && (

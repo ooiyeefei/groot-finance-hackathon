@@ -354,9 +354,9 @@ export default function UnifiedExpenseDetailsModal({
               <div className="flex flex-col h-full">
                 {/* Top Banner - Summary (compact height) */}
                 <div className="bg-record-layer-2 p-3 border-b border-record-border">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-0 mb-3">
                     {/* Left side - Status and key info */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-2 md:gap-4">
                       <Badge
                         variant={
                           claimDetails.status_display?.color === 'green' ? 'success' :
@@ -370,27 +370,25 @@ export default function UnifiedExpenseDetailsModal({
                         {claimDetails.status_display?.label || claimDetails.status?.toWellFormed() || 'UNKNOWN'} {/* ✅ Unified status field */}
                       </Badge>
 
-                      {/* Key expense summary info - Enhanced prominence */}
-                      <div className="flex items-center gap-8 text-foreground">
-                        <div className="flex items-center gap-3">
-                          <DollarSign className="w-5 h-5 text-success" />
-                          <span className="font-semibold text-lg text-success">
-                            {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Building className="w-5 h-5 text-primary" />
-                          <span className="font-semibold text-lg">{claimDetails.vendor_name || claimDetails.transaction?.vendor_name || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Calendar className="w-5 h-5 text-foreground" />
-                          <span className="font-semibold text-lg">{new Date(claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '').toLocaleDateString()}</span>
-                        </div>
+                      {/* Key expense summary info - wraps on mobile */}
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="w-4 md:w-5 h-4 md:h-5 text-success" />
+                        <span className="font-semibold text-base md:text-lg text-success">
+                          {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="hidden md:flex items-center gap-2">
+                        <Building className="w-5 h-5 text-primary" />
+                        <span className="font-semibold text-lg">{claimDetails.vendor_name || claimDetails.transaction?.vendor_name || 'N/A'}</span>
+                      </div>
+                      <div className="hidden md:flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-foreground" />
+                        <span className="font-semibold text-lg">{new Date(claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '').toLocaleDateString()}</span>
                       </div>
                     </div>
 
-                    {/* Right side - Receipt status and Progress bar */}
-                    <div className="text-right text-muted-foreground flex items-center gap-6">
+                    {/* Right side - Receipt status and Progress bar - hidden on mobile */}
+                    <div className="hidden md:flex text-right text-muted-foreground items-center gap-6">
                       {/* Receipt Status for Manager View */}
                       {viewMode === 'manager' && (
                         <div className="flex items-center gap-2">
@@ -432,10 +430,10 @@ export default function UnifiedExpenseDetailsModal({
                   )}
                 </div>
 
-                {/* Bottom Section - 40/60 Split */}
-                <div className="flex flex-1 overflow-hidden">
-                  {/* Left Panel - Receipt Preview (40%) */}
-                  <div className="w-2/5 border-r border-record-border flex flex-col">
+                {/* Bottom Section - Stacked on mobile, 40/60 Split on desktop */}
+                <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+                  {/* Left Panel - Receipt Preview (full width mobile, 40% desktop) */}
+                  <div className="w-full md:w-2/5 border-b md:border-b-0 md:border-r border-record-border flex flex-col h-48 md:h-auto">
                     <div className="flex-1 bg-record-layer-1 overflow-hidden">
                       {imageLoading ? (
                         <div className="flex items-center justify-center h-full">
@@ -472,8 +470,8 @@ export default function UnifiedExpenseDetailsModal({
                     </div>
                   </div>
 
-                  {/* Right Panel - Details and Line Items (60%) */}
-                  <div className="w-3/5 overflow-y-auto">
+                  {/* Right Panel - Details and Line Items (full width mobile, 60% desktop) */}
+                  <div className="w-full md:w-3/5 overflow-y-auto">
                     <div className="p-6 space-y-6">
                       {/* Manager Approval Section - Show for manager mode and move to top */}
                       {viewMode === 'manager' && (
@@ -509,7 +507,7 @@ export default function UnifiedExpenseDetailsModal({
                             </div>
 
                             {/* Approval Actions */}
-                            <div className="flex gap-3 pt-4 border-t border-record-border">
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 border-t border-record-border">
                               <Button
                                 onClick={() => handleApproval('reject')}
                                 disabled={processing}
@@ -603,36 +601,53 @@ export default function UnifiedExpenseDetailsModal({
                         <CardContent>
                           {claimDetails.transaction?.line_items && claimDetails.transaction.line_items.length > 0 ? (
                             <div className="space-y-3">
-                              {/* Line Items Table Header */}
-                              <div className="grid grid-cols-4 gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide border-b border-record-border pb-2">
+                              {/* Line Items Table Header - hidden on mobile */}
+                              <div className="hidden md:grid grid-cols-4 gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide border-b border-record-border pb-2">
                                 <span>Description</span>
                                 <span className="text-center">Qty</span>
                                 <span className="text-right">Unit Price</span>
                                 <span className="text-right">Total</span>
                               </div>
 
-                              {/* Line Items Rows */}
+                              {/* Line Items Rows - card style on mobile, grid on desktop */}
                               {claimDetails.transaction.line_items.map((item, index) => (
-                                <div key={item.id || index} className="grid grid-cols-4 gap-2 items-center bg-record-layer-2 p-3 rounded-lg border border-record-border">
-                                  <span className="text-foreground font-medium truncate" title={item.item_description}>
-                                    {item.item_description || 'Item'}
-                                  </span>
-                                  <span className="text-foreground text-center">
-                                    {item.quantity || 1}
-                                  </span>
-                                  <span className="text-foreground text-right">
-                                    {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.unit_price || '0').toFixed(2)}
-                                  </span>
-                                  <span className="text-foreground font-medium text-right">
-                                    {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.total_amount || '0').toFixed(2)}
-                                  </span>
+                                <div key={item.id || index} className="bg-record-layer-2 p-3 rounded-lg border border-record-border">
+                                  {/* Mobile: stacked layout */}
+                                  <div className="md:hidden space-y-1">
+                                    <div className="flex justify-between items-start">
+                                      <span className="text-foreground font-medium text-sm flex-1 pr-2">
+                                        {item.item_description || 'Item'}
+                                      </span>
+                                      <span className="text-foreground font-semibold text-sm whitespace-nowrap">
+                                        {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.total_amount || '0').toFixed(2)}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Qty: {item.quantity || 1} × {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.unit_price || '0').toFixed(2)}
+                                    </div>
+                                  </div>
+                                  {/* Desktop: grid layout */}
+                                  <div className="hidden md:grid grid-cols-4 gap-2 items-center">
+                                    <span className="text-foreground font-medium truncate" title={item.item_description}>
+                                      {item.item_description || 'Item'}
+                                    </span>
+                                    <span className="text-foreground text-center">
+                                      {item.quantity || 1}
+                                    </span>
+                                    <span className="text-foreground text-right">
+                                      {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.unit_price || '0').toFixed(2)}
+                                    </span>
+                                    <span className="text-foreground font-medium text-right">
+                                      {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.total_amount || '0').toFixed(2)}
+                                    </span>
+                                  </div>
                                 </div>
                               ))}
 
                               {/* Total Summary */}
-                              <div className="grid grid-cols-4 gap-2 items-center bg-blue-50 dark:bg-gray-800 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-200 dark:border-blue-700/50 mt-4">
-                                <span className="text-blue-900 dark:text-white font-medium col-span-3">Total Amount</span>
-                                <span className="text-blue-900 dark:text-white font-bold text-right text-lg">
+                              <div className="flex justify-between items-center md:grid md:grid-cols-4 md:gap-2 bg-blue-50 dark:bg-gray-800 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-200 dark:border-blue-700/50 mt-4">
+                                <span className="text-blue-900 dark:text-white font-medium md:col-span-3">Total Amount</span>
+                                <span className="text-blue-900 dark:text-white font-bold text-right text-base md:text-lg">
                                   {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
                                 </span>
                               </div>
