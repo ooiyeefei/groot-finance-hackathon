@@ -142,7 +142,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 
       {/* Management Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto p-1 gap-1 bg-muted border border-border">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto p-1 gap-1 bg-muted border border-border relative z-10">
           <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Overview
           </TabsTrigger>
