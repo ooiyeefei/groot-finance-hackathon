@@ -625,9 +625,9 @@ export async function processDocument(documentId: string): Promise<{ jobId: stri
     throw new Error('Document is already being processed')
   }
 
-  // Update status to processing
+  // Update status to processing (no separate classification step - routes based on domain)
   await updateDocument(documentId, {
-    status: 'classifying',
+    status: 'processing',
     error_message: null
   })
 
