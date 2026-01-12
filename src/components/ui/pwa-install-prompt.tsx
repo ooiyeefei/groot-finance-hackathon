@@ -37,6 +37,7 @@ export function PWAInstallPrompt({
     isPromptShowing,
     hasUserDismissed,
     isIOS,
+    isMobile,
     shouldShowIOSInstructions,
     promptInstall,
     dismissPrompt,
@@ -44,8 +45,8 @@ export function PWAInstallPrompt({
     hideIOSInstructions,
   } = usePWAInstall();
 
-  // Don't show if already installed or dismissed
-  if (isInstalled || hasUserDismissed) {
+  // Don't show if already installed, dismissed, OR not on mobile
+  if (isInstalled || hasUserDismissed || !isMobile) {
     return null;
   }
 
