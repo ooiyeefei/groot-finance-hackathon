@@ -79,8 +79,8 @@ export function BottomNav({ items, className }: BottomNavProps) {
                     href={item.href}
                     onClick={handleNavClick}
                     className={cn(
-                      // Base styles
-                      'flex flex-col items-center justify-center',
+                      // Base styles - relative needed for active indicator dot positioning
+                      'relative flex flex-col items-center justify-center',
                       // Fixed width for each nav item (allows scrolling)
                       'min-w-[72px] w-[72px] h-full flex-shrink-0',
                       // Padding for tap area
