@@ -79,6 +79,8 @@ export default function EditExpenseModalNew({
     // Currency/exchange
     previewAmount,
     exchangeRate,
+    isManualRate,
+    setManualRate,
 
     // Status info
     claimStatus,
@@ -510,6 +512,8 @@ export default function EditExpenseModalNew({
                             onRejectAllSuggestions={handleRejectAllSuggestions}
                             previewAmount={previewAmount}
                             exchangeRate={exchangeRate}
+                            isManualRate={isManualRate}
+                            onManualRateChange={setManualRate}
                             categories={categories}
                             categoriesLoading={categoriesLoading}
                             categoriesError={categoriesError}

@@ -454,12 +454,15 @@ async function _updateUserAndMembership(
  * Resend invitation email with new token
  * Primary entry point for invitation resend workflow
  * Uses Convex queries for data access
+ *
+ * Note: Returns success even if email fails (graceful degradation)
+ * The invitation is still valid; user can share the link manually
  */
 export async function resendInvitation(
   invitationId: string,
   businessId: string,
   inviterClerkUserId: string
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; emailFailed?: boolean; warning?: string; invitationUrl?: string }> {
   const { client } = await getAuthenticatedConvex()
   if (!client) {
     throw new Error('Failed to get authenticated Convex client')
@@ -514,9 +517,10 @@ export async function resendInvitation(
     7 // 7 days expiration
   )
 
-  // Send invitation email using JWT token
+  // Build invitation URL
   const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/en/invitations/accept?token=${secureToken}`
 
+  // Send invitation email using JWT token
   const emailResult = await emailService.sendInvitation({
     email,
     businessName: business?.name || 'FinanSEAL Business',
@@ -526,8 +530,16 @@ export async function resendInvitation(
     invitationUrl
   })
 
+  // Handle email failure gracefully - invitation is still valid
   if (!emailResult.success) {
-    throw new Error('Failed to send invitation email')
+    console.error('[Invitation Service] Email sending failed:', emailResult.error)
+    return {
+      success: true,
+      message: 'Invitation refreshed but email delivery failed',
+      emailFailed: true,
+      warning: `Email delivery failed: ${emailResult.error}. Please share the invitation link manually with the invitee.`,
+      invitationUrl // Include URL so user can share manually
+    }
   }
 
   console.log(`[Invitation Service] Invitation resent to ${email}`)

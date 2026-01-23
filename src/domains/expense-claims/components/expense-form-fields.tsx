@@ -6,7 +6,7 @@
 
 'use client'
 
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   Tag,
   DollarSign,
@@ -19,7 +19,9 @@ import {
   Brain,
   Loader2,
   XCircle,
-  CheckCircle
+  CheckCircle,
+  Pencil,
+  RotateCcw
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,6 +63,8 @@ export interface ExpenseFormFieldsProps {
   // Currency conversion
   previewAmount: number | null
   exchangeRate: number | null
+  isManualRate?: boolean
+  onManualRateChange?: (rate: number | null) => void
 
   // Categories
   categories: any[]
@@ -258,6 +262,116 @@ function ExpenseSummaryCompact({ formData, receiptInfo, categories }: ExpenseSum
   )
 }
 
+// Conversion Preview component with editable rate
+interface ConversionPreviewProps {
+  previewAmount: number
+  exchangeRate: number
+  homeCurrency: SupportedCurrency
+  isManualRate: boolean
+  onManualRateChange?: (rate: number | null) => void
+}
+
+function ConversionPreview({
+  previewAmount,
+  exchangeRate,
+  homeCurrency,
+  isManualRate,
+  onManualRateChange
+}: ConversionPreviewProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedRate, setEditedRate] = useState(exchangeRate.toFixed(4))
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleEditClick = () => {
+    setEditedRate(exchangeRate.toFixed(4))
+    setIsEditing(true)
+    // Focus input after render
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  const handleRateSubmit = () => {
+    const newRate = parseFloat(editedRate)
+    if (!isNaN(newRate) && newRate > 0 && onManualRateChange) {
+      onManualRateChange(newRate)
+    }
+    setIsEditing(false)
+  }
+
+  const handleRevertToAuto = () => {
+    if (onManualRateChange) {
+      onManualRateChange(null)
+    }
+    setIsEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleRateSubmit()
+    } else if (e.key === 'Escape') {
+      setIsEditing(false)
+      setEditedRate(exchangeRate.toFixed(4))
+    }
+  }
+
+  return (
+    <div className="flex-1 min-w-[240px] space-y-2">
+      <Label className="text-foreground h-6 text-xs flex items-center gap-1">
+        Conversion Preview
+        {isManualRate && (
+          <span className="text-amber-600 dark:text-amber-400 text-[10px] font-medium">(Manual)</span>
+        )}
+      </Label>
+      <div className={`${isManualRate ? 'bg-amber-500/10 border-amber-500/30' : 'bg-blue-500/10 border-blue-500/30'} text-blue-600 dark:text-blue-400 border rounded px-3 py-2 h-10 flex items-center justify-between`}>
+        <div className="font-medium text-sm">
+          {formatCurrency(previewAmount, homeCurrency)}
+          {isEditing ? (
+            <span className="text-xs ml-1 inline-flex items-center gap-1">
+              (Rate:
+              <input
+                ref={inputRef}
+                type="number"
+                step="0.0001"
+                value={editedRate}
+                onChange={(e) => setEditedRate(e.target.value)}
+                onBlur={handleRateSubmit}
+                onKeyDown={handleKeyDown}
+                className="w-20 px-1 py-0.5 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              )
+            </span>
+          ) : (
+            <span className={`text-xs ml-1 ${isManualRate ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+              (Rate: {exchangeRate.toFixed(4)})
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {!isEditing && onManualRateChange && (
+            <button
+              type="button"
+              onClick={handleEditClick}
+              className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+              title="Edit exchange rate"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {isManualRate && !isEditing && onManualRateChange && (
+            <button
+              type="button"
+              onClick={handleRevertToAuto}
+              className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+              title="Revert to auto rate"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ExpenseFormFields({
   formData,
   setFormData,
@@ -272,6 +386,8 @@ export default function ExpenseFormFields({
   onRejectAllSuggestions,
   previewAmount,
   exchangeRate,
+  isManualRate = false,
+  onManualRateChange,
   categories,
   categoriesLoading,
   categoriesError,
@@ -479,17 +595,13 @@ export default function ExpenseFormFields({
 
               {/* Currency Conversion Preview - Inline on Same Row */}
               {previewAmount !== null && exchangeRate !== null && formData.original_currency !== formData.home_currency && (
-                <div className="flex-1 min-w-[200px] space-y-2">
-                  <Label className="text-foreground h-6 text-xs">Conversion Preview</Label>
-                  <div className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 rounded px-3 py-2 h-10 flex items-center">
-                    <div className="font-medium text-sm">
-                      {formatCurrency(previewAmount, formData.home_currency as SupportedCurrency)}
-                      <span className="text-xs ml-1">
-                        (Rate: {exchangeRate.toFixed(4)})
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                <ConversionPreview
+                  previewAmount={previewAmount}
+                  exchangeRate={exchangeRate}
+                  homeCurrency={formData.home_currency as SupportedCurrency}
+                  isManualRate={isManualRate}
+                  onManualRateChange={onManualRateChange}
+                />
               )}
             </div>
             {errors.original_amount && <p className="text-destructive text-sm">{errors.original_amount}</p>}

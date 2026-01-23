@@ -54,6 +54,18 @@ export async function POST(
 
     console.log(`[Resend Invitation V1 API] Invitation resent: ${invitationId}`)
 
+    // Return success with optional email failure warning
+    // The invitation is still valid even if email failed - user can share link manually
+    if (result.emailFailed) {
+      return NextResponse.json({
+        success: true,
+        message: result.message,
+        emailFailed: true,
+        warning: result.warning,
+        invitationUrl: result.invitationUrl
+      })
+    }
+
     return NextResponse.json(result)
 
   } catch (error) {
@@ -67,14 +79,6 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: errorMessage },
         { status: 404 }
-      )
-    }
-
-    // 400 Bad Request - Failed to refresh or send email
-    if (errorMessage.includes('Failed to')) {
-      return NextResponse.json(
-        { success: false, error: errorMessage },
-        { status: 400 }
       )
     }
 

@@ -100,7 +100,7 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile> 
     full_name: user.fullName || null,
     preferred_currency: (user.homeCurrency || 'SGD') as SupportedCurrency,
     language_preference: user.preferences?.language || 'en',
-    timezone: 'Asia/Singapore', // Default - could be added to Convex schema
+    timezone: user.preferences?.timezone || 'Asia/Singapore',
     created_at: user._creationTime ? new Date(user._creationTime).toISOString() : null,
     updated_at: user.updatedAt ? new Date(user.updatedAt).toISOString() : null
   }
@@ -110,7 +110,7 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile> 
 
 /**
  * Update user profile settings
- * Uses Convex mutation
+ * Uses Convex mutations for profile and preferences
  */
 export async function updateUserProfile(
   clerkUserId: string,
@@ -133,12 +133,21 @@ export async function updateUserProfile(
     throw new Error('Failed to get authenticated Convex client')
   }
 
-  // Map service layer fields to Convex field names
-  // Note: Convex expects undefined (not null) for optional fields
-  await client.mutation(api.functions.users.updateProfile, {
-    fullName: updates.full_name ?? undefined,
-    homeCurrency: updates.preferred_currency
-  })
+  // Update profile fields (fullName, homeCurrency)
+  if (updates.full_name !== undefined || updates.preferred_currency !== undefined) {
+    await client.mutation(api.functions.users.updateProfile, {
+      fullName: updates.full_name ?? undefined,
+      homeCurrency: updates.preferred_currency
+    })
+  }
+
+  // Update preferences fields (timezone, language)
+  if (updates.timezone !== undefined || updates.language_preference !== undefined) {
+    await client.mutation(api.functions.users.updatePreferences, {
+      timezone: updates.timezone,
+      language: updates.language_preference
+    })
+  }
 
   // Fetch and return updated profile
   return await getUserProfile(clerkUserId)

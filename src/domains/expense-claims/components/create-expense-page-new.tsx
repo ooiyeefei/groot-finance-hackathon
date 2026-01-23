@@ -75,6 +75,8 @@ export default function CreateExpensePageNew({
     // Currency/exchange
     previewAmount,
     exchangeRate,
+    isManualRate,
+    setManualRate,
 
     // Processing method detection
     processingMethod,
@@ -361,6 +363,8 @@ export default function CreateExpensePageNew({
                   // Currency conversion
                   previewAmount={previewAmount}
                   exchangeRate={exchangeRate}
+                  isManualRate={isManualRate}
+                  onManualRateChange={setManualRate}
 
                   // Categories
                   categories={categories}
@@ -429,6 +433,8 @@ export default function CreateExpensePageNew({
               // Currency conversion
               previewAmount={previewAmount}
               exchangeRate={exchangeRate}
+              isManualRate={isManualRate}
+              onManualRateChange={setManualRate}
 
               // Categories
               categories={categories}

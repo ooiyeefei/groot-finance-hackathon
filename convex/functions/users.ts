@@ -201,6 +201,7 @@ export const updatePreferences = mutation({
     theme: v.optional(v.string()),
     language: v.optional(v.string()),
     notifications: v.optional(v.boolean()),
+    timezone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -219,6 +220,7 @@ export const updatePreferences = mutation({
       ...(args.theme !== undefined && { theme: args.theme }),
       ...(args.language !== undefined && { language: args.language }),
       ...(args.notifications !== undefined && { notifications: args.notifications }),
+      ...(args.timezone !== undefined && { timezone: args.timezone }),
     };
 
     await ctx.db.patch(user._id, {
