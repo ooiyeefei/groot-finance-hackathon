@@ -24,9 +24,9 @@ export default async function TeamsManagementPage() {
     redirect('/sign-in')
   }
 
-  // SECURITY: Server-side role authorization - require admin permission for team management
+  // SECURITY: Server-side role authorization - require finance_admin permission for team management
   try {
-    await requirePermission('admin')
+    await requirePermission('finance_admin')
   } catch (error) {
     console.error('[Teams Page] Authorization failed:', error)
     redirect('/')

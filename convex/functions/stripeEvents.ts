@@ -156,8 +156,8 @@ export const markFailed = mutation({
 // ============================================
 
 /**
- * List recent Stripe events for admin dashboard
- * Only owners/admins of any business can view
+ * List recent Stripe events for finance_admin dashboard
+ * Only owners/finance_admins of any business can view
  */
 export const listRecent = query({
   args: {
@@ -176,18 +176,18 @@ export const listRecent = query({
       return [];
     }
 
-    // Verify user is an owner or admin of at least one business
+    // Verify user is an owner or finance_admin of at least one business
     // (Convex doesn't support .filter() after .withIndex() - use JS find)
     const allMemberships = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
 
-    const adminMembership = allMemberships.find(
-      (m) => m.status === "active" && (m.role === "owner" || m.role === "admin")
+    const finance_adminMembership = allMemberships.find(
+      (m) => m.status === "active" && (m.role === "owner" || m.role === "finance_admin")
     );
 
-    if (!adminMembership) {
+    if (!finance_adminMembership) {
       return [];
     }
 
@@ -241,7 +241,7 @@ export const getFullEvent = query({
       return null;
     }
 
-    // Verify admin access
+    // Verify finance_admin access
     // (Convex doesn't support .filter() after .withIndex() - use JS find)
     const userMemberships = await ctx.db
       .query("business_memberships")
@@ -249,7 +249,7 @@ export const getFullEvent = query({
       .collect();
 
     const membership = userMemberships.find(
-      (m) => m.status === "active" && (m.role === "owner" || m.role === "admin")
+      (m) => m.status === "active" && (m.role === "owner" || m.role === "finance_admin")
     );
 
     if (!membership) {
@@ -285,7 +285,7 @@ export const getStats = query({
       return null;
     }
 
-    // Verify admin access
+    // Verify finance_admin access
     // (Convex doesn't support .filter() after .withIndex() - use JS find)
     const statsMemberships = await ctx.db
       .query("business_memberships")
@@ -293,7 +293,7 @@ export const getStats = query({
       .collect();
 
     const membership = statsMemberships.find(
-      (m) => m.status === "active" && (m.role === "owner" || m.role === "admin")
+      (m) => m.status === "active" && (m.role === "owner" || m.role === "finance_admin")
     );
 
     if (!membership) {
@@ -350,7 +350,7 @@ export const clearError = mutation({
       throw new Error("User not found");
     }
 
-    // Verify admin access
+    // Verify finance_admin access
     // (Convex doesn't support .filter() after .withIndex() - use JS find)
     const clearMemberships = await ctx.db
       .query("business_memberships")

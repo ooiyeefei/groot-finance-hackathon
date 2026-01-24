@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month') // YYYY-MM format
     const employeeId = searchParams.get('employeeId') // Optional, for manager/admin filtering
+    const directReportsOnly = searchParams.get('directReportsOnly') === 'true' // When true, scope to direct reports only
 
     // Validate required month parameter
     if (!month) {
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`[CSV Stream Export] Starting stream for month: ${month}, user: ${userId}, requestedEmployee: ${employeeId}`)
+    console.log(`[CSV Stream Export] Starting stream for month: ${month}, user: ${userId}, requestedEmployee: ${employeeId}, directReportsOnly: ${directReportsOnly}`)
 
     // ✅ MIGRATED: Get current user's business context from Convex
     const businessContext = await convex.query(
@@ -116,6 +117,7 @@ export async function GET(request: NextRequest) {
                 employeeId: employeeId || undefined,
                 offset,
                 limit: BATCH_SIZE,
+                directReportsOnly: directReportsOnly || undefined,
               }
             )
 
@@ -224,11 +226,12 @@ export async function GET(request: NextRequest) {
         employeeId: employeeId || undefined,
         offset: 0,
         limit: 1,
+        directReportsOnly: directReportsOnly || undefined,
       }
     )
 
     const role = initialData && !('error' in initialData) ? initialData.role : 'employee'
-    const isAdmin = role === 'owner' || role === 'admin'
+    const isAdmin = role === 'owner' || role === 'finance_admin'
     const isManager = role === 'manager'
 
     // 5. Determine filename based on scope

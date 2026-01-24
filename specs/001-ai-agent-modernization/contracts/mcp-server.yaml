@@ -1,0 +1,466 @@
+openapi: 3.0.3
+info:
+  title: FinanSEAL MCP Server Specification
+  version: 1.0.0
+  description: |
+    Model Context Protocol (MCP) server for FinanSEAL integration with Claude Desktop
+    and other MCP-compatible AI clients.
+
+    **Server Type**: Domain Intelligence (Type 3)
+
+    This MCP server embeds domain-specific financial intelligence in the tools themselves,
+    performing server-side analysis rather than delegating to the LLM.
+
+servers:
+  - url: mcp://finanseal.local
+    description: Local MCP server (stdio transport)
+
+x-mcp-server:
+  name: finanseal
+  version: 1.0.0
+  transport: stdio
+  auth:
+    type: oauth2
+    authorizationUrl: https://app.finanseal.com/oauth/authorize
+    tokenUrl: https://app.finanseal.com/oauth/token
+    scopes:
+      read:transactions: Read transaction data
+      read:documents: Read documents
+      read:insights: Read Action Center insights
+      write:transactions: Create/update transactions
+      analyze: Run domain intelligence analysis
+
+paths:
+  # MCP Resources (static context providers)
+  /resources:
+    x-mcp-resources:
+      - uri: finanseal://schema
+        name: Database Schema
+        description: Entity relationships and field definitions for FinanSEAL data model
+        mimeType: application/json
+
+      - uri: finanseal://preferences/{userId}
+        name: User Preferences
+        description: User's currency, language, and notification settings
+        mimeType: application/json
+
+      - uri: finanseal://jurisdictions
+        name: Tax Jurisdictions
+        description: Supported ASEAN tax jurisdictions, deadlines, and requirements
+        mimeType: application/json
+
+      - uri: finanseal://vendors/{businessId}
+        name: Vendor Directory
+        description: List of vendors with payment history summaries
+        mimeType: application/json
+
+  # MCP Tools (domain intelligence)
+  /tools:
+    x-mcp-tools:
+      - name: analyze_cash_flow
+        description: |
+          Analyze cash flow patterns with anomaly detection and trend forecasting.
+          Returns actionable insights, not raw transaction data.
+        inputSchema:
+          type: object
+          properties:
+            timeRange:
+              type: string
+              enum: ["7d", "30d", "90d", "1y"]
+              description: Analysis time period
+            includeForecasting:
+              type: boolean
+              default: true
+              description: Include 30-day forecast
+            categories:
+              type: array
+              items:
+                type: string
+              description: Filter by expense categories
+          required:
+            - timeRange
+        outputSchema:
+          $ref: '#/components/schemas/CashFlowAnalysis'
+
+      - name: assess_cross_border_compliance
+        description: |
+          Analyze cross-border transactions for compliance requirements.
+          Uses RAG with regulatory knowledge base + Gemini for jurisdiction-specific analysis.
+        inputSchema:
+          type: object
+          properties:
+            transactionId:
+              type: string
+              description: Specific transaction to analyze
+            jurisdiction:
+              type: string
+              description: Target jurisdiction (ISO country code)
+            includeRecommendations:
+              type: boolean
+              default: true
+          required:
+            - transactionId
+        outputSchema:
+          $ref: '#/components/schemas/ComplianceAssessment'
+
+      - name: evaluate_vendor_risk
+        description: |
+          Evaluate vendor reliability and payment risk based on historical patterns.
+          Computes risk scores and identifies concerning trends.
+        inputSchema:
+          type: object
+          properties:
+            vendorId:
+              type: string
+              description: Vendor to evaluate (optional - evaluates all if omitted)
+            timeRange:
+              type: string
+              enum: ["30d", "90d", "1y", "all"]
+              default: "1y"
+          required: []
+        outputSchema:
+          $ref: '#/components/schemas/VendorRiskAssessment'
+
+      - name: forecast_expenses
+        description: |
+          ML-based expense forecasting with seasonal adjustments and confidence intervals.
+          Returns projected expenses by category with accuracy metrics.
+        inputSchema:
+          type: object
+          properties:
+            forecastPeriod:
+              type: string
+              enum: ["7d", "30d", "90d"]
+              default: "30d"
+            categories:
+              type: array
+              items:
+                type: string
+              description: Categories to forecast (all if omitted)
+            confidenceLevel:
+              type: number
+              minimum: 0.5
+              maximum: 0.99
+              default: 0.95
+          required: []
+        outputSchema:
+          $ref: '#/components/schemas/ExpenseForecast'
+
+      - name: suggest_tax_optimization
+        description: |
+          Generate tax optimization recommendations based on user's jurisdiction and transactions.
+          Uses RAG with tax knowledge base + domain rules.
+        inputSchema:
+          type: object
+          properties:
+            fiscalYear:
+              type: integer
+              description: Fiscal year to analyze (default current)
+            jurisdiction:
+              type: string
+              description: Primary tax jurisdiction
+          required:
+            - jurisdiction
+        outputSchema:
+          $ref: '#/components/schemas/TaxOptimizationSuggestions'
+
+  # MCP Prompts (interaction templates)
+  /prompts:
+    x-mcp-prompts:
+      - name: financial_health_check
+        description: Comprehensive business financial health assessment
+        arguments:
+          - name: period
+            description: Analysis period (e.g., "Q4 2025", "last 90 days")
+            required: false
+        template: |
+          Perform a comprehensive financial health check for my business.
+
+          Please analyze:
+          1. Cash flow trends and runway
+          2. Expense patterns and anomalies
+          3. Vendor payment health
+          4. Compliance status
+          5. Key risks and recommendations
+
+          {{#if period}}Focus on: {{period}}{{/if}}
+
+      - name: compliance_review
+        description: Cross-border compliance status review
+        arguments:
+          - name: jurisdiction
+            description: Target jurisdiction to focus on
+            required: false
+        template: |
+          Review my cross-border compliance status.
+
+          Check for:
+          - Missing documentation
+          - Upcoming filing deadlines
+          - Withholding tax requirements
+          - Regulatory gaps
+
+          {{#if jurisdiction}}Focus on transactions involving: {{jurisdiction}}{{/if}}
+
+      - name: expense_optimization
+        description: Identify expense reduction opportunities
+        arguments: []
+        template: |
+          Analyze my expenses and identify optimization opportunities.
+
+          Look for:
+          - Duplicate payments
+          - Vendor consolidation opportunities
+          - Unusual spending patterns
+          - Cost reduction recommendations
+
+          Prioritize by potential savings amount.
+
+      - name: absence_summary
+        description: Summary of important events since last login
+        arguments:
+          - name: lastLoginDate
+            description: Date of last login
+            required: true
+        template: |
+          Summarize important financial events since {{lastLoginDate}}.
+
+          Include:
+          - New Action Center alerts
+          - Large transactions
+          - Compliance deadlines
+          - Cash flow changes
+          - Any anomalies detected
+
+components:
+  schemas:
+    CashFlowAnalysis:
+      type: object
+      properties:
+        summary:
+          type: string
+          description: Human-readable summary of cash flow status
+        currentBalance:
+          type: number
+        burnRate:
+          type: number
+          description: Monthly burn rate
+        runway:
+          type: integer
+          description: Months of runway at current burn
+        anomalies:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              amount:
+                type: number
+              deviation:
+                type: number
+                description: Standard deviations from baseline
+              description:
+                type: string
+        forecast:
+          type: object
+          properties:
+            projected30Day:
+              type: number
+            confidence:
+              type: number
+            trend:
+              type: string
+              enum: [improving, stable, declining]
+        recommendations:
+          type: array
+          items:
+            type: string
+
+    ComplianceAssessment:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [compliant, requires_attention, non_compliant]
+        riskLevel:
+          type: string
+          enum: [low, medium, high, critical]
+        taxImplications:
+          type: object
+          properties:
+            withholdingRequired:
+              type: boolean
+            estimatedRate:
+              type: number
+            jurisdictions:
+              type: array
+              items:
+                type: string
+        regulatoryRequirements:
+          type: object
+          properties:
+            documentationRequired:
+              type: array
+              items:
+                type: string
+            filingObligations:
+              type: array
+              items:
+                type: string
+            deadlines:
+              type: array
+              items:
+                type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              uri:
+                type: string
+              title:
+                type: string
+              snippet:
+                type: string
+
+    VendorRiskAssessment:
+      type: object
+      properties:
+        vendors:
+          type: array
+          items:
+            type: object
+            properties:
+              vendorId:
+                type: string
+              vendorName:
+                type: string
+              riskScore:
+                type: number
+                minimum: 0
+                maximum: 100
+              riskLevel:
+                type: string
+                enum: [low, medium, high, critical]
+              factors:
+                type: object
+                properties:
+                  averagePaymentDelay:
+                    type: number
+                    description: Days past due on average
+                  paymentVariability:
+                    type: number
+                    description: Standard deviation in payment timing
+                  transactionVolume:
+                    type: integer
+                  lastTransaction:
+                    type: string
+                    format: date
+              trends:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    trend:
+                      type: string
+                    direction:
+                      type: string
+                      enum: [improving, stable, worsening]
+              recommendations:
+                type: array
+                items:
+                  type: string
+
+    ExpenseForecast:
+      type: object
+      properties:
+        forecastPeriod:
+          type: string
+        totalProjected:
+          type: number
+        confidence:
+          type: number
+        byCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              projected:
+                type: number
+              lowerBound:
+                type: number
+              upperBound:
+                type: number
+              trend:
+                type: string
+                enum: [increasing, stable, decreasing]
+              seasonalFactor:
+                type: number
+        alerts:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              alert:
+                type: string
+              severity:
+                type: string
+                enum: [info, warning, critical]
+
+    TaxOptimizationSuggestions:
+      type: object
+      properties:
+        jurisdiction:
+          type: string
+        fiscalYear:
+          type: integer
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              description:
+                type: string
+              potentialSavings:
+                type: number
+              complexity:
+                type: string
+                enum: [low, medium, high]
+              deadline:
+                type: string
+                format: date
+              requirements:
+                type: array
+                items:
+                  type: string
+        disclaimer:
+          type: string
+          default: "These suggestions are for informational purposes. Consult a tax professional."
+
+    MCPError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - unauthorized
+            - forbidden
+            - not_found
+            - rate_limited
+            - internal_error
+        message:
+          type: string
+        details:
+          type: object

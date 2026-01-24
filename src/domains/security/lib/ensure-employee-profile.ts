@@ -14,11 +14,11 @@ export interface UserProfile {
   id: string
   user_id: string
   business_id: string
-  role: 'admin' | 'manager' | 'employee' | 'owner'
+  role: 'finance_admin' | 'manager' | 'employee' | 'owner'
   role_permissions: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
   home_currency?: string // User's preferred home currency
   created_at: string
@@ -81,7 +81,7 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
       id: profile.id as string,
       user_id: profile.user_id as string,
       business_id: profile.business_id as string,
-      role: profile.role as 'admin' | 'manager' | 'employee' | 'owner',
+      role: profile.role as 'finance_admin' | 'manager' | 'employee' | 'owner',
       role_permissions: profile.role_permissions,
       created_at: profile.created_at,
       updated_at: profile.updated_at

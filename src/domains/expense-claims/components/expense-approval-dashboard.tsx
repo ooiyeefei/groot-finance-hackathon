@@ -33,7 +33,7 @@ interface EnhancedApprovalDashboardProps {
 interface UserRole {
   employee: boolean
   manager: boolean
-  admin: boolean
+  finance_admin: boolean
 }
 
 interface ManagementDashboardData {
@@ -81,7 +81,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
       console.error('Failed to fetch management dashboard data:', error)
       // Set minimal fallback data
       setDashboardData({
-        role: { employee: true, manager: true, admin: false },
+        role: { employee: true, manager: true, finance_admin: false },
         summary: {
           total_claims: 0,
           pending_approval: 0,
@@ -149,7 +149,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <TabsTrigger value="approvals" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Approvals
           </TabsTrigger>
-          {dashboardData?.role?.admin && (
+          {dashboardData?.role?.finance_admin && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Reimbursements
             </TabsTrigger>
@@ -167,14 +167,14 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <ApprovalTabContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
         </TabsContent>
 
-        {dashboardData?.role?.admin && (
+        {dashboardData?.role?.finance_admin && (
           <TabsContent value="reimbursements" className="space-y-4">
             <ReimbursementQueueContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
           </TabsContent>
         )}
 
         <TabsContent value="reports" className="space-y-4">
-          <ManagementReportsContent userRole={dashboardData?.role || { employee: true, manager: false, admin: false }} />
+          <ManagementReportsContent userRole={dashboardData?.role || { employee: true, manager: false, finance_admin: false }} />
         </TabsContent>
       </Tabs>
     </div>
@@ -201,7 +201,7 @@ function ManagementOverviewContent({ data, categories, setActiveTab }: {
           </CardHeader>
           <CardContent>
             <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
-              <ExpenseAnalytics scope={data?.role?.admin ? "company" : "department"} />
+              <ExpenseAnalytics scope={data?.role?.finance_admin ? "company" : "department"} />
             </Suspense>
           </CardContent>
         </Card>

@@ -59,12 +59,10 @@ async function checkTrialExpiration(clerkUserId: string): Promise<{
     const convex = getConvexClient()
 
     // Query Convex for trial status using the middleware-specific query
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const queryFn = api.functions.businesses.getTrialStatusByClerkId
-    const result = await convex.query(
-      queryFn as any,
-      { clerkUserId }
-    ) as { isExpired: boolean; businessId: string | null }
+    const result = await convex.query(api.functions.businesses.getTrialStatusByClerkId, { clerkUserId }) as {
+      isExpired: boolean
+      businessId: string | null
+    }
 
     return {
       isExpired: result.isExpired,
@@ -120,21 +118,24 @@ export default clerkMiddleware(async (auth, req) => {
   const localeMatch = pathname.match(/^\/([a-z]{2})\//)
   const locale = localeMatch ? localeMatch[1] : 'en'
 
-  // Check if already on onboarding or billing pages
-  const isOnboardingOrBilling =
+  // Check if already on onboarding, billing, or invitation pages
+  // NOTE: Invitation pages must be exempt because invited users don't have a business yet
+  // They need to reach the invitation acceptance page to join a business
+  const isOnboardingOrBillingOrInvitation =
     pathname.includes('/onboarding/') ||
     pathname.includes('/billing/') ||
-    pathname.includes('/settings/billing')
+    pathname.includes('/settings/billing') ||
+    pathname.includes('/invitations/')
 
   // T048: If user has no business (hasn't completed onboarding), redirect to onboarding
-  if (!trialStatus.businessId && !isOnboardingOrBilling) {
+  if (!trialStatus.businessId && !isOnboardingOrBillingOrInvitation) {
     const onboardingUrl = new URL(`/${locale}/onboarding/business`, req.url)
     console.log(`[Middleware] User ${userId} has no business - redirecting to onboarding`)
     return NextResponse.redirect(onboardingUrl)
   }
 
   // If trial is expired, redirect to plan selection page
-  if (trialStatus.isExpired && !isOnboardingOrBilling) {
+  if (trialStatus.isExpired && !isOnboardingOrBillingOrInvitation) {
     const planSelectionUrl = new URL(`/${locale}/onboarding/plan-selection`, req.url)
     planSelectionUrl.searchParams.set('trial_expired', 'true')
     console.log(`[Middleware] Trial expired for user ${userId} - redirecting to plan selection`)

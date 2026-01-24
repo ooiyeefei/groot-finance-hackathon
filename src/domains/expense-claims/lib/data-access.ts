@@ -453,7 +453,7 @@ export async function listExpenseClaims(
       return { success: false, error: 'Failed to get Convex client' }
     }
 
-    const isAdmin = employeeProfile.role_permissions.admin
+    const isAdmin = employeeProfile.role_permissions.finance_admin
     const isManager = employeeProfile.role_permissions.manager
 
     // Use Convex query for listing
@@ -967,7 +967,7 @@ export async function getExpenseAnalytics(
       return { success: false, error: 'Failed to get Convex client' }
     }
 
-    const isAdmin = employeeProfile.role_permissions.admin
+    const isAdmin = employeeProfile.role_permissions.finance_admin
     const isManager = employeeProfile.role_permissions.manager
 
     // Use Convex analytics query

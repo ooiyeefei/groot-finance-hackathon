@@ -54,7 +54,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Determine the actual storage path to use
     let actualStoragePath = storagePath || expenseClaim.storagePath
 
+    // Debug logging to identify path issues
+    console.log(`[Expense Claim Image URL] Storage path debug:`, {
+      queryParamStoragePath: storagePath,
+      expenseClaimStoragePath: expenseClaim.storagePath,
+      resolvedStoragePath: actualStoragePath,
+      expenseClaimId: claimId
+    })
+
     if (!actualStoragePath) {
+      console.error(`[Expense Claim Image URL] No storage path found for expense claim: ${claimId}`)
       return NextResponse.json(
         { success: false, error: 'No storage path available for this expense claim' },
         { status: 400 }
@@ -64,6 +73,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (useRawFile) {
       // For raw files: use the exact storagePath
       console.log(`[Expense Claim Image URL] Using raw file path: ${actualStoragePath}`)
+
+      // Verify file exists before generating presigned URL
+      const exists = await fileExists('expense_claims', actualStoragePath)
+      if (!exists) {
+        console.error(`[Expense Claim Image URL] File not found in S3: expense_claims/${actualStoragePath}`)
+        return NextResponse.json(
+          { success: false, error: `Receipt file not found in storage. Path: ${actualStoragePath}` },
+          { status: 404 }
+        )
+      }
 
       try {
         const signedUrl = await getPresignedDownloadUrl('expense_claims', actualStoragePath, URL_EXPIRY.download)

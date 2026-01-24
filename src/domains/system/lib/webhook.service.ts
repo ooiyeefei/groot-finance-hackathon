@@ -168,7 +168,7 @@ export async function handleClerkUserCreated(user: ClerkUser, svixId?: string): 
       const rolePermissions = {
         employee: true,
         manager: false, // Default for invitation-based, will be set based on actual role
-        admin: false
+        finance_admin: false
       }
 
       const syncResult = await syncRoleToClerk(user.id, rolePermissions)
@@ -185,7 +185,7 @@ export async function handleClerkUserCreated(user: ClerkUser, svixId?: string): 
       const ownerPermissions = {
         employee: true,
         manager: true,
-        admin: true
+        finance_admin: true
       }
 
       const syncResult = await syncRoleToClerk(user.id, ownerPermissions)

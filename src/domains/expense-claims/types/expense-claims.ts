@@ -40,7 +40,7 @@ export type ExpenseCategory = string
 export interface WorkflowTransition {
   from: ExpenseClaimStatus
   to: ExpenseClaimStatus
-  requiredRole: 'employee' | 'manager' | 'admin'
+  requiredRole: 'employee' | 'manager' | 'finance_admin'
   validator?: (claim: ExpenseClaim) => boolean
 }
 
@@ -60,7 +60,7 @@ export interface EmployeeProfile {
   role_permissions: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
   is_active: boolean
   created_at: string
@@ -212,7 +212,7 @@ export interface ExpenseClaimListResponse {
 
 // Dashboard analytics interfaces
 export interface ExpenseDashboardData {
-  role: 'employee' | 'manager' | 'admin'
+  role: 'employee' | 'manager' | 'finance_admin'
   summary: {
     total_claims: number
     pending_approval: number
@@ -284,11 +284,11 @@ export const EXPENSE_WORKFLOW_TRANSITIONS: WorkflowTransition[] = [
   { from: 'submitted', to: 'approved', requiredRole: 'manager' },
   { from: 'submitted', to: 'rejected', requiredRole: 'manager' },
 
-  // Admin transitions
-  { from: 'approved', to: 'reimbursed', requiredRole: 'admin' },
+  // Finance Admin transitions
+  { from: 'approved', to: 'reimbursed', requiredRole: 'finance_admin' },
 
-  // Admin can also reject approved claims if compliance issues found
-  { from: 'approved', to: 'rejected', requiredRole: 'admin' }
+  // Finance Admin can also reject approved claims if compliance issues found
+  { from: 'approved', to: 'rejected', requiredRole: 'finance_admin' }
 ]
 
 // ============================================================================
@@ -413,7 +413,7 @@ export interface PolicyOverrideEvent extends Omit<AuditEvent, 'event_type' | 'de
     policy_violation_code: string
     violation_description: string
     justification: string
-    override_authority: 'manager' | 'admin' | 'super_admin'
+    override_authority: 'manager' | 'finance_admin' | 'super_admin'
     original_value?: any
     override_value?: any
   }

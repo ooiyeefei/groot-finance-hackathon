@@ -18,9 +18,9 @@ import {
 /**
  * User role in business schema
  */
-export const businessRoleSchema = z.enum(['admin', 'manager', 'employee'], {
+export const businessRoleSchema = z.enum(['finance_admin', 'manager', 'employee'], {
   errorMap: () => ({
-    message: 'Role must be one of: admin, manager, employee'
+    message: 'Role must be one of: finance_admin, manager, employee'
   })
 })
 

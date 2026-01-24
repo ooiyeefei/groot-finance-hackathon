@@ -41,7 +41,7 @@ export interface TeamMember {
   role_permissions: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
   home_currency: string | null
   manager_id: string | null
@@ -183,7 +183,7 @@ export async function getTeamMembers(
     role_permissions: member.role_permissions || {
       employee: true,
       manager: false,
-      admin: false
+      finance_admin: false
     },
     home_currency: member.home_currency || 'SGD',
     manager_id: member.manager_id,
@@ -240,6 +240,53 @@ export async function getTeamMembers(
   }
 
   console.log('[User Service] Final profiles returned:', enrichedProfiles.length)
+
+  return {
+    users: enrichedProfiles,
+    business_id: businessId
+  }
+}
+
+/**
+ * Get direct reports (employees assigned to current manager)
+ * Uses Convex query that returns only team members where managerId matches caller
+ */
+export async function getDirectReports(
+  clerkUserId: string,
+  businessId: string
+): Promise<{ users: TeamMember[]; business_id: string }> {
+  const { client } = await getAuthenticatedConvex()
+  if (!client) {
+    throw new Error('Failed to get authenticated Convex client')
+  }
+
+  console.log('[User Service] Fetching direct reports for business:', businessId)
+
+  const directReportsData = await client.query(api.functions.memberships.getDirectReports, {
+    businessId
+  })
+
+  console.log('[User Service] Direct reports count:', directReportsData?.length || 0)
+
+  const enrichedProfiles: TeamMember[] = (directReportsData || []).map((member: any) => ({
+    id: member.id,
+    user_id: member.user_id,
+    business_id: member.business_id,
+    full_name: member.full_name,
+    email: member.email,
+    role_permissions: member.role_permissions || {
+      employee: true,
+      manager: false,
+      finance_admin: false
+    },
+    home_currency: member.home_currency || 'SGD',
+    manager_id: member.manager_id,
+    manager_name: null,
+    manager_user_id: null,
+    created_at: member.created_at,
+    updated_at: member.updated_at,
+    clerk_user: null
+  }))
 
   return {
     users: enrichedProfiles,

@@ -20,7 +20,7 @@ interface GoogleSheetsExportProps {
   userRole: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
 }
 
@@ -63,7 +63,7 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
   const [previewData, setPreviewData] = useState<any>(null)
 
   // Check if user has export permissions
-  const canExport = userRole.manager || userRole.admin
+  const canExport = userRole.manager || userRole.finance_admin
 
   if (!canExport) {
     return (
@@ -168,7 +168,7 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
             Export Expense Report
           </CardTitle>
           <CardDescription className="text-muted-foreground">
-            Generate comprehensive expense reports for {userRole.admin ? 'company-wide' : 'team'} analysis
+            Generate comprehensive expense reports for {userRole.finance_admin ? 'company-wide' : 'team'} analysis
           </CardDescription>
         </CardHeader>
 

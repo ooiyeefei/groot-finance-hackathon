@@ -38,7 +38,7 @@ interface CategoriesManagementProps {
 interface UserRole {
   employee: boolean
   manager: boolean
-  admin: boolean
+  finance_admin: boolean
 }
 
 export default function CategoriesManagementClient({ userId }: CategoriesManagementProps) {
@@ -54,11 +54,11 @@ export default function CategoriesManagementClient({ userId }: CategoriesManagem
         if (roleData && roleData.permissions) {
           setUserRole(roleData.permissions)
         } else {
-          setUserRole({ employee: true, manager: false, admin: false })
+          setUserRole({ employee: true, manager: false, finance_admin: false })
         }
       } catch (error) {
         console.error('Failed to fetch user role:', error)
-        setUserRole({ employee: true, manager: false, admin: false })
+        setUserRole({ employee: true, manager: false, finance_admin: false })
       } finally {
         setLoading(false)
       }
@@ -89,7 +89,7 @@ export default function CategoriesManagementClient({ userId }: CategoriesManagem
     )
   }
 
-  const canManage = userRole.manager || userRole.admin
+  const canManage = userRole.manager || userRole.finance_admin
 
   if (!canManage) {
     return (
@@ -148,7 +148,7 @@ function ExpenseCategoryManagement({ userRole }: { userRole: UserRole }) {
     category: null
   })
 
-  const canManage = userRole.manager || userRole.admin
+  const canManage = userRole.manager || userRole.finance_admin
 
   const {
     data: categories = [],

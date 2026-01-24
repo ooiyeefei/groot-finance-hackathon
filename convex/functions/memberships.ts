@@ -11,9 +11,10 @@ import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
-// Role hierarchy for permission checks (simplified: owner > manager > employee)
+// Role hierarchy for permission checks: owner > finance_admin > manager > employee
 const ROLE_HIERARCHY: Record<string, number> = {
-  owner: 3,
+  owner: 4,
+  finance_admin: 3,
   manager: 2,
   employee: 1,
 };
@@ -172,7 +173,7 @@ export const getPendingInvitations = query({
       return [];
     }
 
-    // Verify caller has admin/owner access
+    // Verify caller has finance_admin/owner access
     const callerMembership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -221,6 +222,7 @@ export const inviteByEmail = mutation({
     businessId: v.id("businesses"),
     email: v.string(),
     role: v.union(
+      v.literal("finance_admin"),
       v.literal("manager"),
       v.literal("employee")
     ),
@@ -379,7 +381,7 @@ export const declineInvitation = mutation({
       throw new Error("Pending invitation not found");
     }
 
-    // Can be declined by invitee or admin/owner
+    // Can be declined by invitee or finance_admin/owner
     const isInvitee = membership.userId === user._id;
 
     if (!isInvitee) {
@@ -407,6 +409,7 @@ export const updateRole = mutation({
   args: {
     membershipId: v.id("business_memberships"),
     newRole: v.union(
+      v.literal("finance_admin"),
       v.literal("manager"),
       v.literal("employee")
     ),
@@ -484,7 +487,7 @@ export const removeMember = mutation({
       throw new Error("Cannot remove business owner");
     }
 
-    // Check if self-removal (leaving) or admin action
+    // Check if self-removal (leaving) or finance_admin action
     const isSelf = targetMembership.userId === user._id;
 
     if (!isSelf) {
@@ -631,6 +634,7 @@ export const updateRoleByStringIds = mutation({
     businessId: v.string(),
     newRole: v.union(
       v.literal("owner"),
+      v.literal("finance_admin"),
       v.literal("manager"),
       v.literal("employee")
     ),
@@ -771,8 +775,8 @@ export const getBusinessUsersByStringId = query({
           role: membership.role,
           role_permissions: {
             employee: true,
-            manager: membership.role === "owner" || membership.role === "manager",
-            admin: membership.role === "owner",
+            manager: membership.role === "owner" || membership.role === "finance_admin" || membership.role === "manager",
+            finance_admin: membership.role === "owner" || membership.role === "finance_admin",
           },
           status: membership.status,
           created_at: new Date(membership._creationTime).toISOString(),
@@ -868,8 +872,8 @@ export const getTeamMembersWithManagers = query({
           role: membership.role,
           role_permissions: {
             employee: true,
-            manager: membership.role === "owner" || membership.role === "manager",
-            admin: membership.role === "owner",
+            manager: membership.role === "owner" || membership.role === "finance_admin" || membership.role === "manager",
+            finance_admin: membership.role === "owner" || membership.role === "finance_admin",
           },
           status: membership.status,
           full_name: memberUser?.fullName || null,
@@ -894,8 +898,97 @@ export const getTeamMembersWithManagers = query({
 });
 
 /**
+ * Get direct reports for current manager
+ * Returns only team members where managerId matches the calling user
+ * Used for manager-scoped reports and exports
+ */
+export const getDirectReports = query({
+  args: { businessId: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    // Resolve business (supports Convex ID or legacy UUID)
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    // Verify caller has access to this business and is manager/finance_admin
+    const callerMembership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!callerMembership || callerMembership.status !== "active") {
+      return [];
+    }
+
+    // Only managers and finance_admins can view direct reports
+    const isManagerOrAdmin = callerMembership.role === "owner" ||
+                             callerMembership.role === "manager" ||
+                             callerMembership.role === "finance_admin";
+    if (!isManagerOrAdmin) {
+      return [];
+    }
+
+    // Get all active memberships where managerId matches the caller
+    const teamMemberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Filter for direct reports only (managerId === current user)
+    const directReports = teamMemberships.filter(
+      (m) => m.status === "active" && m.managerId === user._id
+    );
+
+    // Enrich with user details
+    const enrichedReports = await Promise.all(
+      directReports.map(async (membership) => {
+        const memberUser = await ctx.db.get(membership.userId);
+
+        return {
+          id: membership._id,
+          membership_id: membership._id,
+          user_id: membership.userId,
+          business_id: membership.businessId,
+          role: membership.role,
+          role_permissions: {
+            employee: true,
+            manager: membership.role === "owner" || membership.role === "finance_admin" || membership.role === "manager",
+            finance_admin: membership.role === "owner" || membership.role === "finance_admin",
+          },
+          status: membership.status,
+          full_name: memberUser?.fullName || null,
+          email: memberUser?.email || null,
+          home_currency: memberUser?.homeCurrency || business.homeCurrency || "SGD",
+          clerk_user_id: memberUser?.clerkUserId || null,
+          manager_id: membership.managerId || null,
+          created_at: new Date(membership._creationTime).toISOString(),
+          updated_at: membership.updatedAt
+            ? new Date(membership.updatedAt).toISOString()
+            : new Date(membership._creationTime).toISOString(),
+        };
+      })
+    );
+
+    return enrichedReports;
+  },
+});
+
+/**
  * Get business members filtered by role and status
- * Used by workflow engines to find approvers (e.g., find admin for high-value approval)
+ * Used by workflow engines to find approvers (e.g., find finance_admin for high-value approval)
  */
 export const getBusinessMembers = query({
   args: {
@@ -968,7 +1061,7 @@ export const getBusinessMembers = query({
 
 /**
  * Assign or update manager for an employee
- * Requires admin/owner permission in the business
+ * Requires finance_admin/owner permission in the business
  */
 export const assignManager = mutation({
   args: {

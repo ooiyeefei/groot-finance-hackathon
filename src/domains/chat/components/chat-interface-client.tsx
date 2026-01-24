@@ -75,7 +75,7 @@ interface ChatInterfaceClientProps {
   userRole: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
 }
 

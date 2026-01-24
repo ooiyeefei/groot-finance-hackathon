@@ -66,8 +66,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Only allow admin/manager access for monitoring operations
-    if (!userContext.permissions.admin && !userContext.permissions.manager) {
+    // Only allow finance_admin/manager access for monitoring operations
+    if (!userContext.permissions.finance_admin && !userContext.permissions.manager) {
       return NextResponse.json(
         { success: false, error: 'Insufficient permissions. Admin or manager role required.' },
         { status: 403 }
@@ -220,10 +220,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Only allow admin access for manual override
-    if (!userContext.permissions.admin) {
+    // Only allow finance_admin access for manual override
+    if (!userContext.permissions.finance_admin) {
       return NextResponse.json(
-        { success: false, error: 'Insufficient permissions. Admin role required for manual override.' },
+        { success: false, error: 'Insufficient permissions. Finance admin role required for manual override.' },
         { status: 403 }
       )
     }

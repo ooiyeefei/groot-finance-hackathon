@@ -379,7 +379,7 @@ export const getProcessingStats = query({
       return null;
     }
 
-    // Verify admin/owner access
+    // Verify finance_admin/owner access
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -531,7 +531,7 @@ export const update = mutation({
       throw new Error("Invoice not found");
     }
 
-    // Check ownership or admin access
+    // Check ownership or finance_admin access
     if (invoice.userId !== user._id && invoice.businessId) {
       const membership = await ctx.db
         .query("business_memberships")
@@ -715,7 +715,7 @@ export const softDelete = mutation({
 
     console.log(`[softDelete] Found invoice ${args.id}, owner: ${invoice.userId}, current user: ${user._id}`);
 
-    // Check ownership or admin access
+    // Check ownership or finance_admin access
     if (invoice.userId !== user._id && invoice.businessId) {
       const membership = await ctx.db
         .query("business_memberships")
@@ -1112,7 +1112,7 @@ export const internalProcessVendorFromExtraction = internalMutation({
 });
 
 // ============================================
-// STUCK RECORDS MONITORING (for admin operations)
+// STUCK RECORDS MONITORING (for finance_admin operations)
 // ============================================
 
 /**
@@ -1143,7 +1143,7 @@ export const getStuckInvoices = query({
       return [];
     }
 
-    // Verify admin/manager role
+    // Verify finance_admin/manager role
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -1155,7 +1155,7 @@ export const getStuckInvoices = query({
       return [];
     }
 
-    if (!["owner", "admin", "manager"].includes(membership.role)) {
+    if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
       return [];
     }
 
@@ -1229,7 +1229,7 @@ export const markStuckInvoicesFailed = mutation({
       throw new Error("Business not found");
     }
 
-    // Verify admin/manager role
+    // Verify finance_admin/manager role
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -1241,7 +1241,7 @@ export const markStuckInvoicesFailed = mutation({
       throw new Error("Not authorized");
     }
 
-    if (!["owner", "admin", "manager"].includes(membership.role)) {
+    if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -1382,7 +1382,7 @@ export const internalUpdateLineItemsStatus = internalMutation({
 });
 
 /**
- * Force-fail a single invoice/document (admin override)
+ * Force-fail a single invoice/document (finance_admin override)
  * Used by: POST /api/v1/system/monitor-stuck-records
  */
 export const forceFailInvoice = mutation({
@@ -1409,7 +1409,7 @@ export const forceFailInvoice = mutation({
       throw new Error("Business not found");
     }
 
-    // Verify admin role (only admins can force-fail)
+    // Verify finance_admin role (only finance_admins can force-fail)
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -1451,7 +1451,7 @@ export const forceFailInvoice = mutation({
       processingMetadata: args.errorMetadata,
       failedAt: now,
       updatedAt: now,
-      errorMessage: args.reason || "Manual admin override",
+      errorMessage: args.reason || "Manual finance_admin override",
     });
 
     console.log(
@@ -1468,7 +1468,7 @@ export const forceFailInvoice = mutation({
 });
 
 /**
- * Reset stuck lineItemsStatus to 'skipped' (admin override)
+ * Reset stuck lineItemsStatus to 'skipped' (finance_admin override)
  * Used when Phase 2 extraction gets stuck at 'extracting' status
  */
 export const resetStuckLineItemsStatus = mutation({
@@ -1493,7 +1493,7 @@ export const resetStuckLineItemsStatus = mutation({
       throw new Error("Business not found");
     }
 
-    // Verify membership and admin/owner role
+    // Verify membership and finance_admin/owner role
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -1505,7 +1505,7 @@ export const resetStuckLineItemsStatus = mutation({
       throw new Error("Not authorized");
     }
 
-    if (!["owner", "admin"].includes(membership.role)) {
+    if (!["owner", "finance_admin"].includes(membership.role)) {
       throw new Error("Admin or owner role required");
     }
 

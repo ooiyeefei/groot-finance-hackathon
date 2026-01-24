@@ -292,7 +292,7 @@ export const switchBusiness = mutation({
  *
  * Handles multiple scenarios:
  * 1. Existing user with active membership → return profile
- * 2. Existing user without membership → create admin membership
+ * 2. Existing user without membership → create finance_admin membership
  * 3. Pending invitation by email → link Clerk account and activate
  * 4. New user (direct signup) → create user, business, and owner membership
  *
@@ -328,7 +328,7 @@ export const ensureUserWithBusiness = mutation({
             role_permissions: {
               employee: true,
               manager: membership.role === "manager" || membership.role === "owner",
-              admin: membership.role === "owner",
+              finance_admin: membership.role === "owner",
             },
             created_at: new Date(membership._creationTime).toISOString(),
             updated_at: membership.updatedAt
@@ -361,7 +361,7 @@ export const ensureUserWithBusiness = mutation({
             role_permissions: {
               employee: true,
               manager: anyMembership.role === "manager" || anyMembership.role === "owner",
-              admin: anyMembership.role === "owner",
+              finance_admin: anyMembership.role === "owner",
             },
             created_at: new Date(anyMembership._creationTime).toISOString(),
             updated_at: anyMembership.updatedAt
@@ -394,7 +394,7 @@ export const ensureUserWithBusiness = mutation({
             role_permissions: {
               employee: true,
               manager: anyMembership.role === "manager" || anyMembership.role === "owner",
-              admin: anyMembership.role === "owner",
+              finance_admin: anyMembership.role === "owner",
             },
             created_at: new Date(anyMembership._creationTime).toISOString(),
             updated_at: anyMembership.updatedAt
@@ -460,7 +460,7 @@ export const ensureUserWithBusiness = mutation({
             role_permissions: {
               employee: true,
               manager: pendingMembership.role === "manager" || pendingMembership.role === "owner",
-              admin: pendingMembership.role === "owner",
+              finance_admin: pendingMembership.role === "owner",
             },
             created_at: new Date(pendingMembership._creationTime).toISOString(),
             updated_at: new Date().toISOString(),
@@ -485,7 +485,7 @@ export const ensureUserWithBusiness = mutation({
             role_permissions: {
               employee: true,
               manager: activeMembership.role === "manager" || activeMembership.role === "owner",
-              admin: activeMembership.role === "owner",
+              finance_admin: activeMembership.role === "owner",
             },
             created_at: new Date(activeMembership._creationTime).toISOString(),
             updated_at: activeMembership.updatedAt
@@ -554,7 +554,7 @@ export const ensureUserWithBusiness = mutation({
       role_permissions: {
         employee: true,
         manager: true,
-        admin: true,
+        finance_admin: true,
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -563,8 +563,8 @@ export const ensureUserWithBusiness = mutation({
 });
 
 /**
- * Update user's full name (admin function)
- * Allows admin/owner to update other users' names in their business
+ * Update user's full name (finance_admin function)
+ * Allows finance_admin/owner to update other users' names in their business
  * Accepts string user IDs (Convex ID or legacy UUID)
  */
 export const updateFullNameByAdmin = mutation({
@@ -604,7 +604,7 @@ export const updateFullNameByAdmin = mutation({
 
     // If updating self, no permission check needed
     if (targetUser._id !== caller._id) {
-      // Verify caller has admin/owner permission
+      // Verify caller has finance_admin/owner permission
       const callerMembership = await ctx.db
         .query("business_memberships")
         .withIndex("by_userId_businessId", (q) =>
@@ -612,7 +612,7 @@ export const updateFullNameByAdmin = mutation({
         )
         .first();
 
-      if (!callerMembership || !["owner", "admin"].includes(callerMembership.role)) {
+      if (!callerMembership || !["owner", "finance_admin"].includes(callerMembership.role)) {
         throw new Error("Admin permissions required to update other users");
       }
 
@@ -736,7 +736,7 @@ export const createEmployeeProfileInternal = internalMutation({
     businessId: v.id("businesses"),
     role: v.union(
       v.literal("owner"),
-      v.literal("admin"),
+      v.literal("finance_admin"),
       v.literal("manager"),
       v.literal("employee")
     ),

@@ -360,7 +360,7 @@ async function _updateUserAndMembership(
       const rolePermissions = {
         employee: true,
         manager: membershipRole === 'manager',
-        admin: false  // admin permissions are for owners only
+        finance_admin: false  // finance_admin permissions are for owners only
       }
 
       const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
@@ -399,7 +399,7 @@ async function _updateUserAndMembership(
       const rolePermissions = {
         employee: true,
         manager: membershipRole === 'manager',
-        admin: false  // admin permissions are for owners only
+        finance_admin: false  // finance_admin permissions are for owners only
       }
 
       const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
@@ -439,7 +439,7 @@ async function _updateUserAndMembership(
   const rolePermissions = {
     employee: membershipRole === 'employee',
     manager: membershipRole === 'manager',
-    admin: false  // admin permissions are for owners only
+    finance_admin: false  // finance_admin permissions are for owners only
   }
 
   const syncResult = await syncRoleToClerk(clerkUserId, rolePermissions)
