@@ -29,24 +29,24 @@ export {
   type MCPToolDefinition,
 } from './mcp-tool-adapter';
 
-// BaseTool implementations (for ToolFactory registration) - DISABLED: mem0ai dependency not installed
-// export { MCPDetectAnomaliesTool } from './mcp-detect-anomalies-tool';
-// export { MCPForecastCashFlowTool } from './mcp-forecast-cashflow-tool';
-// export { MCPAnalyzeVendorRiskTool } from './mcp-analyze-vendor-risk-tool';
+// BaseTool implementations (for ToolFactory registration)
+export { MCPDetectAnomaliesTool } from './mcp-detect-anomalies-tool';
+export { MCPForecastCashFlowTool } from './mcp-forecast-cashflow-tool';
+export { MCPAnalyzeVendorRiskTool } from './mcp-analyze-vendor-risk-tool';
 
-// Memory Integration (Phase 4) - DISABLED: mem0ai dependency not installed
-// export {
-//   recallAnomalyPatterns,
-//   recallVendorRiskPatterns,
-//   recallCashFlowPatterns,
-//   storeAnomalyPatterns,
-//   storeVendorRiskPatterns,
-//   storeCashFlowPatterns,
-//   formatRecalledPatternsForResponse,
-//   type PatternMemory,
-//   type MemoryContext,
-//   type RecalledPatterns,
-// } from './mcp-memory-integration';
+// Memory Integration (Phase 4)
+export {
+  recallAnomalyPatterns,
+  recallVendorRiskPatterns,
+  recallCashFlowPatterns,
+  storeAnomalyPatterns,
+  storeVendorRiskPatterns,
+  storeCashFlowPatterns,
+  formatRecalledPatternsForResponse,
+  type PatternMemory,
+  type MemoryContext,
+  type RecalledPatterns,
+} from './mcp-memory-integration';
 
 // Multi-Tool Orchestration (Phase 5)
 export {
