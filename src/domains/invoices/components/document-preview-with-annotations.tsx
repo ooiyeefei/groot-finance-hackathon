@@ -228,15 +228,25 @@ export default function DocumentPreviewWithAnnotations({
               transition: 'transform 0.2s ease'
             }}
           >
+            {/* Loading skeleton while image loads */}
+            {!imageLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center bg-muted animate-pulse rounded-lg min-h-[300px] min-w-[200px]">
+                <div className="text-center text-muted-foreground">
+                  <div className="w-8 h-8 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin mx-auto mb-2" />
+                  <p className="text-xs">Loading image...</p>
+                </div>
+              </div>
+            )}
             {/* Document Image */}
-            {/* ⚡ OPTIMIZATION: Native lazy loading + async decode (saves 1-3s on page load) */}
+            {/* ⚡ OPTIMIZATION: fetchPriority=high for faster initial load, hide until fully loaded */}
             <img
               ref={imageRef}
               src={imageUrl}
               alt={fileName}
-              className="max-w-full h-auto shadow-lg"
-              loading="lazy"
+              className={`max-w-full h-auto shadow-lg transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+              loading="eager"
               decoding="async"
+              fetchPriority="high"
               onLoad={handleImageLoad}
               onError={() => setImageLoaded(false)}
             />
