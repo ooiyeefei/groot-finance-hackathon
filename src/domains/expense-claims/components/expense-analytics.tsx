@@ -45,7 +45,7 @@ interface AnalyticsData {
   user_role: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
   trends: {
     total_amount_change: number

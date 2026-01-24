@@ -4,7 +4,7 @@
  * These functions handle:
  * - Expense claim CRUD operations
  * - Status transitions with approval workflow
- * - Role-based access control (owner/admin see all, managers see team, employees see own)
+ * - Role-based access control (owner/finance_admin see all, managers see team, employees see own)
  * - Analytics and reporting
  */
 
@@ -29,7 +29,7 @@ const EXPENSE_CLAIM_STATUSES = [
 // Role hierarchy for permission checks
 const ROLE_HIERARCHY: Record<string, number> = {
   owner: 4,
-  admin: 3,
+  finance_admin: 3,
   manager: 2,
   employee: 1,
 };
@@ -113,7 +113,7 @@ export const list = query({
 
       claims = claims.filter((claim) => reportIds.has(claim.userId));
     }
-    // Owners and admins see all claims (no additional filtering)
+    // Owners and finance_admins see all claims (no additional filtering)
 
     // Apply status filter
     if (args.status) {
@@ -307,8 +307,8 @@ export const getPendingApprovals = query({
       return [];
     }
 
-    // Only managers, admins, and owners can approve
-    if (!["owner", "admin", "manager"].includes(membership.role)) {
+    // Only managers, finance_admins, and owners can approve
+    if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
       return [];
     }
 
@@ -377,7 +377,7 @@ export const getAnalytics = query({
       return null;
     }
 
-    // Verify admin/owner access for analytics
+    // Verify finance_admin/owner access for analytics
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -385,7 +385,7 @@ export const getAnalytics = query({
       )
       .first();
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!membership || !["owner", "finance_admin"].includes(membership.role)) {
       return null;
     }
 
@@ -617,10 +617,10 @@ export const update = mutation({
       throw new Error("Not authorized");
     }
 
-    // Only owner of claim can update (unless admin/owner role)
+    // Only owner of claim can update (unless finance_admin/owner role)
     if (
       claim.userId !== user._id &&
-      !["owner", "admin"].includes(membership.role)
+      !["owner", "finance_admin"].includes(membership.role)
     ) {
       throw new Error("Not authorized to update this claim");
     }
@@ -740,11 +740,11 @@ export const updateStatus = mutation({
         break;
 
       case "approved":
-        // Only managers/admins/owners can approve
-        if (!["owner", "admin", "manager"].includes(role)) {
+        // Only managers/finance_admins/owners can approve
+        if (!["owner", "finance_admin", "manager"].includes(role)) {
           throw new Error("Not authorized to approve");
         }
-        // Managers/admins/owners can self-approve when they are the designated approver
+        // Managers/finance_admins/owners can self-approve when they are the designated approver
         // This handles small company scenarios where the manager is the only approver
         // The routing logic (findNextApprover) already tries to find a different approver first
         updateData.approvedBy = user._id;
@@ -891,8 +891,8 @@ export const updateStatus = mutation({
         break;
 
       case "rejected":
-        // Only managers/admins/owners can reject
-        if (!["owner", "admin", "manager"].includes(role)) {
+        // Only managers/finance_admins/owners can reject
+        if (!["owner", "finance_admin", "manager"].includes(role)) {
           throw new Error("Not authorized to reject");
         }
         updateData.reviewedBy = user._id;
@@ -907,8 +907,8 @@ export const updateStatus = mutation({
         if (claim.status !== "approved") {
           throw new Error("Can only reimburse approved claims");
         }
-        // Only admins/owners can mark as reimbursed
-        if (!["owner", "admin"].includes(role)) {
+        // Only finance_admins/owners can mark as reimbursed
+        if (!["owner", "finance_admin"].includes(role)) {
           throw new Error("Not authorized to mark as reimbursed");
         }
         updateData.paidAt = now;
@@ -971,10 +971,10 @@ export const softDelete = mutation({
       throw new Error("Not authorized");
     }
 
-    // Only owner of claim or admin/owner can delete
+    // Only owner of claim or finance_admin/owner can delete
     if (
       claim.userId !== user._id &&
-      !["owner", "admin"].includes(membership.role)
+      !["owner", "finance_admin"].includes(membership.role)
     ) {
       throw new Error("Not authorized to delete this claim");
     }
@@ -1032,7 +1032,7 @@ export const findNextApprover = query({
       return manager;
     }
 
-    // Otherwise, find any admin or owner
+    // Otherwise, find any finance_admin or owner
     // Get all memberships, then filter by role in JS
     // (Convex doesn't support .filter() after .withIndex())
     const allMemberships = await ctx.db
@@ -1040,12 +1040,12 @@ export const findNextApprover = query({
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
       .collect();
 
-    const adminMemberships = allMemberships.filter(
-      (m) => m.role === "owner" || m.role === "admin"
+    const finance_adminMemberships = allMemberships.filter(
+      (m) => m.role === "owner" || m.role === "finance_admin"
     );
 
-    // Return first active admin/owner who isn't the submitter
-    for (const membership of adminMemberships) {
+    // Return first active finance_admin/owner who isn't the submitter
+    for (const membership of finance_adminMemberships) {
       if (
         membership.userId !== submitter._id &&
         membership.status === "active"
@@ -1076,7 +1076,8 @@ export const getReportData = query({
   args: {
     businessId: v.string(),
     month: v.string(), // YYYY-MM format
-    employeeId: v.optional(v.string()), // Filter by specific employee (manager/admin only)
+    employeeId: v.optional(v.string()), // Filter by specific employee (manager/finance_admin only)
+    directReportsOnly: v.optional(v.boolean()), // When true, only show claims from direct reports (managerId = current user)
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1108,7 +1109,7 @@ export const getReportData = query({
     }
 
     const role = membership.role;
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "owner" || role === "finance_admin";
     const isManager = role === "manager";
 
     // Parse month to date range
@@ -1133,10 +1134,39 @@ export const getReportData = query({
     claims = claims.filter((claim) => !claim.deletedAt);
 
     // Apply RBAC filtering
-    if (args.employeeId) {
-      // Only admin/manager can filter by employee
+    if (args.directReportsOnly && (isManager || isAdmin)) {
+      // Get direct reports (employees whose managerId = current user)
+      const directReportMemberships = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("status"), "active"),
+            q.eq(q.field("managerId"), user._id)
+          )
+        )
+        .collect();
+
+      const directReportUserIds = new Set(
+        directReportMemberships.map((m) => m.userId)
+      );
+
+      if (args.employeeId) {
+        // Filter to specific direct report
+        const filterUser = await resolveById(ctx.db, "users", args.employeeId);
+        if (filterUser && directReportUserIds.has(filterUser._id)) {
+          claims = claims.filter((claim) => claim.userId === filterUser._id);
+        } else {
+          claims = []; // Employee not in direct reports
+        }
+      } else {
+        // Filter to all direct reports
+        claims = claims.filter((claim) => directReportUserIds.has(claim.userId));
+      }
+    } else if (args.employeeId) {
+      // Only finance_admin/manager can filter by employee
       if (!isAdmin && !isManager) {
-        return { error: "Only managers and admins can filter by employee ID" };
+        return { error: "Only managers and finance_admins can filter by employee ID" };
       }
       const filterUser = await resolveById(ctx.db, "users", args.employeeId);
       if (filterUser) {
@@ -1243,6 +1273,7 @@ export const getFormattedReportData = query({
     businessId: v.string(),
     month: v.string(), // YYYY-MM format
     employeeId: v.optional(v.string()),
+    directReportsOnly: v.optional(v.boolean()), // When true, only show claims from direct reports
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1272,7 +1303,7 @@ export const getFormattedReportData = query({
     }
 
     const role = membership.role;
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "owner" || role === "finance_admin";
     const isManager = role === "manager";
 
     // Parse month to Unix timestamp range for filtering by approvedAt
@@ -1309,9 +1340,36 @@ export const getFormattedReportData = query({
     console.log(`[Report Debug] Claims after deletedAt filter: ${claims.length}`);
 
     // Apply RBAC filtering
-    if (args.employeeId) {
+    if (args.directReportsOnly && (isManager || isAdmin)) {
+      // Get direct reports (employees whose managerId = current user)
+      const directReportMemberships = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("status"), "active"),
+            q.eq(q.field("managerId"), user._id)
+          )
+        )
+        .collect();
+
+      const directReportUserIds = new Set(
+        directReportMemberships.map((m) => m.userId)
+      );
+
+      if (args.employeeId) {
+        const filterUser = await resolveById(ctx.db, "users", args.employeeId);
+        if (filterUser && directReportUserIds.has(filterUser._id)) {
+          claims = claims.filter((claim) => claim.userId === filterUser._id);
+        } else {
+          claims = [];
+        }
+      } else {
+        claims = claims.filter((claim) => directReportUserIds.has(claim.userId));
+      }
+    } else if (args.employeeId) {
       if (!isAdmin && !isManager) {
-        return { error: "Only managers and admins can filter by employee ID" };
+        return { error: "Only managers and finance_admins can filter by employee ID" };
       }
       console.log(`[Report Debug] employeeId received: ${args.employeeId}`);
       console.log(`[Report Debug] Claims before employee filter: ${claims.length}`);
@@ -1443,6 +1501,7 @@ export const getExportClaims = query({
     employeeId: v.optional(v.string()),
     offset: v.optional(v.number()),
     limit: v.optional(v.number()),
+    directReportsOnly: v.optional(v.boolean()), // When true, only show claims from direct reports
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1472,7 +1531,7 @@ export const getExportClaims = query({
     }
 
     const role = membership.role;
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "owner" || role === "finance_admin";
     const isManager = role === "manager";
 
     // Parse month
@@ -1495,7 +1554,34 @@ export const getExportClaims = query({
     claims = claims.filter((claim) => !claim.deletedAt);
 
     // RBAC filtering
-    if (args.employeeId) {
+    if (args.directReportsOnly && (isManager || isAdmin)) {
+      // Get direct reports (employees whose managerId = current user)
+      const directReportMemberships = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("status"), "active"),
+            q.eq(q.field("managerId"), user._id)
+          )
+        )
+        .collect();
+
+      const directReportUserIds = new Set(
+        directReportMemberships.map((m) => m.userId)
+      );
+
+      if (args.employeeId) {
+        const filterUser = await resolveById(ctx.db, "users", args.employeeId);
+        if (filterUser && directReportUserIds.has(filterUser._id)) {
+          claims = claims.filter((claim) => claim.userId === filterUser._id);
+        } else {
+          claims = [];
+        }
+      } else {
+        claims = claims.filter((claim) => directReportUserIds.has(claim.userId));
+      }
+    } else if (args.employeeId) {
       if (!isAdmin && !isManager) {
         return { error: "Permission denied" };
       }
@@ -1826,7 +1912,7 @@ export const internalUpdateClassification = internalMutation({
 
 /**
  * Internal: Soft delete expense claim (no auth required)
- * Used for admin cleanup of stuck/orphaned records
+ * Used for finance_admin cleanup of stuck/orphaned records
  */
 export const internalSoftDelete = internalMutation({
   args: {
@@ -1961,7 +2047,7 @@ export const internalProcessVendorFromExtraction = internalMutation({
 });
 
 // ============================================
-// STUCK RECORDS MONITORING (for admin operations)
+// STUCK RECORDS MONITORING (for finance_admin operations)
 // ============================================
 
 /**
@@ -1992,7 +2078,7 @@ export const getStuckRecords = query({
       return [];
     }
 
-    // Verify admin/manager role
+    // Verify finance_admin/manager role
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -2004,7 +2090,7 @@ export const getStuckRecords = query({
       return [];
     }
 
-    if (!["owner", "admin", "manager"].includes(membership.role)) {
+    if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
       return [];
     }
 
@@ -2081,7 +2167,7 @@ export const markStuckRecordsFailed = mutation({
       throw new Error("Business not found");
     }
 
-    // Verify admin/manager role
+    // Verify finance_admin/manager role
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -2093,7 +2179,7 @@ export const markStuckRecordsFailed = mutation({
       throw new Error("Not authorized");
     }
 
-    if (!["owner", "admin", "manager"].includes(membership.role)) {
+    if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 
@@ -2142,7 +2228,7 @@ export const markStuckRecordsFailed = mutation({
 });
 
 /**
- * Force-fail a single expense claim (admin override)
+ * Force-fail a single expense claim (finance_admin override)
  * Used by: POST /api/v1/expense-claims/monitor-stuck-records
  */
 export const forceFailRecord = mutation({
@@ -2169,7 +2255,7 @@ export const forceFailRecord = mutation({
       throw new Error("Business not found");
     }
 
-    // Verify admin role (only admins can force-fail)
+    // Verify finance_admin role (only finance_admins can force-fail)
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -2181,7 +2267,7 @@ export const forceFailRecord = mutation({
       throw new Error("Not authorized");
     }
 
-    if (!["owner", "admin"].includes(membership.role)) {
+    if (!["owner", "finance_admin"].includes(membership.role)) {
       throw new Error("Admin role required for manual override");
     }
 
@@ -2211,7 +2297,7 @@ export const forceFailRecord = mutation({
       processingMetadata: args.errorMetadata,
       failedAt: now,
       updatedAt: now,
-      errorMessage: args.reason || "Manual admin override",
+      errorMessage: args.reason || "Manual finance_admin override",
     });
 
     console.log(

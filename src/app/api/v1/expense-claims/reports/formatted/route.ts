@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month') // YYYY-MM format
     const employeeId = searchParams.get('employeeId') // Optional, for manager/admin filtering
+    const directReportsOnly = searchParams.get('directReportsOnly') === 'true' // When true, scope to direct reports only
 
     // Validate required month parameter
     if (!month) {
@@ -99,7 +100,7 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`[Formatted Report API] Generating formatted report for month: ${month}, user: ${userId}, requestedEmployee: ${employeeId}`)
+    console.log(`[Formatted Report API] Generating formatted report for month: ${month}, user: ${userId}, requestedEmployee: ${employeeId}, directReportsOnly: ${directReportsOnly}`)
 
     // ✅ MIGRATED: Get current user's business context from Convex
     const businessContext = await convex.query(
@@ -118,6 +119,7 @@ export async function GET(request: NextRequest) {
         businessId: businessContext.businessId,
         month,
         employeeId: employeeId || undefined,
+        directReportsOnly: directReportsOnly || undefined,
       }
     )
 
@@ -132,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     const { sections, header: convexHeader, role } = reportData
     const parsedMonth = parse(month, 'yyyy-MM', new Date())
-    const isAdmin = role === 'owner' || role === 'admin'
+    const isAdmin = role === 'owner' || role === 'finance_admin'
     const isManager = role === 'manager'
 
     // If no claims found, return empty report
@@ -163,7 +165,7 @@ export async function GET(request: NextRequest) {
             }
           },
           metadata: {
-            reportScope: employeeId ? 'employee' : isAdmin ? 'company' : isManager ? 'team' : 'personal',
+            reportScope: employeeId ? 'employee' : directReportsOnly ? 'direct_reports' : isAdmin ? 'company' : isManager ? 'team' : 'personal',
             generatedAt: new Date().toISOString(),
             dataAsOf: format(new Date(), 'dd/MM/yyyy')
           }
@@ -275,7 +277,7 @@ export async function GET(request: NextRequest) {
         statusBreakdown: statusCount
       },
       metadata: {
-        reportScope: employeeId ? 'employee' : isAdmin ? 'company' : isManager ? 'team' : 'personal',
+        reportScope: employeeId ? 'employee' : directReportsOnly ? 'direct_reports' : isAdmin ? 'company' : isManager ? 'team' : 'personal',
         generatedAt: new Date().toISOString(),
         dataAsOf: format(new Date(), 'dd/MM/yyyy')
       }

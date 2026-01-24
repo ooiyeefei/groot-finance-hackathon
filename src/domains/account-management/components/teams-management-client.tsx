@@ -21,14 +21,15 @@ import { useTeamMembersRealtime, type TeamMember, type UserRole } from '@/domain
 interface PendingInvitation {
   id: string
   email: string
-  role: 'employee' | 'manager'  // Note: 'owner' role cannot be invited, only assigned at business creation
+  role: 'employee' | 'manager' | 'finance_admin'  // Note: 'owner' role cannot be invited, only assigned at business creation
   invited_by: string
   invited_at: string
   status: 'pending' | 'accepted'
 }
 
-// Display role type - includes 'owner' for display but 'owner' cannot be assigned via mutations
-type DisplayRole = 'employee' | 'manager' | 'owner'
+// Display role type - all 4 roles in hierarchy: owner > finance_admin > manager > employee
+// 'owner' cannot be assigned via invitations, only transferred by existing owner
+type DisplayRole = 'employee' | 'manager' | 'finance_admin' | 'owner'
 
 interface TeamsManagementClientProps {
   userId: string
@@ -93,7 +94,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         if (roleData && roleData.permissions) {
           setUserRole(roleData.permissions)
 
-          if (!roleData.permissions.admin) {
+          if (!roleData.permissions.finance_admin) {
             router.push('/')
             return
           }
@@ -184,7 +185,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
   const getAvailableManagers = () => {
     return teamMembers.filter(member =>
-      member.role_permissions.manager || member.role_permissions.admin
+      member.role_permissions.manager || member.role_permissions.finance_admin
     )
   }
 
@@ -439,43 +440,48 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     await updateUserNameMutation.mutateAsync({ memberId, name: editingNameValue })
   }
 
-  const getRoleDisplay = (permissions: any): DisplayRole => {
-    if (permissions.admin) return 'owner'  // Users with admin permissions are owners
+  const getRoleDisplay = (permissions: any, isOwner?: boolean): DisplayRole => {
+    // Owner is a special flag, not just finance_admin permission
+    if (isOwner) return 'owner'
+    if (permissions.finance_admin) return 'finance_admin'
     if (permissions.manager) return 'manager'
     return 'employee'
   }
 
   // IAM: Get the current user's role for permission checks
+  // Note: For now, finance_admin users have owner-level permissions for IAM
   const getCurrentUserRole = (): DisplayRole => {
     if (!userRole) return 'employee'
-    if (userRole.admin) return 'owner'
+    // finance_admin users have full team management permissions (like owner)
+    if (userRole.finance_admin) return 'finance_admin'
     if (userRole.manager) return 'manager'
     return 'employee'
   }
 
   // IAM: Count owners in the business (for last owner protection)
   const getOwnerCount = (): number => {
-    return teamMembers.filter(m => m.role_permissions.admin).length
+    return teamMembers.filter(m => m.role_permissions.finance_admin).length
   }
 
   // IAM: Determine what roles the current user can assign to a target member
   // Follows principle of least privilege
+  // Role hierarchy: owner > finance_admin > manager > employee
   const getAssignableRoles = (targetMember: TeamMember): DisplayRole[] => {
     const currentUserRole = getCurrentUserRole()
     const targetCurrentRole = getRoleDisplay(targetMember.role_permissions)
     const isTargetSelf = targetMember.clerk_user?.id === userId
-    const ownerCount = getOwnerCount()
+    const financeAdminCount = getOwnerCount() // Count of finance_admins (including owners)
 
     // Employees cannot assign any roles
     if (currentUserRole === 'employee') {
       return []
     }
 
-    // Manager: can only assign 'employee' role to those below or equal to them
+    // Manager: can only assign 'employee' role to those below them
     // Managers cannot promote anyone to manager or above
     if (currentUserRole === 'manager') {
-      // Managers cannot change other managers or owners
-      if (targetCurrentRole === 'manager' || targetCurrentRole === 'owner') {
+      // Managers cannot change other managers, finance_admins, or owners
+      if (targetCurrentRole === 'manager' || targetCurrentRole === 'finance_admin' || targetCurrentRole === 'owner') {
         return []
       }
       // Managers cannot change their own role
@@ -485,14 +491,29 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       return ['employee']
     }
 
-    // Owner: can assign any role to others
-    if (currentUserRole === 'owner') {
-      // If targeting self and they're the last owner, cannot demote
-      if (isTargetSelf && ownerCount <= 1) {
-        return [] // Cannot change - last owner protection
+    // Finance Admin: can assign employee, manager, or finance_admin to others
+    // Cannot assign 'owner' role (that's a special transfer)
+    if (currentUserRole === 'finance_admin') {
+      // If targeting self and they're the last finance_admin, cannot demote
+      if (isTargetSelf && financeAdminCount <= 1) {
+        return [] // Cannot change - last finance_admin protection
       }
-      // Owner can assign any role to others (or demote themselves if not last owner)
-      return ['employee', 'manager', 'owner']
+      // Cannot change owners
+      if (targetCurrentRole === 'owner') {
+        return []
+      }
+      // Finance admin can assign employee, manager, finance_admin
+      return ['employee', 'manager', 'finance_admin']
+    }
+
+    // Owner: can assign any role to others (except owner - that's a transfer)
+    if (currentUserRole === 'owner') {
+      // If targeting self and they're the last finance_admin/owner, cannot demote
+      if (isTargetSelf && financeAdminCount <= 1) {
+        return [] // Cannot change - last admin protection
+      }
+      // Owner can assign any role except owner (owner transfer is separate)
+      return ['employee', 'manager', 'finance_admin']
     }
 
     return []
@@ -521,14 +542,14 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     )
   }
 
-  if (!userRole || !userRole.admin) {
+  if (!userRole || !userRole.finance_admin) {
     return (
       <Card className="bg-card border-border">
         <CardContent className="p-12 text-center">
           <ShieldAlert className="w-16 h-16 mx-auto mb-4 text-destructive" />
           <h3 className="text-xl font-semibold text-foreground mb-2">Access Denied</h3>
           <p className="text-muted-foreground">
-            Teams management requires administrator permissions.
+            Teams management requires finance administrator permissions.
           </p>
         </CardContent>
       </Card>
@@ -573,7 +594,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-4 bg-muted rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <UserCheck className="w-4 h-4 text-muted-foreground" />
@@ -583,6 +604,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                 <li>• Submit expense claims</li>
                 <li>• Upload receipts</li>
                 <li>• View own transactions</li>
+                <li>• View own dashboard</li>
               </ul>
             </div>
 
@@ -594,8 +616,22 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• All employee permissions</li>
                 <li>• Approve/reject expenses</li>
-                <li>• Manage categories</li>
+                <li>• Manage expense categories</li>
                 <li>• View team expenses</li>
+              </ul>
+            </div>
+
+            <div className="p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
+              <div className="flex items-center gap-2 mb-2">
+                <ShieldAlert className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <h4 className="font-medium text-foreground">Finance Admin</h4>
+              </div>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• All manager permissions</li>
+                <li>• Full analytics dashboard</li>
+                <li>• Manage user roles</li>
+                <li>• Send team invitations</li>
+                <li>• Access accounting entries</li>
               </ul>
             </div>
 
@@ -605,11 +641,10 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                 <h4 className="font-medium text-foreground">Owner</h4>
               </div>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• All manager permissions</li>
-                <li>• Manage user roles</li>
-                <li>• Assign owner role to others</li>
-                <li>• Send invitations</li>
-                <li>• Full system access</li>
+                <li>• All finance admin permissions</li>
+                <li>• Manage billing & subscription</li>
+                <li>• Transfer business ownership</li>
+                <li>• Delete business account</li>
               </ul>
             </div>
           </div>
@@ -778,11 +813,11 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                       disabled={isDisabled}
                                     >
                                       <SelectTrigger
-                                        className={`bg-input border border-border text-foreground h-9 min-w-[110px] ${isDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                        className={`bg-input border border-border text-foreground h-9 min-w-[130px] ${isDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
                                         title={isLastOwner ? 'Cannot change role - you are the last owner' : undefined}
                                       >
                                         <SelectValue>
-                                          {currentRole === 'owner' ? 'Owner' : currentRole === 'manager' ? 'Manager' : 'Employee'}
+                                          {currentRole === 'owner' ? 'Owner' : currentRole === 'finance_admin' ? 'Finance Admin' : currentRole === 'manager' ? 'Manager' : 'Employee'}
                                         </SelectValue>
                                       </SelectTrigger>
                                       <SelectContent className="bg-popover border-border">
@@ -792,13 +827,16 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                         {assignableRoles.includes('manager') && (
                                           <SelectItem value="manager">Manager</SelectItem>
                                         )}
+                                        {assignableRoles.includes('finance_admin') && (
+                                          <SelectItem value="finance_admin">Finance Admin</SelectItem>
+                                        )}
                                         {assignableRoles.includes('owner') && (
                                           <SelectItem value="owner">Owner</SelectItem>
                                         )}
                                         {/* Show current role if not in assignable list (read-only display) */}
                                         {assignableRoles.length === 0 && (
                                           <SelectItem value={currentRole} disabled>
-                                            {currentRole === 'owner' ? 'Owner' : currentRole === 'manager' ? 'Manager' : 'Employee'}
+                                            {currentRole === 'owner' ? 'Owner' : currentRole === 'finance_admin' ? 'Finance Admin' : currentRole === 'manager' ? 'Manager' : 'Employee'}
                                           </SelectItem>
                                         )}
                                       </SelectContent>

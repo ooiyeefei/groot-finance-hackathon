@@ -14,8 +14,10 @@ import { validateBody, acceptInvitationSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   try {
-    // Apply rate limiting
-    const rateLimitResponse = await rateLimiters.auth(request)
+    // Apply rate limiting - use 'mutation' instead of 'auth' since invitation
+    // acceptance is a legitimate business operation (not a brute-force target)
+    // AUTH limiter (5 req/15min) is too strict for invitation flows
+    const rateLimitResponse = await rateLimiters.mutation(request)
     if (rateLimitResponse) {
       return rateLimitResponse
     }
@@ -104,8 +106,10 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Apply rate limiting (more lenient for validation)
-    const rateLimitResponse = await rateLimiters.auth(request)
+    // Apply rate limiting - use 'query' since validation is a read operation
+    // and doesn't expose sensitive data (token is already required)
+    // AUTH limiter (5 req/15min) is too strict for invitation flows
+    const rateLimitResponse = await rateLimiters.query(request)
     if (rateLimitResponse) {
       return rateLimitResponse
     }

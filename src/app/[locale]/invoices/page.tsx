@@ -4,15 +4,27 @@ import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import DocumentsContainer from '@/domains/invoices/components/documents-container'
 import { ClientProviders } from '@/components/providers/client-providers'
+import { getUserRole } from '@/domains/users/lib/user.service'
 
-export default async function DocumentsPage() {
+export default async function DocumentsPage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params
+
   // Server-side authentication check
   const { userId } = await auth()
-  
+
   if (!userId) {
     redirect('/sign-in')
   }
-  
+
+  // Admin role check - invoices page is for finance admins only
+  const roleData = await getUserRole()
+  const isAdmin = roleData?.permissions?.finance_admin
+
+  if (!isAdmin) {
+    console.log(`[Invoices] Non-admin user redirected to expense-claims`)
+    redirect(`/${locale}/expense-claims`)
+  }
+
   return (
     <ClientProviders>
       <div className="flex h-screen bg-background">

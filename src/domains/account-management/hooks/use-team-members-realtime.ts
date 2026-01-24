@@ -38,7 +38,7 @@ export interface TeamMember {
   role_permissions: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
   created_at: string
   clerk_user?: {
@@ -52,9 +52,10 @@ export interface TeamMember {
   manager_user_id_field?: string
 }
 
-// UserRole includes 'owner' for full role management
+// UserRole includes all 4 roles in the hierarchy:
+// owner > finance_admin > manager > employee
 // IAM rules in the frontend determine who can assign which roles
-export type UserRole = 'employee' | 'manager' | 'owner'
+export type UserRole = 'employee' | 'manager' | 'finance_admin' | 'owner'
 
 interface UseTeamMembersRealtimeOptions {
   businessId?: string
@@ -85,7 +86,7 @@ function mapConvexTeamMember(member: {
   role_permissions: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
   status: string
   full_name: string | null

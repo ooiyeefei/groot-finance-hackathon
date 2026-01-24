@@ -42,10 +42,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Only admins can upload business logos
-    if (!userProfile.role_permissions.admin) {
+    // Only finance_admins can upload business logos
+    if (!userProfile.role_permissions.finance_admin) {
       return NextResponse.json(
-        { success: false, error: 'Only administrators can upload business logos' },
+        { success: false, error: 'Only finance administrators can upload business logos' },
         { status: 403 }
       )
     }
@@ -166,10 +166,10 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Only admins can remove business logos
-    if (!userProfile.role_permissions.admin) {
+    // Only finance_admins can remove business logos
+    if (!userProfile.role_permissions.finance_admin) {
       return NextResponse.json(
-        { success: false, error: 'Only administrators can remove business logos' },
+        { success: false, error: 'Only finance administrators can remove business logos' },
         { status: 403 }
       )
     }

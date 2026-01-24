@@ -453,7 +453,7 @@ export async function listExpenseClaims(
       return { success: false, error: 'Failed to get Convex client' }
     }
 
-    const isAdmin = employeeProfile.role_permissions.admin
+    const isAdmin = employeeProfile.role_permissions.finance_admin
     const isManager = employeeProfile.role_permissions.manager
 
     // Use Convex query for listing
@@ -967,7 +967,7 @@ export async function getExpenseAnalytics(
       return { success: false, error: 'Failed to get Convex client' }
     }
 
-    const isAdmin = employeeProfile.role_permissions.admin
+    const isAdmin = employeeProfile.role_permissions.finance_admin
     const isManager = employeeProfile.role_permissions.manager
 
     // Use Convex analytics query
@@ -980,12 +980,14 @@ export async function getExpenseAnalytics(
       businessId: employeeProfile.business_id
     })
 
-    // Build category name lookup map
+    // Build category name lookup map (case-insensitive keys for robust matching)
     const categoryNameMap: Record<string, string> = {}
     if (Array.isArray(expenseCategories)) {
       for (const cat of expenseCategories) {
         if (cat.id && cat.category_name) {
+          // Store with both original and lowercase keys for case-insensitive lookup
           categoryNameMap[cat.id] = cat.category_name
+          categoryNameMap[cat.id.toLowerCase()] = cat.category_name
         }
       }
     }
@@ -1021,7 +1023,8 @@ export async function getExpenseAnalytics(
       monthly_trends: [],
       category_breakdown: Object.entries(analytics.categoryTotals || {}).map(([category, amount]) => ({
         category,
-        category_name: categoryNameMap[category] || category, // Resolve name or fallback to ID
+        // Resolve name with case-insensitive fallback
+        category_name: categoryNameMap[category] || categoryNameMap[category.toLowerCase()] || category,
         total_amount: amount,
         claims_count: analytics.categoryCounts?.[category] || 0, // Use actual count from Convex
         approved_amount: 0,

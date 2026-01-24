@@ -5,9 +5,9 @@
   "scripts": {
     "postinstall": "npm run setup:python",
     "predev": "npm run setup:python",
-    "dev": "npm run convex:sync && concurrently \"npm run convex:dev\" \"next dev\"",
-    "dev:quick": "concurrently \"npm run convex:dev\" \"next dev\"",
+    "dev": "concurrently \"npm run convex:dev\" \"next dev\"",
     "dev:next-only": "next dev",
+    "dev:sync-from-prod": "npm run convex:sync && concurrently \"npm run convex:dev\" \"next dev\"",
     "convex:dev": "npx convex dev",
     "convex:sync": "mkdir -p .convex-backup && rm -f .convex-backup/prod-data.zip && npx convex export --prod --path .convex-backup/prod-data.zip && npx convex import .convex-backup/prod-data.zip --replace --yes",
     "convex:deploy": "npx convex deploy",

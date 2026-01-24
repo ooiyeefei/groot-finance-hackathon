@@ -5,7 +5,7 @@ import React, { createContext, useContext } from 'react'
 export interface UserRoleData {
   employee: boolean
   manager: boolean
-  admin: boolean
+  finance_admin: boolean
 }
 
 interface UserRoleContextType {

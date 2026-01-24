@@ -11,7 +11,7 @@ import { useTranslations } from 'next-intl'
 interface UserRole {
   employee: boolean
   manager: boolean
-  admin: boolean
+  finance_admin: boolean
 }
 
 interface MobileAppShellProps {
@@ -48,7 +48,7 @@ export function MobileAppShell({
   const [userRole, setUserRole] = useState<UserRole>(() => {
     // SSR-safe: return default on server
     if (typeof window === 'undefined') {
-      return { employee: true, manager: false, admin: false }
+      return { employee: true, manager: false, finance_admin: false }
     }
     // Try to restore cached role from localStorage
     try {
@@ -59,7 +59,7 @@ export function MobileAppShell({
     } catch {
       // Ignore parse errors
     }
-    return { employee: true, manager: false, admin: false }
+    return { employee: true, manager: false, finance_admin: false }
   })
 
   const [hasInitialLoad, setHasInitialLoad] = useState(false)
@@ -94,30 +94,40 @@ export function MobileAppShell({
     fetchUserRole()
   }, [businessId, fetchUserRole, hasInitialLoad])
 
+  // Check if user is employee-only (not manager or finance_admin)
+  const isEmployeeOnly = userRole.employee && !userRole.manager && !userRole.finance_admin
+
+  // Check if user is finance_admin (owner or finance_admin role - has full access)
+  const isAdmin = userRole.finance_admin
+
   // Build navigation items based on user role
-  // Core navigation (everyone)
+  // Dashboard, Invoices, Accounting are admin-only (finance admin features)
+  // Managers only see expense claims and approval dashboard
   const coreNavItems: BottomNavItem[] = [
-    {
+    // Dashboard only visible for admins (finance admin feature)
+    ...(isAdmin ? [{
       icon: Home,
       label: t('dashboard'),
       href: `/${locale}`
-    },
-    {
+    }] : []),
+    // Invoices only visible for admins (finance admin feature)
+    ...(isAdmin ? [{
       icon: FileText,
       label: t('invoices'),
       href: `/${locale}/invoices`
-    },
+    }] : []),
     {
       icon: Receipt,
       label: t('expenseClaims'),
       href: `/${locale}/expense-claims`,
       badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined
     },
-    {
+    // Accounting only visible for admins (finance admin feature)
+    ...(isAdmin ? [{
       icon: CreditCard,
       label: t('transactions'),
       href: `/${locale}/accounting`
-    },
+    }] : []),
     {
       icon: MessageSquare,
       label: t('aiAssistant'),
@@ -125,8 +135,8 @@ export function MobileAppShell({
     },
   ]
 
-  // Manager/Admin navigation items
-  const managerNavItems: BottomNavItem[] = (userRole.manager || userRole.admin) ? [
+  // Manager/Finance Admin navigation items
+  const managerNavItems: BottomNavItem[] = (userRole.manager || userRole.finance_admin) ? [
     {
       icon: FileCheck,
       label: t('managerApprovals'),

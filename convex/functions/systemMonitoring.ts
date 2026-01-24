@@ -39,16 +39,16 @@ function createStuckRecordFailureMetadata(
     extraction_timestamp: now,
     ai_processing_status: "failed",
     processing_status: "failed",
-    error_category: isManualOverride ? "admin_override" : "system_timeout",
+    error_category: isManualOverride ? "finance_admin_override" : "system_timeout",
     error_code: isManualOverride ? "MANUAL_OVERRIDE" : "STUCK_RECORD_TIMEOUT",
     error_message: overrideReason ||
       `Processing timed out after ${minutesStuck} minutes. Please try uploading again or contact support if the issue persists.`,
     technical_error: isManualOverride
-      ? `Manually failed by admin`
+      ? `Manually failed by finance_admin`
       : `Record was stuck in processing status for ${minutesStuck} minutes without updates from Trigger.dev task`,
     failed_at: now,
-    processing_stage: isManualOverride ? "admin_manual_override" : "stuck_record_monitoring",
-    failure_level: isManualOverride ? "admin_action" : "system",
+    processing_stage: isManualOverride ? "finance_admin_manual_override" : "stuck_record_monitoring",
+    failure_level: isManualOverride ? "finance_admin_action" : "system",
     timeout_duration: `${minutesStuck} minutes`,
     monitoring_action: isManualOverride ? "manual_override" : "auto_failed_by_monitor",
     domain,
@@ -97,8 +97,8 @@ export const findStuckInvoices = query({
       return { error: "Not a member of this business", invoices: [] };
     }
 
-    // Only admin/manager can view stuck records
-    if (!["owner", "admin", "manager"].includes(membership.role)) {
+    // Only finance_admin/manager can view stuck records
+    if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
       return { error: "Insufficient permissions", invoices: [] };
     }
 
@@ -182,8 +182,8 @@ export const findStuckExpenseClaims = query({
       return { error: "Not a member of this business", claims: [] };
     }
 
-    // Only admin/manager can view stuck records
-    if (!["owner", "admin", "manager"].includes(membership.role)) {
+    // Only finance_admin/manager can view stuck records
+    if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
       return { error: "Insufficient permissions", claims: [] };
     }
 
@@ -427,8 +427,8 @@ export const batchMarkStuckRecordsAsFailed = mutation({
       throw new Error("Not authorized");
     }
 
-    // Only admin/manager can run monitor
-    if (!["owner", "admin", "manager"].includes(membership.role)) {
+    // Only finance_admin/manager can run monitor
+    if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
       throw new Error("Insufficient permissions");
     }
 

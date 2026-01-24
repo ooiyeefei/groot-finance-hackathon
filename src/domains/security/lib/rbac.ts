@@ -19,7 +19,7 @@ export type AssignableRole = 'employee' | 'manager'
 export interface RolePermissions {
   employee: boolean
   manager: boolean
-  admin: boolean
+  finance_admin: boolean
 }
 
 export interface UserContext {
@@ -54,10 +54,10 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
       profile,
       roles,
       permissions: profile.role_permissions,
-      canApprove: profile.role_permissions.manager || profile.role_permissions.admin,
-      canManageCategories: profile.role_permissions.manager || profile.role_permissions.admin,
-      canViewAllExpenses: profile.role_permissions.manager || profile.role_permissions.admin,
-      canManageUsers: profile.role_permissions.admin
+      canApprove: profile.role_permissions.manager || profile.role_permissions.finance_admin,
+      canManageCategories: profile.role_permissions.manager || profile.role_permissions.finance_admin,
+      canViewAllExpenses: profile.role_permissions.manager || profile.role_permissions.finance_admin,
+      canManageUsers: profile.role_permissions.finance_admin
     }
   } catch (error) {
     console.error('[RBAC] Error getting user context:', error)
@@ -82,9 +82,9 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
 
     // PERFORMANCE FIX: Skip ensureUserProfile on every call - only needed once at login/switch
     // Business membership already provides the profile data we need
-    // CRITICAL FIX: Owners have all permissions (manager + admin-level)
-    const isOwnerOrAdmin = businessContext.isOwner || businessContext.role === 'owner'
-    const isManagerOrAbove = isOwnerOrAdmin || businessContext.role === 'manager'
+    // CRITICAL FIX: Owners and finance_admin have all permissions (manager + admin-level)
+    const isOwnerOrFinanceAdmin = businessContext.isOwner || businessContext.role === 'owner' || businessContext.role === 'finance_admin'
+    const isManagerOrAbove = isOwnerOrFinanceAdmin || businessContext.role === 'manager'
 
     const profile = {
       id: `membership_${businessContext.businessId}`,
@@ -94,7 +94,7 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
       role_permissions: {
         employee: true,
         manager: isManagerOrAbove,
-        admin: isOwnerOrAdmin
+        finance_admin: isOwnerOrFinanceAdmin
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -105,7 +105,7 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
     const permissions: RolePermissions = {
       employee: true,
       manager: isManagerOrAbove,
-      admin: isOwnerOrAdmin
+      finance_admin: isOwnerOrFinanceAdmin
     }
 
     const roles = determineUserRoles(permissions)
@@ -115,10 +115,10 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
       profile,
       roles,
       permissions,
-      canApprove: permissions.manager || permissions.admin,
-      canManageCategories: permissions.manager || permissions.admin,
-      canViewAllExpenses: permissions.manager || permissions.admin,
-      canManageUsers: permissions.admin,
+      canApprove: permissions.manager || permissions.finance_admin,
+      canManageCategories: permissions.manager || permissions.finance_admin,
+      canViewAllExpenses: permissions.manager || permissions.finance_admin,
+      canManageUsers: permissions.finance_admin,
       // OPTIMIZED: Business context already includes ownership info
       businessContext,
       isBusinessOwner: businessContext.isOwner
@@ -137,7 +137,7 @@ function determineUserRoles(permissions: RolePermissions): UserRole[] {
   
   if (permissions.employee) roles.push('employee')
   if (permissions.manager) roles.push('manager')
-  if (permissions.admin) roles.push('owner')  // admin permission = owner role
+  if (permissions.finance_admin) roles.push('owner')  // admin permission = owner role
   
   return roles
 }
@@ -203,18 +203,18 @@ export async function syncRoleToClerk(userId: string, permissions: RolePermissio
 
 /**
  * Convert role to permission structure
- * Note: 'admin' in RolePermissions represents owner-level access
+ * Note: 'finance_admin' in RolePermissions represents owner-level access
  */
 function roleToPermissions(role: UserRole): RolePermissions {
   switch (role) {
     case 'employee':
-      return { employee: true, manager: false, admin: false }
+      return { employee: true, manager: false, finance_admin: false }
     case 'manager':
-      return { employee: true, manager: true, admin: false }
+      return { employee: true, manager: true, finance_admin: false }
     case 'owner':
-      return { employee: true, manager: true, admin: true }
+      return { employee: true, manager: true, finance_admin: true }
     default:
-      return { employee: true, manager: false, admin: false }
+      return { employee: true, manager: false, finance_admin: false }
   }
 }
 
@@ -278,7 +278,7 @@ export async function canSubmitOwnClaim(): Promise<boolean> {
  */
 export async function canApproveExpenseClaims(): Promise<boolean> {
   const context = await getCurrentUserContextWithBusiness()
-  return context?.permissions.manager || context?.permissions.admin || false
+  return context?.permissions.manager || context?.permissions.finance_admin || false
 }
 
 /**
@@ -286,7 +286,7 @@ export async function canApproveExpenseClaims(): Promise<boolean> {
  */
 export async function canProcessReimbursements(): Promise<boolean> {
   const context = await getCurrentUserContextWithBusiness()
-  return context?.permissions.admin ?? false
+  return context?.permissions.finance_admin ?? false
 }
 
 /**
@@ -312,7 +312,7 @@ export async function canReviseOwnClaim(): Promise<boolean> {
  */
 export async function canFilterByUserId(): Promise<boolean> {
   const context = await getCurrentUserContextWithBusiness()
-  return context?.permissions.manager || context?.permissions.admin || false
+  return context?.permissions.manager || context?.permissions.finance_admin || false
 }
 
 /**

@@ -14,7 +14,7 @@ export interface EnhancedWorkflowTransition {
   from: ExpenseClaimStatus | ExpenseClaimStatus[] // ✅ Use unified status type
   to: ExpenseClaimStatus // ✅ Use unified status type
   action: 'submit' | 'recall' | 'approve' | 'reject' | 'request_changes' | 'override_approve'
-  requiredRole: 'employee' | 'manager' | 'admin' | 'super_admin'
+  requiredRole: 'employee' | 'manager' | 'finance_admin' | 'super_admin'
   
   // Pre-conditions that must be met before transition
   preConditions?: {
@@ -40,7 +40,7 @@ export interface EnhancedWorkflowTransition {
   overrideRequirements?: {
     allowOverride: boolean
     requiredJustification: boolean
-    minimumOverrideRole: 'manager' | 'admin' | 'super_admin'
+    minimumOverrideRole: 'manager' | 'finance_admin' | 'super_admin'
   }
 }
 
@@ -127,7 +127,7 @@ export interface PolicyOverride {
   granted_by_id: string
   granted_by_name: string
   granted_at: string
-  override_authority: 'manager' | 'admin' | 'super_admin'
+  override_authority: 'manager' | 'finance_admin' | 'super_admin'
 }
 
 // Enhanced approval step tracking
@@ -241,23 +241,23 @@ export const ENHANCED_WORKFLOW_TRANSITIONS: EnhancedWorkflowTransition[] = [
     from: 'approved',
     to: 'reimbursed',
     action: 'approve',
-    requiredRole: 'admin',
+    requiredRole: 'finance_admin',
     postTransitionActions: {
       updateRiskScore: true,
       sendNotifications: ['finance', 'employee']
     }
   },
-  
+
   // Policy override transitions (Otto's exception handling) ✅ Unified workflow
   {
     from: ['submitted'], // ✅ Unified workflow - direct from submitted to approved
     to: 'approved',
     action: 'override_approve',
-    requiredRole: 'admin',
+    requiredRole: 'finance_admin',
     overrideRequirements: {
       allowOverride: true,
       requiredJustification: true,
-      minimumOverrideRole: 'admin'
+      minimumOverrideRole: 'finance_admin'
     },
     postTransitionActions: {
       updateRiskScore: true,
@@ -297,10 +297,10 @@ async function getAdminApprover(businessId: string): Promise<string | null> {
       return null
     }
 
-    // Use Convex query to find an active admin for this business
+    // Use Convex query to find an active finance admin for this business
     const admins = await client.query(api.functions.memberships.getBusinessMembers, {
       businessId,
-      role: 'admin',
+      role: 'finance_admin',
       status: 'active'
     })
 

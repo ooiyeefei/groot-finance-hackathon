@@ -17,7 +17,7 @@ import { TrialCountdown } from '@/domains/billing/components/trial-countdown'
 interface UserRole {
   employee: boolean
   manager: boolean
-  admin: boolean
+  finance_admin: boolean
 }
 
 export default function Sidebar() {
@@ -36,7 +36,7 @@ export default function Sidebar() {
   const [userRole, setUserRole] = useState<UserRole>(() => {
     // SSR-safe: return default on server
     if (typeof window === 'undefined') {
-      return { employee: true, manager: false, admin: false }
+      return { employee: true, manager: false, finance_admin: false }
     }
     // Try to restore cached role from localStorage
     try {
@@ -47,7 +47,7 @@ export default function Sidebar() {
     } catch {
       // Ignore parse errors
     }
-    return { employee: true, manager: false, admin: false }
+    return { employee: true, manager: false, finance_admin: false }
   })
 
   // CRITICAL FIX: Listen to active business context changes
@@ -58,16 +58,28 @@ export default function Sidebar() {
 
   // Helper function to create localized hrefs (our i18n feature)
   const localizedHref = (path: string) => `/${locale}${path}`
+
+  // Check if user is employee-only (not manager or finance_admin)
+  const isEmployeeOnly = userRole.employee && !userRole.manager && !userRole.finance_admin
+
+  // Check if user is finance_admin (owner or finance_admin role - has full access)
+  const isAdmin = userRole.finance_admin
+
   // Core navigation items (available to everyone) - Part 1
+  // Dashboard, Invoices, Accounting are admin-only (finance admin features)
+  // Managers only see expense claims and approval dashboard
   const coreNavigationPart1 = [
-    { name: t('dashboard'), href: localizedHref('/'), icon: Home },
-    { name: t('invoices'), href: localizedHref('/invoices'), icon: FileText },
-    { name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard },
+    // Dashboard only visible for admins (finance admin feature)
+    ...(isAdmin ? [{ name: t('dashboard'), href: localizedHref('/'), icon: Home }] : []),
+    // Invoices only visible for admins (finance admin feature)
+    ...(isAdmin ? [{ name: t('invoices'), href: localizedHref('/invoices'), icon: FileText }] : []),
+    // Accounting only visible for admins (finance admin feature)
+    ...(isAdmin ? [{ name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard }] : []),
     { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
   ]
 
-  // Manager/Admin navigation items (approvals between expense claims and AI assistant)
-  const managerNavigation = userRole.manager || userRole.admin ? [
+  // Manager/Finance Admin navigation items (approvals between expense claims and AI assistant)
+  const managerNavigation = userRole.manager || userRole.finance_admin ? [
     { name: t('managerApprovals'), href: localizedHref('/manager/approvals'), icon: FileCheck },
   ] : []
 
@@ -76,13 +88,13 @@ export default function Sidebar() {
     { name: t('aiAssistant'), href: localizedHref('/ai-assistant'), icon: MessageSquare },
   ]
 
-  // Business management navigation (managers and admins only)
-  const businessNavigation = userRole.manager || userRole.admin ? [
+  // Business management navigation (managers and finance_admins only)
+  const businessNavigation = userRole.manager || userRole.finance_admin ? [
     { name: t('businessSettings'), href: localizedHref('/business-settings'), icon: Building2 },
   ] : []
 
-  // Billing navigation (managers and admins only - employees don't manage billing)
-  const billingNavigation = userRole.manager || userRole.admin ? [
+  // Billing navigation (finance_admins and owners only - managers don't manage billing)
+  const billingNavigation = userRole.finance_admin ? [
     { name: t('billing'), href: localizedHref('/settings/billing'), icon: Sparkles }
   ] : []
 
@@ -165,7 +177,7 @@ export default function Sidebar() {
       } catch (error) {
         console.error('[Sidebar] Failed to load user role:', error)
         // Fallback to default permissions on error
-        setUserRole({ employee: true, manager: false, admin: false })
+        setUserRole({ employee: true, manager: false, finance_admin: false })
       }
 
       // Mark initial load as completed to prevent duplicate calls

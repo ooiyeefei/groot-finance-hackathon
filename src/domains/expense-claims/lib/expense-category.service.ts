@@ -67,7 +67,7 @@ export async function getAllCategories() {
 
   return {
     categories: sortedCategories,
-    can_manage: employeeProfile.role_permissions?.manager || employeeProfile.role_permissions?.admin
+    can_manage: employeeProfile.role_permissions?.manager || employeeProfile.role_permissions?.finance_admin
   }
 }
 
@@ -135,7 +135,7 @@ export async function createCategory(body: CustomExpenseCategory) {
   }
 
   // Check if user has management permissions
-  const canManage = employeeProfile.role_permissions?.manager || employeeProfile.role_permissions?.admin
+  const canManage = employeeProfile.role_permissions?.manager || employeeProfile.role_permissions?.finance_admin
   if (!canManage) {
     throw new Error('Insufficient permissions to create categories')
   }
@@ -187,7 +187,7 @@ export async function updateCategory(body: CustomExpenseCategory & { id: string 
   }
 
   // Check if user has management permissions
-  const canManage = employeeProfile.role_permissions?.manager || employeeProfile.role_permissions?.admin
+  const canManage = employeeProfile.role_permissions?.manager || employeeProfile.role_permissions?.finance_admin
   if (!canManage) {
     throw new Error('Insufficient permissions to update categories')
   }
@@ -235,7 +235,7 @@ export async function deleteCategory(categoryId: string) {
   }
 
   // Check if user has management permissions
-  const canManage = employeeProfile.role_permissions?.manager || employeeProfile.role_permissions?.admin
+  const canManage = employeeProfile.role_permissions?.manager || employeeProfile.role_permissions?.finance_admin
   if (!canManage) {
     throw new Error('Insufficient permissions to delete categories')
   }

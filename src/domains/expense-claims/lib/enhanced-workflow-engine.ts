@@ -195,7 +195,7 @@ export class EnhancedWorkflowEngine {
         code: 'HIGH_VALUE_NO_PROJECT',
         message: 'High-value expenses require project code',
         canOverride: true,
-        requiredRole: 'admin'
+        requiredRole: 'finance_admin'
       })
     }
 
@@ -205,7 +205,7 @@ export class EnhancedWorkflowEngine {
         code: 'MISSING_RECEIPT',
         message: 'Receipt required for expenses above threshold',
         canOverride: false,
-        requiredRole: 'admin'
+        requiredRole: 'finance_admin'
       })
     }
 
@@ -371,7 +371,7 @@ export class EnhancedWorkflowEngine {
       granted_by_id: context.userProfile.id,
       granted_by_name: context.userProfile.full_name || 'Unknown',
       granted_at: now,
-      override_authority: this.getHighestRole(context.userProfile) as 'manager' | 'admin' | 'super_admin'
+      override_authority: this.getHighestRole(context.userProfile) as 'manager' | 'finance_admin' | 'super_admin'
     }))
   }
 
@@ -422,7 +422,7 @@ export class EnhancedWorkflowEngine {
     const roleHierarchy: Record<string, number> = {
       'employee': 1,
       'manager': 2,
-      'admin': 3,
+      'finance_admin': 3,
       'super_admin': 4
     }
 
@@ -434,7 +434,7 @@ export class EnhancedWorkflowEngine {
 
   private getHighestRole(userProfile: any): string {
     if (userProfile.role_permissions?.super_admin) return 'super_admin'
-    if (userProfile.role_permissions?.admin) return 'admin'
+    if (userProfile.role_permissions?.finance_admin) return 'finance_admin'
     if (userProfile.role_permissions?.manager) return 'manager'
     return 'employee'
   }

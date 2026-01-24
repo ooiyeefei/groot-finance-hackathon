@@ -20,7 +20,7 @@ interface InvitationDialogProps {
 
 export interface InvitationFormData {
   email: string
-  role: 'employee' | 'manager' | 'admin'
+  role: 'employee' | 'manager' | 'finance_admin'
   employee_id?: string
   department?: string
   job_title?: string
@@ -199,7 +199,7 @@ export default function InvitationDialog({
               </Label>
               <Select
                 value={formData.role}
-                onValueChange={(value: 'employee' | 'manager' | 'admin') =>
+                onValueChange={(value: 'employee' | 'manager' | 'finance_admin') =>
                   setFormData({ ...formData, role: value })
                 }
                 disabled={isLoading}
@@ -214,8 +214,8 @@ export default function InvitationDialog({
                   <SelectItem value="manager" className="text-foreground">
                     Manager
                   </SelectItem>
-                  <SelectItem value="admin" className="text-foreground">
-                    Admin
+                  <SelectItem value="finance_admin" className="text-foreground">
+                    Finance Admin
                   </SelectItem>
                 </SelectContent>
               </Select>

@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import AccountingEntriesClient from '@/domains/accounting-entries/components/accounting-entries-client'
 import { AccountingEntriesPageSkeleton } from '@/domains/accounting-entries/components/accounting-entries-skeleton'
 import { getAccountingPageData } from '@/domains/accounting-entries/lib/server-data-access'
+import { getUserRole } from '@/domains/users/lib/user.service'
 
 /**
  * Accounting Entries Page - Optimized with Server Components
@@ -14,13 +15,27 @@ import { getAccountingPageData } from '@/domains/accounting-entries/lib/server-d
  * 3. Direct database access (bypasses API route overhead)
  * 4. Loading skeletons (prevents CLS)
  * 5. Initial data passed to client (no client-side fetch on mount)
+ *
+ * Access Control:
+ * - Admin only - managers and employees are redirected to expense claims
  */
-export default async function AccountingPage() {
+export default async function AccountingPage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params
+
   // Server-side authentication check
   const { userId } = await auth()
 
   if (!userId) {
     redirect('/sign-in')
+  }
+
+  // Admin role check - accounting page is for finance admins only
+  const roleData = await getUserRole()
+  const isAdmin = roleData?.permissions?.finance_admin
+
+  if (!isAdmin) {
+    console.log(`[Accounting] Non-admin user redirected to expense-claims`)
+    redirect(`/${locale}/expense-claims`)
   }
 
   // ⚡ PARALLEL FETCH: All data loaded simultaneously on server

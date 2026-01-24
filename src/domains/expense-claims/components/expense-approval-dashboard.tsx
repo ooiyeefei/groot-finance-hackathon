@@ -33,7 +33,7 @@ interface EnhancedApprovalDashboardProps {
 interface UserRole {
   employee: boolean
   manager: boolean
-  admin: boolean
+  finance_admin: boolean
 }
 
 interface ManagementDashboardData {
@@ -81,7 +81,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
       console.error('Failed to fetch management dashboard data:', error)
       // Set minimal fallback data
       setDashboardData({
-        role: { employee: true, manager: true, admin: false },
+        role: { employee: true, manager: true, finance_admin: false },
         summary: {
           total_claims: 0,
           pending_approval: 0,
@@ -149,7 +149,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <TabsTrigger value="approvals" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Approvals
           </TabsTrigger>
-          {dashboardData?.role?.admin && (
+          {dashboardData?.role?.finance_admin && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Reimbursements
             </TabsTrigger>
@@ -167,14 +167,14 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <ApprovalTabContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
         </TabsContent>
 
-        {dashboardData?.role?.admin && (
+        {dashboardData?.role?.finance_admin && (
           <TabsContent value="reimbursements" className="space-y-4">
             <ReimbursementQueueContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
           </TabsContent>
         )}
 
         <TabsContent value="reports" className="space-y-4">
-          <ManagementReportsContent userRole={dashboardData?.role || { employee: true, manager: false, admin: false }} />
+          <ManagementReportsContent userRole={dashboardData?.role || { employee: true, manager: false, finance_admin: false }} />
         </TabsContent>
       </Tabs>
     </div>
@@ -201,7 +201,7 @@ function ManagementOverviewContent({ data, categories, setActiveTab }: {
           </CardHeader>
           <CardContent>
             <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
-              <ExpenseAnalytics scope={data?.role?.admin ? "company" : "department"} />
+              <ExpenseAnalytics scope={data?.role?.finance_admin ? "company" : "department"} />
             </Suspense>
           </CardContent>
         </Card>
@@ -289,6 +289,40 @@ function ReimbursementQueueContent({
   data: ManagementDashboardData
   onRefreshNeeded: () => void
 }) {
+  // State for tracking selected claims
+  const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set())
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  // Get approved claims for reimbursement
+  const approvedClaims = (data?.recent_claims || []).filter(claim => claim.status === 'approved')
+
+  // Handle Select All checkbox
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      // Select all approved claims
+      const allIds = new Set(approvedClaims.map((claim: any) => claim.id))
+      setSelectedClaims(allIds)
+    } else {
+      // Deselect all
+      setSelectedClaims(new Set())
+    }
+  }
+
+  // Handle individual claim selection
+  const handleSelectClaim = (claimId: string, checked: boolean) => {
+    setSelectedClaims(prev => {
+      const newSet = new Set(prev)
+      if (checked) {
+        newSet.add(claimId)
+      } else {
+        newSet.delete(claimId)
+      }
+      return newSet
+    })
+  }
+
+  // Check if all claims are selected
+  const isAllSelected = approvedClaims.length > 0 && selectedClaims.size === approvedClaims.length
 
   // Handle individual reimbursement processing
   const handleReimbursement = async (claimId: string) => {
@@ -305,7 +339,12 @@ function ReimbursementQueueContent({
       const result = await response.json()
 
       if (result.success) {
-        // Refresh data to update the reimbursement queue
+        // Remove from selection and refresh data
+        setSelectedClaims(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(claimId)
+          return newSet
+        })
         onRefreshNeeded()
       } else {
         console.error('Failed to process reimbursement:', result.error)
@@ -316,6 +355,96 @@ function ReimbursementQueueContent({
       alert('Network error while processing reimbursement')
     }
   }
+
+  // Handle bulk processing of selected claims
+  const handleProcessSelected = async () => {
+    if (selectedClaims.size === 0) {
+      alert('Please select at least one claim to process')
+      return
+    }
+
+    setIsProcessing(true)
+    const claimIds = Array.from(selectedClaims)
+    let successCount = 0
+    let failCount = 0
+
+    try {
+      // Process each selected claim sequentially
+      for (const claimId of claimIds) {
+        try {
+          const response = await fetch(`/api/v1/expense-claims/${claimId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'reimbursed',
+              comment: 'Bulk processed by admin via reimbursement queue'
+            })
+          })
+
+          const result = await response.json()
+          if (result.success) {
+            successCount++
+          } else {
+            failCount++
+            console.error(`Failed to process claim ${claimId}:`, result.error)
+          }
+        } catch (error) {
+          failCount++
+          console.error(`Network error processing claim ${claimId}:`, error)
+        }
+      }
+
+      // Clear selection and refresh
+      setSelectedClaims(new Set())
+      onRefreshNeeded()
+
+      // Show result summary
+      if (failCount === 0) {
+        alert(`Successfully processed ${successCount} claim(s)`)
+      } else {
+        alert(`Processed ${successCount} claim(s). Failed: ${failCount}`)
+      }
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  // Handle export to CSV
+  const handleExportList = () => {
+    if (approvedClaims.length === 0) {
+      alert('No claims to export')
+      return
+    }
+
+    // Build CSV content
+    const headers = ['Employee Name', 'Department', 'Description', 'Amount', 'Currency', 'Approved Date', 'Claim ID']
+    const rows = approvedClaims.map((claim: any) => [
+      claim.employee?.full_name || `Employee ID: ${claim.employee_id}`,
+      claim.employee?.department || 'No Department',
+      claim.description || 'Expense Claim',
+      parseFloat(claim.home_currency_amount || claim.total_amount || '0').toFixed(2),
+      claim.home_currency || claim.currency || 'USD',
+      new Date(claim.approval_date || claim.created_at).toLocaleDateString(),
+      claim.id
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n')
+
+    // Create and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `reimbursement-queue-${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <Card className="bg-record-layer-1 border-record-border">
       <CardHeader>
@@ -326,7 +455,7 @@ function ReimbursementQueueContent({
         <CardDescription>Approved claims ready for payment processing</CardDescription>
       </CardHeader>
       <CardContent>
-        {(data?.recent_claims || []).filter(claim => claim.status === 'approved').length === 0 ? (
+        {approvedClaims.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">
             <CheckCircle className="w-12 h-12 mx-auto mb-4" />
             <p>No pending reimbursements</p>
@@ -337,22 +466,34 @@ function ReimbursementQueueContent({
             {/* Bulk Actions */}
             <div className="flex items-center justify-between p-4 bg-record-layer-2 rounded-lg">
               <div className="flex items-center gap-4">
-                <input type="checkbox" className="rounded border" />
-                <span className="text-foreground font-medium">Select All ({(data?.recent_claims || []).filter(claim => claim.status === 'approved').length} claims)</span>
+                <input
+                  type="checkbox"
+                  className="rounded border h-4 w-4 cursor-pointer"
+                  checked={isAllSelected}
+                  onChange={(e) => handleSelectAll(e.target.checked)}
+                />
+                <span className="text-foreground font-medium">
+                  {selectedClaims.size > 0
+                    ? `${selectedClaims.size} of ${approvedClaims.length} selected`
+                    : `Select All (${approvedClaims.length} claims)`
+                  }
+                </span>
               </div>
               <div className="flex gap-2">
                 <Button
                   size="sm"
                   variant="success"
-                  onClick={() => {
-                    // TODO: Implement bulk processing when selection state is added
-                    alert('Bulk processing will be implemented when selection checkboxes are functional')
-                  }}
+                  onClick={handleProcessSelected}
+                  disabled={selectedClaims.size === 0 || isProcessing}
                 >
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Process Selected
+                  {isProcessing ? (
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <DollarSign className="w-4 h-4 mr-2" />
+                  )}
+                  Process Selected ({selectedClaims.size})
                 </Button>
-                <Button size="sm" variant="primary">
+                <Button size="sm" variant="primary" onClick={handleExportList}>
                   Export List
                 </Button>
               </div>
@@ -360,9 +501,14 @@ function ReimbursementQueueContent({
 
             {/* Reimbursement Items */}
             <div className="space-y-2">
-              {(data?.recent_claims || []).filter(claim => claim.status === 'approved').map((claim: any) => (
+              {approvedClaims.map((claim: any) => (
                 <div key={claim.id} className="flex items-center gap-4 p-3 bg-record-layer-2 rounded-lg hover:bg-accent transition-colors">
-                  <input type="checkbox" className="rounded border" />
+                  <input
+                    type="checkbox"
+                    className="rounded border h-4 w-4 cursor-pointer"
+                    checked={selectedClaims.has(claim.id)}
+                    onChange={(e) => handleSelectClaim(claim.id, e.target.checked)}
+                  />
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <div>

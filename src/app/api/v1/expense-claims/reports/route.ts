@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month') // YYYY-MM format
     const employeeId = searchParams.get('employeeId') // Optional, for manager/admin filtering
+    const directReportsOnly = searchParams.get('directReportsOnly') === 'true' // When true, scope to direct reports only
 
     // Validate required month parameter
     if (!month) {
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`[Expense Reports V1 API] Generating report for month: ${month}, user: ${userId}, requestedEmployee: ${employeeId}`)
+    console.log(`[Expense Reports V1 API] Generating report for month: ${month}, user: ${userId}, requestedEmployee: ${employeeId}, directReportsOnly: ${directReportsOnly}`)
 
     // ✅ MIGRATED: Get current user's business context from Convex
     const businessContext = await convex.query(
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
         businessId: businessContext.businessId,
         month,
         employeeId: employeeId || undefined,
+        directReportsOnly: directReportsOnly || undefined,
       }
     )
 
@@ -180,7 +182,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Determine employee name for report header
-    const isAdmin = role === 'owner' || role === 'admin'
+    const isAdmin = role === 'owner' || role === 'finance_admin'
     const isManager = role === 'manager'
     let employeeName = 'Multiple Employees'
 

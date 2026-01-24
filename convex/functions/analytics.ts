@@ -52,6 +52,21 @@ export const getDashboardAnalytics = query({
       return null;
     }
 
+    // Fetch business to get category names
+    const business = await ctx.db.get(args.businessId);
+
+    // Build category lookup map (ID -> display name)
+    const categoryLookup: Record<string, string> = {};
+    if (business?.customExpenseCategories) {
+      const categories = business.customExpenseCategories as Array<{
+        id: string;
+        category_name: string;
+      }>;
+      for (const cat of categories) {
+        categoryLookup[cat.id] = cat.category_name;
+      }
+    }
+
     // Fetch all transactions for the period
     const entries = await ctx.db
       .query("accounting_entries")
@@ -112,11 +127,13 @@ export const getDashboardAnalytics = query({
         txn.transactionType === "Income" ? amount : -Math.abs(amount);
 
       // Category breakdown (expenses + COGS only)
+      // Look up display name from categoryLookup, fallback to category value
       if (txn.transactionType === "Expense" || txn.transactionType === "Cost of Goods Sold") {
-        if (!categoryBreakdown[category]) {
-          categoryBreakdown[category] = 0;
+        const displayName = categoryLookup[category] || category;
+        if (!categoryBreakdown[displayName]) {
+          categoryBreakdown[displayName] = 0;
         }
-        categoryBreakdown[category] += Math.abs(amount);
+        categoryBreakdown[displayName] += Math.abs(amount);
       }
     }
 

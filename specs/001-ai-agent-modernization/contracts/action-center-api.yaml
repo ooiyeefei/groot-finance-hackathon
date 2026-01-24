@@ -1,0 +1,486 @@
+openapi: 3.0.3
+info:
+  title: FinanSEAL Action Center API
+  version: 1.0.0
+  description: |
+    API for the Smart Action Center proactive intelligence layer.
+    Manages insights, notifications, and user preferences.
+
+servers:
+  - url: /api/v1
+    description: API v1 base path
+
+paths:
+  /insights:
+    get:
+      summary: List Action Center insights
+      description: |
+        Retrieves proactive insights for the authenticated user.
+        Supports filtering by category, priority, and status.
+      operationId: listInsights
+      tags:
+        - Insights
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [new, reviewed, dismissed, actioned, all]
+            default: new
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [anomaly, compliance, deadline, cashflow, optimization, categorization]
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [critical, high, medium, low]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: cursor
+          in: query
+          description: Pagination cursor
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of insights
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightsListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /insights/{insightId}:
+    get:
+      summary: Get insight details
+      description: Retrieves detailed information about a specific insight
+      operationId: getInsight
+      tags:
+        - Insights
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: insightId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Insight details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update insight status
+      description: |
+        Updates the status of an insight (mark as reviewed, dismissed, or actioned).
+        Used when user interacts with an Action Center card.
+      operationId: updateInsightStatus
+      tags:
+        - Insights
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: insightId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsightStatusUpdate'
+      responses:
+        '200':
+          description: Updated insight
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Insight'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /insights/summary:
+    get:
+      summary: Get insights summary
+      description: |
+        Returns aggregated counts of insights by category and priority.
+        Used for dashboard widgets and notification badges.
+      operationId: getInsightsSummary
+      tags:
+        - Insights
+      security:
+        - ClerkAuth: []
+      responses:
+        '200':
+          description: Insights summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightsSummary'
+
+  /insights/{insightId}/deep-dive:
+    post:
+      summary: Initiate deep dive conversation
+      description: |
+        Creates a new chat conversation pre-loaded with insight context.
+        Used when user clicks "Deep Dive" on an Action Center card.
+      operationId: initiateDeepDive
+      tags:
+        - Insights
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: insightId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversationId:
+                    type: string
+                  initialMessage:
+                    type: string
+                    description: AI's initial message with insight context
+
+  /notifications/preferences:
+    get:
+      summary: Get notification preferences
+      operationId: getNotificationPreferences
+      tags:
+        - Notifications
+      security:
+        - ClerkAuth: []
+      responses:
+        '200':
+          description: Current notification settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferences'
+
+    put:
+      summary: Update notification preferences
+      operationId: updateNotificationPreferences
+      tags:
+        - Notifications
+      security:
+        - ClerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPreferences'
+      responses:
+        '200':
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferences'
+
+  /notifications/subscribe:
+    post:
+      summary: Subscribe to web push notifications
+      description: Registers a web push subscription for real-time notifications
+      operationId: subscribeNotifications
+      tags:
+        - Notifications
+      security:
+        - ClerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscription'
+      responses:
+        '201':
+          description: Subscription created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+components:
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Insight:
+      type: object
+      properties:
+        id:
+          type: string
+        category:
+          type: string
+          enum: [anomaly, compliance, deadline, cashflow, optimization, categorization]
+        priority:
+          type: string
+          enum: [critical, high, medium, low]
+        status:
+          type: string
+          enum: [new, reviewed, dismissed, actioned]
+        title:
+          type: string
+        description:
+          type: string
+        recommendedAction:
+          type: string
+        detectedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+
+    InsightDetail:
+      allOf:
+        - $ref: '#/components/schemas/Insight'
+        - type: object
+          properties:
+            affectedEntities:
+              type: array
+              items:
+                $ref: '#/components/schemas/AffectedEntity'
+            metadata:
+              oneOf:
+                - $ref: '#/components/schemas/AnomalyMetadata'
+                - $ref: '#/components/schemas/ComplianceMetadata'
+                - $ref: '#/components/schemas/DeadlineMetadata'
+                - $ref: '#/components/schemas/CashflowMetadata'
+                - $ref: '#/components/schemas/OptimizationMetadata'
+
+    AffectedEntity:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [transaction, document, vendor, invoice]
+        name:
+          type: string
+        amount:
+          type: number
+        date:
+          type: string
+          format: date
+
+    AnomalyMetadata:
+      type: object
+      properties:
+        deviation:
+          type: number
+          description: Standard deviations from baseline
+        baseline:
+          type: number
+          description: Historical average amount
+        category:
+          type: string
+          description: Transaction category
+
+    ComplianceMetadata:
+      type: object
+      properties:
+        regulation:
+          type: string
+        jurisdiction:
+          type: string
+        missingDocs:
+          type: array
+          items:
+            type: string
+
+    DeadlineMetadata:
+      type: object
+      properties:
+        deadlineDate:
+          type: string
+          format: date
+        filingType:
+          type: string
+        jurisdiction:
+          type: string
+        daysRemaining:
+          type: integer
+
+    CashflowMetadata:
+      type: object
+      properties:
+        projectedBalance:
+          type: number
+        daysUntilNegative:
+          type: integer
+        currentBurnRate:
+          type: number
+
+    OptimizationMetadata:
+      type: object
+      properties:
+        potentialSavings:
+          type: number
+        duplicateIds:
+          type: array
+          items:
+            type: string
+
+    InsightsListResponse:
+      type: object
+      properties:
+        insights:
+          type: array
+          items:
+            $ref: '#/components/schemas/Insight'
+        total:
+          type: integer
+        hasMore:
+          type: boolean
+        nextCursor:
+          type: string
+
+    InsightStatusUpdate:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [reviewed, dismissed, actioned]
+        actionTaken:
+          type: string
+          description: Description of action taken (when status is actioned)
+
+    InsightsSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        byPriority:
+          type: object
+          properties:
+            critical:
+              type: integer
+            high:
+              type: integer
+            medium:
+              type: integer
+            low:
+              type: integer
+        byCategory:
+          type: object
+          additionalProperties:
+            type: integer
+        newCount:
+          type: integer
+          description: Unreviewed insights count
+
+    NotificationPreferences:
+      type: object
+      properties:
+        anomaly:
+          $ref: '#/components/schemas/CategoryPreference'
+        compliance:
+          $ref: '#/components/schemas/CategoryPreference'
+        deadline:
+          $ref: '#/components/schemas/CategoryPreference'
+        cashflow:
+          $ref: '#/components/schemas/CategoryPreference'
+        optimization:
+          $ref: '#/components/schemas/CategoryPreference'
+        categorization:
+          $ref: '#/components/schemas/CategoryPreference'
+
+    CategoryPreference:
+      type: object
+      properties:
+        web:
+          type: boolean
+          default: true
+        email:
+          type: boolean
+          default: false
+        minPriority:
+          type: string
+          enum: [critical, high, medium, low]
+          default: high
+
+    PushSubscription:
+      type: object
+      required:
+        - endpoint
+        - keys
+      properties:
+        endpoint:
+          type: string
+          format: uri
+        keys:
+          type: object
+          properties:
+            p256dh:
+              type: string
+            auth:
+              type: string
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
