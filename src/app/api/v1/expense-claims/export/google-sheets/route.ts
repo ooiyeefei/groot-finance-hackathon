@@ -29,6 +29,7 @@ interface ExportConfig {
 
 interface ExpenseClaim {
   _id: string
+  _creationTime?: number
   expenseCategory?: string
   description?: string
   businessPurpose?: string
@@ -82,13 +83,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No business context found' }, { status: 400 })
     }
 
-    // Query expense claims with date range
+    // Query expense claims without date filter (filter in API for more flexibility)
     const claimsData = await convex.query(
       api.functions.expenseClaims.list,
       {
         businessId: businessContext.businessId,
-        startDate: date_range.start_date,
-        endDate: date_range.end_date,
         limit: 10000, // Large limit for export
       }
     )
@@ -100,8 +99,21 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
+    // Filter by date range using multiple date fields (transactionDate, submittedAt, or creation time)
+    let filteredClaims = (claimsData.claims as ExpenseClaim[]).filter((claim) => {
+      // Get the most relevant date for this claim
+      const claimDate = claim.transactionDate ||
+        (claim.submittedAt ? new Date(claim.submittedAt).toISOString().split('T')[0] : null)
+
+      if (!claimDate) return false // Skip claims without any date
+
+      const startDate = date_range.start_date
+      const endDate = date_range.end_date
+
+      return claimDate >= startDate && claimDate <= endDate
+    })
+
     // Filter by status if specified
-    let filteredClaims = claimsData.claims as ExpenseClaim[]
     if (status_filter && status_filter.length > 0) {
       filteredClaims = filteredClaims.filter((claim: ExpenseClaim) =>
         status_filter.includes(claim.status || '')
