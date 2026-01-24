@@ -76,13 +76,13 @@ export interface BusinessProfile {
 
 export interface UpdateMembershipRequest {
   status?: 'active' | 'inactive' | 'pending' | 'suspended'
-  role?: 'employee' | 'manager'  // Note: 'owner' role cannot be changed via API
+  role?: 'employee' | 'manager' | 'finance_admin'  // Note: 'owner' role cannot be changed via API
   reason?: string
 }
 
 export interface CreateInvitationRequest {
   email: string
-  role: 'employee' | 'manager'  // Note: 'owner' role cannot be invited
+  role: 'employee' | 'manager' | 'finance_admin'  // Note: 'owner' role cannot be invited
   employee_id?: string
   department?: string
   job_title?: string
@@ -176,7 +176,7 @@ export async function createBusiness(
   const adminRolePermissions = {
     employee: true,
     manager: true,
-    admin: true
+    finance_admin: true
   }
 
   const syncResult = await syncRoleToClerk(clerkUserId, adminRolePermissions)
@@ -249,7 +249,7 @@ export async function updateMembership(
 
   // Handle role update via existing Convex mutation
   if (role) {
-    const validRoles = ['employee', 'manager'] as const  // Note: 'owner' cannot be assigned via API
+    const validRoles = ['employee', 'manager', 'finance_admin'] as const  // Note: 'owner' cannot be assigned via API
     if (!validRoles.includes(role)) {
       throw new Error('Invalid role specified')
     }
@@ -277,8 +277,8 @@ export async function updateMembership(
     if (targetMember.clerk_user_id && !targetMember.clerk_user_id.startsWith('migrated_')) {
       const rolePermissions = {
         employee: true,
-        manager: role === 'manager',
-        admin: false  // admin permissions are for owners only, cannot be assigned via API
+        manager: role === 'manager' || role === 'finance_admin',
+        finance_admin: role === 'finance_admin'
       }
       await syncRoleToClerk(targetMember.clerk_user_id, rolePermissions)
     }
@@ -472,8 +472,8 @@ export async function createInvitation(
 ): Promise<{ invitation: any; emailFailed?: boolean; warning?: string }> {
   const { email, role } = request
 
-  // Validate input - only 'employee' and 'manager' can be invited (not 'owner')
-  if (!['employee', 'manager'].includes(role)) {
+  // Validate input - 'employee', 'manager', and 'finance_admin' can be invited (not 'owner')
+  if (!['employee', 'manager', 'finance_admin'].includes(role)) {
     throw new Error('Invalid role specified')
   }
 
@@ -488,7 +488,7 @@ export async function createInvitation(
   const membershipId = await client.mutation(api.functions.memberships.inviteByEmail, {
     businessId: businessId as any,
     email: email.toLowerCase(),
-    role: role as 'manager' | 'employee'  // Note: 'owner' role cannot be invited
+    role: role as 'manager' | 'employee' | 'finance_admin'  // Note: 'owner' role cannot be invited
   })
 
   // Get business name for email
