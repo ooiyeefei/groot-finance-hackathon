@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import MobileCameraCapture from './mobile-camera-capture'
+import { compressReceiptImage, shouldCompressImage } from '@/lib/pwa/image-compression'
 
 interface ReceiptUploadStepProps {
   onFileSelected: (file: File) => void
@@ -31,8 +32,11 @@ export default function ReceiptUploadStep({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // State for compression progress
+  const [isCompressing, setIsCompressing] = useState(false)
+
   // AI Principle: Single responsibility - only handle file selection and validation
-  const handleFileSelect = useCallback((file: File) => {
+  const handleFileSelect = useCallback(async (file: File) => {
     if (!file) return
 
     // File validation
@@ -47,16 +51,33 @@ export default function ReceiptUploadStep({
       return
     }
 
-    setSelectedFile(file)
+    let fileToUpload = file
+
+    // Compress large images before upload (only for images, not PDFs)
+    if (file.type.startsWith('image/') && shouldCompressImage(file)) {
+      try {
+        setIsCompressing(true)
+        console.log(`[Receipt Upload] Compressing image: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
+        fileToUpload = await compressReceiptImage(file)
+        console.log(`[Receipt Upload] Compressed to: ${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`)
+      } catch (error) {
+        console.error('[Receipt Upload] Compression failed, using original:', error)
+        // Fall back to original file if compression fails
+      } finally {
+        setIsCompressing(false)
+      }
+    }
+
+    setSelectedFile(fileToUpload)
 
     // Create preview for images
-    if (file.type.startsWith('image/')) {
-      const url = URL.createObjectURL(file)
+    if (fileToUpload.type.startsWith('image/')) {
+      const url = URL.createObjectURL(fileToUpload)
       setPreviewUrl(url)
     }
 
-    // AI Flow: Pass validated file to parent orchestrator
-    onFileSelected(file)
+    // AI Flow: Pass validated (and possibly compressed) file to parent orchestrator
+    onFileSelected(fileToUpload)
   }, [onFileSelected])
 
   const handleCameraCapture = () => {
@@ -159,11 +180,21 @@ export default function ReceiptUploadStep({
         </Alert>
       )}
 
+      {/* Compression indicator */}
+      {isCompressing && (
+        <Alert className="bg-primary/10 border-primary/30">
+          <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <AlertDescription className="text-primary">
+            Optimizing image for faster upload...
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Upload Options - Compact buttons with 37% width */}
       <div className="flex justify-center gap-2">
         <Button
           onClick={handleCameraCapture}
-          disabled={isProcessing}
+          disabled={isProcessing || isCompressing}
           className="h-12 w-40 bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           <Camera className="w-5 h-5 mr-2" />
@@ -172,7 +203,7 @@ export default function ReceiptUploadStep({
 
         <Button
           onClick={handleFileUpload}
-          disabled={isProcessing}
+          disabled={isProcessing || isCompressing}
           className="h-12 w-40 bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           <Upload className="w-5 h-5 mr-2" />
@@ -184,7 +215,7 @@ export default function ReceiptUploadStep({
       <div className="flex justify-center">
         <Button
           onClick={onSkip}
-          disabled={isProcessing}
+          disabled={isProcessing || isCompressing}
           variant="secondary"
           size="sm"
         >
