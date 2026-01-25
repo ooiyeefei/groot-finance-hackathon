@@ -9,6 +9,8 @@
  */
 
 import type * as functions_accountingEntries from "../functions/accountingEntries.js";
+import type * as functions_actionCenterInsights from "../functions/actionCenterInsights.js";
+import type * as functions_actionCenterJobs from "../functions/actionCenterJobs.js";
 import type * as functions_admin from "../functions/admin.js";
 import type * as functions_admin_resetDatabase from "../functions/admin/resetDatabase.js";
 import type * as functions_analytics from "../functions/analytics.js";
@@ -26,6 +28,7 @@ import type * as functions_seedActionCenter from "../functions/seedActionCenter.
 import type * as functions_stripeEvents from "../functions/stripeEvents.js";
 import type * as functions_system from "../functions/system.js";
 import type * as functions_systemMonitoring from "../functions/systemMonitoring.js";
+import type * as functions_testSeedActionCenter from "../functions/testSeedActionCenter.js";
 import type * as functions_users from "../functions/users.js";
 import type * as functions_vendorPriceHistory from "../functions/vendorPriceHistory.js";
 import type * as functions_vendors from "../functions/vendors.js";
@@ -43,6 +46,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "functions/accountingEntries": typeof functions_accountingEntries;
+  "functions/actionCenterInsights": typeof functions_actionCenterInsights;
+  "functions/actionCenterJobs": typeof functions_actionCenterJobs;
   "functions/admin": typeof functions_admin;
   "functions/admin/resetDatabase": typeof functions_admin_resetDatabase;
   "functions/analytics": typeof functions_analytics;
@@ -60,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   "functions/stripeEvents": typeof functions_stripeEvents;
   "functions/system": typeof functions_system;
   "functions/systemMonitoring": typeof functions_systemMonitoring;
+  "functions/testSeedActionCenter": typeof functions_testSeedActionCenter;
   "functions/users": typeof functions_users;
   "functions/vendorPriceHistory": typeof functions_vendorPriceHistory;
   "functions/vendors": typeof functions_vendors;

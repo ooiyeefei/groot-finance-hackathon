@@ -5,6 +5,8 @@ import { TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw, PiggyBank, C
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
 import { SUPPORTED_CURRENCIES } from '@/domains/users/hooks/use-home-currency';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
+import { useActiveBusiness } from '@/contexts/business-context';
+import { ProactiveActionCenter } from './action-center';
 
 // Lazy load heavy components to improve initial page load
 const CurrencyBreakdown = lazy(() => import('./financial-analytics/CurrencyBreakdown'));
@@ -32,6 +34,7 @@ const ComponentLoader = ({ title, height = 'chart' }: { title: string; height?: 
 
 export default function CompleteDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
+  const { businessId } = useActiveBusiness();
 
   // Session-only display currency - resets to user's preferred currency on page refresh
   // Fetch user's actual preferred currency from API (bypass localStorage cache)
@@ -229,6 +232,11 @@ export default function CompleteDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Proactive AI Action Center - Top placement for priority visibility */}
+      {businessId && (
+        <ProactiveActionCenter businessId={businessId} defaultExpanded={true} />
+      )}
 
       {/* KPI Metrics - 3+2 Grid Layout */}
       <div className="space-y-card-gap">
