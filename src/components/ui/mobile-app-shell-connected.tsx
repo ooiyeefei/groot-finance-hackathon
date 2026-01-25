@@ -19,11 +19,10 @@ import * as React from 'react'
 import { MobileAppShell } from './mobile-app-shell'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useExpenseClaimsRealtime } from '@/domains/expense-claims/hooks/use-expense-claims-realtime'
+import { useLocale } from 'next-intl'
 
 interface MobileAppShellConnectedProps {
   children: React.ReactNode
-  /** Current locale for navigation links */
-  locale?: string
 }
 
 /**
@@ -33,11 +32,13 @@ interface MobileAppShellConnectedProps {
  * Falls back to 0 when business context is loading or unavailable.
  */
 export function MobileAppShellConnected({
-  children,
-  locale = 'en'
+  children
 }: MobileAppShellConnectedProps) {
+  // Get locale from next-intl
+  const locale = useLocale()
+
   // Get business context for multi-tenancy
-  const { businessId, isLoading: isBusinessLoading } = useActiveBusiness()
+  const { businessId } = useActiveBusiness()
 
   // Get real-time expense claims data (limit to minimal fetch for badge count)
   const { dashboardData } = useExpenseClaimsRealtime(businessId, { limit: 100 })

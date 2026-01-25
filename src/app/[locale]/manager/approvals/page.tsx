@@ -44,8 +44,8 @@ export default async function ApprovalsPage() {
             subtitle=""
           />
 
-          {/* Main Content Area */}
-          <main className="flex-1 overflow-auto p-4 sm:p-6">
+          {/* Main Content Area - pb-24 for mobile bottom nav */}
+          <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
             <div className="max-w-7xl mx-auto">
               {/* Expense Approval Dashboard */}
               <ExpenseApprovalDashboard userId={userId} />

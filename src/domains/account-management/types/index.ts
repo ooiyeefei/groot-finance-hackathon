@@ -151,8 +151,8 @@ export interface TBusinessSwitcherOption {
 export interface TPermissionFlags extends TBusinessPermissions {
   // Computed convenience flags
   canManageTeam: boolean    // canInviteMembers || canRemoveMembers
-  canAccessAdmin: boolean   // role === 'admin' || isOwner
-  canAccessManager: boolean // role === 'admin' || role === 'manager' || isOwner
+  canAccessAdmin: boolean   // role === 'finance_admin' || isOwner
+  canAccessManager: boolean // role === 'finance_admin' || role === 'manager' || isOwner
 }
 
 // ============================================================================

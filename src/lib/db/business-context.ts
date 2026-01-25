@@ -13,7 +13,7 @@ export interface BusinessMembership {
   id: string
   user_id: string
   business_id: string
-  role: 'owner' | 'manager' | 'employee'
+  role: 'owner' | 'finance_admin' | 'manager' | 'employee'
   invited_at?: string
   joined_at: string
   last_accessed_at?: string
@@ -39,7 +39,7 @@ export interface BusinessWithOwnership {
 export interface BusinessContext {
   businessId: string
   businessName: string
-  role: 'owner' | 'manager' | 'employee'
+  role: 'owner' | 'finance_admin' | 'manager' | 'employee'
   isOwner: boolean
   permissions: {
     canDeleteBusiness: boolean
@@ -186,7 +186,7 @@ export async function getCurrentBusinessContext(userId?: string): Promise<Busine
     return {
       businessId: context.businessId,
       businessName: context.businessName,
-      role: context.role as 'owner' | 'manager' | 'employee',
+      role: context.role as 'owner' | 'finance_admin' | 'manager' | 'employee',
       isOwner: context.isOwner,
       permissions: context.permissions
     }
@@ -257,22 +257,26 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
 
 /**
  * Compute permissions based on role and ownership
- * Note: Owner role now has all admin-level permissions
+ * Role hierarchy: owner > finance_admin > manager > employee
+ * Note: Owner role has all permissions, finance_admin has admin-level permissions
  */
-function computePermissions(role: 'owner' | 'manager' | 'employee', isOwner: boolean) {
+function computePermissions(role: 'owner' | 'finance_admin' | 'manager' | 'employee', isOwner: boolean) {
+  const isFinanceAdminOrAbove = role === 'owner' || role === 'finance_admin'
+  const isManagerOrAbove = isFinanceAdminOrAbove || role === 'manager'
+
   const basePermissions = {
     // Owner-only permissions (business-level)
     canDeleteBusiness: isOwner,
     canManageSubscription: isOwner,
     canTransferOwnership: isOwner,
 
-    // Operational permissions based on role (owner has all, manager has most)
-    canInviteMembers: role === 'owner' || role === 'manager',
-    canRemoveMembers: role === 'owner' || role === 'manager', // Manager can only remove employees
-    canChangeSettings: role === 'owner',
-    canApproveExpenses: role === 'owner' || role === 'manager',
-    canManageCategories: role === 'owner' || role === 'manager',
-    canViewAllData: role === 'owner' || role === 'manager'
+    // Operational permissions based on role
+    canInviteMembers: isManagerOrAbove,
+    canRemoveMembers: isManagerOrAbove, // Manager can only remove employees
+    canChangeSettings: isFinanceAdminOrAbove,
+    canApproveExpenses: isManagerOrAbove,
+    canManageCategories: isManagerOrAbove,
+    canViewAllData: isManagerOrAbove
   }
 
   return basePermissions

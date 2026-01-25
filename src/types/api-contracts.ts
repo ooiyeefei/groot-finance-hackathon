@@ -12,7 +12,7 @@
 // Core Business Types
 // ============================================================================
 
-export type BusinessRole = 'owner' | 'manager' | 'employee'
+export type BusinessRole = 'owner' | 'finance_admin' | 'manager' | 'employee'
 export type MembershipStatus = 'active' | 'suspended' | 'inactive'
 
 /**
@@ -207,8 +207,8 @@ export interface TBusinessSwitcherOption {
 export interface TPermissionFlags extends TBusinessPermissions {
   // Computed convenience flags
   canManageTeam: boolean    // canInviteMembers || canRemoveMembers
-  canAccessAdmin: boolean   // role === 'owner' (only owner has admin-level access)
-  canAccessManager: boolean // role === 'owner' || role === 'manager'
+  canAccessAdmin: boolean   // role === 'owner' || role === 'finance_admin' (owner and finance_admin have admin-level access)
+  canAccessManager: boolean // role === 'owner' || role === 'finance_admin' || role === 'manager'
 }
 
 // ============================================================================

@@ -1,0 +1,240 @@
+/**
+ * User Preferences Functions (T078)
+ *
+ * Manages user-specific settings including notification preferences.
+ * Used by the notification system to determine email delivery preferences.
+ *
+ * Security: Multi-tenant isolation via userId
+ */
+
+import { v } from "convex/values";
+import { query, mutation } from "../_generated/server";
+import { resolveUserByClerkId } from "../lib/resolvers";
+
+// Default notification settings for new users
+const DEFAULT_NOTIFICATION_SETTINGS = {
+  anomaly: { web: true, email: true, minPriority: "high" },
+  compliance: { web: true, email: true, minPriority: "medium" },
+  deadline: { web: true, email: true, minPriority: "medium" },
+  cashflow: { web: true, email: true, minPriority: "high" },
+  optimization: { web: true, email: false, minPriority: "medium" },
+  categorization: { web: true, email: false, minPriority: "low" },
+};
+
+// ============================================
+// QUERIES
+// ============================================
+
+/**
+ * Get notification preferences for the current user
+ */
+export const getNotificationPreferences = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { preferences: DEFAULT_NOTIFICATION_SETTINGS };
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return { preferences: DEFAULT_NOTIFICATION_SETTINGS };
+    }
+
+    // Get existing preferences
+    const prefs = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", user._id.toString()))
+      .first();
+
+    if (!prefs) {
+      return { preferences: DEFAULT_NOTIFICATION_SETTINGS };
+    }
+
+    return {
+      preferences: prefs.notificationSettings || DEFAULT_NOTIFICATION_SETTINGS,
+    };
+  },
+});
+
+/**
+ * Get full user preferences
+ */
+export const getUserPreferences = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return null;
+    }
+
+    const prefs = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", user._id.toString()))
+      .first();
+
+    return prefs;
+  },
+});
+
+// ============================================
+// MUTATIONS
+// ============================================
+
+/**
+ * Update notification preferences
+ */
+export const updateNotificationPreferences = mutation({
+  args: {
+    preferences: v.object({
+      anomaly: v.optional(
+        v.object({
+          web: v.boolean(),
+          email: v.boolean(),
+          minPriority: v.string(),
+        })
+      ),
+      compliance: v.optional(
+        v.object({
+          web: v.boolean(),
+          email: v.boolean(),
+          minPriority: v.string(),
+        })
+      ),
+      deadline: v.optional(
+        v.object({
+          web: v.boolean(),
+          email: v.boolean(),
+          minPriority: v.string(),
+        })
+      ),
+      cashflow: v.optional(
+        v.object({
+          web: v.boolean(),
+          email: v.boolean(),
+          minPriority: v.string(),
+        })
+      ),
+      optimization: v.optional(
+        v.object({
+          web: v.boolean(),
+          email: v.boolean(),
+          minPriority: v.string(),
+        })
+      ),
+      categorization: v.optional(
+        v.object({
+          web: v.boolean(),
+          email: v.boolean(),
+          minPriority: v.string(),
+        })
+      ),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const userId = user._id.toString();
+
+    // Get existing preferences
+    const existing = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    // Merge with defaults and existing
+    const currentSettings =
+      existing?.notificationSettings || DEFAULT_NOTIFICATION_SETTINGS;
+    const mergedSettings = {
+      anomaly: args.preferences.anomaly || currentSettings.anomaly,
+      compliance: args.preferences.compliance || currentSettings.compliance,
+      deadline: args.preferences.deadline || currentSettings.deadline,
+      cashflow: args.preferences.cashflow || currentSettings.cashflow,
+      optimization: args.preferences.optimization || currentSettings.optimization,
+      categorization:
+        args.preferences.categorization || currentSettings.categorization,
+    };
+
+    const now = Date.now();
+
+    if (existing) {
+      // Update existing preferences
+      await ctx.db.patch(existing._id, {
+        notificationSettings: mergedSettings,
+        updatedAt: now,
+      });
+    } else {
+      // Create new preferences record
+      await ctx.db.insert("userPreferences", {
+        userId,
+        preferredCurrency: "MYR",
+        language: "en",
+        notificationSettings: mergedSettings,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return { success: true, preferences: mergedSettings };
+  },
+});
+
+/**
+ * Initialize user preferences (called on first login)
+ */
+export const initializeUserPreferences = mutation({
+  args: {
+    preferredCurrency: v.optional(v.string()),
+    language: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const userId = user._id.toString();
+
+    // Check if already exists
+    const existing = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    if (existing) {
+      return { success: true, preferencesId: existing._id };
+    }
+
+    const now = Date.now();
+
+    // Create with defaults
+    const preferencesId = await ctx.db.insert("userPreferences", {
+      userId,
+      preferredCurrency: args.preferredCurrency || "MYR",
+      language: args.language || "en",
+      notificationSettings: DEFAULT_NOTIFICATION_SETTINGS,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { success: true, preferencesId };
+  },
+});

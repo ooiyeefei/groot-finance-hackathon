@@ -463,6 +463,15 @@ def handler(event: dict, context: DurableContext):
                     import traceback
                     print(f"[{doc_id}] Warning: Failed to update line_items: {str(e)}")
                     print(f"[{doc_id}] Phase 2 ERROR traceback: {traceback.format_exc()}")
+                    # CRITICAL: Mark as 'skipped' so frontend doesn't show infinite spinner
+                    try:
+                        convex.update_expense_claim_line_items_status(
+                            document_id=doc_id,
+                            line_items_status="skipped",
+                        )
+                        print(f"[{doc_id}] expense_claims Phase 2: Marked as 'skipped' due to update failure")
+                    except Exception as skip_err:
+                        print(f"[{doc_id}] Warning: Failed to mark as skipped: {str(skip_err)}")
             else:
                 # Phase 2 failed - mark as skipped, don't fail the whole workflow
                 print(f"[{doc_id}] expense_claims Phase 2 failed: {phase2_result.get('error', 'unknown')}")
@@ -530,6 +539,15 @@ def handler(event: dict, context: DurableContext):
                     import traceback
                     print(f"[{doc_id}] Warning: Failed to update line_items: {str(e)}")
                     print(f"[{doc_id}] Phase 2 ERROR traceback: {traceback.format_exc()}")
+                    # CRITICAL: Mark as 'skipped' so frontend doesn't show infinite spinner
+                    try:
+                        convex.update_invoice_line_items_status(
+                            document_id=doc_id,
+                            line_items_status="skipped",
+                        )
+                        print(f"[{doc_id}] invoices Phase 2: Marked as 'skipped' due to update failure")
+                    except Exception as skip_err:
+                        print(f"[{doc_id}] Warning: Failed to mark as skipped: {str(skip_err)}")
             else:
                 # Phase 2 failed - mark as skipped, don't fail the whole workflow
                 print(f"[{doc_id}] invoices Phase 2 failed: {phase2_result.get('error', 'unknown')}")

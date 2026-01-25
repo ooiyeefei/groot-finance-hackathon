@@ -282,13 +282,14 @@ The frontend subscribes to document queries. When Lambda updates `lineItemsStatu
 3. **Rule: Embrace Parallel Execution**
    - Run independent tasks in parallel whenever possible.
 
-4. **Rule: Git Author for Deployments**
-   - **ALWAYS set git author before any push**:
+4. **Rule: Git Author (MANDATORY)**
+   - **ALWAYS set git author before ANY git operation** (commits, pushes, PRs):
      ```bash
      git config user.name "grootdev-ai"
      git config user.email "dev@hellogroot.com"
      ```
-   - Vercel requires the git author to have project access.
+   - This is non-negotiable - Vercel deployments require the git author to have project access.
+   - All commits, branches, and PRs must use this author identity.
 
 5. **Rule: AWS CDK as Single Source of Truth**
    - **NEVER make ad-hoc CLI changes** to AWS resources.

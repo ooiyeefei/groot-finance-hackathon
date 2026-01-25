@@ -285,6 +285,10 @@ class EmailService {
 
         <div style="text-align: center; margin: 30px 0;">
           <a href="${invitationUrl}" class="cta-button">Accept Invitation</a>
+          <p style="font-size: 13px; color: #6b7280; margin-top: 12px;">
+            New to FinanSEAL? You'll be prompted to sign up first.<br>
+            Already have an account? Just sign in to accept.
+          </p>
         </div>
 
         <p><strong>What you'll get access to:</strong></p>
@@ -337,6 +341,9 @@ ${inviterName} has invited you to join ${businessName} on FinanSEAL as a ${role}
 FinanSEAL is a financial co-pilot that helps Southeast Asian SMEs manage expenses, process receipts, and track financial performance with AI-powered insights.
 
 Accept your invitation: ${invitationUrl}
+
+Note: New to FinanSEAL? You'll be prompted to sign up first.
+Already have an account? Just sign in to accept.
 
 What you'll get access to:
 - AI-powered receipt processing and expense tracking

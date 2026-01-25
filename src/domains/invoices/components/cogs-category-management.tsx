@@ -30,7 +30,7 @@ interface COGSCategoryManagementProps {
   userRole: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
 }
 
@@ -54,7 +54,7 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
   })
 
   // Check permissions
-  const canManage = userRole.manager || userRole.admin
+  const canManage = userRole.manager || userRole.finance_admin
 
   useEffect(() => {
     if (canManage) {

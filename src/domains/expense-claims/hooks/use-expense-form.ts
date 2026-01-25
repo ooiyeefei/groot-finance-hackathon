@@ -110,6 +110,8 @@ export interface UseExpenseFormReturn {
   // Currency/exchange
   previewAmount: number | null
   exchangeRate: number | null
+  isManualRate: boolean
+  setManualRate: (rate: number | null) => void
 
   // Status info (for edit mode)
   claimStatus: string
@@ -190,6 +192,8 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   // Currency conversion
   const [previewAmount, setPreviewAmount] = useState<number | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
+  const [isManualRate, setIsManualRate] = useState<boolean>(false)
+  const [autoExchangeRate, setAutoExchangeRate] = useState<number | null>(null) // Store auto rate for reverting
 
   // AI suggestions state
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([])
@@ -618,15 +622,24 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     prevLineItemsStatusRef.current = newStatus
   }, [mode, realtimeClaim, lineItemsStatus])
 
-  // Fetch exchange rate preview when currencies change
+  // Fetch exchange rate preview when currencies change (only if not using manual rate)
   useEffect(() => {
     if (formData.original_currency !== formData.home_currency && formData.original_amount > 0) {
-      fetchExchangeRatePreview()
+      if (!isManualRate) {
+        fetchExchangeRatePreview()
+      } else {
+        // Recalculate preview with manual rate
+        if (exchangeRate !== null) {
+          setPreviewAmount(formData.original_amount * exchangeRate)
+        }
+      }
     } else {
       setPreviewAmount(null)
       setExchangeRate(null)
+      setAutoExchangeRate(null)
+      setIsManualRate(false)
     }
-  }, [formData.original_currency, formData.home_currency, formData.original_amount])
+  }, [formData.original_currency, formData.home_currency, formData.original_amount, isManualRate, exchangeRate])
 
   const fetchExchangeRatePreview = async () => {
     try {
@@ -643,14 +656,33 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       if (response.ok) {
         const result = await response.json()
         if (result.success && result.data) {
+          const autoRate = result.data.conversion.exchange_rate
+          setAutoExchangeRate(autoRate)
+          setExchangeRate(autoRate)
           setPreviewAmount(result.data.conversion.converted_amount)
-          setExchangeRate(result.data.conversion.exchange_rate)
         }
       }
     } catch (error) {
       console.error('Failed to fetch exchange rate:', error)
     }
   }
+
+  // Handler for setting manual exchange rate
+  const setManualRate = useCallback((rate: number | null) => {
+    if (rate === null) {
+      // Revert to auto rate
+      setIsManualRate(false)
+      if (autoExchangeRate !== null) {
+        setExchangeRate(autoExchangeRate)
+        setPreviewAmount(formData.original_amount * autoExchangeRate)
+      }
+    } else {
+      // Use manual rate
+      setIsManualRate(true)
+      setExchangeRate(rate)
+      setPreviewAmount(formData.original_amount * rate)
+    }
+  }, [autoExchangeRate, formData.original_amount])
 
   // Form validation with enhanced category validation
   const validateForm = (): boolean => {
@@ -1023,6 +1055,8 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     // Currency/exchange
     previewAmount,
     exchangeRate,
+    isManualRate,
+    setManualRate,
 
     // Status info
     claimStatus,

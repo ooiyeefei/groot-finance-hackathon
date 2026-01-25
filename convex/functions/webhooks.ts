@@ -90,7 +90,7 @@ export const handleUserCreated = action({
         await ctx.runMutation(createEmployeeProfileFn, {
           userId: pendingInvitation._id,
           businessId: pendingInvitation.businessId,
-          role: (pendingInvitation.role || "employee") as "admin" | "manager" | "employee" | "owner",
+          role: (pendingInvitation.role || "employee") as "finance_admin" | "manager" | "employee" | "owner",
         });
       }
 

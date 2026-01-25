@@ -1,0 +1,371 @@
+/**
+ * Agent Notifications Functions (T075)
+ *
+ * Handles queueing, processing, and delivery of agent-generated notifications.
+ * Specifically tied to Action Center insights.
+ *
+ * Security: Multi-tenant isolation via userId
+ */
+
+import { v } from "convex/values";
+import { query, mutation, internalMutation } from "../_generated/server";
+import { resolveUserByClerkId } from "../lib/resolvers";
+
+// ============================================
+// QUERIES
+// ============================================
+
+/**
+ * Get pending notifications for a user
+ */
+export const getPendingForUser = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    const limit = args.limit ?? 20;
+
+    const notifications = await ctx.db
+      .query("agentNotifications")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", user._id.toString()).eq("status", "pending")
+      )
+      .order("desc")
+      .take(limit);
+
+    return notifications;
+  },
+});
+
+/**
+ * Get recent notifications for a user (in-app display)
+ */
+export const getRecentForUser = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    const limit = args.limit ?? 50;
+
+    // Get notifications scheduled in the last 7 days
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    const notifications = await ctx.db
+      .query("agentNotifications")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", user._id.toString())
+      )
+      .filter((q) => q.gte(q.field("scheduledAt"), sevenDaysAgo))
+      .order("desc")
+      .take(limit);
+
+    return notifications;
+  },
+});
+
+/**
+ * Get unread notification count for a user
+ */
+export const getUnreadCount = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { count: 0 };
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return { count: 0 };
+    }
+
+    const delivered = await ctx.db
+      .query("agentNotifications")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", user._id.toString()).eq("status", "delivered")
+      )
+      .collect();
+
+    return { count: delivered.length };
+  },
+});
+
+// ============================================
+// MUTATIONS
+// ============================================
+
+/**
+ * Queue a notification for an insight
+ */
+export const queueNotification = mutation({
+  args: {
+    insightId: v.id("actionCenterInsights"),
+    channel: v.union(v.literal("web"), v.literal("email")),
+    scheduledAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Verify insight exists and user has access
+    const insight = await ctx.db.get(args.insightId);
+    if (!insight) {
+      throw new Error("Insight not found");
+    }
+
+    const notificationId = await ctx.db.insert("agentNotifications", {
+      userId: user._id.toString(),
+      insightId: args.insightId,
+      channel: args.channel,
+      status: "pending",
+      scheduledAt: args.scheduledAt || Date.now(),
+      retryCount: 0,
+    });
+
+    return { notificationId };
+  },
+});
+
+/**
+ * Mark a notification as read
+ */
+export const markAsRead = mutation({
+  args: {
+    notificationId: v.id("agentNotifications"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const notification = await ctx.db.get(args.notificationId);
+    if (!notification) {
+      throw new Error("Notification not found");
+    }
+
+    // Verify ownership
+    if (notification.userId !== user._id.toString()) {
+      throw new Error("Not authorized");
+    }
+
+    await ctx.db.patch(args.notificationId, {
+      status: "read",
+      readAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+/**
+ * Mark all notifications as read for a user
+ */
+export const markAllAsRead = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const delivered = await ctx.db
+      .query("agentNotifications")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", user._id.toString()).eq("status", "delivered")
+      )
+      .collect();
+
+    const now = Date.now();
+
+    for (const notification of delivered) {
+      await ctx.db.patch(notification._id, {
+        status: "read",
+        readAt: now,
+      });
+    }
+
+    return { updated: delivered.length };
+  },
+});
+
+// ============================================
+// INTERNAL MUTATIONS (for cron jobs)
+// ============================================
+
+/**
+ * Internal: Queue notification from insight detection (T076)
+ */
+export const internalQueueFromInsight = internalMutation({
+  args: {
+    userId: v.string(),
+    insightId: v.id("actionCenterInsights"),
+    channel: v.union(v.literal("web"), v.literal("email")),
+  },
+  handler: async (ctx, args) => {
+    const notificationId = await ctx.db.insert("agentNotifications", {
+      userId: args.userId,
+      insightId: args.insightId,
+      channel: args.channel,
+      status: "pending",
+      scheduledAt: Date.now(),
+      retryCount: 0,
+    });
+
+    return { notificationId };
+  },
+});
+
+/**
+ * Internal: Process pending notifications for delivery (T076)
+ */
+export const processNotificationQueue = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+
+    // Get pending notifications that are due
+    const pending = await ctx.db
+      .query("agentNotifications")
+      .withIndex("by_scheduled")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "pending"),
+          q.lte(q.field("scheduledAt"), now)
+        )
+      )
+      .take(100);
+
+    if (pending.length === 0) {
+      return { processed: 0 };
+    }
+
+    let processedCount = 0;
+
+    for (const notification of pending) {
+      // Mark as delivered (actual push delivery would happen via external service)
+      await ctx.db.patch(notification._id, {
+        status: "delivered",
+        deliveredAt: now,
+      });
+      processedCount++;
+    }
+
+    console.log(`[AgentNotifications] Processed ${processedCount} notifications`);
+    return { processed: processedCount };
+  },
+});
+
+/**
+ * Internal: Mark notification as delivered (callback from push service)
+ */
+export const markDelivered = internalMutation({
+  args: {
+    notificationId: v.id("agentNotifications"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.notificationId, {
+      status: "delivered",
+      deliveredAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Internal: Mark notification as failed
+ */
+export const markFailed = internalMutation({
+  args: {
+    notificationId: v.id("agentNotifications"),
+    errorMessage: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const notification = await ctx.db.get(args.notificationId);
+    if (!notification) return;
+
+    // Increment retry count
+    const newRetryCount = notification.retryCount + 1;
+
+    if (newRetryCount >= 3) {
+      // Max retries reached, mark as failed
+      await ctx.db.patch(args.notificationId, {
+        status: "failed",
+        failureReason: args.errorMessage,
+        retryCount: newRetryCount,
+      });
+    } else {
+      // Schedule retry
+      await ctx.db.patch(args.notificationId, {
+        retryCount: newRetryCount,
+        scheduledAt: Date.now() + (newRetryCount * 5 * 60 * 1000), // Exponential backoff
+      });
+    }
+  },
+});
+
+/**
+ * Internal: Cleanup old notifications (older than 30 days)
+ */
+export const cleanupOldNotifications = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+    // Get old read notifications
+    const old = await ctx.db
+      .query("agentNotifications")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "read"),
+          q.lt(q.field("scheduledAt"), thirtyDaysAgo)
+        )
+      )
+      .take(500);
+
+    let deletedCount = 0;
+    for (const notification of old) {
+      await ctx.db.delete(notification._id);
+      deletedCount++;
+    }
+
+    console.log(`[AgentNotifications] Cleaned up ${deletedCount} old notifications`);
+    return { deleted: deletedCount };
+  },
+});

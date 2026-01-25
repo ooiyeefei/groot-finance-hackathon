@@ -6,7 +6,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Download, FileText, Calendar, User, Printer, Eye } from 'lucide-react'
+import { Download, FileText, Calendar, User, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -112,9 +112,6 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
   const [employees, setEmployees] = useState([
     { id: 'current', name: 'My Reports' }
   ])
-  const [loadingEmployees, setLoadingEmployees] = useState(false)
-  const [categories, setCategories] = useState<Array<{id: string, category_name: string}>>([])
-  const [loadingCategories, setLoadingCategories] = useState(true)
   const [activePreview, setActivePreview] = useState<'summary' | 'formatted' | null>(null)
 
   // Generate available months (last 12 months)
@@ -142,28 +139,6 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
   const monthOptions = generateMonthOptions()
 
-  // Fetch categories on component mount
-  useEffect(() => {
-    const fetchCategories = async () => {
-      setLoadingCategories(true)
-      try {
-        const response = await fetch('/api/v1/expense-claims/categories')
-        const result = await response.json()
-
-        if (result.success && result.data.categories) {
-          setCategories(result.data.categories)
-        }
-      } catch (error) {
-        console.error('[Monthly Report] Failed to fetch categories:', error)
-        // Don't block report generation if categories fail to load
-      } finally {
-        setLoadingCategories(false)
-      }
-    }
-
-    fetchCategories()
-  }, [])
-
   // Fetch employees from API (only if not personal mode)
   useEffect(() => {
     console.log('[Monthly Report] 🚀 useEffect triggered - personalOnly:', personalOnly)
@@ -178,9 +153,9 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
     const fetchEmployees = async () => {
       try {
-        console.log('[Monthly Report] 🌐 Fetching team members from /api/v1/users/team')
-        setLoadingEmployees(true)
-        const response = await fetch('/api/v1/users/team')
+        // Fetch only direct reports (employees assigned to current manager)
+        console.log('[Monthly Report] 🌐 Fetching direct reports from /api/v1/users/team?directReportsOnly=true')
+        const response = await fetch('/api/v1/users/team?directReportsOnly=true')
 
         console.log('[Monthly Report] 📡 Response status:', response.status, response.statusText)
 
@@ -198,6 +173,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
           console.log('[Monthly Report] 👥 Team members processed:', teamMembers)
 
           const finalEmployees = [
+            { id: 'all', name: 'All Direct Reports' },
             { id: 'current', name: 'My Reports' },
             ...teamMembers
           ]
@@ -216,22 +192,24 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
       } catch (error) {
         console.error('[Monthly Report] 💥 Failed to fetch employees:', error)
         // Keep default "My Reports" only if API fails
-      } finally {
-        console.log('[Monthly Report] 🏁 Fetch employees completed')
-        setLoadingEmployees(false)
       }
     }
 
     fetchEmployees()
   }, [personalOnly])
 
-  // Generate CSV export URL for server-side download
+  // Generate CSV export URL for server-side download (scoped to direct reports)
   const generateCSVExportURL = (): string => {
     if (!selectedMonth) return ''
 
     const params = new URLSearchParams({ month: selectedMonth })
 
-    if (selectedEmployee && selectedEmployee !== 'current') {
+    // Always scope to direct reports when in manager approval context
+    if (!personalOnly) {
+      params.append('directReportsOnly', 'true')
+    }
+
+    if (selectedEmployee && selectedEmployee !== 'current' && selectedEmployee !== 'all') {
       params.append('employeeId', selectedEmployee)
     }
 
@@ -252,7 +230,12 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
         month: selectedMonth
       })
 
-      if (selectedEmployee && selectedEmployee !== 'current') {
+      // Always scope to direct reports when in manager approval context
+      if (!personalOnly) {
+        params.append('directReportsOnly', 'true')
+      }
+
+      if (selectedEmployee && selectedEmployee !== 'current' && selectedEmployee !== 'all') {
         params.append('employeeId', selectedEmployee)
       }
 
@@ -289,7 +272,12 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
         month: selectedMonth
       })
 
-      if (selectedEmployee && selectedEmployee !== 'current') {
+      // Always scope to direct reports when in manager approval context
+      if (!personalOnly) {
+        params.append('directReportsOnly', 'true')
+      }
+
+      if (selectedEmployee && selectedEmployee !== 'current' && selectedEmployee !== 'all') {
         params.append('employeeId', selectedEmployee)
       }
 

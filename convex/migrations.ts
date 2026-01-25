@@ -127,7 +127,7 @@ export const insertMembership = mutation({
       legacyId: args.legacyId,
       userId: args.userId,
       businessId: args.businessId,
-      role: args.role as "owner" | "admin" | "manager" | "employee",
+      role: args.role as "owner" | "finance_admin" | "manager" | "employee",
       status: args.status as "active" | "pending" | "suspended",
       managerId: args.managerId,
       invitedAt: args.invitedAt,

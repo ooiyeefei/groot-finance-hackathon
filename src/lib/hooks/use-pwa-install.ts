@@ -25,6 +25,8 @@ interface PWAInstallState {
   hasUserDismissed: boolean;
   /** Whether we're on iOS (requires manual installation instructions) */
   isIOS: boolean;
+  /** Whether we're on a mobile device */
+  isMobile: boolean;
   /** Whether to show iOS installation instructions */
   shouldShowIOSInstructions: boolean;
 }
@@ -59,6 +61,28 @@ function isIOSDevice(): boolean {
 
   const userAgent = window.navigator.userAgent.toLowerCase();
   return /iphone|ipad|ipod/.test(userAgent);
+}
+
+/**
+ * Detect if running on a mobile device
+ * Uses combination of: user agent, screen width, and touch capability
+ */
+function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const userAgent = window.navigator.userAgent.toLowerCase();
+
+  // User agent detection for common mobile devices
+  const mobileUserAgent = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/.test(userAgent);
+
+  // Screen width check (< 768px is typically mobile/tablet)
+  const smallScreen = window.innerWidth < 768;
+
+  // Touch capability check
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+  // Consider mobile if: (mobile user agent) OR (small screen AND touch capable)
+  return mobileUserAgent || (smallScreen && hasTouch);
 }
 
 /**
@@ -114,15 +138,16 @@ export function usePWAInstall(): UsePWAInstallReturn {
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
   const isIOS = typeof window !== 'undefined' && isIOSDevice();
+  const isMobile = typeof window !== 'undefined' && isMobileDevice();
   const isInstallable = deferredPrompt !== null;
 
   // Task T035: Show on second visit
   const visitCount = typeof window !== 'undefined' ? getVisitCount() : 0;
   const isSecondVisit = visitCount >= 1;
 
-  // Should show iOS instructions (second visit, not installed, not dismissed, iOS device)
+  // Should show iOS instructions (second visit, not installed, not dismissed, iOS device, MOBILE ONLY)
   const shouldShowIOSInstructions =
-    isIOS && isSecondVisit && !isInstalled && !hasUserDismissed && isDismissExpired();
+    isMobile && isIOS && isSecondVisit && !isInstalled && !hasUserDismissed && isDismissExpired();
 
   useEffect(() => {
     // Check if already installed
@@ -141,8 +166,11 @@ export function usePWAInstall(): UsePWAInstallReturn {
 
     // Listen for the beforeinstallprompt event (Android/Chrome)
     const handleBeforeInstallPrompt = (e: Event) => {
-      // Prevent the mini-infobar from appearing
-      e.preventDefault();
+      // Only prevent default on mobile where we show our custom prompt
+      // On desktop, let Chrome show its native install icon in address bar
+      if (isMobileDevice()) {
+        e.preventDefault();
+      }
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
@@ -218,6 +246,7 @@ export function usePWAInstall(): UsePWAInstallReturn {
     isPromptShowing,
     hasUserDismissed,
     isIOS,
+    isMobile,
     shouldShowIOSInstructions,
     promptInstall,
     dismissPrompt,

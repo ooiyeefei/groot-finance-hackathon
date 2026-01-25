@@ -22,6 +22,7 @@ import type * as functions_invoices from "../functions/invoices.js";
 import type * as functions_memberships from "../functions/memberships.js";
 import type * as functions_messages from "../functions/messages.js";
 import type * as functions_ocrUsage from "../functions/ocrUsage.js";
+import type * as functions_seedActionCenter from "../functions/seedActionCenter.js";
 import type * as functions_stripeEvents from "../functions/stripeEvents.js";
 import type * as functions_system from "../functions/system.js";
 import type * as functions_systemMonitoring from "../functions/systemMonitoring.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   "functions/memberships": typeof functions_memberships;
   "functions/messages": typeof functions_messages;
   "functions/ocrUsage": typeof functions_ocrUsage;
+  "functions/seedActionCenter": typeof functions_seedActionCenter;
   "functions/stripeEvents": typeof functions_stripeEvents;
   "functions/system": typeof functions_system;
   "functions/systemMonitoring": typeof functions_systemMonitoring;

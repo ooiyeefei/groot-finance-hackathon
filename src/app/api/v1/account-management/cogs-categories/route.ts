@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     console.log('[COGS Categories V1 API] Found', categories?.length || 0, 'categories')
 
     // Check management permissions from database (consistent with expense-claims API)
-    const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.admin
+    const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.finance_admin
 
     return NextResponse.json({
       success: true,
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check management permissions from database (consistent with expense-claims API)
-    const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.admin
+    const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.finance_admin
     if (!canManage) {
       return NextResponse.json({
         success: false,
@@ -163,7 +163,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Check management permissions from database (consistent with expense-claims API)
-    const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.admin
+    const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.finance_admin
     if (!canManage) {
       return NextResponse.json({
         success: false,
@@ -229,7 +229,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check management permissions from database (consistent with expense-claims API)
-    const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.admin
+    const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.finance_admin
     if (!canManage) {
       return NextResponse.json({
         success: false,

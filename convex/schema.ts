@@ -38,6 +38,7 @@ export default defineSchema({
       theme: v.optional(v.string()),
       language: v.optional(v.string()),
       notifications: v.optional(v.boolean()),
+      timezone: v.optional(v.string()),   // e.g., "Asia/Singapore", "Asia/Kuala_Lumpur"
     })),
     // Email Preferences (stored directly on user for simpler lookups)
     // Note: Transactional emails (security, payment) always send regardless

@@ -23,8 +23,16 @@ const roleBadgeVariants = cva(
           "dark:text-yellow-400"
         ],
 
-        // Admin: Purple color scheme
+        // Admin/Finance Admin: Purple color scheme
         admin: [
+          // Light mode: light purple background with dark purple text
+          "bg-purple-500/10 text-purple-600 border-purple-500/30",
+          // Dark mode: light purple background with light purple text
+          "dark:text-purple-400"
+        ],
+
+        // Finance Admin: Purple color scheme (same as admin)
+        finance_admin: [
           // Light mode: light purple background with dark purple text
           "bg-purple-500/10 text-purple-600 border-purple-500/30",
           // Dark mode: light purple background with light purple text
@@ -63,8 +71,17 @@ const roleBadgeVariants = cva(
 const roleIcons = {
   owner: Crown,
   admin: Crown,
+  finance_admin: Crown,
   manager: Shield,
   employee: UserCheck
+}
+
+const roleLabels: Record<string, string> = {
+  owner: 'Owner',
+  admin: 'Admin',
+  finance_admin: 'Finance Admin',
+  manager: 'Manager',
+  employee: 'Employee'
 }
 
 export interface RoleBadgeProps
@@ -85,7 +102,7 @@ function RoleBadge({
   ...props
 }: RoleBadgeProps) {
   const Icon = roleType ? roleIcons[roleType] : UserCheck
-  const label = roleType ? roleType.charAt(0).toUpperCase() + roleType.slice(1) : "Employee"
+  const label = roleType ? (roleLabels[roleType] || roleType.charAt(0).toUpperCase() + roleType.slice(1)) : "Employee"
 
   return (
     <div

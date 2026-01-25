@@ -41,7 +41,7 @@ export interface TeamMember {
   role_permissions: {
     employee: boolean
     manager: boolean
-    admin: boolean
+    finance_admin: boolean
   }
   home_currency: string | null
   manager_id: string | null
@@ -100,7 +100,7 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile> 
     full_name: user.fullName || null,
     preferred_currency: (user.homeCurrency || 'SGD') as SupportedCurrency,
     language_preference: user.preferences?.language || 'en',
-    timezone: 'Asia/Singapore', // Default - could be added to Convex schema
+    timezone: user.preferences?.timezone || 'Asia/Singapore',
     created_at: user._creationTime ? new Date(user._creationTime).toISOString() : null,
     updated_at: user.updatedAt ? new Date(user.updatedAt).toISOString() : null
   }
@@ -110,7 +110,7 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile> 
 
 /**
  * Update user profile settings
- * Uses Convex mutation
+ * Uses Convex mutations for profile and preferences
  */
 export async function updateUserProfile(
   clerkUserId: string,
@@ -133,12 +133,21 @@ export async function updateUserProfile(
     throw new Error('Failed to get authenticated Convex client')
   }
 
-  // Map service layer fields to Convex field names
-  // Note: Convex expects undefined (not null) for optional fields
-  await client.mutation(api.functions.users.updateProfile, {
-    fullName: updates.full_name ?? undefined,
-    homeCurrency: updates.preferred_currency
-  })
+  // Update profile fields (fullName, homeCurrency)
+  if (updates.full_name !== undefined || updates.preferred_currency !== undefined) {
+    await client.mutation(api.functions.users.updateProfile, {
+      fullName: updates.full_name ?? undefined,
+      homeCurrency: updates.preferred_currency
+    })
+  }
+
+  // Update preferences fields (timezone, language)
+  if (updates.timezone !== undefined || updates.language_preference !== undefined) {
+    await client.mutation(api.functions.users.updatePreferences, {
+      timezone: updates.timezone,
+      language: updates.language_preference
+    })
+  }
 
   // Fetch and return updated profile
   return await getUserProfile(clerkUserId)
@@ -174,7 +183,7 @@ export async function getTeamMembers(
     role_permissions: member.role_permissions || {
       employee: true,
       manager: false,
-      admin: false
+      finance_admin: false
     },
     home_currency: member.home_currency || 'SGD',
     manager_id: member.manager_id,
@@ -231,6 +240,53 @@ export async function getTeamMembers(
   }
 
   console.log('[User Service] Final profiles returned:', enrichedProfiles.length)
+
+  return {
+    users: enrichedProfiles,
+    business_id: businessId
+  }
+}
+
+/**
+ * Get direct reports (employees assigned to current manager)
+ * Uses Convex query that returns only team members where managerId matches caller
+ */
+export async function getDirectReports(
+  clerkUserId: string,
+  businessId: string
+): Promise<{ users: TeamMember[]; business_id: string }> {
+  const { client } = await getAuthenticatedConvex()
+  if (!client) {
+    throw new Error('Failed to get authenticated Convex client')
+  }
+
+  console.log('[User Service] Fetching direct reports for business:', businessId)
+
+  const directReportsData = await client.query(api.functions.memberships.getDirectReports, {
+    businessId
+  })
+
+  console.log('[User Service] Direct reports count:', directReportsData?.length || 0)
+
+  const enrichedProfiles: TeamMember[] = (directReportsData || []).map((member: any) => ({
+    id: member.id,
+    user_id: member.user_id,
+    business_id: member.business_id,
+    full_name: member.full_name,
+    email: member.email,
+    role_permissions: member.role_permissions || {
+      employee: true,
+      manager: false,
+      finance_admin: false
+    },
+    home_currency: member.home_currency || 'SGD',
+    manager_id: member.manager_id,
+    manager_name: null,
+    manager_user_id: null,
+    created_at: member.created_at,
+    updated_at: member.updated_at,
+    clerk_user: null
+  }))
 
   return {
     users: enrichedProfiles,

@@ -28,10 +28,10 @@ export function useUserRole() {
     hasRole: (roleToCheck: UserRole) => role === roleToCheck,
     hasAnyRole: (rolesToCheck: UserRole[]) => rolesToCheck.includes(role),
     hasPermission: (permission: keyof RolePermissions) => permissions?.[permission] ?? false,
-    canApprove: permissions?.manager || permissions?.admin || false,
-    canManageCategories: permissions?.manager || permissions?.admin || false,
-    canViewAllExpenses: permissions?.manager || permissions?.admin || false,
-    canManageUsers: permissions?.admin || false
+    canApprove: permissions?.manager || permissions?.finance_admin || false,
+    canManageCategories: permissions?.manager || permissions?.finance_admin || false,
+    canViewAllExpenses: permissions?.manager || permissions?.finance_admin || false,
+    canManageUsers: permissions?.finance_admin || false
   }
 }
 
@@ -108,7 +108,7 @@ export function useRoleGuard() {
       
       const restrictedPaths = [
         { path: '/manager', role: 'manager' as UserRole },
-        { path: '/admin', role: 'admin' as UserRole }
+        { path: '/admin', role: 'finance_admin' as UserRole }
       ]
       
       const restriction = restrictedPaths.find(r => currentPath.startsWith(r.path))

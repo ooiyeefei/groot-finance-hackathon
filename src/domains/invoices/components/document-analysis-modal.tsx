@@ -859,10 +859,10 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
           </button>
         </div>
         
-        {/* Modal Content - Two Pane Layout */}
-        <div className="flex-1 flex min-h-0">
-          {/* Left Pane - Visual (Scrollable) */}
-          <div className="w-1/2 border-r border-border flex flex-col min-h-0">
+        {/* Modal Content - Two Pane Layout (stacks vertically on mobile) */}
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-y-auto md:overflow-hidden">
+          {/* Left Pane - Visual (Scrollable) - Full width on mobile, half on desktop */}
+          <div className="w-full md:w-1/2 md:border-r border-border flex flex-col shrink-0 md:min-h-0">
             <div className="overflow-y-auto flex-1 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-sm font-medium text-foreground flex items-center">
@@ -1057,8 +1057,8 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
             </div>
           </div>
 
-          {/* Right Pane - Data & Translation */}
-          <div className="w-1/2 flex flex-col min-h-0">
+          {/* Right Pane - Data & Translation - Full width on mobile, half on desktop */}
+          <div className="w-full md:w-1/2 flex flex-col min-h-0">
             <div className="p-6 flex-1 overflow-y-auto">
               <div className="space-y-6">
                 {/* Processing Status & Errors */}

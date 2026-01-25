@@ -1,0 +1,303 @@
+openapi: 3.0.3
+info:
+  title: FinanSEAL AI Streaming API
+  version: 1.0.0
+  description: |
+    SSE-based streaming API for real-time AI assistant responses.
+    Implements token-by-token streaming with tool execution events.
+
+servers:
+  - url: /api/v1
+    description: API v1 base path
+
+paths:
+  /chat/stream:
+    post:
+      summary: Stream AI assistant response
+      description: |
+        Initiates a streaming conversation with the AI assistant.
+        Returns Server-Sent Events (SSE) for real-time token delivery.
+      operationId: streamChat
+      tags:
+        - Chat
+      security:
+        - ClerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatStreamRequest'
+      responses:
+        '200':
+          description: SSE stream initiated
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/StreamEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /chat/conversations/{conversationId}:
+    get:
+      summary: Get conversation history
+      description: Retrieves message history for a conversation
+      operationId: getConversation
+      tags:
+        - Chat
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: before
+          in: query
+          description: Cursor for pagination (message ID)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conversation messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk session JWT
+
+  schemas:
+    ChatStreamRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: User message content
+          maxLength: 10000
+        conversationId:
+          type: string
+          description: Existing conversation ID (optional for new conversation)
+        contextOverrides:
+          type: object
+          description: Optional context injection
+          properties:
+            insightId:
+              type: string
+              description: Action Center insight to include in context
+            entityIds:
+              type: array
+              items:
+                type: string
+              description: Specific entity IDs to focus on
+
+    StreamEvent:
+      oneOf:
+        - $ref: '#/components/schemas/TokenEvent'
+        - $ref: '#/components/schemas/ToolEvent'
+        - $ref: '#/components/schemas/MetadataEvent'
+        - $ref: '#/components/schemas/ErrorEvent'
+        - $ref: '#/components/schemas/DoneEvent'
+
+    TokenEvent:
+      type: object
+      required:
+        - type
+        - content
+      properties:
+        type:
+          type: string
+          enum: [token]
+        content:
+          type: string
+          description: Partial token content
+        messageId:
+          type: string
+          description: Message ID this token belongs to
+
+    ToolEvent:
+      type: object
+      required:
+        - type
+        - tool
+        - status
+      properties:
+        type:
+          type: string
+          enum: [tool]
+        tool:
+          type: string
+          description: Tool name being executed
+        status:
+          type: string
+          enum: [executing, completed, failed]
+        result:
+          type: object
+          description: Tool result (when status is completed)
+        error:
+          type: string
+          description: Error message (when status is failed)
+
+    MetadataEvent:
+      type: object
+      required:
+        - type
+        - metadata
+      properties:
+        type:
+          type: string
+          enum: [metadata]
+        metadata:
+          type: object
+          properties:
+            conversationId:
+              type: string
+            messageId:
+              type: string
+            memoriesRecalled:
+              type: integer
+              description: Number of memories used in context
+            insightsInjected:
+              type: integer
+              description: Number of Action Center insights in context
+
+    ErrorEvent:
+      type: object
+      required:
+        - type
+        - error
+      properties:
+        type:
+          type: string
+          enum: [error]
+        error:
+          type: string
+        code:
+          type: string
+          enum: [rate_limited, context_overflow, tool_error, internal_error]
+
+    DoneEvent:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [done]
+        usage:
+          type: object
+          properties:
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+            totalTokens:
+              type: integer
+
+    ConversationResponse:
+      type: object
+      properties:
+        conversationId:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        hasMore:
+          type: boolean
+        nextCursor:
+          type: string
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        toolCalls:
+          type: array
+          items:
+            type: object
+            properties:
+              tool:
+                type: string
+              input:
+                type: object
+              result:
+                type: object
+        memoriesUsed:
+          type: array
+          items:
+            type: string
+          description: Memory IDs used in generating this response
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Authentication required"
+              code:
+                type: string
+                example: "unauthorized"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+                example: "not_found"
+
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Rate limit exceeded"
+              code:
+                type: string
+                example: "rate_limited"
+              retryAfter:
+                type: integer
+                description: Seconds until rate limit resets

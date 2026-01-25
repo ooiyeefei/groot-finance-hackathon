@@ -201,7 +201,7 @@ function BillingContent() {
             subtitle="Manage your subscription and usage"
           />
 
-          <main className="flex-1 p-6 overflow-auto">
+          <main className="flex-1 p-6 overflow-auto pb-24 sm:pb-6">
             <div className="max-w-7xl mx-auto space-y-6">
               {/* Success/Cancel Messages - Full width banner */}
               {success === 'true' && (
@@ -475,7 +475,7 @@ export default function BillingSettingsPage() {
             <Sidebar />
             <div className="flex-1 flex flex-col">
               <HeaderWithUser title="Billing" subtitle="Manage your subscription and usage" />
-              <main className="flex-1 p-6 overflow-auto">
+              <main className="flex-1 p-6 overflow-auto pb-24 sm:pb-6">
                 <div className="max-w-3xl mx-auto">
                   <Card className="bg-card border-border">
                     <CardContent className="flex items-center justify-center py-12">
