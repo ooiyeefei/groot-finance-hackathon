@@ -97,6 +97,7 @@ export const TRANSACTION_TYPE_VALUES = Object.values(TRANSACTION_TYPES);
 export const MEMBERSHIP_ROLES = {
   OWNER: "owner",
   ADMIN: "admin",
+  FINANCE_ADMIN: "finance_admin",
   MANAGER: "manager",
   EMPLOYEE: "employee",
 } as const;

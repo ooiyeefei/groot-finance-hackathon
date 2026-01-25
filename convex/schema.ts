@@ -609,4 +609,164 @@ export default defineSchema({
     .index("by_type", ["type"])
     .index("by_business", ["businessId"])
     .index("by_user", ["userId"]),
+
+  // ============================================
+  // AI AGENT DOMAIN: Action Center & Memory
+  // ============================================
+
+  // Proactive intelligence insights from background analysis engine
+  // Stores anomalies, compliance gaps, deadlines, cashflow warnings, etc.
+  actionCenterInsights: defineTable({
+    // Target user and business for the insight
+    userId: v.string(),
+    businessId: v.string(),
+
+    // Insight classification
+    category: v.union(
+      v.literal("anomaly"),        // Statistical outlier detection
+      v.literal("compliance"),     // Regulatory gap detection
+      v.literal("deadline"),       // Upcoming filing/payment
+      v.literal("cashflow"),       // Cash flow warning/forecast
+      v.literal("optimization"),   // Cost savings opportunity
+      v.literal("categorization")  // Data quality issue
+    ),
+    priority: v.union(
+      v.literal("critical"),  // Compliance violation, negative cash flow <7 days
+      v.literal("high"),      // Large anomaly >3σ, deadline <14 days
+      v.literal("medium"),    // Moderate anomaly >2σ, deadline <30 days
+      v.literal("low")        // Categorization suggestions, minor optimizations
+    ),
+    status: v.union(
+      v.literal("new"),       // Just detected, not yet viewed
+      v.literal("reviewed"),  // User viewed the insight
+      v.literal("dismissed"), // User dismissed without action
+      v.literal("actioned")   // User took recommended action
+    ),
+
+    // Insight content
+    title: v.string(),              // Short description (max 100 chars)
+    description: v.string(),        // Detailed explanation
+    affectedEntities: v.array(v.string()), // IDs of related transactions/documents
+    recommendedAction: v.string(),  // Suggested next step
+
+    // Timestamps
+    detectedAt: v.number(),         // When insight was generated
+    reviewedAt: v.optional(v.number()),   // When user viewed
+    actionedAt: v.optional(v.number()),   // When user took action
+    dismissedAt: v.optional(v.number()),  // When user dismissed
+    expiresAt: v.optional(v.number()),    // Auto-expire for time-sensitive insights
+
+    // Category-specific metadata (JSONB equivalent)
+    metadata: v.optional(v.any())
+  })
+    .index("by_user_status", ["userId", "status"])
+    .index("by_business_priority", ["businessId", "priority"])
+    .index("by_category", ["category"])
+    .index("by_detected", ["detectedAt"]),
+
+  // Notification delivery tracking for critical insights
+  agentNotifications: defineTable({
+    // Notification recipient
+    userId: v.string(),
+
+    // Reference to the insight being notified
+    insightId: v.id("actionCenterInsights"),
+
+    // Delivery channel
+    channel: v.union(v.literal("web"), v.literal("email")),
+
+    // Delivery status
+    status: v.union(
+      v.literal("pending"),    // Queued for delivery
+      v.literal("delivered"),  // Successfully sent
+      v.literal("read"),       // User clicked/opened
+      v.literal("failed")      // Delivery failed
+    ),
+
+    // Timing
+    scheduledAt: v.number(),              // When to deliver
+    deliveredAt: v.optional(v.number()),  // Actual delivery timestamp
+    readAt: v.optional(v.number()),       // When user clicked/opened
+
+    // Error handling
+    failureReason: v.optional(v.string()), // Error message if failed
+    retryCount: v.number()                 // Number of delivery attempts (max 3)
+  })
+    .index("by_user_status", ["userId", "status"])
+    .index("by_insight", ["insightId"])
+    .index("by_scheduled", ["scheduledAt"]),
+
+  // User-specific AI assistant preferences
+  userPreferences: defineTable({
+    // Unique per user
+    userId: v.string(),
+
+    // Core preferences
+    preferredCurrency: v.string(),  // ISO currency code (default: "MYR")
+    language: v.string(),           // ISO language code (default: "en")
+
+    // Per-category notification preferences
+    notificationSettings: v.object({
+      anomaly: v.object({
+        web: v.boolean(),
+        email: v.boolean(),
+        minPriority: v.string()  // "critical" | "high" | "medium" | "low"
+      }),
+      compliance: v.object({
+        web: v.boolean(),
+        email: v.boolean(),
+        minPriority: v.string()
+      }),
+      deadline: v.object({
+        web: v.boolean(),
+        email: v.boolean(),
+        minPriority: v.string()
+      }),
+      cashflow: v.object({
+        web: v.boolean(),
+        email: v.boolean(),
+        minPriority: v.string()
+      }),
+      optimization: v.object({
+        web: v.boolean(),
+        email: v.boolean(),
+        minPriority: v.string()
+      }),
+      categorization: v.object({
+        web: v.boolean(),
+        email: v.boolean(),
+        minPriority: v.string()
+      })
+    }),
+
+    // User behavior tracking
+    frequentVendors: v.optional(v.array(v.string())),  // Recently/frequently accessed vendor IDs
+
+    // UI customization
+    dashboardLayout: v.optional(v.any()),  // Action Center customization
+
+    // AI assistant behavior preferences
+    aiPersonalization: v.optional(v.object({
+      proactiveLevel: v.union(
+        v.literal("aggressive"),  // AI initiates often
+        v.literal("balanced"),    // Default behavior
+        v.literal("minimal")      // AI mostly responds only
+      ),
+      verbosity: v.union(
+        v.literal("concise"),   // Short responses
+        v.literal("detailed")   // Longer explanations
+      ),
+      expertiseLevel: v.union(
+        v.literal("beginner"),      // Simple explanations
+        v.literal("intermediate"),  // Standard depth
+        v.literal("expert")         // Technical depth
+      ),
+      focusAreas: v.optional(v.array(v.string()))  // e.g., ["compliance", "cashflow"]
+    })),
+
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.number()
+  })
+    .index("by_user", ["userId"]),
 });

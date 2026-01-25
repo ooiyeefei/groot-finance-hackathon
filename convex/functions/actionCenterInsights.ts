@@ -1,0 +1,515 @@
+/**
+ * Action Center Insights Functions - Convex queries and mutations
+ *
+ * CRUD operations for proactive intelligence insights
+ *
+ * These functions handle:
+ * - Listing insights with filtering by status/category/priority
+ * - Getting individual insight details
+ * - Updating insight status (reviewed, dismissed, actioned)
+ * - Getting pending/new insights count
+ * - Generating summary statistics
+ *
+ * Security: Multi-tenant isolation via businessId/userId
+ */
+
+import { v } from "convex/values";
+import { query, mutation, internalMutation } from "../_generated/server";
+import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
+
+// ============================================
+// QUERIES
+// ============================================
+
+/**
+ * List insights with filtering and pagination
+ * Enforces multi-tenant isolation with businessId
+ */
+export const list = query({
+  args: {
+    businessId: v.string(),
+    status: v.optional(v.union(
+      v.literal("new"),
+      v.literal("reviewed"),
+      v.literal("dismissed"),
+      v.literal("actioned")
+    )),
+    category: v.optional(v.union(
+      v.literal("anomaly"),
+      v.literal("compliance"),
+      v.literal("deadline"),
+      v.literal("cashflow"),
+      v.literal("optimization"),
+      v.literal("categorization")
+    )),
+    priority: v.optional(v.union(
+      v.literal("critical"),
+      v.literal("high"),
+      v.literal("medium"),
+      v.literal("low")
+    )),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { insights: [], totalCount: 0 };
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return { insights: [], totalCount: 0 };
+    }
+
+    // Resolve businessId (supports both Convex ID and legacy UUID)
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return { insights: [], totalCount: 0 };
+    }
+
+    // Verify membership
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return { insights: [], totalCount: 0 };
+    }
+
+    const limit = args.limit ?? 50;
+
+    // Query insights for this business using priority index for efficient sorting
+    let insights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q) => q.eq("businessId", business._id.toString()))
+      .collect();
+
+    // Apply filters
+    if (args.status) {
+      insights = insights.filter((i) => i.status === args.status);
+    }
+    if (args.category) {
+      insights = insights.filter((i) => i.category === args.category);
+    }
+    if (args.priority) {
+      insights = insights.filter((i) => i.priority === args.priority);
+    }
+
+    // Filter out expired insights
+    const now = Date.now();
+    insights = insights.filter((i) => !i.expiresAt || i.expiresAt > now);
+
+    // Sort by priority (critical first) then by detected time (newest first)
+    const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    insights.sort((a, b) => {
+      const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return b.detectedAt - a.detectedAt;
+    });
+
+    // Apply limit
+    const paginatedInsights = insights.slice(0, limit);
+
+    return {
+      insights: paginatedInsights,
+      totalCount: insights.length,
+    };
+  },
+});
+
+/**
+ * Get a single insight by ID
+ */
+export const getById = query({
+  args: {
+    insightId: v.id("actionCenterInsights"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return null;
+    }
+
+    const insight = await ctx.db.get(args.insightId);
+    if (!insight) {
+      return null;
+    }
+
+    // Verify user has access to this insight's business
+    const business = await resolveById(ctx.db, "businesses", insight.businessId);
+    if (!business) {
+      return null;
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return null;
+    }
+
+    return insight;
+  },
+});
+
+/**
+ * Get count of pending (new) insights for the user
+ */
+export const getPendingCount = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { count: 0, byCritical: 0, byHigh: 0 };
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return { count: 0, byCritical: 0, byHigh: 0 };
+    }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return { count: 0, byCritical: 0, byHigh: 0 };
+    }
+
+    // Verify membership
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return { count: 0, byCritical: 0, byHigh: 0 };
+    }
+
+    // Query new insights for this business
+    const insights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q) => q.eq("businessId", business._id.toString()))
+      .collect();
+
+    // Filter to new status only
+    const newInsights = insights.filter((i) => i.status === "new");
+
+    // Filter out expired
+    const now = Date.now();
+    const validInsights = newInsights.filter((i) => !i.expiresAt || i.expiresAt > now);
+
+    return {
+      count: validInsights.length,
+      byCritical: validInsights.filter((i) => i.priority === "critical").length,
+      byHigh: validInsights.filter((i) => i.priority === "high").length,
+    };
+  },
+});
+
+/**
+ * Get summary statistics for insights
+ */
+export const getSummary = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return null;
+    }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return null;
+    }
+
+    // Verify membership
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return null;
+    }
+
+    // Get all insights for this business
+    const insights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q) => q.eq("businessId", business._id.toString()))
+      .collect();
+
+    // Filter out expired
+    const now = Date.now();
+    const validInsights = insights.filter((i) => !i.expiresAt || i.expiresAt > now);
+
+    // Calculate statistics
+    const byStatus: Record<string, number> = { new: 0, reviewed: 0, dismissed: 0, actioned: 0 };
+    const byCategory: Record<string, number> = {};
+    const byPriority: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+
+    for (const insight of validInsights) {
+      byStatus[insight.status] = (byStatus[insight.status] || 0) + 1;
+      byCategory[insight.category] = (byCategory[insight.category] || 0) + 1;
+      byPriority[insight.priority] = (byPriority[insight.priority] || 0) + 1;
+    }
+
+    // Calculate actionable rate
+    const totalResolved = byStatus.dismissed + byStatus.actioned;
+    const actionableRate = totalResolved > 0 ? (byStatus.actioned / totalResolved) * 100 : 0;
+
+    return {
+      total: validInsights.length,
+      byStatus,
+      byCategory,
+      byPriority,
+      actionableRate: Math.round(actionableRate),
+    };
+  },
+});
+
+// ============================================
+// MUTATIONS
+// ============================================
+
+/**
+ * Create a new insight (internal use by detection algorithms)
+ */
+export const internalCreate = internalMutation({
+  args: {
+    userId: v.string(),
+    businessId: v.string(),
+    category: v.union(
+      v.literal("anomaly"),
+      v.literal("compliance"),
+      v.literal("deadline"),
+      v.literal("cashflow"),
+      v.literal("optimization"),
+      v.literal("categorization")
+    ),
+    priority: v.union(
+      v.literal("critical"),
+      v.literal("high"),
+      v.literal("medium"),
+      v.literal("low")
+    ),
+    title: v.string(),
+    description: v.string(),
+    affectedEntities: v.array(v.string()),
+    recommendedAction: v.string(),
+    expiresAt: v.optional(v.number()),
+    metadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    // Check for duplicate insights (same category + similar metadata within 24 hours)
+    const recentInsights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", args.userId)
+      )
+      .collect();
+
+    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const duplicateExists = recentInsights.some(
+      (i) =>
+        i.category === args.category &&
+        i.title === args.title &&
+        i.detectedAt > twentyFourHoursAgo
+    );
+
+    if (duplicateExists) {
+      console.log(`[ActionCenterInsights] Skipping duplicate insight: ${args.title}`);
+      return null;
+    }
+
+    const now = Date.now();
+    const insightId = await ctx.db.insert("actionCenterInsights", {
+      userId: args.userId,
+      businessId: args.businessId,
+      category: args.category,
+      priority: args.priority,
+      status: "new",
+      title: args.title,
+      description: args.description,
+      affectedEntities: args.affectedEntities,
+      recommendedAction: args.recommendedAction,
+      detectedAt: now,
+      expiresAt: args.expiresAt,
+      metadata: args.metadata,
+    });
+
+    console.log(`[ActionCenterInsights] Created insight ${insightId}: ${args.title} (${args.priority})`);
+    return insightId;
+  },
+});
+
+/**
+ * Update insight status
+ */
+export const updateStatus = mutation({
+  args: {
+    insightId: v.id("actionCenterInsights"),
+    status: v.union(
+      v.literal("reviewed"),
+      v.literal("dismissed"),
+      v.literal("actioned")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const insight = await ctx.db.get(args.insightId);
+    if (!insight) {
+      throw new Error("Insight not found");
+    }
+
+    // Verify user has access to this insight's business
+    const business = await resolveById(ctx.db, "businesses", insight.businessId);
+    if (!business) {
+      throw new Error("Business not found");
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not authorized to access this business");
+    }
+
+    const now = Date.now();
+    const updateData: Record<string, number | string> = { status: args.status };
+
+    switch (args.status) {
+      case "reviewed":
+        updateData.reviewedAt = now;
+        break;
+      case "dismissed":
+        updateData.dismissedAt = now;
+        break;
+      case "actioned":
+        updateData.actionedAt = now;
+        break;
+    }
+
+    await ctx.db.patch(args.insightId, updateData);
+
+    console.log(`[ActionCenterInsights] Updated insight ${args.insightId} to status: ${args.status}`);
+    return { success: true };
+  },
+});
+
+/**
+ * Batch mark insights as reviewed (for "mark all as read")
+ */
+export const batchMarkReviewed = mutation({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      throw new Error("Business not found");
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not authorized to access this business");
+    }
+
+    // Get all new insights for this business
+    const newInsights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q) => q.eq("businessId", business._id.toString()))
+      .collect();
+
+    const toUpdate = newInsights.filter((i) => i.status === "new");
+
+    const now = Date.now();
+    let updatedCount = 0;
+
+    for (const insight of toUpdate) {
+      await ctx.db.patch(insight._id, {
+        status: "reviewed",
+        reviewedAt: now,
+      });
+      updatedCount++;
+    }
+
+    console.log(`[ActionCenterInsights] Batch marked ${updatedCount} insights as reviewed`);
+    return { updatedCount };
+  },
+});
+
+/**
+ * DEBUG: List all insights without auth (for CLI testing only)
+ */
+export const debugListAll = query({
+  args: {},
+  handler: async (ctx) => {
+    const insights = await ctx.db
+      .query("actionCenterInsights")
+      .collect();
+
+    return {
+      total: insights.length,
+      insights: insights.map(i => ({
+        _id: i._id,
+        title: i.title,
+        category: i.category,
+        priority: i.priority,
+        status: i.status,
+        businessId: i.businessId,
+      })),
+    };
+  },
+});
