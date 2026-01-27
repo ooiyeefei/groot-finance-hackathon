@@ -252,21 +252,36 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     }
   }, [searchParams, highlightProcessed])
 
-  // Handle view parameter to auto-open expense claim edit modal (used by duplicate detection)
+  // Handle view parameter to auto-open expense claim modal (used by duplicate detection)
+  // Opens edit modal for draft claims, view details modal for submitted/approved/etc.
   useEffect(() => {
     const viewId = searchParams.get('view')
 
-    if (viewId && !showEditModal && !loading) {
-      // Open the edit modal for the specified expense claim
-      setEditingClaimId(viewId)
-      setShowEditModal(true)
+    if (viewId && !showEditModal && !showDetailsModal && !loading && dashboardData?.recent_claims) {
+      // Find the expense claim to determine which modal to open
+      const targetClaim = dashboardData.recent_claims.find(claim => claim.id === viewId)
+
+      if (targetClaim) {
+        // Draft claims → edit modal, all others → view details modal
+        if (targetClaim.status === 'draft' || targetClaim.status === 'failed' || targetClaim.status === 'classification_failed') {
+          setEditingClaimId(viewId)
+          setShowEditModal(true)
+        } else {
+          setDetailsClaimId(viewId)
+          setShowDetailsModal(true)
+        }
+      } else {
+        // Claim not found in recent list - try opening details modal as fallback
+        setDetailsClaimId(viewId)
+        setShowDetailsModal(true)
+      }
 
       // Remove view parameter from URL
       const url = new URL(window.location.href)
       url.searchParams.delete('view')
       router.replace(url.pathname + url.search, { scroll: false })
     }
-  }, [searchParams, showEditModal, loading, router])
+  }, [searchParams, showEditModal, showDetailsModal, loading, dashboardData?.recent_claims, router])
 
   // ✅ CONVEX REAL-TIME: No polling needed!
   // Convex WebSocket subscriptions provide instant updates (~50ms latency)
