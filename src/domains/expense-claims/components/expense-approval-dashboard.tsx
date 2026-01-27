@@ -7,7 +7,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2, AlertCircle } from 'lucide-react'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2, AlertCircle, Copy, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -567,6 +567,34 @@ function ReimbursementQueueContent({
 function ManagementReportsContent({ userRole }: { userRole: UserRole }) {
   return (
     <div className="space-y-section-gap">
+      {/* Duplicate Expense Report - Audit Compliance Card */}
+      <Card className="bg-record-layer-1 border-record-border">
+        <CardHeader>
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <Copy className="w-5 h-5" />
+            Duplicate Expense Report
+          </CardTitle>
+          <CardDescription>Review and manage potential duplicate expense claims for audit compliance</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 bg-record-layer-2 rounded-lg">
+            <div className="space-y-1">
+              <p className="text-foreground font-medium">View Duplicate Report</p>
+              <p className="text-muted-foreground text-sm">
+                Analyze duplicate matches, dismiss false positives, or confirm duplicates
+              </p>
+            </div>
+            <a
+              href="/expense-claims/duplicate-report"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open Report
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
           <CardTitle className="text-foreground flex items-center gap-2">

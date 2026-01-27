@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import DuplicateReportTable, { type DuplicateMatch } from './duplicate-report-table'
+import DuplicateComparisonPanel from './duplicate-comparison-panel'
 import { formatNumber } from '@/lib/utils/format-number'
 
 // Summary statistics interface
@@ -56,6 +57,10 @@ export default function DuplicateReportPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedMatches, setSelectedMatches] = useState<Set<string>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+
+  // State for comparison panel modal
+  const [selectedMatch, setSelectedMatch] = useState<DuplicateMatch | null>(null)
+  const [comparisonPanelLoading, setComparisonPanelLoading] = useState(false)
 
   // Fetch duplicate report data
   const fetchReport = useCallback(async () => {
@@ -157,10 +162,69 @@ export default function DuplicateReportPage() {
     URL.revokeObjectURL(url)
   }
 
-  // Handle view match (placeholder for future modal)
+  // Handle view match - opens comparison panel modal
   const handleViewMatch = (match: DuplicateMatch) => {
-    // TODO: Open detail modal or navigate to comparison view
-    console.log('[Duplicate Report] View match:', match._id)
+    setSelectedMatch(match)
+  }
+
+  // Handle dismiss duplicate from comparison panel
+  const handleDismissDuplicate = async (matchId: string, reason: string) => {
+    if (!selectedMatch?.sourceClaim) return
+
+    setComparisonPanelLoading(true)
+    try {
+      const response = await fetch(
+        `/api/v1/expense-claims/${selectedMatch.sourceClaim._id}/dismiss-duplicate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matchId, reason }),
+        }
+      )
+
+      const result = await response.json()
+      if (result.success) {
+        setSelectedMatch(null)
+        fetchReport() // Refresh data
+      } else {
+        setError(result.error || 'Failed to dismiss duplicate')
+      }
+    } catch (err) {
+      console.error('[Duplicate Report] Dismiss error:', err)
+      setError('Network error while dismissing duplicate')
+    } finally {
+      setComparisonPanelLoading(false)
+    }
+  }
+
+  // Handle confirm duplicate from comparison panel
+  const handleConfirmDuplicate = async (matchId: string) => {
+    if (!selectedMatch?.sourceClaim) return
+
+    setComparisonPanelLoading(true)
+    try {
+      const response = await fetch(
+        `/api/v1/expense-claims/${selectedMatch.sourceClaim._id}/confirm-duplicate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matchId }),
+        }
+      )
+
+      const result = await response.json()
+      if (result.success) {
+        setSelectedMatch(null)
+        fetchReport() // Refresh data
+      } else {
+        setError(result.error || 'Failed to confirm duplicate')
+      }
+    } catch (err) {
+      console.error('[Duplicate Report] Confirm error:', err)
+      setError('Network error while confirming duplicate')
+    } finally {
+      setComparisonPanelLoading(false)
+    }
   }
 
   // Handle selection toggle
@@ -414,6 +478,31 @@ export default function DuplicateReportPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Comparison Panel Modal */}
+      {selectedMatch && selectedMatch.sourceClaim && selectedMatch.matchedClaim && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <DuplicateComparisonPanel
+              match={{
+                _id: selectedMatch._id,
+                matchTier: selectedMatch.matchTier,
+                matchedFields: selectedMatch.matchedFields,
+                confidenceScore: selectedMatch.confidenceScore,
+                isCrossUser: selectedMatch.isCrossUser,
+                status: selectedMatch.status,
+                overrideReason: selectedMatch.overrideReason,
+              }}
+              sourceClaim={selectedMatch.sourceClaim}
+              matchedClaim={selectedMatch.matchedClaim}
+              onDismiss={handleDismissDuplicate}
+              onConfirm={handleConfirmDuplicate}
+              onClose={() => setSelectedMatch(null)}
+              isLoading={comparisonPanelLoading}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
