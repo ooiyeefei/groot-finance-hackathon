@@ -7,6 +7,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { ArrowLeft, Save, Send, Loader2, AlertCircle, Upload, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -49,6 +50,10 @@ export default function CreateExpensePageNew({
   pageDescription = 'Fill out the expense details below',
   hideHeader = false
 }: CreateExpensePageNewProps) {
+
+  // Get current pathname to extract locale for navigation
+  const pathname = usePathname()
+  const locale = pathname?.split('/')[1] || 'en'
 
   // Main business logic hook with create mode
   const {
@@ -574,8 +579,8 @@ export default function CreateExpensePageNew({
         duplicates={duplicateCheckResult?.matches || []}
         highestTier={duplicateCheckResult?.highestTier || null}
         onViewExpense={(claimId) => {
-          // Open the matched expense in a new tab for side-by-side comparison
-          window.open(`/expense-claims?view=${claimId}`, '_blank')
+          // Navigate to the matched expense in same window
+          window.location.href = `/${locale}/expense-claims?view=${claimId}`
         }}
       />
     </div>

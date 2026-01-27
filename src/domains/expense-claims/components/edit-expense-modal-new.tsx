@@ -20,6 +20,7 @@ import LineItemTable from './line-item-table'
 import DuplicateWarningModal from './duplicate-warning-modal'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import { useState, useCallback, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { formatBusinessDate } from '@/lib/utils'
 import type { DuplicateMatchPreview, DuplicateOverride, MatchTier } from '@/domains/expense-claims/types/duplicate-detection'
 
@@ -41,6 +42,10 @@ export default function EditExpenseModalNew({
   onReprocess
 }: EditExpenseModalNewProps) {
   console.log('EditExpenseModalNew render called - isOpen:', isOpen, 'expenseClaimId:', expenseClaimId)
+
+  // Get current pathname to extract locale for navigation
+  const pathname = usePathname()
+  const locale = pathname?.split('/')[1] || 'en'
 
   // State for delete confirmation dialog
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -329,9 +334,9 @@ export default function EditExpenseModalNew({
   }, [formData, expenseClaimId])
 
   // Handle duplicate modal close (cancel submission)
+  // NOTE: Don't clear duplicateMatches here - the warning banner should persist
   const handleDuplicateClose = useCallback(() => {
     setShowDuplicateModal(false)
-    setDuplicateMatches([])
   }, [])
 
   // Handle duplicate modal confirm (proceed with submission)
@@ -732,8 +737,11 @@ export default function EditExpenseModalNew({
         duplicates={duplicateMatches}
         highestTier={duplicateHighestTier}
         onViewExpense={(claimId) => {
-          // Open the matched expense in a new tab for side-by-side comparison
-          window.open(`/expense-claims?view=${claimId}`, '_blank')
+          // Navigate to the matched expense in same window
+          // Close the modal first, then navigate
+          setShowDuplicateModal(false)
+          onClose()
+          window.location.href = `/${locale}/expense-claims?view=${claimId}`
         }}
       />
     </div>,

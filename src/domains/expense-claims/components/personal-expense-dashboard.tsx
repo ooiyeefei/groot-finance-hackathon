@@ -252,6 +252,22 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     }
   }, [searchParams, highlightProcessed])
 
+  // Handle view parameter to auto-open expense claim edit modal (used by duplicate detection)
+  useEffect(() => {
+    const viewId = searchParams.get('view')
+
+    if (viewId && !showEditModal && !loading) {
+      // Open the edit modal for the specified expense claim
+      setEditingClaimId(viewId)
+      setShowEditModal(true)
+
+      // Remove view parameter from URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete('view')
+      router.replace(url.pathname + url.search, { scroll: false })
+    }
+  }, [searchParams, showEditModal, loading, router])
+
   // ✅ CONVEX REAL-TIME: No polling needed!
   // Convex WebSocket subscriptions provide instant updates (~50ms latency)
   // when Trigger.dev calls internalUpdateStatus/internalUpdateExtraction
