@@ -578,6 +578,15 @@ export default function CreateExpensePageNew({
         onProceed={handleDuplicateProceed}
         duplicates={duplicateCheckResult?.matches || []}
         highestTier={duplicateCheckResult?.highestTier || null}
+        currentExpense={{
+          claimId: undefined, // New expense, not saved yet
+          vendorName: formData.vendor_name,
+          transactionDate: formData.transaction_date,
+          totalAmount: formData.original_amount,
+          currency: formData.original_currency,
+          status: 'new',
+          referenceNumber: formData.reference_number
+        }}
         onViewExpense={(claimId) => {
           // Navigate to the matched expense in same window
           window.location.href = `/${locale}/expense-claims?view=${claimId}`

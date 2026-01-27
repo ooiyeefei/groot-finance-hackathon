@@ -736,6 +736,15 @@ export default function EditExpenseModalNew({
         onProceed={handleDuplicateConfirm}
         duplicates={duplicateMatches}
         highestTier={duplicateHighestTier}
+        currentExpense={{
+          claimId: expenseClaimId,
+          vendorName: formData.vendor_name,
+          transactionDate: formData.transaction_date,
+          totalAmount: formData.original_amount,
+          currency: formData.original_currency,
+          status: claimStatus || 'draft',
+          referenceNumber: formData.reference_number
+        }}
         onViewExpense={(claimId) => {
           // Navigate to the matched expense in same window
           // Close the modal first, then navigate

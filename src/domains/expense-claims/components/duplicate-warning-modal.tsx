@@ -25,6 +25,17 @@ import type {
   MatchTier
 } from '@/domains/expense-claims/types/duplicate-detection'
 
+// Current expense info for comparison display
+interface CurrentExpenseInfo {
+  claimId?: string
+  vendorName: string
+  transactionDate: string
+  totalAmount: number
+  currency: string
+  status: string
+  referenceNumber?: string
+}
+
 interface DuplicateWarningModalProps {
   isOpen: boolean
   onClose: () => void
@@ -32,6 +43,7 @@ interface DuplicateWarningModalProps {
   duplicates: DuplicateMatchPreview[]
   highestTier: MatchTier | null
   onViewExpense?: (claimId: string) => void
+  currentExpense?: CurrentExpenseInfo
 }
 
 /**
@@ -63,7 +75,8 @@ export default function DuplicateWarningModal({
   onProceed,
   duplicates,
   highestTier,
-  onViewExpense
+  onViewExpense,
+  currentExpense
 }: DuplicateWarningModalProps) {
   // Local state
   const [justificationReason, setJustificationReason] = useState('')
@@ -154,10 +167,65 @@ export default function DuplicateWarningModal({
             </Alert>
           )}
 
+          {/* Current expense card */}
+          {currentExpense && (
+            <div className="space-y-3">
+              <Label className="text-foreground font-medium">
+                Current Expense (Being Edited)
+              </Label>
+              <div className="p-4 rounded-lg border-2 border-primary bg-primary/5">
+                {/* Header row with Current tag */}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="default" size="sm" className="bg-primary text-primary-foreground">
+                      ★ Current
+                    </Badge>
+                    <span className="text-xs text-muted-foreground capitalize">
+                      {currentExpense.status}
+                    </span>
+                  </div>
+                  {currentExpense.claimId && (
+                    <span className="text-xs text-muted-foreground font-mono">
+                      ID: {currentExpense.claimId.slice(0, 8)}...
+                    </span>
+                  )}
+                </div>
+
+                {/* Expense details */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Reference:</span>
+                    <span className="ml-2 text-foreground font-medium">
+                      {currentExpense.referenceNumber || '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Vendor:</span>
+                    <span className="ml-2 text-foreground">
+                      {currentExpense.vendorName}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Date:</span>
+                    <span className="ml-2 text-foreground">
+                      {formatBusinessDate(currentExpense.transactionDate)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Amount:</span>
+                    <span className="ml-2 text-foreground font-medium">
+                      {formatCurrency(currentExpense.totalAmount, currentExpense.currency)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Duplicate matches list */}
           <div className="space-y-3">
             <Label className="text-foreground font-medium">
-              Matching Expenses
+              Matching Expenses (Potential Duplicates)
             </Label>
             <div className="space-y-3">
               {duplicates.map((duplicate, index) => {
@@ -196,7 +264,10 @@ export default function DuplicateWarningModal({
                           {Math.round(duplicate.confidenceScore * 100)}% confidence
                         </span>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground font-mono">
+                          ID: {duplicate.matchedClaimId.slice(0, 8)}...
+                        </span>
                         {onViewExpense && (
                           <span className="text-xs text-primary flex items-center gap-1">
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -206,10 +277,10 @@ export default function DuplicateWarningModal({
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            navigator.clipboard.writeText(duplicate.matchedClaimRef)
+                            navigator.clipboard.writeText(duplicate.matchedClaimId)
                           }}
                           className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                          title="Copy reference"
+                          title="Copy expense ID"
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
