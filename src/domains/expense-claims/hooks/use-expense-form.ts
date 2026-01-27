@@ -1055,11 +1055,13 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       totalAmount: formData.original_amount,
       currency: formData.original_currency,
       referenceNumber: formData.reference_number || undefined,
+      // In edit mode, exclude the current claim from duplicate results
+      excludeClaimId: mode === 'edit' ? expenseClaimId : undefined,
     })
 
     setDuplicateCheckResult(result)
     return result
-  }, [formData.vendor_name, formData.transaction_date, formData.original_amount, formData.original_currency, formData.reference_number, checkDuplicates])
+  }, [formData.vendor_name, formData.transaction_date, formData.original_amount, formData.original_currency, formData.reference_number, checkDuplicates, mode, expenseClaimId])
 
   return {
     // Form state

@@ -72,6 +72,7 @@ export interface CheckDuplicatesRequest {
   transactionDate: string  // YYYY-MM-DD
   totalAmount: number
   currency: string
+  excludeClaimId?: string  // Exclude this claim from results (for edit mode)
 }
 
 // Response from duplicate check API

@@ -115,18 +115,21 @@ export async function POST(request: NextRequest) {
     console.log(`[Check Duplicates API] Found ${candidates.length} candidates to check`)
 
     // 6. Map Convex candidates to the expected interface (undefined -> null)
-    const mappedCandidates = candidates.map((c) => ({
-      _id: c._id as string,
-      userId: c.userId as string,
-      vendorName: c.vendorName ?? null,
-      transactionDate: c.transactionDate ?? null,
-      totalAmount: c.totalAmount ?? null,
-      currency: c.currency ?? null,
-      referenceNumber: c.referenceNumber ?? null,
-      status: c.status,
-      _creationTime: c._creationTime,
-      submittedByName: c.submittedByName,
-    }))
+    // Also filter out the excludeClaimId if provided (for edit mode - don't match self)
+    const mappedCandidates = candidates
+      .filter((c) => !body.excludeClaimId || c._id !== body.excludeClaimId)
+      .map((c) => ({
+        _id: c._id as string,
+        userId: c.userId as string,
+        vendorName: c.vendorName ?? null,
+        transactionDate: c.transactionDate ?? null,
+        totalAmount: c.totalAmount ?? null,
+        currency: c.currency ?? null,
+        referenceNumber: c.referenceNumber ?? null,
+        status: c.status,
+        _creationTime: c._creationTime,
+        submittedByName: c.submittedByName,
+      }))
 
     // 7. Run the duplicate detection algorithm
     const result = checkForDuplicates({
