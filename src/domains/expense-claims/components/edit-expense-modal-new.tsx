@@ -115,7 +115,13 @@ export default function EditExpenseModalNew({
     handleAcceptSuggestion,
     handleRejectSuggestion,
     handleAcceptAllSuggestions,
-    handleRejectAllSuggestions
+    handleRejectAllSuggestions,
+
+    // Duplicate detection
+    duplicateCheckResult,
+    setDuplicateCheckResult,
+    performDuplicateCheck,
+    isCheckingDuplicates
 
   } = useExpenseForm({
     mode: 'edit',
@@ -156,6 +162,36 @@ export default function EditExpenseModalNew({
       }
     }
   }, [formData.line_items]) // Removed setLineItems from dependencies to avoid circular updates
+
+  // Automatic duplicate detection when form data loads
+  // This shows duplicate warnings on drafts immediately, not just at submit time
+  useEffect(() => {
+    // Only check for duplicates when form data is loaded and modal is open
+    if (!isOpen || loading) return
+    // Only check if we have the required fields
+    if (!formData.vendor_name || !formData.transaction_date || !formData.original_amount) return
+    // Only check if we haven't already checked for these values
+    if (duplicateCheckResult) return
+
+    const checkDuplicatesOnLoad = async () => {
+      console.log('[EditExpenseModal] Auto-checking for duplicates on load')
+      setCheckingDuplicates(true)
+      try {
+        const result = await performDuplicateCheck()
+        if (result?.hasDuplicates && result.matches) {
+          // Use matches directly - they're already in DuplicateMatchPreview format
+          setDuplicateMatches(result.matches)
+          setDuplicateHighestTier(result.highestTier || null)
+        }
+      } catch (err) {
+        console.error('[EditExpenseModal] Duplicate check error:', err)
+      } finally {
+        setCheckingDuplicates(false)
+      }
+    }
+
+    checkDuplicatesOnLoad()
+  }, [isOpen, loading, formData.vendor_name, formData.transaction_date, formData.original_amount, duplicateCheckResult, performDuplicateCheck])
 
   // Update form data when line items change (but only when needed for submission)
   const updateFormDataLineItems = useCallback(() => {
@@ -473,6 +509,24 @@ export default function EditExpenseModalNew({
                     </div>
                   </div>
                 </div>
+
+                {/* Duplicate Warning Banner - Shows when duplicates detected on load */}
+                {duplicateMatches.length > 0 && (
+                  <Alert className="mx-4 mt-3 bg-red-50 border-red-500 dark:bg-red-900/20">
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                    <AlertDescription className="text-red-700 dark:text-red-400">
+                      <strong>⚠️ Potential Duplicate Detected!</strong>{' '}
+                      This expense matches {duplicateMatches.length} existing claim{duplicateMatches.length > 1 ? 's' : ''}
+                      ({duplicateHighestTier === 'exact' ? 'Exact match' : duplicateHighestTier === 'strong' ? 'Same vendor/date/amount' : 'Similar expense'}).
+                      <button
+                        className="ml-2 underline text-red-800 hover:text-red-900 dark:text-red-300"
+                        onClick={() => setShowDuplicateModal(true)}
+                      >
+                        View matches →
+                      </button>
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 {/* Bottom Section - Stacked on mobile, 40/60 Split on desktop */}
                 <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
