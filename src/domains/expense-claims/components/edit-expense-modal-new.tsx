@@ -731,6 +731,10 @@ export default function EditExpenseModalNew({
         onProceed={handleDuplicateConfirm}
         duplicates={duplicateMatches}
         highestTier={duplicateHighestTier}
+        onViewExpense={(claimId) => {
+          // Open the matched expense in a new tab for side-by-side comparison
+          window.open(`/expense-claims?view=${claimId}`, '_blank')
+        }}
       />
     </div>,
     document.body

@@ -10,7 +10,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, AlertTriangle, Users, Copy } from 'lucide-react'
+import { X, AlertTriangle, Users, Copy, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -31,6 +31,7 @@ interface DuplicateWarningModalProps {
   onProceed: (override: DuplicateOverride) => void
   duplicates: DuplicateMatchPreview[]
   highestTier: MatchTier | null
+  onViewExpense?: (claimId: string) => void
 }
 
 /**
@@ -61,7 +62,8 @@ export default function DuplicateWarningModal({
   onClose,
   onProceed,
   duplicates,
-  highestTier
+  highestTier,
+  onViewExpense
 }: DuplicateWarningModalProps) {
   // Local state
   const [justificationReason, setJustificationReason] = useState('')
@@ -163,7 +165,20 @@ export default function DuplicateWarningModal({
                 return (
                   <div
                     key={duplicate.matchedClaimId}
-                    className="p-4 rounded-lg border border-border bg-muted/50"
+                    className={`p-4 rounded-lg border border-border bg-muted/50 ${
+                      onViewExpense
+                        ? 'cursor-pointer hover:bg-muted hover:border-primary/50 transition-all'
+                        : ''
+                    }`}
+                    onClick={() => onViewExpense?.(duplicate.matchedClaimId)}
+                    role={onViewExpense ? 'button' : undefined}
+                    tabIndex={onViewExpense ? 0 : undefined}
+                    onKeyDown={(e) => {
+                      if (onViewExpense && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault()
+                        onViewExpense(duplicate.matchedClaimId)
+                      }
+                    }}
                   >
                     {/* Header row with badges */}
                     <div className="flex items-start justify-between gap-2 mb-3">
@@ -181,13 +196,24 @@ export default function DuplicateWarningModal({
                           {Math.round(duplicate.confidenceScore * 100)}% confidence
                         </span>
                       </div>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(duplicate.matchedClaimRef)}
-                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                        title="Copy reference"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {onViewExpense && (
+                          <span className="text-xs text-primary flex items-center gap-1">
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            View
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigator.clipboard.writeText(duplicate.matchedClaimRef)
+                          }}
+                          className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                          title="Copy reference"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Expense details */}

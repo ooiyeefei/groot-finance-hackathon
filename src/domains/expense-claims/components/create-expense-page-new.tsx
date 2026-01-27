@@ -573,6 +573,10 @@ export default function CreateExpensePageNew({
         onProceed={handleDuplicateProceed}
         duplicates={duplicateCheckResult?.matches || []}
         highestTier={duplicateCheckResult?.highestTier || null}
+        onViewExpense={(claimId) => {
+          // Open the matched expense in a new tab for side-by-side comparison
+          window.open(`/expense-claims?view=${claimId}`, '_blank')
+        }}
       />
     </div>
   )

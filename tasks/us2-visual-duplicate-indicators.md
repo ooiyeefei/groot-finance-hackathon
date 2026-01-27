@@ -81,3 +81,9 @@ All User Story 2 tasks are now complete:
 - Fixed `duplicateStatus` not being mapped in `use-expense-claims-realtime.tsx` hook
 - Added duplicate review functionality to `unified-expense-details-modal.tsx` for managers
 - Wired up "Review Duplicates" button with DuplicateComparisonPanel modal
+
+### Enhancement (2025-01-27)
+- **Auto duplicate check on edit modal load**: `edit-expense-modal-new.tsx` now automatically checks for duplicates when form data loads
+- Displays red warning banner with match count and tier (exact/strong/fuzzy) when duplicates detected
+- Includes "View matches" link to open duplicate comparison modal
+- This addresses the user feedback that duplicate indicators should show on drafts "anytime", not just at submit time
