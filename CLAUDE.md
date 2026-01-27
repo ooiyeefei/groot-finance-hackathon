@@ -1,427 +1,96 @@
-# Rules
+# Coding Rules & Guidelines
 
-1. First think through the problem, read the codebase for relevant files, and write a plan to tasks/todo.md.
-2. The plan should have a list of todo items that you can check off as you complete them.
-3. Before you begin working, check in with me and I will verify the plan.
-4. Then, begin working on the todo items, marking them as complete as you go.
-5. Please every step of the way just give me a high level explanation of what changes you made.
-6. Make every task and code change you do as simple as possible. We want to avoid making any massive or complex changes. Every change should impact as little code as possible. Everything is about simplicity.
-7. Finally, add a review section to the todo.md file with a summary of the changes you made and any other relevant information.
+Instructions for AI coding agents working on FinanSEAL.
 
-## Project Overview
+## Workflow Rules
 
-FinanSEAL is a multimodal financial co-pilot web application designed for Southeast Asian SMEs. It's a Next.js-based platform that integrates AI models for intelligent document processing and conversational financial guidance.
+1. **Plan First**: Think through the problem, read relevant files, write plan to `tasks/todo.md`
+2. **Get Approval**: Check in before implementing
+3. **Track Progress**: Mark todo items complete as you go
+4. **Explain Changes**: Give high-level explanation of each change
+5. **Keep It Simple**: Minimal changes, avoid complexity
+6. **Document Results**: Add review section to `tasks/todo.md` when done
 
-## Architecture
+## Project Context
 
-- **Frontend**: Next.js 15.4.6 with App Router, TypeScript, Tailwind CSS
-- **Backend**: Next.js API routes with serverless functions (API v1 versioned)
-- **Database**: Convex (real-time, reactive database)
-- **File Storage**: AWS S3 (finanseal-bucket)
-- **Authentication**: Clerk for user management
-- **Vector Database**: Qdrant Cloud for embedding storage
-- **Background Jobs**: AWS Lambda with Python 3.11 and DSPy
-- **Document Processing**: PDF-to-image conversion with Gemini AI extraction
-- **Currency APIs**: Real-time exchange rate conversion with caching
+**FinanSEAL**: Financial co-pilot for Southeast Asian SMEs
+**Stack**: Next.js 15.4.6 + Convex + AWS Lambda + Gemini AI
+**Docs**: See `docs/README.md` for full documentation
 
-### Domain-Driven Architecture
-
+### Domain Structure
 ```
 src/domains/
-├── account-management/     # Multi-tenancy, business management, team invitations
-├── analytics/              # Financial dashboards, real-time metrics, forecasting
-├── applications/           # Business application workflows, document processing
-├── audit/                  # System audit logs, compliance tracking
-├── chat/                   # AI assistant, conversation management, citations
-├── expense-claims/         # Employee expense submission, manager approval workflows
-├── invoices/              # Document processing, OCR extraction, transaction creation
-├── system/                # System configuration, knowledge base, webhooks
-├── tasks/                 # Background job monitoring, task status tracking
-├── users/                 # User profiles, team management, role assignment
-└── utilities/             # Shared utilities, currency conversion, translation
+├── expense-claims/    # Expense submission & approval
+├── invoices/         # Document processing & OCR
+├── chat/             # AI assistant
+├── analytics/        # Dashboards & metrics
+├── users/            # Team management
+└── ...               # See docs/architecture/overview.md
 ```
 
-**Domain Principles:**
-- **Self-contained**: Each domain manages its own components, hooks, services
-- **API Isolation**: Domain-specific API routes under `/api/v1/{domain}/`
-- **Shared Dependencies**: Common utilities in `/src/lib/` for cross-domain needs
-- **Type Safety**: Domain-specific types and interfaces
+## Mandatory Rules
 
-## Key Features
-
-1. **Multi-Modal Document Processing**: Upload invoices/receipts (PDF/images) and extract structured financial data
-2. **Transaction Management**: Create transactions from OCR data with line items, categorization, and multi-currency support
-3. **Document-Transaction Linking**: Track which documents generated which transactions to prevent duplicates
-4. **Interactive Document Annotations**: Visual bounding boxes showing OCR extraction areas
-5. **Cross-Border Cash Flow**: Multi-currency transaction tracking with real-time conversion
-
-## External Services
-
-- **Convex**: Real-time database with automatic sync
-- **AWS S3**: Document storage (finanseal-bucket)
-- **AWS Lambda**: Document processing with Python 3.11 + DSPy + Gemini
-- **Clerk**: Authentication and user session management
-- **Qdrant Cloud**: Vector embeddings for semantic search
-- **Exchange Rate APIs**: Real-time currency conversion
-- **Stripe**: Subscription billing and plan management
-
-## Subscription Plans & Features
-
-FinanSEAL uses a tiered subscription model with features controlled via Stripe product metadata.
-
-### Plan Overview
-
-| Plan | In Stripe? | Pricing | Notes |
-|------|------------|---------|-------|
-| **Trial** | No | Free (14 days) | Hardcoded in `TRIAL_PLAN` constant |
-| **Starter** | Yes | MYR 99/month | Fetched from Stripe product metadata |
-| **Pro** | Yes | MYR 299/month | Fetched from Stripe product metadata |
-| **Enterprise** | No | Custom | Hardcoded in `FALLBACK_PLANS.enterprise` |
-
-### Stripe Product Metadata Fields
-
-**Required metadata for Starter/Pro products:**
-```
-plan_key: 'starter' | 'pro'
-ocr_limit: number (e.g., '30', '100')
-team_limit: number (e.g., '5', '13')
-```
-
-**Feature metadata (boolean 'true'/'false'):**
-| Metadata Key | Display Name | Starter | Pro | Enterprise |
-|--------------|--------------|---------|-----|------------|
-| `feature_custom_categories` | Custom business categories | ✓ | ✓ | ✓ |
-| `feature_ai_categorization` | AI auto categorization | ✓ | ✓ | ✓ |
-| `feature_approval_workflow` | Advanced approval workflow | ✓ | ✓ | ✓ |
-| `feature_multi_currency` | Multi-currency tracking | ✓ | ✓ | ✓ |
-| `feature_rbac` | Role-based access control | ✓ | ✓ | ✓ |
-| `feature_ai_chat` | AI chat assistant | | ✓ | ✓ |
-| `feature_multi_tenancy` | Multi-tenancy support | | ✓ | ✓ |
-| `feature_vendor_management` | Vendor management | | | ✓ |
-| `feature_dedicated_manager` | Dedicated account manager | | | ✓ |
-| `feature_custom_integrations` | Custom integrations | | | ✓ |
-| `feature_sla_guarantee` | SLA guarantee | | | ✓ |
-| `feature_on_premise` | On-premise option | | | ✓ |
-| `feature_unlimited_ocr` | Unlimited OCR scans | | | ✓ |
-
-**Auto-generated features (from limits):**
-- `ocr_limit: 30` → "30 OCR scans/month"
-- `team_limit: 5` → "Up to 5 team members"
-- `ocr_limit: -1` → "Unlimited OCR scans" (if `feature_unlimited_ocr` not set)
-- `team_limit: -1` → "Unlimited team members"
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `src/lib/stripe/catalog.ts` | Plan config, feature mapping, Stripe fetching |
-| `src/lib/stripe/plans.ts` | Public API for plan data |
-| `src/app/api/v1/billing/subscription/route.ts` | Subscription API endpoint |
-| `src/domains/billing/hooks/use-subscription.ts` | Client hook for subscription data |
-| `src/app/[locale]/settings/billing/page.tsx` | Billing settings UI |
-
-### How Plan Features Are Resolved
-
-```
-1. Start with fallback defaults (TRIAL_PLAN, FALLBACK_PLANS)
-2. Fetch products from Stripe
-3. Parse metadata for each product with plan_key
-4. Build features array from feature_* metadata fields
-5. Override fallback with Stripe data
-6. Return to client via /api/v1/billing/subscription
-```
-
-### Adding New Features
-
-1. Add to `FEATURE_METADATA_MAP` in `catalog.ts`
-2. Add to relevant `FALLBACK_PLANS` features array
-3. Set `feature_xxx: true` in Stripe product metadata
-4. Update this documentation
-
-## AI Model Usage (Gemini 3 Flash)
-
-**CRITICAL: Always use Gemini 3 Flash Preview for all document processing and AI extraction tasks.**
-
-### Model IDs
-
-| Context | Model ID | Notes |
-|---------|----------|-------|
-| **Python (DSPy)** | `gemini/gemini-3-flash-preview` | Used in Lambda document processing |
-| **TypeScript (Direct API)** | `gemini-3-flash-preview` | Used in gemini-ocr-service.ts |
-
-### Why Gemini 3 Flash?
-- **67% faster inference** compared to previous Gemini models
-- **Better multimodal understanding** for receipt/invoice extraction
-- **Cost-effective** for high-volume document processing
-
-### Key Files Using Gemini 3
-
-**Lambda Python (Production Document Processing):**
-- `src/lambda/document-processor-python/steps/extract_invoice.py` - Invoice extraction
-- `src/lambda/document-processor-python/steps/extract_receipt.py` - Receipt extraction
-- `src/lambda/document-processor-python/steps/validate.py` - Document validation
-
-**TypeScript Services:**
-- `src/lib/services/gemini-ocr-service.ts` - Direct Gemini API integration
-- `src/lib/ai/config/ai-config.ts` - AI configuration constants
-
-### Model Configuration Examples
-
-**Python (DSPy):**
-```python
-import dspy
-
-lm = dspy.LM(model="gemini/gemini-3-flash-preview", api_key=api_key)
-dspy.configure(lm=lm)
-```
-
-**TypeScript:**
-```typescript
-this.config = {
-  model: 'gemini-3-flash-preview',
-  timeoutMs: 60000,
-  temperature: 0.1,
-  // ...
-}
-```
-
-### Important Notes
-- **Never downgrade** to older Gemini models (e.g., gemini-1.5-flash-latest)
-- **Environment variable**: `GEMINI_API_KEY` must be set in all environments
-- **Timeout**: Use 60+ seconds for complex documents
-- **Temperature**: Use 0.1 for consistent extraction results
-
-## AWS Lambda Document Processing
-
-### Architecture
-```
-Vercel API → AWS OIDC Auth → Lambda Function (Python 3.11)
-                                    │
-                                    ├── Step 1: convert-pdf (Poppler in Layer)
-                                    ├── Step 2: validate-document (Gemini)
-                                    ├── Step 3: extract-data (DSPy + Gemini)
-                                    └── Step 4: update-convex (HTTP API)
-```
-
-### Key Files
-- `src/lambda/document-processor-python/`: Python Lambda handler and step implementations
-- `infra/`: AWS CDK infrastructure (Lambda, Layer, IAM, CloudWatch)
-- `src/lambda/layers/python-document-processor/`: Docker-based Python Layer
-
-### Lambda Resources
-- **Function ARN**: `arn:aws:lambda:us-west-2:837224017779:function:finanseal-document-processor`
-- **Memory**: 1024 MB | **Timeout**: 15 minutes | **Runtime**: Python 3.11
-
-### Environment Variables
-| Variable | Description |
-|----------|-------------|
-| `NEXT_PUBLIC_CONVEX_URL` | Convex deployment URL |
-| `GEMINI_API_KEY` | Google Gemini API key for DSPy |
-| `S3_BUCKET_NAME` | S3 bucket (finanseal-bucket) |
-| `SENTRY_DSN` | Sentry error tracking |
-
-### Invocation Pattern
-- **API Routes**: Use `@aws-sdk/client-lambda` with OIDC authentication
-- **Auth**: Vercel OIDC provider → AWS IAM Role assumption
-- **Response**: Fire-and-forget async invocation (202 Accepted)
-
-### Two-Phase Extraction Pattern
-
-**CRITICAL: Both invoices and expense claims use two-phase extraction for optimal UX.**
-
-This pattern provides faster perceived performance by splitting document extraction into two sequential phases with real-time Convex updates between them:
-
-```
-Phase 1 (~3-4s): Core fields extraction
-    ↓ Convex update → Frontend renders immediately
-Phase 2 (~3-4s): Line items extraction
-    ↓ Convex real-time update → Frontend updates via subscription
-```
-
-**Why Two-Phase?**
-- **Faster perceived performance**: Users see results in ~3-4s instead of ~7s
-- **Progressive UI rendering**: Core data displays first, line items load via skeleton UI
-- **No data quality sacrifice**: Both phases use the same Gemini model
-
-**`lineItemsStatus` State Machine:**
-```
-pending → extracting → complete
-                     ↓
-                  skipped (on Phase 2 failure)
-```
-
-**Key Implementation Files:**
-- `src/lambda/document-processor-python/handler.py` - Workflow orchestration
-- `src/lambda/document-processor-python/steps/extract_invoice.py` - `extract_invoice_phase1_step()` and `extract_invoice_phase2_step()`
-- `src/lambda/document-processor-python/steps/extract_receipt.py` - `extract_receipt_phase1_step()` and `extract_receipt_phase2_step()`
-- `src/lambda/document-processor-python/utils/convex_client.py` - `update_invoice_line_items()` and `update_expense_claim_line_items()`
-- `convex/functions/invoices.ts` - `internalUpdateInvoiceLineItems` mutation
-- `convex/functions/expenseClaims.ts` - `internalUpdateExpenseClaimLineItems` mutation
-
-**Convex Real-Time Updates:**
-The frontend subscribes to document queries. When Lambda updates `lineItemsStatus` or `lineItems`, Convex pushes changes to connected clients instantly. This enables:
-- Skeleton loading states during `extracting`
-- Instant line items population on `complete`
-- Graceful degradation on `skipped`
-
-**Note:** The legacy `fastMode` parameter has been deprecated. Two-phase extraction achieves the same speed benefit without sacrificing data quality.
-
-## Development Guidelines
-
-### Core Workflow Rules
-
-1. **Rule: Prefer Modification Over Creation**
-   - Do not create new files unless necessary. Get approval first.
-   - Before creating a new file, analyze the current file tree to see if an existing file can be modified.
-
-2. **Rule: The "Build-Fix Loop" is Mandatory**
-   - After applying code changes, ALWAYS run `npm run build`.
-   - If the build fails, fix the error and repeat until successful.
-   - Only report task complete AFTER the build succeeds.
-
-3. **Rule: Embrace Parallel Execution**
-   - Run independent tasks in parallel whenever possible.
-
-4. **Rule: Git Author (MANDATORY)**
-   - **ALWAYS set git author before ANY git operation** (commits, pushes, PRs):
-     ```bash
-     git config user.name "grootdev-ai"
-     git config user.email "dev@hellogroot.com"
-     ```
-   - This is non-negotiable - Vercel deployments require the git author to have project access.
-   - All commits, branches, and PRs must use this author identity.
-
-5. **Rule: AWS CDK as Single Source of Truth**
-   - **NEVER make ad-hoc CLI changes** to AWS resources.
-   - **ALWAYS update the CDK stack** in `infra/` for any infrastructure changes.
-   - Deploy via CDK only:
-     ```bash
-     cd infra
-     npx cdk deploy --profile groot-finanseal --region us-west-2
-     ```
-   - This ensures reproducible, version-controlled infrastructure.
-
-6. **Rule: Always Push to GitHub**
-   - All changes must be committed and pushed to GitHub.
-   - Use git author `grootdev-ai <dev@hellogroot.com>` for all commits.
-
-7. **Rule: Convex Deployment (CRITICAL)**
-   - **Two environments exist**: Dev (`harmless-panther-50`) and Prod (`kindhearted-lynx-129`)
-   - **Local `npx convex dev`** syncs to dev environment ONLY
-   - **Production deployment** happens automatically during Vercel build via `convex:deploy:ci`
-   - **Manual prod deploy**: Run `npx convex deploy --yes` after ANY Convex schema/function changes
-   - **ALWAYS verify prod is synced** before testing in production:
-     ```bash
-     npx convex deploy --yes
-     ```
-   - Common failure: Changing `convex/` files locally, pushing to GitHub, but forgetting to deploy to Convex prod
-
-### Design System Rules
-
-FinanSEAL implements a **Layer 1-2-3 Semantic Design System** for consistent theming.
-
-- **Rule: Always Check Existing Components First**
-  1. Check `src/components/ui/` - UI component library
-  2. Check `src/app/globals.css` - Available semantic tokens
-  3. Check `tailwind.config.js` - Custom utilities
-  4. Search domain components in `src/domains/*/components/`
-
-- **Rule: Mandatory Semantic Token Usage**
-  - **NEVER use hardcoded colors**: No `bg-gray-700`, `text-white`, etc.
-  - **ALWAYS use semantic tokens**: `bg-card`, `text-foreground`, `bg-primary`, etc.
-  - **Follow Layer Hierarchy**: `bg-background` → `bg-surface` → `bg-card` → `bg-muted`
-
-- **Rule: Component Integration Pattern**
-  - Import from UI library: `import { Button, Card, Badge } from '@/components/ui'`
-  - Use CVA variants: Prefer `<Button variant="default">` over custom styling
-  - Test both light and dark mode rendering
-
-**Quick Reference:**
-- Component docs: `src/components/ui/CLAUDE.md`
-- App patterns: `src/app/CLAUDE.md`
-- Semantic tokens: `src/app/globals.css`
-
-### Number Formatting Rules
-
-**Rule: Always Format Large Numbers with Comma Separators**
-
-All financial amounts and large numbers displayed in the UI must use comma separators for readability:
-- `101596428` → `101,596,428`
-- `1234.56` → `1,234.56`
-
-**Implementation:**
-- Use `formatNumber()` utility from `@/lib/utils/format-number` for all numeric displays
-- Apply to: invoices, expense claims, accounting records, analytics dashboards
-- Preserve decimal places as needed (e.g., currency amounts: 2 decimals)
-
-**Usage:**
-```typescript
-import { formatNumber, formatCurrency } from '@/lib/utils/format-number'
-
-// Basic number formatting
-formatNumber(101596428)  // "101,596,428"
-
-// Currency formatting
-formatCurrency(1234.56, 'USD')  // "$1,234.56"
-formatCurrency(1234.56, 'THB')  // "฿1,234.56"
-```
-
-### Document Processing Workflow
-
-1. **File Upload**: Client uploads PDF/images → AWS S3
-2. **API Trigger**: Client calls `/api/documents/[documentId]/process`
-3. **Non-blocking Response**: API returns 202 Accepted immediately
-4. **Lambda Processing**: AWS Lambda processes document with Gemini AI
-5. **Database Update**: Lambda updates Convex via HTTP API
-
-### Currency Handling
-- Store original currency/amount alongside home currency conversion
-- Support for 9 currencies: THB, IDR, MYR, SGD, USD, EUR, CNY, VND, PHP
-- Historical rate preservation for audit trails
-
-### Expense Claims Workflow
-
-**Key Principle**: Only **approved** expense claims create accounting entries.
-
-```
-1. User uploads receipt → Stored in S3
-2. Lambda extraction runs → Stores metadata in Convex
-3. Manager approves → Creates accounting entry
-4. Finance reimburses → Updates entry status to 'paid'
-```
-
-**State Machine:**
-```
-draft → submitted → approved → reimbursed
-                  ↓
-             rejected
-```
-
-### AI Agent System
-
-- **Agent Engine**: LangGraph-based conversational AI for financial queries
-- **Security-First**: Mandatory user context validation
-- **Tool Integration**: Dynamic OpenAI function calling
-- **Multi-language**: English, Thai, Indonesian support
-
-**Key Files:**
-- `src/lib/langgraph-agent.ts`: Main agent implementation
-- `src/app/api/chat/route.ts`: Chat API endpoint
-- `src/lib/tools/`: Self-describing tool system
-
-### Build Requirements
-- Mandatory `npm run build` validation before completion
-- TypeScript strict mode with comprehensive error checking
-- Component reusability and existing pattern following
-
-## AWS Deployment Commands
-
+### Git Author (CRITICAL)
 ```bash
-# CDK deployment (always use this for infrastructure changes)
-cd infra
-npx cdk deploy --profile groot-finanseal --region us-west-2
-
-# Git commits (always use this author)
 git config user.name "grootdev-ai"
 git config user.email "dev@hellogroot.com"
 ```
+**All commits must use this identity** - Vercel deployments require it.
+
+### Build-Fix Loop
+```bash
+npm run build  # MUST pass before task completion
+```
+Fix errors and repeat until successful.
+
+### Convex Deployment
+- **Dev**: `npx convex dev` (auto-syncs)
+- **Prod**: `npx convex deploy --yes` (manual after schema/function changes)
+- **Common failure**: Forgetting to deploy to prod after Convex changes
+
+### AWS CDK
+```bash
+cd infra
+npx cdk deploy --profile groot-finanseal --region us-west-2
+```
+**Never make ad-hoc CLI changes** - all infrastructure via CDK.
+
+### Prefer Modification Over Creation
+- Do not create new files without approval
+- Check if existing files can be modified first
+
+## Code Style
+
+### Design System
+- **Use semantic tokens**: `bg-card`, `text-foreground`, `bg-primary`
+- **Never hardcode colors**: No `bg-gray-700`, `text-white`
+- **Layer hierarchy**: `bg-background` → `bg-surface` → `bg-card` → `bg-muted`
+- **Check first**: `src/components/ui/`, `src/app/globals.css`
+
+### Number Formatting
+```typescript
+import { formatNumber, formatCurrency } from '@/lib/utils/format-number'
+formatCurrency(1234.56, 'USD')  // "$1,234.56"
+```
+
+### Date Handling
+```typescript
+import { formatBusinessDate } from '@/lib/utils'
+formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
+```
+
+### AI Model
+**Always use Gemini 3 Flash Preview**:
+- Python: `gemini/gemini-3-flash-preview`
+- TypeScript: `gemini-3-flash-preview`
+- Temperature: 0.1, Timeout: 60s+
+
+## Quick References
+
+| Resource | Location |
+|----------|----------|
+| Full Documentation | `docs/README.md` |
+| UI Components | `src/components/ui/CLAUDE.md` |
+| API Reference | `src/app/api/v1/CLAUDE.md` |
+| Expense Claims | `src/domains/expense-claims/CLAUDE.md` |
+| App Patterns | `src/app/CLAUDE.md` |
