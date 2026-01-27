@@ -17,9 +17,11 @@ import { useExpenseForm } from '@/domains/expense-claims/hooks/use-expense-form'
 import { useLineItems } from '@/domains/accounting-entries/hooks/use-line-items'
 import ExpenseFormFields from './expense-form-fields'
 import LineItemTable from './line-item-table'
+import DuplicateWarningModal from './duplicate-warning-modal'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import { useState, useCallback, useEffect } from 'react'
 import { formatBusinessDate } from '@/lib/utils'
+import type { DuplicateMatchPreview, DuplicateOverride, MatchTier } from '@/domains/expense-claims/types/duplicate-detection'
 
 interface EditExpenseModalNewProps {
   expenseClaimId: string
@@ -51,6 +53,13 @@ export default function EditExpenseModalNew({
   // State for success messaging
   const [showSuccess, setShowSuccess] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+
+  // State for duplicate detection
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatchPreview[]>([])
+  const [duplicateHighestTier, setDuplicateHighestTier] = useState<MatchTier | null>(null)
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false)
+  const [duplicateOverride, setDuplicateOverride] = useState<DuplicateOverride | null>(null)
 
   // Main business logic hook with edit mode
   const {
@@ -245,11 +254,79 @@ export default function EditExpenseModalNew({
     }, 3000)
   }, [])
 
+  // Check for duplicates before submission
+  const checkForDuplicates = useCallback(async (): Promise<boolean> => {
+    setCheckingDuplicates(true)
+    try {
+      const response = await fetch('/api/v1/expense-claims/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendor_name: formData.vendor_name,
+          transaction_date: formData.transaction_date,
+          original_amount: formData.original_amount,
+          original_currency: formData.original_currency,
+          reference_number: formData.reference_number,
+          exclude_claim_id: expenseClaimId, // Exclude current claim from duplicate check
+        }),
+      })
+
+      if (!response.ok) {
+        console.error('Duplicate check failed:', response.status)
+        return false // Allow submission if check fails
+      }
+
+      const result = await response.json()
+      if (result.success && result.data.hasDuplicates) {
+        setDuplicateMatches(result.data.matches)
+        setDuplicateHighestTier(result.data.highestTier)
+        setShowDuplicateModal(true)
+        return true // Has duplicates
+      }
+      return false // No duplicates
+    } catch (error) {
+      console.error('Duplicate check error:', error)
+      return false // Allow submission if check fails
+    } finally {
+      setCheckingDuplicates(false)
+    }
+  }, [formData, expenseClaimId])
+
+  // Handle duplicate modal close (cancel submission)
+  const handleDuplicateClose = useCallback(() => {
+    setShowDuplicateModal(false)
+    setDuplicateMatches([])
+  }, [])
+
+  // Handle duplicate modal confirm (proceed with submission)
+  const handleDuplicateConfirm = useCallback(async (override: DuplicateOverride) => {
+    setDuplicateOverride(override)
+    setShowDuplicateModal(false)
+    // Now proceed with actual submission
+    try {
+      updateFormDataLineItems()
+      await handleSave('submit')
+      showSuccessMessage('Expense claim submitted for approval!')
+    } catch (error) {
+      console.error('Save error after duplicate override:', error)
+    }
+  }, [updateFormDataLineItems, handleSave, showSuccessMessage])
+
   // Wrapper for handleSave to include line items in form data
   const handleSaveWithLineItems = useCallback(async (action: 'draft' | 'submit') => {
     try {
       // Update form data with current line items before saving
       updateFormDataLineItems()
+
+      // For submit action, check for duplicates first
+      if (action === 'submit') {
+        const hasDuplicates = await checkForDuplicates()
+        if (hasDuplicates) {
+          // Don't proceed - duplicate modal will handle confirmation
+          return
+        }
+      }
+
       await handleSave(action)
 
       // Show success message based on action
@@ -260,7 +337,7 @@ export default function EditExpenseModalNew({
       console.error('Save error in modal:', error)
       // Error is already handled by useExpenseForm hook and displayed via saveError
     }
-  }, [updateFormDataLineItems, handleSave, showSuccessMessage])
+  }, [updateFormDataLineItems, handleSave, showSuccessMessage, checkForDuplicates])
 
   // Don't render if modal is not open
   if (!isOpen) {
@@ -314,10 +391,15 @@ export default function EditExpenseModalNew({
             </button>
             <button
               onClick={() => handleSaveWithLineItems('submit')}
-              disabled={saving || submitting || isReprocessing}
+              disabled={saving || submitting || isReprocessing || checkingDuplicates}
               className="inline-flex items-center px-3 md:px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
-              {submitting ? (
+              {checkingDuplicates ? (
+                <>
+                  <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
+                  <span className="hidden md:inline">Checking...</span>
+                </>
+              ) : submitting ? (
                 <>
                   <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
                   <span className="hidden md:inline">Submitting...</span>
@@ -586,6 +668,15 @@ export default function EditExpenseModalNew({
         cancelText="Cancel"
         confirmVariant="danger"
         isLoading={isDeleting}
+      />
+
+      {/* Duplicate Warning Modal */}
+      <DuplicateWarningModal
+        isOpen={showDuplicateModal}
+        onClose={handleDuplicateClose}
+        onProceed={handleDuplicateConfirm}
+        duplicates={duplicateMatches}
+        highestTier={duplicateHighestTier}
       />
     </div>,
     document.body
