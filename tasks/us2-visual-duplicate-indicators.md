@@ -74,3 +74,10 @@ All User Story 2 tasks are now complete:
 - Managers can access duplicate report via: Approval Dashboard > Reports tab > Duplicate Expense Report
 - Direct URL: `/expense-claims/duplicate-report`
 - In expense lists, duplicate badges show on claims with detected duplicates
+- **Manager approval modal**: When reviewing a submitted expense, duplicate info shows directly in the popup with "Review Duplicates" button
+- **User dashboard**: Draft expense cards show duplicate badges when duplicates are detected
+
+### Bug Fix (2025-01-27)
+- Fixed `duplicateStatus` not being mapped in `use-expense-claims-realtime.tsx` hook
+- Added duplicate review functionality to `unified-expense-details-modal.tsx` for managers
+- Wired up "Review Duplicates" button with DuplicateComparisonPanel modal

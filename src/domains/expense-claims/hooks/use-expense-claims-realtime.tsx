@@ -127,6 +127,10 @@ export function useExpenseClaimsRealtime(
       submitter: claim.submitter,
       reviewer: claim.reviewer,
       approver: claim.approver,
+      // Duplicate detection fields
+      duplicateStatus: claim.duplicateStatus,
+      duplicateGroupId: claim.duplicateGroupId,
+      isSplitExpense: claim.isSplitExpense,
     }));
 
     return {
@@ -264,6 +268,10 @@ export function useExpenseClaimRealtime(claimId: string | null) {
       accounting_entry: claim.accountingEntry,
       // Line items status for two-phase extraction real-time updates
       line_items_status: claim.lineItemsStatus,
+      // Duplicate detection fields
+      duplicateStatus: claim.duplicateStatus,
+      duplicateGroupId: claim.duplicateGroupId,
+      isSplitExpense: claim.isSplitExpense,
     };
   }, [claim]);
 

@@ -34,6 +34,7 @@ import { Textarea } from '@/components/ui/textarea'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import { getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
 import DuplicateBadge from './duplicate-badge'
+import DuplicateComparisonPanel from './duplicate-comparison-panel'
 import CorrectResubmitButton from './correct-resubmit-button'
 
 interface UnifiedExpenseDetailsModalProps {
@@ -125,6 +126,9 @@ export default function UnifiedExpenseDetailsModal({
   const [imageLoading, setImageLoading] = useState(false)
   const [approvalNotes, setApprovalNotes] = useState('')
   const [processing, setProcessing] = useState(false)
+  const [showDuplicateReview, setShowDuplicateReview] = useState(false)
+  const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
+  const [duplicateLoading, setDuplicateLoading] = useState(false)
 
   // Fetch categories on component mount
   useEffect(() => {
@@ -309,6 +313,99 @@ export default function UnifiedExpenseDetailsModal({
       setError(`Failed to ${action} claim. Please try again.`)
     } finally {
       setProcessing(false)
+    }
+  }
+
+  // Fetch duplicate matches for this claim
+  const handleReviewDuplicates = async () => {
+    if (!claimDetails) return
+
+    setDuplicateLoading(true)
+    try {
+      // Check for duplicates based on this claim's data
+      const response = await fetch('/api/v1/expense-claims/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendorName: claimDetails.vendor_name || claimDetails.transaction?.vendor_name || '',
+          transactionDate: claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '',
+          totalAmount: parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0'),
+          currency: claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD',
+          referenceNumber: claimDetails.reference_number || claimDetails.transaction?.reference_number || undefined,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.success && result.data.matches) {
+        // Filter out self-match (the current claim)
+        const matches = result.data.matches.filter(
+          (m: any) => m.matchedClaim._id !== claimDetails.id
+        )
+        setDuplicateMatches(matches)
+        setShowDuplicateReview(true)
+      }
+    } catch (err) {
+      console.error('[Unified Modal] Error fetching duplicates:', err)
+    } finally {
+      setDuplicateLoading(false)
+    }
+  }
+
+  // Handle dismiss duplicate from manager view
+  const handleDismissDuplicate = async (matchId: string, reason: string) => {
+    if (!claimDetails) return
+
+    setDuplicateLoading(true)
+    try {
+      const response = await fetch(
+        `/api/v1/expense-claims/${claimDetails.id}/dismiss-duplicate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matchId, reason }),
+        }
+      )
+
+      const result = await response.json()
+      if (result.success) {
+        setShowDuplicateReview(false)
+        setDuplicateMatches([])
+        // Refresh claim details
+        fetchClaimDetails()
+      }
+    } catch (err) {
+      console.error('[Unified Modal] Dismiss duplicate error:', err)
+    } finally {
+      setDuplicateLoading(false)
+    }
+  }
+
+  // Handle confirm duplicate from manager view
+  const handleConfirmDuplicate = async (matchId: string) => {
+    if (!claimDetails) return
+
+    setDuplicateLoading(true)
+    try {
+      const response = await fetch(
+        `/api/v1/expense-claims/${claimDetails.id}/confirm-duplicate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matchId }),
+        }
+      )
+
+      const result = await response.json()
+      if (result.success) {
+        setShowDuplicateReview(false)
+        setDuplicateMatches([])
+        // Refresh claim details
+        fetchClaimDetails()
+      }
+    } catch (err) {
+      console.error('[Unified Modal] Confirm duplicate error:', err)
+    } finally {
+      setDuplicateLoading(false)
     }
   }
 
@@ -776,7 +873,15 @@ export default function UnifiedExpenseDetailsModal({
                                 </div>
                               </div>
                               {viewMode === 'manager' && claimDetails.duplicateStatus === 'potential' && (
-                                <Button size="sm" variant="outline">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleReviewDuplicates}
+                                  disabled={duplicateLoading}
+                                >
+                                  {duplicateLoading ? (
+                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                  ) : null}
                                   Review Duplicates
                                 </Button>
                               )}
@@ -837,6 +942,51 @@ export default function UnifiedExpenseDetailsModal({
                 hideRegionsCount={true}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Review Modal */}
+      {showDuplicateReview && duplicateMatches.length > 0 && claimDetails && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <DuplicateComparisonPanel
+              match={{
+                _id: duplicateMatches[0]?.matchedClaim?._id || '',
+                matchTier: duplicateMatches[0]?.tier || 'strong',
+                matchedFields: duplicateMatches[0]?.matchedFields || [],
+                confidenceScore: duplicateMatches[0]?.confidenceScore || 0.5,
+                isCrossUser: duplicateMatches[0]?.isCrossUser || false,
+                status: claimDetails.duplicateStatus === 'confirmed' ? 'confirmed_duplicate' : 'pending',
+              }}
+              sourceClaim={{
+                _id: claimDetails.id,
+                vendorName: claimDetails.vendor_name || claimDetails.transaction?.vendor_name || '',
+                transactionDate: claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '',
+                totalAmount: parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0'),
+                currency: claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD',
+                referenceNumber: claimDetails.reference_number || claimDetails.transaction?.reference_number || null,
+                status: claimDetails.status,
+                submitter: { _id: '', fullName: claimDetails.employee_name || 'Unknown', email: '' },
+              }}
+              matchedClaim={{
+                _id: duplicateMatches[0]?.matchedClaim?._id || '',
+                vendorName: duplicateMatches[0]?.matchedClaim?.vendorName || '',
+                transactionDate: duplicateMatches[0]?.matchedClaim?.transactionDate || '',
+                totalAmount: duplicateMatches[0]?.matchedClaim?.totalAmount || 0,
+                currency: duplicateMatches[0]?.matchedClaim?.currency || 'SGD',
+                referenceNumber: duplicateMatches[0]?.matchedClaim?.referenceNumber || null,
+                status: duplicateMatches[0]?.matchedClaim?.status || 'draft',
+                submitter: { _id: '', fullName: duplicateMatches[0]?.matchedClaim?.submittedByName || 'Unknown', email: '' },
+              }}
+              onDismiss={handleDismissDuplicate}
+              onConfirm={handleConfirmDuplicate}
+              onClose={() => {
+                setShowDuplicateReview(false)
+                setDuplicateMatches([])
+              }}
+              isLoading={duplicateLoading}
+            />
           </div>
         </div>
       )}
