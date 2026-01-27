@@ -352,6 +352,65 @@ export const getPendingApprovals = query({
 });
 
 /**
+ * Check for potential duplicate expense claims
+ * Returns candidates based on reference number OR vendor+date+amount match
+ */
+export const checkDuplicates = query({
+  args: {
+    businessId: v.id("businesses"),
+    userId: v.id("users"),
+    referenceNumber: v.optional(v.string()),
+    vendorName: v.string(),
+    transactionDate: v.string(),
+    totalAmount: v.number(),
+    currency: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Get recent claims for this business (last 30 days optimization)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split("T")[0];
+
+    // Query claims using the business index
+    const claims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .filter((q) =>
+        q.and(
+          q.neq(q.field("status"), "rejected"),
+          q.neq(q.field("status"), "failed"),
+          q.or(
+            q.gte(q.field("transactionDate"), thirtyDaysAgoStr),
+            q.eq(q.field("transactionDate"), undefined)
+          )
+        )
+      )
+      .collect();
+
+    // Get user info for each claim's submitter
+    const claimsWithUsers = await Promise.all(
+      claims.map(async (claim) => {
+        const user = await ctx.db.get(claim.userId);
+        return {
+          _id: claim._id,
+          userId: claim.userId,
+          vendorName: claim.vendorName,
+          transactionDate: claim.transactionDate,
+          totalAmount: claim.totalAmount,
+          currency: claim.currency,
+          referenceNumber: claim.referenceNumber,
+          status: claim.status,
+          _creationTime: claim._creationTime,
+          submittedByName: user?.fullName || user?.email || "Unknown",
+        };
+      })
+    );
+
+    return claimsWithUsers;
+  },
+});
+
+/**
  * Get expense claim analytics for dashboard
  */
 export const getAnalytics = query({
@@ -504,6 +563,18 @@ export const create = mutation({
         v.literal("uploading")
       )
     ),
+    // Duplicate override fields (007-duplicate-expense-detection)
+    duplicateStatus: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("potential"),
+        v.literal("confirmed"),
+        v.literal("dismissed")
+      )
+    ),
+    duplicateOverrideReason: v.optional(v.string()),
+    duplicateOverrideAt: v.optional(v.number()),
+    isSplitExpense: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -553,6 +624,11 @@ export const create = mutation({
       fileType: args.fileType,
       fileSize: args.fileSize,
       status: args.status ?? "draft",
+      // Duplicate override fields
+      duplicateStatus: args.duplicateStatus,
+      duplicateOverrideReason: args.duplicateOverrideReason,
+      duplicateOverrideAt: args.duplicateOverrideAt,
+      isSplitExpense: args.isSplitExpense,
       updatedAt: Date.now(),
     });
 
@@ -2310,6 +2386,116 @@ export const forceFailRecord = mutation({
       minutesStuck,
       vendorName: claim.vendorName,
       totalAmount: claim.totalAmount,
+    };
+  },
+});
+
+// ============================================
+// CORRECT & RESUBMIT FLOW (FR-011)
+// ============================================
+
+/**
+ * Resubmit a rejected expense claim with optional corrections
+ * Creates a new claim based on the rejected one and links them
+ */
+export const resubmitRejectedClaim = mutation({
+  args: {
+    claimId: v.id("expense_claims"),
+    updatedData: v.optional(v.object({
+      vendorName: v.optional(v.string()),
+      totalAmount: v.optional(v.number()),
+      transactionDate: v.optional(v.string()),
+      currency: v.optional(v.string()),
+      businessPurpose: v.optional(v.string()),
+      description: v.optional(v.string()),
+      expenseCategory: v.optional(v.string()),
+      referenceNumber: v.optional(v.string()),
+    }))
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Get the original claim
+    const originalClaim = await ctx.db.get(args.claimId);
+    if (!originalClaim || originalClaim.deletedAt) {
+      throw new Error("Expense claim not found");
+    }
+
+    // Verify the claim is in rejected status
+    if (originalClaim.status !== "rejected") {
+      throw new Error("Only rejected claims can be resubmitted");
+    }
+
+    // Verify the user owns the claim
+    if (originalClaim.userId !== user._id) {
+      throw new Error("You can only resubmit your own expense claims");
+    }
+
+    // Verify business membership
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", originalClaim.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not a member of this business");
+    }
+
+    const now = Date.now();
+
+    // Create new claim with data from original (with optional updates)
+    const newClaimData = {
+      businessId: originalClaim.businessId,
+      userId: originalClaim.userId,
+      businessPurpose: args.updatedData?.businessPurpose ?? originalClaim.businessPurpose,
+      description: args.updatedData?.description ?? originalClaim.description,
+      vendorName: args.updatedData?.vendorName ?? originalClaim.vendorName,
+      totalAmount: args.updatedData?.totalAmount ?? originalClaim.totalAmount,
+      currency: args.updatedData?.currency ?? originalClaim.currency,
+      homeCurrency: originalClaim.homeCurrency,
+      homeCurrencyAmount: originalClaim.homeCurrencyAmount,
+      exchangeRate: originalClaim.exchangeRate,
+      transactionDate: args.updatedData?.transactionDate ?? originalClaim.transactionDate,
+      referenceNumber: args.updatedData?.referenceNumber ?? originalClaim.referenceNumber,
+      expenseCategory: args.updatedData?.expenseCategory ?? originalClaim.expenseCategory,
+      storagePath: originalClaim.storagePath,
+      convertedImagePath: originalClaim.convertedImagePath,
+      fileName: originalClaim.fileName,
+      fileType: originalClaim.fileType,
+      fileSize: originalClaim.fileSize,
+      status: "draft" as const,
+      confidenceScore: originalClaim.confidenceScore,
+      processingMetadata: originalClaim.processingMetadata,
+      lineItemsStatus: originalClaim.lineItemsStatus,
+      // Link to original rejected claim
+      resubmittedFromId: args.claimId,
+      updatedAt: now,
+    };
+
+    // Create the new claim
+    const newClaimId = await ctx.db.insert("expense_claims", newClaimData);
+
+    // Update the original claim with reference to new claim
+    await ctx.db.patch(args.claimId, {
+      resubmittedToId: newClaimId,
+      updatedAt: now,
+    });
+
+    console.log(`[Convex] Created resubmitted claim ${newClaimId} from rejected claim ${args.claimId}`);
+
+    return {
+      newClaimId,
+      originalClaimId: args.claimId,
     };
   },
 });

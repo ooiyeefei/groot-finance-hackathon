@@ -7,10 +7,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useExpenseCategories, validateCategorySelection } from './use-expense-categories'
 import { useExpenseClaimRealtime } from './use-expense-claims-realtime'
+import { useDuplicateDetection } from './use-duplicate-detection'
 import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { AIExtractionResult } from '@/domains/expense-claims/types/expense-extraction'
+import type { DuplicateDetectionResult } from '../types/duplicate-detection'
 // Removed client-side Trigger.dev imports - now uses server-side API
 
 // Form data interface
@@ -141,6 +143,12 @@ export interface UseExpenseFormReturn {
   handleRejectSuggestion: (fieldName: string) => void
   handleAcceptAllSuggestions: (acceptedSuggestions: Record<string, string | number>) => Promise<void>
   handleRejectAllSuggestions: () => void
+
+  // Duplicate detection
+  duplicateCheckResult: DuplicateDetectionResult | null
+  setDuplicateCheckResult: React.Dispatch<React.SetStateAction<DuplicateDetectionResult | null>>
+  performDuplicateCheck: () => Promise<DuplicateDetectionResult | null>
+  isCheckingDuplicates: boolean
 }
 
 export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn {
@@ -198,6 +206,10 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   // AI suggestions state
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([])
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set())
+
+  // Duplicate detection state and hook
+  const { checkDuplicates, isChecking: isCheckingDuplicates } = useDuplicateDetection()
+  const [duplicateCheckResult, setDuplicateCheckResult] = useState<DuplicateDetectionResult | null>(null)
 
   // Extract stable values from props to avoid infinite re-renders
   const mode = props.mode
@@ -1029,6 +1041,26 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     setAiSuggestions([])
   }, [aiSuggestions])
 
+  // Duplicate detection function - called by UI before submit
+  const performDuplicateCheck = useCallback(async (): Promise<DuplicateDetectionResult | null> => {
+    // Only check if we have the required fields
+    if (!formData.vendor_name || !formData.transaction_date || !formData.original_amount) {
+      console.log('[useExpenseForm] Skipping duplicate check - missing required fields')
+      return null
+    }
+
+    const result = await checkDuplicates({
+      vendorName: formData.vendor_name,
+      transactionDate: formData.transaction_date,
+      totalAmount: formData.original_amount,
+      currency: formData.original_currency,
+      referenceNumber: formData.reference_number || undefined,
+    })
+
+    setDuplicateCheckResult(result)
+    return result
+  }, [formData.vendor_name, formData.transaction_date, formData.original_amount, formData.original_currency, formData.reference_number, checkDuplicates])
+
   return {
     // Form state
     formData,
@@ -1085,7 +1117,13 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     handleAcceptSuggestion,
     handleRejectSuggestion,
     handleAcceptAllSuggestions,
-    handleRejectAllSuggestions
+    handleRejectAllSuggestions,
+
+    // Duplicate detection
+    duplicateCheckResult,
+    setDuplicateCheckResult,
+    performDuplicateCheck,
+    isCheckingDuplicates
   }
 }
 

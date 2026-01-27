@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import ExpenseStatusBadge from './expense-status-badge'
+import DuplicateBadge from './duplicate-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatBusinessDate } from '@/lib/utils'
 
@@ -707,6 +708,17 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
               processingStage={claim.status_display?.isProcessing ? claim.status as any : undefined}
               animated={true}
             />
+            {/* Duplicate Badge - shows when claim has potential duplicates */}
+            {claim.duplicateStatus && claim.duplicateStatus !== 'none' && (
+              <DuplicateBadge
+                matchTier={claim.duplicateStatus === 'potential' ? 'strong' : 'exact'}
+                size="sm"
+                onClick={() => {
+                  setDetailsClaimId(claim.id)
+                  setShowDetailsModal(true)
+                }}
+              />
+            )}
           </div>
 
           {claim.current_approver_name && ['submitted'].includes(claim.status) && (

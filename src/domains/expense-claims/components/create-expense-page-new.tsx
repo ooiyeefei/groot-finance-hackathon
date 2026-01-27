@@ -6,7 +6,7 @@
 
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { ArrowLeft, Save, Send, Loader2, AlertCircle, Upload, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -15,7 +15,9 @@ import { useExpenseForm } from '@/domains/expense-claims/hooks/use-expense-form'
 import { useLineItems } from '@/domains/accounting-entries/hooks/use-line-items'
 import ExpenseFormFields, { ReceiptUploadSection, ExpenseSummaryCompact } from './expense-form-fields'
 import LineItemTable from './line-item-table'
+import DuplicateWarningModal from './duplicate-warning-modal'
 import { AIExtractionResult } from '@/domains/expense-claims/types/expense-extraction'
+import type { DuplicateOverride } from '@/domains/expense-claims/types/duplicate-detection'
 
 interface CreateExpensePageNewProps {
   // AI extraction result (required for create mode)
@@ -92,6 +94,12 @@ export default function CreateExpensePageNew({
     validateForm,
     handleSave,
 
+    // Duplicate detection
+    duplicateCheckResult,
+    setDuplicateCheckResult,
+    performDuplicateCheck,
+    isCheckingDuplicates,
+
     // AI suggestion handlers
     handleAcceptSuggestion,
     handleRejectSuggestion,
@@ -105,6 +113,11 @@ export default function CreateExpensePageNew({
     onBack,
     isSubmitting
   })
+
+  // State for duplicate warning modal
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [pendingSubmitAction, setPendingSubmitAction] = useState<'draft' | 'submit' | null>(null)
+  const [duplicateOverride, setDuplicateOverride] = useState<DuplicateOverride | null>(null)
 
   // Memoized callback to prevent infinite re-renders
   const handleTotalChange = React.useCallback((newTotal: number) => {
@@ -199,13 +212,26 @@ export default function CreateExpensePageNew({
     }
   }, [setFormData])
 
-  // Handle form submission with proper validation
-  const handleFormSubmit = async (action: 'draft' | 'submit' = 'draft') => {
+  // Handle form submission with duplicate check
+  const handleFormSubmit = async (action: 'draft' | 'submit' = 'draft', override?: DuplicateOverride) => {
     try {
-      // Create submission data with current line items
+      // Only check for duplicates on 'submit' action (not draft saves)
+      // and only if we don't already have an override
+      if (action === 'submit' && !override) {
+        const result = await performDuplicateCheck()
+        if (result?.hasDuplicates) {
+          // Store the pending action and show the modal
+          setPendingSubmitAction(action)
+          setShowDuplicateModal(true)
+          return
+        }
+      }
+
+      // Create submission data with current line items and optional override
       const submissionData = {
         ...formData,
-        line_items: lineItems
+        line_items: lineItems,
+        ...(override ? { duplicateOverride: override } : {})
       }
 
       // Call onSubmit directly with the complete data if in create mode
@@ -219,6 +245,24 @@ export default function CreateExpensePageNew({
     } catch (error) {
       console.error('Form submission error:', error)
     }
+  }
+
+  // Handle proceeding after duplicate warning
+  const handleDuplicateProceed = (override: DuplicateOverride) => {
+    setShowDuplicateModal(false)
+    setDuplicateOverride(override)
+    // Resume the pending submit action with the override
+    if (pendingSubmitAction) {
+      handleFormSubmit(pendingSubmitAction, override)
+      setPendingSubmitAction(null)
+    }
+  }
+
+  // Handle closing duplicate modal (user cancelled)
+  const handleDuplicateClose = () => {
+    setShowDuplicateModal(false)
+    setPendingSubmitAction(null)
+    setDuplicateCheckResult(null)
   }
 
   if (loading) {
@@ -481,7 +525,7 @@ export default function CreateExpensePageNew({
         <div className="flex items-center justify-center space-x-4">
           <Button
             onClick={() => handleFormSubmit('draft')}
-            disabled={saving || submitting}
+            disabled={saving || submitting || isCheckingDuplicates}
             variant="secondary"
           >
             {saving ? (
@@ -499,10 +543,15 @@ export default function CreateExpensePageNew({
 
           <Button
             onClick={() => handleFormSubmit('submit')}
-            disabled={saving || submitting}
+            disabled={saving || submitting || isCheckingDuplicates}
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
-            {submitting ? (
+            {isCheckingDuplicates ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Checking...
+              </>
+            ) : submitting ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Submitting...
@@ -516,6 +565,15 @@ export default function CreateExpensePageNew({
           </Button>
         </div>
       </div>
+
+      {/* Duplicate Warning Modal */}
+      <DuplicateWarningModal
+        isOpen={showDuplicateModal}
+        onClose={handleDuplicateClose}
+        onProceed={handleDuplicateProceed}
+        duplicates={duplicateCheckResult?.matches || []}
+        highestTier={duplicateCheckResult?.highestTier || null}
+      />
     </div>
   )
 }

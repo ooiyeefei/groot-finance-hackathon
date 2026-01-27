@@ -274,6 +274,9 @@ export default function ProcessingStep({
   const pollExpenseClaimCompletion = async (expenseClaimId: string, signal: AbortSignal) => {
     const maxAttempts = 120 // 4 minutes max polling (2 second intervals)
     let attempts = 0
+    let lastStatus: string | null = null
+    let sameStatusCount = 0
+    const stuckThreshold = 45 // 90 seconds (45 * 2s) of same status = likely stuck
 
     while (attempts < maxAttempts && !signal.aborted) {
       try {
@@ -301,6 +304,20 @@ export default function ProcessingStep({
 
         // Also check main claim status for timeout/failure detection
         const mainStatus = claimData.status
+
+        // Track consecutive same-status polls to detect stuck processing
+        const currentStatus = mainStatus || processingStatus || 'unknown'
+        if (currentStatus === lastStatus) {
+          sameStatusCount++
+          // If stuck in processing/analyzing for too long, likely a backend error
+          if (sameStatusCount >= stuckThreshold &&
+              ['processing', 'analyzing', 'classifying', 'converting'].includes(currentStatus)) {
+            throw new Error('Processing appears to be stuck. Please try again or contact support if the issue persists.')
+          }
+        } else {
+          lastStatus = currentStatus
+          sameStatusCount = 1
+        }
 
         // Update progress indication during polling
         if (processingStatus === 'analyzing' || processingStatus === 'classifying' || processingStatus === 'upload_pending' ||

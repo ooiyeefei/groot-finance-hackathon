@@ -33,6 +33,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import { getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
+import DuplicateBadge from './duplicate-badge'
+import CorrectResubmitButton from './correct-resubmit-button'
 
 interface UnifiedExpenseDetailsModalProps {
   claimId: string
@@ -99,6 +101,10 @@ interface ClaimDetails {
   // Manager view fields
   employee_name?: string
   has_receipt?: boolean
+  // Duplicate detection fields
+  duplicateStatus?: 'none' | 'potential' | 'confirmed' | 'dismissed'
+  duplicateGroupId?: string
+  isSplitExpense?: boolean
 }
 
 export default function UnifiedExpenseDetailsModal({
@@ -536,6 +542,31 @@ export default function UnifiedExpenseDetailsModal({
                         </Card>
                       )}
 
+                      {/* Personal Actions - Resubmit for rejected claims */}
+                      {viewMode === 'personal' && claimDetails.status === 'rejected' && (
+                        <Card className="bg-red-500/10 border-red-500/30">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-foreground text-sm flex items-center gap-2">
+                              <XCircle className="w-4 h-4 text-red-500" />
+                              Claim Rejected
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <p className="text-muted-foreground text-sm">
+                              This expense claim was rejected. You can correct any issues and resubmit for approval.
+                            </p>
+                            <CorrectResubmitButton
+                              claimId={claimDetails.id}
+                              status={claimDetails.status}
+                              onResubmit={() => {
+                                onClose()
+                                onRefreshNeeded?.()
+                              }}
+                            />
+                          </CardContent>
+                        </Card>
+                      )}
+
                       {/* Basic Information */}
                       <Card className="bg-record-layer-1 border-record-border">
                         <CardHeader className="pb-3">
@@ -555,14 +586,21 @@ export default function UnifiedExpenseDetailsModal({
                                 {getCategoryName(claimDetails.expense_category || claimDetails.transaction?.expense_category, categories)}
                               </div>
                             </div>
-                            {(claimDetails.reference_number || claimDetails.transaction?.reference_number) && (
-                              <div className="space-y-2">
-                                <label className="text-muted-foreground text-sm">Reference Number</label>
+                            <div className="space-y-2">
+                              <label className="text-muted-foreground text-sm">Reference Number</label>
+                              {(claimDetails.reference_number || claimDetails.transaction?.reference_number) ? (
                                 <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded text-sm">
                                   {claimDetails.reference_number || claimDetails.transaction?.reference_number}
                                 </div>
-                              </div>
-                            )}
+                              ) : (
+                                <div className="flex items-center gap-2 p-2 rounded bg-yellow-500/10 border border-yellow-500/30">
+                                  <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                                  <span className="text-xs text-yellow-700 dark:text-yellow-300">
+                                    Not provided - verify receipt authenticity
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           <div className="space-y-2">
@@ -707,6 +745,42 @@ export default function UnifiedExpenseDetailsModal({
                                 </div>
                               </div>
                             )}
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* Duplicate Detection Indicator */}
+                      {claimDetails.duplicateStatus && claimDetails.duplicateStatus !== 'none' && (
+                        <Card className="bg-yellow-500/10 border-yellow-500/30">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <DuplicateBadge
+                                  matchTier={claimDetails.duplicateStatus === 'confirmed' ? 'exact' : 'strong'}
+                                  size="md"
+                                  showTooltip={false}
+                                />
+                                <div>
+                                  <p className="text-foreground font-medium text-sm">
+                                    {claimDetails.duplicateStatus === 'confirmed'
+                                      ? 'Confirmed Duplicate'
+                                      : claimDetails.duplicateStatus === 'potential'
+                                      ? 'Potential Duplicate Detected'
+                                      : 'Duplicate Dismissed'}
+                                  </p>
+                                  <p className="text-muted-foreground text-xs">
+                                    {claimDetails.isSplitExpense
+                                      ? 'Marked as split expense'
+                                      : 'This claim may be a duplicate of another expense'}
+                                  </p>
+                                </div>
+                              </div>
+                              {viewMode === 'manager' && claimDetails.duplicateStatus === 'potential' && (
+                                <Button size="sm" variant="outline">
+                                  Review Duplicates
+                                </Button>
+                              )}
+                            </div>
                           </CardContent>
                         </Card>
                       )}

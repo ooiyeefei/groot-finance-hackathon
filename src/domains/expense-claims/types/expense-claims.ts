@@ -106,6 +106,17 @@ export interface ExpenseClaim {
   // Error handling (JSONB in database)
   error_message?: ExpenseClaimErrorMessage | null
 
+  // Duplicate detection fields (007-duplicate-expense-detection)
+  duplicateStatus?: 'none' | 'potential' | 'confirmed' | 'dismissed'
+  duplicateGroupId?: string | null
+  duplicateOverrideReason?: string | null
+  duplicateOverrideAt?: number | null
+  isSplitExpense?: boolean
+
+  // Resubmission tracking
+  resubmittedFromId?: string | null
+  resubmittedToId?: string | null
+
   created_at: string
   updated_at: string
 }
@@ -154,6 +165,13 @@ export interface CreateExpenseClaimRequest {
 
   // Line items for detailed expenses
   line_items?: ExpenseLineItemRequest[]
+
+  // Duplicate override fields (for acknowledging duplicates)
+  duplicateOverride?: {
+    acknowledgedDuplicates: string[]  // Claim IDs user acknowledged
+    reason: string                     // Justification text
+    isSplitExpense: boolean           // Checkbox value
+  }
 }
 
 export interface ExpenseLineItemRequest {

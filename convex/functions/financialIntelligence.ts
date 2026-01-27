@@ -1,0 +1,761 @@
+/**
+ * Financial Intelligence - Category 3 Domain Intelligence API
+ *
+ * These are PUBLIC queries that expose FinanSEAL's domain-specific intelligence
+ * for on-demand use by the AI agent. Following the Clockwise MCP model:
+ *
+ * "The tools themselves aren't simple CRUD operations. The scheduling
+ * intelligence happens server-side, not sent back for analysis by the agent's LLM."
+ *
+ * The SAME algorithms that run in actionCenterJobs (cron) are exposed here
+ * for real-time, on-demand analysis. The intelligence IS the query.
+ */
+
+import { v } from "convex/values";
+import { query } from "../_generated/server";
+import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
+
+// ============================================
+// TYPE DEFINITIONS
+// ============================================
+
+interface AnomalyResult {
+  transactionId: string;
+  description: string;
+  category: string;
+  amount: number;
+  zScore: number;
+  severity: "high" | "medium";
+  baseline: number;
+  stdDev: number;
+}
+
+interface CashFlowAnalysis {
+  runwayDays: number;
+  monthlyBurnRate: number;
+  estimatedBalance: number;
+  totalIncome: number;
+  totalExpenses: number;
+  expenseToIncomeRatio: number;
+  alerts: Array<{
+    type: "low_runway" | "expense_exceeding_income";
+    severity: "critical" | "high" | "medium";
+    message: string;
+  }>;
+  periodDays: number;
+}
+
+interface VendorRiskResult {
+  vendorId: string;
+  vendorName: string;
+  riskScore: number;
+  riskFactors: string[];
+  severity: "high" | "medium" | "low";
+  recentSpend: number;
+  transactionCount: number;
+}
+
+interface VendorConcentrationResult {
+  vendorId: string;
+  vendorName: string;
+  category: string;
+  concentrationPercentage: number;
+  totalCategorySpend: number;
+  vendorSpend: number;
+  severity: "high" | "medium" | "low";
+}
+
+interface DuplicateResult {
+  transactionIds: string[];
+  amount: number;
+  vendorName: string;
+  transactionDate: string;
+  count: number;
+}
+
+// ============================================
+// PUBLIC QUERIES - THE INTELLIGENCE LAYER
+// ============================================
+
+/**
+ * Detect anomalies in expenses - returns transactions with amounts >2σ from category average
+ *
+ * THIS IS CATEGORY 3: The server performs statistical analysis and returns structured insights.
+ * The LLM just presents the results - it doesn't analyze raw transaction data.
+ */
+export const detectAnomalies = query({
+  args: {
+    businessId: v.string(),
+    dateRangeDays: v.optional(v.number()), // Default 90 days
+    sensitivity: v.optional(v.union(v.literal("high"), v.literal("medium"), v.literal("low"))), // 1.5σ, 2σ, 3σ
+  },
+  handler: async (ctx, args): Promise<{
+    anomalies: AnomalyResult[];
+    analyzedTransactions: number;
+    categoriesAnalyzed: number;
+    periodDays: number;
+  }> => {
+    // Auth check
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { anomalies: [], analyzedTransactions: 0, categoriesAnalyzed: 0, periodDays: 0 };
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return { anomalies: [], analyzedTransactions: 0, categoriesAnalyzed: 0, periodDays: 0 };
+    }
+
+    // Resolve business
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return { anomalies: [], analyzedTransactions: 0, categoriesAnalyzed: 0, periodDays: 0 };
+    }
+
+    // Verify membership
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return { anomalies: [], analyzedTransactions: 0, categoriesAnalyzed: 0, periodDays: 0 };
+    }
+
+    // Configuration
+    const dateRangeDays = args.dateRangeDays ?? 90;
+    const sigmaThreshold = args.sensitivity === "high" ? 1.5 : args.sensitivity === "low" ? 3 : 2;
+
+    const cutoffDate = new Date(Date.now() - dateRangeDays * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    // Fetch transactions
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const recentExpenses = entries.filter(
+      (e) =>
+        !e.deletedAt &&
+        e.transactionType === "Expense" &&
+        e.transactionDate &&
+        e.transactionDate >= cutoffDate
+    );
+
+    // Group by category for statistical analysis
+    const byCategory: Record<string, Array<{ txn: typeof recentExpenses[0]; amount: number }>> = {};
+
+    for (const txn of recentExpenses) {
+      const category = txn.category || "uncategorized";
+      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+      if (!byCategory[category]) {
+        byCategory[category] = [];
+      }
+      byCategory[category].push({ txn, amount });
+    }
+
+    // Run anomaly detection - THE INTELLIGENCE
+    const anomalies: AnomalyResult[] = [];
+
+    for (const [category, items] of Object.entries(byCategory)) {
+      if (items.length < 5) continue; // Need enough data points for statistical significance
+
+      const amounts = items.map((i) => i.amount);
+      const mean = amounts.reduce((sum, a) => sum + a, 0) / amounts.length;
+
+      // Calculate standard deviation
+      const squaredDiffs = amounts.map((a) => Math.pow(a - mean, 2));
+      const variance = squaredDiffs.reduce((sum, d) => sum + d, 0) / amounts.length;
+      const stdDev = Math.sqrt(variance);
+
+      if (stdDev === 0) continue; // No variance means no anomalies
+
+      const threshold = mean + sigmaThreshold * stdDev;
+      const threshold3Sigma = mean + 3 * stdDev;
+
+      // Find anomalies
+      for (const { txn, amount } of items) {
+        if (amount <= threshold) continue;
+
+        const zScore = (amount - mean) / stdDev;
+        const severity = amount > threshold3Sigma ? "high" : "medium";
+
+        anomalies.push({
+          transactionId: txn._id.toString(),
+          description: txn.description || `${category} expense`,
+          category,
+          amount,
+          zScore: parseFloat(zScore.toFixed(2)),
+          severity,
+          baseline: parseFloat(mean.toFixed(2)),
+          stdDev: parseFloat(stdDev.toFixed(2)),
+        });
+      }
+    }
+
+    // Sort by z-score descending (most anomalous first)
+    anomalies.sort((a, b) => b.zScore - a.zScore);
+
+    return {
+      anomalies,
+      analyzedTransactions: recentExpenses.length,
+      categoriesAnalyzed: Object.keys(byCategory).length,
+      periodDays: dateRangeDays,
+    };
+  },
+});
+
+/**
+ * Analyze cash flow health and runway - returns projected runway days and alerts
+ *
+ * THIS IS CATEGORY 3: The server calculates burn rate, runway, and generates alerts.
+ * The LLM receives structured insights, not raw transaction data to analyze.
+ */
+export const analyzeCashFlow = query({
+  args: {
+    businessId: v.string(),
+    horizonDays: v.optional(v.number()), // Analysis period, default 90 days
+  },
+  handler: async (ctx, args): Promise<CashFlowAnalysis | null> => {
+    // Auth check
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return null;
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) return null;
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") return null;
+
+    const horizonDays = args.horizonDays ?? 90;
+    const cutoffDate = new Date(Date.now() - horizonDays * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const recent = entries.filter(
+      (e) => !e.deletedAt && e.transactionDate && e.transactionDate >= cutoffDate
+    );
+
+    // Calculate totals - THE INTELLIGENCE
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    let estimatedBalance = 0;
+
+    for (const txn of recent) {
+      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+      if (txn.transactionType === "Income") {
+        totalIncome += amount;
+        estimatedBalance += amount;
+      } else if (txn.transactionType === "Expense") {
+        totalExpenses += amount;
+        estimatedBalance -= amount;
+      }
+    }
+
+    // Calculate burn rate and runway
+    const months = horizonDays / 30;
+    const monthlyBurnRate = totalExpenses / months;
+    const dailyBurnRate = monthlyBurnRate / 30;
+    const runwayDays = dailyBurnRate > 0 ? Math.floor(estimatedBalance / dailyBurnRate) : 999;
+    const expenseToIncomeRatio = totalIncome > 0 ? totalExpenses / totalIncome : totalExpenses > 0 ? 999 : 0;
+
+    // Generate alerts - THE INTELLIGENCE
+    const alerts: CashFlowAnalysis["alerts"] = [];
+
+    // Low runway alert
+    if (runwayDays < 30) {
+      alerts.push({
+        type: "low_runway",
+        severity: runwayDays <= 7 ? "critical" : runwayDays <= 14 ? "high" : "medium",
+        message: `Cash runway is only ${runwayDays} days based on current burn rate of ${monthlyBurnRate.toLocaleString()}/month`,
+      });
+    }
+
+    // Expense exceeding income alert
+    if (expenseToIncomeRatio > 1.2) {
+      alerts.push({
+        type: "expense_exceeding_income",
+        severity: expenseToIncomeRatio > 2 ? "critical" : expenseToIncomeRatio > 1.5 ? "high" : "medium",
+        message: `Expenses (${totalExpenses.toLocaleString()}) are ${((expenseToIncomeRatio - 1) * 100).toFixed(0)}% higher than income (${totalIncome.toLocaleString()})`,
+      });
+    }
+
+    return {
+      runwayDays,
+      monthlyBurnRate: parseFloat(monthlyBurnRate.toFixed(2)),
+      estimatedBalance: parseFloat(estimatedBalance.toFixed(2)),
+      totalIncome: parseFloat(totalIncome.toFixed(2)),
+      totalExpenses: parseFloat(totalExpenses.toFixed(2)),
+      expenseToIncomeRatio: parseFloat(expenseToIncomeRatio.toFixed(2)),
+      alerts,
+      periodDays: horizonDays,
+    };
+  },
+});
+
+/**
+ * Analyze vendor risk scores - returns vendors with elevated risk based on multiple factors
+ *
+ * THIS IS CATEGORY 3: The server calculates risk scores using domain heuristics.
+ * The LLM receives structured risk assessments, not raw vendor data to analyze.
+ */
+export const analyzeVendorRisk = query({
+  args: {
+    businessId: v.string(),
+    vendorId: v.optional(v.string()), // Optional: analyze specific vendor
+    riskThreshold: v.optional(v.number()), // Default 70
+  },
+  handler: async (ctx, args): Promise<{
+    vendors: VendorRiskResult[];
+    totalVendorsAnalyzed: number;
+    highRiskCount: number;
+  }> => {
+    // Auth check
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { vendors: [], totalVendorsAnalyzed: 0, highRiskCount: 0 };
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return { vendors: [], totalVendorsAnalyzed: 0, highRiskCount: 0 };
+    }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return { vendors: [], totalVendorsAnalyzed: 0, highRiskCount: 0 };
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return { vendors: [], totalVendorsAnalyzed: 0, highRiskCount: 0 };
+    }
+
+    const riskThreshold = args.riskThreshold ?? 70;
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    // Get vendors
+    let vendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Filter to specific vendor if requested
+    if (args.vendorId) {
+      vendors = vendors.filter((v) => v._id.toString() === args.vendorId);
+    }
+
+    // Get recent transactions for analysis
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const recentExpenses = entries.filter(
+      (e) =>
+        !e.deletedAt &&
+        e.transactionType === "Expense" &&
+        e.transactionDate &&
+        e.transactionDate >= ninetyDaysAgo
+    );
+
+    // Analyze each vendor - THE INTELLIGENCE
+    const results: VendorRiskResult[] = [];
+
+    for (const vendor of vendors) {
+      if (vendor.status === "inactive") continue;
+
+      const vendorTxns = recentExpenses.filter(
+        (e) => e.vendorId?.toString() === vendor._id.toString()
+      );
+
+      let riskScore = 0;
+      const factors: string[] = [];
+
+      // Missing contact info (+15 risk)
+      if (!vendor.email && !vendor.phone) {
+        riskScore += 15;
+        factors.push("No contact info");
+      }
+
+      // Missing tax ID (+10 risk)
+      if (!vendor.taxId) {
+        riskScore += 10;
+        factors.push("Missing tax ID");
+      }
+
+      // Prospective/unverified status (+15 risk)
+      if (vendor.status === "prospective") {
+        riskScore += 15;
+        factors.push("Unverified vendor");
+      }
+
+      // Transaction irregularity - high coefficient of variation (+20-30 risk)
+      if (vendorTxns.length >= 3) {
+        const amounts = vendorTxns.map((t) =>
+          Math.abs(t.homeCurrencyAmount || t.originalAmount || 0)
+        );
+        const mean = amounts.reduce((sum, a) => sum + a, 0) / amounts.length;
+        const variance =
+          amounts.reduce((sum, a) => sum + Math.pow(a - mean, 2), 0) / amounts.length;
+        const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
+
+        if (cv > 1.5) {
+          riskScore += 30;
+          factors.push("Highly irregular payment amounts");
+        } else if (cv > 1) {
+          riskScore += 20;
+          factors.push("Irregular payment amounts");
+        }
+      }
+
+      // Inactivity - no transactions in 6+ months (+20 risk)
+      if (vendorTxns.length === 0) {
+        const daysSinceUpdate = vendor.updatedAt
+          ? (Date.now() - vendor.updatedAt) / (24 * 60 * 60 * 1000)
+          : 365;
+
+        if (daysSinceUpdate > 180) {
+          riskScore += 20;
+          factors.push("No transactions in 6+ months");
+        }
+      }
+
+      // Only include vendors above threshold
+      if (riskScore >= riskThreshold) {
+        const recentSpend = vendorTxns.reduce(
+          (sum, t) => sum + Math.abs(t.homeCurrencyAmount || t.originalAmount || 0),
+          0
+        );
+
+        results.push({
+          vendorId: vendor._id.toString(),
+          vendorName: vendor.name,
+          riskScore,
+          riskFactors: factors,
+          severity: riskScore > 85 ? "high" : riskScore > 75 ? "medium" : "low",
+          recentSpend: parseFloat(recentSpend.toFixed(2)),
+          transactionCount: vendorTxns.length,
+        });
+      }
+    }
+
+    // Sort by risk score descending
+    results.sort((a, b) => b.riskScore - a.riskScore);
+
+    return {
+      vendors: results,
+      totalVendorsAnalyzed: vendors.length,
+      highRiskCount: results.filter((v) => v.severity === "high").length,
+    };
+  },
+});
+
+/**
+ * Detect vendor concentration risk - finds vendors with >X% of category spend
+ *
+ * THIS IS CATEGORY 3: The server identifies concentration risks using business logic.
+ */
+export const analyzeVendorConcentration = query({
+  args: {
+    businessId: v.string(),
+    concentrationThreshold: v.optional(v.number()), // Default 50%
+    dateRangeDays: v.optional(v.number()), // Default 90
+  },
+  handler: async (ctx, args): Promise<{
+    concentrationRisks: VendorConcentrationResult[];
+    categoriesAnalyzed: number;
+  }> => {
+    // Auth check
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { concentrationRisks: [], categoriesAnalyzed: 0 };
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return { concentrationRisks: [], categoriesAnalyzed: 0 };
+    }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return { concentrationRisks: [], categoriesAnalyzed: 0 };
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return { concentrationRisks: [], categoriesAnalyzed: 0 };
+    }
+
+    const threshold = args.concentrationThreshold ?? 50;
+    const dateRangeDays = args.dateRangeDays ?? 90;
+    const cutoffDate = new Date(Date.now() - dateRangeDays * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const expenses = entries.filter(
+      (e) =>
+        !e.deletedAt &&
+        e.transactionType === "Expense" &&
+        e.transactionDate &&
+        e.transactionDate >= cutoffDate &&
+        e.category
+    );
+
+    // Group by category and vendor - THE INTELLIGENCE
+    const byCategory: Record<
+      string,
+      { total: number; byVendor: Record<string, { name: string; amount: number }> }
+    > = {};
+
+    for (const txn of expenses) {
+      const category = txn.category!;
+      const vendorKey = txn.vendorId?.toString() || txn.vendorName || "unknown";
+      const vendorName = txn.vendorName || "Unknown Vendor";
+      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+
+      if (!byCategory[category]) {
+        byCategory[category] = { total: 0, byVendor: {} };
+      }
+      byCategory[category].total += amount;
+
+      if (!byCategory[category].byVendor[vendorKey]) {
+        byCategory[category].byVendor[vendorKey] = { name: vendorName, amount: 0 };
+      }
+      byCategory[category].byVendor[vendorKey].amount += amount;
+    }
+
+    // Find concentration risks
+    const risks: VendorConcentrationResult[] = [];
+
+    for (const [category, data] of Object.entries(byCategory)) {
+      if (data.total < 1000) continue; // Skip low-spend categories
+
+      for (const [vendorId, vendorData] of Object.entries(data.byVendor)) {
+        const percentage = (vendorData.amount / data.total) * 100;
+
+        if (percentage >= threshold) {
+          risks.push({
+            vendorId,
+            vendorName: vendorData.name,
+            category,
+            concentrationPercentage: parseFloat(percentage.toFixed(1)),
+            totalCategorySpend: parseFloat(data.total.toFixed(2)),
+            vendorSpend: parseFloat(vendorData.amount.toFixed(2)),
+            severity: percentage > 80 ? "high" : percentage > 65 ? "medium" : "low",
+          });
+        }
+      }
+    }
+
+    // Sort by concentration percentage descending
+    risks.sort((a, b) => b.concentrationPercentage - a.concentrationPercentage);
+
+    return {
+      concentrationRisks: risks,
+      categoriesAnalyzed: Object.keys(byCategory).length,
+    };
+  },
+});
+
+/**
+ * Detect potential duplicate transactions
+ *
+ * THIS IS CATEGORY 3: The server identifies duplicates using pattern matching.
+ */
+export const detectDuplicates = query({
+  args: {
+    businessId: v.string(),
+    dateRangeDays: v.optional(v.number()), // Default 30
+    minAmount: v.optional(v.number()), // Default 100
+  },
+  handler: async (ctx, args): Promise<{
+    duplicates: DuplicateResult[];
+    transactionsAnalyzed: number;
+    potentialSavings: number;
+  }> => {
+    // Auth check
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { duplicates: [], transactionsAnalyzed: 0, potentialSavings: 0 };
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return { duplicates: [], transactionsAnalyzed: 0, potentialSavings: 0 };
+    }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return { duplicates: [], transactionsAnalyzed: 0, potentialSavings: 0 };
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return { duplicates: [], transactionsAnalyzed: 0, potentialSavings: 0 };
+    }
+
+    const dateRangeDays = args.dateRangeDays ?? 30;
+    const minAmount = args.minAmount ?? 100;
+    const cutoffDate = new Date(Date.now() - dateRangeDays * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const recent = entries.filter(
+      (e) => !e.deletedAt && e.transactionDate && e.transactionDate >= cutoffDate
+    );
+
+    // Group by amount + vendor + date - THE INTELLIGENCE
+    const grouped: Record<string, typeof recent> = {};
+
+    for (const txn of recent) {
+      const amount = Math.abs(txn.originalAmount || 0);
+      if (amount < minAmount) continue;
+
+      const key = `${txn.vendorName || "unknown"}_${amount}_${txn.transactionDate}`;
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(txn);
+    }
+
+    // Find duplicates
+    const duplicates: DuplicateResult[] = [];
+    let potentialSavings = 0;
+
+    for (const [, txns] of Object.entries(grouped)) {
+      if (txns.length <= 1) continue;
+
+      const firstTxn = txns[0];
+      const amount = Math.abs(firstTxn.homeCurrencyAmount || firstTxn.originalAmount || 0);
+
+      duplicates.push({
+        transactionIds: txns.map((t) => t._id.toString()),
+        amount,
+        vendorName: firstTxn.vendorName || "Unknown",
+        transactionDate: firstTxn.transactionDate || "",
+        count: txns.length,
+      });
+
+      // Potential savings = duplicate amount (assuming all but one are duplicates)
+      potentialSavings += amount * (txns.length - 1);
+    }
+
+    // Sort by amount descending
+    duplicates.sort((a, b) => b.amount - a.amount);
+
+    return {
+      duplicates,
+      transactionsAnalyzed: recent.length,
+      potentialSavings: parseFloat(potentialSavings.toFixed(2)),
+    };
+  },
+});
+
+// DISABLED: actionCenterInsights table does not exist - feature was disabled
+// Uncomment when Action Center feature is re-enabled
+/*
+export const getInsightById = query({
+  args: {
+    insightId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return null;
+
+    // Try to find the insight
+    const insight = await ctx.db
+      .query("actionCenterInsights")
+      .filter((q) => q.eq(q.field("_id"), args.insightId as any))
+      .first();
+
+    if (!insight) {
+      // Try string comparison for legacy IDs
+      const allInsights = await ctx.db.query("actionCenterInsights").collect();
+      const found = allInsights.find((i) => i._id.toString() === args.insightId);
+      if (!found) return null;
+
+      // Verify user has access to this business
+      const business = await resolveById(ctx.db, "businesses", found.businessId);
+      if (!business) return null;
+
+      const membership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", user._id).eq("businessId", business._id)
+        )
+        .first();
+
+      if (!membership || membership.status !== "active") return null;
+
+      return found;
+    }
+
+    // Verify user has access
+    const business = await resolveById(ctx.db, "businesses", insight.businessId);
+    if (!business) return null;
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") return null;
+
+    return insight;
+  },
+});
+*/

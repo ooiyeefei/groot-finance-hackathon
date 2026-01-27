@@ -5,6 +5,9 @@
 
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 
+// Re-export duplicate detection types
+export * from './duplicate-detection'
+
 // JSONB error message structure for structured error handling
 export interface ExpenseClaimErrorMessage {
   message: string              // User-friendly error message
@@ -61,6 +64,13 @@ export interface CreateExpenseClaimRequest {
   // Business currency context (added for two-level currency system)
   business_home_currency?: SupportedCurrency
   business_allowed_currencies?: SupportedCurrency[]
+
+  // Duplicate override fields (for acknowledging duplicates)
+  duplicateOverride?: {
+    acknowledgedDuplicates: string[]  // Claim IDs user acknowledged
+    reason: string                     // Justification text
+    isSplitExpense: boolean           // Checkbox value
+  }
 }
 
 export interface UpdateExpenseClaimRequest {

@@ -208,18 +208,43 @@ export async function createExpenseClaim(
       )
 
       if (duplicate) {
-        return {
-          success: false,
-          error: 'duplicate_detected',
-          data: {
-            claimId: duplicate._id,
-            reference_number: duplicate.referenceNumber,
-            transaction_date: duplicate.transactionDate,
-            amount: duplicate.totalAmount,
-            vendor_name: duplicate.vendorName,
-            status: duplicate.status,
-            created_at: duplicate._creationTime
-          } as any
+        // Check if user has acknowledged the duplicate and wants to proceed
+        if (request.duplicateOverride) {
+          // AUDIT: User acknowledged duplicate and proceeded
+          console.log('[Duplicate Detection] AUDIT: User acknowledged duplicate and proceeded', {
+            user_id: employeeProfile.user_id,
+            business_id: employeeProfile.business_id,
+            acknowledged_claim_ids: request.duplicateOverride.acknowledgedDuplicates,
+            reason: request.duplicateOverride.reason,
+            is_split_expense: request.duplicateOverride.isSplitExpense,
+            timestamp: new Date().toISOString()
+          })
+          // Continue with expense claim creation (don't block)
+        } else {
+          // AUDIT: Duplicate detected and blocked
+          console.log('[Duplicate Detection] AUDIT: Duplicate detected and blocked', {
+            user_id: employeeProfile.user_id,
+            business_id: employeeProfile.business_id,
+            duplicate_claim_id: duplicate._id,
+            reference_number,
+            transaction_date,
+            amount: original_amount,
+            timestamp: new Date().toISOString()
+          })
+
+          return {
+            success: false,
+            error: 'duplicate_detected',
+            data: {
+              claimId: duplicate._id,
+              reference_number: duplicate.referenceNumber,
+              transaction_date: duplicate.transactionDate,
+              amount: duplicate.totalAmount,
+              vendor_name: duplicate.vendorName,
+              status: duplicate.status,
+              created_at: duplicate._creationTime
+            } as any
+          }
         }
       }
     }
@@ -271,7 +296,17 @@ export async function createExpenseClaim(
       },
 
       employee_profile_id: employeeProfile.id,
-      created_via: 'expense_claims_api_v1'
+      created_via: 'expense_claims_api_v1',
+
+      // Duplicate override metadata (if user acknowledged duplicates)
+      ...(request.duplicateOverride ? {
+        duplicate_override: {
+          acknowledged_duplicates: request.duplicateOverride.acknowledgedDuplicates,
+          reason: request.duplicateOverride.reason,
+          is_split_expense: request.duplicateOverride.isSplitExpense,
+          override_timestamp: new Date().toISOString()
+        }
+      } : {})
     }
 
     // Log expense claim creation
@@ -302,7 +337,14 @@ export async function createExpenseClaim(
       fileName: request.file?.name,
       fileType: request.file?.type,
       fileSize: request.file?.size,
-      status: request.file ? 'uploading' : 'draft'
+      status: request.file ? 'uploading' : 'draft',
+      // Duplicate override fields (if user acknowledged duplicates)
+      ...(request.duplicateOverride ? {
+        duplicateStatus: 'dismissed' as const,
+        duplicateOverrideReason: request.duplicateOverride.reason,
+        duplicateOverrideAt: Date.now(),
+        isSplitExpense: request.duplicateOverride.isSplitExpense
+      } : {})
     })
 
     // Get the created claim
