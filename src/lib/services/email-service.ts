@@ -1,8 +1,9 @@
 /**
- * Email Service using AWS SES
+ * Email Service using AWS SES with Resend fallback
  * Handles business invitation emails and other transactional emails
  *
- * Migrated from Resend to SES for unified email delivery.
+ * Primary: AWS SES for unified email delivery
+ * Fallback: Resend API when SES fails (e.g., sandbox mode limitations)
  *
  * Authentication:
  * - Vercel Deployment: Uses Vercel OIDC to assume IAM role (AWS_ROLE_ARN required)
@@ -12,10 +13,12 @@
 import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { fromWebToken } from '@aws-sdk/credential-providers'
 import type { AwsCredentialIdentityProvider } from '@smithy/types'
+import { Resend } from 'resend'
 
 // Configuration from environment
 const AWS_REGION = process.env.AWS_REGION || 'us-west-2'
 const AWS_ROLE_ARN = process.env.AWS_ROLE_ARN // Set in Vercel for OIDC
+const RESEND_API_KEY = process.env.RESEND_API_KEY // Fallback email provider
 
 interface InvitationEmailData {
   email: string
@@ -80,6 +83,7 @@ function createVercelOidcCredentialProvider(
 
 class EmailService {
   private ses?: SESClient
+  private resend?: Resend
   private config?: EmailServiceConfig
 
   private initialize() {
@@ -108,7 +112,67 @@ class EmailService {
     }
 
     this.ses = new SESClient(clientConfig)
-    console.log(`[EmailService] Initialized for region: ${AWS_REGION}`)
+    console.log(`[EmailService] Initialized SES for region: ${AWS_REGION}`)
+
+    // Initialize Resend as fallback if API key is available
+    if (RESEND_API_KEY) {
+      this.resend = new Resend(RESEND_API_KEY)
+      console.log('[EmailService] Resend fallback initialized')
+    }
+  }
+
+  /**
+   * Check if error is due to SES sandbox limitations
+   */
+  private isSandboxError(error: unknown): boolean {
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase()
+      return (
+        message.includes('email address is not verified') ||
+        message.includes('messagerejected') ||
+        message.includes('not authorized to send') ||
+        message.includes('sandbox')
+      )
+    }
+    return false
+  }
+
+  /**
+   * Send email via Resend (fallback provider)
+   */
+  private async sendViaResend(params: {
+    to: string
+    subject: string
+    htmlBody: string
+    textBody: string
+  }): Promise<{ success: boolean; error?: string; messageId?: string }> {
+    if (!this.resend) {
+      return { success: false, error: 'Resend not configured (RESEND_API_KEY missing)' }
+    }
+
+    try {
+      const { data, error } = await this.resend.emails.send({
+        from: `FinanSEAL <${this.config!.fromEmail}>`,
+        to: params.to,
+        subject: params.subject,
+        html: params.htmlBody,
+        text: params.textBody
+      })
+
+      if (error) {
+        console.error('[EmailService] Resend error:', error)
+        return { success: false, error: error.message }
+      }
+
+      console.log(`[EmailService] Email sent via Resend, ID: ${data?.id}`)
+      return { success: true, messageId: data?.id }
+    } catch (error) {
+      console.error('[EmailService] Resend exception:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown Resend error'
+      }
+    }
   }
 
   /**
@@ -159,21 +223,28 @@ class EmailService {
   }
 
   /**
-   * Send business invitation email via AWS SES
+   * Send business invitation email via AWS SES with Resend fallback
+   *
+   * Flow:
+   * 1. Try SES first
+   * 2. If SES fails due to sandbox (unverified recipient), fallback to Resend
+   * 3. If both fail, return error
    */
-  async sendInvitation(data: InvitationEmailData): Promise<{ success: boolean; error?: string; messageId?: string }> {
+  async sendInvitation(data: InvitationEmailData): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {
+    this.initialize()
+
+    const { email, businessName } = data
+
+    const htmlBody = this.generateInvitationHTML(data)
+    const textBody = this.generateInvitationText(data)
+    const subject = `Invitation to join ${businessName} on FinanSEAL`
+
+    // Try SES first
     try {
-      this.initialize()
-
-      const { email, businessName } = data
-
-      const htmlBody = this.generateInvitationHTML(data)
-      const textBody = this.generateInvitationText(data)
-
       const rawMessage = this.buildRawEmail({
         from: this.config!.fromEmail,
         to: email,
-        subject: `Invitation to join ${businessName} on FinanSEAL`,
+        subject,
         htmlBody,
         textBody
       })
@@ -187,21 +258,43 @@ class EmailService {
 
       const response = await this.ses!.send(command)
 
-      if (!response.MessageId) {
-        console.error('[EmailService] SES did not return a MessageId')
-        return { success: false, error: 'SES did not return a MessageId' }
+      if (response.MessageId) {
+        console.log(`[EmailService] Invitation sent via SES to ${email}, MessageId: ${response.MessageId}`)
+        return { success: true, messageId: response.MessageId, provider: 'ses' }
+      }
+    } catch (sesError) {
+      console.error('[EmailService] SES failed:', sesError)
+
+      // If SES failed due to sandbox limitations, try Resend
+      if (this.isSandboxError(sesError) && this.resend) {
+        console.log('[EmailService] SES sandbox error detected, falling back to Resend...')
+
+        const resendResult = await this.sendViaResend({
+          to: email,
+          subject,
+          htmlBody,
+          textBody
+        })
+
+        if (resendResult.success) {
+          return { ...resendResult, provider: 'resend' }
+        }
+
+        // Both failed
+        return {
+          success: false,
+          error: `SES sandbox error, Resend fallback also failed: ${resendResult.error}`
+        }
       }
 
-      console.log(`[EmailService] Invitation sent via SES to ${email}, MessageId: ${response.MessageId}`)
-      return { success: true, messageId: response.MessageId }
-
-    } catch (error) {
-      console.error('[EmailService] Failed to send invitation via SES:', error)
+      // SES failed for other reasons (not sandbox)
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown email error'
+        error: sesError instanceof Error ? sesError.message : 'Unknown email error'
       }
     }
+
+    return { success: false, error: 'SES did not return a MessageId' }
   }
 
   /**
@@ -363,27 +456,29 @@ https://finance.hellogroot.com
   }
 
   /**
-   * Send feedback notification email to team members
+   * Send feedback notification email to team members (with Resend fallback)
    */
-  async sendFeedbackNotification(data: FeedbackNotificationData): Promise<{ success: boolean; error?: string; messageId?: string }> {
+  async sendFeedbackNotification(data: FeedbackNotificationData): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {
+    this.initialize()
+
+    const { recipientEmail, feedbackType } = data
+
+    const typeLabels = {
+      bug: 'Bug Report',
+      feature: 'Feature Request',
+      general: 'General Feedback'
+    }
+
+    const htmlBody = this.generateFeedbackNotificationHTML(data)
+    const textBody = this.generateFeedbackNotificationText(data)
+    const subject = `New ${typeLabels[feedbackType]} from FinanSEAL`
+
+    // Try SES first
     try {
-      this.initialize()
-
-      const { recipientEmail, feedbackType } = data
-
-      const typeLabels = {
-        bug: 'Bug Report',
-        feature: 'Feature Request',
-        general: 'General Feedback'
-      }
-
-      const htmlBody = this.generateFeedbackNotificationHTML(data)
-      const textBody = this.generateFeedbackNotificationText(data)
-
       const rawMessage = this.buildRawEmail({
         from: this.config!.fromEmail,
         to: recipientEmail,
-        subject: `New ${typeLabels[feedbackType]} from FinanSEAL`,
+        subject,
         htmlBody,
         textBody
       })
@@ -397,21 +492,41 @@ https://finance.hellogroot.com
 
       const response = await this.ses!.send(command)
 
-      if (!response.MessageId) {
-        console.error('[EmailService] SES did not return a MessageId')
-        return { success: false, error: 'SES did not return a MessageId' }
+      if (response.MessageId) {
+        console.log(`[EmailService] Feedback notification sent via SES to ${recipientEmail}, MessageId: ${response.MessageId}`)
+        return { success: true, messageId: response.MessageId, provider: 'ses' }
+      }
+    } catch (sesError) {
+      console.error('[EmailService] SES failed for feedback notification:', sesError)
+
+      // If SES failed due to sandbox limitations, try Resend
+      if (this.isSandboxError(sesError) && this.resend) {
+        console.log('[EmailService] SES sandbox error, falling back to Resend for feedback notification...')
+
+        const resendResult = await this.sendViaResend({
+          to: recipientEmail,
+          subject,
+          htmlBody,
+          textBody
+        })
+
+        if (resendResult.success) {
+          return { ...resendResult, provider: 'resend' }
+        }
+
+        return {
+          success: false,
+          error: `SES sandbox error, Resend fallback also failed: ${resendResult.error}`
+        }
       }
 
-      console.log(`[EmailService] Feedback notification sent via SES to ${recipientEmail}, MessageId: ${response.MessageId}`)
-      return { success: true, messageId: response.MessageId }
-
-    } catch (error) {
-      console.error('[EmailService] Failed to send feedback notification via SES:', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown email error'
+        error: sesError instanceof Error ? sesError.message : 'Unknown email error'
       }
     }
+
+    return { success: false, error: 'SES did not return a MessageId' }
   }
 
   /**
