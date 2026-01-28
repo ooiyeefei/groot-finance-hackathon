@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, lazy, Suspense, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { redirect } from 'next/navigation'
+import { redirect, useSearchParams } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import ActionButton from '@/components/ui/action-button'
@@ -13,6 +13,22 @@ import { ClientProviders } from '@/components/providers/client-providers'
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ChatInterface = lazy(() => import('@/domains/chat/components/chat-interface'))
 const ConversationSidebar = lazy(() => import('@/domains/chat/components/conversation-sidebar'))
+
+// Wrapper component to handle search params with Suspense
+function SearchParamsHandler({ onPrefillChange }: { onPrefillChange: (prefill: string | null) => void }) {
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const prefill = searchParams.get('prefill')
+    if (prefill) {
+      onPrefillChange(decodeURIComponent(prefill))
+      // Clear the URL param without triggering navigation
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [searchParams, onPrefillChange])
+
+  return null
+}
 
 interface Message {
   id: string
@@ -83,6 +99,17 @@ export default function AIAssistantPage() {
   const [loading, setLoading] = useState(false)
   const [initialLoadComplete, setInitialLoadComplete] = useState(false)
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0)
+  const [prefillMessage, setPrefillMessage] = useState<string | undefined>()
+
+  // Handle prefill from URL (via SearchParamsHandler component)
+  const handlePrefillChange = useCallback((prefill: string | null) => {
+    if (prefill) {
+      setPrefillMessage(prefill)
+      // Start a new chat when prefill is present
+      setCurrentMessages([])
+      setCurrentConversationId(undefined)
+    }
+  }, [])
 
   // Redirect if not authenticated
   if (isLoaded && !userId) {
@@ -91,8 +118,9 @@ export default function AIAssistantPage() {
 
   // Auto-load most recent conversation on initial page load only
   // OPTIMIZED: Parallel fetching with Promise.allSettled() for faster initial load
+  // Skip if prefill is present (we want a new chat)
   useEffect(() => {
-    if (!isLoaded || !userId || initialLoadComplete) return
+    if (!isLoaded || !userId || initialLoadComplete || prefillMessage) return
 
     const loadMostRecentConversation = async () => {
       setLoading(true)
@@ -124,7 +152,7 @@ export default function AIAssistantPage() {
     }
 
     loadMostRecentConversation()
-  }, [isLoaded, userId]) // Removed initialLoadComplete dependency to prevent re-runs
+  }, [isLoaded, userId, prefillMessage]) // Removed initialLoadComplete dependency to prevent re-runs
 
   // Load specific conversation
   const loadConversation = async (conversationId: string) => {
@@ -238,6 +266,11 @@ export default function AIAssistantPage() {
 
   return (
     <ClientProviders>
+      {/* Handle prefill search params with Suspense boundary */}
+      <Suspense fallback={null}>
+        <SearchParamsHandler onPrefillChange={handlePrefillChange} />
+      </Suspense>
+
       <div className="flex h-screen bg-background">
           {/* Main Navigation Sidebar */}
           <Sidebar />
@@ -303,6 +336,7 @@ export default function AIAssistantPage() {
                       onConversationCreated={handleConversationCreated}
                       initialMessages={currentMessages}
                       onMessagesUpdate={handleMessagesUpdate}
+                      initialInput={prefillMessage}
                     />
                   </Suspense>
                 )}

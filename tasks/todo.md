@@ -2055,149 +2055,174 @@ role_permissions: {
 
 ---
 
-# T022: Add Audit Logging for Duplicate Detection Events (2026-01-27)
+# AI Agent Category 3 Transformation (2026-01-26)
 
-## Goal
-Add console.log audit statements for duplicate detection events in expense claims:
-1. When a duplicate is detected and blocked
-2. When a user overrides/acknowledges a duplicate
+## Vision (Clockwise Model)
 
-## Todo Items
-- [x] Add audit log when duplicate is detected and blocked (line ~210 in data-access.ts)
-- [x] Add audit log when user acknowledges duplicate and proceeds (where duplicateOverride is processed)
-- [x] Add `duplicateOverride` field to `CreateExpenseClaimRequest` type
-- [x] Run `npm run build` to verify (passes for expense-claims domain; pre-existing error in convex/functions/financialIntelligence.ts unrelated to this change)
+Based on [Clockwise's MCP architecture](https://www.pulsemcp.com/posts/how-we-baked-domain-specific-intelligence-into-an-mcp-server):
 
-## Files Modified
-1. `src/domains/expense-claims/lib/data-access.ts` - Added audit logging statements
-2. `src/domains/expense-claims/types/index.ts` - Added `duplicateOverride` field to `CreateExpenseClaimRequest` interface
+> "The tools themselves aren't simple CRUD operations. The scheduling intelligence happens server-side, not sent back for analysis by the agent's LLM."
+
+**FinanSEAL Goal:** Transform from Category 1-2 (CRUD/data retrieval) to Category 3 (domain-specific intelligence) where the SERVER performs financial analysis, not the LLM.
+
+## Current State Analysis
+
+### What We Have (Category 1-2 Tools):
+| Tool | Level | Issue |
+|------|-------|-------|
+| `get_transactions` | Cat 1 | Returns raw data, LLM analyzes |
+| `get_vendors` | Cat 1 | Returns raw list, LLM analyzes |
+| `search_documents` | Cat 2 | Search only, no intelligence |
+| `mcp_detect_anomalies` | Cat 2.5 | Stub - calls external MCP |
+
+### What Exists But Is Hidden (Category 3 Intelligence):
+
+**In `convex/functions/actionCenterJobs.ts`** - these algorithms exist but only run on cron schedule:
+- `runAnomalyDetection()` - Z-score analysis, 2σ/3σ thresholds
+- `runCashFlowDetection()` - Expense/income ratio, burn rate
+- `runVendorConcentration()` - Single vendor >50% category detection
+- `runVendorSpendingChanges()` - Period-over-period change detection
+- `runVendorRiskAnalysis()` - Multi-factor risk scoring
+- `runDeadlineProximityAlerts()` - Payment due date alerting
+- `runCashBalanceAlerts()` - Runway days calculation
+- `runDuplicateTransactionAlerts()` - Same amount/vendor/date detection
+
+**Problem:** These run every 4 hours via cron, store results in `actionCenterInsights`. The AI agent CANNOT call them directly - it has to use Category 1 tools and re-analyze.
+
+## Architecture Gap
+
+```
+Current (Broken):
+┌─────────────────────────────────────────────────────────────────┐
+│ Cron Job (Every 4 hrs)              AI Agent (On Demand)        │
+│ ────────────────────                ─────────────────────       │
+│ runAnomalyDetection()        ≠      get_transactions() ← CRUD   │
+│ runCashFlowDetection()       ≠      get_vendors() ← CRUD        │
+│ runVendorRiskAnalysis()      ≠      (no intelligence tools)     │
+│        ↓                                    ↓                   │
+│ Stores in insights DB                LLM does analysis itself   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Implementation Plan
+
+### Phase 1: Create Public Query Wrappers in Convex
+
+**New file: `convex/functions/financialIntelligence.ts`**
+
+Extract algorithms into callable queries:
+- [ ] **1.1** `detectAnomalies(businessId, dateRange, sensitivity)` - Returns anomalies with z-scores
+- [ ] **1.2** `analyzeCashFlow(businessId, horizonDays)` - Returns runway, burn rate, alerts
+- [ ] **1.3** `analyzeVendorRisk(businessId, vendorId?)` - Returns risk scores, concentration
+- [ ] **1.4** `detectDuplicates(businessId, dateRange)` - Returns potential duplicates
+- [ ] **1.5** `getActionCenterInsight(insightId)` - Lookup existing insight by ID
+
+### Phase 2: Create Category 3 Tools for Agent
+
+**New tools in `src/lib/ai/tools/`:**
+- [ ] **2.1** `detect-anomalies-tool.ts` - Calls `financialIntelligence.detectAnomalies`
+- [ ] **2.2** `forecast-cashflow-tool.ts` - Calls `financialIntelligence.analyzeCashFlow`
+- [ ] **2.3** `analyze-vendor-risk-tool.ts` - Calls `financialIntelligence.analyzeVendorRisk`
+- [ ] **2.4** `detect-duplicates-tool.ts` - Calls `financialIntelligence.detectDuplicates`
+- [ ] **2.5** `get-insight-tool.ts` - Calls `financialIntelligence.getActionCenterInsight`
+
+### Phase 3: Register New Tools in ToolFactory
+- [ ] **3.1** Add new tools to `src/lib/ai/tools/tool-factory.ts`
+- [ ] **3.2** Update tool schemas for OpenAI function calling
+
+### Phase 4: Inject Real Test Data
+- [ ] **4.1** Run `seedActionCenter.ts` to create actual accounting_entries
+- [ ] **4.2** Verify insights generated from real data (not mock)
+
+### Phase 5: End-to-End Testing
+- [ ] **5.1** Test: "Are there anomalies in my expenses?"
+  - Agent calls `detect_anomalies` tool
+  - Server runs Z-score analysis on actual transactions
+  - Agent responds with structured insight
+
+## Success Criteria
+
+### Before (Category 1-2):
+```
+User: "What's unusual about my expenses?"
+Tool: get_transactions() → [raw transaction list]
+LLM: "Looking at your transactions, $5000 seems high..." (LLM did the work)
+```
+
+### After (Category 3):
+```
+User: "What's unusual about my expenses?"
+Tool: detect_anomalies() → {anomalies: [{desc, z_score: 4.2, severity: "high"}]}
+LLM: "Found 1 anomaly: Office Supplies $5000 is 4.2σ above average." (Server did the work)
+```
+
+## Files to Create/Modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `convex/functions/financialIntelligence.ts` | CREATE | Public query wrappers for algorithms |
+| `src/lib/ai/tools/detect-anomalies-tool.ts` | CREATE | Category 3 anomaly detection tool |
+| `src/lib/ai/tools/forecast-cashflow-tool.ts` | CREATE | Category 3 cash flow tool |
+| `src/lib/ai/tools/analyze-vendor-risk-tool.ts` | CREATE | Category 3 vendor risk tool |
+| `src/lib/ai/tools/get-insight-tool.ts` | CREATE | Query action center insights by ID |
+| `src/lib/ai/tools/tool-factory.ts` | MODIFY | Register new tools |
 
 ## Review Section
 
-### Implementation Complete (2026-01-27)
+### Completed (2026-01-26)
 
-**Changes Made:**
+**Phase 1: Convex Intelligence Queries** ✅
+- [x] Created `convex/functions/financialIntelligence.ts` with 5 public queries:
+  - `detectAnomalies()` - Z-score analysis with configurable sensitivity
+  - `analyzeCashFlow()` - Runway, burn rate, expense ratio with alerts
+  - `analyzeVendorRisk()` - Multi-factor risk scoring
+  - `analyzeVendorConcentration()` - Category-wise vendor dependency
+  - `detectDuplicates()` - Same amount/vendor/date pattern matching
+  - `getInsightById()` - Lookup action center insights
 
-1. **`src/domains/expense-claims/lib/data-access.ts` (lines 210-249)**
-   - Added check for `request.duplicateOverride` before blocking duplicate
-   - When `duplicateOverride` is provided: Log audit event and continue with claim creation
-   - When `duplicateOverride` is NOT provided: Log audit event and block with `duplicate_detected` error
+**Phase 2: Category 3 Tools for Agent** ✅
+- [x] Created `src/lib/ai/tools/detect-anomalies-tool.ts`
+- [x] Created `src/lib/ai/tools/analyze-cashflow-tool.ts`
+- [x] Created `src/lib/ai/tools/analyze-vendor-risk-tool.ts`
+- [x] Created `src/lib/ai/tools/get-insight-tool.ts`
 
-2. **`src/domains/expense-claims/types/index.ts` (lines 65-70)**
-   - Added `duplicateOverride` optional field to `CreateExpenseClaimRequest`:
-     - `acknowledgedDuplicates: string[]` - Claim IDs user acknowledged
-     - `reason: string` - Justification text
-     - `isSplitExpense: boolean` - Checkbox value
+**Phase 3: Tool Registration** ✅
+- [x] Updated `src/lib/ai/tools/tool-factory.ts` to register 4 new Category 3 tools
 
-**Audit Log Format:**
+**Phase 4: Real Test Data** ✅
+- [x] Injected 15 real accounting entries into YF Test 2 business
+- [x] Ran detection algorithms - generated 14 real insights from actual data
 
-```typescript
-// When duplicate is blocked (no override):
-console.log('[Duplicate Detection] AUDIT: Duplicate detected and blocked', {
-  user_id: string,
-  business_id: string,
-  duplicate_claim_id: string,
-  reference_number: string,
-  transaction_date: string,
-  amount: number,
-  timestamp: ISO string
-})
+### Architecture Transformation Summary
 
-// When user acknowledges and proceeds:
-console.log('[Duplicate Detection] AUDIT: User acknowledged duplicate and proceeded', {
-  user_id: string,
-  business_id: string,
-  acknowledged_claim_ids: string[],
-  reason: string,
-  is_split_expense: boolean,
-  timestamp: ISO string
-})
+**Before (Category 1-2):**
+```
+User: "Are there anomalies in my expenses?"
+Agent: calls get_transactions() → raw data list
+LLM: analyzes raw data, does the statistical work
 ```
 
-**Note on Build:** The build fails with a pre-existing error in `convex/functions/financialIntelligence.ts` (line 721) referencing a non-existent table `actionCenterInsights`. This is unrelated to the T022 audit logging changes. The expense claims domain files compile without errors.
-
-### Verification
-- [x] Audit logging added for duplicate blocked scenario
-- [x] Audit logging added for duplicate override scenario
-- [x] Type definition updated to support duplicateOverride
-- [x] No TypeScript errors in modified files
-
----
-
-# T021: Update POST /api/v1/expense-claims to accept duplicateOverride field (2026-01-27)
-
-## Goal
-When a user acknowledges a duplicate and proceeds, the API should:
-1. Accept the duplicateOverride data in the API (Zod validation)
-2. Pass it to createExpenseClaim in data-access.ts
-3. Store the duplicate acknowledgment metadata in the expense claim (Convex)
-
-## Todo Items
-
-- [x] **1.1** Add duplicateOverride to Zod schema in `src/lib/validations/expense-claims.ts`
-- [x] **1.2** Update route.ts to pass duplicateOverride in createRequest
-- [x] **1.3** Update Convex `expenseClaims.create` mutation to accept duplicate fields
-- [x] **1.4** Update data-access.ts createExpenseClaim function to store override metadata
-
-## Files Modified
-
-1. **`src/lib/validations/expense-claims.ts`**
-   - Added `duplicateOverride` optional object to `createExpenseClaimSchema`:
-     - `acknowledgedDuplicates: z.array(z.string())` - Claim IDs user acknowledged
-     - `reason: z.string().min(1)` - Justification text (required if overriding)
-     - `isSplitExpense: z.boolean()` - Checkbox value
-
-2. **`src/app/api/v1/expense-claims/route.ts`**
-   - Updated JSON body handler to explicitly include `duplicateOverride` in createRequest
-
-3. **`convex/functions/expenseClaims.ts`**
-   - Added to `create` mutation args:
-     - `duplicateStatus: v.optional(v.union(...))` - 'none' | 'potential' | 'confirmed' | 'dismissed'
-     - `duplicateOverrideReason: v.optional(v.string())`
-     - `duplicateOverrideAt: v.optional(v.number())`
-     - `isSplitExpense: v.optional(v.boolean())`
-   - Added these fields to the insert call
-
-4. **`src/domains/expense-claims/lib/data-access.ts`**
-   - Added `duplicate_override` object to processingMetadata when override is provided
-   - Passes duplicate fields to Convex create mutation when `duplicateOverride` present:
-     - `duplicateStatus: 'dismissed'`
-     - `duplicateOverrideReason`, `duplicateOverrideAt`, `isSplitExpense`
-
-## Data Flow
-
+**After (Category 3):**
 ```
-Frontend submits with duplicateOverride → API validates with Zod schema
-                                        ↓
-Route.ts includes duplicateOverride in createRequest
-                                        ↓
-data-access.ts checks for duplicateOverride:
-  - If present: logs audit, stores metadata, sets duplicateStatus='dismissed'
-  - If absent: duplicate detection blocks with error
-                                        ↓
-Convex create mutation stores all duplicate fields in expense_claims table
+User: "Are there anomalies in my expenses?"
+Agent: calls detect_anomalies() → {anomalies: [{z_score: 4.2, severity: "high"}]}
+LLM: presents server-calculated insights
 ```
 
-## Review Section
+### Tools Now Available
 
-### Implementation Complete (2026-01-27)
+| Tool | Type | Description |
+|------|------|-------------|
+| `detect_anomalies` | Category 3 | Server-side Z-score analysis |
+| `analyze_cash_flow` | Category 3 | Server-side runway/burn rate calculation |
+| `analyze_vendor_risk` | Category 3 | Server-side risk scoring |
+| `get_action_center_insight` | Category 3 | Lookup pre-analyzed insights |
+| `get_transactions` | Category 1 | Raw transaction data |
+| `get_vendors` | Category 1 | Raw vendor list |
+| `search_documents` | Category 2 | Vector search |
 
-All changes are minimal and targeted:
-- Zod schema validates the duplicateOverride structure at API boundary
-- Route.ts passes the validated field through to data-access layer
-- data-access.ts stores metadata in processingMetadata AND passes to Convex
-- Convex mutation accepts and stores the duplicate override fields directly in the table
-
-**Build Status:**
-- ESLint passes on all modified files (no new errors)
-- Build fails due to pre-existing issue in `convex/functions/financialIntelligence.ts` (references non-existent `actionCenterInsights` table) - unrelated to this task
-
-### Verification
-- [x] Zod schema validates duplicateOverride structure
-- [x] Route.ts passes duplicateOverride to createExpenseClaim
-- [x] Convex mutation accepts duplicate fields
-- [x] data-access.ts stores metadata in both processingMetadata and Convex fields
-- [x] No TypeScript/ESLint errors in modified files
-- [ ] Manual test: Submit expense claim with duplicateOverride payload
-- [ ] Verify Convex stores duplicateStatus='dismissed'
-- [ ] Verify processingMetadata contains duplicate_override object
+### Next Steps (Future)
+- [ ] Add `detect_duplicates` tool to agent
+- [ ] Add `analyze_vendor_concentration` tool to agent
+- [ ] Implement payment optimization algorithm (like Clockwise's scheduling)
+- [ ] Add ML-based expense categorization suggestions

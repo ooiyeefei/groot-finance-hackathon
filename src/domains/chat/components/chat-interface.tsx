@@ -24,13 +24,14 @@ interface ChatInterfaceProps {
   onConversationCreated?: (conversationId: string) => void
   initialMessages?: Message[]
   onMessagesUpdate?: (messages: Message[]) => void
+  initialInput?: string
 }
 
-export default function ChatInterface({ conversationId, onConversationCreated, initialMessages, onMessagesUpdate }: ChatInterfaceProps) {
+export default function ChatInterface({ conversationId, onConversationCreated, initialMessages, onMessagesUpdate, initialInput }: ChatInterfaceProps) {
   const locale = useLocale()
   const t = useTranslations('chat')
   const [messages, setMessages] = useState<Message[]>(initialMessages || [])
-  const [inputValue, setInputValue] = useState('')
+  const [inputValue, setInputValue] = useState(initialInput || '')
   const [isLoading, setIsLoading] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>(conversationId)
   const [activeCitation, setActiveCitation] = useState<CitationData | null>(null)

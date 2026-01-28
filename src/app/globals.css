@@ -99,15 +99,15 @@
     --radius-lg: 1rem;                /* Large radius */
     --radius-full: 9999px;            /* Full radius (pills) */
 
-    /* Typography Scale (10% smaller for sidebar optimization) */
-    --font-size-xs: 0.675rem;          /* 10.8px - was 12px */
-    --font-size-sm: 0.765rem;          /* 12.24px - was 13.6px */
-    --font-size-base: 0.9rem;          /* 14.4px - was 16px */
-    --font-size-lg: 1.035rem;          /* 16.56px - was 18px */
-    --font-size-xl: 1.125rem;          /* 18px - was 20px */
-    --font-size-2xl: 1.35rem;          /* 21.6px - was 24px */
-    --font-size-3xl: 1.71rem;          /* 27.36px - was 30px */
-    --font-size-4xl: 2.025rem;         /* 32.4px - was 36px */
+    /* Typography Scale (13% smaller for compact UI) */
+    --font-size-xs: 0.587rem;          /* 9.4px - 13% smaller */
+    --font-size-sm: 0.666rem;          /* 10.7px - 13% smaller */
+    --font-size-base: 0.783rem;        /* 12.5px - 13% smaller */
+    --font-size-lg: 0.900rem;          /* 14.4px - 13% smaller */
+    --font-size-xl: 0.979rem;          /* 15.7px - 13% smaller */
+    --font-size-2xl: 1.175rem;         /* 18.8px - 13% smaller */
+    --font-size-3xl: 1.488rem;         /* 23.8px - 13% smaller */
+    --font-size-4xl: 1.762rem;         /* 28.2px - 13% smaller */
 
     /* Spacing Scale (10% smaller for sidebar optimization) */
     --space-1: 0.225rem;               /* 3.6px - was 4px */
@@ -123,11 +123,13 @@
     --space-20: 4.5rem;                /* 72px - was 80px */
     --space-24: 5.4rem;                /* 86.4px - was 96px */
 
-    /* Layout Dimensions (10% smaller for sidebar optimization) */
+    /* Layout Dimensions (optimized for full-width layouts) */
     --sidebar-width: 13.5rem;          /* 216px - was 240px */
     --sidebar-width-collapsed: 3.6rem; /* 57.6px - was 64px */
     --header-height: 3.6rem;           /* 57.6px - was 64px */
-    --content-max-width: 108rem;       /* 1728px - was 1920px */
+    --content-max-width: 100%;         /* Full width - no max constraint */
+    --content-padding: 1rem;           /* Reduced padding for more content space */
+    --content-padding-sm: 0.75rem;     /* Smaller padding for mobile */
 
     /* Component Sizes (10% smaller) */
     --button-height-sm: 1.8rem;        /* 28.8px - was 32px */
@@ -918,3 +920,51 @@
 .animate-fade-in-up:nth-child(6) { animation-delay: 250ms; }
 .animate-fade-in-up:nth-child(7) { animation-delay: 300ms; }
 .animate-fade-in-up:nth-child(8) { animation-delay: 350ms; }
+
+/* ===================
+   FULL-WIDTH LAYOUT SYSTEM
+   =================== */
+
+/* Override max-width constraints on main content areas */
+main {
+  max-width: 100% !important;
+}
+
+main > div {
+  max-width: 100% !important;
+}
+
+/* Reduce padding on main content areas */
+main.p-6 {
+  padding: var(--content-padding) !important;
+}
+
+main .p-6 {
+  padding: var(--content-padding) !important;
+}
+
+/* Full-width utility class */
+.content-full-width {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+/* Reduced padding utility */
+.content-compact {
+  padding: var(--content-padding) !important;
+}
+
+/* Override common max-width constraints */
+.max-w-6xl,
+.max-w-5xl,
+.max-w-4xl,
+.max-w-3xl,
+.max-w-2xl,
+.max-w-xl {
+  max-width: 100% !important;
+}
+
+/* Chat interface full height */
+.h-\[calc\(100vh-160px\)\] {
+  height: calc(100vh - 100px) !important;
+}

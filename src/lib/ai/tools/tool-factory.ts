@@ -9,8 +9,24 @@ import { TransactionLookupTool } from './transaction-lookup-tool'
 import { GetVendorsTool } from './get-vendors-tool'
 import { CrossBorderTaxComplianceTool } from './cross-border-tax-compliance-tool'
 import { RegulatoryKnowledgeTool } from './regulatory-knowledge-tool'
+// Category 3 Domain Intelligence Tools
+import { DetectAnomaliesTool } from './detect-anomalies-tool'
+import { AnalyzeCashFlowTool } from './analyze-cashflow-tool'
+import { AnalyzeVendorRiskTool } from './analyze-vendor-risk-tool'
+import { GetInsightTool } from './get-insight-tool'
 
-export type ToolName = 'search_documents' | 'get_transactions' | 'get_vendors' | 'analyze_cross_border_compliance' | 'searchRegulatoryKnowledgeBase'
+export type ToolName =
+  // Category 1-2: Data retrieval tools
+  | 'search_documents'
+  | 'get_transactions'
+  | 'get_vendors'
+  | 'analyze_cross_border_compliance'
+  | 'searchRegulatoryKnowledgeBase'
+  // Category 3: Domain intelligence tools (server-side analysis)
+  | 'detect_anomalies'
+  | 'analyze_cash_flow'
+  | 'analyze_vendor_risk'
+  | 'get_action_center_insight'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -22,11 +38,20 @@ export class ToolFactory {
    * Register all available tools
    */
   static {
+    // Category 1-2: Data retrieval tools
     this.registerTool('search_documents', () => new DocumentSearchTool())
     this.registerTool('get_transactions', () => new TransactionLookupTool())
     this.registerTool('get_vendors', () => new GetVendorsTool())
     this.registerTool('analyze_cross_border_compliance', () => new CrossBorderTaxComplianceTool())
     this.registerTool('searchRegulatoryKnowledgeBase', () => new RegulatoryKnowledgeTool())
+
+    // Category 3: Domain Intelligence Tools
+    // These perform server-side analysis and return structured insights
+    // Following the Clockwise MCP model: "intelligence happens server-side"
+    this.registerTool('detect_anomalies', () => new DetectAnomaliesTool())
+    this.registerTool('analyze_cash_flow', () => new AnalyzeCashFlowTool())
+    this.registerTool('analyze_vendor_risk', () => new AnalyzeVendorRiskTool())
+    this.registerTool('get_action_center_insight', () => new GetInsightTool())
   }
 
   /**

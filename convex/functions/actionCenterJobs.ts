@@ -364,6 +364,20 @@ async function runCategorizationDetection(
 
   if (uncategorizedPct < 10) return 0; // Below threshold
 
+  // Check for duplicate insight
+  const existingInsights = await ctx.db
+    .query("actionCenterInsights")
+    .withIndex("by_category", (q: any) => q.eq("category", "categorization"))
+    .collect();
+
+  const isDuplicate = existingInsights.some(
+    (i: any) =>
+      i.businessId === businessId.toString() &&
+      i.detectedAt > Date.now() - 7 * 24 * 60 * 60 * 1000 // Within last 7 days
+  );
+
+  if (isDuplicate) return 0;
+
   let insightsCreated = 0;
   const priority = uncategorizedPct > 30 ? "high" : uncategorizedPct > 20 ? "medium" : "low";
 
@@ -431,6 +445,21 @@ async function runCashFlowDetection(
 
   if (ratio < 1.2) return 0; // Expenses less than 120% of income is fine
 
+  // Check for duplicate insight
+  const existingInsights = await ctx.db
+    .query("actionCenterInsights")
+    .withIndex("by_category", (q: any) => q.eq("category", "cashflow"))
+    .collect();
+
+  const isDuplicate = existingInsights.some(
+    (i: any) =>
+      i.businessId === businessId.toString() &&
+      i.metadata?.insightType === "expense_exceeding_income" &&
+      i.detectedAt > Date.now() - 7 * 24 * 60 * 60 * 1000 // Within last 7 days
+  );
+
+  if (isDuplicate) return 0;
+
   let insightsCreated = 0;
   const priority = ratio > 2 ? "critical" : ratio > 1.5 ? "high" : "medium";
 
@@ -452,6 +481,7 @@ async function runCashFlowDetection(
         totalExpenses,
         ratio,
         periodDays: 30,
+        insightType: "expense_exceeding_income",
       },
     });
     insightsCreated++;

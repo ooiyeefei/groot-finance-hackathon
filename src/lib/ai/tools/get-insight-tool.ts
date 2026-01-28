@@ -60,11 +60,12 @@ The insight ID is provided when users click "Ask AI" on an insight card.`
     try {
       console.log(`[GetInsightTool] Looking up insight ${parameters.insight_id}`)
 
-      // Call the Category 3 intelligence query
+      // Call the Action Center insights query
+      // Note: insightId is typed as v.id("actionCenterInsights") in Convex
       const insight = await this.convex.query(
-        this.convexApi.functions.financialIntelligence.getInsightById,
+        this.convexApi.functions.actionCenterInsights.getById,
         {
-          insightId: parameters.insight_id,
+          insightId: parameters.insight_id as any, // Cast to any since we're passing a string that represents the ID
         }
       )
 
