@@ -294,6 +294,26 @@ export default defineSchema({
     // Linked Accounting Entry (created on approval)
     accountingEntryId: v.optional(v.id("accounting_entries")),
 
+    // ============================================
+    // DUPLICATE DETECTION FIELDS (007-duplicate-expense-detection)
+    // ============================================
+
+    // Duplicate detection status
+    duplicateStatus: v.optional(v.union(
+      v.literal("none"),
+      v.literal("potential"),
+      v.literal("confirmed"),
+      v.literal("dismissed")
+    )),
+    duplicateGroupId: v.optional(v.string()),           // Groups claims identified as duplicates
+    duplicateOverrideReason: v.optional(v.string()),    // User justification when overriding
+    duplicateOverrideAt: v.optional(v.number()),        // Timestamp of override
+    isSplitExpense: v.optional(v.boolean()),            // User acknowledged split expense
+
+    // Resubmission tracking (for "Correct & Resubmit" flow)
+    resubmittedFromId: v.optional(v.id("expense_claims")),  // Reference to rejected claim
+    resubmittedToId: v.optional(v.id("expense_claims")),    // Reference to new claim
+
     // Timestamps
     updatedAt: v.optional(v.number()),
   })
@@ -302,7 +322,44 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_transactionDate", ["transactionDate"])
     .index("by_accountingEntryId", ["accountingEntryId"])
-    .index("by_legacyId", ["legacyId"]),
+    .index("by_legacyId", ["legacyId"])
+    // Duplicate detection indexes
+    .index("by_business_vendor_date", ["businessId", "vendorName", "transactionDate"])
+    .index("by_business_reference", ["businessId", "referenceNumber"]),
+
+  // ============================================
+  // DUPLICATE MATCHES TABLE (007-duplicate-expense-detection)
+  // ============================================
+
+  duplicate_matches: defineTable({
+    // Relationships
+    businessId: v.id("businesses"),
+    sourceClaimId: v.id("expense_claims"),    // The claim being submitted
+    matchedClaimId: v.id("expense_claims"),   // The existing claim matched against
+
+    // Match details
+    matchTier: v.union(
+      v.literal("exact"),   // Receipt/reference number match
+      v.literal("strong"),  // Vendor + Date + Amount match
+      v.literal("fuzzy")    // Normalized vendor + Date ±1 day + Amount ±1%
+    ),
+    matchedFields: v.array(v.string()),       // e.g., ['referenceNumber'] or ['vendorName', 'transactionDate', 'totalAmount']
+    confidenceScore: v.number(),              // 0.0-1.0
+    isCrossUser: v.boolean(),                 // Different users in same business
+
+    // Resolution status
+    status: v.union(
+      v.literal("pending"),
+      v.literal("confirmed_duplicate"),
+      v.literal("dismissed")
+    ),
+    overrideReason: v.optional(v.string()),   // User justification if dismissed
+    resolvedBy: v.optional(v.id("users")),    // Who resolved
+    resolvedAt: v.optional(v.number()),       // Resolution timestamp
+  })
+    .index("by_source_claim", ["sourceClaimId"])
+    .index("by_matched_claim", ["matchedClaimId"])
+    .index("by_business_status", ["businessId", "status"]),
 
   // ============================================
   // INVOICES/DOCUMENTS DOMAIN

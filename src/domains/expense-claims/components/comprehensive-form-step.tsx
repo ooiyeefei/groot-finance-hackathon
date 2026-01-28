@@ -625,6 +625,12 @@ export default function ComprehensiveFormStep({
               className="bg-input border-border text-foreground"
               placeholder="PO number, invoice number, etc."
             />
+            {!formData.reference_number && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                Recommended for faster approval
+              </p>
+            )}
           </div>
 
           {/* Entertainment Expense Attendees */}

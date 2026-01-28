@@ -2052,3 +2052,152 @@ role_permissions: {
 - [ ] Manual test: Team management shows Finance Admin in role dropdown
 - [ ] Manual test: Can assign finance_admin role to team members
 - [ ] Manual test: Invitation dialog includes Finance Admin option
+
+---
+
+# T022: Add Audit Logging for Duplicate Detection Events (2026-01-27)
+
+## Goal
+Add console.log audit statements for duplicate detection events in expense claims:
+1. When a duplicate is detected and blocked
+2. When a user overrides/acknowledges a duplicate
+
+## Todo Items
+- [x] Add audit log when duplicate is detected and blocked (line ~210 in data-access.ts)
+- [x] Add audit log when user acknowledges duplicate and proceeds (where duplicateOverride is processed)
+- [x] Add `duplicateOverride` field to `CreateExpenseClaimRequest` type
+- [x] Run `npm run build` to verify (passes for expense-claims domain; pre-existing error in convex/functions/financialIntelligence.ts unrelated to this change)
+
+## Files Modified
+1. `src/domains/expense-claims/lib/data-access.ts` - Added audit logging statements
+2. `src/domains/expense-claims/types/index.ts` - Added `duplicateOverride` field to `CreateExpenseClaimRequest` interface
+
+## Review Section
+
+### Implementation Complete (2026-01-27)
+
+**Changes Made:**
+
+1. **`src/domains/expense-claims/lib/data-access.ts` (lines 210-249)**
+   - Added check for `request.duplicateOverride` before blocking duplicate
+   - When `duplicateOverride` is provided: Log audit event and continue with claim creation
+   - When `duplicateOverride` is NOT provided: Log audit event and block with `duplicate_detected` error
+
+2. **`src/domains/expense-claims/types/index.ts` (lines 65-70)**
+   - Added `duplicateOverride` optional field to `CreateExpenseClaimRequest`:
+     - `acknowledgedDuplicates: string[]` - Claim IDs user acknowledged
+     - `reason: string` - Justification text
+     - `isSplitExpense: boolean` - Checkbox value
+
+**Audit Log Format:**
+
+```typescript
+// When duplicate is blocked (no override):
+console.log('[Duplicate Detection] AUDIT: Duplicate detected and blocked', {
+  user_id: string,
+  business_id: string,
+  duplicate_claim_id: string,
+  reference_number: string,
+  transaction_date: string,
+  amount: number,
+  timestamp: ISO string
+})
+
+// When user acknowledges and proceeds:
+console.log('[Duplicate Detection] AUDIT: User acknowledged duplicate and proceeded', {
+  user_id: string,
+  business_id: string,
+  acknowledged_claim_ids: string[],
+  reason: string,
+  is_split_expense: boolean,
+  timestamp: ISO string
+})
+```
+
+**Note on Build:** The build fails with a pre-existing error in `convex/functions/financialIntelligence.ts` (line 721) referencing a non-existent table `actionCenterInsights`. This is unrelated to the T022 audit logging changes. The expense claims domain files compile without errors.
+
+### Verification
+- [x] Audit logging added for duplicate blocked scenario
+- [x] Audit logging added for duplicate override scenario
+- [x] Type definition updated to support duplicateOverride
+- [x] No TypeScript errors in modified files
+
+---
+
+# T021: Update POST /api/v1/expense-claims to accept duplicateOverride field (2026-01-27)
+
+## Goal
+When a user acknowledges a duplicate and proceeds, the API should:
+1. Accept the duplicateOverride data in the API (Zod validation)
+2. Pass it to createExpenseClaim in data-access.ts
+3. Store the duplicate acknowledgment metadata in the expense claim (Convex)
+
+## Todo Items
+
+- [x] **1.1** Add duplicateOverride to Zod schema in `src/lib/validations/expense-claims.ts`
+- [x] **1.2** Update route.ts to pass duplicateOverride in createRequest
+- [x] **1.3** Update Convex `expenseClaims.create` mutation to accept duplicate fields
+- [x] **1.4** Update data-access.ts createExpenseClaim function to store override metadata
+
+## Files Modified
+
+1. **`src/lib/validations/expense-claims.ts`**
+   - Added `duplicateOverride` optional object to `createExpenseClaimSchema`:
+     - `acknowledgedDuplicates: z.array(z.string())` - Claim IDs user acknowledged
+     - `reason: z.string().min(1)` - Justification text (required if overriding)
+     - `isSplitExpense: z.boolean()` - Checkbox value
+
+2. **`src/app/api/v1/expense-claims/route.ts`**
+   - Updated JSON body handler to explicitly include `duplicateOverride` in createRequest
+
+3. **`convex/functions/expenseClaims.ts`**
+   - Added to `create` mutation args:
+     - `duplicateStatus: v.optional(v.union(...))` - 'none' | 'potential' | 'confirmed' | 'dismissed'
+     - `duplicateOverrideReason: v.optional(v.string())`
+     - `duplicateOverrideAt: v.optional(v.number())`
+     - `isSplitExpense: v.optional(v.boolean())`
+   - Added these fields to the insert call
+
+4. **`src/domains/expense-claims/lib/data-access.ts`**
+   - Added `duplicate_override` object to processingMetadata when override is provided
+   - Passes duplicate fields to Convex create mutation when `duplicateOverride` present:
+     - `duplicateStatus: 'dismissed'`
+     - `duplicateOverrideReason`, `duplicateOverrideAt`, `isSplitExpense`
+
+## Data Flow
+
+```
+Frontend submits with duplicateOverride → API validates with Zod schema
+                                        ↓
+Route.ts includes duplicateOverride in createRequest
+                                        ↓
+data-access.ts checks for duplicateOverride:
+  - If present: logs audit, stores metadata, sets duplicateStatus='dismissed'
+  - If absent: duplicate detection blocks with error
+                                        ↓
+Convex create mutation stores all duplicate fields in expense_claims table
+```
+
+## Review Section
+
+### Implementation Complete (2026-01-27)
+
+All changes are minimal and targeted:
+- Zod schema validates the duplicateOverride structure at API boundary
+- Route.ts passes the validated field through to data-access layer
+- data-access.ts stores metadata in processingMetadata AND passes to Convex
+- Convex mutation accepts and stores the duplicate override fields directly in the table
+
+**Build Status:**
+- ESLint passes on all modified files (no new errors)
+- Build fails due to pre-existing issue in `convex/functions/financialIntelligence.ts` (references non-existent `actionCenterInsights` table) - unrelated to this task
+
+### Verification
+- [x] Zod schema validates duplicateOverride structure
+- [x] Route.ts passes duplicateOverride to createExpenseClaim
+- [x] Convex mutation accepts duplicate fields
+- [x] data-access.ts stores metadata in both processingMetadata and Convex fields
+- [x] No TypeScript/ESLint errors in modified files
+- [ ] Manual test: Submit expense claim with duplicateOverride payload
+- [ ] Verify Convex stores duplicateStatus='dismissed'
+- [ ] Verify processingMetadata contains duplicate_override object

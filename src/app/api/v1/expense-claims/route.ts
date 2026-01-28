@@ -146,8 +146,12 @@ export async function POST(request: NextRequest) {
         return validated.error
       }
 
-      // Use validated data directly without type casting
-      createRequest = validated.data as any
+      // Use validated data directly, including duplicateOverride if present
+      const validatedData = validated.data
+      createRequest = {
+        ...validatedData,
+        duplicateOverride: validatedData.duplicateOverride
+      } as any
     }
 
     // ✅ BUSINESS CURRENCY VALIDATION (CONVEX)

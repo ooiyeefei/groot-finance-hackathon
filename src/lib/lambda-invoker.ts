@@ -8,7 +8,7 @@
  */
 
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
-import { fromWebToken } from '@aws-sdk/credential-providers';
+import { fromWebToken, fromIni } from '@aws-sdk/credential-providers';
 
 // ============================================================================
 // Types (defined inline to avoid importing from excluded Lambda directory)
@@ -119,16 +119,39 @@ async function getVercelOIDCToken(): Promise<string> {
 }
 
 /**
- * Create a Lambda client with OIDC credentials.
+ * Check if running in local development environment
+ */
+function isLocalDevelopment(): boolean {
+  // VERCEL env var is set in Vercel deployments
+  // If not set or explicitly in development mode, we're local
+  return !process.env.VERCEL && process.env.NODE_ENV !== 'production';
+}
+
+/**
+ * Create a Lambda client with appropriate credentials.
  *
- * Uses AWS STS AssumeRoleWithWebIdentity to exchange the Vercel OIDC token
- * for temporary AWS credentials scoped to the Lambda invoke permission.
+ * - In Vercel: Uses OIDC token to assume IAM role
+ * - Locally: Uses AWS profile credentials (from ~/.aws/credentials)
  */
 async function createLambdaClient(): Promise<LambdaClient> {
   console.log('[Lambda] Creating Lambda client...');
-  console.log('[Lambda] ROLE_ARN:', ROLE_ARN ? 'set' : 'NOT SET');
   console.log('[Lambda] LAMBDA_ARN:', LAMBDA_ARN ? 'set' : 'NOT SET');
   console.log('[Lambda] AWS_REGION:', AWS_REGION);
+  console.log('[Lambda] Environment:', isLocalDevelopment() ? 'LOCAL' : 'VERCEL');
+
+  // Local development: Use AWS profile credentials
+  if (isLocalDevelopment()) {
+    const profile = process.env.AWS_PROFILE || 'groot-finanseal';
+    console.log(`[Lambda] Using local AWS profile: ${profile}`);
+
+    return new LambdaClient({
+      region: AWS_REGION,
+      credentials: fromIni({ profile }),
+    });
+  }
+
+  // Vercel deployment: Use OIDC to assume role
+  console.log('[Lambda] ROLE_ARN:', ROLE_ARN ? 'set' : 'NOT SET');
 
   if (!ROLE_ARN) {
     throw new LambdaInvocationError(

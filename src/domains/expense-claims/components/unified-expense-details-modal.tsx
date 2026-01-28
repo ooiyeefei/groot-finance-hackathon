@@ -33,6 +33,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import { getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
+import DuplicateBadge from './duplicate-badge'
+import DuplicateComparisonPanel from './duplicate-comparison-panel'
+import CorrectResubmitButton from './correct-resubmit-button'
 
 interface UnifiedExpenseDetailsModalProps {
   claimId: string
@@ -99,6 +102,10 @@ interface ClaimDetails {
   // Manager view fields
   employee_name?: string
   has_receipt?: boolean
+  // Duplicate detection fields
+  duplicateStatus?: 'none' | 'potential' | 'confirmed' | 'dismissed'
+  duplicateGroupId?: string
+  isSplitExpense?: boolean
 }
 
 export default function UnifiedExpenseDetailsModal({
@@ -119,6 +126,9 @@ export default function UnifiedExpenseDetailsModal({
   const [imageLoading, setImageLoading] = useState(false)
   const [approvalNotes, setApprovalNotes] = useState('')
   const [processing, setProcessing] = useState(false)
+  const [showDuplicateReview, setShowDuplicateReview] = useState(false)
+  const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
+  const [duplicateLoading, setDuplicateLoading] = useState(false)
 
   // Fetch categories on component mount
   useEffect(() => {
@@ -303,6 +313,99 @@ export default function UnifiedExpenseDetailsModal({
       setError(`Failed to ${action} claim. Please try again.`)
     } finally {
       setProcessing(false)
+    }
+  }
+
+  // Fetch duplicate matches for this claim
+  const handleReviewDuplicates = async () => {
+    if (!claimDetails) return
+
+    setDuplicateLoading(true)
+    try {
+      // Check for duplicates based on this claim's data
+      const response = await fetch('/api/v1/expense-claims/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendorName: claimDetails.vendor_name || claimDetails.transaction?.vendor_name || '',
+          transactionDate: claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '',
+          totalAmount: parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0'),
+          currency: claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD',
+          referenceNumber: claimDetails.reference_number || claimDetails.transaction?.reference_number || undefined,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.success && result.data.matches) {
+        // Filter out self-match (the current claim)
+        const matches = result.data.matches.filter(
+          (m: any) => m.matchedClaim._id !== claimDetails.id
+        )
+        setDuplicateMatches(matches)
+        setShowDuplicateReview(true)
+      }
+    } catch (err) {
+      console.error('[Unified Modal] Error fetching duplicates:', err)
+    } finally {
+      setDuplicateLoading(false)
+    }
+  }
+
+  // Handle dismiss duplicate from manager view
+  const handleDismissDuplicate = async (matchId: string, reason: string) => {
+    if (!claimDetails) return
+
+    setDuplicateLoading(true)
+    try {
+      const response = await fetch(
+        `/api/v1/expense-claims/${claimDetails.id}/dismiss-duplicate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matchId, reason }),
+        }
+      )
+
+      const result = await response.json()
+      if (result.success) {
+        setShowDuplicateReview(false)
+        setDuplicateMatches([])
+        // Refresh claim details
+        fetchClaimDetails()
+      }
+    } catch (err) {
+      console.error('[Unified Modal] Dismiss duplicate error:', err)
+    } finally {
+      setDuplicateLoading(false)
+    }
+  }
+
+  // Handle confirm duplicate from manager view
+  const handleConfirmDuplicate = async (matchId: string) => {
+    if (!claimDetails) return
+
+    setDuplicateLoading(true)
+    try {
+      const response = await fetch(
+        `/api/v1/expense-claims/${claimDetails.id}/confirm-duplicate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matchId }),
+        }
+      )
+
+      const result = await response.json()
+      if (result.success) {
+        setShowDuplicateReview(false)
+        setDuplicateMatches([])
+        // Refresh claim details
+        fetchClaimDetails()
+      }
+    } catch (err) {
+      console.error('[Unified Modal] Confirm duplicate error:', err)
+    } finally {
+      setDuplicateLoading(false)
     }
   }
 
@@ -536,6 +639,31 @@ export default function UnifiedExpenseDetailsModal({
                         </Card>
                       )}
 
+                      {/* Personal Actions - Resubmit for rejected claims */}
+                      {viewMode === 'personal' && claimDetails.status === 'rejected' && (
+                        <Card className="bg-red-500/10 border-red-500/30">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-foreground text-sm flex items-center gap-2">
+                              <XCircle className="w-4 h-4 text-red-500" />
+                              Claim Rejected
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <p className="text-muted-foreground text-sm">
+                              This expense claim was rejected. You can correct any issues and resubmit for approval.
+                            </p>
+                            <CorrectResubmitButton
+                              claimId={claimDetails.id}
+                              status={claimDetails.status}
+                              onResubmit={() => {
+                                onClose()
+                                onRefreshNeeded?.()
+                              }}
+                            />
+                          </CardContent>
+                        </Card>
+                      )}
+
                       {/* Basic Information */}
                       <Card className="bg-record-layer-1 border-record-border">
                         <CardHeader className="pb-3">
@@ -555,14 +683,21 @@ export default function UnifiedExpenseDetailsModal({
                                 {getCategoryName(claimDetails.expense_category || claimDetails.transaction?.expense_category, categories)}
                               </div>
                             </div>
-                            {(claimDetails.reference_number || claimDetails.transaction?.reference_number) && (
-                              <div className="space-y-2">
-                                <label className="text-muted-foreground text-sm">Reference Number</label>
+                            <div className="space-y-2">
+                              <label className="text-muted-foreground text-sm">Reference Number</label>
+                              {(claimDetails.reference_number || claimDetails.transaction?.reference_number) ? (
                                 <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded text-sm">
                                   {claimDetails.reference_number || claimDetails.transaction?.reference_number}
                                 </div>
-                              </div>
-                            )}
+                              ) : (
+                                <div className="flex items-center gap-2 p-2 rounded bg-yellow-500/10 border border-yellow-500/30">
+                                  <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                                  <span className="text-xs text-yellow-700 dark:text-yellow-300">
+                                    Not provided - verify receipt authenticity
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           <div className="space-y-2">
@@ -711,6 +846,50 @@ export default function UnifiedExpenseDetailsModal({
                         </Card>
                       )}
 
+                      {/* Duplicate Detection Indicator */}
+                      {claimDetails.duplicateStatus && claimDetails.duplicateStatus !== 'none' && (
+                        <Card className="bg-yellow-500/10 border-yellow-500/30">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <DuplicateBadge
+                                  matchTier={claimDetails.duplicateStatus === 'confirmed' ? 'exact' : 'strong'}
+                                  size="md"
+                                  showTooltip={false}
+                                />
+                                <div>
+                                  <p className="text-foreground font-medium text-sm">
+                                    {claimDetails.duplicateStatus === 'confirmed'
+                                      ? 'Confirmed Duplicate'
+                                      : claimDetails.duplicateStatus === 'potential'
+                                      ? 'Potential Duplicate Detected'
+                                      : 'Duplicate Dismissed'}
+                                  </p>
+                                  <p className="text-muted-foreground text-xs">
+                                    {claimDetails.isSplitExpense
+                                      ? 'Marked as split expense'
+                                      : 'This claim may be a duplicate of another expense'}
+                                  </p>
+                                </div>
+                              </div>
+                              {viewMode === 'manager' && claimDetails.duplicateStatus === 'potential' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleReviewDuplicates}
+                                  disabled={duplicateLoading}
+                                >
+                                  {duplicateLoading ? (
+                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                  ) : null}
+                                  Review Duplicates
+                                </Button>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
                       {/* Expense ID at bottom of content */}
                       <div className="flex justify-end mt-6 pt-4 border-t border-record-border">
                         <div className="flex items-center gap-2 bg-record-layer-2 backdrop-blur-sm px-3 py-1.5 rounded-md border border-record-border">
@@ -763,6 +942,51 @@ export default function UnifiedExpenseDetailsModal({
                 hideRegionsCount={true}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Review Modal */}
+      {showDuplicateReview && duplicateMatches.length > 0 && claimDetails && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <DuplicateComparisonPanel
+              match={{
+                _id: duplicateMatches[0]?.matchedClaim?._id || '',
+                matchTier: duplicateMatches[0]?.tier || 'strong',
+                matchedFields: duplicateMatches[0]?.matchedFields || [],
+                confidenceScore: duplicateMatches[0]?.confidenceScore || 0.5,
+                isCrossUser: duplicateMatches[0]?.isCrossUser || false,
+                status: claimDetails.duplicateStatus === 'confirmed' ? 'confirmed_duplicate' : 'pending',
+              }}
+              sourceClaim={{
+                _id: claimDetails.id,
+                vendorName: claimDetails.vendor_name || claimDetails.transaction?.vendor_name || '',
+                transactionDate: claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '',
+                totalAmount: parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0'),
+                currency: claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD',
+                referenceNumber: claimDetails.reference_number || claimDetails.transaction?.reference_number || null,
+                status: claimDetails.status,
+                submitter: { _id: '', fullName: claimDetails.employee_name || 'Unknown', email: '' },
+              }}
+              matchedClaim={{
+                _id: duplicateMatches[0]?.matchedClaim?._id || '',
+                vendorName: duplicateMatches[0]?.matchedClaim?.vendorName || '',
+                transactionDate: duplicateMatches[0]?.matchedClaim?.transactionDate || '',
+                totalAmount: duplicateMatches[0]?.matchedClaim?.totalAmount || 0,
+                currency: duplicateMatches[0]?.matchedClaim?.currency || 'SGD',
+                referenceNumber: duplicateMatches[0]?.matchedClaim?.referenceNumber || null,
+                status: duplicateMatches[0]?.matchedClaim?.status || 'draft',
+                submitter: { _id: '', fullName: duplicateMatches[0]?.matchedClaim?.submittedByName || 'Unknown', email: '' },
+              }}
+              onDismiss={handleDismissDuplicate}
+              onConfirm={handleConfirmDuplicate}
+              onClose={() => {
+                setShowDuplicateReview(false)
+                setDuplicateMatches([])
+              }}
+              isLoading={duplicateLoading}
+            />
           </div>
         </div>
       )}

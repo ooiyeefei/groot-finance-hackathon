@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import ExpenseStatusBadge from './expense-status-badge'
+import DuplicateBadge from './duplicate-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatBusinessDate } from '@/lib/utils'
 
@@ -250,6 +251,37 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       setHighlightProcessed(false)
     }
   }, [searchParams, highlightProcessed])
+
+  // Handle view parameter to auto-open expense claim modal (used by duplicate detection)
+  // Opens edit modal for draft claims, view details modal for submitted/approved/etc.
+  useEffect(() => {
+    const viewId = searchParams.get('view')
+
+    if (viewId && !showEditModal && !showDetailsModal && !loading && dashboardData?.recent_claims) {
+      // Find the expense claim to determine which modal to open
+      const targetClaim = dashboardData.recent_claims.find(claim => claim.id === viewId)
+
+      if (targetClaim) {
+        // Draft claims → edit modal, all others → view details modal
+        if (targetClaim.status === 'draft' || targetClaim.status === 'failed' || targetClaim.status === 'classification_failed') {
+          setEditingClaimId(viewId)
+          setShowEditModal(true)
+        } else {
+          setDetailsClaimId(viewId)
+          setShowDetailsModal(true)
+        }
+      } else {
+        // Claim not found in recent list - try opening details modal as fallback
+        setDetailsClaimId(viewId)
+        setShowDetailsModal(true)
+      }
+
+      // Remove view parameter from URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete('view')
+      router.replace(url.pathname + url.search, { scroll: false })
+    }
+  }, [searchParams, showEditModal, showDetailsModal, loading, dashboardData?.recent_claims, router])
 
   // ✅ CONVEX REAL-TIME: No polling needed!
   // Convex WebSocket subscriptions provide instant updates (~50ms latency)
@@ -707,6 +739,17 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
               processingStage={claim.status_display?.isProcessing ? claim.status as any : undefined}
               animated={true}
             />
+            {/* Duplicate Badge - shows when claim has potential duplicates */}
+            {claim.duplicateStatus && claim.duplicateStatus !== 'none' && (
+              <DuplicateBadge
+                matchTier={claim.duplicateStatus === 'potential' ? 'strong' : 'exact'}
+                size="sm"
+                onClick={() => {
+                  setDetailsClaimId(claim.id)
+                  setShowDetailsModal(true)
+                }}
+              />
+            )}
           </div>
 
           {claim.current_approver_name && ['submitted'].includes(claim.status) && (

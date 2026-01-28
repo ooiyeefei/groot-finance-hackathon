@@ -7,8 +7,9 @@
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Printer, Download } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { Printer, Download, AlertTriangle } from 'lucide-react'
+import { useRef, useState, useMemo } from 'react'
+import { normalizeVendorName } from '@/domains/expense-claims/lib/vendor-normalizer'
 
 // Enhanced report interfaces (matching API)
 interface CategoryLineItem {
@@ -64,10 +65,84 @@ interface FormattedExpenseReportProps {
   reportData: FormattedExpenseReport
 }
 
+// Duplicate detection types
+interface DuplicateInfo {
+  claimId: string
+  duplicateOf: string  // The first claim in the duplicate group
+  tier: 'exact' | 'strong'
+  matchedFields: string[]
+}
+
+// Detect duplicates among report line items
+function detectReportDuplicates(sections: CategorySection[]): Map<string, DuplicateInfo> {
+  const duplicates = new Map<string, DuplicateInfo>()
+  const allItems: (CategoryLineItem & { categoryName: string })[] = []
+
+  // Flatten all line items
+  for (const section of sections) {
+    for (const item of section.lineItems) {
+      allItems.push({ ...item, categoryName: section.categoryName })
+    }
+  }
+
+  // Check each pair for duplicates
+  for (let i = 0; i < allItems.length; i++) {
+    for (let j = i + 1; j < allItems.length; j++) {
+      const item1 = allItems[i]
+      const item2 = allItems[j]
+
+      // Skip if already marked as duplicate
+      if (duplicates.has(item2.claimId)) continue
+
+      // Tier 1: Exact match on reference number
+      if (item1.referenceNumber && item2.referenceNumber) {
+        const ref1 = item1.referenceNumber.trim().toLowerCase()
+        const ref2 = item2.referenceNumber.trim().toLowerCase()
+        if (ref1 === ref2 && ref1.length > 0) {
+          duplicates.set(item2.claimId, {
+            claimId: item2.claimId,
+            duplicateOf: item1.claimId,
+            tier: 'exact',
+            matchedFields: ['referenceNumber']
+          })
+          continue
+        }
+      }
+
+      // Tier 2: Strong match (same vendor + date + amount)
+      const vendor1 = normalizeVendorName(item1.vendor || '')
+      const vendor2 = normalizeVendorName(item2.vendor || '')
+      const sameVendor = vendor1 === vendor2 && vendor1.length > 0
+      const sameDate = item1.date === item2.date
+      const sameAmount = Math.abs(item1.amount - item2.amount) < 0.01
+
+      if (sameVendor && sameDate && sameAmount) {
+        const matchedFields: string[] = []
+        if (sameVendor) matchedFields.push('vendor')
+        if (sameDate) matchedFields.push('date')
+        if (sameAmount) matchedFields.push('amount')
+
+        duplicates.set(item2.claimId, {
+          claimId: item2.claimId,
+          duplicateOf: item1.claimId,
+          tier: 'strong',
+          matchedFields
+        })
+      }
+    }
+  }
+
+  return duplicates
+}
+
 export default function FormattedExpenseReport({ reportData }: FormattedExpenseReportProps) {
   const { header, categorySections, summary } = reportData
   const reportRef = useRef<HTMLDivElement>(null)
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
+
+  // Detect duplicates in the report
+  const duplicateMap = useMemo(() => detectReportDuplicates(categorySections), [categorySections])
+  const duplicateCount = duplicateMap.size
 
   const handlePrint = () => {
     window.print()
@@ -297,6 +372,22 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
 
         <Card ref={reportRef} className="bg-white border-gray-300 max-w-4xl mx-auto print:shadow-none print:border-0 print-area">
           <CardContent className="p-8 space-y-6 print:p-6">
+        {/* Duplicate Warning Banner */}
+        {duplicateCount > 0 && (
+          <div className="bg-red-50 border-2 border-red-500 rounded-lg p-4 flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-red-800 text-lg">
+                ⚠️ {duplicateCount} Potential Duplicate{duplicateCount > 1 ? 's' : ''} Detected
+              </h3>
+              <p className="text-red-700 text-sm mt-1">
+                The system has identified expense claims with identical reference numbers or matching vendor, date, and amount.
+                Duplicate rows are highlighted in red below. Please review before processing reimbursement.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Report Header - Business Style */}
         <div className="text-center space-y-3 border-b-2 border-gray-800 pb-6">
           <h1 className="text-2xl font-bold text-gray-900 tracking-wide">
@@ -361,8 +452,19 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
                   </tr>
 
                   {/* Category Line Items */}
-                  {category.lineItems.map((item, itemIndex) => (
-                    <tr key={item.claimId} className="border-b border-gray-300">
+                  {category.lineItems.map((item, itemIndex) => {
+                    const duplicateInfo = duplicateMap.get(item.claimId)
+                    const isDuplicate = !!duplicateInfo
+
+                    return (
+                    <tr
+                      key={item.claimId}
+                      className={`border-b border-gray-300 ${
+                        isDuplicate
+                          ? 'bg-red-100 border-l-4 border-l-red-600'
+                          : ''
+                      }`}
+                    >
                       <td className="border-r border-gray-400 px-2 py-2 text-center">
                         {categoryIndex + 1}.{itemIndex + 1}
                       </td>
@@ -376,16 +478,26 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
                             <div className="text-gray-600 text-xs mt-1">{item.vendor}</div>
                           )}
                           {item.referenceNumber && (
-                            <div className="text-gray-500 text-xs">Ref: {item.referenceNumber}</div>
+                            <div className={`text-xs ${isDuplicate && duplicateInfo?.tier === 'exact' ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>
+                              Ref: {item.referenceNumber}
+                              {isDuplicate && duplicateInfo?.tier === 'exact' && ' ⚠️ DUPLICATE'}
+                            </div>
+                          )}
+                          {isDuplicate && (
+                            <div className="text-red-700 text-xs font-medium mt-1">
+                              ⚠️ {duplicateInfo?.tier === 'exact' ? 'EXACT DUPLICATE' : 'LIKELY DUPLICATE'}
+                              {duplicateInfo?.matchedFields && ` (${duplicateInfo.matchedFields.join(', ')})`}
+                            </div>
                           )}
                         </div>
                       </td>
-                      <td className="border-r border-gray-400 px-2 py-2 text-right">
+                      <td className={`border-r border-gray-400 px-2 py-2 text-right ${isDuplicate ? 'text-red-700 font-semibold' : ''}`}>
                         {item.amount.toFixed(2)}
                       </td>
                       <td className="px-2 py-2"></td>
                     </tr>
-                  ))}
+                    )
+                  })}
 
                   {/* Category Subtotal Row */}
                   <tr className="bg-gray-100 border-b-2 border-gray-400">
@@ -487,7 +599,7 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
           <p>Data as of: {reportData.metadata.dataAsOf}</p>
 
           {/* Summary Stats */}
-          <div className="flex gap-4 mt-2">
+          <div className="flex flex-wrap gap-4 mt-2">
             <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-500/30">
               Approved: {summary.statusBreakdown.approved + summary.statusBreakdown.reimbursed} claims
             </Badge>
@@ -497,6 +609,11 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
             <Badge variant="outline" className="text-red-600 dark:text-red-400 border-red-500/30">
               Rejected: {summary.statusBreakdown.rejected} claims
             </Badge>
+            {duplicateCount > 0 && (
+              <Badge variant="outline" className="text-red-600 dark:text-red-400 border-red-500/50 bg-red-50 font-semibold">
+                ⚠️ {duplicateCount} Potential Duplicate{duplicateCount > 1 ? 's' : ''}
+              </Badge>
+            )}
           </div>
         </div>
           </CardContent>

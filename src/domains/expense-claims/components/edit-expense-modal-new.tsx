@@ -17,9 +17,12 @@ import { useExpenseForm } from '@/domains/expense-claims/hooks/use-expense-form'
 import { useLineItems } from '@/domains/accounting-entries/hooks/use-line-items'
 import ExpenseFormFields from './expense-form-fields'
 import LineItemTable from './line-item-table'
+import DuplicateWarningModal from './duplicate-warning-modal'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import { useState, useCallback, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { formatBusinessDate } from '@/lib/utils'
+import type { DuplicateMatchPreview, DuplicateOverride, MatchTier } from '@/domains/expense-claims/types/duplicate-detection'
 
 interface EditExpenseModalNewProps {
   expenseClaimId: string
@@ -40,6 +43,10 @@ export default function EditExpenseModalNew({
 }: EditExpenseModalNewProps) {
   console.log('EditExpenseModalNew render called - isOpen:', isOpen, 'expenseClaimId:', expenseClaimId)
 
+  // Get current pathname to extract locale for navigation
+  const pathname = usePathname()
+  const locale = pathname?.split('/')[1] || 'en'
+
   // State for delete confirmation dialog
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -51,6 +58,13 @@ export default function EditExpenseModalNew({
   // State for success messaging
   const [showSuccess, setShowSuccess] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+
+  // State for duplicate detection
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatchPreview[]>([])
+  const [duplicateHighestTier, setDuplicateHighestTier] = useState<MatchTier | null>(null)
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false)
+  const [duplicateOverride, setDuplicateOverride] = useState<DuplicateOverride | null>(null)
 
   // Main business logic hook with edit mode
   const {
@@ -106,7 +120,13 @@ export default function EditExpenseModalNew({
     handleAcceptSuggestion,
     handleRejectSuggestion,
     handleAcceptAllSuggestions,
-    handleRejectAllSuggestions
+    handleRejectAllSuggestions,
+
+    // Duplicate detection
+    duplicateCheckResult,
+    setDuplicateCheckResult,
+    performDuplicateCheck,
+    isCheckingDuplicates
 
   } = useExpenseForm({
     mode: 'edit',
@@ -147,6 +167,36 @@ export default function EditExpenseModalNew({
       }
     }
   }, [formData.line_items]) // Removed setLineItems from dependencies to avoid circular updates
+
+  // Automatic duplicate detection when form data loads
+  // This shows duplicate warnings on drafts immediately, not just at submit time
+  useEffect(() => {
+    // Only check for duplicates when form data is loaded and modal is open
+    if (!isOpen || loading) return
+    // Only check if we have the required fields
+    if (!formData.vendor_name || !formData.transaction_date || !formData.original_amount) return
+    // Only check if we haven't already checked for these values
+    if (duplicateCheckResult) return
+
+    const checkDuplicatesOnLoad = async () => {
+      console.log('[EditExpenseModal] Auto-checking for duplicates on load')
+      setCheckingDuplicates(true)
+      try {
+        const result = await performDuplicateCheck()
+        if (result?.hasDuplicates && result.matches) {
+          // Use matches directly - they're already in DuplicateMatchPreview format
+          setDuplicateMatches(result.matches)
+          setDuplicateHighestTier(result.highestTier || null)
+        }
+      } catch (err) {
+        console.error('[EditExpenseModal] Duplicate check error:', err)
+      } finally {
+        setCheckingDuplicates(false)
+      }
+    }
+
+    checkDuplicatesOnLoad()
+  }, [isOpen, loading, formData.vendor_name, formData.transaction_date, formData.original_amount, duplicateCheckResult, performDuplicateCheck])
 
   // Update form data when line items change (but only when needed for submission)
   const updateFormDataLineItems = useCallback(() => {
@@ -245,11 +295,79 @@ export default function EditExpenseModalNew({
     }, 3000)
   }, [])
 
+  // Check for duplicates before submission
+  const checkForDuplicates = useCallback(async (): Promise<boolean> => {
+    setCheckingDuplicates(true)
+    try {
+      const response = await fetch('/api/v1/expense-claims/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendor_name: formData.vendor_name,
+          transaction_date: formData.transaction_date,
+          original_amount: formData.original_amount,
+          original_currency: formData.original_currency,
+          reference_number: formData.reference_number,
+          exclude_claim_id: expenseClaimId, // Exclude current claim from duplicate check
+        }),
+      })
+
+      if (!response.ok) {
+        console.error('Duplicate check failed:', response.status)
+        return false // Allow submission if check fails
+      }
+
+      const result = await response.json()
+      if (result.success && result.data.hasDuplicates) {
+        setDuplicateMatches(result.data.matches)
+        setDuplicateHighestTier(result.data.highestTier)
+        setShowDuplicateModal(true)
+        return true // Has duplicates
+      }
+      return false // No duplicates
+    } catch (error) {
+      console.error('Duplicate check error:', error)
+      return false // Allow submission if check fails
+    } finally {
+      setCheckingDuplicates(false)
+    }
+  }, [formData, expenseClaimId])
+
+  // Handle duplicate modal close (cancel submission)
+  // NOTE: Don't clear duplicateMatches here - the warning banner should persist
+  const handleDuplicateClose = useCallback(() => {
+    setShowDuplicateModal(false)
+  }, [])
+
+  // Handle duplicate modal confirm (proceed with submission)
+  const handleDuplicateConfirm = useCallback(async (override: DuplicateOverride) => {
+    setDuplicateOverride(override)
+    setShowDuplicateModal(false)
+    // Now proceed with actual submission
+    try {
+      updateFormDataLineItems()
+      await handleSave('submit')
+      showSuccessMessage('Expense claim submitted for approval!')
+    } catch (error) {
+      console.error('Save error after duplicate override:', error)
+    }
+  }, [updateFormDataLineItems, handleSave, showSuccessMessage])
+
   // Wrapper for handleSave to include line items in form data
   const handleSaveWithLineItems = useCallback(async (action: 'draft' | 'submit') => {
     try {
       // Update form data with current line items before saving
       updateFormDataLineItems()
+
+      // For submit action, check for duplicates first
+      if (action === 'submit') {
+        const hasDuplicates = await checkForDuplicates()
+        if (hasDuplicates) {
+          // Don't proceed - duplicate modal will handle confirmation
+          return
+        }
+      }
+
       await handleSave(action)
 
       // Show success message based on action
@@ -260,7 +378,7 @@ export default function EditExpenseModalNew({
       console.error('Save error in modal:', error)
       // Error is already handled by useExpenseForm hook and displayed via saveError
     }
-  }, [updateFormDataLineItems, handleSave, showSuccessMessage])
+  }, [updateFormDataLineItems, handleSave, showSuccessMessage, checkForDuplicates])
 
   // Don't render if modal is not open
   if (!isOpen) {
@@ -314,10 +432,15 @@ export default function EditExpenseModalNew({
             </button>
             <button
               onClick={() => handleSaveWithLineItems('submit')}
-              disabled={saving || submitting || isReprocessing}
+              disabled={saving || submitting || isReprocessing || checkingDuplicates}
               className="inline-flex items-center px-3 md:px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
-              {submitting ? (
+              {checkingDuplicates ? (
+                <>
+                  <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
+                  <span className="hidden md:inline">Checking...</span>
+                </>
+              ) : submitting ? (
                 <>
                   <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
                   <span className="hidden md:inline">Submitting...</span>
@@ -391,6 +514,24 @@ export default function EditExpenseModalNew({
                     </div>
                   </div>
                 </div>
+
+                {/* Duplicate Warning Banner - Shows when duplicates detected on load */}
+                {duplicateMatches.length > 0 && (
+                  <Alert className="mx-4 mt-3 bg-red-50 border-red-500 dark:bg-red-900/20">
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                    <AlertDescription className="text-red-700 dark:text-red-400">
+                      <strong>⚠️ Potential Duplicate Detected!</strong>{' '}
+                      This expense matches {duplicateMatches.length} existing claim{duplicateMatches.length > 1 ? 's' : ''}
+                      ({duplicateHighestTier === 'exact' ? 'Exact match' : duplicateHighestTier === 'strong' ? 'Same vendor/date/amount' : 'Similar expense'}).
+                      <button
+                        className="ml-2 underline text-red-800 hover:text-red-900 dark:text-red-300"
+                        onClick={() => setShowDuplicateModal(true)}
+                      >
+                        View matches →
+                      </button>
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 {/* Bottom Section - Stacked on mobile, 40/60 Split on desktop */}
                 <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
@@ -586,6 +727,31 @@ export default function EditExpenseModalNew({
         cancelText="Cancel"
         confirmVariant="danger"
         isLoading={isDeleting}
+      />
+
+      {/* Duplicate Warning Modal */}
+      <DuplicateWarningModal
+        isOpen={showDuplicateModal}
+        onClose={handleDuplicateClose}
+        onProceed={handleDuplicateConfirm}
+        duplicates={duplicateMatches}
+        highestTier={duplicateHighestTier}
+        currentExpense={{
+          claimId: expenseClaimId,
+          vendorName: formData.vendor_name,
+          transactionDate: formData.transaction_date,
+          totalAmount: formData.original_amount,
+          currency: formData.original_currency,
+          status: claimStatus || 'draft',
+          referenceNumber: formData.reference_number
+        }}
+        onViewExpense={(claimId) => {
+          // Navigate to the matched expense in same window
+          // Close the modal first, then navigate
+          setShowDuplicateModal(false)
+          onClose()
+          window.location.href = `/${locale}/expense-claims?view=${claimId}`
+        }}
       />
     </div>,
     document.body

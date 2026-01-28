@@ -91,6 +91,14 @@ TECHNICAL_ERROR_PATTERNS = [
     ("presigned",
      "File access issue. Please try uploading again."),
 
+    # Convex/Database errors
+    ("convex",
+     "We're having trouble saving your data. Please try again in a moment."),
+    ("server error",
+     "A temporary server issue occurred. Please try again in a moment."),
+    ("mutation",
+     "We couldn't save the processing results. Please try again."),
+
     # Generic fallbacks
     ("failed",
      "Processing failed. Please try again with a clearer image."),

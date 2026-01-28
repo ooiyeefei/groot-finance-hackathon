@@ -103,7 +103,14 @@ export const createExpenseClaimSchema = z.object({
 
   // Business context (added by backend)
   business_home_currency: currencySchema.optional(),
-  business_allowed_currencies: z.array(currencySchema).optional()
+  business_allowed_currencies: z.array(currencySchema).optional(),
+
+  // Duplicate override fields (for acknowledging duplicates and proceeding)
+  duplicateOverride: z.object({
+    acknowledgedDuplicates: z.array(z.string()),
+    reason: z.string().min(1, 'A reason is required for acknowledging duplicates'),
+    isSplitExpense: z.boolean()
+  }).optional()
 })
 
 /**

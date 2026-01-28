@@ -7,10 +7,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2 } from 'lucide-react'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2, AlertCircle, Copy, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import DuplicateBadge from './duplicate-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -252,12 +253,27 @@ function ManagementOverviewContent({ data, categories, setActiveTab }: {
                       <p className="text-foreground text-xs font-medium">
                         ${parseFloat(claim.home_currency_amount || claim.total_amount || '0').toFixed(0)}
                       </p>
-                      <p className="text-warning-foreground text-xs">
-                        {new Date(claim.created_at).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </p>
+                      <div className="flex items-center justify-end gap-1">
+                        {!claim.reference_number && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30" title="No receipt reference number">
+                            <AlertCircle className="w-2.5 h-2.5" />
+                            No Ref
+                          </span>
+                        )}
+                        {claim.duplicateStatus && claim.duplicateStatus !== 'none' && (
+                          <DuplicateBadge
+                            matchTier={claim.duplicateStatus === 'potential' ? 'strong' : 'exact'}
+                            size="sm"
+                            showTooltip={false}
+                          />
+                        )}
+                        <p className="text-warning-foreground text-xs">
+                          {new Date(claim.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </p>
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -551,6 +567,34 @@ function ReimbursementQueueContent({
 function ManagementReportsContent({ userRole }: { userRole: UserRole }) {
   return (
     <div className="space-y-section-gap">
+      {/* Duplicate Expense Report - Audit Compliance Card */}
+      <Card className="bg-record-layer-1 border-record-border">
+        <CardHeader>
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <Copy className="w-5 h-5" />
+            Duplicate Expense Report
+          </CardTitle>
+          <CardDescription>Review and manage potential duplicate expense claims for audit compliance</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 bg-record-layer-2 rounded-lg">
+            <div className="space-y-1">
+              <p className="text-foreground font-medium">View Duplicate Report</p>
+              <p className="text-muted-foreground text-sm">
+                Analyze duplicate matches, dismiss false positives, or confirm duplicates
+              </p>
+            </div>
+            <a
+              href="/expense-claims/duplicate-report"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open Report
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="bg-record-layer-1 border-record-border">
         <CardHeader>
           <CardTitle className="text-foreground flex items-center gap-2">
@@ -841,6 +885,16 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                   <p className="text-muted-foreground text-sm">Business Purpose:</p>
                   <p className="text-foreground">{claim.business_purpose}</p>
                 </div>
+
+                {/* Missing Reference Number Warning */}
+                {!claim.reference_number && (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/10 border border-yellow-500/30">
+                    <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                    <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                      No receipt reference number provided - verify receipt authenticity
+                    </p>
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex gap-3 pt-4">
