@@ -94,3 +94,10 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 | API Reference | `src/app/api/v1/CLAUDE.md` |
 | Expense Claims | `src/domains/expense-claims/CLAUDE.md` |
 | App Patterns | `src/app/CLAUDE.md` |
+
+## Active Technologies
+- TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8 (001-manager-approval)
+- Convex (document database with real-time sync) (001-manager-approval)
+
+## Recent Changes
+- 001-manager-approval: Added TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8
