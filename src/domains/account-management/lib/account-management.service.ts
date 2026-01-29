@@ -486,11 +486,12 @@ export async function createInvitation(
   console.log(`[Invitation Service] Creating invitation for ${email} to business ${businessId}`)
 
   // Use Convex inviteByEmail mutation
+  // Only pass managerId if it's a non-empty string (Convex expects undefined, not empty string)
   const membershipId = await client.mutation(api.functions.memberships.inviteByEmail, {
     businessId: businessId as any,
     email: email.toLowerCase(),
     role: role as 'manager' | 'employee' | 'finance_admin',  // Note: 'owner' role cannot be invited
-    managerId: request.manager_id as any  // Required for employees, optional for others
+    ...(request.manager_id ? { managerId: request.manager_id as any } : {})  // Required for employees, optional for others
   })
 
   // Get business name for email
