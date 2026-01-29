@@ -166,6 +166,21 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   const handleAssignManager = async (employeeUserId: string, managerId: string) => {
     try {
       setError(null)
+
+      // Find the target member to check their role
+      const targetMember = teamMembers.find(m => m.user_id === employeeUserId)
+      const targetRole = targetMember ? getRoleDisplay(targetMember.role_permissions) : 'employee'
+
+      // Employees MUST have a manager assigned
+      if (targetRole === 'employee' && managerId === 'none') {
+        addToast({
+          type: 'error',
+          title: 'Manager Required',
+          description: 'Employees must have a manager assigned. Please select a manager.'
+        })
+        return
+      }
+
       // Convert "none" to null for the Convex mutation
       await assignManager(employeeUserId, managerId === 'none' ? null : managerId)
       addToast({
@@ -181,6 +196,12 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         description: err instanceof Error ? err.message : 'Failed to assign manager'
       })
     }
+  }
+
+  // Helper to check if employee needs manager warning
+  const employeeNeedsManagerWarning = (member: TeamMember): boolean => {
+    const role = getRoleDisplay(member.role_permissions)
+    return role === 'employee' && !member.manager_id
   }
 
   const getAvailableManagers = () => {
@@ -216,6 +237,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
           email: data.email,
           role: data.role,
           business_id: businessId,
+          manager_id: data.manager_id || null,
           employee_id: data.employee_id || null,
           department: data.department || null,
           job_title: data.job_title || null
@@ -667,6 +689,13 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
           setTeamLimitExceeded(false)
           setTeamLimitMessage(undefined)
         }}
+        availableManagers={getAvailableManagers().map(m => ({
+          user_id: m.user_id,
+          full_name: m.clerk_user?.firstName && m.clerk_user?.lastName
+            ? `${m.clerk_user.firstName} ${m.clerk_user.lastName}`
+            : m.full_name,
+          email: m.email
+        }))}
       />
 
       <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as 'members' | 'invitations')} className="space-y-4">
@@ -846,21 +875,29 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                               </div>
 
                               <div className="flex flex-col">
-                                <span className="text-xs text-muted-foreground mb-1.5">
-                                  {currentRole === 'employee' ? 'Manager' : 'Manager (Optional)'}
+                                <span className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                                  {currentRole === 'employee' ? (
+                                    <>
+                                      Manager <span className="text-destructive">*</span>
+                                      {employeeNeedsManagerWarning(member) && (
+                                        <AlertCircle className="w-3 h-3 text-destructive" />
+                                      )}
+                                    </>
+                                  ) : 'Manager (Optional)'}
                                 </span>
                                 <Select
                                   value={getCurrentManagerUserId(member)}
                                   onValueChange={(managerId) => handleAssignManager(member.user_id, managerId)}
                                   disabled={isUpdating}
                                 >
-                                  <SelectTrigger className="bg-input border border-border text-foreground h-9 min-w-[160px]">
+                                  <SelectTrigger className={`bg-input border text-foreground h-9 min-w-[160px] ${employeeNeedsManagerWarning(member) ? 'border-destructive' : 'border-border'}`}>
                                     <SelectValue placeholder={currentRole === 'employee' ? 'Assign manager' : 'Optional manager'} />
                                   </SelectTrigger>
                                   <SelectContent className="bg-popover border-border">
-                                    <SelectItem value="none">
-                                      {currentRole === 'employee' ? 'No Manager' : 'No Assignment'}
-                                    </SelectItem>
+                                    {/* Only show "No Manager/No Assignment" for non-employees */}
+                                    {currentRole !== 'employee' && (
+                                      <SelectItem value="none">No Assignment</SelectItem>
+                                    )}
                                     {getAvailableManagers()
                                       .filter(manager => manager.user_id !== member.user_id)
                                       .map((manager) => (

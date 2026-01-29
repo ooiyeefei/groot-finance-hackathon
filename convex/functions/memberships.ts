@@ -103,6 +103,50 @@ export const verifyMembership = query({
 });
 
 /**
+ * Get membership by user ID and business ID (for approval workflow)
+ * Used to check if employee has manager assigned before submission
+ */
+export const getByUserAndBusiness = query({
+  args: {
+    userId: v.string(),      // Accepts Convex ID or legacy UUID
+    businessId: v.string(),  // Accepts Convex ID or legacy UUID
+  },
+  handler: async (ctx, args) => {
+    // Resolve user ID (supports both Convex and legacy IDs)
+    const user = await resolveById(ctx.db, "users", args.userId);
+    if (!user) {
+      return null;
+    }
+
+    // Resolve business ID (supports both Convex and legacy IDs)
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return null;
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership) {
+      return null;
+    }
+
+    return {
+      id: membership._id,
+      userId: membership.userId,
+      businessId: membership.businessId,
+      role: membership.role,
+      managerId: membership.managerId || null,
+      status: membership.status,
+    };
+  },
+});
+
+/**
  * Get all memberships for a business (team list)
  */
 export const getByBusinessId = query({
@@ -216,6 +260,7 @@ export const getPendingInvitations = query({
 /**
  * Invite user to business by email
  * Creates pending membership
+ * For employee role, managerId is required
  */
 export const inviteByEmail = mutation({
   args: {
@@ -226,6 +271,7 @@ export const inviteByEmail = mutation({
       v.literal("manager"),
       v.literal("employee")
     ),
+    managerId: v.optional(v.id("users")), // Required for employees, optional for others
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -253,6 +299,30 @@ export const inviteByEmail = mutation({
     // Can't invite to a role higher than your own
     if (!canManageRole(inviterMembership.role, args.role)) {
       throw new Error("Cannot invite to a role equal or higher than your own");
+    }
+
+    // Employees MUST have a manager assigned at invitation time
+    if (args.role === "employee" && !args.managerId) {
+      throw new Error("Employees must have a manager assigned");
+    }
+
+    // Validate managerId if provided
+    let managerUserId = args.managerId;
+    if (managerUserId) {
+      const manager = await ctx.db.get(managerUserId);
+      if (!manager) {
+        throw new Error("Manager not found");
+      }
+      // Verify manager has appropriate role in this business
+      const managerMembership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", managerUserId!).eq("businessId", args.businessId)
+        )
+        .first();
+      if (!managerMembership || !["owner", "manager", "finance_admin"].includes(managerMembership.role)) {
+        throw new Error("Selected manager does not have approval permissions");
+      }
     }
 
     // Find or create user by email
@@ -294,6 +364,7 @@ export const inviteByEmail = mutation({
       await ctx.db.patch(existingMembership._id, {
         role: args.role,
         status: "pending",
+        managerId: managerUserId,
         updatedAt: Date.now(),
       });
       return existingMembership._id;
@@ -305,6 +376,7 @@ export const inviteByEmail = mutation({
       businessId: args.businessId,
       role: args.role,
       status: "pending",
+      managerId: managerUserId,
       updatedAt: Date.now(),
     });
 
@@ -450,6 +522,11 @@ export const updateRole = mutation({
     // Can only assign roles lower than your own
     if (!canManageRole(callerMembership.role, args.newRole)) {
       throw new Error("Cannot assign role equal or higher than your own");
+    }
+
+    // When changing to employee role, require manager to be assigned first
+    if (args.newRole === "employee" && !targetMembership.managerId) {
+      throw new Error("Cannot assign employee role without a manager. Assign a manager first.");
     }
 
     await ctx.db.patch(args.membershipId, {
@@ -706,6 +783,11 @@ export const updateRoleByStringIds = mutation({
     // No role change needed if same role
     if (targetMembership.role === args.newRole) {
       return targetMembership._id;
+    }
+
+    // When changing to employee role, require manager to be assigned first
+    if (args.newRole === "employee" && !targetMembership.managerId) {
+      throw new Error("Cannot assign employee role without a manager. Assign a manager first.");
     }
 
     await ctx.db.patch(targetMembership._id, {
@@ -1114,6 +1196,11 @@ export const assignManager = mutation({
 
     if (!employeeMembership || employeeMembership.status !== "active") {
       throw new Error("Employee membership not found or not active");
+    }
+
+    // Employees MUST have a manager assigned - block removal
+    if (employeeMembership.role === "employee" && !args.managerUserId) {
+      throw new Error("Employees must have a manager assigned");
     }
 
     // If manager is provided, validate them

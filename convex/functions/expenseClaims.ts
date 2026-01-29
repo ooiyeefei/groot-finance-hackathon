@@ -1102,15 +1102,20 @@ export const findNextApprover = query({
       return null;
     }
 
-    // If submitter has a manager, they're the next approver
+    // Step 1: If submitter has a manager, they're the next approver
     if (submitterMembership.managerId) {
       const manager = await ctx.db.get(submitterMembership.managerId);
       return manager;
     }
 
-    // Otherwise, find any finance_admin or owner
-    // Get all memberships, then filter by role in JS
-    // (Convex doesn't support .filter() after .withIndex())
+    // Step 2: If submitter is employee without manager, return null
+    // (blocked at submission layer with MANAGER_REQUIRED error)
+    if (submitterMembership.role === "employee") {
+      return null;
+    }
+
+    // Step 3: For managers/admins/owners without assigned manager,
+    // try to find another finance_admin or owner (separation of duties)
     const allMemberships = await ctx.db
       .query("business_memberships")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
@@ -1129,6 +1134,17 @@ export const findNextApprover = query({
         const approver = await ctx.db.get(membership.userId);
         return approver;
       }
+    }
+
+    // Step 4: Self-approval fallback for managers/admins/owners
+    // when no other approver is available
+    // This allows solo managers or single-person businesses to function
+    if (
+      submitterMembership.role === "manager" ||
+      submitterMembership.role === "finance_admin" ||
+      submitterMembership.role === "owner"
+    ) {
+      return submitter; // Route to self for self-approval
     }
 
     return null;

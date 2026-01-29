@@ -8,6 +8,12 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Mail, X, AlertTriangle, ArrowRight } from 'lucide-react'
 
+interface AvailableManager {
+  user_id: string
+  full_name?: string
+  email?: string
+}
+
 interface InvitationDialogProps {
   isOpen: boolean
   onClose: () => void
@@ -16,11 +22,13 @@ interface InvitationDialogProps {
   teamLimitExceeded?: boolean
   teamLimitMessage?: string
   onDismissLimitError?: () => void
+  availableManagers?: AvailableManager[]
 }
 
 export interface InvitationFormData {
   email: string
   role: 'employee' | 'manager' | 'finance_admin'
+  manager_id?: string
   employee_id?: string
   department?: string
   job_title?: string
@@ -33,12 +41,14 @@ export default function InvitationDialog({
   isLoading = false,
   teamLimitExceeded = false,
   teamLimitMessage,
-  onDismissLimitError
+  onDismissLimitError,
+  availableManagers = []
 }: InvitationDialogProps) {
   const router = useRouter()
   const [formData, setFormData] = useState<InvitationFormData>({
     email: '',
     role: 'employee',
+    manager_id: '',
     employee_id: '',
     department: '',
     job_title: ''
@@ -69,6 +79,11 @@ export default function InvitationDialog({
       newErrors.role = 'Role is required'
     }
 
+    // Employees MUST have a manager assigned
+    if (formData.role === 'employee' && !formData.manager_id) {
+      newErrors.manager_id = 'Manager is required for employees'
+    }
+
     setErrors(newErrors)
 
     if (Object.keys(newErrors).length > 0) {
@@ -81,6 +96,7 @@ export default function InvitationDialog({
       setFormData({
         email: '',
         role: 'employee',
+        manager_id: '',
         employee_id: '',
         department: '',
         job_title: ''
@@ -96,6 +112,7 @@ export default function InvitationDialog({
     setFormData({
       email: '',
       role: 'employee',
+      manager_id: '',
       employee_id: '',
       department: '',
       job_title: ''
@@ -221,6 +238,48 @@ export default function InvitationDialog({
               </Select>
               {errors.role && (
                 <p className="text-destructive text-sm mt-1">{errors.role}</p>
+              )}
+            </div>
+
+            {/* Manager Field - Required for employees */}
+            <div>
+              <Label htmlFor="manager" className="text-foreground">
+                Manager {formData.role === 'employee' ? '*' : '(Optional)'}
+              </Label>
+              <Select
+                value={formData.manager_id || ''}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, manager_id: value === 'none' ? '' : value })
+                }
+                disabled={isLoading}
+              >
+                <SelectTrigger className={`mt-1 bg-input text-foreground ${errors.manager_id ? 'border-destructive' : 'border-border'}`}>
+                  <SelectValue placeholder={formData.role === 'employee' ? 'Select manager' : 'No manager'} />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border">
+                  {formData.role !== 'employee' && (
+                    <SelectItem value="none" className="text-foreground">
+                      No Manager
+                    </SelectItem>
+                  )}
+                  {availableManagers.map((manager) => (
+                    <SelectItem
+                      key={manager.user_id}
+                      value={manager.user_id}
+                      className="text-foreground"
+                    >
+                      {manager.full_name || manager.email || 'Manager'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.manager_id && (
+                <p className="text-destructive text-sm mt-1">{errors.manager_id}</p>
+              )}
+              {formData.role === 'employee' && availableManagers.length === 0 && (
+                <p className="text-amber-500 text-sm mt-1">
+                  No managers available. Add a manager first before inviting employees.
+                </p>
               )}
             </div>
 

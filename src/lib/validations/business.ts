@@ -126,6 +126,10 @@ export const sendInvitationSchema = z.object({
   // Accept both UUID (legacy Supabase) and Convex ID formats
   business_id: documentIdSchema,
 
+  // Manager assignment - required for employees, optional for others
+  // Validation of requirement handled at API level based on role
+  manager_id: z.string().max(100, 'Manager ID too long').optional().nullable(),
+
   // Optional fields for employee profile setup
   employee_id: z.string().max(50, 'Employee ID too long').optional().nullable(),
   department: z.string().max(100, 'Department too long').optional().nullable(),

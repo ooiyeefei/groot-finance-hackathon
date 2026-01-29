@@ -84,6 +84,46 @@ async function getUserData(userId: string, convexClient: any) {
 }
 
 /**
+ * Check if employee can submit expense claims
+ * Employees MUST have a manager assigned before they can submit
+ * Managers/Admins/Owners can always submit (may self-approve)
+ */
+async function canEmployeeSubmit(
+  userId: string,
+  businessId: string,
+  convexClient: any
+): Promise<{ canSubmit: boolean; error?: string }> {
+  try {
+    const membership = await convexClient.query(api.functions.memberships.getByUserAndBusiness, {
+      userId,
+      businessId
+    })
+
+    if (!membership) {
+      return { canSubmit: false, error: 'User is not a member of this business' }
+    }
+
+    // Managers, finance_admins, and owners can always submit (may self-approve)
+    if (membership.role !== 'employee') {
+      return { canSubmit: true }
+    }
+
+    // Employees MUST have a manager assigned
+    if (!membership.managerId) {
+      return {
+        canSubmit: false,
+        error: 'MANAGER_REQUIRED'
+      }
+    }
+
+    return { canSubmit: true }
+  } catch (error) {
+    console.error('[Submission Check] Error checking employee submission eligibility:', error)
+    return { canSubmit: false, error: 'Failed to verify submission eligibility' }
+  }
+}
+
+/**
  * Create new expense claim
  */
 export async function createExpenseClaim(
@@ -772,6 +812,23 @@ export async function updateExpenseClaim(
 
       switch (request.status) {
         case 'submitted':
+          // Check if employee can submit (must have manager assigned)
+          const submissionCheck = await canEmployeeSubmit(
+            existingClaim.userId,
+            userProfile.business_id,
+            convexClient
+          )
+
+          if (!submissionCheck.canSubmit) {
+            if (submissionCheck.error === 'MANAGER_REQUIRED') {
+              return {
+                success: false,
+                error: 'You cannot submit expense claims without an assigned manager. Please contact your administrator to assign you a manager.'
+              }
+            }
+            return { success: false, error: submissionCheck.error || 'Submission not allowed' }
+          }
+
           // Find next approver using Convex
           const nextApproverId = await findNextApprover(
             existingClaim.userId,

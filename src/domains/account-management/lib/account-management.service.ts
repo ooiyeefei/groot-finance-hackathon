@@ -83,6 +83,7 @@ export interface UpdateMembershipRequest {
 export interface CreateInvitationRequest {
   email: string
   role: 'employee' | 'manager' | 'finance_admin'  // Note: 'owner' role cannot be invited
+  manager_id?: string  // Required for employees, optional for others
   employee_id?: string
   department?: string
   job_title?: string
@@ -488,7 +489,8 @@ export async function createInvitation(
   const membershipId = await client.mutation(api.functions.memberships.inviteByEmail, {
     businessId: businessId as any,
     email: email.toLowerCase(),
-    role: role as 'manager' | 'employee' | 'finance_admin'  // Note: 'owner' role cannot be invited
+    role: role as 'manager' | 'employee' | 'finance_admin',  // Note: 'owner' role cannot be invited
+    managerId: request.manager_id as any  // Required for employees, optional for others
   })
 
   // Get business name for email
