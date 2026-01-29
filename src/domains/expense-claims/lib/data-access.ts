@@ -538,16 +538,33 @@ export async function listExpenseClaims(
     const isAdmin = employeeProfile.role_permissions.finance_admin
     const isManager = employeeProfile.role_permissions.manager
 
-    // Use Convex query for listing
-    const result = await convexClient.query(api.functions.expenseClaims.list, {
-      businessId: employeeProfile.business_id,
-      status: params.status,
-      userId: params.user_id ? params.user_id : undefined,
-      startDate: params.date_from,
-      endDate: params.date_to,
-      limit: params.limit || 20,
-      cursor: params.page ? String((params.page - 1) * (params.limit || 20)) : undefined
-    })
+    // Use getPendingApprovals for approval queue (approver=me), general list otherwise
+    // This ensures managers only see claims they should approve, not all their own claims
+    let result: any
+    if (params.approver === 'me' && (isAdmin || isManager)) {
+      // Use getPendingApprovals for proper approval queue filtering:
+      // - Managers: only direct reports' claims
+      // - Admins/Owners: all submitted claims
+      const pendingClaims = await convexClient.query(api.functions.expenseClaims.getPendingApprovals, {
+        businessId: employeeProfile.business_id
+      })
+      result = {
+        claims: pendingClaims || [],
+        totalCount: pendingClaims?.length || 0,
+        nextCursor: null
+      }
+    } else {
+      // Use general list query for all other cases
+      result = await convexClient.query(api.functions.expenseClaims.list, {
+        businessId: employeeProfile.business_id,
+        status: params.status,
+        userId: params.user_id ? params.user_id : undefined,
+        startDate: params.date_from,
+        endDate: params.date_to,
+        limit: params.limit || 20,
+        cursor: params.page ? String((params.page - 1) * (params.limit || 20)) : undefined
+      })
+    }
 
     if (!result) {
       return { success: false, error: 'Failed to fetch expense claims' }
