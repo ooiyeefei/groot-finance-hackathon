@@ -927,9 +927,11 @@ export const updateStatus = mutation({
         if (!["owner", "finance_admin", "manager"].includes(role)) {
           throw new Error("Not authorized to approve");
         }
-        // Managers/finance_admins/owners can self-approve when they are the designated approver
-        // This handles small company scenarios where the manager is the only approver
-        // The routing logic (findNextApprover) already tries to find a different approver first
+        // STRICT ROUTING: Only the designated approver can approve
+        // If designatedApproverId is set, enforce it; otherwise allow role-based approval (legacy)
+        if (claim.designatedApproverId && claim.designatedApproverId !== user._id) {
+          throw new Error("Only the designated approver can approve this claim");
+        }
         updateData.approvedBy = user._id;
         updateData.approvedAt = now;
         if (args.reviewerNotes) {
@@ -1077,6 +1079,11 @@ export const updateStatus = mutation({
         // Only managers/finance_admins/owners can reject
         if (!["owner", "finance_admin", "manager"].includes(role)) {
           throw new Error("Not authorized to reject");
+        }
+        // STRICT ROUTING: Only the designated approver can reject
+        // If designatedApproverId is set, enforce it; otherwise allow role-based rejection (legacy)
+        if (claim.designatedApproverId && claim.designatedApproverId !== user._id) {
+          throw new Error("Only the designated approver can reject this claim");
         }
         updateData.reviewedBy = user._id;
         updateData.rejectedAt = now;
