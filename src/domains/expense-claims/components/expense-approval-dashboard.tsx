@@ -833,7 +833,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
                   <div>
                     <CardTitle className="text-foreground text-lg">{claim.description}</CardTitle>
                     <CardDescription>
-                      By {claim.employee_name} • {new Date(claim.submission_date).toLocaleDateString()}
+                      By {claim.employee?.full_name || 'Unknown'} • {claim.submitted_at ? formatBusinessDate(claim.submitted_at) : 'Not submitted'}
                     </CardDescription>
                   </div>
                   <Badge variant="success">
