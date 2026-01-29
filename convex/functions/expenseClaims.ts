@@ -323,7 +323,7 @@ export const getPendingApprovals = query({
     let pendingClaims = allClaims.filter((c) => c.status === "submitted" && !c.deletedAt);
 
     if (membership.role === "manager") {
-      // Managers only see claims from direct reports
+      // Managers see claims from direct reports + their own claims (for self-approval)
       // Get all memberships, then filter by managerId in JS
       // (Convex doesn't support .filter() after .withIndex())
       const allMemberships = await ctx.db
@@ -333,6 +333,7 @@ export const getPendingApprovals = query({
 
       const directReports = allMemberships.filter((m) => m.managerId === user._id);
       const reportIds = new Set(directReports.map((m) => m.userId));
+      reportIds.add(user._id); // Include own claims for self-approval
       pendingClaims = pendingClaims.filter((c) => reportIds.has(c.userId));
     }
 
@@ -1115,30 +1116,8 @@ export const findNextApprover = query({
     }
 
     // Step 3: For managers/admins/owners without assigned manager,
-    // try to find another finance_admin or owner (separation of duties)
-    const allMemberships = await ctx.db
-      .query("business_memberships")
-      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
-      .collect();
-
-    const finance_adminMemberships = allMemberships.filter(
-      (m) => m.role === "owner" || m.role === "finance_admin"
-    );
-
-    // Return first active finance_admin/owner who isn't the submitter
-    for (const membership of finance_adminMemberships) {
-      if (
-        membership.userId !== submitter._id &&
-        membership.status === "active"
-      ) {
-        const approver = await ctx.db.get(membership.userId);
-        return approver;
-      }
-    }
-
-    // Step 4: Self-approval fallback for managers/admins/owners
-    // when no other approver is available
-    // This allows solo managers or single-person businesses to function
+    // route to SELF for self-approval
+    // Manager submits → goes to their own queue → they self-approve
     if (
       submitterMembership.role === "manager" ||
       submitterMembership.role === "finance_admin" ||
