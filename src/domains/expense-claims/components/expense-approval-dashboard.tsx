@@ -942,6 +942,7 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
         <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
           <UnifiedExpenseDetailsModal
             claimId={selectedClaim.id}
+            businessId={selectedClaim.business_id}
             isOpen={Boolean(selectedClaim)}
             onClose={() => {
               setSelectedClaim(null)
@@ -953,6 +954,12 @@ function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
             }}
             onReject={async (claimId: string, notes?: string) => {
               await handleApproval(claimId, 'reject', notes)
+            }}
+            onRouted={() => {
+              fetchPendingClaims()
+              if (onRefreshNeeded) {
+                onRefreshNeeded()
+              }
             }}
             onRefreshNeeded={() => {
               fetchPendingClaims()

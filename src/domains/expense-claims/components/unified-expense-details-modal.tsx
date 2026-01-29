@@ -36,15 +36,18 @@ import { getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expen
 import DuplicateBadge from './duplicate-badge'
 import DuplicateComparisonPanel from './duplicate-comparison-panel'
 import CorrectResubmitButton from './correct-resubmit-button'
+import RouteClaimButton from './route-claim-button'
 
 interface UnifiedExpenseDetailsModalProps {
   claimId: string
+  businessId: string
   isOpen: boolean
   onClose: () => void
   viewMode: 'personal' | 'manager'
   // Manager-specific callbacks
   onApprove?: (claimId: string, notes?: string) => Promise<void>
   onReject?: (claimId: string, notes?: string) => Promise<void>
+  onRouted?: () => void
   onRefreshNeeded?: () => void
 }
 
@@ -60,6 +63,7 @@ interface ClaimDetails {
   created_at: string
   updated_at: string
   current_approver_name?: string
+  designated_approver_id?: string
   // Direct fields from expense_claims table
   vendor_name?: string
   total_amount?: string
@@ -110,11 +114,13 @@ interface ClaimDetails {
 
 export default function UnifiedExpenseDetailsModal({
   claimId,
+  businessId,
   isOpen,
   onClose,
   viewMode,
   onApprove,
   onReject,
+  onRouted,
   onRefreshNeeded
 }: UnifiedExpenseDetailsModalProps) {
   const [claimDetails, setClaimDetails] = useState<ClaimDetails | null>(null)
@@ -620,6 +626,18 @@ export default function UnifiedExpenseDetailsModal({
                                 <XCircle className="w-4 h-4 mr-2" />
                                 Reject
                               </Button>
+
+                              <RouteClaimButton
+                                claimId={claimDetails.id}
+                                businessId={businessId}
+                                currentApproverId={claimDetails.designated_approver_id}
+                                onRouted={() => {
+                                  onClose()
+                                  onRouted?.()
+                                  onRefreshNeeded?.()
+                                }}
+                                disabled={processing}
+                              />
 
                               <Button
                                 onClick={() => handleApproval('approve')}

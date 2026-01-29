@@ -28,6 +28,7 @@ interface MobileApprovalListProps {
 
 interface ExpenseClaim {
   id: string
+  business_id: string
   description: string
   vendor_name: string
   total_amount: string | number
@@ -312,11 +313,16 @@ export function MobileApprovalList({ onRefreshNeeded }: MobileApprovalListProps)
         >
           <UnifiedExpenseDetailsModal
             claimId={selectedClaim.id}
+            businessId={selectedClaim.business_id}
             isOpen={Boolean(selectedClaim)}
             onClose={() => setSelectedClaim(null)}
             viewMode="manager"
             onApprove={handleModalApprove}
             onReject={handleModalReject}
+            onRouted={() => {
+              fetchPendingClaims()
+              onRefreshNeeded()
+            }}
             onRefreshNeeded={() => {
               fetchPendingClaims()
               onRefreshNeeded()

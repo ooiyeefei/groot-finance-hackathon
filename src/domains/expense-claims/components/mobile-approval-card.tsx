@@ -39,6 +39,7 @@ const ANIMATION_DURATION = 200
 
 interface ExpenseClaim {
   id: string
+  business_id: string
   description: string
   vendor_name: string
   total_amount: string | number

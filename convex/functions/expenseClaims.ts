@@ -312,30 +312,48 @@ export const getPendingApprovals = query({
       return [];
     }
 
-    // Get all claims for business, then filter by status in JS
-    // (Convex doesn't support .filter() after .withIndex())
+    // STRICT ROUTING: Only show claims where current user is the designated approver
+    // This ensures claims only appear in ONE person's queue at a time
     const allClaims = await ctx.db
       .query("expense_claims")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
       .collect();
 
-    // Filter by role
-    let pendingClaims = allClaims.filter((c) => c.status === "submitted" && !c.deletedAt);
+    // Filter submitted claims that aren't deleted
+    const submittedClaims = allClaims.filter(
+      (c) => c.status === "submitted" && !c.deletedAt
+    );
 
-    if (membership.role === "manager") {
-      // Managers see claims from direct reports + their own claims (for self-approval)
-      // Get all memberships, then filter by managerId in JS
-      // (Convex doesn't support .filter() after .withIndex())
-      const allMemberships = await ctx.db
-        .query("business_memberships")
-        .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
-        .collect();
+    // Separate claims with and without designatedApproverId
+    const claimsWithApprover = submittedClaims.filter((c) => c.designatedApproverId);
+    const claimsWithoutApprover = submittedClaims.filter((c) => !c.designatedApproverId);
 
-      const directReports = allMemberships.filter((m) => m.managerId === user._id);
-      const reportIds = new Set(directReports.map((m) => m.userId));
-      reportIds.add(user._id); // Include own claims for self-approval
-      pendingClaims = pendingClaims.filter((c) => reportIds.has(c.userId));
+    // For claims WITH designatedApproverId: strict routing
+    const strictRoutedClaims = claimsWithApprover.filter(
+      (c) => c.designatedApproverId === user._id
+    );
+
+    // For claims WITHOUT designatedApproverId (legacy): fall back to role-based filtering
+    let legacyClaims: typeof claimsWithoutApprover = [];
+    if (claimsWithoutApprover.length > 0) {
+      if (membership.role === "manager") {
+        // Managers see direct reports + own claims (legacy behavior)
+        const allMemberships = await ctx.db
+          .query("business_memberships")
+          .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+          .collect();
+        const directReports = allMemberships.filter((m) => m.managerId === user._id);
+        const reportIds = new Set(directReports.map((m) => m.userId));
+        reportIds.add(user._id);
+        legacyClaims = claimsWithoutApprover.filter((c) => reportIds.has(c.userId));
+      } else {
+        // Owners/finance_admins see all legacy claims
+        legacyClaims = claimsWithoutApprover;
+      }
     }
+
+    // Combine strict routed + legacy claims
+    const pendingClaims = [...strictRoutedClaims, ...legacyClaims];
 
     // Enrich with submitter details
     return await Promise.all(
@@ -346,6 +364,60 @@ export const getPendingApprovals = query({
           submitter: submitter
             ? { _id: submitter._id, email: submitter.email, fullName: submitter.fullName }
             : null,
+        };
+      })
+    );
+  },
+});
+
+/**
+ * Get eligible approvers for routing a claim
+ * Returns all managers, finance_admins, and owners in the business
+ */
+export const getEligibleApprovers = query({
+  args: {
+    businessId: v.string(), // Accepts Convex ID or legacy UUID
+    excludeUserId: v.optional(v.id("users")), // Optionally exclude current approver
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    // Resolve businessId (supports both Convex ID and legacy UUID)
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    // Get all active memberships with approver roles
+    const allMemberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const approverMemberships = allMemberships.filter(
+      (m) =>
+        ["owner", "finance_admin", "manager"].includes(m.role) &&
+        m.status === "active" &&
+        m.userId !== args.excludeUserId // Exclude specified user (usually current approver)
+    );
+
+    // Enrich with user details
+    return await Promise.all(
+      approverMemberships.map(async (membership) => {
+        const approverUser = await ctx.db.get(membership.userId);
+        return {
+          _id: membership.userId,
+          email: approverUser?.email || "",
+          fullName: approverUser?.fullName || "Unknown",
+          role: membership.role,
         };
       })
     );
@@ -808,13 +880,47 @@ export const updateStatus = mutation({
 
     // Status transition logic
     switch (args.status) {
-      case "submitted":
+      case "submitted": {
         // Only claim owner can submit
         if (claim.userId !== user._id) {
           throw new Error("Only claim owner can submit");
         }
         updateData.submittedAt = now;
+
+        // Determine designated approver for strict routing
+        let designatedApproverId: typeof user._id | null = null;
+
+        // Step 1: If submitter has assigned manager, route to them
+        if (membership.managerId) {
+          designatedApproverId = membership.managerId;
+        }
+        // Step 2: For employees without manager, find any finance_admin/owner (fallback)
+        else if (membership.role === "employee") {
+          const allMemberships = await ctx.db
+            .query("business_memberships")
+            .withIndex("by_businessId", (q) => q.eq("businessId", claim.businessId))
+            .collect();
+
+          const adminMembership = allMemberships.find(
+            (m) =>
+              (m.role === "owner" || m.role === "finance_admin") &&
+              m.status === "active" &&
+              m.userId !== user._id
+          );
+          if (adminMembership) {
+            designatedApproverId = adminMembership.userId;
+          }
+        }
+        // Step 3: For managers/admins/owners without assigned manager, self-approval
+        else if (["manager", "finance_admin", "owner"].includes(membership.role)) {
+          designatedApproverId = user._id; // Route to self
+        }
+
+        if (designatedApproverId) {
+          updateData.designatedApproverId = designatedApproverId;
+        }
         break;
+      }
 
       case "approved":
         // Only managers/finance_admins/owners can approve
@@ -1013,6 +1119,98 @@ export const updateStatus = mutation({
 
     await ctx.db.patch(claim._id, updateData);
     return claim._id;
+  },
+});
+
+/**
+ * Route/reassign an expense claim to a different approver
+ * Only the current designated approver or admins can route claims
+ */
+export const routeClaim = mutation({
+  args: {
+    claimId: v.string(),
+    newApproverId: v.id("users"),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim || claim.deletedAt) {
+      throw new Error("Expense claim not found");
+    }
+
+    // Only submitted claims can be routed
+    if (claim.status !== "submitted") {
+      throw new Error("Only submitted claims can be routed");
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", claim.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not authorized");
+    }
+
+    // Authorization: current designated approver OR owner/finance_admin can route
+    const isDesignatedApprover = claim.designatedApproverId === user._id;
+    const isAdmin = ["owner", "finance_admin"].includes(membership.role);
+    if (!isDesignatedApprover && !isAdmin) {
+      throw new Error("Only the designated approver or admins can route claims");
+    }
+
+    // Validate new approver exists and is eligible (manager/finance_admin/owner)
+    const newApprover = await ctx.db.get(args.newApproverId);
+    if (!newApprover) {
+      throw new Error("New approver not found");
+    }
+
+    const newApproverMembership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", args.newApproverId).eq("businessId", claim.businessId)
+      )
+      .first();
+
+    if (!newApproverMembership || newApproverMembership.status !== "active") {
+      throw new Error("New approver is not an active member of this business");
+    }
+
+    if (!["owner", "finance_admin", "manager"].includes(newApproverMembership.role)) {
+      throw new Error("New approver must be a manager, finance admin, or owner");
+    }
+
+    // Build routing history entry
+    const routingEntry = {
+      fromUserId: user._id,
+      toUserId: args.newApproverId,
+      routedAt: Date.now(),
+      reason: args.reason,
+    };
+
+    // Get existing routing history or initialize empty array
+    const existingHistory = claim.routingHistory || [];
+
+    // Update the claim
+    await ctx.db.patch(claim._id, {
+      designatedApproverId: args.newApproverId,
+      routingHistory: [...existingHistory, routingEntry],
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
   },
 });
 

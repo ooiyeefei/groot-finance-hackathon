@@ -281,6 +281,15 @@ export default defineSchema({
     reviewedBy: v.optional(v.id("users")),
     approvedBy: v.optional(v.id("users")),
 
+    // Designated Approver & Routing (strict routing feature)
+    designatedApproverId: v.optional(v.id("users")),  // Who should approve this claim
+    routingHistory: v.optional(v.array(v.object({
+      fromUserId: v.id("users"),
+      toUserId: v.id("users"),
+      routedAt: v.number(),
+      reason: v.optional(v.string()),
+    }))),
+
     // Timestamps
     submittedAt: v.optional(v.number()),
     approvedAt: v.optional(v.number()),
@@ -325,7 +334,9 @@ export default defineSchema({
     .index("by_legacyId", ["legacyId"])
     // Duplicate detection indexes
     .index("by_business_vendor_date", ["businessId", "vendorName", "transactionDate"])
-    .index("by_business_reference", ["businessId", "referenceNumber"]),
+    .index("by_business_reference", ["businessId", "referenceNumber"])
+    // Approval routing index
+    .index("by_designatedApproverId", ["designatedApproverId"]),
 
   // ============================================
   // DUPLICATE MATCHES TABLE (007-duplicate-expense-detection)
