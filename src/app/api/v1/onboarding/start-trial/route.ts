@@ -132,25 +132,31 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Start Trial] Created subscription ${subscription.id} with trial ending ${new Date(subscription.trial_end! * 1000).toISOString()}`)
 
-    // Update business with subscription details via Convex
-    // Trial dates come from Stripe subscription
-    const trialStart = subscription.trial_start
-      ? new Date(subscription.trial_start * 1000).toISOString()
-      : new Date().toISOString()
-    const trialEnd = subscription.trial_end
-      ? new Date(subscription.trial_end * 1000).toISOString()
-      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+    // Extract trial dates from Stripe subscription (stored as Unix seconds)
+    // Convert to milliseconds for database storage and ISO strings for API response
+    const trialStartMs = subscription.trial_start
+      ? subscription.trial_start * 1000
+      : Date.now()
+    const trialEndMs = subscription.trial_end
+      ? subscription.trial_end * 1000
+      : Date.now() + 14 * 24 * 60 * 60 * 1000
+
+    const trialStart = new Date(trialStartMs).toISOString()
+    const trialEnd = new Date(trialEndMs).toISOString()
 
     try {
-      // Update subscription details using the webhook handler function
-      // (Trial dates are managed by Stripe, not stored in DB)
+      // Update subscription details AND trial dates via Convex
+      // CRITICAL: Trial dates must be stored for enforcement
       await convex.mutation(api.functions.businesses.updateSubscriptionFromWebhook, {
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscription.id,
         stripeProductId: starterPlan.productId ?? undefined,
         planName: 'trial',
         subscriptionStatus: 'trialing',
+        trialStartDate: trialStartMs,   // Store as Unix timestamp (milliseconds)
+        trialEndDate: trialEndMs,       // Store as Unix timestamp (milliseconds)
       })
+      console.log(`[Start Trial] Stored trial dates: start=${trialStart}, end=${trialEnd}`)
     } catch (updateError) {
       console.error('[Start Trial] Error updating business:', updateError)
       // Don't fail - subscription was created, webhook will sync

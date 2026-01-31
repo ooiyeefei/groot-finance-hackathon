@@ -1420,6 +1420,9 @@ export const deleteExpenseCategory = mutation({
  * Get trial expiration status for a Clerk user
  * Used by Next.js middleware to check if user should be redirected
  * Returns businessId (null if no business) and isExpired flag
+ *
+ * CRITICAL: This is the primary enforcement point for trial expiration.
+ * Must handle all edge cases including missing planName and subscriptionStatus.
  */
 export const getTrialStatusByClerkId = query({
   args: { clerkUserId: v.string() },
@@ -1442,32 +1445,52 @@ export const getTrialStatusByClerkId = query({
       return { isExpired: false, businessId: null };
     }
 
-    // Only check trial expiration for trial/free plan users
-    const isTrialPlan = business.planName === "trial" || business.planName === "free";
-    if (!isTrialPlan) {
+    // Paid plans with active subscription - allow access
+    const isPaidPlan = business.planName === "starter" || business.planName === "pro" || business.planName === "enterprise";
+    const isActiveSubscription = business.subscriptionStatus === "active";
+
+    if (isPaidPlan && isActiveSubscription) {
       return { isExpired: false, businessId: user.businessId };
     }
 
-    // Check if trial has expired using subscription_status (Stripe source of truth)
-    // 'paused' = trial ended without payment method (needs upgrade via Checkout)
-    const isPaused = business.subscriptionStatus === "paused";
+    // Check for explicitly paused status (trial ended without payment method)
+    // Stripe sets this via webhook when trial_settings.missing_payment_method = 'pause'
+    if (business.subscriptionStatus === "paused") {
+      return { isExpired: true, businessId: user.businessId };
+    }
 
-    // Also check trial_end_date as fallback (synced from Stripe)
-    let dateExpired = false;
-    if (business.trialEndDate) {
-      try {
-        dateExpired = business.trialEndDate < Date.now();
-      } catch {
-        // Invalid date - ignore
+    // Check for canceled/unpaid status
+    if (business.subscriptionStatus === "canceled" || business.subscriptionStatus === "unpaid") {
+      return { isExpired: true, businessId: user.businessId };
+    }
+
+    // Check trial_end_date (synced from Stripe subscription)
+    if (business.trialEndDate && typeof business.trialEndDate === "number") {
+      const now = Date.now();
+      if (business.trialEndDate < now) {
+        // Trial has expired based on date
+        return { isExpired: true, businessId: user.businessId };
       }
     }
 
-    const expired = isPaused || dateExpired;
+    // EDGE CASE: User has trial plan but no trial dates set
+    // This can happen if start-trial endpoint failed or webhooks didn't process
+    // For trial plans without proper setup, check if they should be blocked
+    const isTrialOrFreePlan = business.planName === "trial" || business.planName === "free" || !business.planName;
+    const hasNoTrialDates = !business.trialEndDate;
+    const notTrialing = business.subscriptionStatus !== "trialing";
 
-    return {
-      isExpired: expired,
-      businessId: user.businessId,
-    };
+    if (isTrialOrFreePlan && hasNoTrialDates && notTrialing) {
+      // User on trial/free plan with no trial setup and not actively trialing
+      // This is likely an incomplete setup - they need to go through plan selection
+      // But only if they completed onboarding (has a business)
+      if (business.onboardingCompletedAt) {
+        return { isExpired: true, businessId: user.businessId };
+      }
+    }
+
+    // All checks passed - user is in valid trial or has no enforcement needed
+    return { isExpired: false, businessId: user.businessId };
   },
 });
 
@@ -1538,6 +1561,8 @@ export const updateStripeCustomerFromCheckout = mutation({
 /**
  * Update subscription details after subscription create/update
  * Called from subscription.created and subscription.updated webhooks
+ *
+ * CRITICAL: Stores trialStartDate and trialEndDate for trial enforcement
  */
 export const updateSubscriptionFromWebhook = mutation({
   args: {
@@ -1546,6 +1571,8 @@ export const updateSubscriptionFromWebhook = mutation({
     stripeProductId: v.optional(v.string()),
     planName: v.string(),
     subscriptionStatus: v.string(),
+    trialStartDate: v.optional(v.number()),  // Unix timestamp in milliseconds
+    trialEndDate: v.optional(v.number()),    // Unix timestamp in milliseconds
   },
   handler: async (ctx, args) => {
     // Find business by Stripe customer ID
@@ -1565,6 +1592,9 @@ export const updateSubscriptionFromWebhook = mutation({
       stripeProductId: args.stripeProductId,
       planName: args.planName,
       subscriptionStatus: args.subscriptionStatus,
+      // Store trial dates for enforcement (CRITICAL for trial expiration)
+      ...(args.trialStartDate !== undefined && { trialStartDate: args.trialStartDate }),
+      ...(args.trialEndDate !== undefined && { trialEndDate: args.trialEndDate }),
       updatedAt: Date.now(),
     });
 
@@ -1609,6 +1639,8 @@ export const downgradeToFreeFromWebhook = mutation({
  * Update subscription details using businessId from metadata (fallback)
  * Called when stripeCustomerId lookup fails (e.g., checkout webhook didn't process first)
  * Also links the stripeCustomerId to the business for future lookups
+ *
+ * CRITICAL: Stores trialStartDate and trialEndDate for trial enforcement
  */
 export const updateSubscriptionFromWebhookWithBusinessId = mutation({
   args: {
@@ -1618,6 +1650,8 @@ export const updateSubscriptionFromWebhookWithBusinessId = mutation({
     stripeProductId: v.optional(v.string()),
     planName: v.string(),
     subscriptionStatus: v.string(),
+    trialStartDate: v.optional(v.number()),  // Unix timestamp in milliseconds
+    trialEndDate: v.optional(v.number()),    // Unix timestamp in milliseconds
   },
   handler: async (ctx, args) => {
     // Find business by ID (supports both Convex and legacy UUIDs)
@@ -1634,6 +1668,9 @@ export const updateSubscriptionFromWebhookWithBusinessId = mutation({
       stripeProductId: args.stripeProductId,
       planName: args.planName,
       subscriptionStatus: args.subscriptionStatus,
+      // Store trial dates for enforcement (CRITICAL for trial expiration)
+      ...(args.trialStartDate !== undefined && { trialStartDate: args.trialStartDate }),
+      ...(args.trialEndDate !== undefined && { trialEndDate: args.trialEndDate }),
       updatedAt: Date.now(),
     });
 
@@ -2002,6 +2039,92 @@ export const backfillCategoryIds = internalMutation({
       updatedExpenseCategories,
       updatedCogsCategories,
       totalBusinessesProcessed: businesses.length,
+    };
+  },
+});
+
+/**
+ * Fix expired trials that bypassed enforcement
+ *
+ * This migration finds businesses with:
+ * - planName = 'trial' or 'free' or null
+ * - No trialEndDate set
+ * - onboardingCompletedAt set (completed setup)
+ *
+ * And marks them as expired by setting subscriptionStatus = 'paused'
+ * This will trigger the middleware to redirect them to plan selection.
+ *
+ * Run from Convex dashboard when needed to fix legacy trial users.
+ */
+export const fixExpiredTrialsWithoutDates = internalMutation({
+  args: {
+    dryRun: v.optional(v.boolean()),  // Set true to preview without changes
+  },
+  handler: async (ctx, args) => {
+    const isDryRun = args.dryRun ?? false;
+    console.log(`[Fix Expired Trials] Starting... (dryRun: ${isDryRun})`);
+
+    // Find businesses that should be blocked but aren't
+    const businesses = await ctx.db.query("businesses").collect();
+
+    let fixedCount = 0;
+    let skippedCount = 0;
+    const affectedBusinesses: string[] = [];
+
+    for (const business of businesses) {
+      // Skip paid plans with active subscriptions
+      const isPaidPlan = business.planName === "starter" || business.planName === "pro" || business.planName === "enterprise";
+      const isActiveSubscription = business.subscriptionStatus === "active";
+
+      if (isPaidPlan && isActiveSubscription) {
+        continue;  // Paid users are fine
+      }
+
+      // Skip businesses already marked as paused/canceled
+      if (business.subscriptionStatus === "paused" || business.subscriptionStatus === "canceled") {
+        continue;  // Already blocked
+      }
+
+      // Skip businesses without completed onboarding
+      if (!business.onboardingCompletedAt) {
+        continue;  // Still in setup
+      }
+
+      // Find trial/free users without proper trial dates
+      const isTrialOrFree = business.planName === "trial" || business.planName === "free" || !business.planName;
+      const hasNoTrialEndDate = !business.trialEndDate;
+
+      if (isTrialOrFree && hasNoTrialEndDate) {
+        console.log(`[Fix Expired Trials] Found: ${business._id} (${business.name}) - planName: ${business.planName}, status: ${business.subscriptionStatus}`);
+        affectedBusinesses.push(`${business._id} (${business.name})`);
+
+        if (!isDryRun) {
+          // Mark as paused to trigger enforcement
+          await ctx.db.patch(business._id, {
+            subscriptionStatus: "paused",
+            updatedAt: Date.now(),
+          });
+          fixedCount++;
+          console.log(`[Fix Expired Trials] ✅ Marked as paused: ${business._id}`);
+        } else {
+          fixedCount++;  // Count for preview
+        }
+      } else {
+        skippedCount++;
+      }
+    }
+
+    console.log(`[Fix Expired Trials] Complete.`);
+    console.log(`[Fix Expired Trials] - ${isDryRun ? 'Would fix' : 'Fixed'}: ${fixedCount}`);
+    console.log(`[Fix Expired Trials] - Skipped: ${skippedCount}`);
+    console.log(`[Fix Expired Trials] - Total processed: ${businesses.length}`);
+
+    return {
+      dryRun: isDryRun,
+      fixedCount,
+      skippedCount,
+      totalProcessed: businesses.length,
+      affectedBusinesses,
     };
   },
 });

@@ -78,8 +78,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if already has active subscription
-    if (business.stripeSubscriptionId) {
+    // Check if already has ACTIVE paid subscription
+    // Allow checkout for: no subscription, paused trials, canceled subscriptions
+    const hasActiveSubscription =
+      business.stripeSubscriptionId &&
+      business.subscriptionStatus === 'active' &&
+      business.planName !== 'trial' &&
+      business.planName !== 'free'
+
+    if (hasActiveSubscription) {
       return NextResponse.json(
         {
           success: false,
@@ -87,6 +94,20 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       )
+    }
+
+    // If user has a paused/expired subscription, cancel it before creating new one
+    if (business.stripeSubscriptionId &&
+        (business.subscriptionStatus === 'paused' ||
+         business.subscriptionStatus === 'canceled' ||
+         business.subscriptionStatus === 'trialing')) {
+      try {
+        console.log(`[Billing Checkout] Canceling expired subscription: ${business.stripeSubscriptionId}`)
+        await getStripe().subscriptions.cancel(business.stripeSubscriptionId)
+      } catch (cancelError) {
+        // Subscription may already be canceled, continue with checkout
+        console.warn(`[Billing Checkout] Could not cancel subscription (may already be canceled):`, cancelError)
+      }
     }
 
     // Get user info from Clerk for email

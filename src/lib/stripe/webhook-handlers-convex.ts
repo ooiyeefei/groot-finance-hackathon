@@ -176,6 +176,8 @@ export async function handleInvoicePaymentSucceededConvex(
  * 1. Try to find business by stripeCustomerId
  * 2. If not found, use business_id from subscription metadata (handles case where
  *    checkout.session.completed webhook failed and stripeCustomerId isn't linked yet)
+ *
+ * CRITICAL: Extracts and stores trial dates from Stripe subscription for enforcement
  */
 async function updateBusinessSubscriptionConvex(
   subscription: Stripe.Subscription
@@ -191,6 +193,19 @@ async function updateBusinessSubscriptionConvex(
   // Map Stripe subscription status to our status
   const subscriptionStatus = mapStripeStatus(subscription.status)
 
+  // Extract trial dates from Stripe subscription (CRITICAL for enforcement)
+  // Stripe stores trial dates as Unix timestamps (seconds)
+  const trialStartDate = subscription.trial_start
+    ? subscription.trial_start * 1000  // Convert to milliseconds
+    : undefined
+  const trialEndDate = subscription.trial_end
+    ? subscription.trial_end * 1000    // Convert to milliseconds
+    : undefined
+
+  console.log(
+    `[Webhook Handler Convex] Subscription ${subscription.id}: status=${subscriptionStatus}, trialEnd=${trialEndDate ? new Date(trialEndDate).toISOString() : 'none'}`
+  )
+
   // Try to update using stripeCustomerId first
   try {
     await convex.mutation(api.functions.businesses.updateSubscriptionFromWebhook, {
@@ -199,6 +214,8 @@ async function updateBusinessSubscriptionConvex(
       stripeProductId: productId || undefined,
       planName,
       subscriptionStatus,
+      trialStartDate,
+      trialEndDate,
     })
 
     console.log(
@@ -223,6 +240,8 @@ async function updateBusinessSubscriptionConvex(
       stripeProductId: productId || undefined,
       planName,
       subscriptionStatus,
+      trialStartDate,
+      trialEndDate,
     })
 
     console.log(
@@ -233,10 +252,11 @@ async function updateBusinessSubscriptionConvex(
 
 /**
  * Map Stripe subscription status to our simplified status
+ * CRITICAL: 'paused' must be preserved for trial expiration enforcement
  */
 function mapStripeStatus(
   stripeStatus: Stripe.Subscription.Status
-): 'active' | 'past_due' | 'canceled' | 'trialing' | 'unpaid' {
+): 'active' | 'past_due' | 'canceled' | 'trialing' | 'unpaid' | 'paused' {
   switch (stripeStatus) {
     case 'active':
       return 'active'
@@ -248,9 +268,12 @@ function mapStripeStatus(
       return 'trialing'
     case 'unpaid':
       return 'unpaid'
+    case 'paused':
+      // CRITICAL: Preserve 'paused' status for trial expiration enforcement
+      // When trial ends without payment method, Stripe pauses the subscription
+      return 'paused'
     case 'incomplete':
     case 'incomplete_expired':
-    case 'paused':
     default:
       return 'canceled'
   }
