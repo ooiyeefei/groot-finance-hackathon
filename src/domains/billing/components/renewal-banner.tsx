@@ -63,10 +63,13 @@ export function RenewalBanner({ className }: RenewalBannerProps) {
     setIsDismissed(true)
   }
 
-  // Don't render while loading
+  // Don't render while loading or if data is incomplete
   if (isLoading || !data) return null
 
   const { subscription, renewal, plan } = data
+
+  // Guard against missing renewal data (can happen if API response doesn't include it)
+  if (!renewal) return null
 
   // Check for payment issues first (highest priority)
   if (subscription.status === 'past_due') {
@@ -102,7 +105,7 @@ export function RenewalBanner({ className }: RenewalBannerProps) {
   }
 
   // Check renewal reminders (only for paid plans)
-  if (!renewal.needsAttention || renewal.urgencyLevel === 'none') return null
+  if (!renewal?.needsAttention || renewal?.urgencyLevel === 'none') return null
   if (plan.name === 'trial') return null
   if (isDismissed) return null
 

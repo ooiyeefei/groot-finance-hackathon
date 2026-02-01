@@ -143,11 +143,10 @@ function PlanSelectionContent() {
         {/* Pricing Table - Standalone mode for onboarding */}
         <PricingTable
           standalone
-          hideEnterprise
           showLimits
           showCurrentPlan={false}
           onCheckout={handleCheckout}
-          className="max-w-4xl mx-auto"
+          className="max-w-6xl mx-auto"
         />
 
         {/* Footer Note */}

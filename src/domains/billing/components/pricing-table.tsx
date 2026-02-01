@@ -66,7 +66,7 @@ export function PricingTable({
     if (planName === 'enterprise') {
       const subject = encodeURIComponent('Enterprise Plan Inquiry')
       const body = encodeURIComponent('Hi FinanSEAL team,\n\nI would like to inquire about the Enterprise plan pricing for my organization.\n\nCompany name:\nNumber of users:\nSpecific requirements:\n\nLooking forward to hearing from you.\n\nBest regards')
-      window.location.href = `mailto:hello@hellogroot.com?subject=${subject}&body=${body}`
+      window.location.href = `mailto:support@hellogroot.com?subject=${subject}&body=${body}`
       return
     }
 
