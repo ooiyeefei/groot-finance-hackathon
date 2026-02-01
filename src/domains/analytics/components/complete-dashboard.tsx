@@ -181,25 +181,24 @@ export default function CompleteDashboard() {
   }
 
   return (
-    <div className="space-y-section-gap">
-      {/* Header with Period Selector */}
-      {/* CLS FIX: Fixed height header to prevent shift when lastUpdated appears */}
-      <div className="flex items-center justify-between min-h-[52px]">
+    <div className="space-y-4">
+      {/* Header with Period Selector - Compact */}
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Financial Dashboard</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="text-lg font-semibold text-foreground leading-tight">Financial Dashboard</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
             {getPeriodDisplayName(selectedPeriod)} • Converted to {displayCurrency}
             <span className="ml-2">• Updated {lastUpdated ? lastUpdated.toLocaleTimeString() : '--:--:--'}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Currency Selector */}
           <select
             value={displayCurrency}
             onChange={(e) => handleCurrencyChange(e.target.value as SupportedCurrency)}
             disabled={loading}
-            className="px-3 py-1.5 bg-muted text-foreground border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            className="px-2 py-1 bg-muted text-foreground border rounded text-xs focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
             title="Display currency"
           >
             {SUPPORTED_CURRENCIES.map((c) => (
@@ -213,7 +212,7 @@ export default function CompleteDashboard() {
           <select
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value as 'month' | 'quarter' | 'year')}
-            className="px-3 py-1.5 bg-muted text-foreground border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="px-2 py-1 bg-muted text-foreground border rounded text-xs focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="month">Last 60 Days</option>
             <option value="quarter">Current Quarter</option>
@@ -224,15 +223,15 @@ export default function CompleteDashboard() {
           <button
             onClick={refresh}
             disabled={loading}
-            className="p-2 bg-muted hover:bg-accent text-foreground rounded-lg transition-colors disabled:opacity-50"
+            className="p-1.5 bg-muted hover:bg-accent text-foreground rounded transition-colors disabled:opacity-50"
             title="Refresh data"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Proactive AI Action Center - Top placement for priority visibility */}
+      {/* Proactive AI Action Center */}
       {businessId && (
         <ProactiveActionCenter businessId={businessId} defaultExpanded={true} />
       )}
