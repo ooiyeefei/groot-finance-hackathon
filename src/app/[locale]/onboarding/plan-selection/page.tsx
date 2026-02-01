@@ -4,15 +4,15 @@
  * Plan Selection Page - Onboarding Flow
  *
  * Displays subscription plan options for new users during onboarding.
+ * Uses the shared PricingTable component from billing domain.
+ *
  * Features:
  * - Prominent 14-day free trial CTA (no credit card required)
- * - Three paid plan cards: Starter, Pro, Enterprise
+ * - Paid plan cards via shared PricingTable component
  * - Trial routes to business-setup, paid plans route to checkout
- * - Mobile responsive grid layout
- * - Semantic design tokens for light/dark mode
  *
  * Flow:
- * - Trial → /onboarding/business-setup (continue onboarding)
+ * - Trial → /onboarding/business (continue onboarding)
  * - Paid Plans → /api/v1/billing/checkout (Stripe checkout)
  *
  * Also handles expired trials:
@@ -24,8 +24,8 @@
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { FALLBACK_PLANS, PlanKey } from '@/lib/stripe/plans'
-import { PlanCard } from '@/domains/onboarding/components/plan-selection/plan-card'
+import { PlanKey } from '@/lib/stripe/plans'
+import { PricingTable } from '@/domains/billing/components/pricing-table'
 import { TrialCTA } from '@/domains/onboarding/components/plan-selection/trial-cta'
 import { useToast } from '@/components/ui/toast'
 import { AlertTriangle, Loader2 } from 'lucide-react'
@@ -36,16 +36,15 @@ function PlanSelectionContent() {
   const searchParams = useSearchParams()
   const locale = useLocale()
   const { addToast } = useToast()
-  const [loadingPlan, setLoadingPlan] = useState<PlanKey | null>(null)
+  const [isTrialLoading, setIsTrialLoading] = useState(false)
 
   // Check if this is an expired trial redirect
   const isTrialExpired = searchParams.get('trial_expired') === 'true'
 
   // Handle trial selection - continue to business setup
   const handleStartTrial = async () => {
-    setLoadingPlan('trial')
+    setIsTrialLoading(true)
     try {
-      // Route to business setup page (trial plan stored later in onboarding)
       router.push(`/${locale}/onboarding/business`)
     } catch (error) {
       console.error('Error starting trial:', error)
@@ -54,20 +53,13 @@ function PlanSelectionContent() {
         title: 'Error',
         description: 'Failed to start trial. Please try again.',
       })
-      setLoadingPlan(null)
+      setIsTrialLoading(false)
     }
   }
 
-  // Handle paid plan selection - redirect to Stripe checkout
-  const handleSelectPlan = async (planName: PlanKey) => {
-    if (planName === 'trial') {
-      handleStartTrial()
-      return
-    }
-
-    setLoadingPlan(planName)
+  // Handle paid plan checkout (standalone mode)
+  const handleCheckout = async (planName: PlanKey) => {
     try {
-      // Call checkout API to create Stripe session
       const response = await fetch('/api/v1/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,8 +71,6 @@ function PlanSelectionContent() {
       }
 
       const { url } = await response.json()
-
-      // Redirect to Stripe Checkout
       window.location.href = url
     } catch (error) {
       console.error('Error creating checkout:', error)
@@ -89,19 +79,12 @@ function PlanSelectionContent() {
         title: 'Error',
         description: 'Failed to start checkout. Please try again.',
       })
-      setLoadingPlan(null)
     }
   }
 
-  // Paid plans for display (excluding trial)
-  const paidPlans = [
-    { name: 'starter' as const, plan: FALLBACK_PLANS.starter, isRecommended: false },
-    { name: 'pro' as const, plan: FALLBACK_PLANS.pro, isRecommended: true },
-  ]
-
   return (
     <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="max-w-5xl mx-auto space-y-8">
         {/* Trial Expired Banner */}
         {isTrialExpired && (
           <div className="max-w-3xl mx-auto">
@@ -139,7 +122,7 @@ function PlanSelectionContent() {
             <div className="max-w-3xl mx-auto">
               <TrialCTA
                 onStartTrial={handleStartTrial}
-                isLoading={loadingPlan === 'trial'}
+                isLoading={isTrialLoading}
               />
             </div>
 
@@ -157,22 +140,15 @@ function PlanSelectionContent() {
           </>
         )}
 
-        {/* Paid Plan Cards - 3 Column Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-          {paidPlans.map(({ name, plan, isRecommended }) => (
-            <PlanCard
-              key={name}
-              planName={name}
-              displayName={plan.name}
-              features={plan.features}
-              teamLimit={plan.teamLimit}
-              ocrLimit={plan.ocrLimit}
-              isRecommended={isRecommended}
-              onSelect={() => handleSelectPlan(name)}
-              isLoading={loadingPlan === name}
-            />
-          ))}
-        </div>
+        {/* Pricing Table - Standalone mode for onboarding */}
+        <PricingTable
+          standalone
+          hideEnterprise
+          showLimits
+          showCurrentPlan={false}
+          onCheckout={handleCheckout}
+          className="max-w-4xl mx-auto"
+        />
 
         {/* Footer Note */}
         <div className="text-center pt-4">
