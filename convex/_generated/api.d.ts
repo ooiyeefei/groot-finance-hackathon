@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as crons from "../crons.js";
 import type * as functions_accountingEntries from "../functions/accountingEntries.js";
 import type * as functions_actionCenterInsights from "../functions/actionCenterInsights.js";
 import type * as functions_actionCenterJobs from "../functions/actionCenterJobs.js";
@@ -47,6 +48,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  crons: typeof crons;
   "functions/accountingEntries": typeof functions_accountingEntries;
   "functions/actionCenterInsights": typeof functions_actionCenterInsights;
   "functions/actionCenterJobs": typeof functions_actionCenterJobs;

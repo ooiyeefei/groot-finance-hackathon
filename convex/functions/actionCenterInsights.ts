@@ -491,6 +491,38 @@ export const batchMarkReviewed = mutation({
 });
 
 /**
+ * Delete expired insights (called by cron job)
+ */
+export const deleteExpired = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+
+    // Get all insights with expiration dates
+    const allInsights = await ctx.db
+      .query("actionCenterInsights")
+      .collect();
+
+    // Filter to expired ones
+    const expiredInsights = allInsights.filter(
+      (i) => i.expiresAt && i.expiresAt < now
+    );
+
+    let deletedCount = 0;
+    for (const insight of expiredInsights) {
+      await ctx.db.delete(insight._id);
+      deletedCount++;
+    }
+
+    if (deletedCount > 0) {
+      console.log(`[ActionCenterInsights] Deleted ${deletedCount} expired insights`);
+    }
+
+    return { deleted: deletedCount };
+  },
+});
+
+/**
  * DEBUG: List all insights without auth (for CLI testing only)
  */
 export const debugListAll = query({
