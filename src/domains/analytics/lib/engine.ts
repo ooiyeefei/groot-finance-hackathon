@@ -285,9 +285,12 @@ export function getAnalyticsPeriod(period: 'month' | 'quarter' | 'year', date?: 
 
   switch (period) {
     case 'month':
+      // "Last 60 Days" - rolling 60-day window ending today
+      const sixtyDaysAgo = new Date(now)
+      sixtyDaysAgo.setDate(now.getDate() - 60)
       return {
-        start: new Date(year, month, 1),
-        end: new Date(year, month + 1, 0) // Last day of current month
+        start: sixtyDaysAgo,
+        end: now
       }
 
     case 'quarter':
