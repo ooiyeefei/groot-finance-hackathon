@@ -110,6 +110,13 @@ export function calculateTrialProgress(trial: TrialInfo): number {
   return Math.min(100, Math.round((daysUsed / TRIAL_DURATION_DAYS) * 100))
 }
 
+export interface RenewalInfo {
+  periodEnd: string | null
+  daysUntilRenewal: number | null
+  needsAttention: boolean
+  urgencyLevel: 'none' | 'low' | 'medium' | 'high'
+}
+
 export interface SubscriptionData {
   plan: {
     name: PlanName
@@ -135,6 +142,7 @@ export interface SubscriptionData {
     isUnlimited: boolean
   }
   trial: TrialInfo
+  renewal: RenewalInfo
   business: {
     id: string
     name: string

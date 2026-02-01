@@ -92,8 +92,11 @@ export default defineSchema({
     planName: v.optional(v.string()),         // Subscription plan name
 
     // Trial Period
-    trialStartDate: v.optional(v.number()),   // Unix timestamp
-    trialEndDate: v.optional(v.number()),     // Unix timestamp
+    trialStartDate: v.optional(v.number()),   // Unix timestamp (ms)
+    trialEndDate: v.optional(v.number()),     // Unix timestamp (ms)
+
+    // Subscription Period (for renewal tracking)
+    subscriptionPeriodEnd: v.optional(v.number()), // Unix timestamp (ms) - when current billing period ends
 
     // Onboarding
     onboardingCompletedAt: v.optional(v.number()),  // Unix timestamp

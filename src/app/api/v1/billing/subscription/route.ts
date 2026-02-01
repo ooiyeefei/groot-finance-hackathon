@@ -168,6 +168,38 @@ export async function GET(request: NextRequest) {
       trialInfo.trialExpired = true
     }
 
+    // Calculate renewal info for paid subscriptions
+    let renewalInfo: {
+      periodEnd: string | null
+      daysUntilRenewal: number | null
+      needsAttention: boolean
+      urgencyLevel: 'none' | 'low' | 'medium' | 'high'
+    } = {
+      periodEnd: null,
+      daysUntilRenewal: null,
+      needsAttention: false,
+      urgencyLevel: 'none',
+    }
+
+    // Use period end from database (set by webhook) or from Stripe API
+    const periodEndTimestamp = business.subscriptionPeriodEnd ||
+      (subscriptionDetails?.currentPeriodEnd ? new Date(subscriptionDetails.currentPeriodEnd).getTime() : null)
+
+    if (periodEndTimestamp && planKey !== 'trial') {
+      const periodEnd = new Date(periodEndTimestamp)
+      const now = new Date()
+      const daysUntilRenewal = Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+
+      renewalInfo = {
+        periodEnd: periodEnd.toISOString(),
+        daysUntilRenewal: Math.max(0, daysUntilRenewal),
+        needsAttention: daysUntilRenewal <= 30,
+        urgencyLevel: daysUntilRenewal <= 7 ? 'high' :
+                      daysUntilRenewal <= 14 ? 'medium' :
+                      daysUntilRenewal <= 30 ? 'low' : 'none',
+      }
+    }
+
     const response = {
       success: true,
       data: {
@@ -192,6 +224,7 @@ export async function GET(request: NextRequest) {
           isUnlimited: ocrLimit === -1,
         },
         trial: trialInfo,
+        renewal: renewalInfo,
         business: {
           id: business._id,
           name: business.name,

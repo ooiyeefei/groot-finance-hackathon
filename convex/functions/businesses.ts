@@ -1573,6 +1573,7 @@ export const updateSubscriptionFromWebhook = mutation({
     subscriptionStatus: v.string(),
     trialStartDate: v.optional(v.number()),  // Unix timestamp in milliseconds
     trialEndDate: v.optional(v.number()),    // Unix timestamp in milliseconds
+    subscriptionPeriodEnd: v.optional(v.number()), // Unix timestamp in milliseconds - for renewal tracking
   },
   handler: async (ctx, args) => {
     // Find business by Stripe customer ID
@@ -1595,6 +1596,8 @@ export const updateSubscriptionFromWebhook = mutation({
       // Store trial dates for enforcement (CRITICAL for trial expiration)
       ...(args.trialStartDate !== undefined && { trialStartDate: args.trialStartDate }),
       ...(args.trialEndDate !== undefined && { trialEndDate: args.trialEndDate }),
+      // Store subscription period end for renewal reminders
+      ...(args.subscriptionPeriodEnd !== undefined && { subscriptionPeriodEnd: args.subscriptionPeriodEnd }),
       updatedAt: Date.now(),
     });
 
@@ -1652,6 +1655,7 @@ export const updateSubscriptionFromWebhookWithBusinessId = mutation({
     subscriptionStatus: v.string(),
     trialStartDate: v.optional(v.number()),  // Unix timestamp in milliseconds
     trialEndDate: v.optional(v.number()),    // Unix timestamp in milliseconds
+    subscriptionPeriodEnd: v.optional(v.number()), // Unix timestamp in milliseconds - for renewal tracking
   },
   handler: async (ctx, args) => {
     // Find business by ID (supports both Convex and legacy UUIDs)
@@ -1671,6 +1675,8 @@ export const updateSubscriptionFromWebhookWithBusinessId = mutation({
       // Store trial dates for enforcement (CRITICAL for trial expiration)
       ...(args.trialStartDate !== undefined && { trialStartDate: args.trialStartDate }),
       ...(args.trialEndDate !== undefined && { trialEndDate: args.trialEndDate }),
+      // Store subscription period end for renewal reminders
+      ...(args.subscriptionPeriodEnd !== undefined && { subscriptionPeriodEnd: args.subscriptionPeriodEnd }),
       updatedAt: Date.now(),
     });
 
@@ -2125,6 +2131,118 @@ export const fixExpiredTrialsWithoutDates = internalMutation({
       skippedCount,
       totalProcessed: businesses.length,
       affectedBusinesses,
+    };
+  },
+});
+
+// ============================================================================
+// ADMIN: Manual Subscription Management
+// ============================================================================
+
+/**
+ * Manually activate a subscription for a business
+ *
+ * Use this for:
+ * - Annual billing customers paid outside Stripe
+ * - Migrating from other billing systems
+ * - Testing/development
+ *
+ * IMPORTANT: Set subscriptionPeriodEnd to track when renewal is due
+ *
+ * Usage from Convex Dashboard:
+ * {
+ *   "businessId": "k57...",
+ *   "planName": "pro",
+ *   "subscriptionPeriodEnd": 1767225600000  // Unix timestamp in ms
+ * }
+ */
+export const manuallyActivateSubscription = mutation({
+  args: {
+    businessId: v.string(),
+    planName: v.union(v.literal("starter"), v.literal("pro"), v.literal("enterprise")),
+    subscriptionPeriodEnd: v.number(), // Unix timestamp in milliseconds
+    notes: v.optional(v.string()),     // Optional notes for audit trail
+  },
+  handler: async (ctx, args) => {
+    // Find business by ID (supports both Convex and legacy UUIDs)
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+
+    if (!business) {
+      throw new Error(`Business not found: ${args.businessId}`);
+    }
+
+    const now = Date.now();
+
+    // Validate subscriptionPeriodEnd is in the future
+    if (args.subscriptionPeriodEnd <= now) {
+      throw new Error("subscriptionPeriodEnd must be in the future");
+    }
+
+    // Update business with manual subscription
+    await ctx.db.patch(business._id, {
+      planName: args.planName,
+      subscriptionStatus: "active",
+      subscriptionPeriodEnd: args.subscriptionPeriodEnd,
+      // Mark as manual (no Stripe IDs)
+      stripeCustomerId: `manual_${business._id}`,
+      stripeSubscriptionId: `manual_${now}`,
+      // Clear any trial dates
+      trialStartDate: undefined,
+      trialEndDate: undefined,
+      updatedAt: now,
+    });
+
+    const periodEndDate = new Date(args.subscriptionPeriodEnd);
+
+    console.log(
+      `[Manual Activation] ✅ Activated ${business.name} (${business._id}): ` +
+      `plan=${args.planName}, renewsAt=${periodEndDate.toISOString()}` +
+      (args.notes ? `, notes: ${args.notes}` : "")
+    );
+
+    return {
+      success: true,
+      businessId: business._id,
+      businessName: business.name,
+      planName: args.planName,
+      subscriptionPeriodEnd: periodEndDate.toISOString(),
+    };
+  },
+});
+
+/**
+ * Manually deactivate/expire a subscription
+ *
+ * Use this to revoke access for a business
+ */
+export const manuallyDeactivateSubscription = mutation({
+  args: {
+    businessId: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Find business by ID
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+
+    if (!business) {
+      throw new Error(`Business not found: ${args.businessId}`);
+    }
+
+    // Deactivate by setting status to canceled
+    await ctx.db.patch(business._id, {
+      subscriptionStatus: "canceled",
+      updatedAt: Date.now(),
+    });
+
+    console.log(
+      `[Manual Deactivation] ⛔ Deactivated ${business.name} (${business._id})` +
+      (args.reason ? `: ${args.reason}` : "")
+    );
+
+    return {
+      success: true,
+      businessId: business._id,
+      businessName: business.name,
     };
   },
 });

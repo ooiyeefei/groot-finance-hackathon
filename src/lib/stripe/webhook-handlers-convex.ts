@@ -178,6 +178,7 @@ export async function handleInvoicePaymentSucceededConvex(
  *    checkout.session.completed webhook failed and stripeCustomerId isn't linked yet)
  *
  * CRITICAL: Extracts and stores trial dates from Stripe subscription for enforcement
+ * Also stores current_period_end for renewal reminders
  */
 async function updateBusinessSubscriptionConvex(
   subscription: Stripe.Subscription
@@ -193,17 +194,32 @@ async function updateBusinessSubscriptionConvex(
   // Map Stripe subscription status to our status
   const subscriptionStatus = mapStripeStatus(subscription.status)
 
+  // Stripe SDK v20+ type workaround - cast to access timestamp properties
+  const subscriptionData = subscription as unknown as {
+    trial_start: number | null
+    trial_end: number | null
+    current_period_end: number
+  }
+
   // Extract trial dates from Stripe subscription (CRITICAL for enforcement)
-  // Stripe stores trial dates as Unix timestamps (seconds)
-  const trialStartDate = subscription.trial_start
-    ? subscription.trial_start * 1000  // Convert to milliseconds
+  // Stripe stores dates as Unix timestamps (seconds)
+  const trialStartDate = subscriptionData.trial_start
+    ? subscriptionData.trial_start * 1000  // Convert to milliseconds
     : undefined
-  const trialEndDate = subscription.trial_end
-    ? subscription.trial_end * 1000    // Convert to milliseconds
+  const trialEndDate = subscriptionData.trial_end
+    ? subscriptionData.trial_end * 1000    // Convert to milliseconds
+    : undefined
+
+  // Extract current_period_end for renewal tracking
+  // This is when the current billing period ends (and renewal is due)
+  const subscriptionPeriodEnd = subscriptionData.current_period_end
+    ? subscriptionData.current_period_end * 1000  // Convert to milliseconds
     : undefined
 
   console.log(
-    `[Webhook Handler Convex] Subscription ${subscription.id}: status=${subscriptionStatus}, trialEnd=${trialEndDate ? new Date(trialEndDate).toISOString() : 'none'}`
+    `[Webhook Handler Convex] Subscription ${subscription.id}: status=${subscriptionStatus}, ` +
+    `trialEnd=${trialEndDate ? new Date(trialEndDate).toISOString() : 'none'}, ` +
+    `periodEnd=${subscriptionPeriodEnd ? new Date(subscriptionPeriodEnd).toISOString() : 'none'}`
   )
 
   // Try to update using stripeCustomerId first
@@ -216,6 +232,7 @@ async function updateBusinessSubscriptionConvex(
       subscriptionStatus,
       trialStartDate,
       trialEndDate,
+      subscriptionPeriodEnd,
     })
 
     console.log(
@@ -242,6 +259,7 @@ async function updateBusinessSubscriptionConvex(
       subscriptionStatus,
       trialStartDate,
       trialEndDate,
+      subscriptionPeriodEnd,
     })
 
     console.log(

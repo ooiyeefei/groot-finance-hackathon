@@ -8,6 +8,7 @@ import { GeneralDisclaimer } from '@/components/ui/financial-disclaimer'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { UpgradeBanner } from '@/domains/billing/components/upgrade-banner'
+import { RenewalBanner } from '@/domains/billing/components/renewal-banner'
 import { getUserRole } from '@/domains/users/lib/user.service'
 
 export default async function Dashboard({ params }: { params: Promise<{ locale: string }> }) {
@@ -91,8 +92,13 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
           {/* Main Content Area - extra bottom padding on mobile for bottom nav */}
           <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
             <div className="max-w-7xl mx-auto">
-              {/* Upgrade Banner for Free Plan Users */}
-              <UpgradeBanner />
+              {/* Subscription Banners */}
+              <div className="space-y-4 mb-6">
+                {/* Upgrade Banner for Free/Trial Plan Users */}
+                <UpgradeBanner />
+                {/* Renewal Banner for Paid Plan Users */}
+                <RenewalBanner />
+              </div>
 
               {/* Complete Financial Dashboard with Charts */}
               <CompleteDashboard />
