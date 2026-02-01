@@ -11,7 +11,6 @@ import { ProactiveActionCenter } from './action-center';
 // Lazy load heavy components to improve initial page load
 const CurrencyBreakdown = lazy(() => import('./financial-analytics/CurrencyBreakdown'));
 const CategoryAnalysis = lazy(() => import('./financial-analytics/CategoryAnalysis'));
-const ActionCenter = lazy(() => import('./financial-analytics/ActionCenter'));
 const AgedReceivablesWidget = lazy(() => import('./AgedReceivablesWidget'));
 const AgedPayablesWidget = lazy(() => import('./AgedPayablesWidget'));
 
@@ -496,18 +495,6 @@ export default function CompleteDashboard() {
         </Suspense>
       </div>
 
-      {/* Action Center */}
-      <Suspense fallback={<ComponentLoader title="Action Center" />}>
-        <ActionCenter
-          analytics={analytics}
-          trends={trends}
-          onActionClick={(action) => {
-            console.log('Action clicked:', action);
-            // Handle action clicks here
-          }}
-          loading={loading}
-        />
-      </Suspense>
     </div>
   );
 }
