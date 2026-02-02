@@ -232,11 +232,27 @@ function buildMessagesForLLM(trimmedMessages: any[], systemPrompt: string): any[
         // CRITICAL FIX: Proper OpenAI tool message format
         return {
           role: 'tool',
-          content: msg.content,
+          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
           tool_call_id: msg.tool_call_id
         };
       } else {
-        return { role: 'assistant', content: msg.content };
+        // CRITICAL FIX: Include tool_calls for assistant messages that made tool calls
+        // OpenAI API requires tool_calls in assistant message before tool result
+        const assistantMsg: Record<string, unknown> = {
+          role: 'assistant',
+          content: msg.content || ''
+        };
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
+          assistantMsg.tool_calls = msg.tool_calls.map((tc: { id: string; name: string; args: unknown }) => ({
+            id: tc.id,
+            type: 'function',
+            function: {
+              name: tc.name,
+              arguments: typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args)
+            }
+          }));
+        }
+        return assistantMsg;
       }
     })
   ];
