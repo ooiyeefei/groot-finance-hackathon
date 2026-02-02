@@ -108,27 +108,42 @@ export default function AIAssistantPage() {
 
   // COLD START MITIGATION: Trigger warmup when user first visits the page
   // This spins up the Modal container in the background while user sees the UI
+  // Only show loading overlay if warmup takes >3s (indicating actual cold start)
   useEffect(() => {
     if (!isLoaded || !userId || warmupTriggered.current) return
 
     const triggerWarmup = async () => {
       warmupTriggered.current = true
-      setIsWarmingUp(true)
+
+      // Start a timer - only show loading if warmup takes > 3 seconds
+      const showLoadingTimeout = setTimeout(() => {
+        setIsWarmingUp(true)
+        setIsColdStart(true)
+      }, 3000)
 
       try {
         console.log('[AI Assistant] Triggering LLM warmup...')
+        const startTime = Date.now()
+
         const response = await fetch('/api/v1/chat/warmup', {
           method: 'POST',
         })
 
+        const duration = Date.now() - startTime
+
+        // Clear the timeout - if we finished before 3s, loading never shows
+        clearTimeout(showLoadingTimeout)
+
         if (response.ok) {
           const data = await response.json()
-          console.log(`[AI Assistant] Warmup complete in ${data.data?.duration_ms}ms (cold_start: ${data.data?.was_cold_start})`)
-          setIsColdStart(data.data?.was_cold_start || false)
+          const wasColdStart = data.data?.was_cold_start || duration > 5000
+          console.log(`[AI Assistant] Warmup complete in ${duration}ms (cold_start: ${wasColdStart})`)
+          setIsColdStart(wasColdStart)
         } else {
           console.warn('[AI Assistant] Warmup request failed, continuing anyway')
         }
       } catch (error) {
+        clearTimeout(showLoadingTimeout)
         console.warn('[AI Assistant] Warmup error, continuing anyway:', error)
       } finally {
         setIsWarmingUp(false)
