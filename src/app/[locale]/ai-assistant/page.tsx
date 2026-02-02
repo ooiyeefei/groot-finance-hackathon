@@ -21,7 +21,8 @@ function SearchParamsHandler({ onPrefillChange }: { onPrefillChange: (prefill: s
   useEffect(() => {
     const prefill = searchParams.get('prefill')
     if (prefill) {
-      onPrefillChange(decodeURIComponent(prefill))
+      // Note: searchParams.get() already returns decoded value, no need to decode again
+      onPrefillChange(prefill)
       // Clear the URL param without triggering navigation
       window.history.replaceState({}, '', window.location.pathname)
     }
