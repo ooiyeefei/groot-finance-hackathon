@@ -157,11 +157,12 @@ export async function sendChatMessage(
   // - Tool execution traces with inputs/outputs
   // - Metadata for filtering in LangSmith dashboard
   // - Run grouping by conversation thread
+  // LangSmith tracing config (only applied when LANGCHAIN_TRACING_V2=true)
   const runConfig = {
     configurable: {
       thread_id: currentConversationId, // Groups runs by conversation
     },
-    runName: `FinanSEAL Chat - ${language}`,
+    runName: `FinanSEAL Chat - ${language}`, // Sets the run name in LangSmith
     metadata: {
       userId: userId,
       businessId: businessId,
@@ -173,14 +174,39 @@ export async function sendChatMessage(
     tags: ['finanseal', 'chat', `lang:${language}`],
   }
 
+  console.log(`[Chat Service] Invoking agent with config:`, JSON.stringify({
+    thread_id: runConfig.configurable.thread_id,
+    tags: runConfig.tags,
+    metadata_keys: Object.keys(runConfig.metadata)
+  }))
+
   const agentResult = await financialAgent.invoke(agentState, runConfig)
 
   // Extract response and citations
   const lastMessage = agentResult.messages[agentResult.messages.length - 1]
   let assistantResponse = ''
 
+  // Debug logging
+  console.log(`[Chat Service] Agent result: ${agentResult.messages.length} messages, last message type: ${lastMessage?._getType?.() || 'unknown'}`)
+
   if (lastMessage && lastMessage._getType() === 'ai') {
     assistantResponse = typeof lastMessage.content === 'string' ? lastMessage.content : 'I apologize, but I cannot process your request right now.'
+  } else {
+    // Fallback: try to find any AI message in reverse order
+    console.log(`[Chat Service] WARNING: Last message is not AI type (${lastMessage?._getType?.()}), searching for AI response...`)
+    for (let i = agentResult.messages.length - 1; i >= 0; i--) {
+      const msg = agentResult.messages[i]
+      if (msg._getType?.() === 'ai' && typeof msg.content === 'string' && msg.content.length > 0) {
+        assistantResponse = msg.content
+        console.log(`[Chat Service] Found AI response at index ${i}`)
+        break
+      }
+    }
+
+    if (!assistantResponse) {
+      console.error(`[Chat Service] ERROR: No AI response found in agent result. Message types: ${agentResult.messages.map(m => m._getType?.() || 'unknown').join(', ')}`)
+      assistantResponse = 'I apologize, but I encountered an issue processing your request. Please try again.'
+    }
   }
 
   // Clean response and extract citations
