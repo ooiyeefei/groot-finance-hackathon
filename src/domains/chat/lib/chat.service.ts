@@ -148,9 +148,32 @@ export async function sendChatMessage(
     agentState.messages = conversationHistory.concat([new HumanMessage(message)])
   }
 
-  // Invoke LangGraph agent
+  // Invoke LangGraph agent with LangSmith tracing
   const financialAgent = createFinancialAgent()
-  const agentResult = await financialAgent.invoke(agentState)
+
+  // LangSmith tracing config - automatically enabled when LANGCHAIN_TRACING_V2=true
+  // This provides:
+  // - Per-run latency breakdown by node
+  // - Tool execution traces with inputs/outputs
+  // - Metadata for filtering in LangSmith dashboard
+  // - Run grouping by conversation thread
+  const runConfig = {
+    configurable: {
+      thread_id: currentConversationId, // Groups runs by conversation
+    },
+    runName: `FinanSEAL Chat - ${language}`,
+    metadata: {
+      userId: userId,
+      businessId: businessId,
+      conversationId: currentConversationId,
+      language: language,
+      isClarificationResponse: isClarificationResponse.isResponse,
+      messageLength: message.length,
+    },
+    tags: ['finanseal', 'chat', `lang:${language}`],
+  }
+
+  const agentResult = await financialAgent.invoke(agentState, runConfig)
 
   // Extract response and citations
   const lastMessage = agentResult.messages[agentResult.messages.length - 1]
