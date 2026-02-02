@@ -189,14 +189,18 @@ def openai_api():
     """
     from fastapi import FastAPI, HTTPException
     from pydantic import BaseModel
+    from typing import Any
     import time
     import uuid
+    import json
 
     api = FastAPI(title="FinanSEAL Qwen3 API")
 
     class Message(BaseModel):
         role: str
-        content: str
+        content: Any  # Accept string or dict (tool results can be objects)
+        tool_call_id: str | None = None  # For tool result messages
+        name: str | None = None  # For tool result messages
 
     class ChatRequest(BaseModel):
         model: str = "qwen3-30b"
@@ -238,8 +242,20 @@ def openai_api():
             # Get the service
             service = Qwen3Service()
 
-            # Convert messages to dict format
-            messages = [{"role": m.role, "content": m.content} for m in request.messages]
+            # Convert messages to dict format, stringify non-string content
+            messages = []
+            for m in request.messages:
+                content = m.content
+                # Convert dict/object content to string (tool results)
+                if not isinstance(content, str):
+                    content = json.dumps(content) if content is not None else ""
+                msg = {"role": m.role, "content": content}
+                # Add tool_call_id for tool results
+                if m.tool_call_id:
+                    msg["tool_call_id"] = m.tool_call_id
+                if m.name:
+                    msg["name"] = m.name
+                messages.append(msg)
 
             # Call the model
             result = service.generate.remote(
