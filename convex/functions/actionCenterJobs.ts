@@ -441,9 +441,11 @@ async function runCashFlowDetection(
   if (totalIncome === 0 && totalExpenses === 0) return 0;
 
   // Alert if expenses exceed income by significant margin
+  // Handle zero income case separately
+  const hasNoIncome = totalIncome === 0 && totalExpenses > 0;
   const ratio = totalIncome > 0 ? totalExpenses / totalIncome : totalExpenses > 0 ? 999 : 0;
 
-  if (ratio < 1.2) return 0; // Expenses less than 120% of income is fine
+  if (!hasNoIncome && ratio < 1.2) return 0; // Expenses less than 120% of income is fine
 
   // Check for duplicate insight
   const existingInsights = await ctx.db
@@ -470,10 +472,14 @@ async function runCashFlowDetection(
       category: "cashflow",
       priority,
       status: "new",
-      title: `Expenses exceeding income this month`,
-      description: `Your expenses (${totalExpenses.toLocaleString()}) are ${((ratio - 1) * 100).toFixed(0)}% higher than income (${totalIncome.toLocaleString()}) over the last 30 days.`,
+      title: hasNoIncome ? `Expenses with no income recorded` : `Expenses exceeding income this month`,
+      description: hasNoIncome
+        ? `You have ${totalExpenses.toLocaleString()} in expenses but no income recorded in the last 30 days.`
+        : `Your expenses (${totalExpenses.toLocaleString()}) are ${((ratio - 1) * 100).toFixed(0)}% higher than income (${totalIncome.toLocaleString()}) over the last 30 days.`,
       affectedEntities: [],
-      recommendedAction: `Review your recent expenses and consider cost-cutting measures or increasing revenue.`,
+      recommendedAction: hasNoIncome
+        ? `Record your income transactions or review if all expenses are legitimate.`
+        : `Review your recent expenses and consider cost-cutting measures or increasing revenue.`,
       detectedAt: Date.now(),
       expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
       metadata: {
