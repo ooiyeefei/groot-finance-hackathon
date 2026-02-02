@@ -147,9 +147,23 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
     setCurrentConversationId(conversationId)
   }, [conversationId])
 
-  // Notify parent when messages change - using useEffect directly to avoid callback recreation
+  // Sync messages when initialMessages prop changes (switching conversations or new chat)
+  // This is critical for the "New Chat" button to work correctly
   useEffect(() => {
-    if (onMessagesUpdate && messages.length > 0) {
+    // Only sync if we're switching to a different conversation
+    // (identified by conversationId change or empty initialMessages for new chat)
+    isUpdatingFromProps.current = true
+    setMessages(initialMessages || [])
+    // Reset flag after state update
+    setTimeout(() => {
+      isUpdatingFromProps.current = false
+    }, 0)
+  }, [conversationId]) // Sync when conversation changes
+
+  // Notify parent when messages change - using useEffect directly to avoid callback recreation
+  // Skip notification when we're syncing from props to avoid infinite loops
+  useEffect(() => {
+    if (onMessagesUpdate && messages.length > 0 && !isUpdatingFromProps.current) {
       onMessagesUpdate(messages)
     }
   }, [messages, onMessagesUpdate])
