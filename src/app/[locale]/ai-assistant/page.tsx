@@ -112,14 +112,29 @@ export default function AIAssistantPage() {
   useEffect(() => {
     if (!isLoaded || !userId || warmupTriggered.current) return
 
-    const triggerWarmup = async () => {
-      warmupTriggered.current = true
+    warmupTriggered.current = true
+    let showLoadingTimeout: NodeJS.Timeout | null = null
+    let maxWaitTimeout: NodeJS.Timeout | null = null
+    const abortController = new AbortController()
 
+    const cleanup = () => {
+      if (showLoadingTimeout) clearTimeout(showLoadingTimeout)
+      if (maxWaitTimeout) clearTimeout(maxWaitTimeout)
+      setIsWarmingUp(false)
+    }
+
+    const triggerWarmup = async () => {
       // Start a timer - only show loading if warmup takes > 3 seconds
-      const showLoadingTimeout = setTimeout(() => {
+      showLoadingTimeout = setTimeout(() => {
         setIsWarmingUp(true)
         setIsColdStart(true)
       }, 3000)
+
+      // Safety net: auto-hide loading after 120s max (Modal cold start shouldn't exceed this)
+      maxWaitTimeout = setTimeout(() => {
+        console.warn('[AI Assistant] Warmup max wait exceeded, hiding loading')
+        cleanup()
+      }, 120000)
 
       try {
         console.log('[AI Assistant] Triggering LLM warmup...')
@@ -127,12 +142,10 @@ export default function AIAssistantPage() {
 
         const response = await fetch('/api/v1/chat/warmup', {
           method: 'POST',
+          signal: abortController.signal,
         })
 
         const duration = Date.now() - startTime
-
-        // Clear the timeout - if we finished before 3s, loading never shows
-        clearTimeout(showLoadingTimeout)
 
         if (response.ok) {
           const data = await response.json()
@@ -140,18 +153,24 @@ export default function AIAssistantPage() {
           console.log(`[AI Assistant] Warmup complete in ${duration}ms (cold_start: ${wasColdStart})`)
           setIsColdStart(wasColdStart)
         } else {
-          console.warn('[AI Assistant] Warmup request failed, continuing anyway')
+          console.warn(`[AI Assistant] Warmup failed with status ${response.status}`)
         }
       } catch (error) {
-        clearTimeout(showLoadingTimeout)
-        console.warn('[AI Assistant] Warmup error, continuing anyway:', error)
+        if ((error as Error).name !== 'AbortError') {
+          console.warn('[AI Assistant] Warmup error:', error)
+        }
       } finally {
-        setIsWarmingUp(false)
+        cleanup()
       }
     }
 
-    // Trigger warmup in the background
     triggerWarmup()
+
+    // Cleanup on unmount
+    return () => {
+      abortController.abort()
+      cleanup()
+    }
   }, [isLoaded, userId])
 
   // Handle prefill from URL (via SearchParamsHandler component)

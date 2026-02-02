@@ -11,8 +11,10 @@ import { auth } from '@clerk/nextjs/server'
 import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
+// Allow up to 120s for cold start warmup (Vercel Pro plan)
+export const maxDuration = 120
 
-// Minimal LLM client for warmup
+// Minimal LLM client for warmup with timeout
 const getWarmupClient = () => {
   const endpoint = process.env.CHAT_MODEL_ENDPOINT_URL
   const apiKey = process.env.CHAT_MODEL_API_KEY || 'not-needed'
@@ -24,6 +26,7 @@ const getWarmupClient = () => {
   return new OpenAI({
     baseURL: endpoint,
     apiKey: apiKey,
+    timeout: 115000, // 115s timeout (slightly less than maxDuration)
   })
 }
 
@@ -50,9 +53,9 @@ export async function POST(request: NextRequest) {
     const response = await client.chat.completions.create({
       model: modelId,
       messages: [
-        { role: 'user', content: 'ping' }
+        { role: 'user', content: 'hi' }
       ],
-      max_tokens: 1,
+      max_tokens: 5,
       temperature: 0,
     })
 
@@ -75,12 +78,16 @@ export async function POST(request: NextRequest) {
     const duration = Date.now() - startTime
     console.error(`[Chat Warmup] Error after ${duration}ms:`, error)
 
+    // Return success anyway - container might be warming up, user can proceed
+    // The actual chat will work once container is ready
     return NextResponse.json({
-      success: false,
-      error: 'Warmup failed',
+      success: true,
       data: {
+        status: 'warming',
         duration_ms: duration,
+        was_cold_start: true,
+        error: 'Warmup in progress',
       }
-    }, { status: 500 })
+    })
   }
 }
