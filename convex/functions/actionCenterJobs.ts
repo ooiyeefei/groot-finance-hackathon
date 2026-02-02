@@ -1021,6 +1021,11 @@ async function runCashBalanceAlerts(
   if (monthlyBurnRate <= 0) return 0;
 
   const dailyBurnRate = monthlyBurnRate / 30;
+
+  // If cash balance is negative or zero, runway is 0 (already in deficit)
+  // Don't create this alert if already in deficit - the "expenses exceeding income" alert handles that
+  if (cashBalance <= 0) return 0;
+
   const runwayDays = dailyBurnRate > 0 ? Math.floor(cashBalance / dailyBurnRate) : 999;
 
   if (runwayDays >= warningDays) return 0;
@@ -1052,7 +1057,7 @@ async function runCashBalanceAlerts(
       priority,
       status: "new",
       title: `Low cash runway: ${runwayDays} days`,
-      description: `Based on your burn rate of ${monthlyBurnRate.toLocaleString()}/month, estimated runway is ${runwayDays} days.`,
+      description: `Based on your burn rate of ${monthlyBurnRate.toLocaleString()}/month, you have approximately ${runwayDays} days of runway remaining.`,
       affectedEntities: [],
       recommendedAction:
         runwayDays <= 7
