@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, lazy, Suspense, useCallback } from 'react'
+import { useState, useEffect, lazy, Suspense, useCallback, useRef } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { redirect, useSearchParams } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
@@ -9,6 +9,7 @@ import ActionButton from '@/components/ui/action-button'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { Menu } from 'lucide-react'
 import { ClientProviders } from '@/components/providers/client-providers'
+import WarmupLoading from '@/domains/chat/components/warmup-loading'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ChatInterface = lazy(() => import('@/domains/chat/components/chat-interface'))
@@ -101,6 +102,42 @@ export default function AIAssistantPage() {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false)
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0)
   const [prefillMessage, setPrefillMessage] = useState<string | undefined>()
+  const [isWarmingUp, setIsWarmingUp] = useState(false)
+  const [isColdStart, setIsColdStart] = useState(true)
+  const warmupTriggered = useRef(false)
+
+  // COLD START MITIGATION: Trigger warmup when user first visits the page
+  // This spins up the Modal container in the background while user sees the UI
+  useEffect(() => {
+    if (!isLoaded || !userId || warmupTriggered.current) return
+
+    const triggerWarmup = async () => {
+      warmupTriggered.current = true
+      setIsWarmingUp(true)
+
+      try {
+        console.log('[AI Assistant] Triggering LLM warmup...')
+        const response = await fetch('/api/v1/chat/warmup', {
+          method: 'POST',
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log(`[AI Assistant] Warmup complete in ${data.data?.duration_ms}ms (cold_start: ${data.data?.was_cold_start})`)
+          setIsColdStart(data.data?.was_cold_start || false)
+        } else {
+          console.warn('[AI Assistant] Warmup request failed, continuing anyway')
+        }
+      } catch (error) {
+        console.warn('[AI Assistant] Warmup error, continuing anyway:', error)
+      } finally {
+        setIsWarmingUp(false)
+      }
+    }
+
+    // Trigger warmup in the background
+    triggerWarmup()
+  }, [isLoaded, userId])
 
   // Handle prefill from URL (via SearchParamsHandler component)
   const handlePrefillChange = useCallback((prefill: string | null) => {
@@ -267,6 +304,9 @@ export default function AIAssistantPage() {
 
   return (
     <ClientProviders>
+      {/* Warmup Loading Overlay - shows during LLM cold start */}
+      <WarmupLoading isVisible={isWarmingUp} isColdStart={isColdStart} />
+
       {/* Handle prefill search params with Suspense boundary */}
       <Suspense fallback={null}>
         <SearchParamsHandler onPrefillChange={handlePrefillChange} />

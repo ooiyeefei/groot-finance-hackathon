@@ -373,8 +373,8 @@ export default function ChatInterface({ conversationId, onConversationCreated, i
               >
                 <div className="flex items-start justify-between px-4 py-2">
                   <div className="flex-1 mr-2">
-                    <div className="text-sm">
-                      {message.role === 'assistant' 
+                    <div className="text-[15.8px] leading-relaxed">
+                      {message.role === 'assistant'
                         ? renderContentWithCitations(message.content, message.citations)
                         : <div className="whitespace-pre-wrap">{message.content}</div>
                       }

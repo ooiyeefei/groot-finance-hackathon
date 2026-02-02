@@ -505,7 +505,10 @@
     "delete": "Delete",
     "cancel": "Cancel",
     "deleteMessage": "Delete Message",
-    "deleteMessageConfirm": "Are you sure you want to delete this message? This action cannot be undone."
+    "deleteMessageConfirm": "Are you sure you want to delete this message? This action cannot be undone.",
+    "warmupTitle": "Summoning your AI assistant...",
+    "warmupColdStart": "First visit magic takes a moment. Just once!",
+    "warmupLoading": "Almost there..."
   },
   "settings": {
     "title": "Settings",

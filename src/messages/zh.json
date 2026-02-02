@@ -647,7 +647,10 @@
     "delete": "删除",
     "cancel": "取消",
     "deleteMessage": "删除消息",
-    "deleteMessageConfirm": "您确定要删除此消息吗？此操作无法撤销。"
+    "deleteMessageConfirm": "您确定要删除此消息吗？此操作无法撤销。",
+    "warmupTitle": "正在召唤您的AI助手...",
+    "warmupColdStart": "首次访问需要一点时间，仅此一次！",
+    "warmupLoading": "马上就好..."
   },
   "settings": {
     "title": "设置",

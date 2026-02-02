@@ -600,7 +600,10 @@
     "delete": "Hapus",
     "cancel": "Batal",
     "deleteMessage": "Hapus Pesan",
-    "deleteMessageConfirm": "Apakah Anda yakin ingin menghapus pesan ini? Tindakan ini tidak dapat dibatalkan."
+    "deleteMessageConfirm": "Apakah Anda yakin ingin menghapus pesan ini? Tindakan ini tidak dapat dibatalkan.",
+    "warmupTitle": "Memanggil asisten AI Anda...",
+    "warmupColdStart": "Sihir kunjungan pertama membutuhkan waktu. Hanya sekali!",
+    "warmupLoading": "Hampir selesai..."
   },
   "settings": {
     "title": "Pengaturan",
