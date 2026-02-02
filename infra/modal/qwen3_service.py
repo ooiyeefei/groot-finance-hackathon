@@ -130,17 +130,27 @@ class Qwen3Service:
 
         generated_text = output.outputs[0].text
 
-        # Parse tool calls if present
+        # Parse tool calls if present and convert to OpenAI format
         tool_calls = None
         content = generated_text
 
         if tools and "<tool_call>" in generated_text:
             import json
             import re
+            import uuid
             tool_call_match = re.search(r'<tool_call>(.*?)</tool_call>', generated_text, re.DOTALL)
             if tool_call_match:
                 try:
-                    tool_calls = [json.loads(tool_call_match.group(1))]
+                    raw_call = json.loads(tool_call_match.group(1))
+                    # Convert to OpenAI tool call format
+                    tool_calls = [{
+                        "id": f"call_{uuid.uuid4().hex[:8]}",
+                        "type": "function",
+                        "function": {
+                            "name": raw_call.get("name", ""),
+                            "arguments": json.dumps(raw_call.get("arguments", {}))
+                        }
+                    }]
                     content = generated_text.replace(tool_call_match.group(0), "").strip()
                 except json.JSONDecodeError:
                     pass
