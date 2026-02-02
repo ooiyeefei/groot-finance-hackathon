@@ -1,6 +1,10 @@
 # Modal.com Qwen3 Deployment for FinanSEAL
 
-Cost-optimized LLM deployment using Qwen3-30B-A3B-FP8 on Modal.com.
+Cost-optimized LLM deployment using Qwen3-8B on Modal.com.
+
+> **Note**: Qwen3-30B-A3B-FP8 (~18GB) doesn't fit on L4 GPU (24GB) due to KV cache
+> requirements. Using Qwen3-8B (~16GB BF16) which provides excellent quality for
+> financial chat tasks while fitting comfortably on L4.
 
 ## Cost Analysis
 
@@ -53,7 +57,7 @@ modal app list
 ```bash
 # .env.local
 CHAT_MODEL_ENDPOINT_URL=https://YOUR_USERNAME--finanseal-qwen3-openai-api.modal.run/v1
-CHAT_MODEL_MODEL_ID=qwen3-30b
+CHAT_MODEL_MODEL_ID=qwen3-8b
 USE_GEMINI=false
 ```
 
@@ -71,7 +75,7 @@ modal run infra/modal/qwen3_service.py
 curl -X POST https://YOUR_USERNAME--finanseal-qwen3-openai-api.modal.run/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen3-30b",
+    "model": "qwen3-8b",
     "messages": [{"role": "user", "content": "What is GST in Singapore?"}],
     "temperature": 0.1,
     "max_tokens": 1000
@@ -182,11 +186,13 @@ Modal has default rate limits. For high traffic:
 
 ## Comparison: Current vs Modal
 
-| Aspect | Current (LiteLLM/Qwen3-30B) | Modal (Qwen3-30B-A3B-FP8) |
+| Aspect | Current (LiteLLM/Qwen3-30B) | Modal (Qwen3-8B) |
 |--------|---------------------------|---------------------------|
-| Model | qwen3-30b-fp8 | Qwen3-30B-A3B-FP8 |
-| Active Params | 30B | 3.3B (MoE) |
-| Speed | ~10 tok/s | ~50 tok/s (est.) |
-| Cost | Your infra | $0.80/hr |
+| Model | qwen3-30b-fp8 | Qwen3-8B (BF16) |
+| Parameters | 30B | 8B |
+| Context | 32K | 16K |
+| Cold start | N/A | ~55 seconds |
+| Warm speed | ~10 tok/s | ~15 tok/s |
+| Cost | Your infra | $0.80/hr (only when used) |
 | Maintenance | You manage | Modal manages |
 | Scaling | Manual | Auto |

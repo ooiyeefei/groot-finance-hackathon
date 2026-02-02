@@ -1,8 +1,8 @@
 """
 FinanSEAL Qwen3-30B-A3B Chat Service on Modal.com
 
-Cost-optimized deployment using FP8 quantization on L4 GPU.
-- Model: Qwen/Qwen3-30B-A3B-FP8 (~18GB VRAM)
+Cost-optimized deployment on L4 GPU.
+- Model: Qwen/Qwen3-8B (~16GB VRAM in BF16)
 - GPU: NVIDIA L4 24GB ($0.80/hr)
 - Cold start: ~60-90 seconds (saves money when idle)
 
@@ -23,7 +23,9 @@ import modal
 app = modal.App("finanseal-qwen3")
 
 # Pre-download model image to speed up cold starts
-model_id = "Qwen/Qwen3-30B-A3B-FP8"
+# Note: Qwen3-30B-A3B-FP8 requires >24GB VRAM, doesn't fit on L4
+# Using Qwen3-8B which fits comfortably on L4 (24GB)
+model_id = "Qwen/Qwen3-8B"
 
 vllm_image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -32,24 +34,22 @@ vllm_image = (
         "transformers>=4.51.0",
         "torch>=2.4.0",
         "huggingface_hub",
+        "hf_transfer",  # Fast downloads
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
-    # Pre-download model weights during image build (faster cold starts)
-    .run_commands(
-        f"huggingface-cli download {model_id} --local-dir /model-cache/{model_id}"
-    )
 )
 
 
 @app.cls(
-    gpu=modal.gpu.L4(),  # 24GB VRAM, $0.80/hr - most cost effective
+    gpu="L4",  # 24GB VRAM, $0.80/hr - most cost effective
     image=vllm_image,
-    container_idle_timeout=300,  # 5 min idle = shutdown (saves money!)
-    allow_concurrent_inputs=10,  # Handle multiple requests
+    scaledown_window=180,  # 3 min idle = shutdown (saves money!)
+    startup_timeout=600,  # 10 min for first cold start (torch.compile)
     volumes={
         "/model-cache": modal.Volume.from_name("finanseal-model-cache", create_if_missing=True)
     },
 )
+@modal.concurrent(max_inputs=10)  # Handle multiple concurrent requests
 class Qwen3Service:
     """
     vLLM-based Qwen3 inference service with OpenAI-compatible API.
@@ -58,16 +58,28 @@ class Qwen3Service:
     @modal.enter()
     def load_model(self):
         """Load model on container startup."""
-        from vllm import LLM, SamplingParams
+        from vllm import LLM
+        from huggingface_hub import snapshot_download
+        import os
 
-        print(f"Loading model: {model_id}")
+        # Download model if not cached
+        model_path = f"/model-cache/{model_id}"
+        if not os.path.exists(model_path) or not os.listdir(model_path):
+            print(f"Downloading model: {model_id}")
+            snapshot_download(
+                repo_id=model_id,
+                local_dir=model_path,
+            )
+
+        print(f"Loading model from: {model_path}")
         self.llm = LLM(
-            model=f"/model-cache/{model_id}",
+            model=model_path,
             tensor_parallel_size=1,
-            max_model_len=32768,  # 32K context
+            max_model_len=16384,  # 16K context
             trust_remote_code=True,
-            gpu_memory_utilization=0.90,  # Use 90% of GPU memory
-            dtype="auto",  # Use FP8 from model
+            gpu_memory_utilization=0.90,
+            dtype="auto",
+            enforce_eager=True,  # Skip torch.compile for faster cold starts
         )
         self.tokenizer = self.llm.get_tokenizer()
         print("Model loaded successfully!")
@@ -152,10 +164,11 @@ class Qwen3Service:
 # OpenAI-Compatible API Endpoint
 # ============================================
 
-@app.function(
-    image=modal.Image.debian_slim().pip_install("fastapi", "pydantic"),
-    allow_concurrent_inputs=100,
-)
+fastapi_image = modal.Image.debian_slim().pip_install("fastapi", "pydantic")
+
+
+@app.function(image=fastapi_image, timeout=600)
+@modal.concurrent(max_inputs=100)
 @modal.asgi_app()
 def openai_api():
     """
@@ -276,38 +289,3 @@ def main():
 
     print(f"\nResponse: {result['content'][:500]}...")
     print(f"Usage: {result['usage']}")
-
-
-# ============================================
-# Deployment Instructions
-# ============================================
-"""
-SETUP:
-1. Install Modal CLI:
-   pip install modal
-   modal setup
-
-2. Create volume for model cache:
-   modal volume create finanseal-model-cache
-
-3. Deploy the service:
-   modal deploy infra/modal/qwen3_service.py
-
-4. Get your endpoint URL:
-   modal app list
-   # Look for: finanseal-qwen3-openai-api
-
-5. Update your .env:
-   CHAT_MODEL_ENDPOINT_URL=https://your-username--finanseal-qwen3-openai-api.modal.run/v1
-   CHAT_MODEL_MODEL_ID=qwen3-30b
-
-COST MONITORING:
-- Dashboard: https://modal.com/apps/finanseal-qwen3
-- Set alerts at $50, $100, $150 spend
-
-EXPECTED COSTS:
-- Cold start: ~60-90 sec (first request after idle)
-- Active inference: $0.80/hr
-- Idle: $0.00/hr (container shuts down after 5 min)
-- Typical usage (100 req/day): ~$20-30/month
-"""

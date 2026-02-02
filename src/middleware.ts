@@ -59,10 +59,10 @@ async function checkTrialExpiration(clerkUserId: string): Promise<{
     const convex = getConvexClient()
 
     // Query Convex for trial status using the middleware-specific query
-    // Use bracket notation to avoid TypeScript deep instantiation issue
+    // Cast to any to avoid TypeScript deep instantiation issue with Convex types
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const businesses = (api.functions as any).businesses
-    const result = await convex.query(businesses.getTrialStatusByClerkId, { clerkUserId }) as {
+    const queryFn = (api as any).functions.businesses.getTrialStatusByClerkId
+    const result = await convex.query(queryFn, { clerkUserId }) as {
       isExpired: boolean
       businessId: string | null
     }
