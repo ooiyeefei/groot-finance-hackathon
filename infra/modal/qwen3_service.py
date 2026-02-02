@@ -43,7 +43,7 @@ vllm_image = (
 @app.cls(
     gpu="L4",  # 24GB VRAM, $0.80/hr - most cost effective
     image=vllm_image,
-    scaledown_window=180,  # 3 min idle = shutdown (saves money!)
+    scaledown_window=600,  # 10 min idle = shutdown (better UX, ~$0.13 extra per session)
     startup_timeout=600,  # 10 min for first cold start (torch.compile)
     volumes={
         "/model-cache": modal.Volume.from_name("finanseal-model-cache", create_if_missing=True)
