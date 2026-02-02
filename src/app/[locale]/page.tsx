@@ -90,10 +90,10 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
           />
 
           {/* Main Content Area - extra bottom padding on mobile for bottom nav */}
-          <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
+          <main className="flex-1 overflow-auto px-4 sm:px-6 pt-2 sm:pt-3 pb-24 sm:pb-6">
             <div className="max-w-7xl mx-auto">
               {/* Subscription Banners */}
-              <div className="space-y-4 mb-6">
+              <div className="space-y-3 mb-3 empty:hidden">
                 {/* Upgrade Banner for Free/Trial Plan Users */}
                 <UpgradeBanner />
                 {/* Renewal Banner for Paid Plan Users */}
