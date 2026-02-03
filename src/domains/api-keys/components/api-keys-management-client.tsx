@@ -566,11 +566,11 @@ const ApiKeysManagementClient = memo(() => {
 
       {/* MCP Server Info */}
       <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-foreground mb-2">MCP Server Endpoint</h4>
-        <code className="text-xs font-mono text-muted-foreground bg-muted px-2 py-1 rounded block overflow-x-auto">
+        <h4 className="text-[15px] font-medium text-foreground mb-2">MCP Server Endpoint</h4>
+        <code className="text-[13px] font-mono text-muted-foreground bg-muted px-2 py-1 rounded block overflow-x-auto">
           https://kuy2a5zca8.execute-api.us-west-2.amazonaws.com/v1/mcp
         </code>
-        <p className="text-xs text-muted-foreground mt-2">
+        <p className="text-[13px] text-muted-foreground mt-2">
           Use this endpoint with your API key to connect Claude Desktop, Cursor, or other MCP clients.
         </p>
       </div>

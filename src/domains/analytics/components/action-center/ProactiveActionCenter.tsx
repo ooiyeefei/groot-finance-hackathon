@@ -91,7 +91,7 @@ export function ProactiveActionCenter({ businessId, defaultExpanded = true }: Pr
                 </Badge>
               )}
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[15px] text-muted-foreground">
               {pendingCount.byCritical > 0 && (
                 <span className="text-red-500">{pendingCount.byCritical} critical</span>
               )}

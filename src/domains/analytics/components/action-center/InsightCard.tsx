@@ -112,7 +112,7 @@ Please:
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <h3 className="font-medium text-foreground text-sm leading-tight line-clamp-2">
+            <h3 className="font-medium text-foreground text-[15px] leading-tight line-clamp-2">
               {insight.title}
             </h3>
             {insight.status === 'new' && (
@@ -123,7 +123,7 @@ Please:
       </div>
 
       {/* Description */}
-      <p className="text-xs text-muted-foreground line-clamp-2 mb-2 flex-1">
+      <p className="text-[13px] text-muted-foreground line-clamp-2 mb-2 flex-1">
         {insight.description}
       </p>
 
