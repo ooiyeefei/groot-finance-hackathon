@@ -6,7 +6,7 @@
  */
 
 import { getConvexClient, ConvexError } from '../lib/convex-client.js';
-import { validateBusinessAccess } from '../lib/auth.js';
+import { validateBusinessAccess, type AuthContext } from '../lib/auth.js';
 import type {
   ForecastCashFlowInput,
   ForecastCashFlowOutput,
@@ -29,24 +29,34 @@ interface AccountingEntry {
 
 /**
  * Execute forecast_cash_flow tool
+ *
+ * @param args - Tool arguments (may include business_id for backward compatibility)
+ * @param authContext - Authentication context from API key (preferred source of businessId)
  */
 export async function forecastCashFlow(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  authContext?: AuthContext
 ): Promise<ForecastCashFlowOutput | MCPErrorResponse> {
   // Type-safe input parsing
   const input = args as ForecastCashFlowInput;
 
-  // Validate authorization
-  const authResult = validateBusinessAccess(input.business_id);
-  if (!authResult.authorized) {
-    return {
-      error: true,
-      code: authResult.error!.code as MCPErrorResponse['code'],
-      message: authResult.error!.message,
-    };
-  }
+  // Use businessId from auth context if available (API key auth)
+  // Fall back to args.business_id for backward compatibility
+  let businessId: string;
 
-  const businessId = authResult.businessId!;
+  if (authContext?.businessId) {
+    businessId = authContext.businessId;
+  } else {
+    const authResult = validateBusinessAccess(input.business_id);
+    if (!authResult.authorized) {
+      return {
+        error: true,
+        code: authResult.error!.code as MCPErrorResponse['code'],
+        message: authResult.error!.message,
+      };
+    }
+    businessId = authResult.businessId!;
+  }
   const horizonDays = input.horizon_days || 30;
   const scenario = input.scenario || 'moderate';
   const includeRecurring = input.include_recurring !== false;
@@ -56,7 +66,7 @@ export async function forecastCashFlow(
 
     // Query accounting entries for the business
     const entries = await convex.query<AccountingEntry[]>(
-      'functions/system:getAccountingEntriesForBusiness',
+      'functions/financialIntelligence:getMcpAccountingEntries',
       { businessId }
     );
 

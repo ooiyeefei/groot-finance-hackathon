@@ -2,10 +2,15 @@
  * MCP Server Lambda Handler
  *
  * Entry point for the FinanSEAL MCP Server running on AWS Lambda.
- * Implements JSON-RPC 2.0 over HTTP (stateless mode) using MCP SDK.
+ * Implements JSON-RPC 2.0 over HTTP (stateless mode) with API key authentication.
+ *
+ * Category 3 MCP: Domain intelligence computed server-side, not by the LLM.
+ *
+ * Build timestamp: 2026-01-29T17:55:00Z - Using financialIntelligence module for auth
  */
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import {
   JSON_RPC_ERROR_CODES,
   SERVER_INFO,
@@ -19,12 +24,35 @@ import { MCP_TOOLS } from './contracts/mcp-tools.js';
 import { detectAnomalies } from './tools/detect-anomalies.js';
 import { forecastCashFlow } from './tools/forecast-cash-flow.js';
 import { analyzeVendorRisk } from './tools/analyze-vendor-risk.js';
+import { createProposal } from './tools/create-proposal.js';
+import { confirmProposal } from './tools/confirm-proposal.js';
+import { cancelProposal } from './tools/cancel-proposal.js';
+import {
+  authenticateApiKey,
+  updateApiKeyUsage,
+  hasPermission,
+  type AuthContext,
+} from './lib/auth.js';
+import { logger } from './lib/logger.js';
 
 // Tool implementations registry
-const TOOL_IMPLEMENTATIONS: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+const TOOL_IMPLEMENTATIONS: Record<string, (args: Record<string, unknown>, authContext?: AuthContext) => Promise<unknown>> = {
+  // Read-only intelligence tools
   detect_anomalies: detectAnomalies,
   forecast_cash_flow: forecastCashFlow,
   analyze_vendor_risk: analyzeVendorRisk,
+  // Proposal tools (human approval workflow)
+  create_proposal: createProposal,
+  confirm_proposal: confirmProposal,
+  cancel_proposal: cancelProposal,
+};
+
+// CORS headers for all responses
+const CORS_HEADERS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 /**
@@ -32,29 +60,23 @@ const TOOL_IMPLEMENTATIONS: Record<string, (args: Record<string, unknown>) => Pr
  */
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const startTime = Date.now();
+  const requestId = event.requestContext?.requestId || `req_${Date.now()}`;
 
-  // CORS headers for all responses
-  const corsHeaders = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
-
-  // Handle preflight requests
+  // Handle preflight requests (no auth required)
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
-      headers: corsHeaders,
+      headers: CORS_HEADERS,
       body: '',
     };
   }
 
   // Only accept POST requests
   if (event.httpMethod !== 'POST') {
+    logger.warn('invalid_method', { method: event.httpMethod, requestId });
     return {
       statusCode: 405,
-      headers: corsHeaders,
+      headers: CORS_HEADERS,
       body: JSON.stringify(createErrorResponse(
         null,
         JSON_RPC_ERROR_CODES.INVALID_REQUEST,
@@ -63,56 +85,110 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 
-  try {
-    // Parse JSON-RPC request
-    const body = event.body;
-    if (!body) {
-      return {
-        statusCode: 400,
-        headers: corsHeaders,
-        body: JSON.stringify(createErrorResponse(
-          null,
-          JSON_RPC_ERROR_CODES.PARSE_ERROR,
-          'Empty request body'
-        )),
-      };
-    }
-
-    let request: {
-      jsonrpc: string;
-      id: string | number;
-      method: string;
-      params?: Record<string, unknown>;
+  // Parse JSON-RPC request first (before auth to get request ID for error responses)
+  const body = event.body;
+  if (!body) {
+    logger.warn('empty_body', { requestId });
+    return {
+      statusCode: 400,
+      headers: CORS_HEADERS,
+      body: JSON.stringify(createErrorResponse(
+        null,
+        JSON_RPC_ERROR_CODES.PARSE_ERROR,
+        'Empty request body'
+      )),
     };
+  }
 
-    try {
-      request = JSON.parse(body);
-    } catch {
-      return {
-        statusCode: 400,
-        headers: corsHeaders,
-        body: JSON.stringify(createErrorResponse(
-          null,
-          JSON_RPC_ERROR_CODES.PARSE_ERROR,
-          'Invalid JSON'
-        )),
-      };
-    }
+  let request: {
+    jsonrpc: string;
+    id: string | number;
+    method: string;
+    params?: Record<string, unknown>;
+  };
 
-    // Validate JSON-RPC version
-    if (request.jsonrpc !== '2.0') {
+  try {
+    request = JSON.parse(body);
+  } catch {
+    logger.warn('parse_error', { requestId });
+    return {
+      statusCode: 400,
+      headers: CORS_HEADERS,
+      body: JSON.stringify(createErrorResponse(
+        null,
+        JSON_RPC_ERROR_CODES.PARSE_ERROR,
+        'Invalid JSON'
+      )),
+    };
+  }
+
+  // Validate JSON-RPC version
+  if (request.jsonrpc !== '2.0') {
+    logger.warn('invalid_jsonrpc_version', { requestId, version: request.jsonrpc });
+    return {
+      statusCode: 400,
+      headers: CORS_HEADERS,
+      body: JSON.stringify(createErrorResponse(
+        request.id,
+        JSON_RPC_ERROR_CODES.INVALID_REQUEST,
+        'Invalid JSON-RPC version'
+      )),
+    };
+  }
+
+  logger.requestStart(request.method, { requestId });
+
+  // Authenticate API key (required for all methods except initialize)
+  const authHeader = event.headers?.Authorization || event.headers?.authorization;
+  let authContext: AuthContext | undefined;
+
+  // Initialize doesn't require auth (discovery phase)
+  if (request.method !== 'initialize') {
+    const authResult = await authenticateApiKey(authHeader);
+
+    if (!authResult.authenticated) {
+      const duration = Date.now() - startTime;
+      logger.requestComplete(request.method, duration, 'unauthorized', { requestId });
+
       return {
-        statusCode: 400,
-        headers: corsHeaders,
+        statusCode: 401,
+        headers: CORS_HEADERS,
         body: JSON.stringify(createErrorResponse(
           request.id,
-          JSON_RPC_ERROR_CODES.INVALID_REQUEST,
-          'Invalid JSON-RPC version'
+          JSON_RPC_ERROR_CODES.UNAUTHORIZED,
+          authResult.error?.message || 'Unauthorized'
         )),
       };
     }
 
-    // Route by method
+    // Check for rate limiting
+    if (authResult.error?.code === 'RATE_LIMITED') {
+      const duration = Date.now() - startTime;
+      logger.requestComplete(request.method, duration, 'rate_limited', {
+        requestId,
+        apiKeyPrefix: authResult.context?.keyPrefix,
+      });
+
+      return {
+        statusCode: 429,
+        headers: {
+          ...CORS_HEADERS,
+          'Retry-After': String(authResult.rateLimitInfo?.retryAfter || 60),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(authResult.rateLimitInfo?.resetAt || Date.now() + 60000),
+        },
+        body: JSON.stringify(createErrorResponse(
+          request.id,
+          JSON_RPC_ERROR_CODES.RATE_LIMITED,
+          authResult.error.message
+        )),
+      };
+    }
+
+    authContext = authResult.context;
+  }
+
+  try {
     let result: unknown;
 
     switch (request.method) {
@@ -128,29 +204,20 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         // Notification - no response needed
         return {
           statusCode: 204,
-          headers: corsHeaders,
+          headers: CORS_HEADERS,
           body: '',
         };
 
       case 'tools/list':
+        // Return complete JSON Schema for each tool (Category 3: self-describing)
         result = {
           tools: Object.values(MCP_TOOLS).map(tool => ({
             name: tool.name,
             description: tool.description,
-            inputSchema: {
-              type: 'object',
-              properties: Object.fromEntries(
-                Object.entries(tool.inputSchema.shape || {}).map(([key, schema]) => {
-                  const zodSchema = schema as { description?: string; _def?: { typeName?: string } };
-                  return [key, {
-                    type: zodSchema._def?.typeName === 'ZodNumber' ? 'number' :
-                          zodSchema._def?.typeName === 'ZodBoolean' ? 'boolean' :
-                          zodSchema._def?.typeName === 'ZodArray' ? 'array' : 'string',
-                    description: zodSchema.description || '',
-                  }];
-                })
-              ),
-            },
+            inputSchema: zodToJsonSchema(tool.inputSchema, {
+              target: 'openApi3',
+              $refStrategy: 'none',
+            }),
           })),
         };
         break;
@@ -163,7 +230,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         if (!toolName) {
           return {
             statusCode: 400,
-            headers: corsHeaders,
+            headers: CORS_HEADERS,
             body: JSON.stringify(createErrorResponse(
               request.id,
               JSON_RPC_ERROR_CODES.INVALID_PARAMS,
@@ -172,11 +239,29 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           };
         }
 
+        // Check tool permission
+        if (authContext && !hasPermission(authContext, toolName)) {
+          logger.warn('permission_denied', {
+            requestId,
+            tool: toolName,
+            apiKeyPrefix: authContext.keyPrefix,
+          });
+          return {
+            statusCode: 403,
+            headers: CORS_HEADERS,
+            body: JSON.stringify(createErrorResponse(
+              request.id,
+              JSON_RPC_ERROR_CODES.UNAUTHORIZED,
+              `Permission denied for tool: ${toolName}`
+            )),
+          };
+        }
+
         const toolImpl = TOOL_IMPLEMENTATIONS[toolName];
         if (!toolImpl) {
           return {
             statusCode: 400,
-            headers: corsHeaders,
+            headers: CORS_HEADERS,
             body: JSON.stringify(createErrorResponse(
               request.id,
               JSON_RPC_ERROR_CODES.METHOD_NOT_FOUND,
@@ -185,13 +270,33 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           };
         }
 
-        console.log(`[MCP Server] Executing tool: ${toolName}`, { args: toolArgs });
+        const toolStartTime = Date.now();
+        logger.info('tool_start', {
+          requestId,
+          tool: toolName,
+          apiKeyPrefix: authContext?.keyPrefix,
+          businessId: authContext?.businessId,
+        });
 
         try {
-          const toolResult = await toolImpl(toolArgs);
+          // Pass auth context to tool - it will use businessId from context
+          const toolResult = await toolImpl(toolArgs, authContext);
+          const toolDuration = Date.now() - toolStartTime;
+
+          logger.toolExecution(toolName, toolDuration, 'success', {
+            requestId,
+            apiKeyPrefix: authContext?.keyPrefix,
+            businessId: authContext?.businessId,
+          });
+
           result = createToolResult(toolResult);
         } catch (error) {
-          console.error(`[MCP Server] Tool error: ${toolName}`, error);
+          const toolDuration = Date.now() - toolStartTime;
+          logger.toolExecution(toolName, toolDuration, 'error', {
+            requestId,
+            apiKeyPrefix: authContext?.keyPrefix,
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          });
 
           // Check if it's a structured error from our tools
           const errorObj = error as { error?: boolean; code?: string; message?: string };
@@ -205,13 +310,19 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             }, true);
           }
         }
+
+        // Update API key usage (non-blocking)
+        if (authContext) {
+          updateApiKeyUsage(authContext.apiKeyId).catch(() => {});
+        }
         break;
       }
 
       default:
+        logger.warn('unknown_method', { requestId, method: request.method });
         return {
           statusCode: 400,
-          headers: corsHeaders,
+          headers: CORS_HEADERS,
           body: JSON.stringify(createErrorResponse(
             request.id,
             JSON_RPC_ERROR_CODES.METHOD_NOT_FOUND,
@@ -221,24 +332,29 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[MCP Server] Request completed`, {
-      method: request.method,
-      duration: `${duration}ms`,
+    logger.requestComplete(request.method, duration, 'success', {
+      requestId,
+      apiKeyPrefix: authContext?.keyPrefix,
+      businessId: authContext?.businessId,
     });
 
     return {
       statusCode: 200,
-      headers: corsHeaders,
+      headers: CORS_HEADERS,
       body: JSON.stringify(createSuccessResponse(request.id, result as never)),
     };
   } catch (error) {
-    console.error('[MCP Server] Unexpected error:', error);
+    const duration = Date.now() - startTime;
+    logger.requestComplete(request.method, duration, 'error', {
+      requestId,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+    });
 
     return {
       statusCode: 500,
-      headers: corsHeaders,
+      headers: CORS_HEADERS,
       body: JSON.stringify(createErrorResponse(
-        null,
+        request.id,
         JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
         error instanceof Error ? error.message : 'Internal error'
       )),

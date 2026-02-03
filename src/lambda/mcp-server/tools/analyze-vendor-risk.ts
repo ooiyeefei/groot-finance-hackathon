@@ -6,7 +6,7 @@
  */
 
 import { getConvexClient, ConvexError } from '../lib/convex-client.js';
-import { validateBusinessAccess } from '../lib/auth.js';
+import { validateBusinessAccess, type AuthContext } from '../lib/auth.js';
 import type {
   AnalyzeVendorRiskInput,
   AnalyzeVendorRiskOutput,
@@ -33,24 +33,34 @@ interface AccountingEntry {
 
 /**
  * Execute analyze_vendor_risk tool
+ *
+ * @param args - Tool arguments (may include business_id for backward compatibility)
+ * @param authContext - Authentication context from API key (preferred source of businessId)
  */
 export async function analyzeVendorRisk(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  authContext?: AuthContext
 ): Promise<AnalyzeVendorRiskOutput | MCPErrorResponse> {
   // Type-safe input parsing
   const input = args as AnalyzeVendorRiskInput;
 
-  // Validate authorization
-  const authResult = validateBusinessAccess(input.business_id);
-  if (!authResult.authorized) {
-    return {
-      error: true,
-      code: authResult.error!.code as MCPErrorResponse['code'],
-      message: authResult.error!.message,
-    };
-  }
+  // Use businessId from auth context if available (API key auth)
+  // Fall back to args.business_id for backward compatibility
+  let businessId: string;
 
-  const businessId = authResult.businessId!;
+  if (authContext?.businessId) {
+    businessId = authContext.businessId;
+  } else {
+    const authResult = validateBusinessAccess(input.business_id);
+    if (!authResult.authorized) {
+      return {
+        error: true,
+        code: authResult.error!.code as MCPErrorResponse['code'],
+        message: authResult.error!.message,
+      };
+    }
+    businessId = authResult.businessId!;
+  }
   const analysisPeriodDays = input.analysis_period_days || 90;
   const includeConcentration = input.include_concentration !== false;
   const includeSpendingChanges = input.include_spending_changes !== false;
@@ -60,7 +70,7 @@ export async function analyzeVendorRisk(
 
     // Query accounting entries for the business
     const entries = await convex.query<AccountingEntry[]>(
-      'functions/system:getAccountingEntriesForBusiness',
+      'functions/financialIntelligence:getMcpAccountingEntries',
       { businessId }
     );
 

@@ -1,0 +1,367 @@
+openapi: 3.0.3
+info:
+  title: FinanSEAL MCP Server API
+  description: |
+    Model Context Protocol (MCP) server exposing FinanSEAL's financial intelligence
+    to external AI agents. Implements JSON-RPC 2.0 over HTTP.
+
+    **Category 3 MCP**: Domain intelligence computed server-side, not by the LLM.
+  version: 1.0.0
+  contact:
+    name: FinanSEAL Support
+    email: support@finanseal.com
+
+servers:
+  - url: https://api.finanseal.com/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Development
+
+paths:
+  /mcp:
+    post:
+      summary: MCP JSON-RPC Endpoint
+      description: |
+        Single endpoint for all MCP operations. Uses JSON-RPC 2.0 protocol.
+
+        **Methods**:
+        - `initialize` - Initialize connection, get server capabilities
+        - `tools/list` - List available tools with schemas
+        - `tools/call` - Execute a financial intelligence tool
+      operationId: mcpJsonRpc
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonRpcRequest'
+            examples:
+              initialize:
+                summary: Initialize connection
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: "initialize"
+                  params:
+                    protocolVersion: "2024-11-05"
+                    capabilities: {}
+                    clientInfo:
+                      name: "claude-desktop"
+                      version: "1.0.0"
+              tools_list:
+                summary: List available tools
+                value:
+                  jsonrpc: "2.0"
+                  id: 2
+                  method: "tools/list"
+              tools_call_anomalies:
+                summary: Detect anomalies
+                value:
+                  jsonrpc: "2.0"
+                  id: 3
+                  method: "tools/call"
+                  params:
+                    name: "detect_anomalies"
+                    arguments:
+                      business_id: "biz_abc123"
+                      sensitivity: "medium"
+      responses:
+        '200':
+          description: JSON-RPC response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+        '401':
+          description: Unauthorized - invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcError'
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until rate limit resets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcError'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        API key in Bearer format: `Authorization: Bearer fsk_...`
+
+        API keys are scoped to a single business and can be revoked instantly.
+
+  schemas:
+    JsonRpcRequest:
+      type: object
+      required:
+        - jsonrpc
+        - id
+        - method
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+        method:
+          type: string
+          enum:
+            - initialize
+            - tools/list
+            - tools/call
+            - notifications/initialized
+        params:
+          type: object
+
+    JsonRpcResponse:
+      type: object
+      required:
+        - jsonrpc
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+        result:
+          type: object
+        error:
+          $ref: '#/components/schemas/JsonRpcErrorObject'
+
+    JsonRpcError:
+      type: object
+      required:
+        - jsonrpc
+        - id
+        - error
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+            - type: "null"
+        error:
+          $ref: '#/components/schemas/JsonRpcErrorObject'
+
+    JsonRpcErrorObject:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          description: |
+            JSON-RPC error codes:
+            - `-32700` PARSE_ERROR
+            - `-32600` INVALID_REQUEST
+            - `-32601` METHOD_NOT_FOUND
+            - `-32602` INVALID_PARAMS
+            - `-32603` INTERNAL_ERROR
+            - `-32001` UNAUTHORIZED
+            - `-32002` RATE_LIMITED
+            - `-32003` INSUFFICIENT_DATA
+            - `-32004` CONVEX_ERROR
+        message:
+          type: string
+        data:
+          type: object
+
+    # Tool Input Schemas
+    DetectAnomaliesInput:
+      type: object
+      required:
+        - business_id
+      properties:
+        business_id:
+          type: string
+          description: Business ID for authorization context
+        date_range:
+          $ref: '#/components/schemas/DateRange'
+        category_filter:
+          type: array
+          items:
+            type: string
+          description: Filter to specific expense categories
+        sensitivity:
+          type: string
+          enum: [low, medium, high]
+          default: medium
+          description: |
+            Detection sensitivity:
+            - `low` = 3σ (extreme outliers only)
+            - `medium` = 2σ (standard)
+            - `high` = 1.5σ (sensitive)
+
+    ForecastCashFlowInput:
+      type: object
+      required:
+        - business_id
+      properties:
+        business_id:
+          type: string
+        horizon_days:
+          type: integer
+          minimum: 7
+          maximum: 90
+          default: 30
+        scenario:
+          type: string
+          enum: [conservative, moderate, optimistic]
+          default: moderate
+        include_recurring:
+          type: boolean
+          default: true
+
+    AnalyzeVendorRiskInput:
+      type: object
+      required:
+        - business_id
+      properties:
+        business_id:
+          type: string
+        vendor_filter:
+          type: array
+          items:
+            type: string
+        analysis_period_days:
+          type: integer
+          minimum: 7
+          maximum: 365
+          default: 90
+        include_concentration:
+          type: boolean
+          default: true
+        include_spending_changes:
+          type: boolean
+          default: true
+
+    # Proposal Tools (P2)
+    CreateProposalInput:
+      type: object
+      required:
+        - business_id
+        - operations
+      properties:
+        business_id:
+          type: string
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalOperation'
+
+    ProposalOperation:
+      type: object
+      required:
+        - type
+        - target_id
+      properties:
+        type:
+          type: string
+          enum: [approve_expense, reject_expense, request_revision]
+        target_id:
+          type: string
+          description: Entity ID to operate on
+        params:
+          type: object
+
+    ConfirmProposalInput:
+      type: object
+      required:
+        - business_id
+        - proposal_id
+      properties:
+        business_id:
+          type: string
+        proposal_id:
+          type: string
+
+    # Common Types
+    DateRange:
+      type: object
+      properties:
+        start:
+          type: string
+          format: date
+          description: Start date (YYYY-MM-DD)
+        end:
+          type: string
+          format: date
+          description: End date (YYYY-MM-DD)
+
+    # Tool Output Schemas
+    DetectAnomaliesOutput:
+      type: object
+      properties:
+        anomalies:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnomalyItem'
+        summary:
+          type: object
+          properties:
+            total_transactions_analyzed:
+              type: integer
+            anomalies_found:
+              type: integer
+            sensitivity_used:
+              type: string
+            categories_analyzed:
+              type: array
+              items:
+                type: string
+
+    AnomalyItem:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        category:
+          type: string
+        category_name:
+          type: string
+        transaction_date:
+          type: string
+          format: date
+        vendor_name:
+          type: string
+        z_score:
+          type: number
+          description: Standard deviations from mean
+        category_mean:
+          type: number
+        category_stddev:
+          type: number
+        severity:
+          type: string
+          enum: [medium, high, critical]
+        explanation:
+          type: string
+          description: Human-readable explanation

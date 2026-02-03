@@ -12,8 +12,11 @@
  */
 
 import { v } from "convex/values";
-import { query } from "../_generated/server";
+import { query, mutation } from "../_generated/server";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
+
+// Rate limit window in milliseconds (1 minute)
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 // ============================================
 // TYPE DEFINITIONS
@@ -759,3 +762,316 @@ export const getInsightById = query({
   },
 });
 */
+
+// ============================================
+// MCP API KEY VALIDATION (Temporary - testing deployment)
+// ============================================
+
+/**
+ * Validate an API key for MCP access
+ * This is a copy of the mcpApiKeys.validateApiKey function
+ * placed here for debugging deployment issues
+ */
+// Debug: List all API keys to verify data exists
+export const debugListMcpApiKeys = query({
+  args: {},
+  handler: async (ctx) => {
+    const keys = await ctx.db.query("mcp_api_keys").collect();
+    return keys.map(k => ({ keyPrefix: k.keyPrefix, name: k.name, id: k._id }));
+  },
+});
+
+export const validateMcpApiKey = query({
+  args: {
+    keyPrefix: v.string(),
+    keyHash: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Debug: First try without index
+    const allKeys = await ctx.db.query("mcp_api_keys").collect();
+    const keyByFilter = allKeys.find(k => k.keyPrefix === args.keyPrefix);
+
+    // Find key by prefix (fast index lookup)
+    const apiKey = await ctx.db
+      .query("mcp_api_keys")
+      .withIndex("by_keyPrefix", (q) => q.eq("keyPrefix", args.keyPrefix))
+      .first();
+
+    if (!apiKey) {
+      // Debug: Return extra info
+      return {
+        valid: false,
+        error: "API_KEY_NOT_FOUND",
+        debug: {
+          searchedPrefix: args.keyPrefix,
+          totalKeys: allKeys.length,
+          foundByFilter: keyByFilter ? keyByFilter.keyPrefix : null,
+        }
+      };
+    }
+
+    // Check if revoked
+    if (apiKey.revokedAt) {
+      return { valid: false, error: "API_KEY_REVOKED" };
+    }
+
+    // Check if expired
+    if (apiKey.expiresAt && apiKey.expiresAt < Date.now()) {
+      return { valid: false, error: "API_KEY_EXPIRED" };
+    }
+
+    // Verify hash matches
+    if (apiKey.key !== args.keyHash) {
+      return { valid: false, error: "API_KEY_INVALID" };
+    }
+
+    // Get business info
+    const business = await ctx.db.get(apiKey.businessId);
+    if (!business) {
+      return { valid: false, error: "BUSINESS_NOT_FOUND" };
+    }
+
+    return {
+      valid: true,
+      apiKeyId: apiKey._id,
+      businessId: apiKey.businessId,
+      businessName: business.name,
+      permissions: apiKey.permissions,
+      rateLimitPerMinute: apiKey.rateLimitPerMinute,
+      keyPrefix: apiKey.keyPrefix,
+    };
+  },
+});
+
+/**
+ * Check and increment rate limit for an API key
+ * Uses sliding window counter pattern
+ */
+export const checkMcpRateLimit = mutation({
+  args: {
+    apiKeyId: v.id("mcp_api_keys"),
+    rateLimitPerMinute: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const windowStart = now - RATE_LIMIT_WINDOW_MS;
+
+    // Get current rate limit record
+    const rateLimit = await ctx.db
+      .query("mcp_rate_limits")
+      .withIndex("by_apiKeyId", (q) => q.eq("apiKeyId", args.apiKeyId))
+      .first();
+
+    if (!rateLimit) {
+      // First request - create new rate limit record
+      await ctx.db.insert("mcp_rate_limits", {
+        apiKeyId: args.apiKeyId,
+        windowStart: now,
+        requestCount: 1,
+      });
+      return { allowed: true, remaining: args.rateLimitPerMinute - 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    }
+
+    // Check if window has expired
+    if (rateLimit.windowStart < windowStart) {
+      // Reset window
+      await ctx.db.patch(rateLimit._id, {
+        windowStart: now,
+        requestCount: 1,
+      });
+      return { allowed: true, remaining: args.rateLimitPerMinute - 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    }
+
+    // Check if over limit
+    if (rateLimit.requestCount >= args.rateLimitPerMinute) {
+      const resetAt = rateLimit.windowStart + RATE_LIMIT_WINDOW_MS;
+      const retryAfter = Math.ceil((resetAt - now) / 1000);
+      return {
+        allowed: false,
+        remaining: 0,
+        resetAt,
+        retryAfter,
+      };
+    }
+
+    // Increment counter
+    await ctx.db.patch(rateLimit._id, {
+      requestCount: rateLimit.requestCount + 1,
+    });
+
+    return {
+      allowed: true,
+      remaining: args.rateLimitPerMinute - rateLimit.requestCount - 1,
+      resetAt: rateLimit.windowStart + RATE_LIMIT_WINDOW_MS,
+    };
+  },
+});
+
+/**
+ * Update lastUsedAt timestamp for an API key
+ * Called after successful requests
+ */
+export const updateMcpApiKeyLastUsed = mutation({
+  args: {
+    apiKeyId: v.id("mcp_api_keys"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.apiKeyId, {
+      lastUsedAt: Date.now(),
+    });
+  },
+});
+
+// ============================================
+// MCP SYSTEM DATA ACCESS (No Auth Required)
+// Used by MCP Lambda tools via HTTP API
+// ============================================
+
+/**
+ * Get accounting entries for a business (MCP system access)
+ * Used by MCP tools (detect_anomalies, forecast_cash_flow, analyze_vendor_risk)
+ *
+ * This is a system-level query that doesn't require Clerk authentication.
+ * Authorization is implicit via the businessId - only the MCP Lambda knows valid IDs.
+ */
+export const getMcpAccountingEntries = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Return entries with only the fields needed for analysis
+    // Map actual schema fields to what MCP tools expect
+    return entries.map((e) => ({
+      _id: e._id.toString(),
+      businessId: e.businessId?.toString() ?? "",
+      transactionType: e.transactionType,
+      transactionDate: e.transactionDate,
+      category: e.category,
+      categoryName: e.category, // MCP tools expect categoryName, schema has category
+      vendorName: e.vendorName,
+      vendorId: e.vendorId?.toString(),
+      description: e.description,
+      originalAmount: e.originalAmount,
+      homeCurrencyAmount: e.homeCurrencyAmount,
+      currency: e.originalCurrency, // MCP tools expect currency, schema has originalCurrency
+      deletedAt: e.deletedAt,
+    }));
+  },
+});
+
+/**
+ * Get vendors for a business (MCP system access)
+ * Used by MCP tools (analyze_vendor_risk)
+ */
+export const getMcpVendors = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    const vendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    return vendors.map((v) => ({
+      _id: v._id.toString(),
+      businessId: v.businessId.toString(),
+      name: v.name,
+      email: v.email,
+      phone: v.phone,
+      taxId: v.taxId,
+      status: v.status,
+      updatedAt: v.updatedAt,
+    }));
+  },
+});
+
+/**
+ * Get expense claims for a business (MCP system access)
+ * Used by MCP tools (create_proposal, confirm_proposal)
+ */
+export const getMcpExpenseClaims = query({
+  args: {
+    businessId: v.string(),
+    claimId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    const claims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    let filtered = claims.filter((c) => !c.deletedAt);
+
+    // Filter to specific claim if requested
+    if (args.claimId) {
+      filtered = filtered.filter((c) => c._id.toString() === args.claimId);
+    }
+
+    return filtered.map((c) => ({
+      _id: c._id.toString(),
+      businessId: c.businessId.toString(),
+      status: c.status,
+      vendorName: c.vendorName,
+      totalAmount: c.totalAmount,
+      currency: c.currency,
+      transactionDate: c.transactionDate,
+      description: c.description,
+      expenseCategory: c.expenseCategory,
+    }));
+  },
+});
+
+/**
+ * Update expense claim status (MCP system access)
+ * Used by MCP tools (confirm_proposal)
+ */
+export const mcpUpdateExpenseClaimStatus = mutation({
+  args: {
+    claimId: v.string(),
+    status: v.string(),
+    approvalNote: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim) {
+      return { success: false, error: "CLAIM_NOT_FOUND" };
+    }
+
+    const updateData: Record<string, unknown> = {
+      status: args.status,
+      updatedAt: Date.now(),
+    };
+
+    if (args.status === "approved") {
+      updateData.approvedAt = Date.now();
+      updateData.approvalNote = args.approvalNote || "Approved via MCP";
+    } else if (args.status === "rejected") {
+      updateData.rejectedAt = Date.now();
+      updateData.rejectionReason = args.approvalNote || "Rejected via MCP";
+    }
+
+    await ctx.db.patch(claim._id, updateData);
+    return { success: true, claimId: args.claimId };
+  },
+});

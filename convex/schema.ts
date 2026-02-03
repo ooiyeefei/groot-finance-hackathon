@@ -89,6 +89,7 @@ export default defineSchema({
     stripeSubscriptionId: v.optional(v.string()),
     stripeProductId: v.optional(v.string()),
     subscriptionStatus: v.optional(v.string()),
+    subscriptionPeriodEnd: v.optional(v.number()), // Unix timestamp for subscription period end
     planName: v.optional(v.string()),         // Subscription plan name
 
     // Trial Period
@@ -841,4 +842,94 @@ export default defineSchema({
     updatedAt: v.number()
   })
     .index("by_user", ["userId"]),
+
+  // ============================================
+  // MCP SERVER DOMAIN: API Keys, Proposals, Rate Limits
+  // ============================================
+
+  // API Keys for MCP Server authentication (Category 3 MCP)
+  mcp_api_keys: defineTable({
+    // Hashed key - never store plaintext
+    key: v.string(),
+    // First 8 chars for identification (e.g., "fsk_abc1")
+    keyPrefix: v.string(),
+    // Business this key has access to
+    businessId: v.id("businesses"),
+    // Human-readable name (e.g., "Zapier Integration")
+    name: v.string(),
+    // Allowed tools: ["detect_anomalies", "forecast_cash_flow", ...]
+    permissions: v.array(v.string()),
+    // Requests per minute (default: 60)
+    rateLimitPerMinute: v.number(),
+    // Optional expiration timestamp
+    expiresAt: v.optional(v.number()),
+    // Last successful request timestamp
+    lastUsedAt: v.optional(v.number()),
+    // User who created this key
+    createdBy: v.id("users"),
+    // Creation timestamp
+    createdAt: v.number(),
+    // Soft-delete: revocation timestamp
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_keyPrefix", ["keyPrefix"])
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_active", ["businessId", "revokedAt"]),
+
+  // Proposals for human-approved write operations (Clockwise pattern)
+  mcp_proposals: defineTable({
+    // Business context for this proposal
+    businessId: v.string(),
+    // Action type: approve_expense, reject_expense, categorize_expense, update_vendor
+    actionType: v.string(),
+    // Target entity ID (e.g., expense claim ID)
+    targetId: v.string(),
+    // Action-specific parameters
+    parameters: v.optional(v.any()),
+    // Human-readable summary
+    summary: v.string(),
+    // Status: pending, confirmed, cancelled, expired, executed, failed
+    status: v.union(
+      v.literal("pending"),
+      v.literal("confirmed"),
+      v.literal("cancelled"),
+      v.literal("expired"),
+      v.literal("executed"),
+      v.literal("failed")
+    ),
+    // Auto-expire timestamp (created + 15 minutes)
+    expiresAt: v.number(),
+    // API key that created this proposal
+    createdByApiKeyId: v.optional(v.id("mcp_api_keys")),
+    // When proposal was confirmed
+    confirmedAt: v.optional(v.number()),
+    // User who confirmed the proposal
+    confirmedByUserId: v.optional(v.id("users")),
+    // When proposal was cancelled
+    cancelledAt: v.optional(v.number()),
+    // User who cancelled the proposal
+    cancelledByUserId: v.optional(v.id("users")),
+    // Reason for cancellation
+    cancellationReason: v.optional(v.string()),
+    // When proposal was executed
+    executedAt: v.optional(v.number()),
+    // Result after execution (success/errors)
+    executionResult: v.optional(v.any()),
+    // Creation timestamp
+    createdAt: v.number(),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_status", ["status"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  // Rate limiting for MCP API keys
+  mcp_rate_limits: defineTable({
+    // Reference to the API key
+    apiKeyId: v.id("mcp_api_keys"),
+    // Timestamp of window start
+    windowStart: v.number(),
+    // Requests in current window
+    requestCount: v.number(),
+  })
+    .index("by_apiKeyId", ["apiKeyId"]),
 });

@@ -728,6 +728,154 @@ export const updateExpenseClaimConvertedImage = mutation({
 });
 
 // ============================================
+// MCP FINANCIAL INTELLIGENCE SYSTEM FUNCTIONS
+// Used by MCP Lambda for read-only financial analysis
+// ============================================
+
+/**
+ * Get accounting entries for a business (system access)
+ * Used by MCP tools (detect_anomalies, forecast_cash_flow, etc.)
+ *
+ * Security: Document IDs are long random strings - only our backend knows them.
+ * The businessId provides implicit authorization.
+ */
+export const getAccountingEntriesForBusiness = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Return entries with only the fields needed for analysis
+    // Map actual schema fields to what MCP tools expect
+    return entries.map((e) => ({
+      _id: e._id.toString(),
+      businessId: e.businessId?.toString() ?? "",
+      transactionType: e.transactionType,
+      transactionDate: e.transactionDate,
+      category: e.category,
+      categoryName: e.category, // MCP tools expect categoryName, schema has category
+      vendorName: e.vendorName,
+      vendorId: e.vendorId?.toString(),
+      description: e.description,
+      originalAmount: e.originalAmount,
+      homeCurrencyAmount: e.homeCurrencyAmount,
+      currency: e.originalCurrency, // MCP tools expect currency, schema has originalCurrency
+      deletedAt: e.deletedAt,
+    }));
+  },
+});
+
+/**
+ * Get vendors for a business (system access)
+ * Used by MCP tools (analyze_vendor_risk)
+ */
+export const getVendorsForBusiness = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    const vendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    return vendors.map((v) => ({
+      _id: v._id.toString(),
+      businessId: v.businessId.toString(),
+      name: v.name,
+      email: v.email,
+      phone: v.phone,
+      taxId: v.taxId,
+      status: v.status,
+      updatedAt: v.updatedAt,
+    }));
+  },
+});
+
+/**
+ * Get expense claims for a business (system access)
+ * Used by MCP tools (create_proposal, confirm_proposal)
+ */
+export const getExpenseClaimsForBusiness = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    const claims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    return claims.filter((c) => !c.deletedAt).map((c) => ({
+      _id: c._id.toString(),
+      businessId: c.businessId.toString(),
+      status: c.status,
+      vendorName: c.vendorName,
+      totalAmount: c.totalAmount,
+      currency: c.currency,
+      transactionDate: c.transactionDate,
+      description: c.description,
+      expenseCategory: c.expenseCategory,
+    }));
+  },
+});
+
+/**
+ * Update expense claim status (system access)
+ * Used by MCP tools (confirm_proposal)
+ * This is separate from updateExpenseClaimStatus which is for Trigger.dev
+ */
+export const systemUpdateExpenseClaimStatus = mutation({
+  args: {
+    claimId: v.string(),
+    status: v.string(),
+    approvedBy: v.optional(v.string()),
+    approvalNote: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim) {
+      throw new Error(`Expense claim not found: ${args.claimId}`);
+    }
+
+    const updateData: Record<string, unknown> = {
+      status: args.status,
+      updatedAt: Date.now(),
+    };
+
+    if (args.status === "approved") {
+      updateData.approvedAt = Date.now();
+      updateData.approvalNote = args.approvalNote || "Approved via MCP";
+    } else if (args.status === "rejected") {
+      updateData.rejectedAt = Date.now();
+      updateData.rejectionReason = args.approvalNote || "Rejected via MCP";
+    }
+
+    await ctx.db.patch(claim._id, updateData);
+    return { success: true, claimId: args.claimId };
+  },
+});
+
+// ============================================
 // DEBUG FUNCTIONS (for diagnostic scripts)
 // ============================================
 

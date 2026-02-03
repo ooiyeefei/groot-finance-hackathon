@@ -68,7 +68,7 @@ export class MCPServerStack extends cdk.Stack {
       entry: path.join(__dirname, '../../src/lambda/mcp-server/handler.ts'),
       handler: 'handler',
       functionName: 'finanseal-mcp-server',
-      description: 'FinanSEAL MCP Server for financial intelligence tools',
+      description: 'FinanSEAL Category 3 MCP Server - domain intelligence with human approval workflow',
       memorySize: 512,
       timeout: cdk.Duration.seconds(30),
       architecture: lambda.Architecture.ARM_64, // Cost-effective for Node.js
@@ -103,7 +103,7 @@ export class MCPServerStack extends cdk.Stack {
     // ========================================================================
     const api = new apigateway.RestApi(this, 'MCPServerAPI', {
       restApiName: 'FinanSEAL MCP Server',
-      description: 'MCP Server API for financial intelligence tools',
+      description: 'Category 3 MCP Server API - JSON-RPC 2.0 with API key auth and proposal workflow',
       deployOptions: {
         stageName: 'v1',
         throttlingRateLimit: 100,

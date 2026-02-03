@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, memo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Loader2 } from 'lucide-react'
+import { Building2, DollarSign, Users, Key, Loader2 } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { useUser } from '@clerk/nextjs'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 const BusinessProfileSettings = lazy(() => import('@/domains/account-management/components/business-profile-settings'))
 const CategoriesManagementClient = lazy(() => import('@/domains/expense-claims/components/categories-management-client'))
 const TeamsManagementClient = lazy(() => import('@/domains/account-management/components/teams-management-client'))
+const ApiKeysManagementClient = lazy(() => import('@/domains/api-keys/components/api-keys-management-client'))
 
 // Wrapper components for existing components that need userId
 const CategoryManagementTab = ({ userId }: { userId?: string }) => (
@@ -29,7 +30,7 @@ const TabbedBusinessSettings = memo(() => {
   const pathname = usePathname()
 
   // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'team-management'] as const
+  const validTabs = ['business-profile', 'category-management', 'team-management', 'api-keys'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
   const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'business-profile'
@@ -58,20 +59,22 @@ const TabbedBusinessSettings = memo(() => {
     <div className="w-full space-y-4">
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         {/* Tab Navigation - Semantic Design System */}
-        <TabsList className={`grid w-full ${isOwner ? 'grid-cols-3' : 'grid-cols-2'} bg-muted border border-border`}>
+        <TabsList className={`grid w-full ${isOwner ? 'grid-cols-4' : 'grid-cols-2'} bg-muted border border-border`}>
           <TabsTrigger
             value="business-profile"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
           >
             <Building2 className="w-4 h-4 mr-2" />
-            Business Profile
+            <span className="hidden sm:inline">Business</span>
+            <span className="sm:hidden">Biz</span>
           </TabsTrigger>
           <TabsTrigger
             value="category-management"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
           >
             <DollarSign className="w-4 h-4 mr-2" />
-            Categories
+            <span className="hidden sm:inline">Categories</span>
+            <span className="sm:hidden">Cat</span>
           </TabsTrigger>
           {isOwner && (
             <TabsTrigger
@@ -80,6 +83,16 @@ const TabbedBusinessSettings = memo(() => {
             >
               <Users className="w-4 h-4 mr-2" />
               Team
+            </TabsTrigger>
+          )}
+          {isOwner && (
+            <TabsTrigger
+              value="api-keys"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Key className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">API Keys</span>
+              <span className="sm:hidden">API</span>
             </TabsTrigger>
           )}
         </TabsList>
@@ -123,6 +136,22 @@ const TabbedBusinessSettings = memo(() => {
                 </div>
               }>
                 <TeamManagementTab userId={user?.id} />
+              </Suspense>
+            </div>
+          </TabsContent>
+        )}
+
+        {/* API Keys Tab Content - Owner Only */}
+        {isOwner && (
+          <TabsContent value="api-keys" className="space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6">
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">Loading API keys...</span>
+                </div>
+              }>
+                <ApiKeysManagementClient />
               </Suspense>
             </div>
           </TabsContent>

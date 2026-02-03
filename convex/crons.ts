@@ -8,6 +8,7 @@
  *
  * Additional maintenance jobs:
  * - Expired insights cleanup
+ * - MCP proposal cleanup
  *
  * Note: Notification crons are disabled until push/email integration is complete.
  * See convex/crons.ts.disabled for full list.
@@ -63,6 +64,18 @@ crons.daily(
   "cleanup-expired-insights",
   { hourUTC: 2, minuteUTC: 0 },
   internal.functions.actionCenterInsights.deleteExpired
+);
+
+/**
+ * MCP Proposals Cleanup
+ *
+ * Runs every 5 minutes to clean up expired MCP proposals.
+ * Proposals expire after 5 minutes if not confirmed.
+ */
+crons.interval(
+  "cleanup-expired-mcp-proposals",
+  { minutes: 5 },
+  internal.functions.mcpProposals.cleanupExpiredProposals
 );
 
 export default crons;

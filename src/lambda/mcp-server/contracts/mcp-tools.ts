@@ -32,8 +32,8 @@ export type Severity = z.infer<typeof SeveritySchema>;
 
 export const DetectAnomaliesInputSchema = z.object({
   business_id: z.string()
-    .min(1)
-    .describe('Business ID for authorization context'),
+    .optional()
+    .describe('Business ID (optional when using API key authentication - business is derived from key)'),
 
   date_range: DateRangeSchema.optional()
     .describe('Date range to analyze (defaults to last 30 days)'),
@@ -81,8 +81,8 @@ export interface DetectAnomaliesOutput {
 
 export const ForecastCashFlowInputSchema = z.object({
   business_id: z.string()
-    .min(1)
-    .describe('Business ID for authorization context'),
+    .optional()
+    .describe('Business ID (optional when using API key authentication - business is derived from key)'),
 
   horizon_days: z.number()
     .min(7)
@@ -139,8 +139,8 @@ export interface ForecastCashFlowOutput {
 
 export const AnalyzeVendorRiskInputSchema = z.object({
   business_id: z.string()
-    .min(1)
-    .describe('Business ID for authorization context'),
+    .optional()
+    .describe('Business ID (optional when using API key authentication - business is derived from key)'),
 
   vendor_filter: z.array(z.string()).optional()
     .describe('Filter to specific vendor names'),
@@ -205,6 +205,78 @@ export interface AnalyzeVendorRiskOutput {
     significant_spending_changes: number;
     analysis_period: DateRange;
   };
+}
+
+// ============================================================================
+// Tool 4: create_proposal
+// ============================================================================
+
+export const CreateProposalInputSchema = z.object({
+  action_type: z.enum(['approve_expense', 'reject_expense', 'categorize_expense', 'update_vendor'])
+    .describe('Type of action to propose: approve_expense, reject_expense, categorize_expense, update_vendor'),
+
+  target_id: z.string()
+    .min(1)
+    .describe('ID of the target entity (e.g., expense claim ID)'),
+
+  parameters: z.record(z.unknown())
+    .optional()
+    .describe('Action-specific parameters (e.g., {reason: "Duplicate"} for reject_expense, {category: "TRAVEL"} for categorize_expense)'),
+
+  summary: z.string()
+    .min(10)
+    .max(500)
+    .describe('Human-readable summary of the proposed action for review'),
+});
+
+export type CreateProposalInput = z.infer<typeof CreateProposalInputSchema>;
+
+export interface CreateProposalOutput {
+  proposal_id: string;
+  expires_at: number;
+  expires_in_seconds: number;
+  confirmation_required: true;
+  message: string;
+}
+
+// ============================================================================
+// Tool 5: confirm_proposal
+// ============================================================================
+
+export const ConfirmProposalInputSchema = z.object({
+  proposal_id: z.string()
+    .min(1)
+    .describe('The proposal ID returned from create_proposal'),
+});
+
+export type ConfirmProposalInput = z.infer<typeof ConfirmProposalInputSchema>;
+
+export interface ConfirmProposalOutput {
+  success: boolean;
+  action_executed: string;
+  result: Record<string, unknown>;
+  message: string;
+}
+
+// ============================================================================
+// Tool 6: cancel_proposal
+// ============================================================================
+
+export const CancelProposalInputSchema = z.object({
+  proposal_id: z.string()
+    .min(1)
+    .describe('The proposal ID to cancel'),
+
+  reason: z.string()
+    .optional()
+    .describe('Optional reason for cancellation'),
+});
+
+export type CancelProposalInput = z.infer<typeof CancelProposalInputSchema>;
+
+export interface CancelProposalOutput {
+  success: boolean;
+  message: string;
 }
 
 // ============================================================================
@@ -274,6 +346,21 @@ export const MCP_TOOLS = {
     name: 'analyze_vendor_risk',
     description: 'Analyze vendor concentration, spending changes, and risk factors. Identifies suppliers with high dependency risk.',
     inputSchema: AnalyzeVendorRiskInputSchema
+  },
+  create_proposal: {
+    name: 'create_proposal',
+    description: 'Create a proposal for a write operation that requires human approval. Returns a proposal_id that must be confirmed with confirm_proposal before the action executes. Proposals expire after 15 minutes.',
+    inputSchema: CreateProposalInputSchema
+  },
+  confirm_proposal: {
+    name: 'confirm_proposal',
+    description: 'Confirm and execute a pending proposal. This is the human approval step that triggers the actual write operation. Only call this after the user has explicitly approved the action.',
+    inputSchema: ConfirmProposalInputSchema
+  },
+  cancel_proposal: {
+    name: 'cancel_proposal',
+    description: 'Cancel a pending proposal. Use this when the user decides not to proceed with a proposed action.',
+    inputSchema: CancelProposalInputSchema
   }
 } as const;
 
