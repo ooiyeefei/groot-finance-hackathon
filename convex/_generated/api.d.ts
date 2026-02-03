@@ -24,6 +24,8 @@ import type * as functions_expenseClaims from "../functions/expenseClaims.js";
 import type * as functions_feedback from "../functions/feedback.js";
 import type * as functions_financialIntelligence from "../functions/financialIntelligence.js";
 import type * as functions_invoices from "../functions/invoices.js";
+import type * as functions_mcpApiKeys from "../functions/mcpApiKeys.js";
+import type * as functions_mcpProposals from "../functions/mcpProposals.js";
 import type * as functions_memberships from "../functions/memberships.js";
 import type * as functions_messages from "../functions/messages.js";
 import type * as functions_ocrUsage from "../functions/ocrUsage.js";
@@ -64,6 +66,8 @@ declare const fullApi: ApiFromModules<{
   "functions/feedback": typeof functions_feedback;
   "functions/financialIntelligence": typeof functions_financialIntelligence;
   "functions/invoices": typeof functions_invoices;
+  "functions/mcpApiKeys": typeof functions_mcpApiKeys;
+  "functions/mcpProposals": typeof functions_mcpProposals;
   "functions/memberships": typeof functions_memberships;
   "functions/messages": typeof functions_messages;
   "functions/ocrUsage": typeof functions_ocrUsage;
