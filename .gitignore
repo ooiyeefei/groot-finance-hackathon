@@ -111,3 +111,13 @@ public/sw.js
 public/sw.js.map
 public/workbox-*.js
 public/workbox-*.js.map
+
+# TypeScript compilation artifacts (should not be in src/)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+!src/**/*.config.js
+
+# Convex default boilerplate
+convex/README.md

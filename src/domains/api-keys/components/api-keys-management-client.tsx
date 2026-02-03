@@ -22,8 +22,11 @@ import {
   Loader2,
   Eye,
   EyeOff,
-  X
+  X,
+  BookOpen,
+  ExternalLink
 } from 'lucide-react'
+import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 
 // Available MCP tools for permission selection
@@ -566,13 +569,24 @@ const ApiKeysManagementClient = memo(() => {
 
       {/* MCP Server Info */}
       <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-        <h4 className="text-[15px] font-medium text-foreground mb-2">MCP Server Endpoint</h4>
-        <code className="text-[13px] font-mono text-muted-foreground bg-muted px-2 py-1 rounded block overflow-x-auto">
-          https://kuy2a5zca8.execute-api.us-west-2.amazonaws.com/v1/mcp
-        </code>
-        <p className="text-[13px] text-muted-foreground mt-2">
-          Use this endpoint with your API key to connect Claude Desktop, Cursor, or other MCP clients.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h4 className="text-[15px] font-medium text-foreground mb-2">MCP Server Endpoint</h4>
+            <code className="text-[13px] font-mono text-muted-foreground bg-muted px-2 py-1 rounded block overflow-x-auto">
+              https://kuy2a5zca8.execute-api.us-west-2.amazonaws.com/v1/mcp
+            </code>
+            <p className="text-[13px] text-muted-foreground mt-2">
+              Use this endpoint with your API key to connect Claude Desktop, Cursor, or other MCP clients.
+            </p>
+          </div>
+          <Link href="/en/docs/mcp" target="_blank">
+            <Button variant="outline" size="sm" className="shrink-0">
+              <BookOpen className="w-4 h-4 mr-2" />
+              View Documentation
+              <ExternalLink className="w-3 h-3 ml-1.5" />
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Loading State */}
