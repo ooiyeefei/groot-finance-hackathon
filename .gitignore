@@ -121,3 +121,6 @@ src/**/*.d.ts.map
 
 # Convex default boilerplate
 convex/README.md
+
+# CloudFront signing keys
+secrets/

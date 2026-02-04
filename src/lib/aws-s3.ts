@@ -91,6 +91,14 @@ function getS3Client(): S3Client {
   if (!s3Client) {
     const clientConfig: ConstructorParameters<typeof S3Client>[0] = {
       region: AWS_REGION,
+      // Disable automatic checksum validation for presigned URLs
+      // AWS SDK v3.958+ adds x-amz-checksum-mode=ENABLED by default, which can cause
+      // 403 errors when:
+      // 1. Objects were uploaded without checksums
+      // 2. IAM policy doesn't include s3:GetObjectAttributes
+      // Setting these to 'when_required' only uses checksums when explicitly requested
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     }
 
     // Use Vercel OIDC if AWS_ROLE_ARN is configured

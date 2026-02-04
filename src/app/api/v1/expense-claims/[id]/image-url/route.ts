@@ -1,6 +1,11 @@
 /**
  * GET /api/v1/expense-claims/[id]/image-url - Generate signed URLs for expense claim receipt images
- * Using Convex (database) + AWS S3 (storage)
+ * Using Convex (database) + CloudFront CDN (primary) / AWS S3 (fallback)
+ *
+ * CloudFront benefits:
+ * - Edge caching (faster loads from nearest location)
+ * - No AWS API call for URL generation (instant)
+ * - Better security (S3 bucket not directly exposed)
  */
 
 import { auth } from '@clerk/nextjs/server'
@@ -8,6 +13,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import { getPresignedDownloadUrl, listFiles, fileExists, URL_EXPIRY } from '@/lib/aws-s3'
+import {
+  isCloudFrontConfigured,
+  getExpenseClaimImageUrl,
+  CLOUDFRONT_URL_EXPIRY,
+} from '@/lib/cloudfront-signer'
+
+/**
+ * Generate signed URL using CloudFront (if configured) or S3 (fallback)
+ */
+async function generateSignedUrl(storagePath: string): Promise<string> {
+  // Try CloudFront first (faster, no AWS API call)
+  if (isCloudFrontConfigured()) {
+    console.log('[Expense Claim Image URL] Using CloudFront CDN')
+    return getExpenseClaimImageUrl(storagePath, CLOUDFRONT_URL_EXPIRY.download)
+  }
+
+  // Fallback to S3 presigned URL
+  console.log('[Expense Claim Image URL] Using S3 presigned URL (CloudFront not configured)')
+  return getPresignedDownloadUrl('expense_claims', storagePath, URL_EXPIRY.download)
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -85,7 +110,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
 
       try {
-        const signedUrl = await getPresignedDownloadUrl('expense_claims', actualStoragePath, URL_EXPIRY.download)
+        const signedUrl = await generateSignedUrl(actualStoragePath)
 
         // Extract filename from storage path
         const filename = actualStoragePath.split('/').pop() || 'receipt'
@@ -121,7 +146,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         const exists = await fileExists('expense_claims', convertedPath)
         if (exists) {
           try {
-            const signedUrl = await getPresignedDownloadUrl('expense_claims', convertedPath, URL_EXPIRY.download)
+            const signedUrl = await generateSignedUrl(convertedPath)
             console.log(`[Expense Claim Image URL] Direct file access successful for: ${convertedPath}`)
             return NextResponse.json({
               success: true,
@@ -213,7 +238,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       console.log(`[Expense Claim Image URL] Creating signed URL for file: ${fullImagePath}`)
 
       try {
-        const signedUrl = await getPresignedDownloadUrl('expense_claims', fullImagePath, URL_EXPIRY.download)
+        const signedUrl = await generateSignedUrl(fullImagePath)
 
         console.log(`[Expense Claim Image URL] Generated signed URL successfully for: ${selectedImageFile.name}`)
 

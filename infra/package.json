@@ -10,7 +10,10 @@
     "cdk": "cdk",
     "synth": "cdk synth",
     "deploy:staging": "cdk deploy --context environment=staging",
-    "deploy:prod": "cdk deploy --context environment=prod"
+    "deploy:prod": "cdk deploy --context environment=prod",
+    "cdn:generate-keys": "bash ../scripts/generate-cloudfront-keys.sh",
+    "cdn:deploy": "cdk deploy FinansealCdnStack --app 'npx ts-node bin/cdn.ts' --profile groot-finanseal --region us-west-2",
+    "cdn:diff": "cdk diff FinansealCdnStack --app 'npx ts-node bin/cdn.ts' --profile groot-finanseal --region us-west-2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
