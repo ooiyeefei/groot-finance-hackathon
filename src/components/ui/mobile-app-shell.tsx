@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
-import { Home, Receipt, FileText, Settings, CreditCard, MessageSquare, FileCheck, Building2, Sparkles } from 'lucide-react'
+import { Home, Receipt, FileText, Settings, CreditCard, MessageSquare, FileCheck, Building2, Sparkles, Palmtree, CalendarDays } from 'lucide-react'
 import { BottomNav, BottomNavSpacer, type BottomNavItem } from './bottom-nav'
 import { fetchUserRoleWithCache, clearUserRoleCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
@@ -132,6 +132,16 @@ export function MobileAppShell({
       icon: MessageSquare,
       label: t('aiAssistant'),
       href: `/${locale}/ai-assistant`
+    },
+    {
+      icon: Palmtree,
+      label: t('leave'),
+      href: `/${locale}/leave`
+    },
+    {
+      icon: CalendarDays,
+      label: t('teamCalendar'),
+      href: `/${locale}/team-calendar`
     },
   ]
 

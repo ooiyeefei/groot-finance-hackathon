@@ -16,14 +16,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FinanSEAL - Financial Co-Pilot",
+  title: "Groot Finance",
   description: "Multi-modal financial assistant for Southeast Asian SMEs",
   // PWA manifest link (Task T009)
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "FinanSEAL"
+    title: "Groot Finance"
   }
 };
 
@@ -50,7 +50,7 @@ export default function RootLayout({
   return (
     <html suppressHydrationWarning>
       <head>
-        <link rel="icon" href="https://finanseal-public.s3.us-west-2.amazonaws.com/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.png" type="image/png" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
         <WebVitalsReporter />
