@@ -46,7 +46,9 @@
     "admin": "系统管理",
     "businessSettings": "Business Settings",
     "billing": "账单",
-    "managerApprovals": "经理审批"
+    "managerApprovals": "经理审批",
+    "leave": "休假",
+    "teamCalendar": "团队日历"
   },
   "dashboard": {
     "title": "仪表板",
@@ -1008,6 +1010,94 @@
       "failedToFetchTeamMembers": "获取团队成员失败",
       "networkErrorTeamMembers": "获取团队成员时网络错误",
       "failedToFetchInvitations": "获取待处理邀请失败"
+    }
+  },
+  "leaveManagement": {
+    "title": "休假管理",
+    "subtitle": "管理休假申请和余额",
+    "leaveBalance": "休假余额",
+    "leaveRequest": "休假申请",
+    "myLeaveRequests": "我的休假申请",
+    "applyForLeave": "申请休假",
+    "submitRequest": "提交申请",
+    "cancelRequest": "取消申请",
+    "status": {
+      "draft": "草稿",
+      "submitted": "待审批",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "cancelled": "已取消"
+    },
+    "fields": {
+      "leaveType": "休假类型",
+      "startDate": "开始日期",
+      "endDate": "结束日期",
+      "totalDays": "总天数",
+      "notes": "备注",
+      "reason": "原因",
+      "approverNotes": "审批备注"
+    },
+    "balance": {
+      "entitled": "应享",
+      "used": "已用",
+      "remaining": "剩余",
+      "adjustments": "调整",
+      "carryover": "结转"
+    },
+    "types": {
+      "annual": "年假",
+      "sick": "病假",
+      "personal": "事假",
+      "unpaid": "无薪假",
+      "maternity": "产假",
+      "paternity": "陪产假"
+    },
+    "approval": {
+      "pendingApproval": "待审批",
+      "approveRequest": "批准申请",
+      "rejectRequest": "拒绝申请",
+      "approvalNotes": "审批备注",
+      "rejectionReason": "拒绝原因",
+      "approved": "休假申请已批准",
+      "rejected": "休假申请已拒绝"
+    },
+    "calendar": {
+      "title": "团队日历",
+      "subtitle": "查看团队休假和公共假日",
+      "upcoming": "即将到来",
+      "nextDays": "未来{days}天",
+      "noUpcoming": "没有即将到来的休假",
+      "legend": "图例",
+      "publicHoliday": "公共假日"
+    },
+    "settings": {
+      "title": "休假管理设置",
+      "subtitle": "配置休假类型、假日和权益",
+      "leaveTypes": "休假类型",
+      "publicHolidays": "公共假日",
+      "addLeaveType": "添加休假类型",
+      "editLeaveType": "编辑休假类型",
+      "addHoliday": "添加假日",
+      "defaultDays": "每年默认天数",
+      "deductsBalance": "扣减余额",
+      "requiresApproval": "需要审批",
+      "active": "启用",
+      "inactive": "停用",
+      "recurring": "每年重复"
+    },
+    "messages": {
+      "requestCreated": "休假申请已创建",
+      "requestSubmitted": "休假申请已提交待审批",
+      "requestCancelled": "休假申请已取消",
+      "insufficientBalance": "休假余额不足",
+      "invalidDateRange": "日期范围无效",
+      "noBusinessDays": "所选日期导致0个工作日",
+      "startDatePast": "开始日期不能是过去的日期"
+    },
+    "empty": {
+      "noRequests": "没有休假申请",
+      "noBalance": "没有余额数据",
+      "contactAdmin": "请联系管理员初始化您的休假余额"
     }
   }
 }

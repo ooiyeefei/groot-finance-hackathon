@@ -46,7 +46,9 @@
     "approvals": "Approvals",
     "team": "Team",
     "categories": "Categories",
-    "admin": "Admin"
+    "admin": "Admin",
+    "leave": "Leave",
+    "teamCalendar": "Team Calendar"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1053,6 +1055,94 @@
       "failedToFetchTeamMembers": "Failed to fetch team members",
       "networkErrorTeamMembers": "Network error while fetching team members",
       "failedToFetchInvitations": "Failed to fetch pending invitations"
+    }
+  },
+  "leaveManagement": {
+    "title": "Leave Management",
+    "subtitle": "Manage leave requests and balance",
+    "leaveBalance": "Leave Balance",
+    "leaveRequest": "Leave Request",
+    "myLeaveRequests": "My Leave Requests",
+    "applyForLeave": "Apply for Leave",
+    "submitRequest": "Submit Request",
+    "cancelRequest": "Cancel Request",
+    "status": {
+      "draft": "Draft",
+      "submitted": "Pending Approval",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled"
+    },
+    "fields": {
+      "leaveType": "Leave Type",
+      "startDate": "Start Date",
+      "endDate": "End Date",
+      "totalDays": "Total Days",
+      "notes": "Notes",
+      "reason": "Reason",
+      "approverNotes": "Approver Notes"
+    },
+    "balance": {
+      "entitled": "Entitled",
+      "used": "Used",
+      "remaining": "Remaining",
+      "adjustments": "Adjustments",
+      "carryover": "Carryover"
+    },
+    "types": {
+      "annual": "Annual Leave",
+      "sick": "Sick Leave",
+      "personal": "Personal Leave",
+      "unpaid": "Unpaid Leave",
+      "maternity": "Maternity Leave",
+      "paternity": "Paternity Leave"
+    },
+    "approval": {
+      "pendingApproval": "Pending Approval",
+      "approveRequest": "Approve Request",
+      "rejectRequest": "Reject Request",
+      "approvalNotes": "Approval Notes",
+      "rejectionReason": "Rejection Reason",
+      "approved": "Leave request approved",
+      "rejected": "Leave request rejected"
+    },
+    "calendar": {
+      "title": "Team Calendar",
+      "subtitle": "View team absences and public holidays",
+      "upcoming": "Upcoming",
+      "nextDays": "Next {days} days",
+      "noUpcoming": "No upcoming absences",
+      "legend": "Legend",
+      "publicHoliday": "Public Holiday"
+    },
+    "settings": {
+      "title": "Leave Management Settings",
+      "subtitle": "Configure leave types, holidays, and entitlements",
+      "leaveTypes": "Leave Types",
+      "publicHolidays": "Public Holidays",
+      "addLeaveType": "Add Leave Type",
+      "editLeaveType": "Edit Leave Type",
+      "addHoliday": "Add Holiday",
+      "defaultDays": "Default Days Per Year",
+      "deductsBalance": "Deducts Balance",
+      "requiresApproval": "Requires Approval",
+      "active": "Active",
+      "inactive": "Inactive",
+      "recurring": "Recurring Annually"
+    },
+    "messages": {
+      "requestCreated": "Leave request created",
+      "requestSubmitted": "Leave request submitted for approval",
+      "requestCancelled": "Leave request cancelled",
+      "insufficientBalance": "Insufficient leave balance",
+      "invalidDateRange": "Invalid date range",
+      "noBusinessDays": "Selected dates result in 0 business days",
+      "startDatePast": "Start date cannot be in the past"
+    },
+    "empty": {
+      "noRequests": "No leave requests",
+      "noBalance": "No balance data available",
+      "contactAdmin": "Contact your administrator to initialize your leave balance"
     }
   }
 }

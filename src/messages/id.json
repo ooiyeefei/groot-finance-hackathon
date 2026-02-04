@@ -46,7 +46,9 @@
     "admin": "Admin",
     "businessSettings": "Business Settings",
     "billing": "Tagihan",
-    "managerApprovals": "Persetujuan Manajer"
+    "managerApprovals": "Persetujuan Manajer",
+    "leave": "Cuti",
+    "teamCalendar": "Kalender Tim"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1008,6 +1010,94 @@
       "failedToFetchTeamMembers": "Gagal mengambil anggota tim",
       "networkErrorTeamMembers": "Kesalahan jaringan saat mengambil anggota tim",
       "failedToFetchInvitations": "Gagal mengambil undangan tertunda"
+    }
+  },
+  "leaveManagement": {
+    "title": "Manajemen Cuti",
+    "subtitle": "Kelola permintaan cuti dan saldo",
+    "leaveBalance": "Saldo Cuti",
+    "leaveRequest": "Permintaan Cuti",
+    "myLeaveRequests": "Permintaan Cuti Saya",
+    "applyForLeave": "Ajukan Cuti",
+    "submitRequest": "Kirim Permintaan",
+    "cancelRequest": "Batalkan Permintaan",
+    "status": {
+      "draft": "Draf",
+      "submitted": "Menunggu Persetujuan",
+      "approved": "Disetujui",
+      "rejected": "Ditolak",
+      "cancelled": "Dibatalkan"
+    },
+    "fields": {
+      "leaveType": "Jenis Cuti",
+      "startDate": "Tanggal Mulai",
+      "endDate": "Tanggal Selesai",
+      "totalDays": "Total Hari",
+      "notes": "Catatan",
+      "reason": "Alasan",
+      "approverNotes": "Catatan Persetujuan"
+    },
+    "balance": {
+      "entitled": "Hak",
+      "used": "Terpakai",
+      "remaining": "Sisa",
+      "adjustments": "Penyesuaian",
+      "carryover": "Sisa Tahun Lalu"
+    },
+    "types": {
+      "annual": "Cuti Tahunan",
+      "sick": "Cuti Sakit",
+      "personal": "Cuti Pribadi",
+      "unpaid": "Cuti Tanpa Gaji",
+      "maternity": "Cuti Melahirkan",
+      "paternity": "Cuti Ayah"
+    },
+    "approval": {
+      "pendingApproval": "Menunggu Persetujuan",
+      "approveRequest": "Setujui Permintaan",
+      "rejectRequest": "Tolak Permintaan",
+      "approvalNotes": "Catatan Persetujuan",
+      "rejectionReason": "Alasan Penolakan",
+      "approved": "Permintaan cuti disetujui",
+      "rejected": "Permintaan cuti ditolak"
+    },
+    "calendar": {
+      "title": "Kalender Tim",
+      "subtitle": "Lihat ketidakhadiran tim dan hari libur",
+      "upcoming": "Yang Akan Datang",
+      "nextDays": "{days} hari ke depan",
+      "noUpcoming": "Tidak ada ketidakhadiran",
+      "legend": "Legenda",
+      "publicHoliday": "Hari Libur"
+    },
+    "settings": {
+      "title": "Pengaturan Manajemen Cuti",
+      "subtitle": "Konfigurasi jenis cuti, hari libur, dan hak cuti",
+      "leaveTypes": "Jenis Cuti",
+      "publicHolidays": "Hari Libur",
+      "addLeaveType": "Tambah Jenis Cuti",
+      "editLeaveType": "Ubah Jenis Cuti",
+      "addHoliday": "Tambah Hari Libur",
+      "defaultDays": "Hari Default Per Tahun",
+      "deductsBalance": "Mengurangi Saldo",
+      "requiresApproval": "Butuh Persetujuan",
+      "active": "Aktif",
+      "inactive": "Tidak Aktif",
+      "recurring": "Berulang Tahunan"
+    },
+    "messages": {
+      "requestCreated": "Permintaan cuti dibuat",
+      "requestSubmitted": "Permintaan cuti diajukan untuk persetujuan",
+      "requestCancelled": "Permintaan cuti dibatalkan",
+      "insufficientBalance": "Saldo cuti tidak mencukupi",
+      "invalidDateRange": "Rentang tanggal tidak valid",
+      "noBusinessDays": "Tanggal yang dipilih menghasilkan 0 hari kerja",
+      "startDatePast": "Tanggal mulai tidak boleh di masa lalu"
+    },
+    "empty": {
+      "noRequests": "Tidak ada permintaan cuti",
+      "noBalance": "Data saldo tidak tersedia",
+      "contactAdmin": "Hubungi administrator untuk menginisialisasi saldo cuti"
     }
   }
 }

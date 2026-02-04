@@ -1,0 +1,788 @@
+openapi: 3.0.3
+info:
+  title: Leave Management API
+  description: |
+    Convex functions API for Leave & Time-Off Management module.
+    Note: This documents the Convex function interface, not REST endpoints.
+    Actual implementation uses Convex client SDK.
+  version: 1.0.0
+
+paths:
+  # Leave Requests
+  /leaveRequests.list:
+    get:
+      summary: List leave requests
+      description: Returns leave requests filtered by business, user, status
+      tags: [Leave Requests]
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: query
+          schema:
+            type: string
+          description: Filter by employee (optional for managers/admins)
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, submitted, approved, rejected, cancelled]
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: List of leave requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaveRequest'
+
+  /leaveRequests.getById:
+    get:
+      summary: Get leave request by ID
+      tags: [Leave Requests]
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Leave request details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+
+  /leaveRequests.create:
+    post:
+      summary: Create a new leave request
+      tags: [Leave Requests]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLeaveRequestInput'
+      responses:
+        '200':
+          description: Created leave request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+
+  /leaveRequests.update:
+    post:
+      summary: Update a leave request (draft only)
+      tags: [Leave Requests]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLeaveRequestInput'
+      responses:
+        '200':
+          description: Updated leave request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+
+  /leaveRequests.submit:
+    post:
+      summary: Submit a leave request for approval
+      tags: [Leave Requests]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        '200':
+          description: Submitted leave request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+
+  /leaveRequests.approve:
+    post:
+      summary: Approve a leave request
+      tags: [Leave Requests]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Approved leave request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+
+  /leaveRequests.reject:
+    post:
+      summary: Reject a leave request
+      tags: [Leave Requests]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, reason]
+              properties:
+                id:
+                  type: string
+                reason:
+                  type: string
+                  minLength: 1
+      responses:
+        '200':
+          description: Rejected leave request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+
+  /leaveRequests.cancel:
+    post:
+      summary: Cancel a leave request
+      tags: [Leave Requests]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Cancelled leave request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+
+  /leaveRequests.getPendingForManager:
+    get:
+      summary: Get pending requests for a manager
+      tags: [Leave Requests]
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: managerId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of pending requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaveRequest'
+
+  # Leave Balances
+  /leaveBalances.getByUser:
+    get:
+      summary: Get balances for a user
+      tags: [Leave Balances]
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User's leave balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaveBalance'
+
+  /leaveBalances.getTeamBalances:
+    get:
+      summary: Get balances for manager's team
+      tags: [Leave Balances]
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: managerId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Team leave balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaveBalance'
+
+  /leaveBalances.adjust:
+    post:
+      summary: Manually adjust a balance (admin only)
+      tags: [Leave Balances]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustBalanceInput'
+      responses:
+        '200':
+          description: Updated balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveBalance'
+
+  # Leave Types
+  /leaveTypes.list:
+    get:
+      summary: List leave types for a business
+      tags: [Leave Types]
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: activeOnly
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: List of leave types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaveType'
+
+  /leaveTypes.create:
+    post:
+      summary: Create a custom leave type
+      tags: [Leave Types]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLeaveTypeInput'
+      responses:
+        '200':
+          description: Created leave type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveType'
+
+  /leaveTypes.update:
+    post:
+      summary: Update a leave type
+      tags: [Leave Types]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLeaveTypeInput'
+      responses:
+        '200':
+          description: Updated leave type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveType'
+
+  # Public Holidays
+  /publicHolidays.getByCountry:
+    get:
+      summary: Get holidays for a country
+      tags: [Public Holidays]
+      parameters:
+        - name: countryCode
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [MY, SG, ID, PH, TH, VN]
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of public holidays
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicHoliday'
+
+  /publicHolidays.getForBusiness:
+    get:
+      summary: Get holidays for a business (system + custom)
+      tags: [Public Holidays]
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: countryCode
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of public holidays
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicHoliday'
+
+  /publicHolidays.addCustom:
+    post:
+      summary: Add a custom company holiday
+      tags: [Public Holidays]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCustomHolidayInput'
+      responses:
+        '200':
+          description: Created holiday
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicHoliday'
+
+  # Team Calendar
+  /teamCalendar.getEvents:
+    get:
+      summary: Get calendar events for team
+      tags: [Team Calendar]
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: managerId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Calendar events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarResponse'
+
+components:
+  schemas:
+    LeaveRequest:
+      type: object
+      required:
+        - _id
+        - businessId
+        - userId
+        - leaveTypeId
+        - startDate
+        - endDate
+        - totalDays
+        - status
+      properties:
+        _id:
+          type: string
+        businessId:
+          type: string
+        userId:
+          type: string
+        leaveTypeId:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        totalDays:
+          type: number
+        status:
+          type: string
+          enum: [draft, submitted, approved, rejected, cancelled]
+        notes:
+          type: string
+        approverId:
+          type: string
+        approverNotes:
+          type: string
+        approvedAt:
+          type: number
+        cancelledAt:
+          type: number
+        cancelReason:
+          type: string
+
+    CreateLeaveRequestInput:
+      type: object
+      required:
+        - businessId
+        - leaveTypeId
+        - startDate
+        - endDate
+      properties:
+        businessId:
+          type: string
+        leaveTypeId:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        notes:
+          type: string
+
+    UpdateLeaveRequestInput:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+        leaveTypeId:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        notes:
+          type: string
+
+    LeaveBalance:
+      type: object
+      required:
+        - _id
+        - businessId
+        - userId
+        - leaveTypeId
+        - year
+        - entitled
+        - used
+        - adjustments
+      properties:
+        _id:
+          type: string
+        businessId:
+          type: string
+        userId:
+          type: string
+        leaveTypeId:
+          type: string
+        year:
+          type: integer
+        entitled:
+          type: number
+        used:
+          type: number
+        adjustments:
+          type: number
+        carryover:
+          type: number
+        remaining:
+          type: number
+          description: Computed field
+
+    AdjustBalanceInput:
+      type: object
+      required:
+        - balanceId
+        - adjustment
+        - reason
+      properties:
+        balanceId:
+          type: string
+        adjustment:
+          type: number
+        reason:
+          type: string
+
+    LeaveType:
+      type: object
+      required:
+        - _id
+        - businessId
+        - name
+        - code
+        - defaultDays
+        - requiresApproval
+        - deductsBalance
+        - isActive
+        - sortOrder
+      properties:
+        _id:
+          type: string
+        businessId:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        defaultDays:
+          type: number
+        requiresApproval:
+          type: boolean
+        deductsBalance:
+          type: boolean
+        countryCode:
+          type: string
+        color:
+          type: string
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+
+    CreateLeaveTypeInput:
+      type: object
+      required:
+        - businessId
+        - name
+        - code
+        - defaultDays
+      properties:
+        businessId:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        defaultDays:
+          type: number
+        requiresApproval:
+          type: boolean
+          default: true
+        deductsBalance:
+          type: boolean
+          default: true
+        countryCode:
+          type: string
+        color:
+          type: string
+
+    UpdateLeaveTypeInput:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        defaultDays:
+          type: number
+        requiresApproval:
+          type: boolean
+        deductsBalance:
+          type: boolean
+        color:
+          type: string
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+
+    PublicHoliday:
+      type: object
+      required:
+        - _id
+        - countryCode
+        - date
+        - name
+        - year
+        - isCustom
+      properties:
+        _id:
+          type: string
+        businessId:
+          type: string
+        countryCode:
+          type: string
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+        year:
+          type: integer
+        isCustom:
+          type: boolean
+
+    AddCustomHolidayInput:
+      type: object
+      required:
+        - businessId
+        - date
+        - name
+      properties:
+        businessId:
+          type: string
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+
+    CalendarResponse:
+      type: object
+      required:
+        - leaveEvents
+        - holidays
+      properties:
+        leaveEvents:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarLeaveEvent'
+        holidays:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicHoliday'
+        conflicts:
+          type: array
+          items:
+            type: string
+            format: date
+          description: Dates with multiple absences
+
+    CalendarLeaveEvent:
+      type: object
+      required:
+        - requestId
+        - userId
+        - userName
+        - leaveType
+        - startDate
+        - endDate
+        - status
+      properties:
+        requestId:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        leaveType:
+          type: string
+        leaveTypeColor:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        status:
+          type: string

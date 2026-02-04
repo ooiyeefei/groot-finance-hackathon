@@ -46,7 +46,9 @@
     "admin": "ผู้ดูแลระบบ",
     "businessSettings": "Business Settings",
     "billing": "การเรียกเก็บเงิน",
-    "managerApprovals": "การอนุมัติผู้จัดการ"
+    "managerApprovals": "การอนุมัติผู้จัดการ",
+    "leave": "ลางาน",
+    "teamCalendar": "ปฏิทินทีม"
   },
   "dashboard": {
     "title": "แดชบอร์ด",
@@ -1008,6 +1010,94 @@
       "failedToFetchTeamMembers": "ดึงข้อมูลสมาชิกทีมล้มเหลว",
       "networkErrorTeamMembers": "ข้อผิดพลาดเครือข่ายขณะดึงข้อมูลสมาชิกทีม",
       "failedToFetchInvitations": "ดึงข้อมูลคำเชิญที่รอดำเนินการล้มเหลว"
+    }
+  },
+  "leaveManagement": {
+    "title": "การจัดการลางาน",
+    "subtitle": "จัดการคำขอลางานและยอดคงเหลือ",
+    "leaveBalance": "ยอดวันลา",
+    "leaveRequest": "คำขอลา",
+    "myLeaveRequests": "คำขอลาของฉัน",
+    "applyForLeave": "ขอลางาน",
+    "submitRequest": "ส่งคำขอ",
+    "cancelRequest": "ยกเลิกคำขอ",
+    "status": {
+      "draft": "แบบร่าง",
+      "submitted": "รอการอนุมัติ",
+      "approved": "อนุมัติ",
+      "rejected": "ปฏิเสธ",
+      "cancelled": "ยกเลิก"
+    },
+    "fields": {
+      "leaveType": "ประเภทการลา",
+      "startDate": "วันเริ่มต้น",
+      "endDate": "วันสิ้นสุด",
+      "totalDays": "จำนวนวัน",
+      "notes": "หมายเหตุ",
+      "reason": "เหตุผล",
+      "approverNotes": "หมายเหตุผู้อนุมัติ"
+    },
+    "balance": {
+      "entitled": "สิทธิ์",
+      "used": "ใช้แล้ว",
+      "remaining": "คงเหลือ",
+      "adjustments": "ปรับปรุง",
+      "carryover": "ยกมา"
+    },
+    "types": {
+      "annual": "ลาพักร้อน",
+      "sick": "ลาป่วย",
+      "personal": "ลากิจ",
+      "unpaid": "ลาไม่รับเงิน",
+      "maternity": "ลาคลอด",
+      "paternity": "ลาเลี้ยงดูบุตร"
+    },
+    "approval": {
+      "pendingApproval": "รอการอนุมัติ",
+      "approveRequest": "อนุมัติคำขอ",
+      "rejectRequest": "ปฏิเสธคำขอ",
+      "approvalNotes": "หมายเหตุการอนุมัติ",
+      "rejectionReason": "เหตุผลการปฏิเสธ",
+      "approved": "คำขอลาได้รับการอนุมัติ",
+      "rejected": "คำขอลาถูกปฏิเสธ"
+    },
+    "calendar": {
+      "title": "ปฏิทินทีม",
+      "subtitle": "ดูการลาของทีมและวันหยุดราชการ",
+      "upcoming": "ที่จะมาถึง",
+      "nextDays": "{days} วันถัดไป",
+      "noUpcoming": "ไม่มีการลาที่จะมาถึง",
+      "legend": "คำอธิบาย",
+      "publicHoliday": "วันหยุดราชการ"
+    },
+    "settings": {
+      "title": "การตั้งค่าการจัดการลางาน",
+      "subtitle": "กำหนดค่าประเภทการลา วันหยุด และสิทธิ์",
+      "leaveTypes": "ประเภทการลา",
+      "publicHolidays": "วันหยุดราชการ",
+      "addLeaveType": "เพิ่มประเภทการลา",
+      "editLeaveType": "แก้ไขประเภทการลา",
+      "addHoliday": "เพิ่มวันหยุด",
+      "defaultDays": "วันเริ่มต้นต่อปี",
+      "deductsBalance": "หักยอดคงเหลือ",
+      "requiresApproval": "ต้องได้รับอนุมัติ",
+      "active": "ใช้งาน",
+      "inactive": "ไม่ใช้งาน",
+      "recurring": "เกิดซ้ำทุกปี"
+    },
+    "messages": {
+      "requestCreated": "สร้างคำขอลาแล้ว",
+      "requestSubmitted": "ส่งคำขอลาเพื่อขออนุมัติแล้ว",
+      "requestCancelled": "ยกเลิกคำขอลาแล้ว",
+      "insufficientBalance": "ยอดวันลาไม่เพียงพอ",
+      "invalidDateRange": "ช่วงวันที่ไม่ถูกต้อง",
+      "noBusinessDays": "วันที่เลือกมีผลลัพธ์เป็น 0 วันทำการ",
+      "startDatePast": "วันเริ่มต้นไม่สามารถเป็นอดีตได้"
+    },
+    "empty": {
+      "noRequests": "ไม่มีคำขอลา",
+      "noBalance": "ไม่มีข้อมูลยอดคงเหลือ",
+      "contactAdmin": "ติดต่อผู้ดูแลระบบเพื่อเริ่มต้นยอดวันลา"
     }
   }
 }

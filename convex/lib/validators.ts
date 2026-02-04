@@ -22,6 +22,7 @@ import {
   FEEDBACK_TYPE_VALUES,
   FEEDBACK_STATUS_VALUES,
   VENDOR_STATUS_VALUES,
+  LEAVE_REQUEST_STATUS_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -117,3 +118,10 @@ export const feedbackStatusValidator = literalUnion(FEEDBACK_STATUS_VALUES);
  * Lifecycle: prospective (from OCR) → active (has transactions) → inactive (user deactivated)
  */
 export const vendorStatusValidator = literalUnion(VENDOR_STATUS_VALUES);
+
+/**
+ * Leave request status validator
+ * Workflow: draft → submitted → approved/rejected
+ * Can be cancelled from submitted or approved (future dates only)
+ */
+export const leaveRequestStatusValidator = literalUnion(LEAVE_REQUEST_STATUS_VALUES);

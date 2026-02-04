@@ -26,6 +26,7 @@ const GoogleSheetsExport = lazy(() => import('./google-sheets-export'))
 const DocumentPreviewWithAnnotations = lazy(() => import('@/domains/invoices/components/document-preview-with-annotations'))
 const UnifiedExpenseDetailsModal = lazy(() => import('./unified-expense-details-modal'))
 const MobileApprovalList = lazy(() => import('./mobile-approval-list'))
+const LeaveApprovalsContent = lazy(() => import('@/domains/leave-management/components/leave-approvals-content'))
 
 interface EnhancedApprovalDashboardProps {
   userId: string
@@ -143,16 +144,19 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 
       {/* Management Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto p-1 gap-1 bg-muted border border-border relative z-10">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto p-1 gap-1 bg-muted border border-border relative z-10">
           <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Overview
           </TabsTrigger>
           <TabsTrigger value="approvals" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            Approvals
+            Expenses
+          </TabsTrigger>
+          <TabsTrigger value="leave-requests" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            Leave
           </TabsTrigger>
           {dashboardData?.role?.finance_admin && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Reimbursements
+              Reimburse
             </TabsTrigger>
           )}
           <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
@@ -166,6 +170,16 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 
         <TabsContent value="approvals" className="space-y-4">
           <ApprovalTabContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
+        </TabsContent>
+
+        <TabsContent value="leave-requests" className="space-y-4">
+          <Suspense fallback={
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          }>
+            <LeaveApprovalsContent onRefreshNeeded={fetchDashboardData} />
+          </Suspense>
         </TabsContent>
 
         {dashboardData?.role?.finance_admin && (

@@ -14,6 +14,7 @@ import {
   feedbackTypeValidator,
   feedbackStatusValidator,
   vendorStatusValidator,
+  leaveRequestStatusValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -116,6 +117,11 @@ export default defineSchema({
     // Role & Status (validators from src/lib/constants/statuses.ts)
     role: membershipRoleValidator,
     status: membershipStatusValidator,
+
+    // Leave Management - Custom entitlements per employee
+    // Maps leaveTypeId -> entitled days (overrides leave_type.defaultDays)
+    // Example: { "k57abc123": 18, "k57def456": 5 }
+    leaveEntitlements: v.optional(v.any()),
 
     // Timestamps
     invitedAt: v.optional(v.number()),
@@ -929,4 +935,135 @@ export default defineSchema({
     requestCount: v.number(),
   })
     .index("by_apiKeyId", ["apiKeyId"]),
+
+  // ============================================
+  // LEAVE MANAGEMENT DOMAIN
+  // ============================================
+
+  // Leave requests - formal requests by employees to take time off
+  leave_requests: defineTable({
+    // Multi-tenant scope
+    businessId: v.id("businesses"),
+    // Employee requesting leave
+    userId: v.id("users"),
+    // Type of leave (references leave_types)
+    leaveTypeId: v.id("leave_types"),
+
+    // Date range (ISO date strings YYYY-MM-DD)
+    startDate: v.string(),
+    endDate: v.string(),
+    // Business days calculated (excludes weekends and holidays)
+    totalDays: v.number(),
+
+    // Workflow status
+    status: leaveRequestStatusValidator,
+
+    // Employee notes/reason
+    notes: v.optional(v.string()),
+
+    // Approval workflow
+    approverId: v.optional(v.id("users")),       // Manager who should approve (auto-set from managerId)
+    approverNotes: v.optional(v.string()),       // Approval/rejection notes
+    approvedAt: v.optional(v.number()),          // Timestamp of approval decision
+
+    // Cancellation
+    cancelledAt: v.optional(v.number()),
+    cancelReason: v.optional(v.string()),
+
+    // Timestamps
+    submittedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_userId", ["userId"])
+    .index("by_status", ["status"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_businessId_userId", ["businessId", "userId"])
+    .index("by_approverId_status", ["approverId", "status"]),
+
+  // Leave balances - tracks entitlement and usage per employee per leave type per year
+  leave_balances: defineTable({
+    // Multi-tenant scope
+    businessId: v.id("businesses"),
+    // Employee
+    userId: v.id("users"),
+    // Leave type
+    leaveTypeId: v.id("leave_types"),
+    // Calendar year
+    year: v.number(),
+
+    // Entitlement
+    entitled: v.number(),        // Total days entitled for the year
+    used: v.number(),            // Days used (approved requests)
+    adjustments: v.number(),     // Manual adjustments (+/-)
+    carryover: v.optional(v.number()),  // Days carried from previous year
+
+    // Timestamps
+    lastUpdated: v.number(),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_userId", ["userId"])
+    .index("by_userId_year", ["userId", "year"])
+    .index("by_businessId_userId_leaveTypeId_year", ["businessId", "userId", "leaveTypeId", "year"]),
+
+  // Leave types - configurable leave categories per organization
+  leave_types: defineTable({
+    // Multi-tenant scope
+    businessId: v.id("businesses"),
+
+    // Display
+    name: v.string(),                    // e.g., "Annual Leave"
+    code: v.string(),                    // e.g., "ANNUAL" - unique per business
+    description: v.optional(v.string()), // Help text for employees
+    color: v.optional(v.string()),       // Calendar display color (hex)
+
+    // Configuration
+    defaultDays: v.number(),             // Default entitlement
+    requiresApproval: v.boolean(),       // Auto-approve if false
+    deductsBalance: v.boolean(),         // Affects balance if true
+
+    // Regional
+    countryCode: v.optional(v.string()), // Country-specific (ISO 3166-1)
+
+    // Accrual rules (for US9)
+    carryoverCap: v.optional(v.number()),           // Max days to carry over
+    carryoverPolicy: v.optional(v.union(
+      v.literal("none"),       // No carryover
+      v.literal("cap"),        // Up to carryoverCap
+      v.literal("unlimited")   // Full carryover
+    )),
+    prorationEnabled: v.optional(v.boolean()),      // Prorate for partial year
+
+    // Status
+    isActive: v.boolean(),
+    sortOrder: v.number(),
+
+    // Timestamps
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_code", ["businessId", "code"])
+    .index("by_businessId_isActive", ["businessId", "isActive"]),
+
+  // Public holidays - non-working days by country
+  public_holidays: defineTable({
+    // Null businessId = system default (country-wide)
+    businessId: v.optional(v.id("businesses")),
+    // ISO 3166-1 alpha-2 country code
+    countryCode: v.string(),
+    // ISO date string YYYY-MM-DD
+    date: v.string(),
+    // Holiday name
+    name: v.string(),
+    // Calendar year (for efficient queries)
+    year: v.number(),
+    // Company-specific if true (businessId must be set)
+    isCustom: v.boolean(),
+
+    // Timestamps
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_countryCode_year", ["countryCode", "year"])
+    .index("by_businessId", ["businessId"])
+    .index("by_date", ["date"]),
 });

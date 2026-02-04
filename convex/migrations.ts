@@ -560,3 +560,213 @@ export const removeCategoryCode = mutation({
     };
   },
 });
+
+// ============================================
+// LEAVE MANAGEMENT SEED DATA
+// ============================================
+
+/**
+ * Seed default leave types for a business
+ *
+ * Run via Convex Dashboard → Functions → migrations:seedLeaveTypes
+ * or programmatically when a new business is created
+ */
+export const seedLeaveTypes = mutation({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    // Check if leave types already exist for this business
+    const existingTypes = await ctx.db
+      .query("leave_types")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    if (existingTypes.length > 0) {
+      return {
+        success: false,
+        message: `Leave types already exist for this business (${existingTypes.length} types found)`,
+        leaveTypeIds: existingTypes.map(t => t._id),
+      };
+    }
+
+    // Default leave types for SEA businesses
+    const defaultTypes = [
+      {
+        name: "Annual Leave",
+        code: "ANNUAL",
+        description: "Paid annual leave for rest and vacation",
+        defaultDays: 14,
+        requiresApproval: true,
+        deductsBalance: true,
+        color: "#3B82F6",
+        isActive: true,
+        sortOrder: 1,
+      },
+      {
+        name: "Sick Leave",
+        code: "SICK",
+        description: "Leave for illness or medical appointments",
+        defaultDays: 14,
+        requiresApproval: true,
+        deductsBalance: true,
+        color: "#EF4444",
+        isActive: true,
+        sortOrder: 2,
+      },
+      {
+        name: "Medical Leave",
+        code: "MEDICAL",
+        description: "Extended leave for hospitalization or serious illness",
+        defaultDays: 60,
+        requiresApproval: true,
+        deductsBalance: true,
+        color: "#F97316",
+        isActive: true,
+        sortOrder: 3,
+      },
+      {
+        name: "Unpaid Leave",
+        code: "UNPAID",
+        description: "Leave without pay for personal matters",
+        defaultDays: 0,
+        requiresApproval: true,
+        deductsBalance: false,
+        color: "#6B7280",
+        isActive: true,
+        sortOrder: 4,
+      },
+    ];
+
+    const leaveTypeIds: string[] = [];
+
+    for (const leaveType of defaultTypes) {
+      const id = await ctx.db.insert("leave_types", {
+        businessId: args.businessId,
+        ...leaveType,
+        updatedAt: Date.now(),
+      });
+      leaveTypeIds.push(id);
+    }
+
+    return {
+      success: true,
+      message: `Seeded ${leaveTypeIds.length} default leave types`,
+      leaveTypeIds,
+    };
+  },
+});
+
+/**
+ * Seed public holidays for a country and year
+ *
+ * Run via Convex Dashboard → Functions → migrations:seedPublicHolidays
+ */
+export const seedPublicHolidays = mutation({
+  args: {
+    countryCode: v.string(),
+    year: v.number(),
+    holidays: v.array(v.object({
+      date: v.string(),
+      name: v.string(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    // Check if holidays already exist for this country/year
+    const existingHolidays = await ctx.db
+      .query("public_holidays")
+      .withIndex("by_countryCode_year", (q) =>
+        q.eq("countryCode", args.countryCode).eq("year", args.year)
+      )
+      .collect();
+
+    // Filter to only system holidays (not custom)
+    const existingSystemHolidays = existingHolidays.filter(h => !h.isCustom);
+
+    if (existingSystemHolidays.length > 0) {
+      return {
+        success: false,
+        message: `System holidays already exist for ${args.countryCode} ${args.year} (${existingSystemHolidays.length} found)`,
+        holidayIds: existingSystemHolidays.map(h => h._id),
+      };
+    }
+
+    const holidayIds: string[] = [];
+
+    for (const holiday of args.holidays) {
+      const id = await ctx.db.insert("public_holidays", {
+        countryCode: args.countryCode,
+        date: holiday.date,
+        name: holiday.name,
+        year: args.year,
+        isCustom: false,
+        updatedAt: Date.now(),
+      });
+      holidayIds.push(id);
+    }
+
+    return {
+      success: true,
+      message: `Seeded ${holidayIds.length} public holidays for ${args.countryCode} ${args.year}`,
+      holidayIds,
+    };
+  },
+});
+
+/**
+ * Initialize leave balances for a user
+ *
+ * Creates balance records for all active leave types for the current year
+ */
+export const initializeLeaveBalances = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    userId: v.id("users"),
+    year: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Get all active leave types for the business
+    const leaveTypes = await ctx.db
+      .query("leave_types")
+      .withIndex("by_businessId_isActive", (q) =>
+        q.eq("businessId", args.businessId).eq("isActive", true)
+      )
+      .collect();
+
+    const balanceIds: string[] = [];
+
+    for (const leaveType of leaveTypes) {
+      // Check if balance already exists
+      const existingBalance = await ctx.db
+        .query("leave_balances")
+        .withIndex("by_businessId_userId_leaveTypeId_year", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("userId", args.userId)
+            .eq("leaveTypeId", leaveType._id)
+            .eq("year", args.year)
+        )
+        .first();
+
+      if (!existingBalance) {
+        const id = await ctx.db.insert("leave_balances", {
+          businessId: args.businessId,
+          userId: args.userId,
+          leaveTypeId: leaveType._id,
+          year: args.year,
+          entitled: leaveType.defaultDays,
+          used: 0,
+          adjustments: 0,
+          lastUpdated: Date.now(),
+        });
+        balanceIds.push(id);
+      }
+    }
+
+    return {
+      success: true,
+      message: `Initialized ${balanceIds.length} leave balances for user`,
+      balanceIds,
+    };
+  },
+});

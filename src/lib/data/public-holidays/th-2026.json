@@ -1,0 +1,25 @@
+{
+  "countryCode": "TH",
+  "year": 2026,
+  "holidays": [
+    { "date": "2026-01-01", "name": "New Year's Day" },
+    { "date": "2026-02-17", "name": "Makha Bucha Day" },
+    { "date": "2026-04-06", "name": "Chakri Memorial Day" },
+    { "date": "2026-04-13", "name": "Songkran Festival" },
+    { "date": "2026-04-14", "name": "Songkran Festival" },
+    { "date": "2026-04-15", "name": "Songkran Festival" },
+    { "date": "2026-05-01", "name": "National Labour Day" },
+    { "date": "2026-05-04", "name": "Coronation Day" },
+    { "date": "2026-05-12", "name": "Visakha Bucha Day" },
+    { "date": "2026-06-03", "name": "Queen Suthida's Birthday" },
+    { "date": "2026-07-10", "name": "Asanha Bucha Day" },
+    { "date": "2026-07-11", "name": "Buddhist Lent Day" },
+    { "date": "2026-07-28", "name": "King's Birthday" },
+    { "date": "2026-08-12", "name": "Queen Mother's Birthday" },
+    { "date": "2026-10-13", "name": "King Bhumibol Memorial Day" },
+    { "date": "2026-10-23", "name": "Chulalongkorn Day" },
+    { "date": "2026-12-05", "name": "Father's Day" },
+    { "date": "2026-12-10", "name": "Constitution Day" },
+    { "date": "2026-12-31", "name": "New Year's Eve" }
+  ]
+}

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, Building2, FileCheck, Sparkles } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, Building2, FileCheck, Sparkles, Calendar, CalendarDays } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/domains/account-management/components/enhanced-business-display'
@@ -76,6 +76,10 @@ export default function Sidebar() {
     // Accounting only visible for admins (finance admin feature)
     ...(isAdmin ? [{ name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard }] : []),
     { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
+    // Leave management available to all users
+    { name: t('leave') || 'Leave', href: localizedHref('/leave'), icon: Calendar },
+    // Team calendar available to all users
+    { name: t('teamCalendar') || 'Team Calendar', href: localizedHref('/team-calendar'), icon: CalendarDays },
   ]
 
   // Manager/Finance Admin navigation items (approvals between expense claims and AI assistant)

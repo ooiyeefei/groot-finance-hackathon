@@ -196,3 +196,18 @@ export const VENDOR_STATUSES = {
 
 export type VendorStatus = typeof VENDOR_STATUSES[keyof typeof VENDOR_STATUSES];
 export const VENDOR_STATUS_VALUES = Object.values(VENDOR_STATUSES);
+
+// ============================================
+// LEAVE REQUEST STATUSES
+// ============================================
+
+export const LEAVE_REQUEST_STATUSES = {
+  DRAFT: "draft",           // Employee editing, not submitted
+  SUBMITTED: "submitted",   // Pending manager approval
+  APPROVED: "approved",     // Manager approved, balance deducted
+  REJECTED: "rejected",     // Manager rejected
+  CANCELLED: "cancelled",   // Employee cancelled
+} as const;
+
+export type LeaveRequestStatus = typeof LEAVE_REQUEST_STATUSES[keyof typeof LEAVE_REQUEST_STATUSES];
+export const LEAVE_REQUEST_STATUS_VALUES = Object.values(LEAVE_REQUEST_STATUSES);

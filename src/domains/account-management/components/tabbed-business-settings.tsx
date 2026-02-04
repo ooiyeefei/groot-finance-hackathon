@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, memo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Key, Loader2 } from 'lucide-react'
+import { Building2, DollarSign, Users, Key, Loader2, Calendar } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { useUser } from '@clerk/nextjs'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -12,6 +12,7 @@ const BusinessProfileSettings = lazy(() => import('@/domains/account-management/
 const CategoriesManagementClient = lazy(() => import('@/domains/expense-claims/components/categories-management-client'))
 const TeamsManagementClient = lazy(() => import('@/domains/account-management/components/teams-management-client'))
 const ApiKeysManagementClient = lazy(() => import('@/domains/api-keys/components/api-keys-management-client'))
+const LeaveManagementSettings = lazy(() => import('@/domains/leave-management/components/leave-management-settings'))
 
 // Wrapper components for existing components that need userId
 const CategoryManagementTab = ({ userId }: { userId?: string }) => (
@@ -30,7 +31,7 @@ const TabbedBusinessSettings = memo(() => {
   const pathname = usePathname()
 
   // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'team-management', 'api-keys'] as const
+  const validTabs = ['business-profile', 'category-management', 'leave-management', 'team-management', 'api-keys'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
   const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'business-profile'
@@ -59,7 +60,7 @@ const TabbedBusinessSettings = memo(() => {
     <div className="w-full space-y-4">
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         {/* Tab Navigation - Semantic Design System */}
-        <TabsList className={`grid w-full ${isOwner ? 'grid-cols-4' : 'grid-cols-2'} bg-muted border border-border`}>
+        <TabsList className={`grid w-full ${isOwner ? 'grid-cols-5' : 'grid-cols-3'} bg-muted border border-border`}>
           <TabsTrigger
             value="business-profile"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -75,6 +76,14 @@ const TabbedBusinessSettings = memo(() => {
             <DollarSign className="w-4 h-4 mr-2" />
             <span className="hidden sm:inline">Categories</span>
             <span className="sm:hidden">Cat</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="leave-management"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Leave</span>
+            <span className="sm:hidden">Leave</span>
           </TabsTrigger>
           {isOwner && (
             <TabsTrigger
@@ -121,6 +130,20 @@ const TabbedBusinessSettings = memo(() => {
               </div>
             }>
               <CategoryManagementTab userId={user?.id} />
+            </Suspense>
+          </div>
+        </TabsContent>
+
+        {/* Leave Management Tab Content */}
+        <TabsContent value="leave-management" className="space-y-4">
+          <div className="bg-card rounded-lg border border-border p-6">
+            <Suspense fallback={
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading leave settings...</span>
+              </div>
+            }>
+              <LeaveManagementSettings />
             </Suspense>
           </div>
         </TabsContent>

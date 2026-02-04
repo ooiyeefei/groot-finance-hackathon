@@ -29,6 +29,7 @@ export function ProactiveActionCenter({ businessId, defaultExpanded = true }: Pr
   const [activeTab, setActiveTab] = useState<'all' | 'critical' | 'reviewed'>('all');
   const [showAll, setShowAll] = useState(false);
 
+  // Fetch ALL insights without filters - we'll filter client-side for consistency
   const {
     insights,
     isLoading,
@@ -38,9 +39,7 @@ export function ProactiveActionCenter({ businessId, defaultExpanded = true }: Pr
     markAllReviewed,
   } = useInsights({
     businessId,
-    status: activeTab === 'reviewed' ? 'reviewed' : undefined,
-    priority: activeTab === 'critical' ? 'critical' : undefined,
-    limit: 50,
+    limit: 100, // Fetch more since we're filtering client-side
   });
 
   const handleDismiss = async (insightId: string) => {
@@ -57,8 +56,14 @@ export function ProactiveActionCenter({ businessId, defaultExpanded = true }: Pr
 
   // Filter insights based on active tab
   const filteredInsights = insights.filter(insight => {
-    if (activeTab === 'critical') return insight.priority === 'critical' || insight.priority === 'high';
+    if (activeTab === 'critical') {
+      // Show critical/high priority items that are still actionable (not dismissed/actioned)
+      const isCriticalOrHigh = insight.priority === 'critical' || insight.priority === 'high';
+      const isActionable = insight.status === 'new' || insight.status === 'reviewed';
+      return isCriticalOrHigh && isActionable;
+    }
     if (activeTab === 'reviewed') return insight.status === 'reviewed';
+    // 'all' tab shows new items
     return insight.status === 'new';
   });
 
@@ -67,8 +72,12 @@ export function ProactiveActionCenter({ businessId, defaultExpanded = true }: Pr
   const hasMoreInsights = filteredInsights.length > CARDS_PER_ROW;
   const hiddenCount = filteredInsights.length - CARDS_PER_ROW;
 
+  // Calculate counts from the full insights array (client-side) for consistency with display
   const newCount = insights.filter(i => i.status === 'new').length;
-  const criticalCount = insights.filter(i => i.priority === 'critical' || i.priority === 'high').length;
+  const criticalCount = insights.filter(i =>
+    (i.priority === 'critical' || i.priority === 'high') &&
+    (i.status === 'new' || i.status === 'reviewed')
+  ).length;
   const reviewedCount = insights.filter(i => i.status === 'reviewed').length;
 
   return (

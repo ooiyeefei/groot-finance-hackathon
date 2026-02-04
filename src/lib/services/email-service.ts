@@ -39,6 +39,19 @@ interface FeedbackNotificationData {
   isAnonymous: boolean
 }
 
+interface LeaveNotificationData {
+  recipientEmail: string
+  recipientName: string
+  notificationType: 'approved' | 'rejected' | 'submitted' | 'cancelled'
+  leaveType: string
+  startDate: string
+  endDate: string
+  totalDays: number
+  approverName?: string
+  reason?: string // For rejection reason or approval notes
+  businessName: string
+}
+
 interface EmailServiceConfig {
   fromEmail: string
   appUrl: string
@@ -669,6 +682,315 @@ View in Dashboard: ${this.config!.appUrl}/en/admin/feedback
 
 ---
 FinanSEAL Feedback System
+    `
+  }
+
+  /**
+   * Send leave request notification email (with Resend fallback)
+   */
+  async sendLeaveNotification(data: LeaveNotificationData): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {
+    this.initialize()
+
+    const { recipientEmail, notificationType } = data
+
+    const subjectMap = {
+      approved: 'Your Leave Request Has Been Approved',
+      rejected: 'Your Leave Request Has Been Rejected',
+      submitted: 'New Leave Request Pending Your Approval',
+      cancelled: 'Leave Request Cancelled',
+    }
+
+    const htmlBody = this.generateLeaveNotificationHTML(data)
+    const textBody = this.generateLeaveNotificationText(data)
+    const subject = subjectMap[notificationType]
+
+    // Try SES first
+    try {
+      const rawMessage = this.buildRawEmail({
+        from: this.config!.fromEmail,
+        to: recipientEmail,
+        subject,
+        htmlBody,
+        textBody
+      })
+
+      const command = new SendRawEmailCommand({
+        RawMessage: {
+          Data: Buffer.from(rawMessage)
+        },
+        ConfigurationSetName: this.config!.configurationSet
+      })
+
+      const response = await this.ses!.send(command)
+
+      if (response.MessageId) {
+        console.log(`[EmailService] Leave notification sent via SES to ${recipientEmail}, MessageId: ${response.MessageId}`)
+        return { success: true, messageId: response.MessageId, provider: 'ses' }
+      }
+    } catch (sesError) {
+      console.error('[EmailService] SES failed for leave notification:', sesError)
+
+      // If SES failed due to sandbox limitations, try Resend
+      if (this.isSandboxError(sesError) && this.resend) {
+        console.log('[EmailService] SES sandbox error, falling back to Resend for leave notification...')
+
+        const resendResult = await this.sendViaResend({
+          to: recipientEmail,
+          subject,
+          htmlBody,
+          textBody
+        })
+
+        if (resendResult.success) {
+          return { ...resendResult, provider: 'resend' }
+        }
+
+        return {
+          success: false,
+          error: `SES sandbox error, Resend fallback also failed: ${resendResult.error}`
+        }
+      }
+
+      return {
+        success: false,
+        error: sesError instanceof Error ? sesError.message : 'Unknown email error'
+      }
+    }
+
+    return { success: false, error: 'SES did not return a MessageId' }
+  }
+
+  /**
+   * Generate HTML email template for leave notification
+   */
+  private generateLeaveNotificationHTML(data: LeaveNotificationData): string {
+    const { recipientName, notificationType, leaveType, startDate, endDate, totalDays, approverName, reason, businessName } = data
+
+    const statusColors = {
+      approved: '#059669',
+      rejected: '#ef4444',
+      submitted: '#f59e0b',
+      cancelled: '#6b7280',
+    }
+
+    const statusLabels = {
+      approved: 'Approved',
+      rejected: 'Rejected',
+      submitted: 'Pending Approval',
+      cancelled: 'Cancelled',
+    }
+
+    const getMainMessage = () => {
+      switch (notificationType) {
+        case 'approved':
+          return `Great news! Your ${leaveType} request has been approved${approverName ? ` by ${approverName}` : ''}.`
+        case 'rejected':
+          return `Unfortunately, your ${leaveType} request has been rejected${approverName ? ` by ${approverName}` : ''}.`
+        case 'submitted':
+          return `A new ${leaveType} request is waiting for your approval.`
+        case 'cancelled':
+          return `A ${leaveType} request has been cancelled.`
+        default:
+          return `Your ${leaveType} request status has been updated.`
+      }
+    }
+
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Leave Request ${statusLabels[notificationType]}</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .header {
+          background: ${statusColors[notificationType]};
+          color: white;
+          padding: 24px;
+          text-align: center;
+          border-radius: 8px 8px 0 0;
+        }
+        .content {
+          background: #ffffff;
+          padding: 24px;
+          border: 1px solid #e5e7eb;
+          border-top: none;
+        }
+        .status-badge {
+          display: inline-block;
+          background: ${statusColors[notificationType]}20;
+          color: ${statusColors[notificationType]};
+          padding: 4px 12px;
+          border-radius: 16px;
+          font-size: 14px;
+          font-weight: 600;
+          text-transform: uppercase;
+        }
+        .details-box {
+          background: #f9fafb;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          padding: 16px;
+          margin: 20px 0;
+        }
+        .details-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 8px 0;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        .details-row:last-child {
+          border-bottom: none;
+        }
+        .details-label {
+          color: #6b7280;
+          font-size: 14px;
+        }
+        .details-value {
+          font-weight: 500;
+        }
+        .reason-box {
+          background: ${notificationType === 'rejected' ? '#fef2f2' : '#f0fdf4'};
+          border: 1px solid ${notificationType === 'rejected' ? '#fecaca' : '#bbf7d0'};
+          border-radius: 8px;
+          padding: 16px;
+          margin: 20px 0;
+        }
+        .cta-button {
+          display: inline-block;
+          background: #3b82f6;
+          color: #ffffff !important;
+          padding: 12px 24px;
+          text-decoration: none;
+          border-radius: 6px;
+          font-weight: 600;
+          margin: 20px 0;
+        }
+        .footer {
+          background: #f9fafb;
+          padding: 16px;
+          text-align: center;
+          font-size: 14px;
+          color: #6b7280;
+          border-radius: 0 0 8px 8px;
+          border: 1px solid #e5e7eb;
+          border-top: none;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Leave Request ${statusLabels[notificationType]}</h1>
+      </div>
+
+      <div class="content">
+        <p>Hi ${recipientName},</p>
+
+        <p>${getMainMessage()}</p>
+
+        <div class="details-box">
+          <div class="details-row">
+            <span class="details-label">Leave Type</span>
+            <span class="details-value">${leaveType}</span>
+          </div>
+          <div class="details-row">
+            <span class="details-label">Duration</span>
+            <span class="details-value">${startDate} to ${endDate}</span>
+          </div>
+          <div class="details-row">
+            <span class="details-label">Total Days</span>
+            <span class="details-value">${totalDays} business day${totalDays !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="details-row">
+            <span class="details-label">Status</span>
+            <span class="status-badge">${statusLabels[notificationType]}</span>
+          </div>
+        </div>
+
+        ${reason ? `
+        <div class="reason-box">
+          <strong>${notificationType === 'rejected' ? 'Reason for rejection:' : 'Notes:'}</strong>
+          <p style="margin: 8px 0 0 0;">${reason}</p>
+        </div>
+        ` : ''}
+
+        <div style="text-align: center;">
+          <a href="${this.config!.appUrl}/en/leave" class="cta-button">View in FinanSEAL</a>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>This notification was sent from ${businessName} via FinanSEAL</p>
+        <p style="margin-top: 12px;">
+          <a href="${this.config!.appUrl}" style="color: #3b82f6;">FinanSEAL</a> -
+          Financial Co-Pilot for Southeast Asian SMEs
+        </p>
+      </div>
+    </body>
+    </html>
+    `
+  }
+
+  /**
+   * Generate plain text version of leave notification email
+   */
+  private generateLeaveNotificationText(data: LeaveNotificationData): string {
+    const { recipientName, notificationType, leaveType, startDate, endDate, totalDays, approverName, reason, businessName } = data
+
+    const statusLabels = {
+      approved: 'Approved',
+      rejected: 'Rejected',
+      submitted: 'Pending Approval',
+      cancelled: 'Cancelled',
+    }
+
+    const getMainMessage = () => {
+      switch (notificationType) {
+        case 'approved':
+          return `Great news! Your ${leaveType} request has been approved${approverName ? ` by ${approverName}` : ''}.`
+        case 'rejected':
+          return `Unfortunately, your ${leaveType} request has been rejected${approverName ? ` by ${approverName}` : ''}.`
+        case 'submitted':
+          return `A new ${leaveType} request is waiting for your approval.`
+        case 'cancelled':
+          return `A ${leaveType} request has been cancelled.`
+        default:
+          return `Your ${leaveType} request status has been updated.`
+      }
+    }
+
+    return `
+Leave Request ${statusLabels[notificationType]}
+
+Hi ${recipientName},
+
+${getMainMessage()}
+
+Leave Details:
+- Leave Type: ${leaveType}
+- Duration: ${startDate} to ${endDate}
+- Total Days: ${totalDays} business day${totalDays !== 1 ? 's' : ''}
+- Status: ${statusLabels[notificationType]}
+
+${reason ? `
+${notificationType === 'rejected' ? 'Reason for rejection:' : 'Notes:'}
+${reason}
+` : ''}
+
+View in FinanSEAL: ${this.config!.appUrl}/en/leave
+
+---
+This notification was sent from ${businessName} via FinanSEAL
+Financial Co-Pilot for Southeast Asian SMEs
+${this.config!.appUrl}
     `
   }
 

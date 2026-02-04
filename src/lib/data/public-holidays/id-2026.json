@@ -1,0 +1,22 @@
+{
+  "countryCode": "ID",
+  "year": 2026,
+  "holidays": [
+    { "date": "2026-01-01", "name": "Tahun Baru" },
+    { "date": "2026-02-17", "name": "Tahun Baru Imlek" },
+    { "date": "2026-03-14", "name": "Isra Mi'raj" },
+    { "date": "2026-03-20", "name": "Hari Raya Idul Fitri" },
+    { "date": "2026-03-21", "name": "Hari Raya Idul Fitri (Cuti Bersama)" },
+    { "date": "2026-03-22", "name": "Nyepi" },
+    { "date": "2026-04-03", "name": "Wafat Isa Al Masih" },
+    { "date": "2026-05-01", "name": "Hari Buruh" },
+    { "date": "2026-05-12", "name": "Hari Raya Waisak" },
+    { "date": "2026-05-14", "name": "Kenaikan Isa Al Masih" },
+    { "date": "2026-05-27", "name": "Hari Raya Idul Adha" },
+    { "date": "2026-06-01", "name": "Hari Lahir Pancasila" },
+    { "date": "2026-06-17", "name": "Tahun Baru Islam" },
+    { "date": "2026-08-17", "name": "Hari Kemerdekaan" },
+    { "date": "2026-08-26", "name": "Maulid Nabi Muhammad" },
+    { "date": "2026-12-25", "name": "Hari Raya Natal" }
+  ]
+}

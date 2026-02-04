@@ -71,7 +71,10 @@ export async function GET(request: NextRequest) {
     // Build subscription response
     let subscriptionDetails = null
 
-    if (business.stripeSubscriptionId) {
+    // Skip Stripe API call for manual subscriptions (not real Stripe IDs)
+    const isManualSubscription = business.stripeSubscriptionId?.startsWith('manual_')
+
+    if (business.stripeSubscriptionId && !isManualSubscription) {
       try {
         // Stripe SDK v20+ type workaround - cast to access properties
         const subscription = (await getStripe().subscriptions.retrieve(

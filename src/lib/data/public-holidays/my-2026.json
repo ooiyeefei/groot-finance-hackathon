@@ -1,0 +1,22 @@
+{
+  "countryCode": "MY",
+  "year": 2026,
+  "holidays": [
+    { "date": "2026-01-01", "name": "New Year's Day" },
+    { "date": "2026-01-29", "name": "Thaipusam" },
+    { "date": "2026-02-17", "name": "Chinese New Year" },
+    { "date": "2026-02-18", "name": "Chinese New Year (Second Day)" },
+    { "date": "2026-03-20", "name": "Hari Raya Aidilfitri" },
+    { "date": "2026-03-21", "name": "Hari Raya Aidilfitri (Second Day)" },
+    { "date": "2026-05-01", "name": "Labour Day" },
+    { "date": "2026-05-12", "name": "Wesak Day" },
+    { "date": "2026-05-27", "name": "Hari Raya Aidiladha" },
+    { "date": "2026-06-01", "name": "Yang di-Pertuan Agong's Birthday" },
+    { "date": "2026-06-17", "name": "Awal Muharram" },
+    { "date": "2026-08-26", "name": "Maulidur Rasul" },
+    { "date": "2026-08-31", "name": "Merdeka Day" },
+    { "date": "2026-09-16", "name": "Malaysia Day" },
+    { "date": "2026-11-14", "name": "Deepavali" },
+    { "date": "2026-12-25", "name": "Christmas Day" }
+  ]
+}

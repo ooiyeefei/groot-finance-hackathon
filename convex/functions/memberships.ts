@@ -428,6 +428,50 @@ export const acceptInvitation = mutation({
       });
     }
 
+    // Auto-initialize leave balances for the new member
+    const currentYear = new Date().getFullYear();
+    const customEntitlements = (membership.leaveEntitlements as Record<string, number>) || {};
+
+    // Get all active leave types for the business
+    const leaveTypes = await ctx.db
+      .query("leave_types")
+      .withIndex("by_businessId_isActive", (q) =>
+        q.eq("businessId", membership.businessId).eq("isActive", true)
+      )
+      .collect();
+
+    for (const leaveType of leaveTypes) {
+      // Check if balance already exists
+      const existing = await ctx.db
+        .query("leave_balances")
+        .withIndex("by_businessId_userId_leaveTypeId_year", (q) =>
+          q
+            .eq("businessId", membership.businessId)
+            .eq("userId", user._id)
+            .eq("leaveTypeId", leaveType._id)
+            .eq("year", currentYear)
+        )
+        .first();
+
+      if (!existing) {
+        // Use custom entitlement if set, otherwise use leave type default
+        const entitledDays = customEntitlements[leaveType._id] ?? leaveType.defaultDays;
+
+        await ctx.db.insert("leave_balances", {
+          businessId: membership.businessId,
+          userId: user._id,
+          leaveTypeId: leaveType._id,
+          year: currentYear,
+          entitled: entitledDays,
+          used: 0,
+          adjustments: 0,
+          lastUpdated: Date.now(),
+        });
+      }
+    }
+
+    console.log(`[Memberships] Accepted invitation and initialized leave balances for user ${user._id}`);
+
     return args.membershipId;
   },
 });
@@ -1237,5 +1281,124 @@ export const assignManager = mutation({
     });
 
     return employeeMembership._id;
+  },
+});
+
+/**
+ * Update leave entitlements for a team member
+ * Allows admins to set custom leave days per leave type for each employee
+ */
+export const updateLeaveEntitlements = mutation({
+  args: {
+    membershipId: v.id("business_memberships"),
+    leaveEntitlements: v.any(), // Record<leaveTypeId, days>
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const targetMembership = await ctx.db.get(args.membershipId);
+    if (!targetMembership) throw new Error("Membership not found");
+
+    // Verify current user has admin permission for this business
+    const actorMembership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", targetMembership.businessId)
+      )
+      .first();
+
+    if (!actorMembership || actorMembership.status !== "active") {
+      throw new Error("You are not a member of this business");
+    }
+
+    if (actorMembership.role !== "owner" && actorMembership.role !== "finance_admin") {
+      throw new Error("Only owners and finance admins can update leave entitlements");
+    }
+
+    // Validate entitlements - ensure all values are positive numbers
+    const entitlements = args.leaveEntitlements as Record<string, number>;
+    for (const [leaveTypeId, days] of Object.entries(entitlements)) {
+      if (typeof days !== "number" || days < 0) {
+        throw new Error(`Invalid entitlement value for ${leaveTypeId}: must be a non-negative number`);
+      }
+    }
+
+    // Update the membership with new entitlements
+    await ctx.db.patch(args.membershipId, {
+      leaveEntitlements: args.leaveEntitlements,
+      updatedAt: Date.now(),
+    });
+
+    console.log(`[Memberships] Updated leave entitlements for membership ${args.membershipId}`);
+    return args.membershipId;
+  },
+});
+
+/**
+ * Get leave entitlements for a team member (includes leave type details)
+ */
+export const getLeaveEntitlements = query({
+  args: {
+    membershipId: v.id("business_memberships"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return null;
+
+    const targetMembership = await ctx.db.get(args.membershipId);
+    if (!targetMembership) return null;
+
+    // Verify current user has access to this business
+    const actorMembership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", targetMembership.businessId)
+      )
+      .first();
+
+    if (!actorMembership || actorMembership.status !== "active") {
+      return null;
+    }
+
+    // Only admins can view other members' entitlements
+    const isOwnProfile = targetMembership.userId === user._id;
+    const isAdmin = actorMembership.role === "owner" || actorMembership.role === "finance_admin";
+
+    if (!isOwnProfile && !isAdmin) {
+      return null;
+    }
+
+    // Get all active leave types for context
+    const leaveTypes = await ctx.db
+      .query("leave_types")
+      .withIndex("by_businessId_isActive", (q) =>
+        q.eq("businessId", targetMembership.businessId).eq("isActive", true)
+      )
+      .collect();
+
+    const customEntitlements = (targetMembership.leaveEntitlements as Record<string, number>) || {};
+
+    // Build entitlements with leave type details
+    const enrichedEntitlements = leaveTypes.map((lt) => ({
+      leaveTypeId: lt._id,
+      leaveTypeName: lt.name,
+      leaveTypeCode: lt.code,
+      defaultDays: lt.defaultDays,
+      customDays: customEntitlements[lt._id] ?? null, // null = use default
+      effectiveDays: customEntitlements[lt._id] ?? lt.defaultDays,
+    }));
+
+    return {
+      membershipId: targetMembership._id,
+      userId: targetMembership.userId,
+      entitlements: enrichedEntitlements,
+    };
   },
 });
