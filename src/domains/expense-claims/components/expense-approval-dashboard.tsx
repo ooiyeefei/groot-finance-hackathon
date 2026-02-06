@@ -7,7 +7,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2, AlertCircle, Copy, ExternalLink } from 'lucide-react'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,8 +21,6 @@ import { useExpenseCategories, getCategoryName, type DynamicExpenseCategory } fr
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
-const MonthlyReportGenerator = lazy(() => import('./monthly-report-generator'))
-const GoogleSheetsExport = lazy(() => import('./google-sheets-export'))
 const DocumentPreviewWithAnnotations = lazy(() => import('@/domains/invoices/components/document-preview-with-annotations'))
 const UnifiedExpenseDetailsModal = lazy(() => import('./unified-expense-details-modal'))
 const MobileApprovalList = lazy(() => import('./mobile-approval-list'))
@@ -144,7 +142,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 
       {/* Management Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto p-1 gap-1 bg-muted border border-border relative z-10">
+        <TabsList className={`grid w-full h-auto p-1 gap-1 bg-muted border border-border relative z-10 ${dashboardData?.role?.finance_admin ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:grid-cols-3'}`}>
           <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Overview
           </TabsTrigger>
@@ -159,9 +157,6 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
               Reimburse
             </TabsTrigger>
           )}
-          <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            Reports
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -188,9 +183,6 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           </TabsContent>
         )}
 
-        <TabsContent value="reports" className="space-y-4">
-          <ManagementReportsContent userRole={dashboardData?.role || { employee: true, manager: false, finance_admin: false }} />
-        </TabsContent>
       </Tabs>
     </div>
   )
@@ -574,68 +566,6 @@ function ReimbursementQueueContent({
         )}
       </CardContent>
     </Card>
-  )
-}
-
-// Management Reports Content - Full employee selection
-function ManagementReportsContent({ userRole }: { userRole: UserRole }) {
-  return (
-    <div className="space-y-section-gap">
-      {/* Duplicate Expense Report - Audit Compliance Card */}
-      <Card className="bg-record-layer-1 border-record-border">
-        <CardHeader>
-          <CardTitle className="text-foreground flex items-center gap-2">
-            <Copy className="w-5 h-5" />
-            Duplicate Expense Report
-          </CardTitle>
-          <CardDescription>Review and manage potential duplicate expense claims for audit compliance</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between p-4 bg-record-layer-2 rounded-lg">
-            <div className="space-y-1">
-              <p className="text-foreground font-medium">View Duplicate Report</p>
-              <p className="text-muted-foreground text-sm">
-                Analyze duplicate matches, dismiss false positives, or confirm duplicates
-              </p>
-            </div>
-            <a
-              href="/expense-claims/duplicate-report"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Open Report
-            </a>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="bg-record-layer-1 border-record-border">
-        <CardHeader>
-          <CardTitle className="text-foreground flex items-center gap-2">
-            <BarChart3 className="w-5 h-5" />
-            Management Reports
-          </CardTitle>
-          <CardDescription>Generate comprehensive expense reports with full employee selection</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
-            <MonthlyReportGenerator personalOnly={false} />
-          </Suspense>
-        </CardContent>
-      </Card>
-
-      <Card className="bg-record-layer-1 border-record-border">
-        <CardHeader>
-          <CardTitle className="text-foreground">Export & Integration</CardTitle>
-          <CardDescription>Export data to external systems</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
-            <GoogleSheetsExport userRole={userRole} />
-          </Suspense>
-        </CardContent>
-      </Card>
-    </div>
   )
 }
 

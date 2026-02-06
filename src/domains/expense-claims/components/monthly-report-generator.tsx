@@ -101,9 +101,20 @@ interface MonthlyReportGeneratorProps {
   personalOnly?: boolean
 }
 
+// Status options for filtering
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'submitted', label: 'Submitted (Pending)' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'reimbursed', label: 'Reimbursed' },
+]
+
 export default function MonthlyReportGenerator({ personalOnly = false }: MonthlyReportGeneratorProps) {
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedEmployee, setSelectedEmployee] = useState('')
+  const [selectedStatus, setSelectedStatus] = useState('all')
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [formattedReportData, setFormattedReportData] = useState<FormattedReportData | null>(null)
   const [generating, setGenerating] = useState(false)
@@ -113,6 +124,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
     { id: 'current', name: 'My Reports' }
   ])
   const [activePreview, setActivePreview] = useState<'summary' | 'formatted' | null>(null)
+  const [userRole, setUserRole] = useState<{ manager: boolean; finance_admin: boolean } | null>(null)
 
   // Generate available months (last 12 months)
   const generateMonthOptions = () => {
@@ -139,7 +151,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
 
   const monthOptions = generateMonthOptions()
 
-  // Fetch employees from API (only if not personal mode)
+  // Fetch user role and employees from API (only if not personal mode)
   useEffect(() => {
     console.log('[Monthly Report] 🚀 useEffect triggered - personalOnly:', personalOnly)
 
@@ -151,66 +163,88 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
       return
     }
 
-    const fetchEmployees = async () => {
+    const fetchRoleAndEmployees = async () => {
       try {
-        // Fetch only direct reports (employees assigned to current manager)
-        console.log('[Monthly Report] 🌐 Fetching direct reports from /api/v1/users/team?directReportsOnly=true')
-        const response = await fetch('/api/v1/users/team?directReportsOnly=true')
+        // First fetch user role to determine access level
+        console.log('[Monthly Report] 🔐 Fetching user role...')
+        const roleResponse = await fetch('/api/v1/users/role')
+        const roleResult = await roleResponse.json()
 
-        console.log('[Monthly Report] 📡 Response status:', response.status, response.statusText)
+        if (roleResult.success && roleResult.data?.permissions) {
+          const permissions = roleResult.data.permissions
+          setUserRole(permissions)
+          console.log('[Monthly Report] 👤 User permissions:', permissions)
 
-        const result = await response.json()
-        console.log('[Monthly Report] 📊 Team API response:', result)
+          // Finance admin sees ALL employees, managers see only direct reports
+          const isFinanceAdmin = permissions.finance_admin
+          const apiUrl = isFinanceAdmin
+            ? '/api/v1/users/team'  // All employees for admins
+            : '/api/v1/users/team?directReportsOnly=true'  // Direct reports for managers
 
-        if (result.success && result.data && result.data.users && result.data.users.length > 0) {
-          console.log('[Monthly Report] ✅ Processing team data - found', result.data.users.length, 'users')
+          console.log('[Monthly Report] 🌐 Fetching employees from:', apiUrl)
+          const response = await fetch(apiUrl)
+          const result = await response.json()
 
-          const teamMembers = result.data.users.map((member: any) => ({
-            id: member.user_id, // Use user_id for the reports API employeeId parameter
-            name: member.full_name || member.email || `Employee ID: ${member.user_id}`
-          }))
+          console.log('[Monthly Report] 📊 Team API response:', result)
 
-          console.log('[Monthly Report] 👥 Team members processed:', teamMembers)
+          if (result.success && result.data && result.data.users && result.data.users.length > 0) {
+            console.log('[Monthly Report] ✅ Processing team data - found', result.data.users.length, 'users')
 
-          const finalEmployees = [
-            { id: 'all', name: 'All Direct Reports' },
-            { id: 'current', name: 'My Reports' },
-            ...teamMembers
-          ]
+            const teamMembers = result.data.users.map((member: any) => ({
+              id: member.user_id,
+              name: member.full_name || member.email || `Employee ID: ${member.user_id}`
+            }))
 
-          console.log('[Monthly Report] 📋 Final employees list:', finalEmployees)
-          setEmployees(finalEmployees)
+            console.log('[Monthly Report] 👥 Team members processed:', teamMembers)
+
+            const finalEmployees = [
+              { id: 'all', name: isFinanceAdmin ? 'All Employees' : 'All Direct Reports' },
+              { id: 'current', name: 'My Reports' },
+              ...teamMembers
+            ]
+
+            console.log('[Monthly Report] 📋 Final employees list:', finalEmployees)
+            setEmployees(finalEmployees)
+          } else {
+            console.log('[Monthly Report] ❌ No team data found:', {
+              success: result.success,
+              hasData: !!result.data,
+              hasUsers: !!result.data?.users,
+              userCount: result.data?.users?.length || 0,
+              error: result.error
+            })
+          }
         } else {
-          console.log('[Monthly Report] ❌ No team data found or API failed:', {
-            success: result.success,
-            hasData: !!result.data,
-            hasUsers: !!result.data?.users,
-            userCount: result.data?.users?.length || 0,
-            error: result.error
-          })
+          console.log('[Monthly Report] ❌ Failed to get user role:', roleResult.error)
         }
       } catch (error) {
-        console.error('[Monthly Report] 💥 Failed to fetch employees:', error)
-        // Keep default "My Reports" only if API fails
+        console.error('[Monthly Report] 💥 Failed to fetch role/employees:', error)
       }
     }
 
-    fetchEmployees()
+    fetchRoleAndEmployees()
   }, [personalOnly])
 
-  // Generate CSV export URL for server-side download (scoped to direct reports)
+  // Generate CSV export URL for server-side download
   const generateCSVExportURL = (): string => {
     if (!selectedMonth) return ''
 
     const params = new URLSearchParams({ month: selectedMonth })
 
-    // Always scope to direct reports when in manager approval context
+    // Scope based on role: admins get all, managers get direct reports
     if (!personalOnly) {
-      params.append('directReportsOnly', 'true')
+      if (!userRole?.finance_admin) {
+        params.append('directReportsOnly', 'true')
+      }
     }
 
     if (selectedEmployee && selectedEmployee !== 'current' && selectedEmployee !== 'all') {
       params.append('employeeId', selectedEmployee)
+    }
+
+    // Add status filter if not "all"
+    if (selectedStatus && selectedStatus !== 'all') {
+      params.append('status', selectedStatus)
     }
 
     return `/api/v1/expense-claims/reports/export?${params.toString()}`
@@ -230,13 +264,20 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
         month: selectedMonth
       })
 
-      // Always scope to direct reports when in manager approval context
+      // Scope based on role: admins get all, managers get direct reports
       if (!personalOnly) {
-        params.append('directReportsOnly', 'true')
+        if (!userRole?.finance_admin) {
+          params.append('directReportsOnly', 'true')
+        }
       }
 
       if (selectedEmployee && selectedEmployee !== 'current' && selectedEmployee !== 'all') {
         params.append('employeeId', selectedEmployee)
+      }
+
+      // Add status filter if not "all"
+      if (selectedStatus && selectedStatus !== 'all') {
+        params.append('status', selectedStatus)
       }
 
       // Use the comprehensive reports API endpoint for JSON preview
@@ -272,13 +313,20 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
         month: selectedMonth
       })
 
-      // Always scope to direct reports when in manager approval context
+      // Scope based on role: admins get all, managers get direct reports
       if (!personalOnly) {
-        params.append('directReportsOnly', 'true')
+        if (!userRole?.finance_admin) {
+          params.append('directReportsOnly', 'true')
+        }
       }
 
       if (selectedEmployee && selectedEmployee !== 'current' && selectedEmployee !== 'all') {
         params.append('employeeId', selectedEmployee)
+      }
+
+      // Add status filter if not "all"
+      if (selectedStatus && selectedStatus !== 'all') {
+        params.append('status', selectedStatus)
       }
 
       // Use the new formatted reports API endpoint
@@ -317,7 +365,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
             </Alert>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Month Selection */}
             <div className="space-y-2">
               <label className="text-record-title text-sm font-medium">Report Month *</label>
@@ -352,6 +400,23 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
                         <User className="w-4 h-4" />
                         {employee.name}
                       </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Status Filter */}
+            <div className="space-y-2">
+              <label className="text-record-title text-sm font-medium">Status Filter</label>
+              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                <SelectTrigger className="bg-record-layer-2 border-record-border text-record-title">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent className="bg-record-layer-2 border-record-border">
+                  {STATUS_OPTIONS.map((status) => (
+                    <SelectItem key={status.value} value={status.value} className="text-record-title">
+                      {status.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

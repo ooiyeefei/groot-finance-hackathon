@@ -1354,6 +1354,7 @@ export const getReportData = query({
     month: v.string(), // YYYY-MM format
     employeeId: v.optional(v.string()), // Filter by specific employee (manager/finance_admin only)
     directReportsOnly: v.optional(v.boolean()), // When true, only show claims from direct reports (managerId = current user)
+    status: v.optional(v.string()), // Filter by status (draft, submitted, approved, rejected, reimbursed)
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1463,6 +1464,11 @@ export const getReportData = query({
       }
     }
 
+    // Apply status filter if provided
+    if (args.status && args.status !== "all") {
+      claims = claims.filter((claim) => claim.status === args.status);
+    }
+
     // Enrich with employee details
     const enrichedClaims = await Promise.all(
       claims.map(async (claim) => {
@@ -1550,6 +1556,7 @@ export const getFormattedReportData = query({
     month: v.string(), // YYYY-MM format
     employeeId: v.optional(v.string()),
     directReportsOnly: v.optional(v.boolean()), // When true, only show claims from direct reports
+    status: v.optional(v.string()), // Filter by status (draft, submitted, approved, rejected, reimbursed)
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1600,15 +1607,24 @@ export const getFormattedReportData = query({
     console.log(`[Report Debug] Total claims in business before date filter: ${claims.length}`);
     console.log(`[Report Debug] Claims approvedAt: ${claims.map(c => c.approvedAt ? new Date(c.approvedAt).toISOString() : 'NULL').join(', ')}`);
 
-    // Filter by approvedAt timestamp - only include approved/reimbursed claims
-    claims = claims.filter((claim) => {
-      // Must be approved or reimbursed to appear in reports
-      if (!["approved", "reimbursed"].includes(claim.status)) return false;
-      // Must have approvedAt timestamp
-      if (!claim.approvedAt) return false;
-      // Check if approvedAt falls within the month range
-      return claim.approvedAt >= startTimestamp && claim.approvedAt < endTimestamp;
-    });
+    // Filter by status and date
+    if (args.status && args.status !== "all") {
+      // Filter by specific status and submittedAt date
+      claims = claims.filter((claim) => {
+        if (claim.status !== args.status) return false;
+        // For draft claims, use createdAt; for others use submittedAt
+        const dateField = claim.status === "draft" ? claim._creationTime : claim.submittedAt;
+        if (!dateField) return false;
+        return dateField >= startTimestamp && dateField < endTimestamp;
+      });
+    } else {
+      // Default: only include approved/reimbursed claims filtered by approvedAt
+      claims = claims.filter((claim) => {
+        if (!["approved", "reimbursed"].includes(claim.status)) return false;
+        if (!claim.approvedAt) return false;
+        return claim.approvedAt >= startTimestamp && claim.approvedAt < endTimestamp;
+      });
+    }
 
     console.log(`[Report Debug] Claims after date filter: ${claims.length}`);
 
