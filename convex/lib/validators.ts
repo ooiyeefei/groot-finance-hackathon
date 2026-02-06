@@ -23,6 +23,13 @@ import {
   FEEDBACK_STATUS_VALUES,
   VENDOR_STATUS_VALUES,
   LEAVE_REQUEST_STATUS_VALUES,
+  EXPORT_MODULE_VALUES,
+  EXPORT_TEMPLATE_TYPE_VALUES,
+  EXPORT_FREQUENCY_VALUES,
+  EXPORT_HISTORY_STATUS_VALUES,
+  EXPORT_TRIGGER_VALUES,
+  DATE_RANGE_TYPE_VALUES,
+  THOUSAND_SEPARATOR_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -125,3 +132,49 @@ export const vendorStatusValidator = literalUnion(VENDOR_STATUS_VALUES);
  * Can be cancelled from submitted or approved (future dates only)
  */
 export const leaveRequestStatusValidator = literalUnion(LEAVE_REQUEST_STATUS_VALUES);
+
+// ============================================
+// EXPORT VALIDATORS
+// ============================================
+
+/**
+ * Export module validator
+ * Which data to export: expense claims or leave records
+ */
+export const exportModuleValidator = literalUnion(EXPORT_MODULE_VALUES);
+
+/**
+ * Export template type validator
+ * custom (user-created) or cloned (from pre-built)
+ */
+export const exportTemplateTypeValidator = literalUnion(EXPORT_TEMPLATE_TYPE_VALUES);
+
+/**
+ * Export frequency validator
+ * For scheduled exports: daily, weekly, or monthly
+ */
+export const exportFrequencyValidator = literalUnion(EXPORT_FREQUENCY_VALUES);
+
+/**
+ * Export history status validator
+ * Lifecycle: processing → completed/failed, then archived after 90 days
+ */
+export const exportHistoryStatusValidator = literalUnion(EXPORT_HISTORY_STATUS_VALUES);
+
+/**
+ * Export trigger validator
+ * manual (user-initiated) or schedule (cron-triggered)
+ */
+export const exportTriggerValidator = literalUnion(EXPORT_TRIGGER_VALUES);
+
+/**
+ * Date range type validator
+ * Relative date ranges for scheduled exports
+ */
+export const dateRangeTypeValidator = literalUnion(DATE_RANGE_TYPE_VALUES);
+
+/**
+ * Thousand separator validator
+ * Number formatting: comma or none
+ */
+export const thousandSeparatorValidator = literalUnion(THOUSAND_SEPARATOR_VALUES);

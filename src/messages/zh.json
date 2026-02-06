@@ -48,7 +48,8 @@
     "billing": "账单",
     "managerApprovals": "经理审批",
     "leave": "休假",
-    "teamCalendar": "团队日历"
+    "teamCalendar": "团队日历",
+    "reporting": "报告与导出"
   },
   "dashboard": {
     "title": "仪表板",

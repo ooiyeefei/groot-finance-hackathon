@@ -211,3 +211,93 @@ export const LEAVE_REQUEST_STATUSES = {
 
 export type LeaveRequestStatus = typeof LEAVE_REQUEST_STATUSES[keyof typeof LEAVE_REQUEST_STATUSES];
 export const LEAVE_REQUEST_STATUS_VALUES = Object.values(LEAVE_REQUEST_STATUSES);
+
+// ============================================
+// EXPORT MODULES
+// ============================================
+
+export const EXPORT_MODULES = {
+  EXPENSE: "expense",
+  LEAVE: "leave",
+} as const;
+
+export type ExportModule = typeof EXPORT_MODULES[keyof typeof EXPORT_MODULES];
+export const EXPORT_MODULE_VALUES = Object.values(EXPORT_MODULES);
+
+// ============================================
+// EXPORT TEMPLATE TYPES
+// ============================================
+
+export const EXPORT_TEMPLATE_TYPES = {
+  CUSTOM: "custom",
+  CLONED: "cloned",
+} as const;
+
+export type ExportTemplateType = typeof EXPORT_TEMPLATE_TYPES[keyof typeof EXPORT_TEMPLATE_TYPES];
+export const EXPORT_TEMPLATE_TYPE_VALUES = Object.values(EXPORT_TEMPLATE_TYPES);
+
+// ============================================
+// EXPORT FREQUENCIES
+// ============================================
+
+export const EXPORT_FREQUENCIES = {
+  DAILY: "daily",
+  WEEKLY: "weekly",
+  MONTHLY: "monthly",
+} as const;
+
+export type ExportFrequency = typeof EXPORT_FREQUENCIES[keyof typeof EXPORT_FREQUENCIES];
+export const EXPORT_FREQUENCY_VALUES = Object.values(EXPORT_FREQUENCIES);
+
+// ============================================
+// EXPORT HISTORY STATUSES
+// ============================================
+
+export const EXPORT_HISTORY_STATUSES = {
+  PROCESSING: "processing",   // Export in progress
+  COMPLETED: "completed",     // Successfully generated
+  FAILED: "failed",           // Generation failed
+  ARCHIVED: "archived",       // File deleted after 90 days
+} as const;
+
+export type ExportHistoryStatus = typeof EXPORT_HISTORY_STATUSES[keyof typeof EXPORT_HISTORY_STATUSES];
+export const EXPORT_HISTORY_STATUS_VALUES = Object.values(EXPORT_HISTORY_STATUSES);
+
+// ============================================
+// EXPORT TRIGGERS
+// ============================================
+
+export const EXPORT_TRIGGERS = {
+  MANUAL: "manual",
+  SCHEDULE: "schedule",
+} as const;
+
+export type ExportTrigger = typeof EXPORT_TRIGGERS[keyof typeof EXPORT_TRIGGERS];
+export const EXPORT_TRIGGER_VALUES = Object.values(EXPORT_TRIGGERS);
+
+// ============================================
+// DATE RANGE TYPES (for scheduled exports)
+// ============================================
+
+export const DATE_RANGE_TYPES = {
+  PREVIOUS_DAY: "previous_day",
+  PREVIOUS_WEEK: "previous_week",
+  PREVIOUS_MONTH: "previous_month",
+  MONTH_TO_DATE: "month_to_date",
+  YEAR_TO_DATE: "year_to_date",
+} as const;
+
+export type DateRangeType = typeof DATE_RANGE_TYPES[keyof typeof DATE_RANGE_TYPES];
+export const DATE_RANGE_TYPE_VALUES = Object.values(DATE_RANGE_TYPES);
+
+// ============================================
+// THOUSAND SEPARATORS
+// ============================================
+
+export const THOUSAND_SEPARATORS = {
+  COMMA: "comma",
+  NONE: "none",
+} as const;
+
+export type ThousandSeparator = typeof THOUSAND_SEPARATORS[keyof typeof THOUSAND_SEPARATORS];
+export const THOUSAND_SEPARATOR_VALUES = Object.values(THOUSAND_SEPARATORS);

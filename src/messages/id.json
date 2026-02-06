@@ -48,7 +48,8 @@
     "billing": "Tagihan",
     "managerApprovals": "Persetujuan Manajer",
     "leave": "Cuti",
-    "teamCalendar": "Kalender Tim"
+    "teamCalendar": "Kalender Tim",
+    "reporting": "Laporan & Ekspor"
   },
   "dashboard": {
     "title": "Dashboard",

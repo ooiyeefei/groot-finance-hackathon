@@ -15,6 +15,13 @@ import {
   feedbackStatusValidator,
   vendorStatusValidator,
   leaveRequestStatusValidator,
+  exportModuleValidator,
+  exportTemplateTypeValidator,
+  exportFrequencyValidator,
+  exportHistoryStatusValidator,
+  exportTriggerValidator,
+  dateRangeTypeValidator,
+  thousandSeparatorValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -1066,4 +1073,142 @@ export default defineSchema({
     .index("by_countryCode_year", ["countryCode", "year"])
     .index("by_businessId", ["businessId"])
     .index("by_date", ["date"]),
+
+  // ============================================
+  // EXPORT TEMPLATES DOMAIN (CSV Template Builder)
+  // ============================================
+
+  // Custom export templates - user-created configurations for CSV exports
+  export_templates: defineTable({
+    // Multi-tenant scope
+    businessId: v.id("businesses"),
+
+    // Template identity
+    name: v.string(),
+    description: v.optional(v.string()),
+
+    // Module - which data to export
+    module: exportModuleValidator,
+
+    // Template type
+    type: exportTemplateTypeValidator,
+
+    // For cloned templates - reference to pre-built
+    clonedFromId: v.optional(v.string()),
+    clonedFromVersion: v.optional(v.string()),
+
+    // Field mappings (embedded for Convex optimization)
+    fieldMappings: v.array(v.object({
+      sourceField: v.string(),
+      targetColumn: v.string(),
+      order: v.number(),
+      dateFormat: v.optional(v.string()),
+      decimalPlaces: v.optional(v.number()),
+      thousandSeparator: v.optional(thousandSeparatorValidator),
+    })),
+
+    // Global format settings (defaults)
+    defaultDateFormat: v.optional(v.string()),
+    defaultDecimalPlaces: v.optional(v.number()),
+    defaultThousandSeparator: v.optional(thousandSeparatorValidator),
+
+    // Ownership & audit
+    createdBy: v.id("users"),
+    updatedBy: v.optional(v.id("users")),
+
+    // Timestamps
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_module", ["businessId", "module"])
+    .index("by_createdBy", ["createdBy"]),
+
+  // Scheduled export configurations
+  export_schedules: defineTable({
+    // Multi-tenant scope
+    businessId: v.id("businesses"),
+
+    // Template reference (one must be set)
+    templateId: v.optional(v.id("export_templates")),
+    prebuiltTemplateId: v.optional(v.string()),
+
+    // Schedule configuration
+    frequency: exportFrequencyValidator,
+
+    // Schedule details
+    hourUtc: v.number(),
+    minuteUtc: v.optional(v.number()),
+    dayOfWeek: v.optional(v.number()),
+    dayOfMonth: v.optional(v.number()),
+
+    // Filter configuration
+    filters: v.optional(v.object({
+      statusFilter: v.optional(v.array(v.string())),
+      employeeIds: v.optional(v.array(v.id("users"))),
+      dateRangeType: v.optional(dateRangeTypeValidator),
+    })),
+
+    // Status
+    isEnabled: v.boolean(),
+
+    // Timing
+    lastRunAt: v.optional(v.number()),
+    nextRunAt: v.number(),
+
+    // Ownership & audit
+    createdBy: v.id("users"),
+
+    // Timestamps
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_nextRunAt", ["nextRunAt"])
+    .index("by_isEnabled_nextRunAt", ["isEnabled", "nextRunAt"]),
+
+  // Export history - records of completed exports
+  export_history: defineTable({
+    // Multi-tenant scope
+    businessId: v.id("businesses"),
+
+    // Template used
+    templateId: v.optional(v.id("export_templates")),
+    prebuiltTemplateId: v.optional(v.string()),
+    templateName: v.string(),
+
+    // Module
+    module: exportModuleValidator,
+
+    // Export details
+    recordCount: v.number(),
+    fileSize: v.number(),
+    storageId: v.optional(v.id("_storage")),
+
+    // Filters used
+    filters: v.optional(v.object({
+      startDate: v.optional(v.string()),
+      endDate: v.optional(v.string()),
+      statusFilter: v.optional(v.array(v.string())),
+      employeeIds: v.optional(v.array(v.string())),
+    })),
+
+    // Status
+    status: exportHistoryStatusValidator,
+    errorMessage: v.optional(v.string()),
+
+    // Trigger source
+    triggeredBy: exportTriggerValidator,
+    scheduleId: v.optional(v.id("export_schedules")),
+
+    // Who initiated
+    initiatedBy: v.optional(v.id("users")),
+
+    // Timestamps
+    completedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_module", ["businessId", "module"])
+    .index("by_initiatedBy", ["initiatedBy"])
+    .index("by_scheduleId", ["scheduleId"])
+    .index("by_expiresAt", ["expiresAt"]),
 });

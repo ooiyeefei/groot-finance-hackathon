@@ -48,7 +48,8 @@
     "billing": "การเรียกเก็บเงิน",
     "managerApprovals": "การอนุมัติผู้จัดการ",
     "leave": "ลางาน",
-    "teamCalendar": "ปฏิทินทีม"
+    "teamCalendar": "ปฏิทินทีม",
+    "reporting": "รายงานและส่งออก"
   },
   "dashboard": {
     "title": "แดชบอร์ด",
