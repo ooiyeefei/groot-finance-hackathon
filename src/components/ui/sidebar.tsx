@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, Building2, FileCheck, Sparkles, Calendar, CalendarDays } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, Building2, FileCheck, Sparkles, Calendar, CalendarDays, FileSpreadsheet } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/domains/account-management/components/enhanced-business-display'
@@ -82,10 +82,15 @@ export default function Sidebar() {
     { name: t('teamCalendar') || 'Team Calendar', href: localizedHref('/team-calendar'), icon: CalendarDays },
   ]
 
-  // Manager/Finance Admin navigation items (approvals between expense claims and AI assistant)
+  // Manager/Finance Admin navigation items (after team calendar, before reporting)
   const managerNavigation = userRole.manager || userRole.finance_admin ? [
     { name: t('managerApprovals'), href: localizedHref('/manager/approvals'), icon: FileCheck },
   ] : []
+
+  // Reporting & Exports (after manager approvals)
+  const reportingNavigation = [
+    { name: t('reporting') || 'Reporting & Exports', href: localizedHref('/reporting'), icon: FileSpreadsheet },
+  ]
 
   // Core navigation items (available to everyone) - Part 2
   const coreNavigationPart2 = [
@@ -111,6 +116,7 @@ export default function Sidebar() {
   const navigation = [
     ...coreNavigationPart1,
     ...managerNavigation,
+    ...reportingNavigation,
     ...coreNavigationPart2,
     ...businessNavigation,
     ...billingNavigation,

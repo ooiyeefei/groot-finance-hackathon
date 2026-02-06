@@ -72,12 +72,16 @@ export function ProactiveActionCenter({ businessId, defaultExpanded = true }: Pr
   const hasMoreInsights = filteredInsights.length > CARDS_PER_ROW;
   const hiddenCount = filteredInsights.length - CARDS_PER_ROW;
 
-  // Calculate counts from the full insights array (client-side) for consistency with display
+  // Calculate counts from the full insights array (client-side) for consistency
+  // newCount: All insights with status 'new'
   const newCount = insights.filter(i => i.status === 'new').length;
+  // criticalCount: Critical/high priority items that are NEW only (matches API pendingCount)
+  // This ensures the header number matches the tab badge
   const criticalCount = insights.filter(i =>
     (i.priority === 'critical' || i.priority === 'high') &&
-    (i.status === 'new' || i.status === 'reviewed')
+    i.status === 'new'
   ).length;
+  // reviewedCount: All insights that have been reviewed
   const reviewedCount = insights.filter(i => i.status === 'reviewed').length;
 
   return (

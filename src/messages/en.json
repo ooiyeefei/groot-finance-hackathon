@@ -48,7 +48,8 @@
     "categories": "Categories",
     "admin": "Admin",
     "leave": "Leave",
-    "teamCalendar": "Team Calendar"
+    "teamCalendar": "Team Calendar",
+    "reporting": "Reporting & Exports"
   },
   "dashboard": {
     "title": "Dashboard",

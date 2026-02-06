@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
     const month = searchParams.get('month') // YYYY-MM format
     const employeeId = searchParams.get('employeeId') // Optional, for manager/admin filtering
     const directReportsOnly = searchParams.get('directReportsOnly') === 'true' // When true, scope to direct reports only
+    const status = searchParams.get('status') // Optional, filter by status
 
     // Validate required month parameter
     if (!month) {
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`[Formatted Report API] Generating formatted report for month: ${month}, user: ${userId}, requestedEmployee: ${employeeId}, directReportsOnly: ${directReportsOnly}`)
+    console.log(`[Formatted Report API] Generating formatted report for month: ${month}, user: ${userId}, requestedEmployee: ${employeeId}, directReportsOnly: ${directReportsOnly}, status: ${status}`)
 
     // ✅ MIGRATED: Get current user's business context from Convex
     const businessContext = await convex.query(
@@ -120,6 +121,7 @@ export async function GET(request: NextRequest) {
         month,
         employeeId: employeeId || undefined,
         directReportsOnly: directReportsOnly || undefined,
+        status: status || undefined,
       }
     )
 
