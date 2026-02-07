@@ -1339,6 +1339,119 @@ export const updateLeaveEntitlements = mutation({
 });
 
 /**
+ * Resolve employee by name query for manager cross-employee queries.
+ * Matches a natural language name query against direct reports.
+ *
+ * Authorization:
+ * - Manager: searches only direct reports
+ * - Finance admin / Owner: searches all business employees
+ */
+export const resolveEmployeeByName = query({
+  args: {
+    businessId: v.id("businesses"),
+    requestingUserId: v.id("users"),
+    nameQuery: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Verify requesting user's membership and role
+    const requesterMembership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", args.requestingUserId).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!requesterMembership || requesterMembership.status !== "active") {
+      return { matches: [], totalDirectReports: 0 };
+    }
+
+    const role = requesterMembership.role;
+    const isAdminOrOwner = role === "owner" || role === "finance_admin";
+
+    // Get candidate memberships based on role
+    const allMemberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const activeMemberships = allMemberships.filter((m) => m.status === "active");
+
+    // Filter to scope: direct reports for managers, all employees for admin/owner
+    let candidateMemberships;
+    if (isAdminOrOwner) {
+      // Admin/Owner: all active members except themselves
+      candidateMemberships = activeMemberships.filter(
+        (m) => m.userId !== args.requestingUserId
+      );
+    } else if (role === "manager") {
+      // Manager: only direct reports
+      candidateMemberships = activeMemberships.filter(
+        (m) => m.managerId === args.requestingUserId
+      );
+    } else {
+      // Employee: no access
+      return { matches: [], totalDirectReports: 0 };
+    }
+
+    const totalDirectReports = candidateMemberships.length;
+    const query = args.nameQuery.toLowerCase();
+
+    // Match against user records
+    const matches: Array<{
+      userId: string;
+      clerkUserId: string;
+      fullName: string;
+      email: string;
+      confidence: "exact" | "partial" | "ambiguous";
+    }> = [];
+
+    for (const membership of candidateMemberships) {
+      const user = await ctx.db.get(membership.userId);
+      if (!user) continue;
+
+      const fullName = (user.fullName || "").toLowerCase();
+      const email = (user.email || "").toLowerCase();
+      const emailPrefix = email.split("@")[0];
+
+      let confidence: "exact" | "partial" | "ambiguous" | null = null;
+
+      if (fullName === query) {
+        confidence = "exact";
+      } else if (fullName.includes(query)) {
+        confidence = "partial";
+      } else if (emailPrefix === query || emailPrefix.includes(query)) {
+        confidence = "partial";
+      }
+
+      if (confidence) {
+        matches.push({
+          userId: membership.userId.toString(),
+          clerkUserId: user.clerkUserId,
+          fullName: user.fullName || user.email || "",
+          email: user.email || "",
+          confidence,
+        });
+      }
+    }
+
+    // Sort: exact matches first, then partial
+    matches.sort((a, b) => {
+      const order = { exact: 0, partial: 1, ambiguous: 2 };
+      return order[a.confidence] - order[b.confidence];
+    });
+
+    // If multiple partial matches, mark as ambiguous
+    if (matches.length > 1 && matches.every((m) => m.confidence === "partial")) {
+      for (const match of matches) {
+        match.confidence = "ambiguous";
+      }
+    }
+
+    return { matches, totalDirectReports };
+  },
+});
+
+/**
  * Get leave entitlements for a team member (includes leave type details)
  */
 export const getLeaveEntitlements = query({

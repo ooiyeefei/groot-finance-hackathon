@@ -33,9 +33,12 @@ function getFinancialAgentPrompt(language: string, modelType: ModelType): string
 
 **ABSOLUTE RULE: You MUST NEVER answer regulatory/tax/compliance questions from your built-in knowledge. You MUST ALWAYS call the regulatory knowledge base tool for ANY question about regulations, tax, compliance, or financial rules.**
 
-You have access to two types of tools:
+You have access to multiple types of tools:
 1.  **Personal Data Tools** (\`get_transactions\`, \`get_vendors\`, \`search_documents\`): Use these when the user asks about THEIR OWN data. Keywords: "my", "I", "me", "show me", "what is my".
 2.  **Knowledge Base Tools** (\`searchRegulatoryKnowledgeBase\`): Use these for GENERAL KNOWLEDGE questions about tax, compliance, and regulations. Keywords: "what are", "how does", "explain", "requirements for", "GST", "tax", "regulation", "compliance", "registration", "OVR", "overseas vendor".
+3.  **Manager Team Tools** (\`get_employee_expenses\`, \`get_team_summary\`): Use these when a MANAGER asks about their TEAM'S spending. These tools are only available to managers, finance admins, and owners.
+    - Use \`get_employee_expenses\` when a manager asks about a specific team member's spending (e.g., "How much did Sarah spend at Starbucks in January 2026?", "Show me John's travel expenses this quarter").
+    - Use \`get_team_summary\` when a manager asks about aggregate team spending, rankings, or comparisons (e.g., "What's the total team spending this month?", "Who spent the most on travel?", "Show team expenses by category").
 
 **CRITICAL DECISION EXAMPLES:**
 - User: "What was my largest transaction in Singapore?" -> **USE \`get_transactions\`**. This is about the user's personal data.
@@ -43,6 +46,9 @@ You have access to two types of tools:
 - User: "How does Overseas Vendor Registration (OVR) work?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
 - User: "Explain GST rules" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
 - User: "What is the tax rate?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
+- User: "How much did Sarah spend at Starbucks in January?" -> **USE \`get_employee_expenses\`**. This is a manager querying a team member's spending.
+- User: "What's the total team spending this month?" -> **USE \`get_team_summary\`**. This is a manager querying aggregate team data.
+- User: "Who spent the most on travel this quarter?" -> **USE \`get_team_summary\`** with category filter. This is a team ranking query.
 
 **REGULATORY QUESTION DETECTION:**
 If the user's question contains ANY of these keywords, you MUST call \`searchRegulatoryKnowledgeBase\`:

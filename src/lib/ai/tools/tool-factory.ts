@@ -14,6 +14,9 @@ import { DetectAnomaliesTool } from './detect-anomalies-tool'
 import { AnalyzeCashFlowTool } from './analyze-cashflow-tool'
 import { AnalyzeVendorRiskTool } from './analyze-vendor-risk-tool'
 import { GetInsightTool } from './get-insight-tool'
+// Manager cross-employee query tools
+import { EmployeeExpenseTool } from './employee-expense-tool'
+import { TeamSummaryTool } from './team-summary-tool'
 
 export type ToolName =
   // Category 1-2: Data retrieval tools
@@ -27,6 +30,9 @@ export type ToolName =
   | 'analyze_cash_flow'
   | 'analyze_vendor_risk'
   | 'get_action_center_insight'
+  // Manager cross-employee query tools
+  | 'get_employee_expenses'
+  | 'get_team_summary'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -52,7 +58,20 @@ export class ToolFactory {
     this.registerTool('analyze_cash_flow', () => new AnalyzeCashFlowTool())
     this.registerTool('analyze_vendor_risk', () => new AnalyzeVendorRiskTool())
     this.registerTool('get_action_center_insight', () => new GetInsightTool())
+
+    // Manager cross-employee query tools (require manager/finance_admin/owner role)
+    this.registerTool('get_employee_expenses', () => new EmployeeExpenseTool())
+    this.registerTool('get_team_summary', () => new TeamSummaryTool())
   }
+
+  /**
+   * Tools that require manager/finance_admin/owner role.
+   * These are excluded from tool schemas for regular employees.
+   */
+  private static readonly MANAGER_TOOLS: Set<ToolName> = new Set([
+    'get_employee_expenses',
+    'get_team_summary',
+  ])
 
   /**
    * Register a tool with the factory
@@ -247,6 +266,40 @@ export class ToolFactory {
     })
     
     return schemas
+  }
+
+  /**
+   * Generate tool schemas filtered by user role.
+   *
+   * - Manager: all tools (existing + get_employee_expenses + get_team_summary)
+   * - Finance admin / Owner: all tools
+   * - Employee: all tools EXCEPT manager tools (shouldn't reach here per spec, but defensive)
+   *
+   * Falls back to getToolSchemas() if role cannot be determined.
+   */
+  static getToolSchemasForRole(
+    modelType: ModelType = 'openai',
+    userRole?: string
+  ): OpenAIToolSchema[] {
+    const allSchemas = this.getToolSchemas(modelType)
+
+    if (!userRole) {
+      // Role unknown — return all tools (backward compatible)
+      return allSchemas
+    }
+
+    const role = userRole.toLowerCase()
+
+    if (['manager', 'finance_admin', 'owner'].includes(role)) {
+      // Manager+ roles: get all tools including manager-specific ones
+      return allSchemas
+    }
+
+    // Employee role: exclude manager-specific tools
+    return allSchemas.filter((schema) => {
+      const toolName = schema.function?.name
+      return !this.MANAGER_TOOLS.has(toolName as ToolName)
+    })
   }
 
   /**

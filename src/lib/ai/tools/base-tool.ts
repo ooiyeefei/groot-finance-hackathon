@@ -17,6 +17,7 @@ export interface UserContext {
   convexUserId?: string // Convex database user ID
   businessId?: string // Business ID for tenant isolation
   conversationId?: string
+  role?: string // Business membership role (manager, finance_admin, owner, employee)
 }
 
 export interface ToolParameters {
