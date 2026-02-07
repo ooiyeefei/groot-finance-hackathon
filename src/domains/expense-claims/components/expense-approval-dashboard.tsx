@@ -112,34 +112,6 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
   return (
     <div className="space-y-section-gap">
 
-      {/* Management Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-card-gap">
-        <ManagementSummaryCard
-          title="Pending Approvals"
-          value={dashboardData?.summary?.pending_approval?.toString() || '0'}
-          icon={<Clock className="w-5 h-5" />}
-          variant="warning"
-        />
-        <ManagementSummaryCard
-          title="Approved Amount"
-          value={`$${(dashboardData?.summary?.approved_amount || 0).toFixed(2)}`}
-          icon={<CheckCircle className="w-5 h-5" />}
-          variant="success"
-        />
-        <ManagementSummaryCard
-          title="Total Claims"
-          value={dashboardData?.summary?.total_claims?.toString() || '0'}
-          icon={<User className="w-5 h-5" />}
-          variant="default"
-        />
-        <ManagementSummaryCard
-          title="Rejected Claims"
-          value={dashboardData?.summary?.rejected_count?.toString() || '0'}
-          icon={<XCircle className="w-5 h-5" />}
-          variant="error"
-        />
-      </div>
-
       {/* Management Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className={`grid w-full h-auto p-1 gap-1 bg-muted border border-border relative z-10 ${dashboardData?.role?.finance_admin ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:grid-cols-3'}`}>
@@ -202,7 +174,7 @@ function ManagementOverviewContent({ data, categories, setActiveTab }: {
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
               <BarChart3 className="w-5 h-5" />
-              Company Analytics
+              {data?.role?.finance_admin ? 'Company Analytics' : 'Team Analytics'}
             </CardTitle>
             <CardDescription>Real-time expense insights</CardDescription>
           </CardHeader>

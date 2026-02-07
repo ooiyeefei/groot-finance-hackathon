@@ -510,7 +510,7 @@ export const getAnalytics = query({
       return null;
     }
 
-    // Verify finance_admin/owner access for analytics
+    // Verify manager/finance_admin/owner access for analytics
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -518,7 +518,7 @@ export const getAnalytics = query({
       )
       .first();
 
-    if (!membership || !["owner", "finance_admin"].includes(membership.role)) {
+    if (!membership || !["owner", "finance_admin", "manager"].includes(membership.role)) {
       return null;
     }
 
@@ -529,6 +529,18 @@ export const getAnalytics = query({
       .collect();
 
     claims = claims.filter((c) => !c.deletedAt);
+
+    // Scope claims for managers to only their direct reports
+    if (membership.role === "manager") {
+      const allMemberships = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+        .collect();
+      const directReports = allMemberships.filter((m) => m.managerId === user._id);
+      const reportIds = new Set(directReports.map((m) => m.userId));
+      reportIds.add(user._id); // Include manager's own claims
+      claims = claims.filter((c) => reportIds.has(c.userId));
+    }
 
     // Apply date filters
     if (args.startDate) {
