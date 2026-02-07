@@ -1390,26 +1390,21 @@ export const getReportData = query({
     const isAdmin = role === "owner" || role === "finance_admin";
     const isManager = role === "manager";
 
-    // Parse month to date range
+    // Parse month to UTC timestamp range for filtering by submittedAt
     const [year, monthNum] = args.month.split("-").map(Number);
-    const startDate = new Date(year, monthNum - 1, 1);
-    const endDate = new Date(year, monthNum, 1); // First day of next month (exclusive)
+    const startTimestamp = Date.UTC(year, monthNum - 1, 1);
+    const endTimestamp = Date.UTC(year, monthNum, 1); // First day of next month (exclusive)
 
-    // Get all submitted claims for the business
+    // Get all claims for the business
     let claims = await ctx.db
       .query("expense_claims")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
       .collect();
 
-    // Filter by transactionDate (receipt/expense date) for the selected month
-    const startDateStr = `${year}-${String(monthNum).padStart(2, "0")}-01`;
-    const endYear = monthNum === 12 ? year + 1 : year;
-    const endMonth = monthNum === 12 ? 1 : monthNum + 1;
-    const endDateStr = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
-
+    // Filter by submittedAt date range (when the claim was submitted for processing)
     claims = claims.filter((claim) => {
-      if (!claim.transactionDate) return false;
-      return claim.transactionDate >= startDateStr && claim.transactionDate < endDateStr;
+      if (!claim.submittedAt) return false;
+      return claim.submittedAt >= startTimestamp && claim.submittedAt < endTimestamp;
     });
 
     // Filter out deleted claims
@@ -1594,12 +1589,10 @@ export const getFormattedReportData = query({
     const isAdmin = role === "owner" || role === "finance_admin";
     const isManager = role === "manager";
 
-    // Parse month to date range for filtering by transactionDate (receipt/expense date)
+    // Parse month to UTC timestamp range for filtering by submittedAt
     const [year, monthNum] = args.month.split("-").map(Number);
-    const startDateStr = `${year}-${String(monthNum).padStart(2, "0")}-01`;
-    const endYear = monthNum === 12 ? year + 1 : year;
-    const endMonth = monthNum === 12 ? 1 : monthNum + 1;
-    const endDateStr = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
+    const startTimestamp = Date.UTC(year, monthNum - 1, 1);
+    const endTimestamp = Date.UTC(year, monthNum, 1); // First day of next month (exclusive)
 
     // Get claims for the business
     let claims = await ctx.db
@@ -1607,10 +1600,10 @@ export const getFormattedReportData = query({
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
       .collect();
 
-    // Filter by transactionDate (receipt/expense date) for the selected month
+    // Filter by submittedAt date range (when the claim was submitted for processing)
     claims = claims.filter((claim) => {
-      if (!claim.transactionDate) return false;
-      return claim.transactionDate >= startDateStr && claim.transactionDate < endDateStr;
+      if (!claim.submittedAt) return false;
+      return claim.submittedAt >= startTimestamp && claim.submittedAt < endTimestamp;
     });
 
     // Apply status filter if provided
