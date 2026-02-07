@@ -54,7 +54,7 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import { getPrebuiltTemplateById } from '../lib/prebuilt-templates';
 
 export default function ExportsPageContent() {
-  const [activeTab, setActiveTab] = useState('export');
+  const [activeTab, setActiveTab] = useState('reports');
   const { addToast } = useToast();
   const locale = useLocale();
 
