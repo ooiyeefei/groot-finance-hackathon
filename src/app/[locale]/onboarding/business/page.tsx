@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth, SignOutButton } from '@clerk/nextjs'
 import {
   Building2,
   ArrowLeft,
@@ -24,6 +24,7 @@ import {
   Rocket,
   Settings,
   X,
+  LogOut,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -295,14 +296,26 @@ export default function BusinessOnboarding() {
                 </p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClose}
-              className="h-9 w-9 p-0"
-            >
-              <X className="h-5 w-5" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <SignOutButton redirectUrl="/en/sign-in">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <LogOut className="h-4 w-4 mr-1.5" />
+                  Sign out
+                </Button>
+              </SignOutButton>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClose}
+                className="h-9 w-9 p-0"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
 
           {/* Progress bar */}
