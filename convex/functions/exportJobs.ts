@@ -416,6 +416,10 @@ async function getExpenseRecords(
   if (filters?.statusFilter && filters.statusFilter.length > 0) {
     claims = claims.filter((claim: any) => filters.statusFilter!.includes(claim.status));
   }
+  if (filters?.employeeIds && filters.employeeIds.length > 0) {
+    const employeeIdSet = new Set(filters.employeeIds);
+    claims = claims.filter((claim: any) => employeeIdSet.has(claim.userId));
+  }
 
   // Filter out soft-deleted
   claims = claims.filter((claim: any) => !claim.deletedAt);
@@ -459,6 +463,10 @@ async function getLeaveRecords(
   }
   if (filters?.statusFilter && filters.statusFilter.length > 0) {
     requests = requests.filter((req: any) => filters.statusFilter!.includes(req.status));
+  }
+  if (filters?.employeeIds && filters.employeeIds.length > 0) {
+    const employeeIdSet = new Set(filters.employeeIds);
+    requests = requests.filter((req: any) => employeeIdSet.has(req.userId));
   }
 
   // Limit

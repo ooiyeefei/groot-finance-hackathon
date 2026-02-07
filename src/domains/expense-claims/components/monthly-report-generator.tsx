@@ -125,6 +125,7 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
   ])
   const [activePreview, setActivePreview] = useState<'summary' | 'formatted' | null>(null)
   const [userRole, setUserRole] = useState<{ manager: boolean; finance_admin: boolean } | null>(null)
+  const [roleLoading, setRoleLoading] = useState(!personalOnly)
 
   // Generate available months (last 12 months)
   const generateMonthOptions = () => {
@@ -219,6 +220,8 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
         }
       } catch (error) {
         console.error('[Monthly Report] 💥 Failed to fetch role/employees:', error)
+      } finally {
+        setRoleLoading(false)
       }
     }
 
@@ -428,24 +431,24 @@ export default function MonthlyReportGenerator({ personalOnly = false }: Monthly
           <div className="flex flex-wrap gap-3">
             <Button
               onClick={generateReport}
-              disabled={generating || generatingFormatted}
+              disabled={generating || generatingFormatted || roleLoading}
               variant="view"
             >
               <FileText className="w-4 h-4 mr-2" />
-              {generating ? 'Generating...' : 'Summary Preview'}
+              {roleLoading ? 'Loading...' : generating ? 'Generating...' : 'Summary Preview'}
             </Button>
 
             <Button
               onClick={generateFormattedReport}
-              disabled={generating || generatingFormatted}
+              disabled={generating || generatingFormatted || roleLoading}
               variant="view"
             >
               <Eye className="w-4 h-4 mr-2" />
-              {generatingFormatted ? 'Generating...' : 'Formatted Preview'}
+              {roleLoading ? 'Loading...' : generatingFormatted ? 'Generating...' : 'Formatted Preview'}
             </Button>
 
             {/* CSV Export as direct download link */}
-            {selectedMonth ? (
+            {selectedMonth && !roleLoading ? (
               <Button
                 asChild
                 variant="primary"
