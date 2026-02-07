@@ -24,11 +24,12 @@
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { SignOutButton } from '@clerk/nextjs'
 import { PlanKey } from '@/lib/stripe/plans'
 import { PricingTable } from '@/domains/billing/components/pricing-table'
 import { TrialCTA } from '@/domains/onboarding/components/plan-selection/trial-cta'
 import { useToast } from '@/components/ui/toast'
-import { AlertTriangle, Loader2 } from 'lucide-react'
+import { AlertTriangle, Loader2, LogOut } from 'lucide-react'
 
 // Inner component that uses useSearchParams (must be wrapped in Suspense)
 function PlanSelectionContent() {
@@ -150,10 +151,16 @@ function PlanSelectionContent() {
         />
 
         {/* Footer Note */}
-        <div className="text-center pt-4">
+        <div className="text-center pt-4 space-y-3">
           <p className="text-sm text-muted-foreground">
             All plans include full data access and email support
           </p>
+          <SignOutButton redirectUrl="/en/sign-in">
+            <button className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <LogOut className="w-3.5 h-3.5" />
+              Sign out
+            </button>
+          </SignOutButton>
         </div>
       </div>
     </div>
