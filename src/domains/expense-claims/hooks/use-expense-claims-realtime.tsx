@@ -66,6 +66,7 @@ export function useExpenseClaimsRealtime(
       businessId,
       status: options?.status,
       limit: options?.limit ?? 20,
+      personalOnly: true,
     } : 'skip' // Skip query if no businessId
   );
 

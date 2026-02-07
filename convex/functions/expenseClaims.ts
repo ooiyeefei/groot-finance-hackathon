@@ -53,6 +53,7 @@ export const list = query({
     endDate: v.optional(v.string()),
     limit: v.optional(v.number()),
     cursor: v.optional(v.string()),
+    personalOnly: v.optional(v.boolean()), // When true, only show current user's own claims regardless of role
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -95,8 +96,8 @@ export const list = query({
     let claims = await claimsQuery.collect();
 
     // Apply role-based filtering
-    if (role === "employee") {
-      // Employees only see their own claims
+    if (args.personalOnly || role === "employee") {
+      // Personal mode or employees: only show own claims
       claims = claims.filter((claim) => claim.userId === user._id);
     } else if (role === "manager") {
       // Managers see their own + direct reports
@@ -1400,11 +1401,15 @@ export const getReportData = query({
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
       .collect();
 
-    // Filter by submittedAt date range
+    // Filter by transactionDate (receipt/expense date) for the selected month
+    const startDateStr = `${year}-${String(monthNum).padStart(2, "0")}-01`;
+    const endYear = monthNum === 12 ? year + 1 : year;
+    const endMonth = monthNum === 12 ? 1 : monthNum + 1;
+    const endDateStr = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
+
     claims = claims.filter((claim) => {
-      if (!claim.submittedAt) return false;
-      const submitted = new Date(claim.submittedAt);
-      return submitted >= startDate && submitted < endDate;
+      if (!claim.transactionDate) return false;
+      return claim.transactionDate >= startDateStr && claim.transactionDate < endDateStr;
     });
 
     // Filter out deleted claims
@@ -1589,47 +1594,31 @@ export const getFormattedReportData = query({
     const isAdmin = role === "owner" || role === "finance_admin";
     const isManager = role === "manager";
 
-    // Parse month to Unix timestamp range for filtering by approvedAt
+    // Parse month to date range for filtering by transactionDate (receipt/expense date)
     const [year, monthNum] = args.month.split("-").map(Number);
-    // Create start timestamp (first day of month at 00:00:00 UTC)
-    const startTimestamp = new Date(Date.UTC(year, monthNum - 1, 1, 0, 0, 0)).getTime();
-    // Create end timestamp (first day of next month at 00:00:00 UTC)
-    const endTimestamp = new Date(Date.UTC(year, monthNum, 1, 0, 0, 0)).getTime();
+    const startDateStr = `${year}-${String(monthNum).padStart(2, "0")}-01`;
+    const endYear = monthNum === 12 ? year + 1 : year;
+    const endMonth = monthNum === 12 ? 1 : monthNum + 1;
+    const endDateStr = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
 
-    // Get claims and filter by approvedAt timestamp
+    // Get claims for the business
     let claims = await ctx.db
       .query("expense_claims")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
       .collect();
 
-    // Debug: Log date range and claims before filtering
-    console.log(`[Report Debug] Timestamp range: ${startTimestamp} to ${endTimestamp} (${new Date(startTimestamp).toISOString()} to ${new Date(endTimestamp).toISOString()})`);
-    console.log(`[Report Debug] Total claims in business before date filter: ${claims.length}`);
-    console.log(`[Report Debug] Claims approvedAt: ${claims.map(c => c.approvedAt ? new Date(c.approvedAt).toISOString() : 'NULL').join(', ')}`);
+    // Filter by transactionDate (receipt/expense date) for the selected month
+    claims = claims.filter((claim) => {
+      if (!claim.transactionDate) return false;
+      return claim.transactionDate >= startDateStr && claim.transactionDate < endDateStr;
+    });
 
-    // Filter by status and date
+    // Apply status filter if provided
     if (args.status && args.status !== "all") {
-      // Filter by specific status and submittedAt date
-      claims = claims.filter((claim) => {
-        if (claim.status !== args.status) return false;
-        // For draft claims, use createdAt; for others use submittedAt
-        const dateField = claim.status === "draft" ? claim._creationTime : claim.submittedAt;
-        if (!dateField) return false;
-        return dateField >= startTimestamp && dateField < endTimestamp;
-      });
-    } else {
-      // Default: only include approved/reimbursed claims filtered by approvedAt
-      claims = claims.filter((claim) => {
-        if (!["approved", "reimbursed"].includes(claim.status)) return false;
-        if (!claim.approvedAt) return false;
-        return claim.approvedAt >= startTimestamp && claim.approvedAt < endTimestamp;
-      });
+      claims = claims.filter((claim) => claim.status === args.status);
     }
 
-    console.log(`[Report Debug] Claims after date filter: ${claims.length}`);
-
     claims = claims.filter((claim) => !claim.deletedAt);
-    console.log(`[Report Debug] Claims after deletedAt filter: ${claims.length}`);
 
     // Apply RBAC filtering
     if (args.directReportsOnly && (isManager || isAdmin)) {
@@ -1663,19 +1652,9 @@ export const getFormattedReportData = query({
       if (!isAdmin && !isManager) {
         return { error: "Only managers and finance_admins can filter by employee ID" };
       }
-      console.log(`[Report Debug] employeeId received: ${args.employeeId}`);
-      console.log(`[Report Debug] Claims before employee filter: ${claims.length}`);
-      console.log(`[Report Debug] Claim userIds: ${claims.map(c => c.userId).join(', ')}`);
-
       const filterUser = await resolveById(ctx.db, "users", args.employeeId);
-      console.log(`[Report Debug] resolveById result: ${filterUser ? filterUser._id : 'null'}`);
-
       if (filterUser) {
-        console.log(`[Report Debug] Filtering by userId: ${filterUser._id}`);
         claims = claims.filter((claim) => claim.userId === filterUser._id);
-        console.log(`[Report Debug] Claims after employee filter: ${claims.length}`);
-      } else {
-        console.log(`[Report Debug] WARNING: filterUser is null, no filter applied`);
       }
     } else {
       if (isAdmin) {
