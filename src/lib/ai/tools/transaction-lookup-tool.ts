@@ -5,6 +5,7 @@
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { aiConfig } from '@/lib/ai/config/ai-config'
+import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
 
 interface TransactionLookupParameters {
   query?: string
@@ -290,8 +291,11 @@ export class TransactionLookupTool extends BaseTool {
   }
 
   /**
-   * Calculate date range from dateRange parameters
-   * MEDIUM RISK: Complex logic with deterministic output for LLM date calculations
+   * Calculate date range from dateRange parameters.
+   * Delegates to shared resolveDateRange utility for consistent behavior across all tools.
+   *
+   * Handles legacy patterns (underscore format like "past_60_days", "june_2024")
+   * by normalizing them before passing to the shared resolver.
    */
   private _calculateDateRange(params: TransactionLookupParameters): { startDate?: string; endDate?: string } {
     let startDate: string | undefined = params.startDate
@@ -301,62 +305,17 @@ export class TransactionLookupTool extends BaseTool {
       return { startDate, endDate }
     }
 
-    console.log(`[TransactionLookupTool] DETERMINISTIC: Calculating dates for range: ${params.dateRange}`)
-    const today = new Date() // Current date - reliable!
+    console.log(`[TransactionLookupTool] DETERMINISTIC: Calculating dates via shared resolver for: ${params.dateRange}`)
 
-    // Handle month_year patterns (e.g., "june_2024") and month-only patterns (e.g., "june")
-    const monthYearMatch = params.dateRange.match(/^(\w+)_(\d{4})$/)
-    const monthOnlyMatch = params.dateRange.match(/^([a-zA-Z]+)$/) &&
-                          !['past_7_days', 'past_30_days', 'past_60_days', 'past_90_days', 'this_month', 'last_month', 'this_year'].includes(params.dateRange)
+    // Normalize legacy underscore patterns to space-separated for the shared resolver
+    // e.g., "past_60_days" → "past 60 days", "june_2024" → "june 2024", "this_month" → "this month"
+    const normalized = params.dateRange.replace(/_/g, ' ')
 
-    if (monthYearMatch) {
-      // Handle patterns like "june_2024"
-      const monthName = monthYearMatch[1].toLowerCase()
-      const year = parseInt(monthYearMatch[2])
-      const result = this._parseMonthYear(monthName, year)
+    const result = resolveDateRange(normalized)
+    startDate = result.startDate
+    endDate = result.endDate
 
-      if (result) {
-        startDate = result.startDate
-        endDate = result.endDate
-        console.log(`[TransactionLookupTool] MONTH_YEAR: Parsed ${params.dateRange} as ${monthName} ${year}`)
-        console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
-      } else {
-        console.warn(`[TransactionLookupTool] Unknown month name: ${monthName}`)
-        endDate = today.toISOString().split('T')[0]
-        startDate = endDate
-      }
-    } else if (monthOnlyMatch) {
-      // Handle patterns like "june" (defaults to current year)
-      const monthName = params.dateRange.toLowerCase()
-      const currentYear = today.getFullYear()
-      const result = this._parseMonthYear(monthName, currentYear)
-
-      if (result) {
-        startDate = result.startDate
-        endDate = result.endDate
-        console.log(`[TransactionLookupTool] MONTH_ONLY: Parsed ${params.dateRange} as ${monthName} ${currentYear}`)
-        console.log(`[TransactionLookupTool] CALCULATED: ${params.dateRange} = ${startDate} to ${endDate}`)
-      } else {
-        console.warn(`[TransactionLookupTool] Unknown month name: ${monthName}`)
-        endDate = today.toISOString().split('T')[0]
-        startDate = endDate
-      }
-    } else {
-      // ENHANCED ERROR HANDLING: Handle dynamic date range calculation with error checking
-      const result = this._calculateStandardDateRange(params.dateRange, today)
-
-      if (result.error) {
-        // LOG ERROR but don't fail completely - use fallback behavior
-        console.error(`[TransactionLookupTool] Date range calculation error: ${result.error}`)
-        console.error(`[TransactionLookupTool] FALLBACK: Using today only as date range`)
-        // Fallback to today-only range to prevent hallucination
-        startDate = result.endDate  // Both are same day as fallback
-        endDate = result.endDate
-      } else {
-        startDate = result.startDate
-        endDate = result.endDate
-      }
-    }
+    console.log(`[TransactionLookupTool] CALCULATED via shared resolver: ${params.dateRange} → ${startDate} to ${endDate} (${result.description})`)
 
     return { startDate, endDate }
   }

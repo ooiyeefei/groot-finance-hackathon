@@ -280,6 +280,89 @@ export interface CancelProposalOutput {
 }
 
 // ============================================================================
+// Tool 7: analyze_team_spending (Manager Cross-Employee Analytics)
+// ============================================================================
+
+export const AnalyzeTeamSpendingInputSchema = z.object({
+  business_id: z.string()
+    .optional()
+    .describe('Business ID (optional when using API key authentication - business is derived from key)'),
+
+  manager_user_id: z.string()
+    .describe('Convex user ID of the requesting manager. Required for authorization check.'),
+
+  employee_filter: z.array(z.string()).optional()
+    .describe('Optional list of employee user IDs to scope the analysis to specific team members'),
+
+  date_range: DateRangeSchema.optional()
+    .describe('Date range to analyze (defaults to last 30 days)'),
+
+  category_filter: z.array(z.string()).optional()
+    .describe('Filter to specific expense categories (e.g., ["TRAVEL_ENTERTAINMENT", "OFFICE_SUPPLIES"])'),
+
+  vendor_filter: z.array(z.string()).optional()
+    .describe('Filter to specific vendor names (case-insensitive partial match)'),
+
+  include_trends: z.boolean()
+    .default(false)
+    .describe('Compare current period with previous period of equal length'),
+
+  include_rankings: z.boolean()
+    .default(true)
+    .describe('Include employee spending rankings in the response')
+});
+
+export type AnalyzeTeamSpendingInput = z.infer<typeof AnalyzeTeamSpendingInputSchema>;
+
+export interface TeamEmployeeSummary {
+  user_id: string;
+  employee_name: string;
+  total_spend: number;
+  transaction_count: number;
+  spend_percentage: number;
+  top_categories: Array<{ category: string; amount: number }>;
+  top_vendors: Array<{ vendor: string; amount: number }>;
+}
+
+export interface TeamCategoryBreakdown {
+  category: string;
+  category_name: string;
+  total_amount: number;
+  transaction_count: number;
+  percentage: number;
+}
+
+export interface TeamVendorBreakdown {
+  vendor_name: string;
+  total_amount: number;
+  transaction_count: number;
+  percentage: number;
+  employee_count: number;
+}
+
+export interface TeamSpendingTrend {
+  current_period_total: number;
+  previous_period_total: number;
+  change_percentage: number;
+  change_direction: 'increase' | 'decrease' | 'stable';
+}
+
+export interface AnalyzeTeamSpendingOutput {
+  team_summary: {
+    total_spend: number;
+    currency: string;
+    employee_count: number;
+    transaction_count: number;
+    date_range: DateRange;
+    average_per_employee: number;
+  };
+  employee_rankings: TeamEmployeeSummary[];
+  category_breakdown: TeamCategoryBreakdown[];
+  vendor_breakdown: TeamVendorBreakdown[];
+  trends?: TeamSpendingTrend;
+}
+
+// ============================================================================
 // Error Types
 // ============================================================================
 
@@ -311,12 +394,14 @@ export type MCPErrorResponse = MCPToolError;
 export type MCPToolInput =
   | DetectAnomaliesInput
   | ForecastCashFlowInput
-  | AnalyzeVendorRiskInput;
+  | AnalyzeVendorRiskInput
+  | AnalyzeTeamSpendingInput;
 
 export type MCPToolOutput =
   | DetectAnomaliesOutput
   | ForecastCashFlowOutput
-  | AnalyzeVendorRiskOutput;
+  | AnalyzeVendorRiskOutput
+  | AnalyzeTeamSpendingOutput;
 
 export interface MCPToolResult<T extends MCPToolOutput = MCPToolOutput> {
   success: true;
@@ -361,6 +446,11 @@ export const MCP_TOOLS = {
     name: 'cancel_proposal',
     description: 'Cancel a pending proposal. Use this when the user decides not to proceed with a proposed action.',
     inputSchema: CancelProposalInputSchema
+  },
+  analyze_team_spending: {
+    name: 'analyze_team_spending',
+    description: 'Analyze team spending patterns across a manager\'s direct reports. Returns employee rankings, category/vendor breakdowns, and optional period-over-period trends. Requires manager authorization.',
+    inputSchema: AnalyzeTeamSpendingInputSchema
   }
 } as const;
 

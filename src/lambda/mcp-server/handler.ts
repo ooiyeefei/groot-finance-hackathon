@@ -27,6 +27,7 @@ import { analyzeVendorRisk } from './tools/analyze-vendor-risk.js';
 import { createProposal } from './tools/create-proposal.js';
 import { confirmProposal } from './tools/confirm-proposal.js';
 import { cancelProposal } from './tools/cancel-proposal.js';
+import { analyzeTeamSpending } from './tools/analyze-team-spending.js';
 import {
   authenticateApiKey,
   updateApiKeyUsage,
@@ -45,6 +46,8 @@ const TOOL_IMPLEMENTATIONS: Record<string, (args: Record<string, unknown>, authC
   create_proposal: createProposal,
   confirm_proposal: confirmProposal,
   cancel_proposal: cancelProposal,
+  // Manager cross-employee analytics
+  analyze_team_spending: analyzeTeamSpending,
 };
 
 // CORS headers for all responses

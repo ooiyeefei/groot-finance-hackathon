@@ -764,6 +764,471 @@ export const getInsightById = query({
 */
 
 // ============================================
+// MANAGER CROSS-EMPLOYEE QUERY FUNCTIONS
+// ============================================
+
+/**
+ * Get employee expenses for a manager.
+ * Fetches accounting entries for a specific employee, authorized by manager relationship.
+ *
+ * Authorization:
+ * - Manager: target employee must be a direct report (managerId match)
+ * - Finance admin / Owner: any employee in business
+ * - Employee: denied
+ */
+export const getEmployeeExpensesForManager = query({
+  args: {
+    businessId: v.string(),
+    requestingUserId: v.string(),
+    targetEmployeeId: v.string(),
+    filters: v.optional(v.object({
+      vendorName: v.optional(v.string()),
+      category: v.optional(v.string()),
+      startDate: v.optional(v.string()),
+      endDate: v.optional(v.string()),
+      transactionType: v.optional(v.string()),
+      limit: v.optional(v.number()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    // Resolve business
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return { authorized: false, error: "Business not found", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: "" };
+    }
+
+    // Resolve requesting user
+    const requester = await resolveById(ctx.db, "users", args.requestingUserId);
+    if (!requester) {
+      return { authorized: false, error: "Requesting user not found", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: "" };
+    }
+
+    // Get requester's membership and role
+    const requesterMembership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", requester._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!requesterMembership || requesterMembership.status !== "active") {
+      return { authorized: false, error: "Not a member of this business", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: "" };
+    }
+
+    const role = requesterMembership.role;
+
+    // Resolve target employee
+    const targetEmployee = await resolveById(ctx.db, "users", args.targetEmployeeId);
+    if (!targetEmployee) {
+      return { authorized: false, error: "Target employee not found", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: "" };
+    }
+
+    // Authorization check
+    if (role === "employee") {
+      return { authorized: false, error: "Employees cannot query other employees' data", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: targetEmployee.fullName || "" };
+    }
+
+    if (role === "manager") {
+      // Verify target is a direct report
+      const targetMembership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", targetEmployee._id).eq("businessId", business._id)
+        )
+        .first();
+
+      if (!targetMembership || targetMembership.managerId !== requester._id) {
+        return { authorized: false, error: "You can only view data for your direct reports", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: targetEmployee.fullName || "" };
+      }
+    }
+    // finance_admin and owner: allowed for any employee in business
+
+    // Query accounting entries
+    const allEntries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Filter: userId match, not deleted, apply optional filters
+    let filtered = allEntries.filter((e) =>
+      e.userId === targetEmployee._id && !e.deletedAt
+    );
+
+    const filters = args.filters;
+    if (filters) {
+      if (filters.vendorName) {
+        const vendorLower = filters.vendorName.toLowerCase();
+        filtered = filtered.filter((e) =>
+          (e.vendorName || "").toLowerCase().includes(vendorLower)
+        );
+      }
+      if (filters.category) {
+        filtered = filtered.filter((e) => e.category === filters.category);
+      }
+      if (filters.startDate) {
+        filtered = filtered.filter((e) =>
+          e.transactionDate && e.transactionDate >= filters.startDate!
+        );
+      }
+      if (filters.endDate) {
+        filtered = filtered.filter((e) =>
+          e.transactionDate && e.transactionDate <= filters.endDate!
+        );
+      }
+      if (filters.transactionType) {
+        filtered = filtered.filter((e) => e.transactionType === filters.transactionType);
+      }
+    }
+
+    // Sort by transactionDate descending
+    filtered.sort((a, b) =>
+      (b.transactionDate || "").localeCompare(a.transactionDate || "")
+    );
+
+    // Compute totals BEFORE applying limit
+    const totalCount = filtered.length;
+    const totalAmount = filtered.reduce(
+      (sum, e) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0),
+      0
+    );
+
+    // Apply limit
+    const limit = Math.min(filters?.limit || 50, 50);
+    const limited = filtered.slice(0, limit);
+
+    // Map entries to response format
+    const entries = limited.map((e) => ({
+      id: e._id.toString(),
+      transactionDate: e.transactionDate || "",
+      description: e.description || "",
+      vendorName: e.vendorName || "",
+      originalAmount: e.originalAmount || 0,
+      homeCurrencyAmount: e.homeCurrencyAmount || e.originalAmount || 0,
+      originalCurrency: e.originalCurrency || "SGD",
+      homeCurrency: e.homeCurrency || business.homeCurrency || "SGD",
+      category: e.category || "",
+      transactionType: e.transactionType,
+      sourceDocumentType: e.sourceDocumentType || "",
+    }));
+
+    return {
+      authorized: true,
+      entries,
+      totalCount,
+      totalAmount: parseFloat(totalAmount.toFixed(2)),
+      currency: business.homeCurrency || "SGD",
+      employeeName: targetEmployee.fullName || targetEmployee.email || "",
+    };
+  },
+});
+
+/**
+ * Get team expense summary for a manager.
+ * Aggregates accounting entries across all direct reports.
+ *
+ * Authorization:
+ * - Manager: aggregates only direct reports
+ * - Finance admin / Owner: aggregates all business employees
+ */
+export const getTeamExpenseSummary = query({
+  args: {
+    businessId: v.string(),
+    requestingUserId: v.string(),
+    filters: v.optional(v.object({
+      startDate: v.optional(v.string()),
+      endDate: v.optional(v.string()),
+      category: v.optional(v.string()),
+      groupBy: v.optional(v.string()), // "employee" | "category" | "vendor"
+    })),
+  },
+  handler: async (ctx, args) => {
+    // Resolve business
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return { authorized: false, error: "Business not found", summary: { totalAmount: 0, currency: "SGD", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
+    }
+
+    // Resolve requesting user
+    const requester = await resolveById(ctx.db, "users", args.requestingUserId);
+    if (!requester) {
+      return { authorized: false, error: "Requesting user not found", summary: { totalAmount: 0, currency: "SGD", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
+    }
+
+    // Get requester's membership
+    const requesterMembership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", requester._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!requesterMembership || requesterMembership.status !== "active") {
+      return { authorized: false, error: "Not a member of this business", summary: { totalAmount: 0, currency: "SGD", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
+    }
+
+    const role = requesterMembership.role;
+    if (role === "employee") {
+      return { authorized: false, error: "Employees cannot access team data", summary: { totalAmount: 0, currency: "SGD", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
+    }
+
+    // Get target employee IDs based on role
+    const allMemberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const activeMemberships = allMemberships.filter((m) => m.status === "active");
+
+    let targetUserIds: Set<string>;
+    if (role === "manager") {
+      // Only direct reports
+      targetUserIds = new Set(
+        activeMemberships
+          .filter((m) => m.managerId === requester._id)
+          .map((m) => m.userId.toString())
+      );
+    } else {
+      // Finance admin / Owner: all employees except self
+      targetUserIds = new Set(
+        activeMemberships
+          .filter((m) => m.userId !== requester._id)
+          .map((m) => m.userId.toString())
+      );
+    }
+
+    if (targetUserIds.size === 0) {
+      return {
+        authorized: true,
+        summary: { totalAmount: 0, currency: business.homeCurrency || "SGD", employeeCount: 0, recordCount: 0 },
+        breakdown: [],
+        topCategories: [],
+      };
+    }
+
+    // Build user name map
+    const userNameMap: Record<string, string> = {};
+    for (const userId of targetUserIds) {
+      const user = await resolveById(ctx.db, "users", userId);
+      if (user) {
+        userNameMap[userId] = user.fullName || user.email || userId;
+      }
+    }
+
+    // Query all entries for business
+    const allEntries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Filter to target users, not deleted, apply optional filters
+    let filtered = allEntries.filter((e) =>
+      targetUserIds.has(e.userId.toString()) && !e.deletedAt
+    );
+
+    const filters = args.filters;
+    if (filters) {
+      if (filters.startDate) {
+        filtered = filtered.filter((e) =>
+          e.transactionDate && e.transactionDate >= filters.startDate!
+        );
+      }
+      if (filters.endDate) {
+        filtered = filtered.filter((e) =>
+          e.transactionDate && e.transactionDate <= filters.endDate!
+        );
+      }
+      if (filters.category) {
+        filtered = filtered.filter((e) => e.category === filters.category);
+      }
+    }
+
+    // Compute summary
+    const totalAmount = filtered.reduce(
+      (sum, e) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0),
+      0
+    );
+    const uniqueEmployees = new Set(filtered.map((e) => e.userId.toString()));
+
+    // Group by requested dimension
+    const groupBy = filters?.groupBy || "employee";
+    const groups: Record<string, { groupKey: string; groupId: string; totalAmount: number; recordCount: number }> = {};
+
+    for (const entry of filtered) {
+      const amount = Math.abs(entry.homeCurrencyAmount || entry.originalAmount || 0);
+      let key: string;
+      let groupKey: string;
+
+      if (groupBy === "employee") {
+        key = entry.userId.toString();
+        groupKey = userNameMap[key] || key;
+      } else if (groupBy === "category") {
+        key = entry.category || "uncategorized";
+        groupKey = key;
+      } else {
+        // vendor
+        key = (entry.vendorName || "Unknown").toLowerCase();
+        groupKey = entry.vendorName || "Unknown";
+      }
+
+      if (!groups[key]) {
+        groups[key] = { groupKey, groupId: key, totalAmount: 0, recordCount: 0 };
+      }
+      groups[key].totalAmount += amount;
+      groups[key].recordCount++;
+    }
+
+    // Build breakdown with percentages, sorted by amount descending
+    const breakdown = Object.values(groups)
+      .map((g) => ({
+        ...g,
+        totalAmount: parseFloat(g.totalAmount.toFixed(2)),
+        percentage: totalAmount > 0 ? parseFloat(((g.totalAmount / totalAmount) * 100).toFixed(1)) : 0,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount);
+
+    // Compute top categories (always, regardless of groupBy)
+    const categoryGroups: Record<string, number> = {};
+    for (const entry of filtered) {
+      const category = entry.category || "uncategorized";
+      const amount = Math.abs(entry.homeCurrencyAmount || entry.originalAmount || 0);
+      categoryGroups[category] = (categoryGroups[category] || 0) + amount;
+    }
+
+    const topCategories = Object.entries(categoryGroups)
+      .map(([category, amount]) => ({
+        category,
+        categoryName: category,
+        totalAmount: parseFloat(amount.toFixed(2)),
+        percentage: totalAmount > 0 ? parseFloat(((amount / totalAmount) * 100).toFixed(1)) : 0,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount)
+      .slice(0, 5);
+
+    return {
+      authorized: true,
+      summary: {
+        totalAmount: parseFloat(totalAmount.toFixed(2)),
+        currency: business.homeCurrency || "SGD",
+        employeeCount: uniqueEmployees.size,
+        recordCount: filtered.length,
+      },
+      breakdown,
+      topCategories,
+    };
+  },
+});
+
+/**
+ * Get team expenses for MCP server analytics tool.
+ * Returns raw expense data for server-side computation.
+ *
+ * System-level query - no Clerk auth required.
+ * Authorization: validates managerUserId has manager/finance_admin/owner role.
+ */
+export const getMcpTeamExpenses = query({
+  args: {
+    businessId: v.string(),
+    managerUserId: v.string(),
+    employeeIds: v.optional(v.array(v.string())),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    categoryFilter: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    // Resolve business
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) return [];
+
+    // Resolve manager user
+    const manager = await resolveById(ctx.db, "users", args.managerUserId);
+    if (!manager) return [];
+
+    // Verify manager's role
+    const managerMembership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", manager._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!managerMembership || managerMembership.status !== "active") return [];
+
+    const role = managerMembership.role;
+    if (!["manager", "finance_admin", "owner"].includes(role)) return [];
+
+    // Get target employee IDs
+    const allMemberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const activeMemberships = allMemberships.filter((m) => m.status === "active");
+
+    let targetUserIds: Set<string>;
+    if (args.employeeIds && args.employeeIds.length > 0) {
+      // Specific employees requested - validate they're in scope
+      const allowedIds = role === "manager"
+        ? new Set(activeMemberships.filter((m) => m.managerId === manager._id).map((m) => m.userId.toString()))
+        : new Set(activeMemberships.map((m) => m.userId.toString()));
+
+      targetUserIds = new Set(args.employeeIds.filter((id) => allowedIds.has(id)));
+    } else {
+      // All in scope
+      targetUserIds = role === "manager"
+        ? new Set(activeMemberships.filter((m) => m.managerId === manager._id).map((m) => m.userId.toString()))
+        : new Set(activeMemberships.filter((m) => m.userId !== manager._id).map((m) => m.userId.toString()));
+    }
+
+    if (targetUserIds.size === 0) return [];
+
+    // Build user name map
+    const userNameMap: Record<string, string> = {};
+    for (const userId of targetUserIds) {
+      const user = await resolveById(ctx.db, "users", userId);
+      if (user) {
+        userNameMap[userId] = user.fullName || user.email || userId;
+      }
+    }
+
+    // Query entries
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Filter
+    let filtered = entries.filter((e) =>
+      targetUserIds.has(e.userId.toString()) && !e.deletedAt
+    );
+
+    if (args.startDate) {
+      filtered = filtered.filter((e) => e.transactionDate && e.transactionDate >= args.startDate!);
+    }
+    if (args.endDate) {
+      filtered = filtered.filter((e) => e.transactionDate && e.transactionDate <= args.endDate!);
+    }
+    if (args.categoryFilter && args.categoryFilter.length > 0) {
+      const categorySet = new Set(args.categoryFilter);
+      filtered = filtered.filter((e) => categorySet.has(e.category || ""));
+    }
+
+    return filtered.map((e) => ({
+      _id: e._id.toString(),
+      userId: e.userId.toString(),
+      userName: userNameMap[e.userId.toString()] || "",
+      transactionDate: e.transactionDate || "",
+      vendorName: e.vendorName || "",
+      category: e.category || "",
+      categoryName: e.category || "",
+      originalAmount: e.originalAmount || 0,
+      homeCurrencyAmount: e.homeCurrencyAmount || e.originalAmount || 0,
+      currency: e.originalCurrency || business.homeCurrency || "SGD",
+      transactionType: e.transactionType,
+    }));
+  },
+});
+
+// ============================================
 // MCP API KEY VALIDATION (Temporary - testing deployment)
 // ============================================
 

@@ -85,7 +85,8 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
     console.log(`[CallModel] Calling LLM for user: ${state.userContext.userId}`);
 
     // Get available tools for function calling from ToolFactory (single source of truth)
-    const tools = await getValidatedTools(modelType);
+    // Role-based filtering: managers see team tools, employees don't
+    const tools = await getValidatedTools(modelType, state.userContext.role);
 
     // Check if we should use Gemini
     if (modelType === 'gemini' && geminiService) {
@@ -261,11 +262,11 @@ function buildMessagesForLLM(trimmedMessages: any[], systemPrompt: string): any[
 }
 
 /**
- * Get validated tools for the LLM
+ * Get validated tools for the LLM, filtered by user role
  */
-async function getValidatedTools(modelType: ModelType): Promise<any[]> {
-  // Use model-specific schemas for clean architectural separation
-  const rawTools = ToolFactory.getToolSchemas(modelType);
+async function getValidatedTools(modelType: ModelType, userRole?: string): Promise<any[]> {
+  // Use role-based schemas to filter tool visibility by user role
+  const rawTools = ToolFactory.getToolSchemasForRole(modelType, userRole);
 
   if (process.env.NODE_ENV === 'development') {
     console.log(`[CallModel] DEBUG: ToolFactory returned ${rawTools.length} raw tools`);
