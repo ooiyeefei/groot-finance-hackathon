@@ -1448,9 +1448,9 @@ export const getTrialStatusByClerkId = query({
       .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", args.clerkUserId))
       .first();
 
+    console.log("[getTrialStatus] DEBUG: lookup clerkUserId=", args.clerkUserId, "→ user=", user?._id, "businessId=", user?.businessId, "clerkUserIdStored=", user?.clerkUserId);
     if (!user || !user.businessId) {
       // No user or no business - let them through to onboarding
-      console.log("[getTrialStatus] DEBUG: user=", user?._id, "businessId=", user?.businessId, "clerkUserId=", args.clerkUserId);
       return { isExpired: false, businessId: null };
     }
 
