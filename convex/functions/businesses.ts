@@ -91,13 +91,17 @@ export const getMyBusinessesWithMemberships = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
+      console.log("[getMyBusinesses] DEBUG: No identity from ctx.auth");
       return [];
     }
+    console.log("[getMyBusinesses] DEBUG: identity.subject=", identity.subject);
 
     const user = await resolveUserByClerkId(ctx.db, identity.subject);
     if (!user) {
+      console.log("[getMyBusinesses] DEBUG: No user found for subject=", identity.subject);
       return [];
     }
+    console.log("[getMyBusinesses] DEBUG: User _id=", user._id, "clerkUserId=", user.clerkUserId);
 
     // Get all memberships, then filter by status in JS
     // (Convex doesn't support .filter() after .withIndex())
@@ -105,6 +109,7 @@ export const getMyBusinessesWithMemberships = query({
       .query("business_memberships")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
+    console.log("[getMyBusinesses] DEBUG: allMemberships count=", allMemberships.length, "statuses=", allMemberships.map(m => m.status));
 
     const memberships = allMemberships.filter((m) => m.status === "active");
 
@@ -169,17 +174,26 @@ export const getBusinessContext = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
+      console.log("[getBusinessContext] DEBUG: No identity from ctx.auth.getUserIdentity()");
       return null;
     }
+    console.log("[getBusinessContext] DEBUG: identity.subject=", identity.subject, "tokenIdentifier=", identity.tokenIdentifier);
 
     const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user || !user.businessId) {
+    if (!user) {
+      console.log("[getBusinessContext] DEBUG: No user found for clerkUserId=", identity.subject);
       return null;
     }
+    if (!user.businessId) {
+      console.log("[getBusinessContext] DEBUG: User found _id=", user._id, "but businessId is null/undefined. clerkUserId=", user.clerkUserId);
+      return null;
+    }
+    console.log("[getBusinessContext] DEBUG: User found _id=", user._id, "businessId=", user.businessId, "clerkUserId=", user.clerkUserId);
 
     // Get business details
     const business = await ctx.db.get(user.businessId);
     if (!business) {
+      console.log("[getBusinessContext] DEBUG: Business not found for id=", user.businessId);
       return null;
     }
 
@@ -192,6 +206,7 @@ export const getBusinessContext = query({
       .first();
 
     if (!membership || membership.status !== "active") {
+      console.log("[getBusinessContext] DEBUG: Membership check failed. membership=", membership?._id, "status=", membership?.status, "userId=", user._id, "businessId=", user.businessId);
       return null;
     }
 
@@ -1435,6 +1450,7 @@ export const getTrialStatusByClerkId = query({
 
     if (!user || !user.businessId) {
       // No user or no business - let them through to onboarding
+      console.log("[getTrialStatus] DEBUG: user=", user?._id, "businessId=", user?.businessId, "clerkUserId=", args.clerkUserId);
       return { isExpired: false, businessId: null };
     }
 

@@ -74,11 +74,13 @@ export async function getCurrentUserContextWithBusiness(): Promise<UserContext |
     if (!userId) return null
 
     // PERFORMANCE FIX: Get business context with ownership info (no duplicate calls)
+    console.log('[RBAC] DEBUG: Getting business context for clerkUserId=', userId)
     const businessContext = await getCurrentBusinessContext(userId)
     if (!businessContext) {
-      console.warn('[RBAC] No active business context for user')
+      console.warn('[RBAC] No active business context for user', userId)
       return null
     }
+    console.log('[RBAC] DEBUG: Business context found, role=', businessContext.role, 'businessId=', businessContext.businessId)
 
     // PERFORMANCE FIX: Skip ensureUserProfile on every call - only needed once at login/switch
     // Business membership already provides the profile data we need

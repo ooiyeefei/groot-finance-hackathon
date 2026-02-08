@@ -72,9 +72,10 @@ async function checkTrialExpiration(clerkUserId: string): Promise<{
       businessId: result.businessId,
     }
   } catch (error) {
-    console.error('[Middleware] Error checking trial expiration:', error)
-    // On error, fail open (allow access)
-    return { isExpired: false, businessId: null }
+    console.error('[Middleware] Error checking trial expiration for', clerkUserId, ':', error)
+    // On error, fail open - return a sentinel businessId to prevent onboarding redirect
+    // Previously this returned businessId: null which caused false onboarding redirects
+    return { isExpired: false, businessId: 'error-fallback' }
   }
 }
 

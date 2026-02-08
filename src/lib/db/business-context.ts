@@ -173,14 +173,20 @@ export async function getCurrentBusinessContext(userId?: string): Promise<Busine
   if (!clerkUserId) return null
 
   try {
-    const { client } = await getAuthenticatedConvex()
-    if (!client) return null
+    const { client, userId: authUserId } = await getAuthenticatedConvex()
+    if (!client) {
+      console.warn('[BusinessContext] DEBUG: getAuthenticatedConvex returned null client for', clerkUserId)
+      return null
+    }
+    console.log('[BusinessContext] DEBUG: Authenticated client obtained for', clerkUserId, 'authUserId=', authUserId)
 
     const context = await client.query(api.functions.businesses.getBusinessContext, {})
 
     if (!context) {
+      console.warn('[BusinessContext] DEBUG: getBusinessContext returned null for', clerkUserId)
       return null
     }
+    console.log('[BusinessContext] DEBUG: Context found for', clerkUserId, 'businessId=', context.businessId, 'role=', context.role)
 
     // Map Convex response to expected interface
     return {

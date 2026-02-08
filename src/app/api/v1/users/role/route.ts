@@ -45,7 +45,9 @@ export async function GET(request: NextRequest) {
     }
 
     const startTime = Date.now()
+    console.log('[User Role V1 API] DEBUG: Fetching role for clerkUserId=', userId)
     const roleInfo = await getUserRole()
+    console.log('[User Role V1 API] DEBUG: Role fetched successfully for', userId, 'role=', roleInfo?.profile?.role)
 
     // Cache the result in Redis
     await redisRoleCache.set(userId, roleInfo)
@@ -65,6 +67,7 @@ export async function GET(request: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
     // Handle authentication errors
+    console.error('[User Role V1 API] DEBUG: Error:', errorMessage)
     if (errorMessage.includes('not authenticated')) {
       return NextResponse.json(
         { success: false, error: 'User not authenticated' },
