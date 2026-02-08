@@ -6,9 +6,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserProfile, updateUserProfile } from '@/domains/users/lib/user.service'
+import { getUserProfile, updateUserProfile, updateUserName } from '@/domains/users/lib/user.service'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
+import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
 
 // GET /api/v1/users/profile - Fetch user profile
 export async function GET(request: NextRequest) {
@@ -86,6 +87,44 @@ export async function PATCH(request: NextRequest) {
           { success: false, error: 'Name must be at least 2 characters long' },
           { status: 400 }
         )
+      }
+    }
+
+    // Admin updating another user's name
+    if (body.target_user_id && body.full_name) {
+      try {
+        const userContext = await getCurrentUserContextWithBusiness()
+        if (!userContext || !userContext.businessContext) {
+          return NextResponse.json(
+            { success: false, error: 'Unable to resolve business context' },
+            { status: 403 }
+          )
+        }
+
+        await updateUserName(
+          body.target_user_id,
+          body.full_name,
+          userContext.userId,
+          userContext.businessContext.businessId,
+          userContext.canManageUsers
+        )
+
+        return NextResponse.json({
+          success: true,
+          data: null,
+          message: 'User name updated successfully'
+        })
+      } catch (serviceError) {
+        const errorMessage = serviceError instanceof Error ? serviceError.message : 'Failed to update user name'
+
+        if (errorMessage.includes('Admin permissions required') || errorMessage.includes('Name must be')) {
+          return NextResponse.json(
+            { success: false, error: errorMessage },
+            { status: 403 }
+          )
+        }
+
+        throw serviceError
       }
     }
 
