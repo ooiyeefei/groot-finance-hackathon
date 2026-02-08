@@ -100,10 +100,8 @@ export async function getAuthenticatedConvex(): Promise<{
     return { client: null, userId: null, sessionId: null }
   }
 
-  // Only log in development to reduce noise (JWT tokens are fetched multiple times per request)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Convex Auth] ✅ Got JWT token for user:', userId)
-  }
+  // Debug: Log token acquisition for all users (temporary - remove after debugging)
+  console.log('[Convex Auth] Token obtained for user:', userId, 'tokenLength:', token.length)
 
   // Create a new client instance for this request to avoid race conditions
   const authenticatedClient = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
