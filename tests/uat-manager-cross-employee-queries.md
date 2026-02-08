@@ -4,6 +4,33 @@
 **Date**: 2026-02-07
 **Spec**: `specs/008-manager-agent-queries/spec.md`
 
+## Deployment Status
+
+| Component | Status | Endpoint / Version |
+|-----------|--------|--------------------|
+| Convex backend queries | Deployed | `kindhearted-lynx-129.convex.cloud` |
+| Next.js AI agent tools | Deployed | `finance.hellogroot.com` (Vercel) |
+| MCP Lambda (`analyze_team_spending`) | Deployed | `https://kuy2a5zca8.execute-api.us-west-2.amazonaws.com/v1/mcp` |
+| CDK stack | Verified 2026-02-08 | `FinansealMCPServer` (no changes needed) |
+
+## Test Accounts (YF Test 2 Business)
+
+| Role | User | Clerk ID | Convex User ID |
+|------|------|----------|----------------|
+| Owner / Finance Admin | Employee1 | `user_...` | `kd7...` |
+| Manager | Yee Fei Manager1 | `user_38uz7IZqctGsjLane4X3vglfYHD` | `kd79090511yxjmt4x9rnyy6v0s805z68` |
+| Employee | yeefei+employee1 | `user_...` | `...` |
+
+> Fill in the exact IDs before running tests. Ensure the manager has direct reports assigned via `managerId` on `business_memberships`.
+
+## How to Execute
+
+1. **Log in** as the test user for the role being tested
+2. **Navigate** to AI Assistant (sidebar)
+3. **Type** the input from each test case
+4. **Compare** AI response to expected output
+5. **Record** Pass/Fail in the execution log at the bottom
+
 ## Prerequisites
 
 - Deployed to staging/production (Convex + CDK Lambda)
@@ -461,45 +488,63 @@
 
 ## Test Execution Log
 
+**Environment**: Production (`finance.hellogroot.com`)
+**MCP Endpoint**: `https://kuy2a5zca8.execute-api.us-west-2.amazonaws.com/v1/mcp`
+
+### Priority Order
+
+Run these sections in order — earlier sections validate foundations for later ones:
+
+1. **Role-Based Access (TC-019 to TC-023)** — verifies tools appear/hide by role
+2. **Manager Employee Expense Queries (TC-001 to TC-005)** — core `get_employee_expenses` tool
+3. **Employee Spending by Category (TC-006 to TC-008)** — category mapping
+4. **Date Range Calculation (TC-013 to TC-018)** — date resolver accuracy
+5. **Aggregate Team Spending (TC-009 to TC-012)** — `get_team_summary` tool
+6. **Response Formatting (TC-024 to TC-026)** — structured output
+7. **Authorization & Security (TC-027 to TC-029)** — cross-business isolation
+8. **MCP Server Integration (TC-030 to TC-031)** — external MCP tool
+9. **Backward Compatibility (TC-032 to TC-035)** — existing tools unaffected
+10. **Edge Cases (TC-036 to TC-040)** — stress/boundary testing
+
 | TC ID | Tester | Date | Environment | Result | Notes |
 |-------|--------|------|-------------|--------|-------|
-| TC-001 | | | | | |
-| TC-002 | | | | | |
-| TC-003 | | | | | |
-| TC-004 | | | | | |
-| TC-005 | | | | | |
-| TC-006 | | | | | |
-| TC-007 | | | | | |
-| TC-008 | | | | | |
-| TC-009 | | | | | |
-| TC-010 | | | | | |
-| TC-011 | | | | | |
-| TC-012 | | | | | |
-| TC-013 | | | | | |
-| TC-014 | | | | | |
-| TC-015 | | | | | |
-| TC-016 | | | | | |
-| TC-017 | | | | | |
-| TC-018 | | | | | |
-| TC-019 | | | | | |
-| TC-020 | | | | | |
-| TC-021 | | | | | |
-| TC-022 | | | | | |
-| TC-023 | | | | | |
-| TC-024 | | | | | |
-| TC-025 | | | | | |
-| TC-026 | | | | | |
-| TC-027 | | | | | |
-| TC-028 | | | | | |
-| TC-029 | | | | | |
-| TC-030 | | | | | |
-| TC-031 | | | | | |
-| TC-032 | | | | | |
-| TC-033 | | | | | |
-| TC-034 | | | | | |
-| TC-035 | | | | | |
-| TC-036 | | | | | |
-| TC-037 | | | | | |
-| TC-038 | | | | | |
-| TC-039 | | | | | |
-| TC-040 | | | | | |
+| TC-001 | | | Production | | |
+| TC-002 | | | Production | | |
+| TC-003 | | | Production | | |
+| TC-004 | | | Production | | |
+| TC-005 | | | Production | | |
+| TC-006 | | | Production | | |
+| TC-007 | | | Production | | |
+| TC-008 | | | Production | | |
+| TC-009 | | | Production | | |
+| TC-010 | | | Production | | |
+| TC-011 | | | Production | | |
+| TC-012 | | | Production | | |
+| TC-013 | | | Production | | |
+| TC-014 | | | Production | | |
+| TC-015 | | | Production | | |
+| TC-016 | | | Production | | |
+| TC-017 | | | Production | | |
+| TC-018 | | | Production | | |
+| TC-019 | | | Production | | |
+| TC-020 | | | Production | | |
+| TC-021 | | | Production | | |
+| TC-022 | | | Production | | |
+| TC-023 | | | Production | | |
+| TC-024 | | | Production | | |
+| TC-025 | | | Production | | |
+| TC-026 | | | Production | | |
+| TC-027 | | | Production | | |
+| TC-028 | | | Production | | |
+| TC-029 | | | Production | | |
+| TC-030 | | | Production | | |
+| TC-031 | | | Production | | |
+| TC-032 | | | Production | | |
+| TC-033 | | | Production | | |
+| TC-034 | | | Production | | |
+| TC-035 | | | Production | | |
+| TC-036 | | | Production | | |
+| TC-037 | | | Production | | |
+| TC-038 | | | Production | | |
+| TC-039 | | | Production | | |
+| TC-040 | | | Production | | |

@@ -11,3 +11,6 @@ export { analyzeVendorRisk } from './analyze-vendor-risk.js';
 export { createProposal } from './create-proposal.js';
 export { confirmProposal } from './confirm-proposal.js';
 export { cancelProposal } from './cancel-proposal.js';
+
+// Manager cross-employee analytics
+export { analyzeTeamSpending } from './analyze-team-spending.js';
