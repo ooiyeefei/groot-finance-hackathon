@@ -407,7 +407,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   }
 
   const updateUserNameMutation = useMutation({
-    mutationFn: async ({ memberId, name }: { memberId: string; name: string }) => {
+    mutationFn: async ({ membershipId, targetUserId, name }: { membershipId: string; targetUserId: string; name: string }) => {
       if (!name.trim()) {
         throw new Error('Please enter a valid name')
       }
@@ -420,7 +420,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           full_name: name.trim(),
-          target_user_id: memberId,
+          target_user_id: targetUserId,
           business_id: businessId,
         })
       })
@@ -429,18 +429,18 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       if (!result.success) {
         throw new Error(result.error || 'Failed to update name')
       }
-      return { result, memberId }
+      return { result, membershipId }
     },
-    onMutate: ({ memberId }) => {
-      setNameUpdating(prev => new Set([...prev, memberId]))
+    onMutate: ({ membershipId }) => {
+      setNameUpdating(prev => new Set([...prev, membershipId]))
     },
-    onSuccess: ({ memberId }) => {
+    onSuccess: ({ membershipId }) => {
       addToast({
         type: 'success',
         title: 'Success',
         description: 'Name updated successfully'
       })
-      cancelEditingName(memberId)
+      cancelEditingName(membershipId)
       // No invalidateQueries needed - Convex real-time subscription auto-updates!
     },
     onError: (error: Error) => {
@@ -455,15 +455,15 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       if (data) {
         setNameUpdating(prev => {
           const newSet = new Set(prev)
-          newSet.delete(data.memberId)
+          newSet.delete(data.membershipId)
           return newSet
         })
       }
     }
   })
 
-  const updateUserName = async (memberId: string) => {
-    await updateUserNameMutation.mutateAsync({ memberId, name: editingNameValue })
+  const updateUserName = async (membershipId: string, targetUserId: string) => {
+    await updateUserNameMutation.mutateAsync({ membershipId, targetUserId, name: editingNameValue })
   }
 
   const getRoleDisplay = (permissions: any, isOwner?: boolean): DisplayRole => {
@@ -754,7 +754,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                       />
                                       <Button
                                         size="sm"
-                                        onClick={() => updateUserName(member.user_id)}
+                                        onClick={() => updateUserName(member.id, member.user_id)}
                                         disabled={nameUpdating.has(member.id)}
                                         className="h-8 px-2 bg-action-view hover:bg-action-view/90 text-action-view-foreground"
                                       >
