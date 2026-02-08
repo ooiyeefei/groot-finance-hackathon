@@ -141,10 +141,16 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error loading memberships'
 
-      // For new users, this is expected - don't treat as error
-      if (errorMsg.includes('User not found') || errorMsg.includes('500')) {
+      // For genuinely new users (no Convex record), this is expected
+      if (errorMsg.includes('User not found')) {
         setMemberships([])
         setMembershipsError(null) // Clear error for new users
+      } else if (errorMsg.includes('500')) {
+        // Server errors are transient — keep error state set to prevent
+        // the auto-redirect logic from treating this as "user has no memberships"
+        setMemberships([])
+        setMembershipsError('transient_server_error')
+        log.warn(' Server error loading memberships (transient, will not redirect):', errorMsg)
       } else {
         setMembershipsError(errorMsg)
         log.error(' Exception loading memberships:', error)
@@ -197,10 +203,16 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error loading context'
 
-      // For new users, this is expected - don't treat as error
-      if (errorMsg.includes('User not found') || errorMsg.includes('500')) {
+      // For genuinely new users (no Convex record), this is expected
+      if (errorMsg.includes('User not found')) {
         setActiveContext(null)
         setContextError(null) // Clear error for new users
+      } else if (errorMsg.includes('500')) {
+        // Server errors are transient — keep error state set to prevent
+        // the auto-redirect logic from treating this as "user has no context"
+        setActiveContext(null)
+        setContextError('transient_server_error')
+        log.warn(' Server error loading context (transient, will not redirect):', errorMsg)
       } else {
         setContextError(errorMsg)
         log.error(' Exception loading context:', error)
@@ -378,9 +390,9 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
           log.debug(' ✅ Memberships loaded successfully')
         } else {
           log.error(' ❌ Memberships failed:', membershipsResult.reason)
-          // For new users, this is expected - don't treat as critical error
+          // Keep error state set to prevent false "no memberships" redirect
           setMemberships([])
-          setMembershipsError(null)
+          setMembershipsError('transient_load_error')
         }
 
         // Handle context result
@@ -388,9 +400,9 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
           log.debug(' ✅ Business context loaded successfully')
         } else {
           log.error(' ❌ Business context failed:', contextResult.reason)
-          // For new users, this is expected
+          // Keep error state set to prevent false redirect
           setActiveContext(null)
-          setContextError(null)
+          setContextError('transient_load_error')
         }
 
         // Handle profile result

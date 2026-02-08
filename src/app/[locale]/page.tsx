@@ -42,10 +42,14 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
     redirect(`/${locale}/access-denied`)
   }
 
-  // If user doesn't have a profile or no business_id, redirect to onboarding
+  // If user doesn't have a profile or no business_id, redirect to expense-claims (safe default).
+  // The middleware already handles the genuine "no business" → onboarding redirect using an
+  // unauthenticated Convex query. If a request reaches here, it passed the middleware check,
+  // meaning the user HAS a business. A null profile is most likely a transient auth token issue
+  // (e.g., Clerk JWT not fully propagated on first login after sign-in).
   if (!userProfile || !userProfile.business_id) {
-    console.log(`[Dashboard] User has no business context, redirecting to onboarding`)
-    redirect(`/${locale}/onboarding/business`)
+    console.log(`[Dashboard] User profile unavailable (likely transient auth issue) - redirecting to expense-claims instead of onboarding`)
+    redirect(`/${locale}/expense-claims`)
   }
 
   console.log(`[Dashboard] User has business context: ${userProfile.business_id}`)

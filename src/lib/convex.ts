@@ -92,10 +92,18 @@ export async function getAuthenticatedConvex(): Promise<{
 
   // Get JWT token for Convex authentication
   // This token is validated by Convex using CLERK_JWT_ISSUER_DOMAIN
-  const token = await getToken({ template: 'convex' })
+  // Retry once with brief delay if first attempt fails (handles first-login JWT race condition
+  // where the Clerk session isn't fully propagated on the very first server-side request)
+  let token = await getToken({ template: 'convex' })
 
   if (!token) {
-    console.error('[Convex Auth] ❌ Failed to get JWT token for Convex. Ensure "convex" JWT template exists in Clerk Dashboard.')
+    console.warn('[Convex Auth] ⚠️ First token attempt returned null for user:', userId, '- retrying after 200ms...')
+    await new Promise(r => setTimeout(r, 200))
+    token = await getToken({ template: 'convex' })
+  }
+
+  if (!token) {
+    console.error('[Convex Auth] ❌ Failed to get JWT token after retry. Ensure "convex" JWT template exists in Clerk Dashboard.')
     console.error('[Convex Auth] userId:', userId, 'sessionId:', sessionId)
     return { client: null, userId: null, sessionId: null }
   }
