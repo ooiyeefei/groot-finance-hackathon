@@ -418,7 +418,11 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
       const response = await fetch(`/api/v1/users/profile`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: name.trim() })
+        body: JSON.stringify({
+          full_name: name.trim(),
+          target_user_id: memberId,
+          business_id: businessId,
+        })
       })
 
       const result = await response.json()

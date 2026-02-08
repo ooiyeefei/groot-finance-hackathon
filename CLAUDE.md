@@ -103,6 +103,7 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - Convex (real-time document database with subscriptions) (001-leave-management)
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, React Query 5.90.7, Zod 3.23.8, Clerk 6.30.0 (002-csv-template-builder)
 - Convex (document database with real-time subscriptions), Convex File Storage for CSV files (002-csv-template-builder)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, LangGraph/LangChain, Zod 3.23.8, AWS CDK (008-manager-agent-queries)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management
