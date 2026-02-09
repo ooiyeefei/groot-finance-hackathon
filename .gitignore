@@ -124,3 +124,13 @@ convex/README.md
 
 # CloudFront signing keys
 secrets/
+
+# Database dumps and backups (use proper backup tooling, not git)
+*_backup.sql
+*_data.sql
+*.sql.bak
+PRODUCTION_MIGRATION_SCRIPT.sql
+
+# Binary test fixtures (large files that bloat history)
+tests/fixtures/**/*.PF3
+test/data/*.pdf
