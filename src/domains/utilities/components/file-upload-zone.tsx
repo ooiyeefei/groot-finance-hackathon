@@ -186,7 +186,9 @@ export default function FileUploadZone({
     }
   }
 
-  // Upload multiple files
+  // Upload multiple files in parallel with concurrency limit
+  const CONCURRENCY_LIMIT = 3
+
   const uploadFiles = async (files: File[]) => {
     // Notify parent component that upload is starting
     onUploadStart?.()
@@ -202,25 +204,37 @@ export default function FileUploadZone({
 
     const uploadedDocuments: UploadedDocument[] = []
     const errors: string[] = []
+    let completedCount = 0
 
-    for (let i = 0; i < files.length; i++) {
+    // Process files in parallel batches of CONCURRENCY_LIMIT
+    const processFile = async (file: File) => {
       try {
-        const uploadedDocument = await uploadFile(files[i])
+        const uploadedDocument = await uploadFile(file)
         uploadedDocuments.push(uploadedDocument)
-
-        // Update progress
-        setUploadState(prev => ({
-          ...prev,
-          uploadedFiles: i + 1,
-          progress: ((i + 1) / files.length) * 100
-        }))
-
-        // Notify parent for single file success
         onUploadSuccess?.(uploadedDocument)
       } catch (error) {
-        errors.push(`${files[i].name}: ${error instanceof Error ? error.message : 'Upload failed'}`)
+        errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Upload failed'}`)
+      } finally {
+        completedCount++
+        setUploadState(prev => ({
+          ...prev,
+          uploadedFiles: completedCount,
+          progress: (completedCount / files.length) * 100
+        }))
       }
     }
+
+    // Sliding-window concurrency pool: always keep CONCURRENCY_LIMIT uploads in-flight
+    const pool = new Set<Promise<void>>()
+    for (const file of files) {
+      const task = processFile(file).then(() => { pool.delete(task) })
+      pool.add(task)
+      if (pool.size >= CONCURRENCY_LIMIT) {
+        await Promise.race(pool)
+      }
+    }
+    // Wait for remaining uploads to complete
+    await Promise.all(pool)
 
     // Finalize upload state
     if (errors.length === 0) {
