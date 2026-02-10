@@ -34,6 +34,8 @@ interface FileUploadZoneProps {
   allowMultiple?: boolean
   domain?: 'invoices' | 'expense-claims' // Domain configuration
   submissionId?: string // Link uploaded receipts to an expense submission
+  /** Compact mode: slim inline upload strip without the file types info section */
+  compact?: boolean
 }
 
 export default function FileUploadZone({
@@ -44,6 +46,7 @@ export default function FileUploadZone({
   allowMultiple = false,
   domain = 'invoices', // Default to invoices for backward compatibility
   submissionId,
+  compact = false,
 }: FileUploadZoneProps) {
   const { businessId } = useActiveBusiness()
   const [dragActive, setDragActive] = useState(false)
@@ -339,11 +342,11 @@ export default function FileUploadZone({
   }
 
   return (
-    <div className="space-y-4">
+    <div className={compact ? 'space-y-2' : 'space-y-4'}>
       {/* Upload Zone */}
       <div
         className={`
-          relative border-2 border-dashed rounded-lg p-12 text-center cursor-pointer
+          relative border-2 border-dashed rounded-lg ${compact ? 'px-4 py-3' : 'p-12'} text-center cursor-pointer
           transition-all duration-200
           ${dragActive
             ? 'border-primary bg-primary/10'
@@ -367,86 +370,123 @@ export default function FileUploadZone({
           multiple={allowMultiple}
         />
 
-        <div className="space-y-4">
-          {uploadState.uploading ? (
-            <>
-              <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto" />
-              <div>
-                <p className="text-foreground font-medium">
-                  {uploadState.totalFiles > 1 ? 'Uploading files...' : 'Uploading file...'}
-                </p>
-                <p className="text-muted-foreground text-sm">
+        {compact ? (
+          /* Compact: single row layout */
+          <div className="flex items-center justify-center gap-3">
+            {uploadState.uploading ? (
+              <>
+                <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full flex-shrink-0" />
+                <p className="text-foreground text-sm font-medium">
                   {uploadState.totalFiles > 1
-                    ? `Processing ${uploadState.uploadedFiles} of ${uploadState.totalFiles} files`
-                    : 'Please wait while we process your document'
-                  }
+                    ? `Uploading ${uploadState.uploadedFiles}/${uploadState.totalFiles}...`
+                    : 'Uploading...'}
                 </p>
                 {uploadState.totalFiles > 1 && (
-                  <div className="w-full bg-muted rounded-full h-2 mt-2">
+                  <div className="w-24 bg-muted rounded-full h-1.5">
                     <div
-                      className="bg-primary h-2 rounded-full transition-all duration-300"
+                      className="bg-primary h-1.5 rounded-full transition-all duration-300"
                       style={{ width: `${uploadState.progress}%` }}
                     />
                   </div>
                 )}
-              </div>
-            </>
-          ) : (
-            <>
-              <Upload className="w-12 h-12 text-muted-foreground mx-auto" />
-              <div>
-                <p className="text-foreground font-medium">
-                  {dragActive
-                    ? `Drop your ${allowMultiple ? 'files' : 'file'} here`
-                    : `Click to upload or drag and drop`
-                  }
+              </>
+            ) : (
+              <>
+                <Upload className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                <p className="text-foreground text-sm font-medium">
+                  {dragActive ? 'Drop files here' : 'Upload receipts'}
                 </p>
-                <p className="text-muted-foreground text-sm mt-1">
-                  JPG, PNG, or PDF files up to 10MB
-                  {allowMultiple && ' (multiple files supported)'}
-                </p>
-              </div>
-            </>
-          )}
-        </div>
+                <span className="text-muted-foreground text-xs">
+                  JPG, PNG, PDF up to 10MB
+                </span>
+              </>
+            )}
+          </div>
+        ) : (
+          /* Default: large centered layout */
+          <div className="space-y-4">
+            {uploadState.uploading ? (
+              <>
+                <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+                <div>
+                  <p className="text-foreground font-medium">
+                    {uploadState.totalFiles > 1 ? 'Uploading files...' : 'Uploading file...'}
+                  </p>
+                  <p className="text-muted-foreground text-sm">
+                    {uploadState.totalFiles > 1
+                      ? `Processing ${uploadState.uploadedFiles} of ${uploadState.totalFiles} files`
+                      : 'Please wait while we process your document'
+                    }
+                  </p>
+                  {uploadState.totalFiles > 1 && (
+                    <div className="w-full bg-muted rounded-full h-2 mt-2">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadState.progress}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <Upload className="w-12 h-12 text-muted-foreground mx-auto" />
+                <div>
+                  <p className="text-foreground font-medium">
+                    {dragActive
+                      ? `Drop your ${allowMultiple ? 'files' : 'file'} here`
+                      : `Click to upload or drag and drop`
+                    }
+                  </p>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    JPG, PNG, or PDF files up to 10MB
+                    {allowMultiple && ' (multiple files supported)'}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Status Messages */}
       {uploadState.error && (
-        <div className="flex items-center space-x-2 p-4 bg-danger/10 border border-danger rounded-lg">
-          <AlertCircle className="w-5 h-5 text-danger-foreground" />
+        <div className={`flex items-center space-x-2 ${compact ? 'p-2 text-sm' : 'p-4'} bg-danger/10 border border-danger rounded-lg`}>
+          <AlertCircle className={compact ? 'w-4 h-4 text-danger-foreground flex-shrink-0' : 'w-5 h-5 text-danger-foreground'} />
           <p className="text-danger-foreground">{uploadState.error}</p>
         </div>
       )}
 
       {uploadState.success && (
-        <div className="flex items-center space-x-2 p-4 bg-success border border-success rounded-lg">
-          <CheckCircle className="w-5 h-5 text-success-foreground" />
+        <div className={`flex items-center space-x-2 ${compact ? 'p-2 text-sm' : 'p-4'} bg-success border border-success rounded-lg`}>
+          <CheckCircle className={compact ? 'w-4 h-4 text-success-foreground flex-shrink-0' : 'w-5 h-5 text-success-foreground'} />
           <p className="text-success-foreground">{uploadState.success}</p>
         </div>
       )}
 
-      {/* File Format Info */}
-      <div className="bg-muted/50 rounded-lg p-4">
-        <h3 className="text-foreground font-medium mb-2 flex items-center">
-          <FileText className="w-4 h-4 mr-2" />
-          Supported File Types
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground">
-          <div>
-            <strong className="text-foreground">Images:</strong>
-            <br />JPG, JPEG, PNG
-          </div>
-          <div>
-            <strong className="text-foreground">Documents:</strong>
-            <br />PDF (converted to image for OCR)
-          </div>
-          <div>
-            <strong className="text-foreground">Size Limit:</strong>
-            <br />Maximum 10MB
+      {/* File Format Info - hidden in compact mode */}
+      {!compact && (
+        <div className="bg-muted/50 rounded-lg p-4">
+          <h3 className="text-foreground font-medium mb-2 flex items-center">
+            <FileText className="w-4 h-4 mr-2" />
+            Supported File Types
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground">
+            <div>
+              <strong className="text-foreground">Images:</strong>
+              <br />JPG, JPEG, PNG
+            </div>
+            <div>
+              <strong className="text-foreground">Documents:</strong>
+              <br />PDF (converted to image for OCR)
+            </div>
+            <div>
+              <strong className="text-foreground">Size Limit:</strong>
+              <br />Maximum 10MB
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

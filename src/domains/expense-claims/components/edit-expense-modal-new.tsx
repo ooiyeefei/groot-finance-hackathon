@@ -31,6 +31,8 @@ interface EditExpenseModalNewProps {
   onSave: () => void
   onDelete?: () => void
   onReprocess?: () => void
+  /** Hide the individual Submit button (used when editing within a batch submission) */
+  hideSubmit?: boolean
 }
 
 export default function EditExpenseModalNew({
@@ -39,7 +41,8 @@ export default function EditExpenseModalNew({
   onClose,
   onSave,
   onDelete,
-  onReprocess
+  onReprocess,
+  hideSubmit = false
 }: EditExpenseModalNewProps) {
   console.log('EditExpenseModalNew render called - isOpen:', isOpen, 'expenseClaimId:', expenseClaimId)
 
@@ -430,28 +433,30 @@ export default function EditExpenseModalNew({
                 </>
               )}
             </button>
-            <button
-              onClick={() => handleSaveWithLineItems('submit')}
-              disabled={saving || submitting || isReprocessing || checkingDuplicates}
-              className="inline-flex items-center px-3 md:px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
-            >
-              {checkingDuplicates ? (
-                <>
-                  <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
-                  <span className="hidden md:inline">Checking...</span>
-                </>
-              ) : submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
-                  <span className="hidden md:inline">Submitting...</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-4 h-4 md:mr-1.5" />
-                  <span className="hidden md:inline">Submit</span>
-                </>
-              )}
-            </button>
+            {!hideSubmit && (
+              <button
+                onClick={() => handleSaveWithLineItems('submit')}
+                disabled={saving || submitting || isReprocessing || checkingDuplicates}
+                className="inline-flex items-center px-3 md:px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              >
+                {checkingDuplicates ? (
+                  <>
+                    <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
+                    <span className="hidden md:inline">Checking...</span>
+                  </>
+                ) : submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 md:mr-1.5 animate-spin" />
+                    <span className="hidden md:inline">Submitting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 md:mr-1.5" />
+                    <span className="hidden md:inline">Submit</span>
+                  </>
+                )}
+              </button>
+            )}
 
             <button
               onClick={onClose}

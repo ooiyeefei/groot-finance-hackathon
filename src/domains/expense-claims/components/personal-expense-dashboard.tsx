@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import { useSearchParams, useRouter, useParams } from 'next/navigation'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle } from 'lucide-react'
+import { FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,12 +23,10 @@ import { useExpenseClaimsRealtime } from '../hooks/use-expense-claims-realtime'
 import { useExpenseCategories, getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
-const ExpenseSubmissionFlow = lazy(() => import('./expense-submission-flow'))
 const MonthlyReportGenerator = lazy(() => import('./monthly-report-generator'))
 const EditExpenseModalNew = lazy(() => import('./edit-expense-modal-new'))
 const UnifiedExpenseDetailsModal = lazy(() => import('./unified-expense-details-modal'))
 const ConfirmationDialog = lazy(() => import('@/components/ui/confirmation-dialog'))
-const FileUploadZone = lazy(() => import('@/domains/utilities/components/file-upload-zone'))
 const SubmissionList = lazy(() => import('./submission-list'))
 
 interface PersonalExpenseDashboardProps {
@@ -67,7 +65,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   const { categories, loading: categoriesLoading } = useExpenseCategories({ includeDisabled: true })
 
   const [activeTab, setActiveTab] = useState('overview')
-  const [showSubmissionForm, setShowSubmissionForm] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingClaimId, setEditingClaimId] = useState<string | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -77,7 +74,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
   const [isDeleting, setIsDeleting] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [toastType, setToastType] = useState<'success' | 'error'>('success')
-  const [submissionMode, setSubmissionMode] = useState<'camera' | 'manual'>('camera')
   const [reprocessingClaims, setReprocessingClaims] = useState<Set<string>>(new Set())
   const [highlightProcessed, setHighlightProcessed] = useState(false)
 
@@ -366,27 +362,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
           <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
             <SubmissionList locale={locale} />
           </Suspense>
-
-          <PersonalOverviewContent
-            data={dashboardData}
-            categories={categories}
-            onNewClaim={(mode: 'camera' | 'manual' = 'camera') => {
-              setSubmissionMode(mode)
-              setShowSubmissionForm(true)
-            }}
-            setActiveTab={setActiveTab}
-            fetchDashboardData={fetchDashboardData}
-            setShowSubmissionForm={setShowSubmissionForm}
-            setEditingClaimId={setEditingClaimId}
-            setShowEditModal={setShowEditModal}
-            setDetailsClaimId={setDetailsClaimId}
-            setShowDetailsModal={setShowDetailsModal}
-            deleteClaim={handleDeleteClick}
-            setToastMessage={setToastMessage}
-            setToastType={setToastType}
-            handleReprocessClick={handleReprocessClick}
-            reprocessingClaims={reprocessingClaims}
-          />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-4">
@@ -410,79 +385,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
           <PersonalReportsContent />
         </TabsContent>
       </Tabs>
-
-      {/* AI Expense Submission Flow */}
-      {showSubmissionForm && (
-        <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>}>
-          <ExpenseSubmissionFlow
-            initialStep={submissionMode === 'manual' ? 'form' : 'upload'}
-            onClose={(hasBackgroundProcessing = false) => {
-              setShowSubmissionForm(false)
-
-              // If there's background processing, show a notification
-              if (hasBackgroundProcessing) {
-                // Store background processing notification in localStorage
-                localStorage.setItem('backgroundProcessing', JSON.stringify({
-                  message: 'Receipt processing continues in background',
-                  timestamp: new Date().toISOString(),
-                  type: 'info'
-                }))
-              }
-
-              // Refresh dashboard when form closes
-              fetchDashboardData()
-            }}
-            onSubmit={async (data) => {
-              try {
-                // Transform form data to API format
-                const requestBody = {
-                  description: data.description,
-                  business_purpose: data.business_purpose,
-                  expense_category: data.expense_category,
-                  original_amount: data.original_amount,
-                  original_currency: data.original_currency,
-                  home_currency: data.home_currency, // Include home currency for conversion
-                  transaction_date: data.transaction_date,
-                  vendor_name: data.vendor_name,
-                  reference_number: data.reference_number || undefined,
-                  notes: data.notes || undefined,
-                  // Include storage_path for manual receipt uploads
-                  storage_path: data.storage_path || undefined,
-                  line_items: data.line_items || []
-                }
-
-                const response = await fetch('/api/v1/expense-claims', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify(requestBody)
-                })
-
-                if (!response.ok) {
-                  const errorData = await response.json()
-                  throw new Error(errorData.error || 'Failed to submit expense claim')
-                }
-
-                const result = await response.json()
-
-                // Close the form after successful submission
-                setShowSubmissionForm(false)
-
-                // Refresh dashboard data to show new claim
-                fetchDashboardData()
-
-                // Return result for any additional processing
-                return result
-
-              } catch (error) {
-                console.error('Error submitting expense claim:', error)
-                throw error // Let the form handle the error display
-              }
-            }}
-          />
-        </Suspense>
-      )}
 
       {/* Expense Edit Modal */}
       {showEditModal && editingClaimId && (
@@ -561,113 +463,6 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-// Personal Overview Content
-function PersonalOverviewContent({ data, categories, onNewClaim, setActiveTab, fetchDashboardData, setShowSubmissionForm, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
-  data: PersonalDashboardData
-  categories: DynamicExpenseCategory[]
-  onNewClaim: (mode: 'camera' | 'manual') => void
-  setActiveTab: (tab: string) => void
-  fetchDashboardData: () => void
-  setShowSubmissionForm: (show: boolean) => void
-  setEditingClaimId: (id: string | null) => void
-  setShowEditModal: (show: boolean) => void
-  setDetailsClaimId: (id: string | null) => void
-  setShowDetailsModal: (show: boolean) => void
-  deleteClaim: (claimId: string) => void
-  setToastMessage: (message: string | null) => void
-  setToastType: (type: 'success' | 'error') => void
-  handleReprocessClick: (claimId: string, storagePath: string) => Promise<void>
-  reprocessingClaims: Set<string>
-}) {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Quick Actions */}
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-foreground">Quick Actions</CardTitle>
-          <CardDescription>Create expense submissions or enter claims manually</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Button
-              onClick={() => onNewClaim('camera')}
-              variant="primary"
-              className="justify-center"
-            >
-              <Camera className="w-4 h-4 mr-2" />
-              Capture Receipt
-            </Button>
-            <Button
-              onClick={() => onNewClaim('manual')}
-              variant="secondary"
-              className="justify-center"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Manual Entry
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-3">
-            For batch uploads, use &ldquo;New Submission&rdquo; above to group multiple receipts for approval.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Recent Claims Status */}
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-foreground flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            Recent Claims
-          </CardTitle>
-          <CardDescription>Your latest expense claim status</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {data.recent_claims.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
-              <FileText className="w-12 h-12 mx-auto mb-4" />
-              <p>No expense claims yet</p>
-              <p className="text-sm">Submit your first expense claim to get started</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {data.recent_claims.slice(0, 5).map((claim: any, index: number) => (
-                <ExpenseClaimCard
-                  key={`overview-${claim.id}-${index}`}
-                  claim={claim}
-                  index={index}
-                  context="overview"
-                  categories={categories}
-                  setEditingClaimId={setEditingClaimId}
-                  setShowEditModal={setShowEditModal}
-                  setDetailsClaimId={setDetailsClaimId}
-                  setShowDetailsModal={setShowDetailsModal}
-                  deleteClaim={deleteClaim}
-                  fetchDashboardData={fetchDashboardData}
-                  setToastMessage={setToastMessage}
-                  setToastType={setToastType}
-                  handleReprocessClick={handleReprocessClick}
-                  reprocessingClaims={reprocessingClaims}
-                />
-              ))}
-              
-              {data.recent_claims.length > 5 && (
-                <Button
-                  variant="ghost"
-                  className="w-full"
-                  onClick={() => setActiveTab('history')}
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  View all {data.recent_claims.length} claims
-                </Button>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }
@@ -861,34 +656,6 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
             >
               <Trash2 className="w-4 h-4 mr-1.5" />
               Delete
-            </Button>
-            <Button
-              onClick={async () => {
-                try {
-                  const response = await fetch(`/api/v1/expense-claims/${claim.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'submitted' })
-                  })
-
-                  const result = await response.json()
-
-                  if (response.ok && result.success) {
-                    fetchDashboardData() // Refresh data
-                  } else {
-                    console.error('Submit failed:', result.error)
-                    alert(`Failed to submit claim: ${result.error}`)
-                  }
-                } catch (error) {
-                  console.error('Failed to submit claim:', error)
-                  alert('Failed to submit claim. Please try again.')
-                }
-              }}
-              variant="primary"
-              size="sm"
-            >
-              <CheckCircle className="w-4 h-4 mr-1.5" />
-              Submit
             </Button>
           </>
         )}
@@ -1152,87 +919,22 @@ function PersonalDashboardSkeleton() {
           <div className="bg-transparent rounded-lg m-1"></div>
         </div>
 
-        {/* Overview Content Skeleton - Fixed heights prevent CLS */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Quick Actions Card - min-height matches loaded content */}
-          <Card className="bg-card border-border min-h-[340px]">
-            <CardHeader className="pb-2">
-              <div className="animate-pulse space-y-2">
-                <div className="h-6 bg-muted rounded w-32"></div>
-                <div className="h-4 bg-muted rounded w-48"></div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="animate-pulse space-y-6">
-                {/* File Upload Zone - exact height */}
-                <div className="border-2 border-dashed border-border rounded-lg h-[140px] bg-muted/20"></div>
-                {/* Buttons */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="h-10 bg-muted rounded"></div>
-                  <div className="h-10 bg-muted rounded"></div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Claims Card - min-height matches loaded content */}
-          <Card className="bg-card border-border min-h-[340px]">
-            <CardHeader className="pb-2">
-              <div className="animate-pulse space-y-2">
-                <div className="h-6 bg-muted rounded w-40"></div>
-                <div className="h-4 bg-muted rounded w-56"></div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="animate-pulse space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <ExpenseClaimCardSkeleton key={i} />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Submission List Skeleton */}
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div className="animate-pulse space-y-2">
+              <div className="h-6 bg-muted rounded w-48"></div>
+              <div className="h-4 bg-muted rounded w-32"></div>
+            </div>
+            <div className="h-10 bg-muted rounded w-40 animate-pulse"></div>
+          </div>
+          <div className="animate-pulse h-10 bg-muted rounded w-full"></div>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="animate-pulse h-[76px] bg-muted/50 rounded-lg border border-border" />
+          ))}
         </div>
       </div>
     </div>
   )
 }
 
-// ✅ PERFORMANCE OPTIMIZATION: Individual expense claim card skeleton
-// CLS FIX: Fixed min-height prevents layout shift during data load
-function ExpenseClaimCardSkeleton() {
-  return (
-    <div className="p-3 bg-muted/50 rounded-lg border border-border animate-pulse min-h-[140px]">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex-1 space-y-1">
-          <div className="h-4 bg-muted rounded w-3/4"></div>
-          <div className="h-3 bg-muted rounded w-1/2"></div>
-        </div>
-        <div className="text-right space-y-1">
-          <div className="h-4 bg-muted rounded w-16"></div>
-          <div className="h-3 bg-muted rounded w-12"></div>
-        </div>
-      </div>
-
-      {/* Status and Progress */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="h-6 bg-muted rounded w-20"></div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="w-full bg-muted rounded-full h-2">
-          <div className="h-2 bg-muted rounded-full w-1/3"></div>
-        </div>
-
-        <div className="h-3 bg-muted rounded w-2/3"></div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="mt-3 flex items-center space-x-2">
-        <div className="h-8 bg-muted rounded w-16"></div>
-        <div className="h-8 bg-muted rounded w-20"></div>
-      </div>
-    </div>
-  )
-}

@@ -22,7 +22,9 @@ import {
   X,
   AlertCircle,
   Loader2,
+  Upload,
 } from 'lucide-react'
+import { useExpenseCategories, getCategoryName } from '../hooks/use-expense-categories'
 
 // Lazy load the existing file upload component (handles full upload + AI processing pipeline)
 const FileUploadZone = lazy(() => import('@/domains/utilities/components/file-upload-zone'))
@@ -58,6 +60,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const router = useRouter()
   const { businessId } = useActiveBusiness()
   const { data, isLoading, error, refetch } = useSubmissionDetail(submissionId)
+  const { categories } = useExpenseCategories({ includeDisabled: true })
   const { updateSubmission, deleteSubmission, submitForApproval, approveSubmission, rejectSubmission, removeClaim } = useSubmissionMutations()
 
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
@@ -182,11 +185,6 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
 
   return (
     <div className="space-y-6">
-      {/* Back button */}
-      <Button variant="ghost" size="sm" onClick={() => router.push(`/${locale}/expense-claims`)}>
-        <ArrowLeft className="h-4 w-4 mr-2" /> Back
-      </Button>
-
       {/* Rejection banner */}
       {submission.rejectedAt && submission.rejectionReason && (
         <Card className="border-red-500/30 bg-red-500/5">
@@ -237,6 +235,9 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
             <div className="flex-1 min-w-0">
               {isEditingTitle ? (
                 <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(`/${locale}/expense-claims`)}>
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
                   <Input
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
@@ -249,6 +250,9 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(`/${locale}/expense-claims`)}>
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
                   <h1 className="text-2xl font-semibold text-foreground truncate">{submission.title}</h1>
                   {isDraft && (
                     <Button variant="ghost" size="sm" onClick={() => { setEditTitle(submission.title); setIsEditingTitle(true) }}>
@@ -328,25 +332,19 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
         </Card>
       )}
 
-      {/* Upload area (only for draft owners) */}
+      {/* Compact upload area (only for draft owners) */}
       {isDraft && (
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-lg">Upload Receipts</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-              <FileUploadZone
-                domain="expense-claims"
-                allowMultiple={true}
-                autoProcess={true}
-                submissionId={submissionId}
-                onUploadSuccess={handleUploadSuccess}
-                onBatchUploadSuccess={handleUploadSuccess}
-              />
-            </Suspense>
-          </CardContent>
-        </Card>
+        <Suspense fallback={<div className="flex items-center justify-center p-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
+          <FileUploadZone
+            domain="expense-claims"
+            allowMultiple={true}
+            autoProcess={true}
+            submissionId={submissionId}
+            onUploadSuccess={handleUploadSuccess}
+            onBatchUploadSuccess={handleUploadSuccess}
+            compact={true}
+          />
+        </Suspense>
       )}
 
       {/* Claims list */}
@@ -389,7 +387,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                           }
                         </td>
                         <td className="px-4 py-3 text-foreground text-sm">
-                          {claim.expenseCategory || <span className="text-muted-foreground">—</span>}
+                          {claim.expenseCategory ? getCategoryName(claim.expenseCategory, categories) : <span className="text-muted-foreground">—</span>}
                         </td>
                         <td className="px-4 py-3 text-foreground text-sm">
                           {claim.transactionDate ? formatBusinessDate(claim.transactionDate) : <span className="text-muted-foreground">—</span>}
@@ -465,6 +463,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
           isOpen={true}
           onClose={handleClaimModalClose}
           onSave={handleClaimModalClose}
+          hideSubmit={true}
         />
       )}
 
