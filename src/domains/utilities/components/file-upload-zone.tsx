@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react'
+import { Upload, AlertCircle, CheckCircle } from 'lucide-react'
 import { useActiveBusiness } from '@/contexts/business-context'
 
 // File validation constants
@@ -480,29 +480,6 @@ export default function FileUploadZone({
         </div>
       )}
 
-      {/* File Format Info - hidden in compact mode */}
-      {!compact && (
-        <div className="bg-muted/50 rounded-lg p-4">
-          <h3 className="text-foreground font-medium mb-2 flex items-center">
-            <FileText className="w-4 h-4 mr-2" />
-            Supported File Types
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground">
-            <div>
-              <strong className="text-foreground">Images:</strong>
-              <br />JPG, JPEG, PNG
-            </div>
-            <div>
-              <strong className="text-foreground">Documents:</strong>
-              <br />PDF (converted to image for OCR)
-            </div>
-            <div>
-              <strong className="text-foreground">Size Limit:</strong>
-              <br />Maximum 10MB
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
