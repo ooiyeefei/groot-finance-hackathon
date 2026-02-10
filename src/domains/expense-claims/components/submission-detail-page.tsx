@@ -3,7 +3,9 @@
 import { useState, useCallback, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSubmissionDetail, useSubmissionMutations } from '../hooks/use-expense-submissions'
-import { ClaimDetailDrawer } from './claim-detail-drawer'
+import { useActiveBusiness } from '@/contexts/business-context'
+import EditExpenseModalNew from './edit-expense-modal-new'
+import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -54,10 +56,11 @@ const CLAIM_STATUS_BADGES: Record<string, { className: string; label: string }> 
 
 export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailPageProps) {
   const router = useRouter()
+  const { businessId } = useActiveBusiness()
   const { data, isLoading, error, refetch } = useSubmissionDetail(submissionId)
   const { updateSubmission, deleteSubmission, submitForApproval, approveSubmission, rejectSubmission, removeClaim } = useSubmissionMutations()
 
-  const [selectedClaim, setSelectedClaim] = useState<typeof claims[number] | null>(null)
+  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [showRejectDialog, setShowRejectDialog] = useState(false)
@@ -75,6 +78,11 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const processingStatuses = ['uploading', 'classifying', 'analyzing', 'extracting', 'processing']
   const hasProcessingClaims = claims.some((c) => processingStatuses.includes(c.status))
   const canSubmit = isDraft && claims.length > 0 && !hasProcessingClaims
+
+  // Determine which modal to show based on claim status
+  const selectedClaim = claims.find((c) => c._id === selectedClaimId)
+  const showEditModal = !!selectedClaimId && selectedClaim?.status === 'draft'
+  const showViewModal = !!selectedClaimId && selectedClaim?.status !== 'draft'
 
   // Handle receipt upload success - the FileUploadZone handles the full pipeline
   // (upload to storage, trigger AI classification/extraction, create claim record)
@@ -145,6 +153,11 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
       alert(e.message)
     }
   }, [submissionId, removeClaim, refetch])
+
+  const handleClaimModalClose = useCallback(() => {
+    setSelectedClaimId(null)
+    refetch()
+  }, [refetch])
 
   if (isLoading) {
     return (
@@ -364,7 +377,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                       <tr
                         key={claim._id}
                         className="border-b border-border hover:bg-muted/50 cursor-pointer transition-colors"
-                        onClick={() => setSelectedClaim(claim)}
+                        onClick={() => setSelectedClaimId(claim._id)}
                       >
                         <td className="px-4 py-3 text-foreground">
                           {claim.vendorName || <span className="text-muted-foreground italic">Pending extraction</span>}
@@ -445,12 +458,26 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
         </Card>
       )}
 
-      {/* Claim Detail Drawer */}
-      <ClaimDetailDrawer
-        claim={selectedClaim}
-        isOpen={!!selectedClaim}
-        onClose={() => setSelectedClaim(null)}
-      />
+      {/* Edit modal for draft claims (image preview + edit fields + line items) */}
+      {showEditModal && selectedClaimId && (
+        <EditExpenseModalNew
+          expenseClaimId={selectedClaimId}
+          isOpen={true}
+          onClose={handleClaimModalClose}
+          onSave={handleClaimModalClose}
+        />
+      )}
+
+      {/* View modal for non-draft claims (image preview + read-only details + line items) */}
+      {showViewModal && selectedClaimId && businessId && (
+        <UnifiedExpenseDetailsModal
+          claimId={selectedClaimId}
+          businessId={businessId}
+          isOpen={true}
+          onClose={handleClaimModalClose}
+          viewMode="personal"
+        />
+      )}
     </div>
   )
 }
