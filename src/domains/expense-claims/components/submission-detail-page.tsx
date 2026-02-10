@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Loader2,
   Upload,
+  Brain,
 } from 'lucide-react'
 import { useExpenseCategories, getCategoryName } from '../hooks/use-expense-categories'
 
@@ -394,7 +395,14 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                           {claim.transactionDate ? formatBusinessDate(claim.transactionDate) : <span className="text-muted-foreground">—</span>}
                         </td>
                         <td className="px-4 py-3">
-                          <Badge className={claimBadge.className}>{claimBadge.label}</Badge>
+                          {processingStatuses.includes(claim.status) ? (
+                            <div className="flex items-center gap-2">
+                              <Brain className="h-4 w-4 animate-spin text-yellow-500" />
+                              <span className="text-sm text-yellow-600 dark:text-yellow-400">{claimBadge.label}</span>
+                            </div>
+                          ) : (
+                            <Badge className={claimBadge.className}>{claimBadge.label}</Badge>
+                          )}
                         </td>
                         {isDraft && (
                           <td className="px-4 py-3 text-right">

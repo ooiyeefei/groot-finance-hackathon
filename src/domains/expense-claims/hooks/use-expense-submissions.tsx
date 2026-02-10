@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { useQuery as useTanstackQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery as useConvexQuery } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 import type { ExpenseSubmission, SubmissionWithClaims } from '../types/expense-claims'
 
 // Query keys
@@ -23,12 +25,6 @@ async function fetchSubmissions(businessId: string, status?: string) {
   return response.json()
 }
 
-async function fetchSubmissionDetail(id: string): Promise<SubmissionWithClaims> {
-  const response = await fetch(`/api/v1/expense-submissions/${id}`)
-  if (!response.ok) throw new Error('Failed to fetch submission')
-  return response.json()
-}
-
 async function fetchPendingApprovals(businessId: string) {
   const response = await fetch(`/api/v1/expense-submissions/pending-approvals?businessId=${businessId}`)
   if (!response.ok) throw new Error('Failed to fetch pending approvals')
@@ -44,7 +40,7 @@ interface UseExpenseSubmissionsOptions {
 export function useExpenseSubmissions({ businessId, status, enabled = true }: UseExpenseSubmissionsOptions) {
   const queryClient = useQueryClient()
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useTanstackQuery({
     queryKey: SUBMISSION_KEYS.list(businessId, status),
     queryFn: () => fetchSubmissions(businessId, status),
     enabled: enabled && !!businessId,
@@ -67,23 +63,26 @@ export function useExpenseSubmissions({ businessId, status, enabled = true }: Us
 }
 
 export function useSubmissionDetail(id: string | null) {
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: SUBMISSION_KEYS.detail(id || ''),
-    queryFn: () => fetchSubmissionDetail(id!),
-    enabled: !!id,
-    staleTime: 30_000,
-  })
+  // Use Convex real-time subscription for instant updates when claim statuses change
+  const convexData = useConvexQuery(
+    api.functions.expenseSubmissions.getById,
+    id ? { id } : 'skip'
+  )
+
+  // Convex useQuery returns undefined while loading, null if not found
+  const isLoading = convexData === undefined
+  const data = convexData as SubmissionWithClaims | null | undefined
 
   return {
     data: data || null,
     isLoading,
-    error: error?.message || null,
-    refetch,
+    error: null as string | null,
+    refetch: () => {}, // No-op: Convex subscriptions auto-update
   }
 }
 
 export function usePendingApprovals(businessId: string) {
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useTanstackQuery({
     queryKey: SUBMISSION_KEYS.pendingApprovals(businessId),
     queryFn: () => fetchPendingApprovals(businessId),
     enabled: !!businessId,

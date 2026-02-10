@@ -3,16 +3,14 @@
  * Feature: 007-duplicate-expense-detection
  *
  * Multi-tier matching strategy:
+ * - Early exit: Different reference numbers → NOT a duplicate
  * - Tier 1 (Exact): Receipt/reference number match
- * - Tier 2 (Strong): Vendor + Date + Amount match
- * - Tier 3 (Fuzzy): Normalized vendor + Date ±1 day + Amount ±1%
+ * - Tier 2 (Strong): Vendor + Date + Amount exact match
+ * - Tier 3 (Fuzzy): Normalized vendor + Date + Amount exact match
  */
 
 import {
-  normalizeVendorName,
   vendorNamesMatch,
-  amountsMatch,
-  datesMatch,
 } from './vendor-normalizer'
 import type {
   DuplicateDetectionResult,
@@ -94,6 +92,10 @@ function checkSingleClaim(
     ) {
       return createMatch(claim, 'exact', ['referenceNumber'], 1.0, isCrossUser)
     }
+    // Both claims have reference numbers but they differ → definitively NOT a duplicate.
+    // Different receipt numbers prove these are separate transactions regardless of
+    // vendor/date/amount similarity (e.g., repeat purchases at the same shop).
+    return null
   }
 
   // Tier 2: Strong match - exact vendor + date + amount
@@ -118,17 +120,20 @@ function checkSingleClaim(
     }
   }
 
-  // Tier 3: Fuzzy match - normalized vendor + date ±1 day + amount ±1%
+  // Tier 3: Fuzzy match - normalized vendor + exact date + exact amount
+  // Only vendor name comparison is fuzzy (handles variations like "Starbucks" vs
+  // "STARBUCKS COFFEE SDN BHD"). Date and amount must match exactly because
+  // same vendor on different days or with different amounts = legitimate repeat purchase.
   if (
     claim.vendorName &&
     claim.transactionDate &&
     claim.totalAmount !== null
   ) {
     const vendorFuzzy = vendorNamesMatch(input.vendorName, claim.vendorName)
-    const dateFuzzy = datesMatch(input.transactionDate, claim.transactionDate, true)
-    const amountFuzzy = amountsMatch(input.totalAmount, claim.totalAmount)
+    const dateExact = input.transactionDate === claim.transactionDate
+    const amountExact = input.totalAmount === claim.totalAmount
 
-    if (vendorFuzzy && dateFuzzy && amountFuzzy) {
+    if (vendorFuzzy && dateExact && amountExact) {
       return createMatch(
         claim,
         'fuzzy',
