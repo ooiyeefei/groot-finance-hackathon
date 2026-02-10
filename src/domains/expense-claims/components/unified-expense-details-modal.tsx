@@ -450,8 +450,8 @@ export default function UnifiedExpenseDetailsModal({
               </div>
             ) : error ? (
               <div className="text-center py-12">
-                <AlertCircle className="w-12 h-12 mx-auto text-danger mb-4" />
-                <p className="text-danger mb-4">{error}</p>
+                <AlertCircle className="w-12 h-12 mx-auto text-red-600 dark:text-red-500 mb-4" />
+                <p className="text-red-700 dark:text-red-400 font-medium mb-4">{error}</p>
                 <Button
                   onClick={fetchClaimDetails}
                   variant="outline"

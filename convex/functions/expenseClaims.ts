@@ -451,6 +451,7 @@ export const checkDuplicates = query({
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .filter((q) =>
         q.and(
+          q.eq(q.field("deletedAt"), undefined),
           q.neq(q.field("status"), "rejected"),
           q.neq(q.field("status"), "failed"),
           q.or(

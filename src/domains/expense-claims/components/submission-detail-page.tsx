@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, lazy, Suspense } from 'react'
+import { useState, useCallback, lazy, Suspense, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSubmissionDetail, useSubmissionMutations } from '../hooks/use-expense-submissions'
 import { useActiveBusiness } from '@/contexts/business-context'
@@ -23,9 +23,10 @@ import {
   AlertCircle,
   Loader2,
   Upload,
-  Brain,
 } from 'lucide-react'
 import { useExpenseCategories, getCategoryName } from '../hooks/use-expense-categories'
+import ConfirmationDialog from '@/components/ui/confirmation-dialog'
+import DocumentStatusBadge from '@/domains/invoices/components/document-status-badge'
 
 // Lazy load the existing file upload component (handles full upload + AI processing pipeline)
 const FileUploadZone = lazy(() => import('@/domains/utilities/components/file-upload-zone'))
@@ -71,6 +72,13 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const [rejectReason, setRejectReason] = useState('')
   const [showEmptyWarning, setShowEmptyWarning] = useState(true)
 
+  // Confirmation dialog states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false)
+  const [showRemoveClaimConfirm, setShowRemoveClaimConfirm] = useState(false)
+  const [isConfirmLoading, setIsConfirmLoading] = useState(false)
+  const pendingRemoveClaimId = useRef<string | null>(null)
+
   const submission = data?.submission
   const claims = data?.claims || []
   const totalsByCurrency = data?.totalsByCurrency || []
@@ -112,24 +120,38 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   }, [submissionId, submitForApproval, refetch])
 
   // Handle delete
-  const handleDelete = useCallback(async () => {
-    if (!confirm('Delete this draft submission and all its claims?')) return
+  const handleDeleteClick = useCallback(() => {
+    setShowDeleteConfirm(true)
+  }, [])
+
+  const handleDeleteConfirmed = useCallback(async () => {
     try {
+      setIsConfirmLoading(true)
       await deleteSubmission.mutateAsync(submissionId)
+      setShowDeleteConfirm(false)
       router.push(`/${locale}/expense-claims`)
     } catch (e: any) {
       alert(e.message)
+    } finally {
+      setIsConfirmLoading(false)
     }
   }, [submissionId, deleteSubmission, router, locale])
 
   // Handle approve
-  const handleApprove = useCallback(async () => {
-    if (!confirm('Approve this submission? Accounting entries will be created for all claims.')) return
+  const handleApproveClick = useCallback(() => {
+    setShowApproveConfirm(true)
+  }, [])
+
+  const handleApproveConfirmed = useCallback(async () => {
     try {
+      setIsConfirmLoading(true)
       await approveSubmission.mutateAsync({ id: submissionId })
+      setShowApproveConfirm(false)
       refetch()
     } catch (e: any) {
       alert(e.message)
+    } finally {
+      setIsConfirmLoading(false)
     }
   }, [submissionId, approveSubmission, refetch])
 
@@ -147,13 +169,24 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   }, [submissionId, rejectReason, rejectSubmission, refetch])
 
   // Handle remove claim
-  const handleRemoveClaim = useCallback(async (claimId: string) => {
-    if (!confirm('Remove this claim from the submission?')) return
+  const handleRemoveClaimClick = useCallback((claimId: string) => {
+    pendingRemoveClaimId.current = claimId
+    setShowRemoveClaimConfirm(true)
+  }, [])
+
+  const handleRemoveClaimConfirmed = useCallback(async () => {
+    const claimId = pendingRemoveClaimId.current
+    if (!claimId) return
     try {
+      setIsConfirmLoading(true)
       await removeClaim.mutateAsync({ submissionId, claimId })
+      setShowRemoveClaimConfirm(false)
+      pendingRemoveClaimId.current = null
       refetch()
     } catch (e: any) {
       alert(e.message)
+    } finally {
+      setIsConfirmLoading(false)
     }
   }, [submissionId, removeClaim, refetch])
 
@@ -283,7 +316,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                 {submitForApproval.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
                 Submit for Approval
               </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={deleteSubmission.isPending}>
+              <Button variant="destructive" onClick={handleDeleteClick} disabled={deleteSubmission.isPending}>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Draft
               </Button>
@@ -291,7 +324,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
           )}
           {isSubmitted && (
             <>
-              <Button onClick={handleApprove} disabled={approveSubmission.isPending} className="bg-green-600 hover:bg-green-700 text-white">
+              <Button onClick={handleApproveClick} disabled={approveSubmission.isPending} className="bg-green-600 hover:bg-green-700 text-white">
                 {approveSubmission.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
                 Approve All
               </Button>
@@ -396,10 +429,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                         </td>
                         <td className="px-4 py-3">
                           {processingStatuses.includes(claim.status) ? (
-                            <div className="flex items-center gap-2">
-                              <Brain className="h-4 w-4 animate-spin text-yellow-500" />
-                              <span className="text-sm text-yellow-600 dark:text-yellow-400">{claimBadge.label}</span>
-                            </div>
+                            <DocumentStatusBadge status={claim.status as any} />
                           ) : (
                             <Badge className={claimBadge.className}>{claimBadge.label}</Badge>
                           )}
@@ -409,7 +439,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={(e) => { e.stopPropagation(); handleRemoveClaim(claim._id) }}
+                              onClick={(e) => { e.stopPropagation(); handleRemoveClaimClick(claim._id) }}
                             >
                               <Trash2 className="h-4 w-4 text-muted-foreground" />
                             </Button>
@@ -494,6 +524,41 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
           viewMode="personal"
         />
       )}
+
+      {/* Confirmation dialogs */}
+      <ConfirmationDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => !isConfirmLoading && setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteConfirmed}
+        title="Delete Draft Submission"
+        message="Are you sure you want to delete this draft submission and all its claims? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        isLoading={isConfirmLoading}
+      />
+      <ConfirmationDialog
+        isOpen={showApproveConfirm}
+        onClose={() => !isConfirmLoading && setShowApproveConfirm(false)}
+        onConfirm={handleApproveConfirmed}
+        title="Approve Submission"
+        message="Approve this submission? Accounting entries will be created for all claims."
+        confirmText="Approve"
+        cancelText="Cancel"
+        confirmVariant="primary"
+        isLoading={isConfirmLoading}
+      />
+      <ConfirmationDialog
+        isOpen={showRemoveClaimConfirm}
+        onClose={() => { if (!isConfirmLoading) { setShowRemoveClaimConfirm(false); pendingRemoveClaimId.current = null } }}
+        onConfirm={handleRemoveClaimConfirmed}
+        title="Remove Claim"
+        message="Remove this claim from the submission? The claim will be unlinked but not deleted."
+        confirmText="Remove"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        isLoading={isConfirmLoading}
+      />
     </div>
   )
 }
