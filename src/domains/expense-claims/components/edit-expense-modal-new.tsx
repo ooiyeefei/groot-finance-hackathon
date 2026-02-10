@@ -419,7 +419,7 @@ export default function EditExpenseModalNew({
             <button
               onClick={() => handleSaveWithLineItems('draft')}
               disabled={saving || submitting || isReprocessing}
-              className="inline-flex items-center px-3 md:px-4 py-1.5 bg-secondary hover:bg-secondary/80 text-secondary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-3 md:px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               {saving ? (
                 <>

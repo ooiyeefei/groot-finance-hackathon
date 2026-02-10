@@ -67,6 +67,12 @@ npx cdk deploy --profile groot-finanseal --region us-west-2
 - **Layer hierarchy**: `bg-background` → `bg-surface` → `bg-card` → `bg-muted`
 - **Check first**: `src/components/ui/`, `src/app/globals.css`
 
+### Button Styling (MANDATORY)
+- **Action buttons** (Save, Submit, Confirm, etc.): `bg-primary hover:bg-primary/90 text-primary-foreground` (blue bg, white text)
+- **Destructive buttons** (Delete, Remove, etc.): `bg-destructive hover:bg-destructive/90 text-destructive-foreground` (red bg, white text)
+- **Cancel buttons**: `bg-secondary hover:bg-secondary/80 text-secondary-foreground` (gray bg, white text)
+- Never use gray/secondary styling for action buttons
+
 ### Number Formatting
 ```typescript
 import { formatNumber, formatCurrency } from '@/lib/utils/format-number'
