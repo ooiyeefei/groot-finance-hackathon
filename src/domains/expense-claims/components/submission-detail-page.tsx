@@ -8,7 +8,7 @@ import EditExpenseModalNew from './edit-expense-modal-new'
 import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
@@ -69,6 +69,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [showEmptyWarning, setShowEmptyWarning] = useState(true)
+  const [showUploadZone, setShowUploadZone] = useState(false)
 
   const submission = data?.submission
   const claims = data?.claims || []
@@ -88,7 +89,6 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const showViewModal = !!selectedClaimId && selectedClaim?.status !== 'draft'
 
   // Handle receipt upload success - the FileUploadZone handles the full pipeline
-  // (upload to storage, trigger AI classification/extraction, create claim record)
   const handleUploadSuccess = useCallback(() => {
     refetch()
   }, [refetch])
@@ -184,7 +184,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const statusBadge = STATUS_BADGES[submission.status] || STATUS_BADGES.draft
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Rejection banner */}
       {submission.rejectedAt && submission.rejectionReason && (
         <Card className="border-red-500/30 bg-red-500/5">
@@ -228,87 +228,81 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
         </Card>
       )}
 
-      {/* Header */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between flex-wrap gap-4">
-            <div className="flex-1 min-w-0">
-              {isEditingTitle ? (
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(`/${locale}/expense-claims`)}>
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  <Input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    className="max-w-xs"
-                    autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
-                  />
-                  <Button size="sm" onClick={handleSaveTitle}>Save</Button>
-                  <Button size="sm" variant="ghost" onClick={() => setIsEditingTitle(false)}>Cancel</Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(`/${locale}/expense-claims`)}>
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  <h1 className="text-2xl font-semibold text-foreground truncate">{submission.title}</h1>
-                  {isDraft && (
-                    <Button variant="ghost" size="sm" onClick={() => { setEditTitle(submission.title); setIsEditingTitle(true) }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              )}
-              <div className="flex items-center gap-3 mt-2">
-                <Badge className={statusBadge.className}>{statusBadge.label}</Badge>
-                <span className="text-sm text-muted-foreground">
-                  {claims.length} {claims.length === 1 ? 'claim' : 'claims'}
-                </span>
-                {data?.submitter && (
-                  <span className="text-sm text-muted-foreground">by {data.submitter.name}</span>
-                )}
-              </div>
-              {submission.description && (
-                <p className="text-sm text-muted-foreground mt-2">{submission.description}</p>
-              )}
+      {/* Header row - title + actions */}
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div className="flex-1 min-w-0">
+          {isEditingTitle ? (
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(`/${locale}/expense-claims`)}>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="max-w-xs"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
+              />
+              <Button size="sm" onClick={handleSaveTitle}>Save</Button>
+              <Button size="sm" variant="ghost" onClick={() => setIsEditingTitle(false)}>Cancel</Button>
             </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center gap-2 flex-wrap">
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(`/${locale}/expense-claims`)}>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <h1 className="text-2xl font-semibold text-foreground truncate">{submission.title}</h1>
               {isDraft && (
-                <>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={!canSubmit || submitForApproval.isPending}
-                    title={!canSubmit ? (claims.length === 0 ? 'Add at least one claim' : hasProcessingClaims ? 'Wait for claims to finish processing' : '') : ''}
-                  >
-                    {submitForApproval.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-                    Submit for Approval
-                  </Button>
-                  <Button variant="destructive" onClick={handleDelete} disabled={deleteSubmission.isPending}>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Draft
-                  </Button>
-                </>
-              )}
-              {isSubmitted && (
-                <>
-                  <Button onClick={handleApprove} disabled={approveSubmission.isPending} className="bg-green-600 hover:bg-green-700">
-                    {approveSubmission.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                    Approve All
-                  </Button>
-                  <Button variant="destructive" onClick={() => setShowRejectDialog(true)}>
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Reject
-                  </Button>
-                </>
+                <Button variant="ghost" size="sm" onClick={() => { setEditTitle(submission.title); setIsEditingTitle(true) }}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
               )}
             </div>
+          )}
+          <div className="flex items-center gap-3 mt-1 ml-10">
+            <Badge className={statusBadge.className}>{statusBadge.label}</Badge>
+            <span className="text-sm text-muted-foreground">
+              {claims.length} {claims.length === 1 ? 'claim' : 'claims'}
+            </span>
+            {data?.submitter && (
+              <span className="text-sm text-muted-foreground">by {data.submitter.name}</span>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {isDraft && (
+            <>
+              <Button
+                onClick={handleSubmit}
+                disabled={!canSubmit || submitForApproval.isPending}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                title={!canSubmit ? (claims.length === 0 ? 'Add at least one claim' : hasProcessingClaims ? 'Wait for claims to finish processing' : '') : ''}
+              >
+                {submitForApproval.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                Submit for Approval
+              </Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={deleteSubmission.isPending}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Draft
+              </Button>
+            </>
+          )}
+          {isSubmitted && (
+            <>
+              <Button onClick={handleApprove} disabled={approveSubmission.isPending} className="bg-green-600 hover:bg-green-700 text-white">
+                {approveSubmission.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                Approve All
+              </Button>
+              <Button variant="destructive" onClick={() => setShowRejectDialog(true)}>
+                <XCircle className="h-4 w-4 mr-2" />
+                Reject
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Reject dialog */}
       {showRejectDialog && (
@@ -332,27 +326,48 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
         </Card>
       )}
 
-      {/* Compact upload area (only for draft owners) */}
-      {isDraft && (
-        <Suspense fallback={<div className="flex items-center justify-center p-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
-          <FileUploadZone
-            domain="expense-claims"
-            allowMultiple={true}
-            autoProcess={true}
-            submissionId={submissionId}
-            onUploadSuccess={handleUploadSuccess}
-            onBatchUploadSuccess={handleUploadSuccess}
-            compact={true}
-          />
-        </Suspense>
-      )}
+      {/* Single unified Claims card with upload button in header, table, and totals in footer */}
+      <Card>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h3 className="text-lg font-semibold text-foreground">
+            Claims
+            {totalsByCurrency.length > 0 && (
+              <span className="ml-3 text-base font-normal text-muted-foreground">
+                {totalsByCurrency.map(({ currency, total }) => formatCurrency(total, currency)).join(' + ')}
+              </span>
+            )}
+          </h3>
+          {isDraft && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setShowUploadZone(!showUploadZone)}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Upload Receipts
+            </Button>
+          )}
+        </div>
 
-      {/* Claims list */}
-      {claims.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Claims</CardTitle>
-          </CardHeader>
+        {/* Collapsible upload zone */}
+        {isDraft && showUploadZone && (
+          <div className="px-6 py-3 border-b border-border bg-muted/30">
+            <Suspense fallback={<div className="flex items-center justify-center p-3"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
+              <FileUploadZone
+                domain="expense-claims"
+                allowMultiple={true}
+                autoProcess={true}
+                submissionId={submissionId}
+                onUploadSuccess={handleUploadSuccess}
+                onBatchUploadSuccess={handleUploadSuccess}
+                compact={true}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {/* Claims table */}
+        {claims.length > 0 ? (
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -412,49 +427,57 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                 </tbody>
               </table>
             </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Totals summary */}
-      {totalsByCurrency.length > 0 && (
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-wrap gap-6">
-              {totalsByCurrency.map(({ currency, total }) => (
-                <div key={currency}>
-                  <p className="text-sm text-muted-foreground">Total ({currency})</p>
-                  <p className="text-2xl font-semibold text-foreground">{formatCurrency(total, currency)}</p>
+            {/* Totals footer inside the card */}
+            {totalsByCurrency.length > 0 && (
+              <div className="px-6 py-4 border-t border-border bg-muted/30">
+                <div className="flex flex-wrap items-center gap-6">
+                  {totalsByCurrency.map(({ currency, total }) => (
+                    <div key={currency} className="flex items-baseline gap-2">
+                      <span className="text-sm text-muted-foreground">Total ({currency})</span>
+                      <span className="text-xl font-semibold text-foreground">{formatCurrency(total, currency)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+
+                {/* Reimbursement progress */}
+                {data?.reimbursementProgress && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <p className="text-sm text-muted-foreground">
+                      Reimbursement: {data.reimbursementProgress.reimbursed} of {data.reimbursementProgress.total} claims reimbursed
+                    </p>
+                    <div className="w-full bg-muted rounded-full h-2 mt-2">
+                      <div
+                        className="bg-green-500 h-2 rounded-full transition-all"
+                        style={{ width: `${(data.reimbursementProgress.reimbursed / data.reimbursementProgress.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Approver info */}
+                {data?.approver && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <p className="text-sm text-muted-foreground">
+                      {submission.status === 'submitted' ? 'Pending approval from' : 'Approved by'}: <span className="text-foreground font-medium">{data.approver.name}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        ) : (
+          <CardContent className="p-8">
+            <div className="text-center text-muted-foreground">
+              <Upload className="w-10 h-10 mx-auto mb-3 opacity-50" />
+              <p className="text-base">No claims yet</p>
+              <p className="text-sm mt-1">
+                {isDraft ? 'Click "Upload Receipts" above to add expense claims' : 'This submission has no claims'}
+              </p>
             </div>
-
-            {/* Reimbursement progress */}
-            {data?.reimbursementProgress && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <p className="text-sm text-muted-foreground">
-                  Reimbursement: {data.reimbursementProgress.reimbursed} of {data.reimbursementProgress.total} claims reimbursed
-                </p>
-                <div className="w-full bg-muted rounded-full h-2 mt-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full transition-all"
-                    style={{ width: `${(data.reimbursementProgress.reimbursed / data.reimbursementProgress.total) * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Approver info */}
-            {data?.approver && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <p className="text-sm text-muted-foreground">
-                  {submission.status === 'submitted' ? 'Pending approval from' : 'Approved by'}: <span className="text-foreground font-medium">{data.approver.name}</span>
-                </p>
-              </div>
-            )}
           </CardContent>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {/* Edit modal for draft claims (image preview + edit fields + line items) */}
       {showEditModal && selectedClaimId && (
