@@ -9,6 +9,7 @@ import {
   createdByMethodValidator,
   sourceDocumentTypeValidator,
   expenseClaimStatusValidator,
+  expenseSubmissionStatusValidator,
   invoiceStatusValidator,
   messageRoleValidator,
   feedbackTypeValidator,
@@ -337,6 +338,9 @@ export default defineSchema({
     resubmittedFromId: v.optional(v.id("expense_claims")),  // Reference to rejected claim
     resubmittedToId: v.optional(v.id("expense_claims")),    // Reference to new claim
 
+    // Batch Submission (009-batch-receipt-submission)
+    submissionId: v.optional(v.id("expense_submissions")),  // Parent submission
+
     // Timestamps
     updatedAt: v.optional(v.number()),
   })
@@ -350,7 +354,51 @@ export default defineSchema({
     .index("by_business_vendor_date", ["businessId", "vendorName", "transactionDate"])
     .index("by_business_reference", ["businessId", "referenceNumber"])
     // Approval routing index
-    .index("by_designatedApproverId", ["designatedApproverId"]),
+    .index("by_designatedApproverId", ["designatedApproverId"])
+    // Batch submission index
+    .index("by_submissionId", ["submissionId"]),
+
+  // ============================================
+  // EXPENSE SUBMISSIONS DOMAIN (009-batch-receipt-submission)
+  // ============================================
+
+  expense_submissions: defineTable({
+    // Identity
+    businessId: v.id("businesses"),
+    userId: v.id("users"),                          // Submitter/owner
+
+    // Submission Details
+    title: v.string(),                               // Display name (auto-generated or custom)
+    description: v.optional(v.string()),             // Optional notes
+
+    // Status & Workflow
+    status: expenseSubmissionStatusValidator,         // draft → submitted → approved/rejected → reimbursed
+
+    // Rejection Details
+    rejectionReason: v.optional(v.string()),          // Manager's reason for rejection
+    claimNotes: v.optional(v.array(v.object({        // Per-claim notes from manager
+      claimId: v.id("expense_claims"),
+      note: v.string(),
+    }))),
+
+    // Approval Routing
+    designatedApproverId: v.optional(v.id("users")), // Target approver (set on submission)
+    approvedBy: v.optional(v.id("users")),           // Who approved
+
+    // Timestamps
+    submittedAt: v.optional(v.number()),
+    approvedAt: v.optional(v.number()),
+    rejectedAt: v.optional(v.number()),
+    reimbursedAt: v.optional(v.number()),            // Auto-set when all claims reimbursed
+    deletedAt: v.optional(v.number()),               // Soft delete
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_userId", ["userId"])
+    .index("by_status", ["status"])
+    .index("by_designatedApproverId", ["designatedApproverId"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_businessId_userId", ["businessId", "userId"]),
 
   // ============================================
   // DUPLICATE MATCHES TABLE (007-duplicate-expense-detection)

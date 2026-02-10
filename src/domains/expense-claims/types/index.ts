@@ -71,6 +71,9 @@ export interface CreateExpenseClaimRequest {
     reason: string                     // Justification text
     isSplitExpense: boolean           // Checkbox value
   }
+
+  // Link to expense submission (batch receipt submission)
+  submissionId?: string
 }
 
 export interface UpdateExpenseClaimRequest {

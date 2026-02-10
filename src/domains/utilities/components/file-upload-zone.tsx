@@ -33,6 +33,7 @@ interface FileUploadZoneProps {
   autoProcess?: boolean
   allowMultiple?: boolean
   domain?: 'invoices' | 'expense-claims' // Domain configuration
+  submissionId?: string // Link uploaded receipts to an expense submission
 }
 
 export default function FileUploadZone({
@@ -41,7 +42,8 @@ export default function FileUploadZone({
   onUploadStart,
   autoProcess = true,
   allowMultiple = false,
-  domain = 'invoices' // Default to invoices for backward compatibility
+  domain = 'invoices', // Default to invoices for backward compatibility
+  submissionId,
 }: FileUploadZoneProps) {
   const { businessId } = useActiveBusiness()
   const [dragActive, setDragActive] = useState(false)
@@ -101,6 +103,11 @@ export default function FileUploadZone({
         formData.append('original_currency', 'SGD') // Default currency
         formData.append('transaction_date', new Date().toISOString().split('T')[0]) // Today's date
         formData.append('vendor_name', 'Processing...') // Placeholder vendor name
+
+        // Link to expense submission if provided
+        if (submissionId) {
+          formData.append('submissionId', submissionId)
+        }
       }
 
       // Use domain-specific API endpoint

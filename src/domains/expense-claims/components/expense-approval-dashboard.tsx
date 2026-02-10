@@ -7,7 +7,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2, AlertCircle } from 'lucide-react'
+import { useRouter, useParams } from 'next/navigation'
+import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2, AlertCircle, Send, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,8 +17,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatBusinessDate } from '@/lib/utils'
-import { formatNumber } from '@/lib/utils/format-number'
+import { formatNumber, formatCurrency } from '@/lib/utils/format-number'
 import { useExpenseCategories, getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
+import { useActiveBusiness } from '@/contexts/business-context'
+import { usePendingApprovals } from '../hooks/use-expense-submissions'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
@@ -48,12 +51,19 @@ interface ManagementDashboardData {
 }
 
 export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDashboardProps) {
+  const router = useRouter()
+  const params = useParams()
+  const locale = (params?.locale as string) || 'en'
   const [activeTab, setActiveTab] = useState('overview')
   const [dashboardData, setDashboardData] = useState<ManagementDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Fetch expense categories for displaying category names instead of IDs
   const { categories } = useExpenseCategories({ includeDisabled: true })
+
+  // Fetch pending submission approvals
+  const { businessId } = useActiveBusiness()
+  const { submissions: pendingSubmissions, isLoading: pendingSubmissionsLoading } = usePendingApprovals(businessId || '')
 
   // Fetch management dashboard data
   const fetchDashboardData = useCallback(async () => {
@@ -136,6 +146,43 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
         </TabsContent>
 
         <TabsContent value="approvals" className="space-y-4">
+          {/* Pending Submission Approvals */}
+          {pendingSubmissions.length > 0 && (
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-foreground flex items-center gap-2 text-lg">
+                  <Send className="w-4 h-4" />
+                  Pending Submissions ({pendingSubmissions.length})
+                </CardTitle>
+                <CardDescription className="text-sm">Batch expense submissions awaiting your approval</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {pendingSubmissions.map((sub: any) => (
+                    <div
+                      key={sub._id}
+                      className="flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+                      onClick={() => router.push(`/${locale}/expense-claims/submissions/${sub._id}`)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{sub.title}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-xs text-muted-foreground">
+                            {sub.claimCount || 0} claims
+                          </span>
+                          {sub.submitterName && (
+                            <span className="text-xs text-muted-foreground">by {sub.submitterName}</span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <ApprovalTabContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
         </TabsContent>
 

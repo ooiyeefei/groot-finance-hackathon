@@ -37,6 +37,21 @@ export type ExpenseClaimStatus = typeof EXPENSE_CLAIM_STATUSES[keyof typeof EXPE
 export const EXPENSE_CLAIM_STATUS_VALUES = Object.values(EXPENSE_CLAIM_STATUSES);
 
 // ============================================
+// EXPENSE SUBMISSION STATUSES
+// ============================================
+
+export const EXPENSE_SUBMISSION_STATUSES = {
+  DRAFT: "draft",
+  SUBMITTED: "submitted",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+  REIMBURSED: "reimbursed",
+} as const;
+
+export type ExpenseSubmissionStatus = typeof EXPENSE_SUBMISSION_STATUSES[keyof typeof EXPENSE_SUBMISSION_STATUSES];
+export const EXPENSE_SUBMISSION_STATUS_VALUES = Object.values(EXPENSE_SUBMISSION_STATUSES);
+
+// ============================================
 // INVOICE STATUSES
 // ============================================
 

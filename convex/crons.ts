@@ -78,4 +78,17 @@ crons.interval(
   internal.functions.mcpProposals.cleanupExpiredProposals
 );
 
+/**
+ * Empty Draft Submission Cleanup (009-batch-receipt-submission)
+ *
+ * Runs every hour to delete draft submissions that:
+ * - Have zero claims attached
+ * - Are older than 24 hours
+ */
+crons.interval(
+  "cleanup-empty-draft-submissions",
+  { hours: 1 },
+  internal.functions.expenseSubmissions.cleanupEmptyDrafts
+);
+
 export default crons;

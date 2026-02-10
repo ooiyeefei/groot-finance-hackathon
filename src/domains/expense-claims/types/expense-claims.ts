@@ -315,6 +315,69 @@ export const EXPENSE_WORKFLOW_TRANSITIONS: WorkflowTransition[] = [
 // Category data structure: businesses.custom_expense_categories (JSONB)
 // ============================================================================
 
+// ============================================================================
+// BATCH EXPENSE SUBMISSION TYPES (009-batch-receipt-submission)
+// ============================================================================
+
+export type ExpenseSubmissionStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'reimbursed'
+
+export interface CurrencyTotal {
+  currency: string
+  total: number
+}
+
+export interface ReimbursementProgress {
+  reimbursed: number
+  total: number
+}
+
+export interface ExpenseSubmission {
+  _id: string
+  businessId: string
+  userId: string
+  title: string
+  description?: string
+  status: ExpenseSubmissionStatus
+  rejectionReason?: string
+  claimNotes?: Array<{ claimId: string; note: string }>
+  designatedApproverId?: string
+  approvedBy?: string
+  submittedAt?: number
+  approvedAt?: number
+  rejectedAt?: number
+  reimbursedAt?: number
+  deletedAt?: number
+  _creationTime: number
+  // Computed fields (enriched by queries)
+  submitterName?: string
+  claimCount?: number
+  totalsByCurrency?: CurrencyTotal[]
+  reimbursementProgress?: ReimbursementProgress | null
+}
+
+export interface SubmissionWithClaims {
+  submission: ExpenseSubmission
+  claims: SubmissionClaim[]
+  submitter: { name: string; email: string }
+  approver?: { name: string; email: string }
+  totalsByCurrency: CurrencyTotal[]
+  reimbursementProgress: ReimbursementProgress | null
+}
+
+export interface SubmissionClaim {
+  _id: string
+  vendorName?: string
+  totalAmount?: number
+  currency?: string
+  expenseCategory?: string
+  transactionDate?: string
+  status: string
+  businessPurpose: string
+  confidenceScore?: number
+  storagePath?: string
+  convertedImagePath?: string
+}
+
 // Otto's compliance validation rules
 export interface ExpenseValidationRule {
   id: string
