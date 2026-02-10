@@ -360,11 +360,13 @@ export default function FileUploadZone({
       {/* Upload Zone */}
       <div
         className={`
-          relative border-2 border-dashed rounded-lg ${compact ? 'px-4 py-3' : 'p-12'} text-center cursor-pointer
+          relative border-2 border-dashed rounded-lg ${compact ? 'px-4 py-3' : 'p-10'} text-center cursor-pointer
           transition-all duration-200
           ${dragActive
-            ? 'border-primary bg-primary/10'
-            : 'border-border hover:border-muted-foreground hover:bg-muted/50'
+            ? 'border-primary bg-primary/15'
+            : compact
+              ? 'border-border hover:border-muted-foreground hover:bg-muted/50'
+              : 'border-primary/40 bg-gradient-to-b from-primary/5 to-primary/10 hover:from-primary/10 hover:to-primary/15 hover:border-primary/60'
           }
           ${uploadState.uploading ? 'pointer-events-none opacity-50' : ''}
         `}
@@ -444,9 +446,9 @@ export default function FileUploadZone({
               </>
             ) : (
               <>
-                <Upload className="w-12 h-12 text-muted-foreground mx-auto" />
+                <Upload className="w-12 h-12 text-primary/50 mx-auto" />
                 <div>
-                  <p className="text-foreground font-medium">
+                  <p className="text-foreground font-medium text-base">
                     {dragActive
                       ? `Drop your ${allowMultiple ? 'files' : 'file'} here`
                       : `Click to upload or drag and drop`

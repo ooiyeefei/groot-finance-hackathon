@@ -69,7 +69,6 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [showEmptyWarning, setShowEmptyWarning] = useState(true)
-  const [showUploadZone, setShowUploadZone] = useState(false)
 
   const submission = data?.submission
   const claims = data?.claims || []
@@ -326,7 +325,21 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
         </Card>
       )}
 
-      {/* Single unified Claims card with upload button in header, table, and totals in footer */}
+      {/* Upload zone (always visible for drafts) */}
+      {isDraft && (
+        <Suspense fallback={<div className="flex items-center justify-center p-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
+          <FileUploadZone
+            domain="expense-claims"
+            allowMultiple={true}
+            autoProcess={true}
+            submissionId={submissionId}
+            onUploadSuccess={handleUploadSuccess}
+            onBatchUploadSuccess={handleUploadSuccess}
+          />
+        </Suspense>
+      )}
+
+      {/* Claims card with table and totals */}
       <Card>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-lg font-semibold text-foreground">
@@ -337,34 +350,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
               </span>
             )}
           </h3>
-          {isDraft && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setShowUploadZone(!showUploadZone)}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Receipts
-            </Button>
-          )}
         </div>
-
-        {/* Collapsible upload zone */}
-        {isDraft && showUploadZone && (
-          <div className="px-6 py-3 border-b border-border bg-muted/30">
-            <Suspense fallback={<div className="flex items-center justify-center p-3"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
-              <FileUploadZone
-                domain="expense-claims"
-                allowMultiple={true}
-                autoProcess={true}
-                submissionId={submissionId}
-                onUploadSuccess={handleUploadSuccess}
-                onBatchUploadSuccess={handleUploadSuccess}
-                compact={true}
-              />
-            </Suspense>
-          </div>
-        )}
 
         {/* Claims table */}
         {claims.length > 0 ? (
