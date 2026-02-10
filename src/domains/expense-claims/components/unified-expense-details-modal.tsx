@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
   X,
@@ -163,50 +163,53 @@ export default function UnifiedExpenseDetailsModal({
     }
   }, [isOpen, claimId])
 
+  // Fetch signed image URL with optional S3 fallback
+  const fetchSignedUrl = useCallback(async (forceS3 = false) => {
+    if (!claimDetails?.storage_path) return
+
+    try {
+      setImageLoading(true)
+      const s3Param = forceS3 ? '&forceS3=true' : ''
+
+      const response = await fetch(`/api/v1/expense-claims/${claimDetails.id}/image-url?useRawFile=true&storagePath=${encodeURIComponent(claimDetails.storage_path)}${s3Param}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to generate signed URL')
+      }
+
+      const result = await response.json()
+      const imageUrl = result?.data?.imageUrl || result?.imageUrl || result?.signedUrl || null
+
+      if (imageUrl) {
+        setSignedImageUrl(imageUrl)
+      } else {
+        setSignedImageUrl(null)
+      }
+    } catch (error) {
+      console.error('[Unified Modal] Failed to generate signed URL:', error)
+      setSignedImageUrl(null)
+    } finally {
+      setImageLoading(false)
+    }
+  }, [claimDetails?.storage_path, claimDetails?.id])
+
   // Generate signed URL when claim details are loaded
   useEffect(() => {
-    const generateSignedUrl = async () => {
-      if (!claimDetails?.storage_path) {
-        console.log('🔍 [Unified Modal] No storage_path available:', claimDetails?.storage_path)
-        return
-      }
+    fetchSignedUrl()
+  }, [fetchSignedUrl])
 
-      try {
-        setImageLoading(true)
-        console.log('🔍 [Unified Modal] Generating signed URL for storage path:', claimDetails.storage_path)
-
-        const response = await fetch(`/api/v1/expense-claims/${claimDetails.id}/image-url?useRawFile=true&storagePath=${encodeURIComponent(claimDetails.storage_path)}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || 'Failed to generate signed URL')
-        }
-
-        const result = await response.json()
-        const imageUrl = result?.data?.imageUrl || result?.imageUrl || result?.signedUrl || null
-
-        if (imageUrl) {
-          console.log('✅ [Unified Modal] Generated signed URL:', imageUrl)
-          setSignedImageUrl(imageUrl)
-        } else {
-          console.error('❌ [Unified Modal] No imageUrl found in response:', result)
-          setSignedImageUrl(null)
-        }
-      } catch (error) {
-        console.error('❌ [Unified Modal] Failed to generate signed URL:', error)
-        setSignedImageUrl(null)
-      } finally {
-        setImageLoading(false)
-      }
+  // Handle image load error (CloudFront 403) - retry with S3 presigned URL
+  const handleImageError = useCallback(() => {
+    if (signedImageUrl && !signedImageUrl.includes('X-Amz-Signature')) {
+      fetchSignedUrl(true)
     }
-
-    generateSignedUrl()
-  }, [claimDetails?.storage_path, claimDetails?.id])
+  }, [signedImageUrl, fetchSignedUrl])
 
   const fetchClaimDetails = async () => {
     try {
@@ -559,6 +562,7 @@ export default function UnifiedExpenseDetailsModal({
                           fileSize={0}
                           boundingBoxes={claimDetails.document?.extracted_data?.bounding_boxes || []}
                           hideRegionsCount={true}
+                          onImageError={handleImageError}
                         />
                       ) : claimDetails.storage_path ? (
                         <div className="flex items-center justify-center h-full">

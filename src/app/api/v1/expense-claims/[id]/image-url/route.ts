@@ -21,16 +21,17 @@ import {
 
 /**
  * Generate signed URL using CloudFront (if configured) or S3 (fallback)
+ * @param forceS3 - Force S3 presigned URL even if CloudFront is configured (used as fallback when CloudFront returns 403)
  */
-async function generateSignedUrl(storagePath: string): Promise<string> {
-  // Try CloudFront first (faster, no AWS API call)
-  if (isCloudFrontConfigured()) {
+async function generateSignedUrl(storagePath: string, forceS3 = false): Promise<string> {
+  // Try CloudFront first (faster, no AWS API call) unless forced to use S3
+  if (!forceS3 && isCloudFrontConfigured()) {
     console.log('[Expense Claim Image URL] Using CloudFront CDN')
     return getExpenseClaimImageUrl(storagePath, CLOUDFRONT_URL_EXPIRY.download)
   }
 
   // Fallback to S3 presigned URL
-  console.log('[Expense Claim Image URL] Using S3 presigned URL (CloudFront not configured)')
+  console.log(`[Expense Claim Image URL] Using S3 presigned URL${forceS3 ? ' (forced fallback)' : ' (CloudFront not configured)'}`)
   return getPresignedDownloadUrl('expense_claims', storagePath, URL_EXPIRY.download)
 }
 
@@ -52,6 +53,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const useRawFile = searchParams.get('useRawFile') === 'true'
     const pageNumber = parseInt(searchParams.get('pageNumber') || '1')
     const storagePath = searchParams.get('storagePath') // Optional override
+    const forceS3 = searchParams.get('forceS3') === 'true' // Force S3 presigned URL (CloudFront fallback)
 
     console.log(`[Expense Claim Image URL] Generating signed URL for claim: ${claimId} (useRawFile: ${useRawFile}, page: ${pageNumber})`)
 
@@ -110,7 +112,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
 
       try {
-        const signedUrl = await generateSignedUrl(actualStoragePath)
+        const signedUrl = await generateSignedUrl(actualStoragePath, forceS3)
 
         // Extract filename from storage path
         const filename = actualStoragePath.split('/').pop() || 'receipt'
@@ -146,7 +148,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         const exists = await fileExists('expense_claims', convertedPath)
         if (exists) {
           try {
-            const signedUrl = await generateSignedUrl(convertedPath)
+            const signedUrl = await generateSignedUrl(convertedPath, forceS3)
             console.log(`[Expense Claim Image URL] Direct file access successful for: ${convertedPath}`)
             return NextResponse.json({
               success: true,
@@ -238,7 +240,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       console.log(`[Expense Claim Image URL] Creating signed URL for file: ${fullImagePath}`)
 
       try {
-        const signedUrl = await generateSignedUrl(fullImagePath)
+        const signedUrl = await generateSignedUrl(fullImagePath, forceS3)
 
         console.log(`[Expense Claim Image URL] Generated signed URL successfully for: ${selectedImageFile.name}`)
 
