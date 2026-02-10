@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Sheet,
@@ -47,8 +47,8 @@ export function ClaimDetailDrawer({ claim, isOpen, onClose }: ClaimDetailDrawerP
   const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null)
   const [imageLoading, setImageLoading] = useState(false)
 
-  // Fetch signed URL with optional S3 fallback
-  const fetchSignedUrl = useCallback(async (forceS3 = false) => {
+  // Generate signed URL for receipt image preview
+  useEffect(() => {
     if (!claim || !isOpen) {
       setSignedImageUrl(null)
       return
@@ -57,38 +57,28 @@ export function ClaimDetailDrawer({ claim, isOpen, onClose }: ClaimDetailDrawerP
     const storagePath = claim.storagePath
     if (!storagePath) return
 
-    try {
-      setImageLoading(true)
-      const s3Param = forceS3 ? '&forceS3=true' : ''
-      const response = await fetch(
-        `/api/v1/expense-claims/${claim._id}/image-url?useRawFile=true&storagePath=${encodeURIComponent(storagePath)}${s3Param}`
-      )
-      if (!response.ok) {
+    const generateSignedUrl = async () => {
+      try {
+        setImageLoading(true)
+        const response = await fetch(
+          `/api/v1/expense-claims/${claim._id}/image-url?useRawFile=true&storagePath=${encodeURIComponent(storagePath)}`
+        )
+        if (!response.ok) {
+          setSignedImageUrl(null)
+          return
+        }
+        const result = await response.json()
+        const imageUrl = result?.data?.imageUrl || null
+        setSignedImageUrl(imageUrl)
+      } catch {
         setSignedImageUrl(null)
-        return
+      } finally {
+        setImageLoading(false)
       }
-      const result = await response.json()
-      const imageUrl = result?.data?.imageUrl || null
-      setSignedImageUrl(imageUrl)
-    } catch {
-      setSignedImageUrl(null)
-    } finally {
-      setImageLoading(false)
     }
+
+    generateSignedUrl()
   }, [claim?._id, claim?.storagePath, isOpen])
-
-  // Generate signed URL for receipt image preview
-  useEffect(() => {
-    fetchSignedUrl()
-  }, [fetchSignedUrl])
-
-  // Handle image load error (CloudFront 403) - retry with S3 presigned URL
-  const handleImageError = useCallback(() => {
-    if (signedImageUrl && !signedImageUrl.includes('X-Amz-Signature')) {
-      // Current URL is likely CloudFront - retry with S3 fallback
-      fetchSignedUrl(true)
-    }
-  }, [signedImageUrl, fetchSignedUrl])
 
   const statusBadge = claim ? (STATUS_BADGES[claim.status] || STATUS_BADGES.draft) : STATUS_BADGES.draft
 
@@ -134,7 +124,6 @@ export function ClaimDetailDrawer({ claim, isOpen, onClose }: ClaimDetailDrawerP
                     src={signedImageUrl}
                     alt={claim.vendorName || 'Receipt'}
                     className="w-full max-h-64 object-contain bg-muted"
-                    onError={handleImageError}
                   />
                 </div>
               ) : claim.storagePath ? (

@@ -231,60 +231,50 @@ export default function EditExpenseModalNew({
     }
   }, [isDeleting])
 
-  // Fetch signed image URL (supports S3 fallback when CloudFront 403s)
-  const fetchSignedUrl = useCallback(async (forceS3 = false) => {
-    if (!receiptInfo.storagePath) {
-      console.log('[Edit Modal] No storage_path available:', receiptInfo.storagePath)
-      return
-    }
-
-    try {
-      setImageLoading(true)
-      const s3Param = forceS3 ? '&forceS3=true' : ''
-      console.log(`[Edit Modal] Generating signed URL for storage path: ${receiptInfo.storagePath}${forceS3 ? ' (S3 fallback)' : ''}`)
-
-      const response = await fetch(`/api/v1/expense-claims/${expenseClaimId}/image-url?useRawFile=true&storagePath=${encodeURIComponent(receiptInfo.storagePath)}${s3Param}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to generate signed URL')
-      }
-
-      const result = await response.json()
-      const imageUrl = result?.data?.imageUrl || result?.imageUrl || result?.signedUrl || null
-
-      if (imageUrl) {
-        setSignedImageUrl(imageUrl)
-      } else {
-        console.error('[Edit Modal] No imageUrl found in response:', result)
-        setSignedImageUrl(null)
-      }
-    } catch (error) {
-      console.error('[Edit Modal] Failed to generate signed URL:', error)
-      setSignedImageUrl(null)
-    } finally {
-      setImageLoading(false)
-    }
-  }, [receiptInfo.storagePath, expenseClaimId])
-
   // Generate signed URL when receipt info is loaded
   useEffect(() => {
-    fetchSignedUrl()
-  }, [fetchSignedUrl])
+    const generateSignedUrl = async () => {
+      if (!receiptInfo.storagePath) {
+        console.log('🔍 [Edit Modal] No storage_path available:', receiptInfo.storagePath)
+        return
+      }
 
-  // Handle image load error (CloudFront 403) - retry with S3 presigned URL
-  const handleImageError = useCallback(() => {
-    if (signedImageUrl && !signedImageUrl.includes('s3.') && !signedImageUrl.includes('X-Amz-Signature')) {
-      // Current URL is likely CloudFront - retry with S3 fallback
-      console.log('[Edit Modal] CloudFront image failed, retrying with S3 presigned URL')
-      fetchSignedUrl(true)
+      try {
+        setImageLoading(true)
+        console.log('🔍 [Edit Modal] Generating signed URL for storage path:', receiptInfo.storagePath)
+
+        const response = await fetch(`/api/v1/expense-claims/${expenseClaimId}/image-url?useRawFile=true&storagePath=${encodeURIComponent(receiptInfo.storagePath)}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to generate signed URL')
+        }
+
+        const result = await response.json()
+        const imageUrl = result?.data?.imageUrl || result?.imageUrl || result?.signedUrl || null
+
+        if (imageUrl) {
+          console.log('✅ [Edit Modal] Generated signed URL:', imageUrl)
+          setSignedImageUrl(imageUrl)
+        } else {
+          console.error('❌ [Edit Modal] No imageUrl found in response:', result)
+          setSignedImageUrl(null)
+        }
+      } catch (error) {
+        console.error('❌ [Edit Modal] Failed to generate signed URL:', error)
+        setSignedImageUrl(null)
+      } finally {
+        setImageLoading(false)
+      }
     }
-  }, [signedImageUrl, fetchSignedUrl])
+
+    generateSignedUrl()
+  }, [receiptInfo.storagePath, expenseClaimId])
 
   // Handle reprocess with proper callback integration
   const handleReprocessWrapper = useCallback(async () => {
@@ -429,7 +419,7 @@ export default function EditExpenseModalNew({
             <button
               onClick={() => handleSaveWithLineItems('draft')}
               disabled={saving || submitting || isReprocessing}
-              className="inline-flex items-center px-3 md:px-4 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-3 md:px-4 py-1.5 bg-secondary hover:bg-secondary/80 text-secondary-foreground text-sm font-medium rounded-md transition-colors disabled:opacity-50"
             >
               {saving ? (
                 <>
@@ -591,7 +581,6 @@ export default function EditExpenseModalNew({
                                   </button>
                                 }
                                 hideRegionsCount={true}
-                                onImageError={handleImageError}
                               />
                             ) : receiptInfo.storagePath ? (
                               <div className="flex items-center justify-center h-full">

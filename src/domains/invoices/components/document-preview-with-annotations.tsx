@@ -22,7 +22,6 @@ interface DocumentPreviewProps {
   onBoxClick?: (box: BoundingBox) => void
   extraToolbarActions?: React.ReactNode // New prop for extra toolbar actions
   hideRegionsCount?: boolean // New prop to hide regions count
-  onImageError?: () => void // Callback when image fails to load (e.g. CloudFront 403)
 }
 
 // Color mapping for different layout categories
@@ -49,8 +48,7 @@ export default function DocumentPreviewWithAnnotations({
   onBoxHover,
   onBoxClick,
   extraToolbarActions,
-  hideRegionsCount = false,
-  onImageError
+  hideRegionsCount = false
 }: DocumentPreviewProps) {
   const [scale, setScale] = useState(1)
   const [rotation, setRotation] = useState(0)
@@ -250,7 +248,7 @@ export default function DocumentPreviewWithAnnotations({
               decoding="async"
               fetchPriority="high"
               onLoad={handleImageLoad}
-              onError={() => { setImageLoaded(false); onImageError?.() }}
+              onError={() => setImageLoaded(false)}
             />
             
             {/* Bounding Box Overlays */}
