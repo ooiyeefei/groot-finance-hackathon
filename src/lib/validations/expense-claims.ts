@@ -145,7 +145,10 @@ export const createExpenseClaimFileSchema = z.object({
   storage_path: z.string().optional(),
 
   // Business context (provided by client but ignored - uses authenticated user's context instead)
-  businessId: z.string().optional()
+  businessId: z.string().optional(),
+
+  // Link to expense submission (batch receipt submission)
+  submissionId: z.string().optional()
 })
 
 /**

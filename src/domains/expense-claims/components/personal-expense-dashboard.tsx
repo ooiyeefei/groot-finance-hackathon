@@ -7,7 +7,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams, useRouter, useParams } from 'next/navigation'
 import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -29,6 +29,7 @@ const EditExpenseModalNew = lazy(() => import('./edit-expense-modal-new'))
 const UnifiedExpenseDetailsModal = lazy(() => import('./unified-expense-details-modal'))
 const ConfirmationDialog = lazy(() => import('@/components/ui/confirmation-dialog'))
 const FileUploadZone = lazy(() => import('@/domains/utilities/components/file-upload-zone'))
+const SubmissionList = lazy(() => import('./submission-list'))
 
 interface PersonalExpenseDashboardProps {
   userId: string
@@ -47,6 +48,8 @@ interface PersonalDashboardData {
 export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDashboardProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const params = useParams()
+  const locale = (params?.locale as string) || 'en'
 
   // ✅ CONVEX REAL-TIME: Get business context for multi-tenancy
   const { businessId, isLoading: isBusinessLoading } = useActiveBusiness()
@@ -359,6 +362,11 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
+          {/* Expense Submissions */}
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
+            <SubmissionList locale={locale} />
+          </Suspense>
+
           <PersonalOverviewContent
             data={dashboardData}
             categories={categories}
@@ -581,32 +589,9 @@ function PersonalOverviewContent({ data, categories, onNewClaim, setActiveTab, f
       <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="text-foreground">Quick Actions</CardTitle>
-          <CardDescription>Submit new expense claims</CardDescription>
+          <CardDescription>Create expense submissions or enter claims manually</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* File Upload Zone - Above the buttons */}
-          <div className="mb-6">
-            <Suspense fallback={<div className="border-2 border-dashed border-border rounded-lg p-card-padding text-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto" /></div>}>
-              <FileUploadZone
-                domain="expense-claims"
-                allowMultiple={true}
-                autoProcess={true}
-                onUploadSuccess={(document) => {
-                  // Refresh dashboard to show new claims
-                  fetchDashboardData()
-                }}
-                onBatchUploadSuccess={(documents) => {
-                  // Refresh dashboard to show all new claims
-                  fetchDashboardData()
-                }}
-                onUploadStart={() => {
-                  // Upload started
-                }}
-              />
-            </Suspense>
-          </div>
-
-          {/* Existing buttons */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Button
               onClick={() => onNewClaim('camera')}
@@ -614,7 +599,7 @@ function PersonalOverviewContent({ data, categories, onNewClaim, setActiveTab, f
               className="justify-center"
             >
               <Camera className="w-4 h-4 mr-2" />
-              Capture or Upload
+              Capture Receipt
             </Button>
             <Button
               onClick={() => onNewClaim('manual')}
@@ -625,6 +610,9 @@ function PersonalOverviewContent({ data, categories, onNewClaim, setActiveTab, f
               Manual Entry
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            For batch uploads, use &ldquo;New Submission&rdquo; above to group multiple receipts for approval.
+          </p>
         </CardContent>
       </Card>
 

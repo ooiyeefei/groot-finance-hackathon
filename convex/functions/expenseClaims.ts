@@ -649,6 +649,8 @@ export const create = mutation({
         v.literal("uploading")
       )
     ),
+    // Batch submission (009-batch-receipt-submission)
+    submissionId: v.optional(v.id("expense_submissions")),
     // Duplicate override fields (007-duplicate-expense-detection)
     duplicateStatus: v.optional(
       v.union(
@@ -710,6 +712,8 @@ export const create = mutation({
       fileType: args.fileType,
       fileSize: args.fileSize,
       status: args.status ?? "draft",
+      // Batch submission
+      submissionId: args.submissionId,
       // Duplicate override fields
       duplicateStatus: args.duplicateStatus,
       duplicateOverrideReason: args.duplicateOverrideReason,
@@ -1125,6 +1129,13 @@ export const updateStatus = mutation({
             updatedAt: now,
           });
           console.log(`[Convex] Updated accounting entry ${claim.accountingEntryId} status to 'paid'`);
+        }
+
+        // Check if all claims in the parent submission are reimbursed
+        if (claim.submissionId) {
+          await ctx.runMutation(internal.functions.expenseSubmissions.checkReimbursementComplete, {
+            submissionId: claim.submissionId,
+          });
         }
         break;
 

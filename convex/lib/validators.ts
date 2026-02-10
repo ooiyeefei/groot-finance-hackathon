@@ -11,6 +11,7 @@
 import { v, Validator } from "convex/values";
 import {
   EXPENSE_CLAIM_STATUS_VALUES,
+  EXPENSE_SUBMISSION_STATUS_VALUES,
   INVOICE_STATUS_VALUES,
   ACCOUNTING_ENTRY_STATUS_VALUES,
   TRANSACTION_TYPE_VALUES,
@@ -66,6 +67,12 @@ function literalUnion<T extends readonly string[]>(
  * Includes workflow states + processing states + error states
  */
 export const expenseClaimStatusValidator = literalUnion(EXPENSE_CLAIM_STATUS_VALUES);
+
+/**
+ * Expense submission status validator
+ * Lifecycle: draft → submitted → approved/rejected → reimbursed
+ */
+export const expenseSubmissionStatusValidator = literalUnion(EXPENSE_SUBMISSION_STATUS_VALUES);
 
 /**
  * Invoice status validator

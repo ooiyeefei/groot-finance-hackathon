@@ -378,6 +378,8 @@ export async function createExpenseClaim(
       fileType: request.file?.type,
       fileSize: request.file?.size,
       status: request.file ? 'uploading' : 'draft',
+      // Link to expense submission (batch receipt submission)
+      ...(request.submissionId ? { submissionId: request.submissionId as any } : {}),
       // Duplicate override fields (if user acknowledged duplicates)
       ...(request.duplicateOverride ? {
         duplicateStatus: 'dismissed' as const,

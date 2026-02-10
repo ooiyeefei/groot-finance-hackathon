@@ -137,7 +137,8 @@ export async function POST(request: NextRequest) {
         storage_path: validatedData.storage_path,
         line_items: [],
         file: validatedData.file,
-        processing_mode: validatedData.processing_mode
+        processing_mode: validatedData.processing_mode,
+        submissionId: validatedData.submissionId,
       }
     } else {
       // ✅ Validate JSON body with Zod
