@@ -187,7 +187,7 @@ export default function FileUploadZone({
   }
 
   // Upload multiple files in parallel with concurrency limit
-  const CONCURRENCY_LIMIT = 3
+  const CONCURRENCY_LIMIT = 10
 
   const uploadFiles = async (files: File[]) => {
     // Notify parent component that upload is starting
