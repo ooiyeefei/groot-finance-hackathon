@@ -27,6 +27,7 @@ import {
 import { useExpenseCategories, getCategoryName } from '../hooks/use-expense-categories'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
 import DocumentStatusBadge from '@/domains/invoices/components/document-status-badge'
 
 // Lazy load the existing file upload component (handles full upload + AI processing pipeline)
@@ -65,7 +66,7 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   const { businessId } = useActiveBusiness()
   const { data, isLoading, error, refetch } = useSubmissionDetail(submissionId)
   const { categories } = useExpenseCategories({ includeDisabled: true })
-  const { updateSubmission, deleteSubmission, submitForApproval, removeClaim, approveSubmission, rejectSubmission } = useSubmissionMutations()
+  const { updateSubmission, deleteSubmission, submitForApproval, removeClaim, approveSubmission, rejectSubmission, approvePartialSubmission } = useSubmissionMutations()
 
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -84,6 +85,11 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   const [rejectionReason, setRejectionReason] = useState('')
   const [showApproveConfirm, setShowApproveConfirm] = useState(false)
 
+  // Partial approval selection state
+  const [selectedClaimIds, setSelectedClaimIds] = useState<Set<string>>(new Set())
+  const [showPartialApproveConfirm, setShowPartialApproveConfirm] = useState(false)
+  const [partialRejectionReason, setPartialRejectionReason] = useState('')
+
   const submission = data?.submission
   const claims = data?.claims || []
   const totalsByCurrency = data?.totalsByCurrency || []
@@ -95,6 +101,27 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   const processingStatuses = ['uploading', 'classifying', 'analyzing', 'extracting', 'processing']
   const hasProcessingClaims = claims.some((c) => processingStatuses.includes(c.status))
   const canSubmit = isDraft && claims.length > 0 && !hasProcessingClaims
+
+  // Claim selection helpers (manager partial approval)
+  const isAllSelected = claims.length > 0 && selectedClaimIds.size === claims.length
+  const isPartialSelection = selectedClaimIds.size > 0 && selectedClaimIds.size < claims.length
+
+  const toggleClaimSelection = useCallback((claimId: string) => {
+    setSelectedClaimIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(claimId)) next.delete(claimId)
+      else next.add(claimId)
+      return next
+    })
+  }, [])
+
+  const toggleSelectAll = useCallback(() => {
+    if (isAllSelected) {
+      setSelectedClaimIds(new Set())
+    } else {
+      setSelectedClaimIds(new Set(claims.map((c) => c._id)))
+    }
+  }, [isAllSelected, claims])
 
   // Determine which modal to show based on claim status
   const selectedClaim = claims.find((c) => c._id === selectedClaimId)
@@ -182,6 +209,25 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
       setIsConfirmLoading(false)
     }
   }, [submissionId, approveSubmission, router, backPath])
+
+  const handlePartialApproveConfirmed = useCallback(async () => {
+    try {
+      setIsConfirmLoading(true)
+      await approvePartialSubmission.mutateAsync({
+        id: submissionId,
+        approvedClaimIds: Array.from(selectedClaimIds),
+        rejectionReason: partialRejectionReason.trim() || undefined,
+      })
+      setShowPartialApproveConfirm(false)
+      setPartialRejectionReason('')
+      setSelectedClaimIds(new Set())
+      router.push(backPath)
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setIsConfirmLoading(false)
+    }
+  }, [submissionId, selectedClaimIds, partialRejectionReason, approvePartialSubmission, router, backPath])
 
   const handleRejectConfirmed = useCallback(async () => {
     if (!rejectionReason.trim()) return
@@ -353,6 +399,37 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
         </Suspense>
       )}
 
+      {/* Bulk action bar for partial approval */}
+      {canApproveReject && selectedClaimIds.size > 0 && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <span className="text-base font-medium text-foreground">
+                {selectedClaimIds.size} of {claims.length} claims selected
+              </span>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedClaimIds(new Set())}>
+                  Clear Selection
+                </Button>
+                <Button
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={() => {
+                    if (selectedClaimIds.size === claims.length) {
+                      setShowApproveConfirm(true)
+                    } else {
+                      setShowPartialApproveConfirm(true)
+                    }
+                  }}
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Approve Selected ({selectedClaimIds.size})
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Claims card with table and totals */}
       <Card>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -373,6 +450,14 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
               <table className="w-full">
                 <thead className="bg-muted">
                   <tr>
+                    {canApproveReject && (
+                      <th className="px-4 py-3 w-10">
+                        <Checkbox
+                          checked={isAllSelected ? true : isPartialSelection ? 'indeterminate' : false}
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </th>
+                    )}
                     <th className="px-4 py-3 text-left text-foreground font-medium text-base">Vendor</th>
                     <th className="px-4 py-3 text-left text-foreground font-medium text-base">Amount</th>
                     <th className="px-4 py-3 text-left text-foreground font-medium text-base">Category</th>
@@ -392,6 +477,14 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
                         className="border-b border-border hover:bg-muted/50 cursor-pointer transition-colors"
                         onClick={() => setSelectedClaimId(claim._id)}
                       >
+                        {canApproveReject && (
+                          <td className="px-4 py-3 w-10" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedClaimIds.has(claim._id)}
+                              onCheckedChange={() => toggleClaimSelection(claim._id)}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-foreground text-base">
                           {claim.vendorName || <span className="text-muted-foreground italic">Pending extraction</span>}
                         </td>
@@ -542,6 +635,45 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
         confirmVariant="primary"
         isLoading={isConfirmLoading}
       />
+
+      {/* Partial approval confirmation dialog */}
+      {showPartialApproveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 transition-opacity"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+            onClick={() => !isConfirmLoading && setShowPartialApproveConfirm(false)}
+          />
+          <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-md">
+            <div className="p-6 space-y-5">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold leading-6 text-foreground">Partial Approval</h3>
+              </div>
+              <p className="text-sm text-muted-foreground text-center">
+                Approving {selectedClaimIds.size} of {claims.length} claims. Remaining {claims.length - selectedClaimIds.size} claim(s) will be returned to the employee as a new draft.
+              </p>
+              <div>
+                <label className="text-sm font-medium text-foreground">Reason for returning claims (optional)</label>
+                <Textarea
+                  className="mt-2"
+                  rows={3}
+                  placeholder="Explain why some claims are being returned..."
+                  value={partialRejectionReason}
+                  onChange={(e) => setPartialRejectionReason(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+                <Button variant="secondary" onClick={() => setShowPartialApproveConfirm(false)} disabled={isConfirmLoading} className="min-w-[100px] sm:min-w-[120px]">
+                  Cancel
+                </Button>
+                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground min-w-[100px] sm:min-w-[120px]" onClick={handlePartialApproveConfirmed} disabled={isConfirmLoading}>
+                  {isConfirmLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Approving...</> : `Approve ${selectedClaimIds.size} Claims`}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Manager reject dialog with reason */}
       {showRejectDialog && (

@@ -112,6 +112,10 @@ export function useSubmissionMutations() {
     api.functions.expenseSubmissions.reject,
   )
 
+  const approvePartialSubmission = useConvexMutationAdapter(
+    api.functions.expenseSubmissions.approvePartial,
+  )
+
   const removeClaim = useConvexMutationAdapter(
     api.functions.expenseSubmissions.removeClaim,
   )
@@ -123,6 +127,7 @@ export function useSubmissionMutations() {
     submitForApproval,
     approveSubmission,
     rejectSubmission,
+    approvePartialSubmission,
     removeClaim,
   }
 }
