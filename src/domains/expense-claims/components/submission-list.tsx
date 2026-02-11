@@ -102,9 +102,10 @@ export default function SubmissionList({ locale }: SubmissionListProps) {
   const handleCreateSubmission = async () => {
     if (!businessId) return
     try {
-      const result = await createSubmission.mutateAsync({ businessId })
-      if (result?.id) {
-        router.push(`/${locale}/expense-claims/submissions/${result.id}`)
+      // Convex create mutation returns the new submission ID directly
+      const submissionId = await createSubmission.mutateAsync({ businessId })
+      if (submissionId) {
+        router.push(`/${locale}/expense-claims/submissions/${submissionId}`)
       }
     } catch (e: any) {
       console.error('Failed to create submission:', e)

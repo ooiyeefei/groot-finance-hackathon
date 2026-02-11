@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useInfiniteQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useMutation as useConvexMutation } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import type {
   AccountingEntry,
   CreateAccountingEntryRequest,
@@ -136,6 +138,8 @@ export function useAccountingEntries(
   } | null
 ): UseAccountingEntriesReturn {
   const queryClient = useQueryClient();
+  const convexUpdate = useConvexMutation(api.functions.accountingEntries.update);
+  const convexSoftDelete = useConvexMutation(api.functions.accountingEntries.softDelete);
 
   // State for tracking operations
   const [updating, setUpdating] = useState(new Set<string>());
@@ -262,48 +266,52 @@ export function useAccountingEntries(
     }
   });
 
-  // Update transaction mutation with optimistic updates
+  // Update transaction mutation — direct Convex call (no Vercel hop)
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: UpdateAccountingEntryRequest }): Promise<AccountingEntryResponse> => {
-      const response = await fetch(`/api/v1/accounting-entries/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
+      // Map snake_case request fields to camelCase Convex args
+      const updateData: Record<string, any> = {};
+      if (data.category !== undefined) updateData.category = data.category;
+      if (data.subcategory !== undefined) updateData.subcategory = data.subcategory;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.vendor_name !== undefined) updateData.vendorName = data.vendor_name;
+      if (data.reference_number !== undefined) updateData.referenceNumber = data.reference_number;
+      if (data.transaction_date !== undefined) updateData.transactionDate = data.transaction_date;
+      if (data.original_amount !== undefined) updateData.originalAmount = data.original_amount;
+      if (data.original_currency !== undefined) updateData.originalCurrency = data.original_currency;
+      if (data.status !== undefined) updateData.status = data.status;
+      if (data.notes !== undefined) updateData.notes = data.notes;
+      if (data.due_date !== undefined) updateData.dueDate = data.due_date;
+      if (data.payment_date !== undefined) updateData.paymentDate = data.payment_date;
+      if (data.payment_method !== undefined) updateData.paymentMethod = data.payment_method;
 
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to update accounting entry');
+      // Map line items to Convex format if provided
+      if (data.line_items !== undefined) {
+        updateData.lineItems = data.line_items.map((item, index) => ({
+          itemDescription: item.item_description,
+          itemCode: item.item_code,
+          quantity: item.quantity,
+          unitMeasurement: item.unit_measurement,
+          unitPrice: item.unit_price,
+          totalAmount: item.quantity * item.unit_price,
+          currency: item.currency || data.original_currency,
+          taxRate: item.tax_rate || 0,
+          taxAmount: item.tax_rate ? (item.quantity * item.unit_price) * (item.tax_rate / 100) : 0,
+          lineOrder: index + 1,
+        }));
       }
 
-      return result;
+      await convexUpdate({ id, ...updateData });
+
+      return { success: true, data: { transaction: { id } as any } };
     },
     onMutate: async ({ id }) => {
       setUpdating(prev => new Set(prev).add(id));
     },
-    onSuccess: (response, { id }) => {
-      // Optimistically update the accounting entry in the infinite query list
-      queryClient.setQueryData(['accounting-entries', mergedFilters], (oldData: any) => {
-        if (!oldData) return oldData;
-
-        const updatedTransaction = response.data.transaction;
-
-        // Update accounting entry across all pages
-        const newPages = oldData.pages.map((page: AccountingEntryListResponse) => ({
-          ...page,
-          data: {
-            ...page.data,
-            transactions: page.data.transactions.map(t =>
-              t.id === id ? updatedTransaction : t
-            )
-          }
-        }));
-
-        return {
-          ...oldData,
-          pages: newPages
-        };
-      });
+    onSuccess: () => {
+      // Refetch to get the updated entry from the server
+      // The optimistic `updating` Set provides immediate UI feedback
+      refetch();
     },
     onSettled: (_, __, { id }) => {
       setUpdating(prev => {
@@ -317,20 +325,11 @@ export function useAccountingEntries(
     }
   });
 
-  // Delete transaction mutation with optimistic updates
+  // Delete transaction mutation — direct Convex call (no Vercel hop)
   const deleteMutation = useMutation({
     mutationFn: async (id: string): Promise<{ success: boolean }> => {
-      const response = await fetch(`/api/v1/accounting-entries/${id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to delete accounting entry');
-      }
-
-      return result;
+      await convexSoftDelete({ id });
+      return { success: true };
     },
     onMutate: async (id) => {
       setDeleting(prev => new Set(prev).add(id));

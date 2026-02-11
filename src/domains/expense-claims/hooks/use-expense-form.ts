@@ -5,6 +5,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useMutation } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 import { useExpenseCategories, validateCategorySelection } from './use-expense-categories'
 import { useExpenseClaimRealtime } from './use-expense-claims-realtime'
 import { useDuplicateDetection } from './use-duplicate-detection'
@@ -13,7 +15,6 @@ import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accountin
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { AIExtractionResult } from '@/domains/expense-claims/types/expense-extraction'
 import type { DuplicateDetectionResult } from '../types/duplicate-detection'
-// Removed client-side Trigger.dev imports - now uses server-side API
 
 // Form data interface
 export interface ExpenseFormData {
@@ -210,6 +211,11 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   // Duplicate detection state and hook
   const { checkDuplicates, isChecking: isCheckingDuplicates } = useDuplicateDetection()
   const [duplicateCheckResult, setDuplicateCheckResult] = useState<DuplicateDetectionResult | null>(null)
+
+  // Direct Convex mutations (replaces fetch() calls for edit mode)
+  const updateClaimMutation = useMutation(api.functions.expenseClaims.update)
+  const updateStatusMutation = useMutation(api.functions.expenseClaims.updateStatus)
+  const deleteClaimMutation = useMutation(api.functions.expenseClaims.softDelete)
 
   // Extract stable values from props to avoid infinite re-renders
   const mode = props.mode
@@ -749,58 +755,24 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
           await onSubmit(formData)
         }
       } else {
-        // Edit mode submission
+        // Edit mode: direct Convex mutations (no Vercel hop)
+        // Always include exchange rate data to match old API route behavior:
+        // - Same currency: rate=1, homeCurrencyAmount=originalAmount
+        // - Different currency: use computed values from currency conversion preview
+        const needsConversion = formData.original_currency !== formData.home_currency
+        const exchangeData = needsConversion && exchangeRate && previewAmount
+          ? { exchangeRate, homeCurrencyAmount: previewAmount }
+          : { exchangeRate: 1, homeCurrencyAmount: formData.original_amount }
+        const convexArgs = mapFormToConvexArgs(formData, expenseClaimId!, exchangeData)
+
         if (action === 'submit') {
-          // Two-step submission for edit mode
-          const updateData = {
-            ...formData,
-            line_items: formData.line_items,
-            status: 'draft'
-          }
-
-          const updateResponse = await fetch(`/api/v1/expense-claims/${expenseClaimId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updateData)
-          })
-
-          if (!updateResponse.ok) {
-            const errorData = await updateResponse.json()
-            throw new Error(errorData.error || 'Failed to save expense claim before submission')
-          }
-
-          const submitResponse = await fetch(`/api/v1/expense-claims/${expenseClaimId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'submitted' })
-          })
-
-          const submitResult = await submitResponse.json()
-
-          if (!submitResponse.ok) {
-            throw new Error(submitResult.error || 'Failed to submit expense claim to workflow')
-          }
-
-          console.log('Expense claim submitted to workflow successfully:', submitResult.data.message)
+          // Two-step: save fields first, then transition status
+          await updateClaimMutation(convexArgs)
+          await updateStatusMutation({ id: expenseClaimId!, status: 'submitted' })
+          console.log('Expense claim submitted to workflow successfully')
         } else {
-          // Draft save for edit mode
-          const updateData = {
-            ...formData,
-            line_items: formData.line_items,
-            status: 'draft'
-          }
-
-          const response = await fetch(`/api/v1/expense-claims/${expenseClaimId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updateData)
-          })
-
-          if (!response.ok) {
-            const errorData = await response.json()
-            throw new Error(errorData.error || 'Failed to save expense claim as draft')
-          }
-
+          // Draft save
+          await updateClaimMutation(convexArgs)
           console.log('Expense claim saved as draft successfully')
         }
 
@@ -826,24 +798,14 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     }
   }
 
-  // Delete handler (edit mode only)
+  // Delete handler (edit mode only) — direct Convex mutation
   const handleDelete = async () => {
     if (mode !== 'edit') return
 
     try {
       setSaveError(null)
 
-      const response = await fetch(`/api/v1/expense-claims/${expenseClaimId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to delete expense claim')
-      }
-
+      await deleteClaimMutation({ id: expenseClaimId! })
       console.log('Expense claim deleted successfully')
 
       if (onDelete) {
@@ -1126,6 +1088,35 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     setDuplicateCheckResult,
     performDuplicateCheck,
     isCheckingDuplicates
+  }
+}
+
+/**
+ * Maps snake_case form data to camelCase Convex expenseClaims.update args.
+ *
+ * Note: processingMetadata/line_items are intentionally omitted.
+ * Line items are read-only in the form (populated by AI extraction via Lambda).
+ * Passing them here would overwrite the full processingMetadata field in Convex
+ * (patch replaces the entire value), potentially losing extraction metadata.
+ */
+function mapFormToConvexArgs(
+  formData: ExpenseFormData,
+  claimId: string,
+  exchangeData: { exchangeRate: number; homeCurrencyAmount: number }
+) {
+  return {
+    id: claimId,
+    description: formData.description,
+    businessPurpose: formData.business_purpose,
+    expenseCategory: formData.expense_category,
+    totalAmount: formData.original_amount,
+    currency: formData.original_currency,
+    homeCurrency: formData.home_currency,
+    exchangeRate: exchangeData.exchangeRate,
+    homeCurrencyAmount: exchangeData.homeCurrencyAmount,
+    transactionDate: formData.transaction_date,
+    vendorName: formData.vendor_name,
+    referenceNumber: formData.reference_number || undefined,
   }
 }
 

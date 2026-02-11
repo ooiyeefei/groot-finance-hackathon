@@ -1,3 +1,8 @@
+/**
+ * @deprecated This hook is dead code — replaced by use-expense-claims-realtime.tsx
+ * which uses direct Convex subscriptions instead of TanStack Query + fetch().
+ * No components import from this file. Safe to delete.
+ */
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';

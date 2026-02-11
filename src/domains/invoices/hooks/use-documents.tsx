@@ -15,6 +15,8 @@
 
 import { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { useMutation as useConvexMutation } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { useInvoicesRealtime, type Invoice } from './use-invoices-realtime';
 
 // Re-export Invoice type for consumers
@@ -54,6 +56,7 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
   // State for tracking processing and deleting operations
   const [processingDocuments, setProcessingDocuments] = useState(new Set<string>());
   const [deletingDocuments, setDeletingDocuments] = useState(new Set<string>());
+  const convexSoftDelete = useConvexMutation(api.functions.invoices.softDelete);
 
   // Real-time data from Convex - automatically updates when data changes
   const {
@@ -106,23 +109,11 @@ export function useDocuments(filters: DocumentFilters = {}): UseDocumentsReturn 
     }
   });
 
-  // Delete document mutation
+  // Delete document mutation — direct Convex call (no Vercel hop)
   const deleteMutation = useMutation({
     mutationFn: async (documentId: string) => {
-      const response = await fetch(`/api/v1/invoices/${documentId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to delete document');
-      }
-
-      return result;
+      await convexSoftDelete({ id: documentId });
+      return { success: true };
     },
     onMutate: async (documentId) => {
       // Optimistic removal

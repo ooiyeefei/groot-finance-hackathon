@@ -284,7 +284,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
               <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(`/${locale}/expense-claims`)}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <h1 className="text-2xl font-semibold text-foreground truncate">{submission.title}</h1>
+              <h1 className="text-[27px] font-semibold text-foreground truncate">{submission.title}</h1>
               {isDraft && (
                 <Button variant="ghost" size="sm" onClick={() => { setEditTitle(submission.title); setIsEditingTitle(true) }}>
                   <Pencil className="h-4 w-4" />
@@ -294,11 +294,11 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
           )}
           <div className="flex items-center gap-3 mt-1 ml-10">
             <Badge className={statusBadge.className}>{statusBadge.label}</Badge>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-base text-muted-foreground">
               {claims.length} {claims.length === 1 ? 'claim' : 'claims'}
             </span>
             {data?.submitter && (
-              <span className="text-sm text-muted-foreground">by {data.submitter.name}</span>
+              <span className="text-base text-muted-foreground">by {data.submitter.name}</span>
             )}
           </div>
         </div>
@@ -376,10 +376,10 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
       {/* Claims card with table and totals */}
       <Card>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-foreground">
+          <h3 className="text-xl font-semibold text-foreground">
             Claims
             {totalsByCurrency.length > 0 && (
-              <span className="ml-3 text-base font-normal text-muted-foreground">
+              <span className="ml-3 text-lg font-normal text-muted-foreground">
                 {totalsByCurrency.map(({ currency, total }) => formatCurrency(total, currency)).join(' + ')}
               </span>
             )}
@@ -393,13 +393,13 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
               <table className="w-full">
                 <thead className="bg-muted">
                   <tr>
-                    <th className="px-4 py-3 text-left text-foreground font-medium text-sm">Vendor</th>
-                    <th className="px-4 py-3 text-left text-foreground font-medium text-sm">Amount</th>
-                    <th className="px-4 py-3 text-left text-foreground font-medium text-sm">Category</th>
-                    <th className="px-4 py-3 text-left text-foreground font-medium text-sm">Date</th>
-                    <th className="px-4 py-3 text-left text-foreground font-medium text-sm">Status</th>
+                    <th className="px-4 py-3 text-left text-foreground font-medium text-base">Vendor</th>
+                    <th className="px-4 py-3 text-left text-foreground font-medium text-base">Amount</th>
+                    <th className="px-4 py-3 text-left text-foreground font-medium text-base">Category</th>
+                    <th className="px-4 py-3 text-left text-foreground font-medium text-base">Date</th>
+                    <th className="px-4 py-3 text-left text-foreground font-medium text-base">Status</th>
                     {isDraft && (
-                      <th className="px-4 py-3 text-right text-foreground font-medium text-sm">Actions</th>
+                      <th className="px-4 py-3 text-right text-foreground font-medium text-base">Actions</th>
                     )}
                   </tr>
                 </thead>
@@ -412,19 +412,19 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                         className="border-b border-border hover:bg-muted/50 cursor-pointer transition-colors"
                         onClick={() => setSelectedClaimId(claim._id)}
                       >
-                        <td className="px-4 py-3 text-foreground">
+                        <td className="px-4 py-3 text-foreground text-base">
                           {claim.vendorName || <span className="text-muted-foreground italic">Pending extraction</span>}
                         </td>
-                        <td className="px-4 py-3 text-foreground">
+                        <td className="px-4 py-3 text-foreground text-base">
                           {claim.totalAmount && claim.currency
                             ? formatCurrency(claim.totalAmount, claim.currency)
                             : <span className="text-muted-foreground">—</span>
                           }
                         </td>
-                        <td className="px-4 py-3 text-foreground text-sm">
+                        <td className="px-4 py-3 text-foreground text-base">
                           {claim.expenseCategory ? getCategoryName(claim.expenseCategory, categories) : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-foreground text-sm">
+                        <td className="px-4 py-3 text-foreground text-base">
                           {claim.transactionDate ? formatBusinessDate(claim.transactionDate) : <span className="text-muted-foreground">—</span>}
                         </td>
                         <td className="px-4 py-3">
@@ -439,9 +439,10 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                             <Button
                               variant="ghost"
                               size="sm"
+                              className="hover:bg-red-500/10"
                               onClick={(e) => { e.stopPropagation(); handleRemoveClaimClick(claim._id) }}
                             >
-                              <Trash2 className="h-4 w-4 text-muted-foreground" />
+                              <Trash2 className="h-4 w-4 text-red-500 dark:text-red-400" />
                             </Button>
                           </td>
                         )}
@@ -458,8 +459,8 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                 <div className="flex flex-wrap items-center gap-6">
                   {totalsByCurrency.map(({ currency, total }) => (
                     <div key={currency} className="flex items-baseline gap-2">
-                      <span className="text-sm text-muted-foreground">Total ({currency})</span>
-                      <span className="text-xl font-semibold text-foreground">{formatCurrency(total, currency)}</span>
+                      <span className="text-base text-muted-foreground">Total ({currency})</span>
+                      <span className="text-[22.6px] font-semibold text-foreground">{formatCurrency(total, currency)}</span>
                     </div>
                   ))}
                 </div>
@@ -467,7 +468,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                 {/* Reimbursement progress */}
                 {data?.reimbursementProgress && (
                   <div className="mt-3 pt-3 border-t border-border">
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-base text-muted-foreground">
                       Reimbursement: {data.reimbursementProgress.reimbursed} of {data.reimbursementProgress.total} claims reimbursed
                     </p>
                     <div className="w-full bg-muted rounded-full h-2 mt-2">
@@ -482,7 +483,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
                 {/* Approver info */}
                 {data?.approver && (
                   <div className="mt-3 pt-3 border-t border-border">
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-base text-muted-foreground">
                       {submission.status === 'submitted' ? 'Pending approval from' : 'Approved by'}: <span className="text-foreground font-medium">{data.approver.name}</span>
                     </p>
                   </div>
@@ -494,8 +495,8 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
           <CardContent className="p-8">
             <div className="text-center text-muted-foreground">
               <Upload className="w-10 h-10 mx-auto mb-3 opacity-50" />
-              <p className="text-base">No claims yet</p>
-              <p className="text-sm mt-1">
+              <p className="text-lg">No claims yet</p>
+              <p className="text-base mt-1">
                 {isDraft ? 'Click "Upload Receipts" above to add expense claims' : 'This submission has no claims'}
               </p>
             </div>

@@ -1,35 +1,14 @@
 'use client'
 
-import { useCallback } from 'react'
-import { useQuery as useTanstackQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useQuery as useConvexQuery } from 'convex/react'
+import { useState, useCallback } from 'react'
+import { useQuery as useConvexQuery, useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
+import { useConvexMutationAdapter } from '@/lib/hooks/use-convex-mutation-adapter'
 import type { ExpenseSubmission, SubmissionWithClaims } from '../types/expense-claims'
 
-// Query keys
-const SUBMISSION_KEYS = {
-  all: ['expense-submissions'] as const,
-  lists: () => [...SUBMISSION_KEYS.all, 'list'] as const,
-  list: (businessId: string, status?: string) => [...SUBMISSION_KEYS.lists(), businessId, status] as const,
-  details: () => [...SUBMISSION_KEYS.all, 'detail'] as const,
-  detail: (id: string) => [...SUBMISSION_KEYS.details(), id] as const,
-  pendingApprovals: (businessId: string) => [...SUBMISSION_KEYS.all, 'pending-approvals', businessId] as const,
-}
-
-// API helpers
-async function fetchSubmissions(businessId: string, status?: string) {
-  const params = new URLSearchParams({ businessId })
-  if (status) params.set('status', status)
-  const response = await fetch(`/api/v1/expense-submissions?${params}`)
-  if (!response.ok) throw new Error('Failed to fetch submissions')
-  return response.json()
-}
-
-async function fetchPendingApprovals(businessId: string) {
-  const response = await fetch(`/api/v1/expense-submissions/pending-approvals?businessId=${businessId}`)
-  if (!response.ok) throw new Error('Failed to fetch pending approvals')
-  return response.json()
-}
+// ============================================
+// QUERIES (Convex real-time subscriptions)
+// ============================================
 
 interface UseExpenseSubmissionsOptions {
   businessId: string
@@ -38,27 +17,20 @@ interface UseExpenseSubmissionsOptions {
 }
 
 export function useExpenseSubmissions({ businessId, status, enabled = true }: UseExpenseSubmissionsOptions) {
-  const queryClient = useQueryClient()
+  const data = useConvexQuery(
+    api.functions.expenseSubmissions.list,
+    enabled && businessId ? { businessId, status } : 'skip'
+  )
 
-  const { data, isLoading, error, refetch } = useTanstackQuery({
-    queryKey: SUBMISSION_KEYS.list(businessId, status),
-    queryFn: () => fetchSubmissions(businessId, status),
-    enabled: enabled && !!businessId,
-    staleTime: 60_000, // 1 minute
-  })
-
-  const submissions: ExpenseSubmission[] = data?.submissions || []
-
-  const invalidateList = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: SUBMISSION_KEYS.lists() })
-  }, [queryClient])
+  const isLoading = data === undefined
+  const submissions: ExpenseSubmission[] = (data as ExpenseSubmission[] | undefined) || []
 
   return {
     submissions,
     isLoading,
-    error: error?.message || null,
-    refetch,
-    invalidateList,
+    error: null as string | null,
+    refetch: () => {}, // No-op: Convex subscriptions auto-update
+    invalidateList: () => {}, // No-op: Convex subscriptions auto-update
   }
 }
 
@@ -82,131 +54,67 @@ export function useSubmissionDetail(id: string | null) {
 }
 
 export function usePendingApprovals(businessId: string) {
-  const { data, isLoading, error, refetch } = useTanstackQuery({
-    queryKey: SUBMISSION_KEYS.pendingApprovals(businessId),
-    queryFn: () => fetchPendingApprovals(businessId),
-    enabled: !!businessId,
-    staleTime: 60_000,
-  })
+  const data = useConvexQuery(
+    api.functions.expenseSubmissions.getPendingApprovals,
+    businessId ? { businessId } : 'skip'
+  )
+
+  const isLoading = data === undefined
 
   return {
-    submissions: data?.submissions || [],
+    submissions: (data as any[]) || [],
     isLoading,
-    error: error?.message || null,
-    refetch,
+    error: null as string | null,
+    refetch: () => {}, // No-op: Convex subscriptions auto-update
   }
 }
 
+// ============================================
+// MUTATIONS (Direct Convex calls via adapter)
+// ============================================
+
 export function useSubmissionMutations() {
-  const queryClient = useQueryClient()
+  // Convex create returns a raw ID string. Consumer (submission-list.tsx)
+  // handles this directly — no result mapping needed.
+  const createSubmission = useConvexMutationAdapter(
+    api.functions.expenseSubmissions.create,
+  )
 
-  const invalidateAll = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: SUBMISSION_KEYS.all })
-  }, [queryClient])
+  const updateSubmission = useConvexMutationAdapter(
+    api.functions.expenseSubmissions.update,
+  )
 
-  const createSubmission = useMutation({
-    mutationFn: async ({ businessId, title }: { businessId: string; title?: string }) => {
-      const response = await fetch('/api/v1/expense-submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId, title }),
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error?.error?.message || 'Failed to create submission')
-      }
-      return response.json()
-    },
-    onSuccess: invalidateAll,
-  })
+  // deleteSubmission and submitForApproval: consumers pass a raw string (id),
+  // but Convex mutations expect { id: string }. Wrap to preserve the consumer API.
+  const softDeleteMutation = useMutation(api.functions.expenseSubmissions.softDelete)
+  const [deletePending, setDeletePending] = useState(false)
+  const deleteSubmissionMutateAsync = useCallback(async (id: string) => {
+    setDeletePending(true)
+    try { return await softDeleteMutation({ id }) }
+    finally { setDeletePending(false) }
+  }, [softDeleteMutation])
+  const deleteSubmission = { mutateAsync: deleteSubmissionMutateAsync, isPending: deletePending }
 
-  const updateSubmission = useMutation({
-    mutationFn: async ({ id, title, description }: { id: string; title?: string; description?: string }) => {
-      const response = await fetch(`/api/v1/expense-submissions/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description }),
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error?.error?.message || 'Failed to update submission')
-      }
-      return response.json()
-    },
-    onSuccess: invalidateAll,
-  })
+  const submitMutation = useMutation(api.functions.expenseSubmissions.submit)
+  const [submitPending, setSubmitPending] = useState(false)
+  const submitForApprovalMutateAsync = useCallback(async (id: string) => {
+    setSubmitPending(true)
+    try { return await submitMutation({ id }) }
+    finally { setSubmitPending(false) }
+  }, [submitMutation])
+  const submitForApproval = { mutateAsync: submitForApprovalMutateAsync, isPending: submitPending }
 
-  const deleteSubmission = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/v1/expense-submissions/${id}`, { method: 'DELETE' })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error?.error?.message || 'Failed to delete submission')
-      }
-      return response.json()
-    },
-    onSuccess: invalidateAll,
-  })
+  const approveSubmission = useConvexMutationAdapter(
+    api.functions.expenseSubmissions.approve,
+  )
 
-  const submitForApproval = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/v1/expense-submissions/${id}/submit`, {
-        method: 'POST',
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error?.error?.message || 'Failed to submit')
-      }
-      return response.json()
-    },
-    onSuccess: invalidateAll,
-  })
+  const rejectSubmission = useConvexMutationAdapter(
+    api.functions.expenseSubmissions.reject,
+  )
 
-  const approveSubmission = useMutation({
-    mutationFn: async ({ id, notes }: { id: string; notes?: string }) => {
-      const response = await fetch(`/api/v1/expense-submissions/${id}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes }),
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error?.error?.message || 'Failed to approve')
-      }
-      return response.json()
-    },
-    onSuccess: invalidateAll,
-  })
-
-  const rejectSubmission = useMutation({
-    mutationFn: async ({ id, reason, claimNotes }: { id: string; reason: string; claimNotes?: Array<{ claimId: string; note: string }> }) => {
-      const response = await fetch(`/api/v1/expense-submissions/${id}/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason, claimNotes }),
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error?.error?.message || 'Failed to reject')
-      }
-      return response.json()
-    },
-    onSuccess: invalidateAll,
-  })
-
-  const removeClaim = useMutation({
-    mutationFn: async ({ submissionId, claimId }: { submissionId: string; claimId: string }) => {
-      const response = await fetch(`/api/v1/expense-submissions/${submissionId}/claims/${claimId}`, {
-        method: 'DELETE',
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error?.error?.message || 'Failed to remove claim')
-      }
-      return response.json()
-    },
-    onSuccess: invalidateAll,
-  })
+  const removeClaim = useConvexMutationAdapter(
+    api.functions.expenseSubmissions.removeClaim,
+  )
 
   return {
     createSubmission,

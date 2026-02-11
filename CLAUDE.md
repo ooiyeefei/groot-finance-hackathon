@@ -43,10 +43,15 @@ npm run build  # MUST pass before task completion
 ```
 Fix errors and repeat until successful.
 
-### Convex Deployment
+### Convex Deployment (CRITICAL)
 - **Dev**: `npx convex dev` (auto-syncs)
 - **Prod**: `npx convex deploy --yes` (manual after schema/function changes)
-- **Common failure**: Forgetting to deploy to prod after Convex changes
+- **MANDATORY**: After ANY Convex-related change (schema, functions, queries, mutations, indexes), you MUST run `npx convex deploy --yes` before considering the task complete. This includes:
+  - Adding/modifying tables or indexes in `convex/schema.ts`
+  - Adding/modifying functions in `convex/functions/`
+  - Changing query or mutation signatures
+  - Adding new Convex modules
+- **Common failure**: Forgetting to deploy to prod after Convex changes — causes "Could not find public function" errors in production
 
 ### AWS CDK
 ```bash
