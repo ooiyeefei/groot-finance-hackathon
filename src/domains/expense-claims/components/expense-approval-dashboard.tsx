@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useActiveBusiness } from '@/contexts/business-context'
-import { usePendingApprovals } from '../hooks/use-expense-submissions'
+import { usePendingApprovals, useManagerSubmissions } from '../hooks/use-expense-submissions'
+import { Badge } from '@/components/ui/badge'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
@@ -48,9 +49,10 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
   const [dashboardData, setDashboardData] = useState<ManagementDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch pending submission approvals
+  // Fetch submission approvals (pending + full history)
   const { businessId } = useActiveBusiness()
   const { submissions: pendingSubmissions, isLoading: pendingSubmissionsLoading } = usePendingApprovals(businessId || '')
+  const { submissions: allManagerSubmissions, isLoading: allSubmissionsLoading } = useManagerSubmissions(businessId || '')
 
   // Fetch management dashboard data
   const fetchDashboardData = useCallback(async () => {
@@ -171,14 +173,60 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           )}
 
           {pendingSubmissions.length === 0 && !pendingSubmissionsLoading && (
-            <Card className="bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50">
-              <CardContent className="p-12 text-center">
-                <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
-                <h3 className="text-xl font-semibold text-green-900 dark:text-white mb-2">All Caught Up!</h3>
-                <p className="text-green-700 dark:text-gray-300">No expense submissions pending your approval.</p>
+            <Card className="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50">
+              <CardContent className="p-8 text-center">
+                <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500" />
+                <h3 className="text-lg font-semibold text-green-900 dark:text-white mb-1">All Caught Up!</h3>
+                <p className="text-sm text-green-700 dark:text-gray-300">No expense submissions pending your approval.</p>
               </CardContent>
             </Card>
           )}
+
+          {/* Submission History (approved, rejected, reimbursed) */}
+          {(() => {
+            const historySubmissions = allManagerSubmissions.filter(
+              (s: any) => s.status !== 'submitted'
+            )
+            if (allSubmissionsLoading || historySubmissions.length === 0) return null
+            return (
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-foreground flex items-center gap-2 text-lg">
+                    <Clock className="w-4 h-4" />
+                    Submission History ({historySubmissions.length})
+                  </CardTitle>
+                  <CardDescription className="text-sm">Previously reviewed submissions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {historySubmissions.map((sub: any) => (
+                      <div
+                        key={sub._id}
+                        className="flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+                        onClick={() => router.push(`/${locale}/manager/approvals/submissions/${sub._id}`)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{sub.title}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-xs text-muted-foreground">
+                              {sub.claimCount || 0} claims
+                            </span>
+                            {sub.submitterName && (
+                              <span className="text-xs text-muted-foreground">by {sub.submitterName}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <SubmissionStatusBadge status={sub.status} />
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })()}
         </TabsContent>
 
         <TabsContent value="leave-requests" className="space-y-4">
@@ -247,10 +295,10 @@ function ManagementOverviewContent({ data, setActiveTab, pendingSubmissions, pen
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
             ) : pendingSubmissions.length === 0 ? (
-              <div className="text-center text-muted-foreground py-6">
-                <CheckCircle className="w-8 h-8 mx-auto mb-3" />
-                <p className="text-sm">No pending approvals</p>
-                <p className="text-xs">All submissions reviewed</p>
+              <div className="text-center py-6">
+                <CheckCircle className="w-8 h-8 mx-auto mb-3 text-green-500" />
+                <p className="text-sm text-green-700 dark:text-green-400">No pending approvals</p>
+                <p className="text-xs text-green-600 dark:text-green-500">All submissions reviewed</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -622,6 +670,18 @@ function ManagementSummaryCard({ title, value, icon, variant }: {
 }
 
 
+
+// Status badge for submission history
+function SubmissionStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { label: string; className: string }> = {
+    approved: { label: 'Approved', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+    rejected: { label: 'Rejected', className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
+    reimbursed: { label: 'Reimbursed', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+    draft: { label: 'Draft', className: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400' },
+  }
+  const { label, className } = config[status] || { label: status, className: 'bg-gray-100 text-gray-800' }
+  return <Badge variant="outline" className={`text-xs px-2 py-0.5 border-0 ${className}`}>{label}</Badge>
+}
 
 // Loading skeleton
 function ManagementDashboardSkeleton() {

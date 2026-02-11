@@ -404,6 +404,89 @@ export const getPendingApprovals = query({
   },
 });
 
+/**
+ * List ALL submissions where the current user is the designated approver (all statuses).
+ * Used for the manager Expenses tab to show full approval history.
+ */
+export const getManagerSubmissions = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      return [];
+    }
+
+    // All submissions where this user is the designated approver
+    const submissions = await ctx.db
+      .query("expense_submissions")
+      .withIndex("by_designatedApproverId", (q) =>
+        q.eq("designatedApproverId", user._id)
+      )
+      .collect();
+
+    const filtered = submissions.filter(
+      (s) => !s.deletedAt && s.businessId === business._id
+    );
+
+    // Sort: pending first (submitted), then by most recent
+    filtered.sort((a, b) => {
+      // submitted status sorts first
+      if (a.status === "submitted" && b.status !== "submitted") return -1;
+      if (b.status === "submitted" && a.status !== "submitted") return 1;
+      // Within same priority, newest first
+      return b._creationTime - a._creationTime;
+    });
+
+    // Enrich
+    const enriched = await Promise.all(
+      filtered.map(async (submission) => {
+        const submitter = await ctx.db.get(submission.userId);
+        const claims = await ctx.db
+          .query("expense_claims")
+          .withIndex("by_submissionId", (q) => q.eq("submissionId", submission._id))
+          .collect();
+        const activeClaims = claims.filter((c) => !c.deletedAt);
+
+        const currencyMap = new Map<string, number>();
+        for (const claim of activeClaims) {
+          if (claim.totalAmount && claim.currency) {
+            const existing = currencyMap.get(claim.currency) || 0;
+            currencyMap.set(claim.currency, existing + claim.totalAmount);
+          }
+        }
+
+        return {
+          _id: submission._id,
+          title: submission.title,
+          status: submission.status,
+          submitterName: submitter?.fullName || submitter?.email || "Unknown",
+          claimCount: activeClaims.length,
+          totalsByCurrency: Array.from(currencyMap.entries()).map(
+            ([currency, total]) => ({ currency, total })
+          ),
+          submittedAt: submission.submittedAt || submission._creationTime,
+          approvedAt: submission.approvedAt,
+          rejectedAt: submission.rejectedAt,
+        };
+      })
+    );
+
+    return enriched;
+  },
+});
+
 // ============================================
 // MUTATIONS
 // ============================================
