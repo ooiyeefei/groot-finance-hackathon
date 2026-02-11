@@ -127,6 +127,8 @@ export async function POST(request: NextRequest) {
       businessType: body.businessType,
       plan: body.selectedPlan,
       forceCreateNew: body.forceCreateNew,
+      customCOGSNames: body.customCOGSNames,
+      customExpenseNames: body.customExpenseNames,
     })
 
     if (!result.success) {

@@ -34,6 +34,8 @@ export interface InitializeBusinessInput {
   plan: 'trial' | 'starter' | 'pro' | 'enterprise';
   allowedCurrencies?: string[];
   forceCreateNew?: boolean;  // When true, always create new business (for modal)
+  customCOGSNames?: string[];  // User-provided COGS category names from onboarding wizard
+  customExpenseNames?: string[];  // User-provided expense category names from onboarding wizard
 }
 
 export interface InitializeBusinessResult {
@@ -79,15 +81,22 @@ function generateBusinessSlug(name: string): string {
  * Generate AI-enhanced category metadata for business onboarding
  */
 async function generateBusinessCategories(
-  businessType: BusinessType
+  businessType: BusinessType,
+  customCOGSNames?: string[],
+  customExpenseNames?: string[],
 ): Promise<{ cogsCategories: BusinessCategory[]; expenseCategories: BusinessCategory[] }> {
   console.log(`[BusinessInit] 🤖 AI category generation starting - businessType: ${businessType}`);
 
   try {
-    const cogsCategoryNames = [...getSuggestedCategories(businessType, 'cogs')];
-    const expenseCategoryNames = [...getSuggestedCategories(businessType, 'expense')];
+    // Use user-provided custom names if available, otherwise fall back to defaults
+    const cogsCategoryNames = customCOGSNames && customCOGSNames.length > 0
+      ? [...customCOGSNames]
+      : [...getSuggestedCategories(businessType, 'cogs')];
+    const expenseCategoryNames = customExpenseNames && customExpenseNames.length > 0
+      ? [...customExpenseNames]
+      : [...getSuggestedCategories(businessType, 'expense')];
 
-    console.log(`[BusinessInit] 📋 Suggested categories - COGS: ${cogsCategoryNames.length}, Expense: ${expenseCategoryNames.length}`);
+    console.log(`[BusinessInit] 📋 Categories (custom: COGS=${!!(customCOGSNames?.length)}, Expense=${!!(customExpenseNames?.length)}) - COGS: ${cogsCategoryNames.length}, Expense: ${expenseCategoryNames.length}`);
 
     const cogsCategories = await generateCategoryMetadata(
       businessType,
@@ -109,8 +118,13 @@ async function generateBusinessCategories(
     console.error(`[BusinessInit] ⚠️ AI category generation failed, using fallback:`, error);
 
     // Fallback: return basic categories without AI enhancements
-    const cogsCategoryNames = [...getSuggestedCategories(businessType, 'cogs')];
-    const expenseCategoryNames = [...getSuggestedCategories(businessType, 'expense')];
+    // Still respect user-provided custom names
+    const cogsCategoryNames = customCOGSNames && customCOGSNames.length > 0
+      ? [...customCOGSNames]
+      : [...getSuggestedCategories(businessType, 'cogs')];
+    const expenseCategoryNames = customExpenseNames && customExpenseNames.length > 0
+      ? [...customExpenseNames]
+      : [...getSuggestedCategories(businessType, 'expense')];
 
     // Helper to generate readable category IDs: category_slug_6random
     const slugify = (name: string) => name.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
@@ -180,7 +194,11 @@ export async function initializeBusiness(
     console.log(`[BusinessInit] 🤖 Step 2: Generating business categories with AI`);
 
     const businessType: BusinessType = input.businessType || 'other';
-    const { cogsCategories, expenseCategories } = await generateBusinessCategories(businessType);
+    const { cogsCategories, expenseCategories } = await generateBusinessCategories(
+      businessType,
+      input.customCOGSNames,
+      input.customExpenseNames,
+    );
 
     console.log(`[BusinessInit] ✅ Categories generated - COGS: ${cogsCategories.length}, Expense: ${expenseCategories.length}`);
 
