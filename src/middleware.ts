@@ -6,6 +6,8 @@ import { api } from '@/convex/_generated/api'
 
 // Define public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
+  // Landing page (root)
+  '/',
   // Auth pages
   '/:locale/sign-in(.*)',
   '/:locale/sign-up(.*)',

@@ -37,7 +37,7 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
           <ThemeToggle />
           <LanguageSwitcher />
           <UserButton
-            afterSignOutUrl="/en/sign-in"
+            afterSignOutUrl="/"
             appearance={{
               elements: {
                 avatarBox: "w-8 h-8",
