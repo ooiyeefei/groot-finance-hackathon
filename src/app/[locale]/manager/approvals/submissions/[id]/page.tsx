@@ -10,6 +10,7 @@ import { requirePermission } from '@/domains/security/lib/rbac'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { SubmissionDetailPage } from '@/domains/expense-claims/components/submission-detail-page'
+import ManagerSubmissionSidebar from '@/domains/expense-claims/components/manager-submission-sidebar'
 import { ClientProviders } from '@/components/providers/client-providers'
 
 interface PageProps {
@@ -35,17 +36,20 @@ export default async function ManagerSubmissionReviewPage({ params }: PageProps)
     <ClientProviders>
       <div className="flex h-screen bg-background">
         <Sidebar />
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col overflow-hidden">
           <HeaderWithUser title="Review Submission" subtitle="" />
-          <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
-            <div className="max-w-7xl mx-auto">
-              <SubmissionDetailPage
-                submissionId={id}
-                locale={locale}
-                viewMode="manager"
-              />
-            </div>
-          </main>
+          <div className="flex-1 flex overflow-hidden">
+            <ManagerSubmissionSidebar currentSubmissionId={id} />
+            <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
+              <div className="max-w-7xl mx-auto">
+                <SubmissionDetailPage
+                  submissionId={id}
+                  locale={locale}
+                  viewMode="manager"
+                />
+              </div>
+            </main>
+          </div>
         </div>
       </div>
     </ClientProviders>

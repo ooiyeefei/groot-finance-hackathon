@@ -70,7 +70,7 @@ export default function ConfirmationDialog({
                 {cancelText}
               </Button>
               <Button
-                variant={confirmVariant === 'danger' ? 'destructive' : 'default'}
+                variant={confirmVariant === 'danger' ? 'destructive' : 'primary'}
                 onClick={onConfirm}
                 disabled={isLoading}
                 className="min-w-[100px] sm:min-w-[120px]"
