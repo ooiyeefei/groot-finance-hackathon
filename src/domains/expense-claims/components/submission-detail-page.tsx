@@ -16,6 +16,7 @@ import {
   Trash2,
   Send,
   XCircle,
+  CheckCircle,
   ArrowLeft,
   Pencil,
   X,
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react'
 import { useExpenseCategories, getCategoryName } from '../hooks/use-expense-categories'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
+import { Textarea } from '@/components/ui/textarea'
 import DocumentStatusBadge from '@/domains/invoices/components/document-status-badge'
 
 // Lazy load the existing file upload component (handles full upload + AI processing pipeline)
@@ -33,6 +35,7 @@ const FileUploadZone = lazy(() => import('@/domains/utilities/components/file-up
 interface SubmissionDetailPageProps {
   submissionId: string
   locale: string
+  viewMode?: 'employee' | 'manager'
 }
 
 const STATUS_BADGES: Record<string, { className: string; label: string }> = {
@@ -57,12 +60,12 @@ const CLAIM_STATUS_BADGES: Record<string, { className: string; label: string }> 
   classification_failed: { className: 'bg-red-500/10 text-red-600 dark:text-red-400', label: 'Failed' },
 }
 
-export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailPageProps) {
+export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employee' }: SubmissionDetailPageProps) {
   const router = useRouter()
   const { businessId } = useActiveBusiness()
   const { data, isLoading, error, refetch } = useSubmissionDetail(submissionId)
   const { categories } = useExpenseCategories({ includeDisabled: true })
-  const { updateSubmission, deleteSubmission, submitForApproval, removeClaim } = useSubmissionMutations()
+  const { updateSubmission, deleteSubmission, submitForApproval, removeClaim, approveSubmission, rejectSubmission } = useSubmissionMutations()
 
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -75,11 +78,19 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const [isConfirmLoading, setIsConfirmLoading] = useState(false)
   const pendingRemoveClaimId = useRef<string | null>(null)
 
+  // Manager-specific state
+  const isManagerView = viewMode === 'manager'
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false)
+
   const submission = data?.submission
   const claims = data?.claims || []
   const totalsByCurrency = data?.totalsByCurrency || []
 
   const isDraft = submission?.status === 'draft'
+  const canApproveReject = isManagerView && submission?.status === 'submitted'
+  const backPath = isManagerView ? `/${locale}/manager/approvals` : `/${locale}/expense-claims`
 
   const processingStatuses = ['uploading', 'classifying', 'analyzing', 'extracting', 'processing']
   const hasProcessingClaims = claims.some((c) => processingStatuses.includes(c.status))
@@ -158,6 +169,35 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
     refetch()
   }, [refetch])
 
+  // Manager approve/reject handlers
+  const handleApproveConfirmed = useCallback(async () => {
+    try {
+      setIsConfirmLoading(true)
+      await approveSubmission.mutateAsync({ id: submissionId })
+      setShowApproveConfirm(false)
+      router.push(backPath)
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setIsConfirmLoading(false)
+    }
+  }, [submissionId, approveSubmission, router, backPath])
+
+  const handleRejectConfirmed = useCallback(async () => {
+    if (!rejectionReason.trim()) return
+    try {
+      setIsConfirmLoading(true)
+      await rejectSubmission.mutateAsync({ id: submissionId, reason: rejectionReason.trim() })
+      setShowRejectDialog(false)
+      setRejectionReason('')
+      router.push(backPath)
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setIsConfirmLoading(false)
+    }
+  }, [submissionId, rejectSubmission, rejectionReason, router, backPath])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -170,8 +210,8 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">{error || 'Submission not found'}</p>
-        <Button variant="ghost" className="mt-4" onClick={() => router.push(`/${locale}/expense-claims`)}>
-          <ArrowLeft className="h-4 w-4 mr-2" /> Back to Expense Claims
+        <Button variant="ghost" className="mt-4" onClick={() => router.push(backPath)}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> {isManagerView ? 'Back to Approvals' : 'Back to Expense Claims'}
         </Button>
       </div>
     )
@@ -229,7 +269,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
         <div className="flex-1 min-w-0">
           {isEditingTitle ? (
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(`/${locale}/expense-claims`)}>
+              <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(backPath)}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <Input
@@ -244,7 +284,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(`/${locale}/expense-claims`)}>
+              <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(backPath)}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <h1 className="text-[27px] font-semibold text-foreground truncate">{submission.title}</h1>
@@ -282,6 +322,16 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
               <Button variant="destructive" onClick={handleDeleteClick} disabled={deleteSubmission.isPending}>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Draft
+              </Button>
+            </>
+          )}
+          {canApproveReject && (
+            <>
+              <Button variant="destructive" onClick={() => setShowRejectDialog(true)}>
+                <XCircle className="h-4 w-4 mr-2" /> Reject
+              </Button>
+              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => setShowApproveConfirm(true)}>
+                <CheckCircle className="h-4 w-4 mr-2" /> Approve All
               </Button>
             </>
           )}
@@ -452,7 +502,7 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
           businessId={businessId}
           isOpen={true}
           onClose={handleClaimModalClose}
-          viewMode="personal"
+          viewMode={isManagerView ? 'manager' : 'personal'}
         />
       )}
 
@@ -479,6 +529,55 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
         confirmVariant="danger"
         isLoading={isConfirmLoading}
       />
+
+      {/* Manager approve confirmation */}
+      <ConfirmationDialog
+        isOpen={showApproveConfirm}
+        onClose={() => !isConfirmLoading && setShowApproveConfirm(false)}
+        onConfirm={handleApproveConfirmed}
+        title="Approve Submission"
+        message={`Approve all ${claims.length} claim(s) in "${submission?.title}"? This will mark the entire submission as approved.`}
+        confirmText="Approve All"
+        cancelText="Cancel"
+        confirmVariant="primary"
+        isLoading={isConfirmLoading}
+      />
+
+      {/* Manager reject dialog with reason */}
+      {showRejectDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 transition-opacity"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+            onClick={() => !isConfirmLoading && setShowRejectDialog(false)}
+          />
+          <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-md">
+            <div className="p-6 space-y-5">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold leading-6 text-foreground">Reject Submission</h3>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground">Reason for rejection</label>
+                <Textarea
+                  className="mt-2"
+                  rows={3}
+                  placeholder="Explain why this submission is being rejected..."
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+                <Button variant="secondary" onClick={() => setShowRejectDialog(false)} disabled={isConfirmLoading} className="min-w-[100px] sm:min-w-[120px]">
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleRejectConfirmed} disabled={!rejectionReason.trim() || isConfirmLoading} className="min-w-[100px] sm:min-w-[120px]">
+                  {isConfirmLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Rejecting...</> : 'Reject'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

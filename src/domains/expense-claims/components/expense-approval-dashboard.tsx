@@ -8,12 +8,10 @@
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { Clock, CheckCircle, BarChart3, DollarSign, Loader2, AlertCircle, Send, ChevronRight } from 'lucide-react'
+import { Clock, CheckCircle, BarChart3, DollarSign, Loader2, Send, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import DuplicateBadge from './duplicate-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useExpenseCategories, getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { usePendingApprovals } from '../hooks/use-expense-submissions'
 
@@ -49,9 +47,6 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
   const [activeTab, setActiveTab] = useState('overview')
   const [dashboardData, setDashboardData] = useState<ManagementDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-
-  // Fetch expense categories for displaying category names instead of IDs
-  const { categories } = useExpenseCategories({ includeDisabled: true })
 
   // Fetch pending submission approvals
   const { businessId } = useActiveBusiness()
@@ -134,7 +129,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          <ManagementOverviewContent data={dashboardData} categories={categories} setActiveTab={setActiveTab} />
+          <ManagementOverviewContent data={dashboardData} setActiveTab={setActiveTab} pendingSubmissions={pendingSubmissions} pendingSubmissionsLoading={pendingSubmissionsLoading} locale={locale} />
         </TabsContent>
 
         <TabsContent value="approvals" className="space-y-4">
@@ -154,7 +149,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
                     <div
                       key={sub._id}
                       className="flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => router.push(`/${locale}/expense-claims/submissions/${sub._id}`)}
+                      onClick={() => router.push(`/${locale}/manager/approvals/submissions/${sub._id}`)}
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{sub.title}</p>
@@ -208,11 +203,14 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 }
 
 // Management Overview Content - 2:1 layout with Company Analytics (left, 2/3) and Priority Approvals (right, 1/3)
-function ManagementOverviewContent({ data, categories, setActiveTab }: {
+function ManagementOverviewContent({ data, setActiveTab, pendingSubmissions, pendingSubmissionsLoading, locale }: {
   data: ManagementDashboardData
-  categories: DynamicExpenseCategory[]
   setActiveTab: (tab: string) => void
+  pendingSubmissions: any[]
+  pendingSubmissionsLoading: boolean
+  locale: string
 }) {
+  const router = useRouter()
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-card-gap">
       {/* Company Analytics - Left side, takes 2/3 width */}
@@ -244,65 +242,41 @@ function ManagementOverviewContent({ data, categories, setActiveTab }: {
             <CardDescription className="text-sm">Claims requiring immediate attention</CardDescription>
           </CardHeader>
           <CardContent className="p-card-padding">
-            {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').length === 0 ? (
+            {pendingSubmissionsLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : pendingSubmissions.length === 0 ? (
               <div className="text-center text-muted-foreground py-6">
                 <CheckCircle className="w-8 h-8 mx-auto mb-3" />
                 <p className="text-sm">No pending approvals</p>
-                <p className="text-xs">All claims reviewed</p>
+                <p className="text-xs">All submissions reviewed</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').slice(0, 6).map((claim: any) => (
+                {pendingSubmissions.slice(0, 6).map((sub: any) => (
                   <button
-                    key={claim.id}
+                    key={sub._id}
                     className="w-full flex items-center justify-between p-2 bg-record-layer-2 rounded-md hover:bg-accent transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
-                    onClick={() => {
-                      setActiveTab('approvals')
-                    }}
+                    onClick={() => router.push(`/${locale}/manager/approvals/submissions/${sub._id}`)}
                   >
                     <div className="flex-1 text-left min-w-0">
                       <p className="text-foreground text-xs font-medium truncate">
-                        {claim.employee?.full_name || `Employee ID: ${claim.employee_id}`}
+                        {sub.title}
                       </p>
-                      <p className="text-muted-foreground text-xs truncate">
-                        {claim.description?.length > 20
-                          ? `${claim.description?.substring(0, 20)}...`
-                          : claim.description
-                        }
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        {getCategoryName(claim.expense_category, categories)}
-                      </p>
-                    </div>
-                    <div className="text-right ml-2">
-                      <p className="text-foreground text-xs font-medium">
-                        ${parseFloat(claim.home_currency_amount || claim.total_amount || '0').toFixed(0)}
-                      </p>
-                      <div className="flex items-center justify-end gap-1">
-                        {!claim.reference_number && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30" title="No receipt reference number">
-                            <AlertCircle className="w-2.5 h-2.5" />
-                            No Ref
-                          </span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-muted-foreground text-xs">
+                          {sub.claimCount || 0} claims
+                        </span>
+                        {sub.submitterName && (
+                          <span className="text-muted-foreground text-xs">by {sub.submitterName}</span>
                         )}
-                        {claim.duplicateStatus && claim.duplicateStatus !== 'none' && (
-                          <DuplicateBadge
-                            matchTier={claim.duplicateStatus === 'potential' ? 'strong' : 'exact'}
-                            size="sm"
-                            showTooltip={false}
-                          />
-                        )}
-                        <p className="text-warning-foreground text-xs">
-                          {new Date(claim.created_at).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </p>
                       </div>
                     </div>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0 ml-2" />
                   </button>
                 ))}
-                {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').length > 6 && (
+                {pendingSubmissions.length > 6 && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -310,7 +284,7 @@ function ManagementOverviewContent({ data, categories, setActiveTab }: {
                     onClick={() => setActiveTab('approvals')}
                   >
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    Review all {(data?.recent_claims || []).filter(claim => claim.status === 'submitted').length}
+                    Review all {pendingSubmissions.length}
                   </Button>
                 )}
               </div>
