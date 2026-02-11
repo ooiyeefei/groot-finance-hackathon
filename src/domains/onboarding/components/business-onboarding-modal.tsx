@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
   Building2,
@@ -259,7 +260,8 @@ export default function BusinessOnboardingModal({
     }
   }
 
-  return (
+  // Portal to document.body to escape sidebar's transform containing block
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
@@ -651,6 +653,7 @@ export default function BusinessOnboardingModal({
           </CardContent>
         </Card>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
