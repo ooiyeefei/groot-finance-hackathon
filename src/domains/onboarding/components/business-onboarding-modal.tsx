@@ -274,8 +274,8 @@ export default function BusinessOnboardingModal({
         onClick={onClose}
       />
 
-      {/* Modal Content - More square/portrait (max-w-3xl = 768px, min-h-[85vh]) */}
-      <div className="relative w-full max-w-3xl min-h-[85vh] max-h-[96vh] overflow-hidden m-4 flex flex-col">
+      {/* Modal Content - Narrower portrait layout (~540px width, 30% less than 768px) */}
+      <div className="relative w-full max-w-[540px] min-h-[85vh] max-h-[96vh] overflow-hidden m-4 flex flex-col">
         <Card className="bg-card border-border shadow-2xl flex flex-col h-full">
           {/* Header with close button */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
