@@ -49,6 +49,8 @@
     "managerApprovals": "经理审批",
     "leave": "休假",
     "teamCalendar": "团队日历",
+    "leaveManagement": "休假管理",
+    "personalSettings": "个人设置",
     "reporting": "报告与导出"
   },
   "dashboard": {

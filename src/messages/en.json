@@ -49,6 +49,8 @@
     "admin": "Admin",
     "leave": "Leave",
     "teamCalendar": "Team Calendar",
+    "leaveManagement": "Leave Management",
+    "personalSettings": "Personal Settings",
     "reporting": "Reporting & Exports"
   },
   "dashboard": {

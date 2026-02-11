@@ -28,6 +28,8 @@ const isPublicRoute = createRouteMatcher([
   '/billing(.*)',
   '/:locale/settings/billing(.*)',
   '/settings/billing(.*)',
+  '/:locale/business-settings(.*)',
+  '/business-settings(.*)',
 ])
 
 // Check if request is an API route

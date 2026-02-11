@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     // Build return URL
     const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL
-    const returnUrl = `${origin}/settings/billing`
+    const returnUrl = `${origin}/en/business-settings?tab=billing`
 
     // Create Stripe Customer Portal session
     const portalSession = await getStripe().billingPortal.sessions.create({
