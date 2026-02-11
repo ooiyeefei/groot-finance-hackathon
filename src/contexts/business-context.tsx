@@ -22,7 +22,8 @@ import {
   getBusinessContext,
   switchBusiness
 } from '@/lib/api-client'
-import { prefetchUserRole } from '@/lib/cache-utils'
+import { prefetchUserRole, clearAllAppCaches } from '@/lib/cache-utils'
+import { clearCurrencyCache } from '@/domains/users/hooks/use-home-currency'
 import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('BusinessContext')
@@ -339,6 +340,43 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   // ============================================================================
   // Effect Hooks
   // ============================================================================
+
+  // USER CHANGE DETECTION: Clear all caches when user identity changes
+  // Handles: sign-out (userId → null), sign-in as different user (userId A → userId B)
+  const prevUserIdRef = useRef<string | null | undefined>(undefined)
+
+  useEffect(() => {
+    if (!isAuthLoaded) return
+
+    const prevUserId = prevUserIdRef.current
+
+    // First render after auth loads — just record the userId
+    if (prevUserId === undefined) {
+      prevUserIdRef.current = userId ?? null
+      return
+    }
+
+    const currentUserId = userId ?? null
+
+    // Detect user change (sign-out or different user signed in)
+    if (prevUserId !== null && prevUserId !== currentUserId) {
+      log.debug('User identity changed, clearing all caches', {
+        from: prevUserId,
+        to: currentUserId,
+      })
+      clearAllAppCaches()
+      clearCurrencyCache()
+
+      // Reset in-memory state so stale data isn't served to the new user
+      setMemberships([])
+      setActiveContext(null)
+      setProfile(null)
+      setHasCompletedInitialLoad(false)
+      setHasStartedInitialLoad(false)
+    }
+
+    prevUserIdRef.current = currentUserId
+  }, [isAuthLoaded, userId])
 
   // ULTRA-EARLY PREFETCH: Start role prefetching as soon as Clerk is ready
   useEffect(() => {

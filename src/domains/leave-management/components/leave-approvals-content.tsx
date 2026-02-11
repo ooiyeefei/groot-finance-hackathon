@@ -194,20 +194,11 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
   // Empty state
   if (!pendingRequests || pendingRequests.length === 0) {
     return (
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-foreground flex items-center gap-2">
-            <CalendarDays className="w-5 h-5" />
-            Leave Requests
-          </CardTitle>
-          <CardDescription>Pending leave requests requiring your approval</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="text-lg font-medium">All caught up!</p>
-            <p className="text-sm">No pending leave requests to review</p>
-          </div>
+      <Card className="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50">
+        <CardContent className="p-12 text-center">
+          <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
+          <h3 className="text-xl font-semibold text-green-900 dark:text-white mb-2">All Caught Up!</h3>
+          <p className="text-green-700 dark:text-gray-300">No pending leave requests to review.</p>
         </CardContent>
       </Card>
     );

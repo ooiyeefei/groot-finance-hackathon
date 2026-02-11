@@ -173,7 +173,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           {pendingSubmissions.length === 0 && !pendingSubmissionsLoading && (
             <Card className="bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50">
               <CardContent className="p-12 text-center">
-                <CheckCircle className="w-16 h-16 mx-auto mb-4 text-success" />
+                <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
                 <h3 className="text-xl font-semibold text-green-900 dark:text-white mb-2">All Caught Up!</h3>
                 <p className="text-green-700 dark:text-gray-300">No expense submissions pending your approval.</p>
               </CardContent>
