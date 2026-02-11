@@ -1,12 +1,11 @@
 /**
- * Business Settings Page
- * Central hub for business management functions (managers and admins only)
- * SECURITY: Server-side role authorization required
+ * Settings Page (unified)
+ * Central hub for all settings: business management (managers/owners) and personal profile (all users)
+ * All authenticated users can access - tab visibility is role-gated client-side
  */
 
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { requirePermission } from '@/domains/security/lib/rbac'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { ClientProviders } from '@/components/providers/client-providers'
@@ -24,16 +23,6 @@ export default async function BusinessSettingsPage() {
     redirect('/sign-in')
   }
 
-  // SECURITY: Server-side role authorization - require manager or admin permission
-  try {
-    await requirePermission('manager') // This allows both manager and admin
-  } catch (error) {
-    console.error('[Business Settings Page] Authorization failed:', error)
-    redirect('/')
-  }
-
-  const user = await currentUser()
-
   return (
     <ClientProviders>
       <div className="flex h-screen bg-background">
@@ -44,8 +33,8 @@ export default async function BusinessSettingsPage() {
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <HeaderWithUser
-            title="Business Settings"
-            subtitle="Manage your business configuration and team"
+            title="Settings"
+            subtitle="Manage your preferences and business configuration"
           />
 
           {/* Main Content Area - Full Width Tabbed Interface */}

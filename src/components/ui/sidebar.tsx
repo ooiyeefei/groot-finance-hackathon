@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, Building2, FileCheck, Sparkles, Calendar, CalendarDays, FileSpreadsheet } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, FileCheck, CalendarDays, FileSpreadsheet } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/domains/account-management/components/enhanced-business-display'
@@ -65,63 +65,35 @@ export default function Sidebar() {
   // Check if user is finance_admin (owner or finance_admin role - has full access)
   const isAdmin = userRole.finance_admin
 
-  // Core navigation items (available to everyone) - Part 1
-  // Dashboard, Invoices, Accounting are admin-only (finance admin features)
-  // Managers only see expense claims and approval dashboard
-  const coreNavigationPart1 = [
-    // Dashboard only visible for admins (finance admin feature)
-    ...(isAdmin ? [{ name: t('dashboard'), href: localizedHref('/'), icon: Home }] : []),
-    // Invoices only visible for admins (finance admin feature)
-    ...(isAdmin ? [{ name: t('invoices'), href: localizedHref('/invoices'), icon: FileText }] : []),
-    // Accounting only visible for admins (finance admin feature)
-    ...(isAdmin ? [{ name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard }] : []),
-    { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
-    // Leave management available to all users
-    { name: t('leave') || 'Leave', href: localizedHref('/leave'), icon: Calendar },
-    // Team calendar available to all users
-    { name: t('teamCalendar') || 'Team Calendar', href: localizedHref('/team-calendar'), icon: CalendarDays },
-  ]
+  // === Navigation Groups ===
+  // Items are organized into visual groups separated by subtle dividers.
+  // Empty groups (e.g. financeGroup for non-admins) are filtered out so no orphan dividers appear.
 
-  // Manager/Finance Admin navigation items (after team calendar, before reporting)
-  const managerNavigation = userRole.manager || userRole.finance_admin ? [
-    { name: t('managerApprovals'), href: localizedHref('/manager/approvals'), icon: FileCheck },
+  // Group 1: Finance (admin/owner only) — core financial management tools
+  const financeGroup = isAdmin ? [
+    { name: t('dashboard'), href: localizedHref('/'), icon: Home },
+    { name: t('invoices'), href: localizedHref('/invoices'), icon: FileText },
+    { name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard },
   ] : []
 
-  // Reporting & Exports (after manager approvals)
-  const reportingNavigation = [
+  // Group 2: Workspace (all users) — day-to-day work items + conditional manager tools
+  const workspaceGroup = [
+    { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
+    { name: t('leaveManagement') || 'Leave Management', href: localizedHref('/leave-management'), icon: CalendarDays },
+    ...(userRole.manager || userRole.finance_admin ? [
+      { name: t('managerApprovals'), href: localizedHref('/manager/approvals'), icon: FileCheck },
+    ] : []),
     { name: t('reporting') || 'Reporting & Exports', href: localizedHref('/reporting'), icon: FileSpreadsheet },
   ]
 
-  // Core navigation items (available to everyone) - Part 2
-  const coreNavigationPart2 = [
+  // Group 3: Utility (all users) — tools and settings
+  const utilityGroup = [
     { name: t('aiAssistant'), href: localizedHref('/ai-assistant'), icon: MessageSquare },
+    { name: t('settings') || 'Settings', href: localizedHref('/business-settings'), icon: Settings },
   ]
 
-  // Business management navigation (managers and finance_admins only)
-  const businessNavigation = userRole.manager || userRole.finance_admin ? [
-    { name: t('businessSettings'), href: localizedHref('/business-settings'), icon: Building2 },
-  ] : []
-
-  // Billing navigation (finance_admins and owners only - managers don't manage billing)
-  const billingNavigation = userRole.finance_admin ? [
-    { name: t('billing'), href: localizedHref('/settings/billing'), icon: Sparkles }
-  ] : []
-
-  // Personal settings (available to everyone)
-  const settingsNavigation = [
-    { name: t('settings'), href: localizedHref('/settings'), icon: Settings }
-  ]
-
-  // Build complete navigation based on role
-  const navigation = [
-    ...coreNavigationPart1,
-    ...managerNavigation,
-    ...reportingNavigation,
-    ...coreNavigationPart2,
-    ...businessNavigation,
-    ...billingNavigation,
-    ...settingsNavigation
-  ]
+  // Filter out empty groups, then render with separators between them
+  const navigationGroups = [financeGroup, workspaceGroup, utilityGroup].filter(g => g.length > 0)
 
   // Load saved state from localStorage and fetch user role
   useEffect(() => {
@@ -295,66 +267,80 @@ export default function Sidebar() {
         {/* Navigation */}
         <nav className="flex-1 p-4">
           <ul className="space-y-2">
-            {navigation.map((item) => {
-              const isActive = item.href === `/${locale}`
-                ? pathname === item.href
-                : pathname === item.href || pathname.startsWith(`${item.href}/`)
-              const NavItem = (
-                <Link
-                  href={item.href}
-                  className={`
-                    flex items-center rounded-lg transition-colors relative
-                    ${isExpanded ? 'p-3' : 'p-3 justify-center'}
-                    ${isActive
-                      ? 'bg-accent/70 text-accent-foreground font-medium'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }
-                  `}
-                >
-                  <item.icon className={`w-5 h-5 ${isExpanded ? 'mr-3' : ''} flex-shrink-0`} />
-                  <span className={`
-                    transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap flex-1
-                    ${isExpanded ? 'opacity-100 max-w-none' : 'opacity-0 max-w-0'}
-                  `}>
-                    {item.name}
-                  </span>
-                  {/* Badge for notifications */}
-                  {'badge' in item && (item as any).badge && (
-                    <Badge
-                      variant="destructive"
-                      className={`
-                        text-xs px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center
-                        ${isExpanded ? 'ml-2' : 'absolute -top-1 -right-1 scale-75'}
-                        ${isExpanded ? 'opacity-100' : 'opacity-100'}
-                      `}
-                    >
-                      {(item as any).badge}
-                    </Badge>
-                  )}
-                </Link>
-              )
+            {navigationGroups.map((group, groupIndex) => {
+              const renderItem = (item: typeof group[number]) => {
+                const isActive = item.href === `/${locale}`
+                  ? pathname === item.href
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                const NavItem = (
+                  <Link
+                    href={item.href}
+                    className={`
+                      flex items-center rounded-lg transition-colors relative
+                      ${isExpanded ? 'p-3' : 'p-3 justify-center'}
+                      ${isActive
+                        ? 'bg-accent/70 text-accent-foreground font-medium'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }
+                    `}
+                  >
+                    <item.icon className={`w-5 h-5 ${isExpanded ? 'mr-3' : ''} flex-shrink-0`} />
+                    <span className={`
+                      transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap flex-1
+                      ${isExpanded ? 'opacity-100 max-w-none' : 'opacity-0 max-w-0'}
+                    `}>
+                      {item.name}
+                    </span>
+                    {/* Badge for notifications */}
+                    {'badge' in item && (item as any).badge && (
+                      <Badge
+                        variant="destructive"
+                        className={`
+                          text-xs px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center
+                          ${isExpanded ? 'ml-2' : 'absolute -top-1 -right-1 scale-75'}
+                          ${isExpanded ? 'opacity-100' : 'opacity-100'}
+                        `}
+                      >
+                        {(item as any).badge}
+                      </Badge>
+                    )}
+                  </Link>
+                )
+
+                return (
+                  <li key={item.name}>
+                    {!isExpanded ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          {NavItem}
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="ml-2">
+                          <div className="flex items-center gap-2">
+                            {item.name}
+                            {'badge' in item && (item as any).badge && (
+                              <Badge variant="destructive" className="text-xs">
+                                {(item as any).badge}
+                              </Badge>
+                            )}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      NavItem
+                    )}
+                  </li>
+                )
+              }
 
               return (
-                <li key={item.name}>
-                  {!isExpanded ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        {NavItem}
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="ml-2">
-                        <div className="flex items-center gap-2">
-                          {item.name}
-                          {'badge' in item && (item as any).badge && (
-                            <Badge variant="destructive" className="text-xs">
-                              {(item as any).badge}
-                            </Badge>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    NavItem
+                <li key={`group-${groupIndex}`} className="list-none">
+                  {/* Separator between groups (not before the first group) */}
+                  {groupIndex > 0 && (
+                    <div className="my-2 mx-1 border-t border-border/50" />
                   )}
+                  <ul className="space-y-1">
+                    {group.map(renderItem)}
+                  </ul>
                 </li>
               )
             })}

@@ -372,24 +372,24 @@ export default function ExportsPageContent() {
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
-          <TabsTrigger value="reports" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-5 h-auto p-1 gap-1 bg-muted border border-border lg:w-[600px]">
+          <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             <span className="hidden sm:inline">Reports</span>
           </TabsTrigger>
-          <TabsTrigger value="export" className="flex items-center gap-2">
+          <TabsTrigger value="export" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
             <FileSpreadsheet className="h-4 w-4" />
             <span className="hidden sm:inline">Export</span>
           </TabsTrigger>
-          <TabsTrigger value="templates" className="flex items-center gap-2">
+          <TabsTrigger value="templates" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">Templates</span>
           </TabsTrigger>
-          <TabsTrigger value="schedules" className="flex items-center gap-2">
+          <TabsTrigger value="schedules" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
             <Clock className="h-4 w-4" />
             <span className="hidden sm:inline">Schedules</span>
           </TabsTrigger>
-          <TabsTrigger value="history" className="flex items-center gap-2">
+          <TabsTrigger value="history" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
             <History className="h-4 w-4" />
             <span className="hidden sm:inline">History</span>
           </TabsTrigger>

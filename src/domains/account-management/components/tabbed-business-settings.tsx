@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, memo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Key, Loader2, Calendar } from 'lucide-react'
+import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { useUser } from '@clerk/nextjs'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -13,6 +13,8 @@ const CategoriesManagementClient = lazy(() => import('@/domains/expense-claims/c
 const TeamsManagementClient = lazy(() => import('@/domains/account-management/components/teams-management-client'))
 const ApiKeysManagementClient = lazy(() => import('@/domains/api-keys/components/api-keys-management-client'))
 const LeaveManagementSettings = lazy(() => import('@/domains/leave-management/components/leave-management-settings'))
+const BillingSettingsContent = lazy(() => import('@/domains/billing/components/billing-settings-content'))
+const UserProfileSection = lazy(() => import('@/domains/account-management/components/user-profile-section'))
 
 // Wrapper components for existing components that need userId
 const CategoryManagementTab = ({ userId }: { userId?: string }) => (
@@ -24,17 +26,19 @@ const TeamManagementTab = ({ userId }: { userId?: string }) => (
 )
 
 const TabbedBusinessSettings = memo(() => {
-  const { isManager, isOwner } = usePermissions()
+  const { isOwner } = usePermissions()
   const { user } = useUser()
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
 
   // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'leave-management', 'team-management', 'api-keys'] as const
+  const validTabs = ['business-profile', 'category-management', 'leave-management', 'team-management', 'api-keys', 'billing', 'profile'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
-  const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'business-profile'
+  // Default tab: 'business-profile' for finance_admin/owner, 'profile' for everyone else
+  const defaultTab = isOwner ? 'business-profile' : 'profile'
+  const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab
 
   // Update URL when tab changes (without full page reload)
   const handleTabChange = useCallback((value: string) => {
@@ -43,48 +47,42 @@ const TabbedBusinessSettings = memo(() => {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }, [searchParams, router, pathname])
 
-  // Only show business management tabs to owners and managers
-  const canManageBusiness = isOwner || isManager
-
-  if (!canManageBusiness) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-muted-foreground">
-          Business management settings are available to managers and administrators only.
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div className="w-full space-y-4">
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         {/* Tab Navigation - Semantic Design System */}
-        <TabsList className={`grid w-full ${isOwner ? 'grid-cols-5' : 'grid-cols-3'} bg-muted border border-border`}>
-          <TabsTrigger
-            value="business-profile"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
-            <Building2 className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Business</span>
-            <span className="sm:hidden">Biz</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="category-management"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
-            <DollarSign className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Categories</span>
-            <span className="sm:hidden">Cat</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="leave-management"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
-            <Calendar className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Leave</span>
-            <span className="sm:hidden">Leave</span>
-          </TabsTrigger>
+        {/* Uses flex-wrap: 1 tab for employee/manager (Profile only), 7 for owner (all tabs) */}
+        <TabsList className="flex flex-wrap h-auto p-1 gap-1 bg-muted border border-border">
+          {isOwner && (
+            <TabsTrigger
+              value="business-profile"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Building2 className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Business</span>
+              <span className="sm:hidden">Biz</span>
+            </TabsTrigger>
+          )}
+          {isOwner && (
+            <TabsTrigger
+              value="category-management"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <DollarSign className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Categories</span>
+              <span className="sm:hidden">Cat</span>
+            </TabsTrigger>
+          )}
+          {isOwner && (
+            <TabsTrigger
+              value="leave-management"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Leave</span>
+              <span className="sm:hidden">Leave</span>
+            </TabsTrigger>
+          )}
           {isOwner && (
             <TabsTrigger
               value="team-management"
@@ -104,49 +102,72 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">API</span>
             </TabsTrigger>
           )}
+          {isOwner && (
+            <TabsTrigger
+              value="billing"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Billing</span>
+              <span className="sm:hidden">Bill</span>
+            </TabsTrigger>
+          )}
+          <TabsTrigger
+            value="profile"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            <User className="w-4 h-4 mr-2" />
+            Profile
+          </TabsTrigger>
         </TabsList>
 
-        {/* Business Profile Tab Content */}
-        <TabsContent value="business-profile" className="space-y-4">
-          <div className="bg-card rounded-lg border border-border p-6">
-            <Suspense fallback={
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading business profile...</span>
-              </div>
-            }>
-              <BusinessProfileSettings />
-            </Suspense>
-          </div>
-        </TabsContent>
+        {/* Business Profile Tab Content - Finance Admin/Owner only */}
+        {isOwner && (
+          <TabsContent value="business-profile" className="space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6">
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">Loading business profile...</span>
+                </div>
+              }>
+                <BusinessProfileSettings />
+              </Suspense>
+            </div>
+          </TabsContent>
+        )}
 
-        {/* Category Management Tab Content */}
-        <TabsContent value="category-management" className="space-y-4">
-          <div className="bg-card rounded-lg border border-border p-6">
-            <Suspense fallback={
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading categories...</span>
-              </div>
-            }>
-              <CategoryManagementTab userId={user?.id} />
-            </Suspense>
-          </div>
-        </TabsContent>
+        {/* Category Management Tab Content - Finance Admin/Owner only */}
+        {isOwner && (
+          <TabsContent value="category-management" className="space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6">
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">Loading categories...</span>
+                </div>
+              }>
+                <CategoryManagementTab userId={user?.id} />
+              </Suspense>
+            </div>
+          </TabsContent>
+        )}
 
-        {/* Leave Management Tab Content */}
-        <TabsContent value="leave-management" className="space-y-4">
-          <div className="bg-card rounded-lg border border-border p-6">
-            <Suspense fallback={
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading leave settings...</span>
-              </div>
-            }>
-              <LeaveManagementSettings />
-            </Suspense>
-          </div>
-        </TabsContent>
+        {/* Leave Management Tab Content - Finance Admin/Owner only */}
+        {isOwner && (
+          <TabsContent value="leave-management" className="space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6">
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">Loading leave settings...</span>
+                </div>
+              }>
+                <LeaveManagementSettings />
+              </Suspense>
+            </div>
+          </TabsContent>
+        )}
 
         {/* Team Management Tab Content - Owner Only */}
         {isOwner && (
@@ -179,6 +200,34 @@ const TabbedBusinessSettings = memo(() => {
             </div>
           </TabsContent>
         )}
+
+        {/* Billing Tab Content - Owner Only */}
+        {isOwner && (
+          <TabsContent value="billing" className="space-y-4">
+            <Suspense fallback={
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading billing...</span>
+              </div>
+            }>
+              <BillingSettingsContent />
+            </Suspense>
+          </TabsContent>
+        )}
+
+        {/* Profile Tab Content - Available to ALL users */}
+        <TabsContent value="profile" className="space-y-4">
+          <div className="bg-card rounded-lg border border-border p-6">
+            <Suspense fallback={
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading profile...</span>
+              </div>
+            }>
+              <UserProfileSection />
+            </Suspense>
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
   )

@@ -80,7 +80,7 @@ export function SubscriptionCard() {
             </div>
           </div>
 
-          <Link href="/en/settings/billing">
+          <Link href="/en/business-settings?tab=billing">
             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
               Manage
               <ChevronRight className="w-4 h-4 ml-1" />

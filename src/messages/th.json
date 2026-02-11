@@ -49,6 +49,8 @@
     "managerApprovals": "การอนุมัติผู้จัดการ",
     "leave": "ลางาน",
     "teamCalendar": "ปฏิทินทีม",
+    "leaveManagement": "จัดการลางาน",
+    "personalSettings": "ตั้งค่าส่วนตัว",
     "reporting": "รายงานและส่งออก"
   },
   "dashboard": {

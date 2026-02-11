@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
       finalCancelUrl = `${baseUrl}/en/onboarding/plan-selection?canceled=true`
     } else {
       // Normal billing flow: existing behavior
-      finalSuccessUrl = `${baseUrl}/en/settings/billing?success=true&session_id={CHECKOUT_SESSION_ID}`
+      finalSuccessUrl = `${baseUrl}/en/business-settings?tab=billing&success=true&session_id={CHECKOUT_SESSION_ID}`
       finalCancelUrl = `${baseUrl}/en/pricing?canceled=true`
     }
 

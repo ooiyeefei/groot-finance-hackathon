@@ -49,6 +49,8 @@
     "managerApprovals": "Persetujuan Manajer",
     "leave": "Cuti",
     "teamCalendar": "Kalender Tim",
+    "leaveManagement": "Manajemen Cuti",
+    "personalSettings": "Pengaturan Pribadi",
     "reporting": "Laporan & Ekspor"
   },
   "dashboard": {
