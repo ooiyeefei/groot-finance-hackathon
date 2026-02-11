@@ -31,6 +31,13 @@ import {
   EXPORT_TRIGGER_VALUES,
   DATE_RANGE_TYPE_VALUES,
   THOUSAND_SEPARATOR_VALUES,
+  SALES_INVOICE_STATUS_VALUES,
+  PAYMENT_TERMS_VALUES,
+  CUSTOMER_STATUS_VALUES,
+  CATALOG_ITEM_STATUS_VALUES,
+  RECURRING_FREQUENCY_VALUES,
+  PAYMENT_TYPE_VALUES,
+  PAYMENT_METHOD_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -185,3 +192,49 @@ export const dateRangeTypeValidator = literalUnion(DATE_RANGE_TYPE_VALUES);
  * Number formatting: comma or none
  */
 export const thousandSeparatorValidator = literalUnion(THOUSAND_SEPARATOR_VALUES);
+
+// ============================================
+// SALES INVOICE VALIDATORS
+// ============================================
+
+/**
+ * Sales invoice status validator
+ * Lifecycle: draft → sent → paid/overdue/partially_paid → void
+ */
+export const salesInvoiceStatusValidator = literalUnion(SALES_INVOICE_STATUS_VALUES);
+
+/**
+ * Payment terms validator
+ */
+export const paymentTermsValidator = literalUnion(PAYMENT_TERMS_VALUES);
+
+/**
+ * Customer status validator
+ */
+export const customerStatusValidator = literalUnion(CUSTOMER_STATUS_VALUES);
+
+/**
+ * Catalog item status validator
+ */
+export const catalogItemStatusValidator = literalUnion(CATALOG_ITEM_STATUS_VALUES);
+
+/**
+ * Recurring invoice frequency validator
+ */
+export const recurringFrequencyValidator = literalUnion(RECURRING_FREQUENCY_VALUES);
+
+// ============================================
+// PAYMENT VALIDATORS (010-ar-debtor-management)
+// ============================================
+
+/**
+ * Payment type validator
+ * payment (normal) or reversal (correction)
+ */
+export const paymentTypeValidator = literalUnion(PAYMENT_TYPE_VALUES);
+
+/**
+ * Payment method validator
+ * bank_transfer, cash, cheque, card, other
+ */
+export const paymentMethodValidator = literalUnion(PAYMENT_METHOD_VALUES);

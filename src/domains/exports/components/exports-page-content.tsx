@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { FileSpreadsheet, FileText, Clock, History, Download, Plus, BarChart3, Copy, ExternalLink, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, FileText, Clock, History, Download, Plus, BarChart3, Copy, ExternalLink, Loader2, Users } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 
 // Lazy load MonthlyReportGenerator for performance
@@ -414,30 +414,27 @@ export default function ExportsPageContent() {
               <MonthlyReportGenerator />
             </Suspense>
 
-            {/* Duplicate Expense Report Link */}
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-                    <Copy className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-foreground">Duplicate Expense Report</CardTitle>
-                    <CardDescription className="text-muted-foreground">
-                      Review and manage potential duplicate expense claims
-                    </CardDescription>
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => window.open(`/${locale}/expense-claims/duplicate-report`, '_blank')}
-                    className="flex items-center gap-2"
-                  >
-                    <span>Open Report</span>
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-            </Card>
+            {/* Quick Report Links */}
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => window.open(`/${locale}/expense-claims/duplicate-report`, '_blank')}
+                className="flex items-center gap-2"
+              >
+                <Copy className="h-4 w-4" />
+                Duplicate Expense Report
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.open(`/${locale}/invoices`, '_blank')}
+                className="flex items-center gap-2"
+              >
+                <Users className="h-4 w-4" />
+                AR Aging Report
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
         </TabsContent>
 

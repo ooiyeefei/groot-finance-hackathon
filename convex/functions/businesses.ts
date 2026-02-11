@@ -592,6 +592,7 @@ export const getBusinessProfileByStringId = query({
       tax_id: business.taxId || null,
       address: business.address || null,
       contact_email: business.contactEmail || null,
+      contact_phone: business.contactPhone || null,
       home_currency: business.homeCurrency || "SGD",
       country_code: business.countryCode || null,
       logo_url: business.logoStoragePath || business.logoUrl || null,
@@ -626,6 +627,7 @@ export const updateBusinessByStringId = mutation({
     tax_id: v.optional(v.string()),
     address: v.optional(v.string()),
     contact_email: v.optional(v.string()),
+    contact_phone: v.optional(v.string()),
     home_currency: v.optional(v.string()),
     country_code: v.optional(v.string()),
     logo_url: v.optional(v.string()),
@@ -673,6 +675,7 @@ export const updateBusinessByStringId = mutation({
     if (args.tax_id !== undefined) updates.taxId = args.tax_id;
     if (args.address !== undefined) updates.address = args.address;
     if (args.contact_email !== undefined) updates.contactEmail = args.contact_email;
+    if (args.contact_phone !== undefined) updates.contactPhone = args.contact_phone;
     if (args.home_currency !== undefined) updates.homeCurrency = args.home_currency;
     if (args.country_code !== undefined) updates.countryCode = args.country_code;
     if (args.logo_url !== undefined) updates.logoStoragePath = args.logo_url;

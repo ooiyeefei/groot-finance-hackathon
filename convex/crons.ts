@@ -91,4 +91,28 @@ crons.interval(
   internal.functions.expenseSubmissions.cleanupEmptyDrafts
 );
 
+/**
+ * Sales Invoice: Mark Overdue
+ *
+ * Runs daily at midnight UTC to mark sent/partially_paid invoices
+ * as overdue when dueDate has passed.
+ */
+crons.daily(
+  "mark-overdue-invoices",
+  { hourUTC: 0, minuteUTC: 0 },
+  internal.functions.salesInvoices.markOverdue
+);
+
+/**
+ * Sales Invoice: Generate Recurring Invoices
+ *
+ * Runs daily at 1 AM UTC to generate invoices from active
+ * recurring schedules when nextGenerationDate is reached.
+ */
+crons.daily(
+  "generate-recurring-invoices",
+  { hourUTC: 1, minuteUTC: 0 },
+  internal.functions.salesInvoices.generateDueInvoices
+);
+
 export default crons;
