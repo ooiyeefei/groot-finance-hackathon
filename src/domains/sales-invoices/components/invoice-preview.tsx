@@ -1,0 +1,105 @@
+'use client'
+
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Download, Send, Eye, Printer } from 'lucide-react'
+import { ModernInvoiceTemplate } from './invoice-templates/template-modern'
+import { ClassicInvoiceTemplate } from './invoice-templates/template-classic'
+
+interface InvoicePreviewProps {
+  invoice: {
+    invoiceNumber: string
+    invoiceDate: string
+    dueDate: string
+    customerSnapshot: {
+      businessName: string
+      contactPerson?: string
+      email: string
+      phone?: string
+      address?: string
+      taxId?: string
+    }
+    lineItems: Array<{
+      description: string
+      quantity: number
+      unitPrice: number
+      taxRate?: number
+      taxAmount?: number
+      discountAmount?: number
+      totalAmount: number
+      currency: string
+      itemCode?: string
+      unitMeasurement?: string
+    }>
+    subtotal: number
+    totalDiscount?: number
+    totalTax: number
+    totalAmount: number
+    balanceDue: number
+    amountPaid?: number
+    currency: string
+    taxMode: string
+    notes?: string
+    paymentInstructions?: string
+    paymentTerms?: string
+    signatureName?: string
+    status: string
+  }
+  businessInfo?: {
+    companyName?: string
+    companyAddress?: string
+    companyPhone?: string
+    companyEmail?: string
+    registrationNumber?: string
+    taxId?: string
+    logoUrl?: string
+  }
+  templateId?: string
+  onSend?: () => void
+  onDownloadPdf?: () => void
+  showActions?: boolean
+}
+
+export function InvoicePreview({
+  invoice,
+  businessInfo,
+  templateId = 'modern',
+  onSend,
+  onDownloadPdf,
+  showActions = true,
+}: InvoicePreviewProps) {
+  const TemplateComponent = templateId === 'classic' ? ClassicInvoiceTemplate : ModernInvoiceTemplate
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  return (
+    <div className="space-y-4">
+      {showActions && (
+        <div className="flex items-center gap-2 print:hidden">
+          {onDownloadPdf && (
+            <Button variant="outline" size="sm" onClick={onDownloadPdf}>
+              <Download className="w-4 h-4 mr-2" />
+              Download PDF
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={handlePrint}>
+            <Printer className="w-4 h-4 mr-2" />
+            Print
+          </Button>
+          {onSend && invoice.status === 'draft' && (
+            <Button size="sm" onClick={onSend}>
+              <Send className="w-4 h-4 mr-2" />
+              Send Invoice
+            </Button>
+          )}
+        </div>
+      )}
+
+      <div className="bg-card border border-border rounded-lg overflow-hidden print:border-none print:shadow-none">
+        <TemplateComponent invoice={invoice} businessInfo={businessInfo} />
+      </div>
+    </div>
+  )
+}

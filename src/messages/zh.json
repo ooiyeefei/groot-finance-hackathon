@@ -31,6 +31,7 @@
   "navigation": {
     "dashboard": "仪表板",
     "invoices": "发票",
+    "salesInvoices": "销售发票",
     "transactions": "会计",
     "applications": "申请",
     "expenseClaims": "费用报销",
@@ -1101,6 +1102,80 @@
       "noRequests": "没有休假申请",
       "noBalance": "没有余额数据",
       "contactAdmin": "请联系管理员初始化您的休假余额"
+    }
+  },
+  "debtors": {
+    "title": "应收账款",
+    "tabLabel": "应收账款",
+    "noDebtors": "没有未付款项",
+    "noDebtorsDescription": "所有客户已全部付清。",
+    "totalOutstanding": "未付总额",
+    "openInvoices": "未结发票",
+    "oldestOverdue": "最早逾期",
+    "days": "天",
+    "agingSummary": "账龄汇总",
+    "current": "当前",
+    "days1to30": "1-30天",
+    "days31to60": "31-60天",
+    "days61to90": "61-90天",
+    "days90plus": "90天以上",
+    "total": "合计",
+    "overdueOnly": "仅逾期",
+    "sortBy": "排序方式",
+    "outstandingAmount": "未付金额",
+    "daysOverdue": "逾期天数",
+    "customerName": "客户名称",
+    "detail": {
+      "title": "应收详情",
+      "totalInvoiced": "开票总额",
+      "totalPaid": "已付总额",
+      "totalOutstanding": "未付总额",
+      "overdueInvoices": "逾期发票",
+      "invoiceHistory": "发票历史",
+      "paymentHistory": "付款历史",
+      "runningBalance": "累计余额",
+      "noInvoices": "该客户没有发票记录。",
+      "date": "日期",
+      "description": "描述",
+      "debit": "借方",
+      "credit": "贷方",
+      "balance": "余额"
+    },
+    "statement": {
+      "title": "应收对账单",
+      "generateStatement": "生成对账单",
+      "dateRange": "日期范围",
+      "from": "从",
+      "to": "到",
+      "openingBalance": "期初余额",
+      "closingBalance": "期末余额",
+      "transactions": "交易记录",
+      "noTransactions": "该期间没有交易记录。",
+      "downloadPdf": "下载PDF",
+      "emailToCustomer": "发送邮件给客户",
+      "totalDebits": "借方合计",
+      "totalCredits": "贷方合计"
+    },
+    "agingReport": {
+      "title": "应收账龄报告",
+      "asOfDate": "截至日期",
+      "exportCsv": "导出CSV",
+      "grandTotal": "总计",
+      "noData": "没有应收账款需要报告。"
+    },
+    "payment": {
+      "type": "类型",
+      "payment": "付款",
+      "reversal": "冲销",
+      "recordPayment": "记录付款",
+      "recordReversal": "记录冲销",
+      "reversePayment": "冲销付款",
+      "confirmReversal": "确定要冲销此付款吗？发票余额将被恢复。",
+      "paymentRecorded": "付款已记录",
+      "reversalRecorded": "冲销已记录",
+      "allocations": "分配",
+      "allocateAmount": "分配金额",
+      "remainingToAllocate": "剩余待分配"
     }
   }
 }

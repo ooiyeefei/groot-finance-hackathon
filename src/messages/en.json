@@ -31,6 +31,7 @@
   "navigation": {
     "dashboard": "Dashboard",
     "invoices": "Invoices",
+    "salesInvoices": "Sales Invoices",
     "transactions": "Accounting",
     "applications": "Applications",
     "expenseClaims": "Expense Claims",
@@ -1146,6 +1147,80 @@
       "noRequests": "No leave requests",
       "noBalance": "No balance data available",
       "contactAdmin": "Contact your administrator to initialize your leave balance"
+    }
+  },
+  "debtors": {
+    "title": "Debtors",
+    "tabLabel": "Debtors",
+    "noDebtors": "No outstanding receivables",
+    "noDebtorsDescription": "All customers are fully paid.",
+    "totalOutstanding": "Total Outstanding",
+    "openInvoices": "Open Invoices",
+    "oldestOverdue": "Oldest Overdue",
+    "days": "days",
+    "agingSummary": "Aging Summary",
+    "current": "Current",
+    "days1to30": "1-30 Days",
+    "days31to60": "31-60 Days",
+    "days61to90": "61-90 Days",
+    "days90plus": "90+ Days",
+    "total": "Total",
+    "overdueOnly": "Overdue Only",
+    "sortBy": "Sort By",
+    "outstandingAmount": "Outstanding Amount",
+    "daysOverdue": "Days Overdue",
+    "customerName": "Customer Name",
+    "detail": {
+      "title": "Debtor Detail",
+      "totalInvoiced": "Total Invoiced",
+      "totalPaid": "Total Paid",
+      "totalOutstanding": "Total Outstanding",
+      "overdueInvoices": "Overdue Invoices",
+      "invoiceHistory": "Invoice History",
+      "paymentHistory": "Payment History",
+      "runningBalance": "Running Balance",
+      "noInvoices": "No invoices found for this customer.",
+      "date": "Date",
+      "description": "Description",
+      "debit": "Debit",
+      "credit": "Credit",
+      "balance": "Balance"
+    },
+    "statement": {
+      "title": "Debtor Statement",
+      "generateStatement": "Generate Statement",
+      "dateRange": "Date Range",
+      "from": "From",
+      "to": "To",
+      "openingBalance": "Opening Balance",
+      "closingBalance": "Closing Balance",
+      "transactions": "Transactions",
+      "noTransactions": "No transactions in this period.",
+      "downloadPdf": "Download PDF",
+      "emailToCustomer": "Email to Customer",
+      "totalDebits": "Total Debits",
+      "totalCredits": "Total Credits"
+    },
+    "agingReport": {
+      "title": "AR Aging Report",
+      "asOfDate": "As of Date",
+      "exportCsv": "Export CSV",
+      "grandTotal": "Grand Total",
+      "noData": "No outstanding receivables to report."
+    },
+    "payment": {
+      "type": "Type",
+      "payment": "Payment",
+      "reversal": "Reversal",
+      "recordPayment": "Record Payment",
+      "recordReversal": "Record Reversal",
+      "reversePayment": "Reverse Payment",
+      "confirmReversal": "Are you sure you want to reverse this payment? This will restore the invoice balance.",
+      "paymentRecorded": "Payment Recorded",
+      "reversalRecorded": "Reversal Recorded",
+      "allocations": "Allocations",
+      "allocateAmount": "Allocate Amount",
+      "remainingToAllocate": "Remaining to Allocate"
     }
   }
 }

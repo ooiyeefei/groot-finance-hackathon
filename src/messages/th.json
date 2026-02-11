@@ -31,6 +31,7 @@
   "navigation": {
     "dashboard": "แดชบอร์ด",
     "invoices": "ใบแจ้งหนี้",
+    "salesInvoices": "ใบแจ้งหนี้ขาย",
     "transactions": "บัญชี",
     "applications": "แอปพลิเคชัน",
     "expenseClaims": "เคลมค่าใช้จ่าย",
@@ -1101,6 +1102,80 @@
       "noRequests": "ไม่มีคำขอลา",
       "noBalance": "ไม่มีข้อมูลยอดคงเหลือ",
       "contactAdmin": "ติดต่อผู้ดูแลระบบเพื่อเริ่มต้นยอดวันลา"
+    }
+  },
+  "debtors": {
+    "title": "ลูกหนี้",
+    "tabLabel": "ลูกหนี้",
+    "noDebtors": "ไม่มียอดค้างชำระ",
+    "noDebtorsDescription": "ลูกค้าทุกรายชำระเงินเรียบร้อยแล้ว",
+    "totalOutstanding": "ยอดค้างชำระรวม",
+    "openInvoices": "ใบแจ้งหนี้ค้างชำระ",
+    "oldestOverdue": "ค้างชำระนานที่สุด",
+    "days": "วัน",
+    "agingSummary": "สรุปอายุหนี้",
+    "current": "ปัจจุบัน",
+    "days1to30": "1-30 วัน",
+    "days31to60": "31-60 วัน",
+    "days61to90": "61-90 วัน",
+    "days90plus": "90+ วัน",
+    "total": "รวม",
+    "overdueOnly": "เฉพาะค้างชำระ",
+    "sortBy": "เรียงตาม",
+    "outstandingAmount": "ยอดค้างชำระ",
+    "daysOverdue": "จำนวนวันค้างชำระ",
+    "customerName": "ชื่อลูกค้า",
+    "detail": {
+      "title": "รายละเอียดลูกหนี้",
+      "totalInvoiced": "ยอดออกใบแจ้งหนี้รวม",
+      "totalPaid": "ยอดชำระรวม",
+      "totalOutstanding": "ยอดค้างชำระรวม",
+      "overdueInvoices": "ใบแจ้งหนี้ค้างชำระ",
+      "invoiceHistory": "ประวัติใบแจ้งหนี้",
+      "paymentHistory": "ประวัติการชำระเงิน",
+      "runningBalance": "ยอดสะสม",
+      "noInvoices": "ไม่พบใบแจ้งหนี้สำหรับลูกค้ารายนี้",
+      "date": "วันที่",
+      "description": "รายละเอียด",
+      "debit": "เดบิต",
+      "credit": "เครดิต",
+      "balance": "ยอดคงเหลือ"
+    },
+    "statement": {
+      "title": "ใบแจ้งยอดลูกหนี้",
+      "generateStatement": "สร้างใบแจ้งยอด",
+      "dateRange": "ช่วงวันที่",
+      "from": "จาก",
+      "to": "ถึง",
+      "openingBalance": "ยอดยกมา",
+      "closingBalance": "ยอดยกไป",
+      "transactions": "รายการ",
+      "noTransactions": "ไม่มีรายการในช่วงเวลานี้",
+      "downloadPdf": "ดาวน์โหลด PDF",
+      "emailToCustomer": "ส่งอีเมลถึงลูกค้า",
+      "totalDebits": "รวมเดบิต",
+      "totalCredits": "รวมเครดิต"
+    },
+    "agingReport": {
+      "title": "รายงานอายุลูกหนี้",
+      "asOfDate": "ณ วันที่",
+      "exportCsv": "ส่งออก CSV",
+      "grandTotal": "รวมทั้งหมด",
+      "noData": "ไม่มียอดค้างชำระ"
+    },
+    "payment": {
+      "type": "ประเภท",
+      "payment": "ชำระเงิน",
+      "reversal": "กลับรายการ",
+      "recordPayment": "บันทึกการชำระเงิน",
+      "recordReversal": "บันทึกการกลับรายการ",
+      "reversePayment": "กลับรายการชำระเงิน",
+      "confirmReversal": "คุณแน่ใจหรือไม่ว่าต้องการกลับรายการชำระเงินนี้? ยอดค้างชำระจะถูกคืนกลับ",
+      "paymentRecorded": "บันทึกการชำระเงินแล้ว",
+      "reversalRecorded": "บันทึกการกลับรายการแล้ว",
+      "allocations": "การจัดสรร",
+      "allocateAmount": "จำนวนเงินที่จัดสรร",
+      "remainingToAllocate": "คงเหลือที่ต้องจัดสรร"
     }
   }
 }

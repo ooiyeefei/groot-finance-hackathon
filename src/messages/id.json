@@ -31,6 +31,7 @@
   "navigation": {
     "dashboard": "Dashboard",
     "invoices": "Faktur",
+    "salesInvoices": "Faktur Penjualan",
     "transactions": "Akuntansi",
     "applications": "Aplikasi",
     "expenseClaims": "Klaim Pengeluaran",
@@ -1101,6 +1102,80 @@
       "noRequests": "Tidak ada permintaan cuti",
       "noBalance": "Data saldo tidak tersedia",
       "contactAdmin": "Hubungi administrator untuk menginisialisasi saldo cuti"
+    }
+  },
+  "debtors": {
+    "title": "Piutang",
+    "tabLabel": "Piutang",
+    "noDebtors": "Tidak ada piutang yang belum dibayar",
+    "noDebtorsDescription": "Semua pelanggan sudah membayar lunas.",
+    "totalOutstanding": "Total Belum Dibayar",
+    "openInvoices": "Faktur Terbuka",
+    "oldestOverdue": "Jatuh Tempo Terlama",
+    "days": "hari",
+    "agingSummary": "Ringkasan Umur Piutang",
+    "current": "Saat Ini",
+    "days1to30": "1-30 Hari",
+    "days31to60": "31-60 Hari",
+    "days61to90": "61-90 Hari",
+    "days90plus": "90+ Hari",
+    "total": "Total",
+    "overdueOnly": "Jatuh Tempo Saja",
+    "sortBy": "Urutkan",
+    "outstandingAmount": "Jumlah Belum Dibayar",
+    "daysOverdue": "Hari Jatuh Tempo",
+    "customerName": "Nama Pelanggan",
+    "detail": {
+      "title": "Detail Piutang",
+      "totalInvoiced": "Total Ditagih",
+      "totalPaid": "Total Dibayar",
+      "totalOutstanding": "Total Belum Dibayar",
+      "overdueInvoices": "Faktur Jatuh Tempo",
+      "invoiceHistory": "Riwayat Faktur",
+      "paymentHistory": "Riwayat Pembayaran",
+      "runningBalance": "Saldo Berjalan",
+      "noInvoices": "Tidak ada faktur untuk pelanggan ini.",
+      "date": "Tanggal",
+      "description": "Deskripsi",
+      "debit": "Debit",
+      "credit": "Kredit",
+      "balance": "Saldo"
+    },
+    "statement": {
+      "title": "Laporan Piutang",
+      "generateStatement": "Buat Laporan",
+      "dateRange": "Rentang Tanggal",
+      "from": "Dari",
+      "to": "Sampai",
+      "openingBalance": "Saldo Awal",
+      "closingBalance": "Saldo Akhir",
+      "transactions": "Transaksi",
+      "noTransactions": "Tidak ada transaksi pada periode ini.",
+      "downloadPdf": "Unduh PDF",
+      "emailToCustomer": "Kirim Email ke Pelanggan",
+      "totalDebits": "Total Debit",
+      "totalCredits": "Total Kredit"
+    },
+    "agingReport": {
+      "title": "Laporan Umur Piutang",
+      "asOfDate": "Per Tanggal",
+      "exportCsv": "Ekspor CSV",
+      "grandTotal": "Total Keseluruhan",
+      "noData": "Tidak ada piutang untuk dilaporkan."
+    },
+    "payment": {
+      "type": "Jenis",
+      "payment": "Pembayaran",
+      "reversal": "Pembatalan",
+      "recordPayment": "Catat Pembayaran",
+      "recordReversal": "Catat Pembatalan",
+      "reversePayment": "Batalkan Pembayaran",
+      "confirmReversal": "Apakah Anda yakin ingin membatalkan pembayaran ini? Saldo faktur akan dikembalikan.",
+      "paymentRecorded": "Pembayaran Dicatat",
+      "reversalRecorded": "Pembatalan Dicatat",
+      "allocations": "Alokasi",
+      "allocateAmount": "Jumlah Alokasi",
+      "remainingToAllocate": "Sisa untuk Dialokasikan"
     }
   }
 }

@@ -13,6 +13,9 @@ export default function BusinessProfileSettings() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [businessName, setBusinessName] = useState('')
+  const [businessAddress, setBusinessAddress] = useState('')
+  const [businessEmail, setBusinessEmail] = useState('')
+  const [businessPhone, setBusinessPhone] = useState('')
   const [isCurrencySaving, setIsCurrencySaving] = useState(false)
   const [lastCurrencySaved, setLastCurrencySaved] = useState<Date | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -21,24 +24,23 @@ export default function BusinessProfileSettings() {
   useEffect(() => {
     if (profile) {
       setBusinessName(profile.name || '')
+      setBusinessAddress(profile.address || '')
+      setBusinessEmail(profile.contact_email || '')
+      setBusinessPhone(profile.contact_phone || '')
     }
   }, [profile])
 
 
-  const updateBusinessName = async () => {
+  const updateBusinessDetails = async () => {
     if (!profile || !businessName.trim()) return
 
     try {
       setIsUpdating(true)
 
       const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
-      if (!csrfResponse.ok) {
-        throw new Error('Failed to get CSRF token')
-      }
+      if (!csrfResponse.ok) throw new Error('Failed to get CSRF token')
       const csrfData = await csrfResponse.json()
-      if (!csrfData.success) {
-        throw new Error(csrfData.error || 'Failed to get CSRF token')
-      }
+      if (!csrfData.success) throw new Error(csrfData.error || 'Failed to get CSRF token')
 
       const response = await fetch('/api/v1/account-management/businesses/profile', {
         method: 'PUT',
@@ -47,7 +49,10 @@ export default function BusinessProfileSettings() {
           'X-CSRF-Token': csrfData.data.csrfToken
         },
         body: JSON.stringify({
-          name: businessName.trim()
+          name: businessName.trim(),
+          address: businessAddress.trim() || undefined,
+          contact_email: businessEmail.trim() || undefined,
+          contact_phone: businessPhone.trim() || undefined,
         })
       })
 
@@ -57,20 +62,20 @@ export default function BusinessProfileSettings() {
         updateProfile(result.data)
         addToast({
           type: 'success',
-          title: 'Business name updated',
-          description: 'Your business name has been updated successfully'
+          title: 'Business profile updated',
+          description: 'Your business details have been saved'
         })
       } else {
         addToast({
           type: 'error',
-          title: 'Failed to update name',
-          description: result.error || 'Unable to update business name'
+          title: 'Failed to update details',
+          description: result.error || 'Unable to update business details'
         })
       }
     } catch {
       addToast({
         type: 'error',
-        title: 'Error updating name',
+        title: 'Error updating details',
         description: 'Unable to connect to server'
       })
     } finally {
@@ -336,34 +341,79 @@ export default function BusinessProfileSettings() {
           </div>
         </div>
 
-        {/* Business Name */}
+        {/* Business Details */}
         <div>
-          <label className="block text-sm font-medium text-foreground mb-2">
-            Business Name
-          </label>
-          <div className="flex space-x-3">
-            <input
-              type="text"
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-              placeholder="Enter your business name"
-              className="flex-1 bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-            />
-            <button
-              onClick={updateBusinessName}
-              disabled={isUpdating || businessName.trim() === profile?.name || !businessName.trim()}
-              className="px-4 py-2 bg-action-view hover:bg-action-view/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-action-view-foreground rounded-md font-medium transition-colors"
-            >
-              {isUpdating ? (
-                <div className="w-4 h-4 border-2 border-action-view-foreground border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                'Update'
-              )}
-            </button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            This name will appear in the sidebar and throughout the application.
+          <p className="text-xs text-muted-foreground mb-4">
+            These details will appear on your invoices and customer-facing documents.
           </p>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Business Name
+              </label>
+              <input
+                type="text"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                placeholder="Enter your business name"
+                className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                This name will appear in the sidebar and throughout the application.
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Business Address
+              </label>
+              <textarea
+                value={businessAddress}
+                onChange={(e) => setBusinessAddress(e.target.value)}
+                placeholder="Enter your business address"
+                rows={2}
+                className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Contact Email
+                </label>
+                <input
+                  type="email"
+                  value={businessEmail}
+                  onChange={(e) => setBusinessEmail(e.target.value)}
+                  placeholder="billing@company.com"
+                  className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={businessPhone}
+                  onChange={(e) => setBusinessPhone(e.target.value)}
+                  placeholder="+60 12-345 6789"
+                  className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={updateBusinessDetails}
+                disabled={isUpdating}
+                className="px-4 py-2 bg-action-view hover:bg-action-view/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-action-view-foreground rounded-md font-medium transition-colors"
+              >
+                {isUpdating ? (
+                  <div className="w-4 h-4 border-2 border-action-view-foreground border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  'Save Details'
+                )}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Currency Preferences */}
