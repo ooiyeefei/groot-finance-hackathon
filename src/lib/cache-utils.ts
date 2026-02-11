@@ -6,6 +6,10 @@ export const cacheKeys = {
   BUSINESS_PROFILE: 'business-profile',
   USER_ROLE: 'user-role',
   SIDEBAR_EXPANDED: 'sidebar-expanded',
+  SIDEBAR_USER_ROLE: 'sidebar-user-role',
+  HOME_CURRENCY: 'homeCurrency',
+  SUBSCRIPTION_DATA: 'subscription-data',
+  USER_ROLE_CACHE: 'user-role-cache',
 } as const
 
 // Cache TTL: 5 minutes (matches server-side cache)
@@ -91,7 +95,8 @@ export function clearBusinessProfileCache(): void {
 }
 
 /**
- * Clear all app caches
+ * Clear all app caches — call on sign-out or user change
+ * to prevent stale data leaking between user sessions.
  */
 export function clearAllAppCaches(): void {
   if (typeof window !== 'undefined') {
