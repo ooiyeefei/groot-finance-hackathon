@@ -296,7 +296,9 @@ export default function Sidebar() {
         <nav className="flex-1 p-4">
           <ul className="space-y-2">
             {navigation.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = item.href === `/${locale}`
+                ? pathname === item.href
+                : pathname === item.href || pathname.startsWith(`${item.href}/`)
               const NavItem = (
                 <Link
                   href={item.href}

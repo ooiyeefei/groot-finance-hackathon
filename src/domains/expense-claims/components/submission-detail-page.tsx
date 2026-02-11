@@ -15,7 +15,6 @@ import { formatBusinessDate } from '@/lib/utils'
 import {
   Trash2,
   Send,
-  CheckCircle,
   XCircle,
   ArrowLeft,
   Pencil,
@@ -63,18 +62,15 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const { businessId } = useActiveBusiness()
   const { data, isLoading, error, refetch } = useSubmissionDetail(submissionId)
   const { categories } = useExpenseCategories({ includeDisabled: true })
-  const { updateSubmission, deleteSubmission, submitForApproval, approveSubmission, rejectSubmission, removeClaim } = useSubmissionMutations()
+  const { updateSubmission, deleteSubmission, submitForApproval, removeClaim } = useSubmissionMutations()
 
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editTitle, setEditTitle] = useState('')
-  const [showRejectDialog, setShowRejectDialog] = useState(false)
-  const [rejectReason, setRejectReason] = useState('')
   const [showEmptyWarning, setShowEmptyWarning] = useState(true)
 
   // Confirmation dialog states
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showApproveConfirm, setShowApproveConfirm] = useState(false)
   const [showRemoveClaimConfirm, setShowRemoveClaimConfirm] = useState(false)
   const [isConfirmLoading, setIsConfirmLoading] = useState(false)
   const pendingRemoveClaimId = useRef<string | null>(null)
@@ -84,8 +80,6 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
   const totalsByCurrency = data?.totalsByCurrency || []
 
   const isDraft = submission?.status === 'draft'
-  const isRejected = submission?.status === 'rejected'
-  const isSubmitted = submission?.status === 'submitted'
 
   const processingStatuses = ['uploading', 'classifying', 'analyzing', 'extracting', 'processing']
   const hasProcessingClaims = claims.some((c) => processingStatuses.includes(c.status))
@@ -136,37 +130,6 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
       setIsConfirmLoading(false)
     }
   }, [submissionId, deleteSubmission, router, locale])
-
-  // Handle approve
-  const handleApproveClick = useCallback(() => {
-    setShowApproveConfirm(true)
-  }, [])
-
-  const handleApproveConfirmed = useCallback(async () => {
-    try {
-      setIsConfirmLoading(true)
-      await approveSubmission.mutateAsync({ id: submissionId })
-      setShowApproveConfirm(false)
-      refetch()
-    } catch (e: any) {
-      alert(e.message)
-    } finally {
-      setIsConfirmLoading(false)
-    }
-  }, [submissionId, approveSubmission, refetch])
-
-  // Handle reject
-  const handleReject = useCallback(async () => {
-    if (!rejectReason.trim()) return
-    try {
-      await rejectSubmission.mutateAsync({ id: submissionId, reason: rejectReason.trim() })
-      setShowRejectDialog(false)
-      setRejectReason('')
-      refetch()
-    } catch (e: any) {
-      alert(e.message)
-    }
-  }, [submissionId, rejectReason, rejectSubmission, refetch])
 
   // Handle remove claim
   const handleRemoveClaimClick = useCallback((claimId: string) => {
@@ -322,42 +285,9 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
               </Button>
             </>
           )}
-          {isSubmitted && (
-            <>
-              <Button onClick={handleApproveClick} disabled={approveSubmission.isPending} className="bg-green-600 hover:bg-green-700 text-white">
-                {approveSubmission.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                Approve All
-              </Button>
-              <Button variant="destructive" onClick={() => setShowRejectDialog(true)}>
-                <XCircle className="h-4 w-4 mr-2" />
-                Reject
-              </Button>
-            </>
-          )}
         </div>
       </div>
 
-      {/* Reject dialog */}
-      {showRejectDialog && (
-        <Card className="border-red-500/30">
-          <CardContent className="p-6">
-            <h3 className="font-medium text-foreground mb-2">Rejection Reason</h3>
-            <textarea
-              className="w-full p-3 border border-border rounded-md bg-input text-foreground min-h-[100px]"
-              placeholder="Explain why this submission is being rejected..."
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-            />
-            <div className="flex gap-2 mt-3">
-              <Button variant="destructive" onClick={handleReject} disabled={!rejectReason.trim() || rejectSubmission.isPending}>
-                {rejectSubmission.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Confirm Rejection
-              </Button>
-              <Button variant="ghost" onClick={() => { setShowRejectDialog(false); setRejectReason('') }}>Cancel</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Upload zone (always visible for drafts) */}
       {isDraft && (
@@ -536,17 +466,6 @@ export function SubmissionDetailPage({ submissionId, locale }: SubmissionDetailP
         confirmText="Delete"
         cancelText="Cancel"
         confirmVariant="danger"
-        isLoading={isConfirmLoading}
-      />
-      <ConfirmationDialog
-        isOpen={showApproveConfirm}
-        onClose={() => !isConfirmLoading && setShowApproveConfirm(false)}
-        onConfirm={handleApproveConfirmed}
-        title="Approve Submission"
-        message="Approve this submission? Accounting entries will be created for all claims."
-        confirmText="Approve"
-        cancelText="Cancel"
-        confirmVariant="primary"
         isLoading={isConfirmLoading}
       />
       <ConfirmationDialog

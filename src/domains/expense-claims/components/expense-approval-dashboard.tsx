@@ -8,25 +8,17 @@
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { Plus, Camera, FileText, Clock, CheckCircle, XCircle, Edit3, User, BarChart3, Settings, DollarSign, TrendingUp, Eye, Tag, Calendar, X, Loader2, AlertCircle, Send, ChevronRight } from 'lucide-react'
+import { Clock, CheckCircle, BarChart3, DollarSign, Loader2, AlertCircle, Send, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import DuplicateBadge from './duplicate-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { formatBusinessDate } from '@/lib/utils'
-import { formatNumber, formatCurrency } from '@/lib/utils/format-number'
 import { useExpenseCategories, getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { usePendingApprovals } from '../hooks/use-expense-submissions'
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
-const DocumentPreviewWithAnnotations = lazy(() => import('@/domains/invoices/components/document-preview-with-annotations'))
-const UnifiedExpenseDetailsModal = lazy(() => import('./unified-expense-details-modal'))
-const MobileApprovalList = lazy(() => import('./mobile-approval-list'))
 const LeaveApprovalsContent = lazy(() => import('@/domains/leave-management/components/leave-approvals-content'))
 
 interface EnhancedApprovalDashboardProps {
@@ -183,7 +175,15 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
             </Card>
           )}
 
-          <ApprovalTabContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
+          {pendingSubmissions.length === 0 && !pendingSubmissionsLoading && (
+            <Card className="bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50">
+              <CardContent className="p-12 text-center">
+                <CheckCircle className="w-16 h-16 mx-auto mb-4 text-success" />
+                <h3 className="text-xl font-semibold text-green-900 dark:text-white mb-2">All Caught Up!</h3>
+                <p className="text-green-700 dark:text-gray-300">No expense submissions pending your approval.</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="leave-requests" className="space-y-4">
@@ -647,296 +647,7 @@ function ManagementSummaryCard({ title, value, icon, variant }: {
   )
 }
 
-// Approval Tab Content - Responsive: mobile list on small screens, desktop grid on larger
-function ApprovalTabContent({ data, onRefreshNeeded }: {
-  data: ManagementDashboardData
-  onRefreshNeeded: () => void
-}) {
-  return (
-    <div className="space-y-section-gap">
-      {/* Mobile: Use MobileApprovalList with swipe gestures */}
-      <div className="sm:hidden">
-        <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
-          <MobileApprovalList onRefreshNeeded={onRefreshNeeded} />
-        </Suspense>
-      </div>
 
-      {/* Desktop: Use standard ApprovalsList with grid layout */}
-      <div className="hidden sm:block">
-        <ApprovalsList onRefreshNeeded={onRefreshNeeded} />
-      </div>
-    </div>
-  )
-}
-
-// Streamlined Approvals List Component - Core approval functionality without nested UI
-function ApprovalsList({ onRefreshNeeded }: { onRefreshNeeded: () => void }) {
-  const [claims, setClaims] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [processingClaims, setProcessingClaims] = useState<Set<string>>(new Set())
-  const [selectedClaim, setSelectedClaim] = useState<any | null>(null)
-  const [approvalNotes, setApprovalNotes] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  // Fetch expense categories for displaying category names instead of IDs
-  const { categories } = useExpenseCategories({ includeDisabled: true })
-
-
-  useEffect(() => {
-    fetchPendingClaims()
-  }, [])
-
-  const fetchPendingClaims = async () => {
-    try {
-      setLoading(true)
-      // Only fetch claims that are submitted and pending approval
-      const response = await fetch('/api/v1/expense-claims?approver=me&status=submitted')
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const result = await response.json()
-
-      if (result.success) {
-        // Filter to only show submitted claims (double-check on client side)
-        const submittedClaims = (result.data.claims || []).filter((claim: any) => claim.status === 'submitted')
-        setClaims(submittedClaims)
-        setError(null)
-      } else {
-        console.error('[ApprovalsList] API error:', result.error)
-        setError(result.error || 'Failed to fetch pending claims')
-      }
-    } catch (error) {
-      console.error('[ApprovalsList] Network error:', error)
-      setError(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleApproval = async (claimId: string, action: 'approve' | 'reject', notes?: string) => {
-    try {
-      setProcessingClaims(prev => new Set([...prev, claimId]))
-
-      const response = await fetch(`/api/v1/expense-claims/${claimId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: action === 'approve' ? 'approved' : 'rejected', comment: notes })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        await fetchPendingClaims()
-        setSelectedClaim(null)
-        setApprovalNotes('')
-        // Notify parent component to refresh dashboard data for cross-tab synchronization
-        onRefreshNeeded()
-      } else {
-        setError(result.error || `Failed to ${action} claim`)
-      }
-    } catch (error) {
-      console.error(`Failed to ${action} claim:`, error)
-      setError(`Network error while ${action === 'approve' ? 'approving' : 'rejecting'} claim`)
-    } finally {
-      setProcessingClaims(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(claimId)
-        return newSet
-      })
-    }
-  }
-
-  if (loading) {
-    return (
-      <Card className="bg-record-layer-1 border-record-border">
-        <CardContent className="p-12 text-center">
-          <Clock className="w-8 h-8 mx-auto mb-4 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading expense approvals...</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (error) {
-    return (
-      <Card className="bg-record-layer-1 border-record-border">
-        <CardContent className="p-12 text-center">
-          <XCircle className="w-8 h-8 mx-auto mb-4 text-danger" />
-          <p className="text-danger">{error}</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (claims.length === 0) {
-    return (
-      <Card className="bg-green-50 dark:bg-gray-800 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50">
-        <CardContent className="p-12 text-center">
-          <CheckCircle className="w-16 h-16 mx-auto mb-4 text-success" />
-          <h3 className="text-xl font-semibold text-green-900 dark:text-white mb-2">All Caught Up!</h3>
-          <p className="text-green-700 dark:text-gray-300">No expense claims pending your approval.</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <>
-      {/* Claims Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-card-gap">
-        {claims.map((claim) => {
-          const isProcessing = processingClaims.has(claim.id)
-
-          return (
-            <Card key={claim.id} className="bg-record-layer-1 border-0 shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-foreground text-lg">{claim.description}</CardTitle>
-                    <CardDescription>
-                      By {claim.employee?.full_name || 'Unknown'} • {claim.submitted_at ? formatBusinessDate(claim.submitted_at) : 'Not submitted'}
-                    </CardDescription>
-                  </div>
-                  <Badge variant="success">
-                    {claim.status.replace('_', ' ')}
-                  </Badge>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {/* Amount and Category */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-foreground font-semibold">
-                      {formatNumber(claim.total_amount, 2)} {claim.currency}
-                    </span>
-                    {claim.home_currency_amount &&
-                     claim.currency !== claim.home_currency &&
-                     parseFloat(String(claim.home_currency_amount)) !== parseFloat(String(claim.total_amount || '0')) && (
-                      <span className="text-muted-foreground text-sm">
-                        (≈ {claim.home_currency} {formatNumber(claim.home_currency_amount, 2)})
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Tag className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-foreground">
-                      {getCategoryName(claim.expense_category, categories)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Vendor and Date */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-foreground">{claim.vendor_name}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-foreground" />
-                    <span className="text-foreground">
-                      {formatBusinessDate(claim.transaction_date)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Business Purpose */}
-                <div>
-                  <p className="text-muted-foreground text-sm">Business Purpose:</p>
-                  <p className="text-foreground">{claim.business_purpose}</p>
-                </div>
-
-                {/* Missing Reference Number Warning */}
-                {!claim.reference_number && (
-                  <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/10 border border-yellow-500/30">
-                    <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
-                    <p className="text-xs text-yellow-700 dark:text-yellow-300">
-                      No receipt reference number provided - verify receipt authenticity
-                    </p>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    size="sm"
-                    onClick={() => setSelectedClaim(claim)}
-                    variant="primary"
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    Review
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    onClick={() => handleApproval(claim.id, 'approve')}
-                    disabled={isProcessing}
-                    variant="success"
-                  >
-                    {isProcessing ? (
-                      <Clock className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                    )}
-                    Approve
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    onClick={() => handleApproval(claim.id, 'reject')}
-                    disabled={isProcessing}
-                    variant="destructive"
-                  >
-                    <XCircle className="w-4 h-4 mr-2" />
-                    Reject
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Unified Expense Details Modal - Manager View */}
-      {selectedClaim && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
-          <UnifiedExpenseDetailsModal
-            claimId={selectedClaim.id}
-            businessId={selectedClaim.business_id}
-            isOpen={Boolean(selectedClaim)}
-            onClose={() => {
-              setSelectedClaim(null)
-              setApprovalNotes('')
-            }}
-            viewMode="manager"
-            onApprove={async (claimId: string, notes?: string) => {
-              await handleApproval(claimId, 'approve', notes)
-            }}
-            onReject={async (claimId: string, notes?: string) => {
-              await handleApproval(claimId, 'reject', notes)
-            }}
-            onRouted={() => {
-              fetchPendingClaims()
-              if (onRefreshNeeded) {
-                onRefreshNeeded()
-              }
-            }}
-            onRefreshNeeded={() => {
-              fetchPendingClaims()
-              if (onRefreshNeeded) {
-                onRefreshNeeded()
-              }
-            }}
-          />
-        </Suspense>
-      )}
-
-    </>
-  )
-}
 
 // Loading skeleton
 function ManagementDashboardSkeleton() {
