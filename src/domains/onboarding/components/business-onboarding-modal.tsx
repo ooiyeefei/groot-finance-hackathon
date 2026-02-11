@@ -274,9 +274,8 @@ export default function BusinessOnboardingModal({
         onClick={onClose}
       />
 
-      {/* Modal Content - CSS dimensions are reduced to compensate for zoom: 1.3 scaling */}
-      {/* Rendered size: 478*1.3≈621px wide, 65vh*1.3≈85vh min, 74vh*1.3≈96vh max */}
-      <div className="relative w-full max-w-[478px] min-h-[65vh] max-h-[74vh] overflow-hidden m-4 flex flex-col" style={{ zoom: 1.3 }}>
+      {/* Modal Content - 699px wide */}
+      <div className="relative w-full max-w-[699px] min-h-[85vh] max-h-[96vh] overflow-hidden m-4 flex flex-col">
         <Card className="bg-card border-border shadow-2xl flex flex-col h-full">
           {/* Header with close button */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -285,10 +284,10 @@ export default function BusinessOnboardingModal({
                 <Building2 className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-foreground">
+                <h2 className="text-2xl font-semibold text-foreground">
                   Create New Business
                 </h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-base text-muted-foreground">
                   Step {currentStep} of {WIZARD_STEPS.length}
                 </p>
               </div>
@@ -321,7 +320,7 @@ export default function BusinessOnboardingModal({
                   <div key={step.id} className="flex items-center gap-1.5">
                     <div
                       className={cn(
-                        'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-colors',
+                        'w-7 h-7 rounded-full flex items-center justify-center text-sm font-medium transition-colors',
                         isActive && 'bg-primary text-primary-foreground ring-2 ring-primary/30',
                         isCompleted && 'bg-green-500 text-white',
                         !isActive && !isCompleted && 'bg-muted text-muted-foreground'
@@ -331,7 +330,7 @@ export default function BusinessOnboardingModal({
                     </div>
                     <span
                       className={cn(
-                        'text-xs hidden sm:inline',
+                        'text-sm hidden sm:inline',
                         isActive && 'text-primary font-medium',
                         isCompleted && 'text-green-500',
                         !isActive && !isCompleted && 'text-muted-foreground'
@@ -351,17 +350,17 @@ export default function BusinessOnboardingModal({
             {currentStep === 1 && (
               <div className="flex-1 flex flex-col space-y-5">
                 <div className="text-center space-y-2 mb-5">
-                  <h3 className="text-xl font-semibold text-foreground">
+                  <h3 className="text-2xl font-semibold text-foreground">
                     Business Details
                   </h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-base text-muted-foreground">
                     Tell us about your business
                   </p>
                 </div>
 
                 {/* Business Name */}
                 <div className="space-y-2">
-                  <Label htmlFor="businessName" className="text-sm font-medium text-foreground">
+                  <Label htmlFor="businessName" className="text-base font-medium text-foreground">
                     Business Name <span className="text-destructive">*</span>
                   </Label>
                   <Input
@@ -377,7 +376,7 @@ export default function BusinessOnboardingModal({
 
                 {/* Country */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">Country</Label>
+                  <Label className="text-base font-medium text-foreground">Country</Label>
                   <Select
                     value={wizardData.countryCode || 'SG'}
                     onValueChange={handleCountryChange}
@@ -401,7 +400,7 @@ export default function BusinessOnboardingModal({
 
                 {/* Currency */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">Home Currency</Label>
+                  <Label className="text-base font-medium text-foreground">Home Currency</Label>
                   <Select value={homeCurrency} onValueChange={setHomeCurrency}>
                     <SelectTrigger className="bg-input border-border text-foreground h-10">
                       <SelectValue placeholder="Select currency" />
@@ -528,7 +527,7 @@ export default function BusinessOnboardingModal({
                     </div>
 
                     {/* Message with smooth transition */}
-                    <p className="text-base font-medium text-foreground text-center px-6 transition-all duration-300">
+                    <p className="text-lg font-medium text-foreground text-center px-6 transition-all duration-300">
                       {BREWING_MESSAGES[brewingMessageIndex].text}
                     </p>
 
@@ -540,10 +539,10 @@ export default function BusinessOnboardingModal({
                 )}
 
                 <div className="text-center space-y-2 mb-4">
-                  <h3 className="text-xl font-semibold text-foreground">
+                  <h3 className="text-2xl font-semibold text-foreground">
                     Review Your Setup
                   </h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-base text-muted-foreground">
                     Confirm your business details
                   </p>
                 </div>
@@ -551,8 +550,8 @@ export default function BusinessOnboardingModal({
                 <div className="space-y-3">
                   {/* Business Details */}
                   <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                    <h4 className="text-sm font-medium text-foreground">Business Details</h4>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                    <h4 className="text-base font-medium text-foreground">Business Details</h4>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-base">
                       <div>
                         <span className="text-muted-foreground">Name:</span>
                         <p className="font-medium text-foreground">{wizardData.businessName}</p>
@@ -579,20 +578,20 @@ export default function BusinessOnboardingModal({
 
                   {/* COGS Categories */}
                   <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                    <h4 className="text-sm font-medium text-foreground">
+                    <h4 className="text-base font-medium text-foreground">
                       COGS Categories ({wizardData.customCOGSNames?.length || 0})
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {(wizardData.customCOGSNames || []).map((cat, i) => (
                         <span
                           key={i}
-                          className="px-2 py-1 bg-primary/10 text-primary text-sm rounded"
+                          className="px-2 py-1 bg-primary/10 text-primary text-base rounded"
                         >
                           {cat}
                         </span>
                       ))}
                       {(!wizardData.customCOGSNames || wizardData.customCOGSNames.length === 0) && (
-                        <span className="text-muted-foreground text-sm">
+                        <span className="text-muted-foreground text-base">
                           AI will generate defaults
                         </span>
                       )}
@@ -601,20 +600,20 @@ export default function BusinessOnboardingModal({
 
                   {/* Expense Categories */}
                   <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                    <h4 className="text-sm font-medium text-foreground">
+                    <h4 className="text-base font-medium text-foreground">
                       Expense Categories ({wizardData.customExpenseNames?.length || 0})
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {(wizardData.customExpenseNames || []).map((cat, i) => (
                         <span
                           key={i}
-                          className="px-2 py-1 bg-orange-500/10 text-orange-600 dark:text-orange-400 text-sm rounded"
+                          className="px-2 py-1 bg-orange-500/10 text-orange-600 dark:text-orange-400 text-base rounded"
                         >
                           {cat}
                         </span>
                       ))}
                       {(!wizardData.customExpenseNames || wizardData.customExpenseNames.length === 0) && (
-                        <span className="text-muted-foreground text-sm">
+                        <span className="text-muted-foreground text-base">
                           AI will generate defaults
                         </span>
                       )}
@@ -625,7 +624,7 @@ export default function BusinessOnboardingModal({
                 {/* Error Display */}
                 {(error || submitError) && (
                   <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
-                    <p className="text-sm text-destructive">{error || submitError}</p>
+                    <p className="text-base text-destructive">{error || submitError}</p>
                   </div>
                 )}
 

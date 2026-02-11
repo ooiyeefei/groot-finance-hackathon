@@ -79,10 +79,10 @@ export default function BusinessTypeStep({
     <div className={cn("w-full space-y-4", className)}>
       {/* Header */}
       <div className="text-center space-y-1">
-        <h2 className="text-lg font-semibold text-foreground">
+        <h2 className="text-xl font-semibold text-foreground">
           What type of business do you run?
         </h2>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground text-base">
           This helps us suggest relevant categories
         </p>
       </div>
@@ -117,13 +117,13 @@ export default function BusinessTypeStep({
                   >
                     <Icon className="w-4 h-4" />
                   </div>
-                  <h3 className="text-sm font-medium text-foreground">
+                  <h3 className="text-base font-medium text-foreground">
                     {config.label}
                   </h3>
                 </div>
 
                 {/* Description */}
-                <p className="text-xs text-muted-foreground leading-snug line-clamp-2">
+                <p className="text-sm text-muted-foreground leading-snug line-clamp-2">
                   {config.description}
                 </p>
 
@@ -131,7 +131,7 @@ export default function BusinessTypeStep({
                 {isSelected && (
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                    <span className="text-xs font-medium text-primary">
+                    <span className="text-sm font-medium text-primary">
                       Selected
                     </span>
                   </div>
@@ -145,7 +145,7 @@ export default function BusinessTypeStep({
       {/* Custom Type Input - shown when "other" is selected */}
       {selectedType === 'other' && (
         <div className="space-y-1.5 p-3 bg-muted/50 rounded-md border border-border">
-          <Label htmlFor="customType" className="text-xs font-medium text-foreground">
+          <Label htmlFor="customType" className="text-sm font-medium text-foreground">
             Describe your business type <span className="text-destructive">*</span>
           </Label>
           <Input
@@ -154,7 +154,7 @@ export default function BusinessTypeStep({
             placeholder="e.g., Consulting, Healthcare, Education..."
             value={localCustomType}
             onChange={(e) => handleCustomTypeChange(e.target.value)}
-            className="bg-input border-border text-foreground h-8 text-sm"
+            className="bg-input border-border text-foreground h-9 text-base"
           />
         </div>
       )}

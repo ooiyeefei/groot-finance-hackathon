@@ -122,10 +122,10 @@ export default function COGSCategoriesStep({
     <div className={cn("w-full space-y-3", className)}>
       {/* Header */}
       <div className="text-center space-y-1">
-        <h2 className="text-lg font-semibold text-foreground">
+        <h2 className="text-xl font-semibold text-foreground">
           Customize COGS categories
         </h2>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-sm">
           Add categories for direct costs of producing your products/services
         </p>
       </div>
@@ -135,7 +135,7 @@ export default function COGSCategoriesStep({
         <CardContent className="p-3 space-y-3">
           {/* Input Area */}
           <div className="space-y-1.5">
-            <label htmlFor="category-input" className="text-foreground font-medium text-xs">
+            <label htmlFor="category-input" className="text-foreground font-medium text-sm">
               Add new category
             </label>
             <div className="flex gap-2">
@@ -146,7 +146,7 @@ export default function COGSCategoriesStep({
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type category name..."
-                className="flex-1 bg-input border-border text-foreground focus:ring-ring h-8 text-sm"
+                className="flex-1 bg-input border-border text-foreground focus:ring-ring h-9 text-base"
               />
               <Button
                 onClick={handleAddCategory}
@@ -159,7 +159,7 @@ export default function COGSCategoriesStep({
               </Button>
             </div>
             {showLimitWarning && (
-              <div className="flex items-center gap-1.5 text-warning-foreground text-xs">
+              <div className="flex items-center gap-1.5 text-warning-foreground text-sm">
                 <AlertCircle className="w-3 h-3" />
                 <span>Maximum {MAX_CATEGORIES} categories reached</span>
               </div>
@@ -169,7 +169,7 @@ export default function COGSCategoriesStep({
           {/* Current Categories */}
           {categories.length > 0 && (
             <div className="space-y-1.5">
-              <label className="text-foreground font-medium text-xs">
+              <label className="text-foreground font-medium text-sm">
                 Your categories ({categories.length}/{MAX_CATEGORIES})
               </label>
               <div className="flex flex-wrap gap-1.5">
@@ -178,7 +178,7 @@ export default function COGSCategoriesStep({
                     key={category}
                     className={cn(
                       "bg-primary/10 text-primary border border-primary/30",
-                      "px-2 py-0.5 text-xs font-medium",
+                      "px-2 py-0.5 text-sm font-medium",
                       "hover:bg-primary/20 transition-colors"
                     )}
                   >
@@ -202,7 +202,7 @@ export default function COGSCategoriesStep({
       {suggestedCategories.length > 0 && (
         <Card className="bg-card border-border">
           <CardContent className="p-3 space-y-2">
-            <label className="text-foreground font-medium text-xs">
+            <label className="text-foreground font-medium text-sm">
               Suggested for your business
             </label>
             <div className="flex flex-wrap gap-1.5">
@@ -219,7 +219,7 @@ export default function COGSCategoriesStep({
                       isAlreadyAdded
                         ? "bg-muted text-muted-foreground border border-border opacity-50 cursor-not-allowed"
                         : "bg-muted text-muted-foreground border border-border hover:bg-primary/10 hover:text-primary hover:border-primary/30 cursor-pointer",
-                      "px-2 py-0.5 text-xs font-medium transition-all"
+                      "px-2 py-0.5 text-sm font-medium transition-all"
                     )}
                   >
                     {suggestion}

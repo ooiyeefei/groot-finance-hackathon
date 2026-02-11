@@ -113,10 +113,10 @@ export default function ExpenseCategoriesStep({
     <div className={cn("w-full space-y-3", className)}>
       {/* Header */}
       <div className="text-center space-y-1">
-        <h2 className="text-lg font-semibold text-foreground">
+        <h2 className="text-xl font-semibold text-foreground">
           Customize expense categories
         </h2>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-sm">
           Add categories for operating expenses like rent, utilities, marketing
         </p>
       </div>
@@ -126,7 +126,7 @@ export default function ExpenseCategoriesStep({
         <div className="p-3 space-y-3">
           {/* Input Section */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground">
+            <label className="text-sm font-medium text-foreground">
               Add Expense Categories
             </label>
             <div className="flex gap-2">
@@ -139,7 +139,7 @@ export default function ExpenseCategoriesStep({
                   setError('');
                 }}
                 onKeyDown={handleKeyDown}
-                className="flex-1 bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-ring h-8 text-sm"
+                className="flex-1 bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-ring h-9 text-base"
                 disabled={categories.length >= MAX_CATEGORIES}
               />
               <Button
@@ -153,11 +153,11 @@ export default function ExpenseCategoriesStep({
               </Button>
             </div>
             {error && (
-              <p className="text-xs text-red-600 dark:text-red-400">
+              <p className="text-sm text-red-600 dark:text-red-400">
                 {error}
               </p>
             )}
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {categories.length}/{MAX_CATEGORIES} categories
             </p>
           </div>
@@ -165,14 +165,14 @@ export default function ExpenseCategoriesStep({
           {/* Current Categories */}
           {categories.length > 0 && (
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">
+              <label className="text-sm font-medium text-foreground">
                 Your Categories
               </label>
               <div className="flex flex-wrap gap-1.5">
                 {categories.map((category) => (
                   <Badge
                     key={category}
-                    className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 px-2 py-0.5 text-xs inline-flex items-center gap-1"
+                    className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 px-2 py-0.5 text-sm inline-flex items-center gap-1"
                   >
                     {category}
                     <button
@@ -192,8 +192,8 @@ export default function ExpenseCategoriesStep({
           {/* Suggested Categories */}
           {availableSuggestions.length > 0 && (
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-orange-500" />
+              <label className="text-sm font-medium text-foreground flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-orange-500" />
                 Suggested for your business
               </label>
               <div className="flex flex-wrap gap-1.5">
@@ -201,7 +201,7 @@ export default function ExpenseCategoriesStep({
                   <Badge
                     key={suggested}
                     onClick={() => handleAddSuggested(suggested)}
-                    className="bg-muted text-muted-foreground hover:bg-orange-500/10 hover:text-orange-600 dark:hover:text-orange-400 hover:border-orange-500/30 cursor-pointer transition-colors px-2 py-0.5 text-xs"
+                    className="bg-muted text-muted-foreground hover:bg-orange-500/10 hover:text-orange-600 dark:hover:text-orange-400 hover:border-orange-500/30 cursor-pointer transition-colors px-2 py-0.5 text-sm"
                   >
                     {suggested}
                   </Badge>
