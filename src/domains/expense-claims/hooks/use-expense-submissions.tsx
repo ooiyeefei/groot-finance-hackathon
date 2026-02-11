@@ -69,6 +69,21 @@ export function usePendingApprovals(businessId: string) {
   }
 }
 
+export function useManagerSubmissions(businessId: string) {
+  const data = useConvexQuery(
+    api.functions.expenseSubmissions.getManagerSubmissions,
+    businessId ? { businessId } : 'skip'
+  )
+
+  const isLoading = data === undefined
+
+  return {
+    submissions: (data as any[]) || [],
+    isLoading,
+    error: null as string | null,
+  }
+}
+
 // ============================================
 // MUTATIONS (Direct Convex calls via adapter)
 // ============================================
