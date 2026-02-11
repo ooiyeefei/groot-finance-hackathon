@@ -7,7 +7,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "../_generated/server";
+import { query, mutation, internalMutation, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
@@ -641,6 +641,145 @@ export const submit = mutation({
 });
 
 /**
+ * Process a single claim for approval: validate fields, create accounting entry,
+ * insert normalized line items, activate vendor, and update claim status.
+ *
+ * Returns the accounting entry ID if created, or null if the claim was missing
+ * required financial data (claim is still marked approved either way).
+ */
+async function approveOneClaim(
+  ctx: MutationCtx,
+  claim: any,
+  approverUserId: Id<"users">,
+  homeCurrency: string,
+  now: number
+): Promise<Id<"accounting_entries"> | null> {
+  // Validate required fields
+  if (!claim.totalAmount || !claim.currency || !claim.transactionDate) {
+    console.log(`[Submission Approve] Skipping accounting entry for claim ${claim._id}: missing financial data`);
+    await ctx.db.patch(claim._id, {
+      status: "approved",
+      approvedBy: approverUserId,
+      approvedAt: now,
+      updatedAt: now,
+    });
+    return null;
+  }
+
+  // Extract line items from processingMetadata
+  const processingMetadata = claim.processingMetadata as {
+    line_items?: Array<{
+      item_description?: string;
+      description?: string;
+      item_code?: string;
+      unit_price?: number;
+      quantity?: number;
+      total_amount?: number;
+      currency?: string;
+      tax_amount?: number;
+      tax_rate?: number;
+      item_category?: string;
+      unit_measurement?: string;
+      line_order?: number;
+    }>;
+  } | null;
+
+  const rawLineItems = processingMetadata?.line_items ?? [];
+  const lineItems = rawLineItems
+    .filter((item) => {
+      const desc = item.item_description || item.description;
+      return desc && desc.trim().length > 0;
+    })
+    .map((item, index) => ({
+      itemDescription: (item.item_description || item.description || "Item")!,
+      quantity: item.quantity ?? 1,
+      unitPrice: item.unit_price ?? 0,
+      totalAmount: item.total_amount ?? (item.unit_price ?? 0) * (item.quantity ?? 1),
+      currency: item.currency || claim.currency || "MYR",
+      taxAmount: item.tax_amount,
+      taxRate: item.tax_rate,
+      itemCategory: item.item_category,
+      itemCode: item.item_code,
+      unitMeasurement: item.unit_measurement,
+      lineOrder: item.line_order ?? index + 1,
+    }));
+
+  // Create accounting entry
+  const accountingEntryId = await ctx.db.insert("accounting_entries", {
+    businessId: claim.businessId,
+    userId: claim.userId,
+    transactionType: "Expense",
+    description: claim.businessPurpose || claim.description || "Expense claim",
+    originalAmount: claim.totalAmount,
+    originalCurrency: claim.currency,
+    homeCurrency: claim.homeCurrency || homeCurrency,
+    homeCurrencyAmount: claim.homeCurrencyAmount || claim.totalAmount,
+    exchangeRate: claim.exchangeRate || 1,
+    transactionDate: claim.transactionDate,
+    category: claim.expenseCategory,
+    vendorName: claim.vendorName,
+    referenceNumber: claim.referenceNumber,
+    status: "pending",
+    createdByMethod: "document_extract",
+    sourceRecordId: claim._id,
+    sourceDocumentType: "expense_claim",
+    processingMetadata: claim.processingMetadata,
+    lineItems: lineItems.length > 0 ? lineItems : undefined,
+    updatedAt: now,
+  });
+
+  // Insert normalized line items
+  if (lineItems.length > 0) {
+    for (const item of lineItems) {
+      await ctx.db.insert("line_items", {
+        accountingEntryId,
+        itemDescription: item.itemDescription,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalAmount: item.totalAmount,
+        currency: item.currency,
+        taxAmount: item.taxAmount,
+        taxRate: item.taxRate,
+        lineOrder: item.lineOrder,
+        itemCode: item.itemCode,
+        unitMeasurement: item.unitMeasurement,
+        updatedAt: now,
+      });
+    }
+  }
+
+  // Vendor activation
+  if (claim.vendorName) {
+    try {
+      const vendor = await ctx.runQuery(internal.functions.vendors.getByName, {
+        businessId: claim.businessId,
+        vendorName: claim.vendorName,
+      });
+
+      if (vendor) {
+        await ctx.db.patch(accountingEntryId, { vendorId: vendor._id });
+        await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
+          vendorId: vendor._id,
+        });
+      }
+    } catch (e) {
+      console.log(`[Submission Approve] Vendor activation skipped for "${claim.vendorName}": ${e}`);
+    }
+  }
+
+  // Update claim
+  await ctx.db.patch(claim._id, {
+    status: "approved",
+    approvedBy: approverUserId,
+    approvedAt: now,
+    accountingEntryId,
+    updatedAt: now,
+  });
+
+  return accountingEntryId;
+}
+
+/**
  * Approve an entire submission (manager action)
  */
 export const approve = mutation({
@@ -697,129 +836,8 @@ export const approve = mutation({
 
     // Approve each claim and create accounting entries
     for (const claim of activeClaims) {
-      // Validate required fields
-      if (!claim.totalAmount || !claim.currency || !claim.transactionDate) {
-        console.log(`[Submission Approve] Skipping accounting entry for claim ${claim._id}: missing financial data`);
-        await ctx.db.patch(claim._id, {
-          status: "approved",
-          approvedBy: user._id,
-          approvedAt: now,
-          updatedAt: now,
-        });
-        continue;
-      }
-
-      // Extract line items from processingMetadata (reuse logic from expenseClaims.updateStatus)
-      const processingMetadata = claim.processingMetadata as {
-        line_items?: Array<{
-          item_description?: string;
-          description?: string;
-          item_code?: string;
-          unit_price?: number;
-          quantity?: number;
-          total_amount?: number;
-          currency?: string;
-          tax_amount?: number;
-          tax_rate?: number;
-          item_category?: string;
-          unit_measurement?: string;
-          line_order?: number;
-        }>;
-      } | null;
-
-      const rawLineItems = processingMetadata?.line_items ?? [];
-      const lineItems = rawLineItems
-        .filter((item) => {
-          const desc = item.item_description || item.description;
-          return desc && desc.trim().length > 0;
-        })
-        .map((item, index) => ({
-          itemDescription: (item.item_description || item.description || "Item")!,
-          quantity: item.quantity ?? 1,
-          unitPrice: item.unit_price ?? 0,
-          totalAmount: item.total_amount ?? (item.unit_price ?? 0) * (item.quantity ?? 1),
-          currency: item.currency || claim.currency || "MYR",
-          taxAmount: item.tax_amount,
-          taxRate: item.tax_rate,
-          itemCategory: item.item_category,
-          itemCode: item.item_code,
-          unitMeasurement: item.unit_measurement,
-          lineOrder: item.line_order ?? index + 1,
-        }));
-
-      // Create accounting entry
-      const accountingEntryId = await ctx.db.insert("accounting_entries", {
-        businessId: claim.businessId,
-        userId: claim.userId,
-        transactionType: "Expense",
-        description: claim.businessPurpose || claim.description || "Expense claim",
-        originalAmount: claim.totalAmount,
-        originalCurrency: claim.currency,
-        homeCurrency: claim.homeCurrency || homeCurrency,
-        homeCurrencyAmount: claim.homeCurrencyAmount || claim.totalAmount,
-        exchangeRate: claim.exchangeRate || 1,
-        transactionDate: claim.transactionDate,
-        category: claim.expenseCategory,
-        vendorName: claim.vendorName,
-        referenceNumber: claim.referenceNumber,
-        status: "pending",
-        createdByMethod: "document_extract",
-        sourceRecordId: claim._id,
-        sourceDocumentType: "expense_claim",
-        processingMetadata: claim.processingMetadata,
-        lineItems: lineItems.length > 0 ? lineItems : undefined,
-        updatedAt: now,
-      });
-
-      // Insert normalized line items
-      if (lineItems.length > 0) {
-        for (const item of lineItems) {
-          await ctx.db.insert("line_items", {
-            accountingEntryId,
-            itemDescription: item.itemDescription,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalAmount: item.totalAmount,
-            currency: item.currency,
-            taxAmount: item.taxAmount,
-            taxRate: item.taxRate,
-            lineOrder: item.lineOrder,
-            itemCode: item.itemCode,
-            unitMeasurement: item.unitMeasurement,
-            updatedAt: now,
-          });
-        }
-      }
-
-      // Vendor activation
-      if (claim.vendorName) {
-        try {
-          const vendor = await ctx.runQuery(internal.functions.vendors.getByName, {
-            businessId: claim.businessId,
-            vendorName: claim.vendorName,
-          });
-
-          if (vendor) {
-            await ctx.db.patch(accountingEntryId, { vendorId: vendor._id });
-            await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
-              vendorId: vendor._id,
-            });
-          }
-        } catch (e) {
-          console.log(`[Submission Approve] Vendor activation skipped for "${claim.vendorName}": ${e}`);
-        }
-      }
-
-      // Update claim
-      await ctx.db.patch(claim._id, {
-        status: "approved",
-        approvedBy: user._id,
-        approvedAt: now,
-        accountingEntryId,
-        updatedAt: now,
-      });
-
-      accountingEntriesCreated++;
+      const entryId = await approveOneClaim(ctx, claim, user._id, homeCurrency, now);
+      if (entryId) accountingEntriesCreated++;
     }
 
     // Update submission
@@ -836,6 +854,158 @@ export const approve = mutation({
       submissionId: submission._id,
       status: "approved" as const,
       accountingEntriesCreated,
+    };
+  },
+});
+
+/**
+ * Partially approve a submission: approve selected claims, move remaining
+ * claims to a new draft submission for the employee to revise and resubmit.
+ */
+export const approvePartial = mutation({
+  args: {
+    id: v.string(),
+    approvedClaimIds: v.array(v.string()),
+    rejectionReason: v.optional(v.string()),
+    claimNotes: v.optional(
+      v.array(
+        v.object({
+          claimId: v.string(),
+          note: v.string(),
+        })
+      )
+    ),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    let submission;
+    try {
+      submission = await ctx.db.get(args.id as Id<"expense_submissions">);
+    } catch {
+      throw new Error("Submission not found");
+    }
+
+    if (!submission || submission.deletedAt) {
+      throw new Error("Submission not found");
+    }
+
+    if (submission.status !== "submitted") {
+      throw new Error("Can only approve submitted submissions");
+    }
+
+    // Verify designated approver
+    if (submission.designatedApproverId && submission.designatedApproverId !== user._id) {
+      throw new Error("Only the designated approver can approve this submission");
+    }
+
+    // Fetch all active claims
+    const claims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_submissionId", (q) => q.eq("submissionId", submission._id))
+      .collect();
+    const activeClaims = claims.filter((c) => !c.deletedAt);
+
+    // Partition claims
+    const approvedIdSet = new Set(args.approvedClaimIds);
+    const approvedClaims = activeClaims.filter((c) => approvedIdSet.has(c._id));
+    const rejectedClaims = activeClaims.filter((c) => !approvedIdSet.has(c._id));
+
+    if (approvedClaims.length === 0) {
+      throw new Error("At least one claim must be approved. Use reject to reject the entire submission.");
+    }
+
+    const now = Date.now();
+
+    // Get business for home currency
+    const business = await ctx.db.get(submission.businessId);
+    const homeCurrency = business?.homeCurrency || "SGD";
+
+    // If ALL claims are approved, short-circuit to full approve (no split needed)
+    if (rejectedClaims.length === 0) {
+      let accountingEntriesCreated = 0;
+      for (const claim of approvedClaims) {
+        const entryId = await approveOneClaim(ctx, claim, user._id, homeCurrency, now);
+        if (entryId) accountingEntriesCreated++;
+      }
+
+      await ctx.db.patch(submission._id, {
+        status: "approved",
+        approvedBy: user._id,
+        approvedAt: now,
+        updatedAt: now,
+      });
+
+      console.log(`[Submission Approve Partial] All claims approved for ${submission._id}, no split needed`);
+
+      return {
+        submissionId: submission._id,
+        newDraftSubmissionId: null as string | null,
+        accountingEntriesCreated,
+        rejectedClaimsCount: 0,
+      };
+    }
+
+    // --- Partial approval: approve selected, split the rest ---
+
+    // 1. Approve selected claims
+    let accountingEntriesCreated = 0;
+    for (const claim of approvedClaims) {
+      const entryId = await approveOneClaim(ctx, claim, user._id, homeCurrency, now);
+      if (entryId) accountingEntriesCreated++;
+    }
+
+    // 2. Create new draft submission for rejected claims
+    const claimNotes = args.claimNotes?.map((note) => ({
+      claimId: note.claimId as Id<"expense_claims">,
+      note: note.note,
+    }));
+
+    const newDraftSubmissionId = await ctx.db.insert("expense_submissions", {
+      businessId: submission.businessId,
+      userId: submission.userId,
+      title: `Returned: ${submission.title}`,
+      status: "draft",
+      rejectionReason: args.rejectionReason,
+      claimNotes: claimNotes,
+      rejectedAt: now,
+      updatedAt: now,
+    });
+
+    // 3. Move rejected claims to the new draft submission
+    for (const claim of rejectedClaims) {
+      await ctx.db.patch(claim._id, {
+        submissionId: newDraftSubmissionId,
+        status: "draft",
+        designatedApproverId: undefined,
+        submittedAt: undefined,
+        updatedAt: now,
+      });
+    }
+
+    // 4. Mark original submission as approved
+    await ctx.db.patch(submission._id, {
+      status: "approved",
+      approvedBy: user._id,
+      approvedAt: now,
+      updatedAt: now,
+    });
+
+    console.log(`[Submission Approve Partial] Approved ${approvedClaims.length} claims, returned ${rejectedClaims.length} claims to new draft ${newDraftSubmissionId}`);
+
+    return {
+      submissionId: submission._id,
+      newDraftSubmissionId: newDraftSubmissionId as string,
+      accountingEntriesCreated,
+      rejectedClaimsCount: rejectedClaims.length,
     };
   },
 });

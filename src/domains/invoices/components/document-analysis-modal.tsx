@@ -895,7 +895,7 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                   ref={scrollContainerRef}
                   onScroll={handleScroll}
                   className="overflow-y-auto bg-muted/30 rounded-lg"
-                  style={{ maxHeight: '55vh' }}
+                  style={{ maxHeight: '75vh' }}
                 >
                   {pageImageUrls.length > 0 ? (
                     <div className="space-y-1">
