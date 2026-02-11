@@ -10,10 +10,10 @@ import imageCompression from 'browser-image-compression'
  * Optimized for readability while maintaining reasonable file size
  */
 const COMPRESSION_OPTIONS = {
-  maxSizeMB: 2, // Maximum file size in MB
+  maxSizeMB: 1, // Maximum file size in MB (receipts don't need 2MB+)
   maxWidthOrHeight: 1920, // Maximum dimension in pixels
   useWebWorker: true, // Use web worker for better performance
-  initialQuality: 0.85, // Initial quality (0-1)
+  initialQuality: 0.8, // Initial quality (0-1) — still very readable for receipts
   fileType: 'image/jpeg' as const, // Convert to JPEG for better compression
 }
 

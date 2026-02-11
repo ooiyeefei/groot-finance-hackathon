@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Upload, AlertCircle, CheckCircle } from 'lucide-react'
 import { useActiveBusiness } from '@/contexts/business-context'
+import { compressReceiptImage } from '@/lib/pwa/image-compression'
 
 // File validation constants
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
@@ -89,8 +90,14 @@ export default function FileUploadZone({
     }
 
     try {
+      // Compress images before upload (skip PDFs)
+      let fileToUpload = file
+      if (file.type.startsWith('image/')) {
+        fileToUpload = await compressReceiptImage(file)
+      }
+
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', fileToUpload)
 
       // Add businessId for invoice compatibility (expense-claims ignores this and uses user context instead)
       formData.append('businessId', businessId)
