@@ -292,7 +292,8 @@ export function SalesInvoiceForm() {
           businessInfo={businessInfo}
           templateId={form.templateId}
           onDownloadPdf={() => generatePdf(previewInvoice.invoiceNumber, buildPdfData())}
-          onSend={form.isValid && !isSending ? handleSaveAndSend : undefined}
+          onSend={form.isValid ? handleSaveAndSend : undefined}
+          isSending={isSending}
         />
       </div>
     )

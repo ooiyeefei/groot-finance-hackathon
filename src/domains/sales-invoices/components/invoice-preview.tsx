@@ -58,6 +58,7 @@ interface InvoicePreviewProps {
   onSend?: () => void
   onDownloadPdf?: () => void
   showActions?: boolean
+  isSending?: boolean
 }
 
 export function InvoicePreview({
@@ -67,6 +68,7 @@ export function InvoicePreview({
   onSend,
   onDownloadPdf,
   showActions = true,
+  isSending = false,
 }: InvoicePreviewProps) {
   const TemplateComponent = templateId === 'classic' ? ClassicInvoiceTemplate : ModernInvoiceTemplate
 
@@ -89,9 +91,9 @@ export function InvoicePreview({
             Print
           </Button>
           {onSend && invoice.status === 'draft' && (
-            <Button size="sm" onClick={onSend} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Button size="sm" onClick={onSend} disabled={isSending} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               <Send className="w-4 h-4 mr-2" />
-              Save & Send
+              {isSending ? 'Sending...' : 'Save & Send'}
             </Button>
           )}
         </div>
