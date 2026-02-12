@@ -412,6 +412,10 @@
     @apply border-border;
   }
 
+  html {
+    font-size: 109%; /* 9% larger than default 16px → ~17.4px root */
+  }
+
   html, body {
     margin: 0;
     padding: 0;
