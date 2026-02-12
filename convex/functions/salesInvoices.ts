@@ -696,12 +696,106 @@ export const remove = mutation({
       throw new Error("Only draft invoices can be deleted");
     }
 
+    // Delete stored PDF if exists
+    if (invoice.pdfStorageId) {
+      try {
+        await ctx.storage.delete(invoice.pdfStorageId);
+      } catch {
+        // File may already be deleted
+      }
+    }
+
     await ctx.db.patch(args.id, {
       deletedAt: Date.now(),
       updatedAt: Date.now(),
     });
 
     return args.id;
+  },
+});
+
+// ============================================
+// PDF STORAGE
+// ============================================
+
+/**
+ * Generate an upload URL for storing invoice PDF in Convex storage
+ */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * Store the PDF storage ID on an invoice after upload
+ */
+export const storePdfStorageId = mutation({
+  args: {
+    id: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdmin(ctx, args.businessId);
+
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) {
+      throw new Error("Invoice not found");
+    }
+
+    // Delete old PDF if exists
+    if (invoice.pdfStorageId) {
+      try {
+        await ctx.storage.delete(invoice.pdfStorageId);
+      } catch {
+        // Old file may already be deleted
+      }
+    }
+
+    await ctx.db.patch(args.id, {
+      pdfStorageId: args.storageId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Get the PDF download URL for an invoice
+ */
+export const getPdfUrl = query({
+  args: {
+    id: v.string(),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return null;
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") return null;
+
+    try {
+      const invoice = await ctx.db.get(args.id as import("../_generated/dataModel").Id<"sales_invoices">);
+      if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) return null;
+      if (!invoice.pdfStorageId) return null;
+
+      return await ctx.storage.getUrl(invoice.pdfStorageId);
+    } catch {
+      return null;
+    }
   },
 });
 

@@ -41,6 +41,7 @@ export async function POST(
       businessEmail,
       lineItems,
       pdfAttachment,
+      pdfUrl,
     } = body as {
       to: string
       recipientName?: string
@@ -59,6 +60,7 @@ export async function POST(
       businessEmail?: string
       lineItems?: { itemCode?: string; description: string; quantity: number; unitPrice: number; amount: number }[]
       pdfAttachment?: { content: string; filename: string }
+      pdfUrl?: string
     }
 
     if (!to) {
@@ -75,10 +77,26 @@ export async function POST(
       )
     }
 
+    // If pdfUrl is provided (from Convex storage), fetch and convert to attachment
+    let resolvedPdfAttachment = pdfAttachment
+    if (!resolvedPdfAttachment && pdfUrl) {
+      try {
+        const pdfResponse = await fetch(pdfUrl)
+        if (pdfResponse.ok) {
+          const buffer = await pdfResponse.arrayBuffer()
+          const base64 = Buffer.from(buffer).toString('base64')
+          resolvedPdfAttachment = { content: base64, filename: `${invoiceNumber}.pdf` }
+        }
+      } catch (pdfError) {
+        console.error('[Sales Invoices API] Failed to fetch PDF from storage:', pdfError)
+      }
+    }
+
     console.log('[Sales Invoices API] Sending invoice email:', {
       invoiceId,
       to,
       invoiceNumber,
+      hasPdf: !!resolvedPdfAttachment,
     })
 
     const result = await emailService.sendInvoiceEmail({
@@ -98,7 +116,7 @@ export async function POST(
       businessPhone,
       businessEmail,
       lineItems,
-      pdfAttachment,
+      pdfAttachment: resolvedPdfAttachment,
     })
 
     if (!result.success) {

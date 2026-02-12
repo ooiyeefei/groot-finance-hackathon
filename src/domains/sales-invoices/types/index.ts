@@ -244,6 +244,7 @@ export interface SalesInvoice {
   signatureName?: string;
   recurringScheduleId?: string;
   isRecurringSource?: boolean;
+  pdfStorageId?: string;
   accountingEntryId?: string;
   deletedAt?: number;
   updatedAt?: number;

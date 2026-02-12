@@ -1262,6 +1262,9 @@ export default defineSchema({
     // Accounting
     accountingEntryId: v.optional(v.string()),
 
+    // PDF Storage (generated on save from preview, used for email attachments)
+    pdfStorageId: v.optional(v.id("_storage")),
+
     // Soft Delete & Timestamps
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),

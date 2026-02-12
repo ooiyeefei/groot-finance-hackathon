@@ -89,9 +89,9 @@ export function InvoicePreview({
             Print
           </Button>
           {onSend && invoice.status === 'draft' && (
-            <Button size="sm" onClick={onSend}>
+            <Button size="sm" onClick={onSend} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               <Send className="w-4 h-4 mr-2" />
-              Send Invoice
+              Save & Send
             </Button>
           )}
         </div>

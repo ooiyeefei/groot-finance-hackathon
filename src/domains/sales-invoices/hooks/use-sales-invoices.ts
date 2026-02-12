@@ -100,6 +100,8 @@ export function useSalesInvoiceMutations() {
   const recordPayment = useMutation(api.functions.payments.recordPayment)
   const voidInvoice = useMutation(api.functions.salesInvoices.voidInvoice)
   const removeInvoice = useMutation(api.functions.salesInvoices.remove)
+  const generateUploadUrl = useMutation(api.functions.salesInvoices.generateUploadUrl)
+  const storePdfStorageId = useMutation(api.functions.salesInvoices.storePdfStorageId)
 
   return {
     createInvoice,
@@ -108,7 +110,28 @@ export function useSalesInvoiceMutations() {
     recordPayment,
     voidInvoice,
     removeInvoice,
+    generateUploadUrl,
+    storePdfStorageId,
   }
+}
+
+/**
+ * Hook for getting a stored invoice PDF URL
+ */
+export function useInvoicePdfUrl(invoiceId: string | undefined) {
+  const { businessId } = useActiveBusiness()
+
+  const pdfUrl = useQuery(
+    api.functions.salesInvoices.getPdfUrl,
+    invoiceId && businessId
+      ? {
+          id: invoiceId,
+          businessId: businessId as Id<"businesses">,
+        }
+      : "skip"
+  )
+
+  return pdfUrl ?? null
 }
 
 /**

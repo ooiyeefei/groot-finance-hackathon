@@ -341,13 +341,40 @@ export default function LandingContent({ country }: { country: string }) {
           background: rgba(66, 133, 244, 0.15);
         }
 
-        /* Restore standard layout values overridden by dashboard-specific globals.css */
-        .landing-page { font-size: 1rem; }
-        .landing-page .max-w-5xl { max-width: 64rem !important; }
-        .landing-page .max-w-4xl { max-width: 56rem !important; }
-        .landing-page .max-w-3xl { max-width: 48rem !important; }
-        .landing-page .max-w-2xl { max-width: 42rem !important; }
-        .landing-page .max-w-xl { max-width: 36rem !important; }
+        /* Restore standard Tailwind values overridden by dashboard-specific globals.css */
+        .landing-page {
+          /* Typography - standard Tailwind sizes (globals.css reduces these by 13%) */
+          --font-size-xs: 0.75rem;     /* 12px */
+          --font-size-sm: 0.875rem;    /* 14px */
+          --font-size-base: 1rem;      /* 16px */
+          --font-size-lg: 1.125rem;    /* 18px */
+          --font-size-xl: 1.25rem;     /* 20px */
+          --font-size-2xl: 1.5rem;     /* 24px */
+          --font-size-3xl: 1.875rem;   /* 30px */
+          --font-size-4xl: 2.25rem;    /* 36px */
+          /* Spacing - standard Tailwind sizes (globals.css reduces these by 10%) */
+          --space-1: 0.25rem;          /* 4px */
+          --space-2: 0.5rem;           /* 8px */
+          --space-3: 0.75rem;          /* 12px */
+          --space-4: 1rem;             /* 16px */
+          --space-5: 1.25rem;          /* 20px */
+          --space-6: 1.5rem;           /* 24px */
+          --space-8: 2rem;             /* 32px */
+          --space-10: 2.5rem;          /* 40px */
+          --space-12: 3rem;            /* 48px */
+          --space-16: 4rem;            /* 64px */
+          --space-20: 5rem;            /* 80px */
+          --space-24: 6rem;            /* 96px */
+          /* Component sizes - standard values (globals.css reduces these by 10%) */
+          --button-height-sm: 2rem;    /* 32px */
+          --button-height-md: 2.5rem;  /* 40px */
+          --button-height-lg: 3rem;    /* 48px */
+          --input-height: 2.5rem;      /* 40px */
+          --card-padding: 1.5rem;      /* 24px */
+          --card-gap: 1.5rem;          /* 24px */
+          --section-gap: 3rem;         /* 48px */
+          font-size: 1rem;
+        }
       `}</style>
 
       {/* Navigation */}

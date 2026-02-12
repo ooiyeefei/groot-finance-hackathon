@@ -50,41 +50,131 @@ export function SalesInvoiceForm() {
     defaultTemplateId: (invoiceSettings?.selectedTemplate as string) ?? 'modern',
   })
 
-  const { createInvoice, sendInvoice } = useSalesInvoiceMutations()
+  const { createInvoice, sendInvoice, generateUploadUrl, storePdfStorageId } = useSalesInvoiceMutations()
   const nextInvoiceNumber = useNextInvoiceNumber()
-  const { generatePdf, isGenerating } = useInvoicePdf()
+  const { generatePdf, generatePdfBlob, isGenerating } = useInvoicePdf()
+  const [isSending, setIsSending] = useState(false)
 
   const { results: catalogResults } = useCatalogItemSearch(catalogSearchQuery, showCatalogDropdown)
+
+  /** Upload PDF blob to Convex storage and store the reference on the invoice */
+  const uploadPdfToStorage = useCallback(async (invoiceId: Id<"sales_invoices">) => {
+    try {
+      const invoiceNum = nextInvoiceNumber ?? 'INV-XXXX-XXX'
+      const pdfResult = await generatePdfBlob(invoiceNum)
+      if (!pdfResult.success || !pdfResult.blob) return
+
+      // Upload to Convex storage
+      const uploadUrl = await generateUploadUrl()
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: pdfResult.blob,
+      })
+      if (!uploadResponse.ok) return
+
+      const { storageId } = await uploadResponse.json()
+      await storePdfStorageId({
+        id: invoiceId,
+        businessId: businessId as Id<"businesses">,
+        storageId,
+      })
+    } catch {
+      console.error('Failed to upload PDF to storage')
+    }
+  }, [nextInvoiceNumber, generatePdfBlob, generateUploadUrl, storePdfStorageId, businessId])
+
+  const createInvoiceData = useCallback(() => ({
+    businessId: businessId as Id<"businesses">,
+    customerId: form.getFormData().customerId as Id<"customers"> | undefined,
+    customerSnapshot: form.getFormData().customerSnapshot,
+    lineItems: form.getFormData().lineItems,
+    currency: form.getFormData().currency,
+    taxMode: form.getFormData().taxMode,
+    invoiceDate: form.getFormData().invoiceDate,
+    paymentTerms: form.getFormData().paymentTerms,
+    dueDate: form.getFormData().dueDate,
+    notes: form.getFormData().notes,
+    paymentInstructions: form.getFormData().paymentInstructions,
+    templateId: form.getFormData().templateId,
+    signatureName: form.getFormData().signatureName,
+    invoiceDiscountType: form.getFormData().invoiceDiscountType,
+    invoiceDiscountValue: form.getFormData().invoiceDiscountValue,
+  }), [businessId, form])
 
   const handleSaveDraft = useCallback(async () => {
     if (!businessId || !form.isValid) return
     setIsSaving(true)
     try {
-      const data = form.getFormData()
-      await createInvoice({
-        businessId: businessId as Id<"businesses">,
-        customerId: data.customerId as Id<"customers"> | undefined,
-        customerSnapshot: data.customerSnapshot,
-        lineItems: data.lineItems,
-        currency: data.currency,
-        taxMode: data.taxMode,
-        invoiceDate: data.invoiceDate,
-        paymentTerms: data.paymentTerms,
-        dueDate: data.dueDate,
-        notes: data.notes,
-        paymentInstructions: data.paymentInstructions,
-        templateId: data.templateId,
-        signatureName: data.signatureName,
-        invoiceDiscountType: data.invoiceDiscountType,
-        invoiceDiscountValue: data.invoiceDiscountValue,
-      })
+      const invoiceId = await createInvoice(createInvoiceData())
+
+      // If in preview mode (template rendered), generate and store PDF
+      if (mode === 'preview') {
+        await uploadPdfToStorage(invoiceId)
+      }
+
       router.push(`/${locale}/invoices#sales-invoices`)
     } catch (error) {
       console.error('Failed to save invoice:', error)
     } finally {
       setIsSaving(false)
     }
-  }, [businessId, form, createInvoice, router, locale])
+  }, [businessId, form, mode, createInvoice, createInvoiceData, uploadPdfToStorage, router, locale])
+
+  const handleSaveAndSend = useCallback(async () => {
+    if (!businessId || !form.isValid) return
+    setIsSending(true)
+    try {
+      // 1. Create the invoice
+      const invoiceId = await createInvoice(createInvoiceData())
+
+      // 2. Upload PDF to Convex storage (template is rendered in preview)
+      await uploadPdfToStorage(invoiceId)
+
+      // 3. Mark as sent
+      await sendInvoice({ id: invoiceId, businessId: businessId as Id<"businesses"> })
+
+      // 4. Send email — the API will fetch the stored PDF via pdfUrl
+      const resolvedBusinessName = businessProfile?.name || (business as unknown as Record<string, unknown>)?.businessName as string || 'Our Company'
+      try {
+        await fetch(`/api/v1/sales-invoices/${invoiceId}/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: form.customerSnapshot.email,
+            recipientName: form.customerSnapshot.contactPerson || form.customerSnapshot.businessName,
+            invoiceNumber: nextInvoiceNumber ?? 'INV-XXXX-XXX',
+            invoiceDate: form.invoiceDate,
+            dueDate: form.dueDate,
+            totalAmount: form.totals.totalAmount,
+            currency: form.currency,
+            balanceDue: form.totals.totalAmount,
+            subtotal: form.totals.subtotal,
+            totalTax: form.totals.totalTax,
+            paymentInstructions: form.paymentInstructions,
+            businessName: resolvedBusinessName,
+            businessAddress: businessProfile?.address || undefined,
+            businessPhone: businessProfile?.contact_phone || undefined,
+            businessEmail: businessProfile?.contact_email || undefined,
+            lineItems: form.lineItems.map((item) => ({
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              amount: item.totalAmount,
+            })),
+          }),
+        })
+      } catch (emailError) {
+        console.error('Failed to send invoice email:', emailError)
+      }
+
+      router.push(`/${locale}/invoices#sales-invoices`)
+    } catch (error) {
+      console.error('Failed to save and send invoice:', error)
+    } finally {
+      setIsSending(false)
+    }
+  }, [businessId, business, businessProfile, form, nextInvoiceNumber, createInvoice, createInvoiceData, sendInvoice, uploadPdfToStorage, router, locale])
 
   const handleCustomerSelect = useCallback((customer: { _id: string; businessName: string; contactPerson?: string; email: string; phone?: string; address?: string; taxId?: string }) => {
     form.setCustomerId(customer._id)
@@ -148,6 +238,7 @@ export function SalesInvoiceForm() {
           businessInfo={businessInfo}
           templateId={form.templateId}
           onDownloadPdf={() => generatePdf(previewInvoice.invoiceNumber)}
+          onSend={form.isValid && !isSending ? handleSaveAndSend : undefined}
         />
       </div>
     )

@@ -18,7 +18,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
-import { useActiveBusiness } from '@/contexts/business-context'
+import { useConvex } from 'convex/react'
+import { api } from '../../../../convex/_generated/api'
+import type { Id } from '../../../../convex/_generated/dataModel'
+import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoices, useSalesInvoiceMutations } from '../hooks/use-sales-invoices'
 import { InvoiceStatusBadge } from './invoice-status-badge'
 import type { SalesInvoice, SalesInvoiceStatus } from '../types'
@@ -51,12 +54,14 @@ const FILTER_TABS: TabDefinition[] = [
 export default function SalesInvoiceList() {
   const locale = useLocale()
   const { business } = useActiveBusiness()
+  const { profile: businessProfile } = useBusinessProfile()
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
 
   const statusFilter = activeTab === 'all' ? undefined : activeTab
   const { invoices, summary, isLoading, totalCount } = useSalesInvoices({
     status: statusFilter,
   })
+  const convex = useConvex()
   const { sendInvoice, voidInvoice } = useSalesInvoiceMutations()
 
   const [sendingIds, setSendingIds] = useState<Set<string>>(new Set())
@@ -75,7 +80,22 @@ export default function SalesInvoiceList() {
 
         // Send email to customer
         try {
-          const businessName = (business as unknown as Record<string, unknown>)?.name as string || 'Our Company'
+          const businessName = businessProfile?.name || business?.businessName || 'Our Company'
+
+          // Resolve stored PDF URL if available
+          let pdfPayload: Record<string, unknown> = {}
+          if (invoice.pdfStorageId) {
+            try {
+              const pdfUrl = await convex.query(api.functions.salesInvoices.getPdfUrl, {
+                id: invoice._id as string,
+                businessId: invoice.businessId as Id<"businesses">,
+              })
+              if (pdfUrl) pdfPayload = { pdfUrl }
+            } catch {
+              console.error('Failed to resolve PDF URL')
+            }
+          }
+
           await fetch(`/api/v1/sales-invoices/${id}/send-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -88,8 +108,21 @@ export default function SalesInvoiceList() {
               totalAmount: invoice.totalAmount,
               currency: invoice.currency,
               balanceDue: invoice.balanceDue,
+              subtotal: invoice.subtotal,
+              totalTax: invoice.totalTax,
               paymentInstructions: invoice.paymentInstructions,
               businessName,
+              businessAddress: businessProfile?.address || undefined,
+              businessPhone: businessProfile?.contact_phone || undefined,
+              businessEmail: businessProfile?.contact_email || undefined,
+              lineItems: invoice.lineItems?.map((item: { itemCode?: string; description: string; quantity: number; unitPrice: number; totalAmount: number }) => ({
+                itemCode: item.itemCode,
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                amount: item.totalAmount,
+              })),
+              ...pdfPayload,
             }),
           })
         } catch (emailError) {
@@ -103,7 +136,7 @@ export default function SalesInvoiceList() {
         })
       }
     },
-    [sendInvoice, business],
+    [sendInvoice, business, businessProfile, convex],
   )
 
   const handleVoid = useCallback(

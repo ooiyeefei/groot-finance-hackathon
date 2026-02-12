@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
-import { useSalesInvoice, useSalesInvoiceMutations } from '@/domains/sales-invoices/hooks/use-sales-invoices'
+import { useSalesInvoice, useSalesInvoiceMutations, useInvoicePdfUrl } from '@/domains/sales-invoices/hooks/use-sales-invoices'
 import { useInvoicePdf } from '@/domains/sales-invoices/hooks/use-invoice-pdf'
 import { InvoicePreview } from '@/domains/sales-invoices/components/invoice-preview'
 import { InvoiceStatusBadge } from '@/domains/sales-invoices/components/invoice-status-badge'
@@ -29,6 +29,7 @@ export default function SalesInvoiceDetailPage() {
   const { invoice, isLoading } = useSalesInvoice(invoiceId)
   const { sendInvoice, voidInvoice, removeInvoice } = useSalesInvoiceMutations()
   const { generatePdf, generatePdfBlob, isGenerating } = useInvoicePdf()
+  const storedPdfUrl = useInvoicePdfUrl(invoiceId)
 
   const [isSending, setIsSending] = useState(false)
   const [isResending, setIsResending] = useState(false)
@@ -105,20 +106,27 @@ export default function SalesInvoiceDetailPage() {
     }
   }
 
+  /** Build the PDF part of the email payload — prefer stored PDF URL, fallback to client-side */
+  const buildPdfPayload = async () => {
+    if (storedPdfUrl) {
+      return { pdfUrl: storedPdfUrl }
+    }
+    const pdfAttachment = await buildPdfAttachment()
+    return pdfAttachment ? { pdfAttachment } : {}
+  }
+
   const handleSend = async () => {
     setIsSending(true)
     try {
-      // Generate PDF attachment before sending (template is still rendered)
-      const pdfAttachment = await buildPdfAttachment()
-
       await sendInvoice({ id: invoice._id, businessId: invoice.businessId })
 
       // Send email to customer after invoice status is updated
       try {
+        const pdfPayload = await buildPdfPayload()
         await fetch(`/api/v1/sales-invoices/${invoice._id}/send-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...buildEmailPayload(), pdfAttachment }),
+          body: JSON.stringify({ ...buildEmailPayload(), ...pdfPayload }),
         })
       } catch (emailError) {
         // Email failure is non-blocking — invoice is already marked as sent
@@ -132,11 +140,11 @@ export default function SalesInvoiceDetailPage() {
   const handleResendEmail = async () => {
     setIsResending(true)
     try {
-      const pdfAttachment = await buildPdfAttachment()
+      const pdfPayload = await buildPdfPayload()
       const res = await fetch(`/api/v1/sales-invoices/${invoice._id}/send-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...buildEmailPayload(), pdfAttachment }),
+        body: JSON.stringify({ ...buildEmailPayload(), ...pdfPayload }),
       })
       if (!res.ok) {
         console.error('Resend email failed:', await res.text())
