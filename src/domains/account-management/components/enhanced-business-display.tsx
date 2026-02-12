@@ -11,7 +11,7 @@
 import React, { useState, memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ChevronDown, Building2, Loader2, AlertCircle, Check, PanelLeftClose, PanelLeftOpen, MoreVertical, Plus } from 'lucide-react'
+import { Building2, Loader2, AlertCircle, Check, PanelLeftClose, PanelLeftOpen, MoreVertical, Plus } from 'lucide-react'
 import BusinessOnboardingModal from '@/domains/onboarding/components/business-onboarding-modal'
 import {
   useActiveBusiness,
@@ -263,7 +263,7 @@ export default function EnhancedBusinessDisplay({
                 {/* Business dropdown - always show to allow creating new business */}
               <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                 <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg]:hidden">
-                  <ChevronDown className="w-3 h-3 text-foreground" />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg>
                 </SelectTrigger>
                 <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                   {memberships.map((membership) => {
@@ -343,7 +343,7 @@ export default function EnhancedBusinessDisplay({
                     {/* Business dropdown - always show to allow creating new business */}
                     <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                       <SelectTrigger className="absolute -bottom-1 -right-1 w-5 h-5 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg]:hidden">
-                        <ChevronDown className="w-2.5 h-2.5 text-foreground" />
+                        <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg>
                       </SelectTrigger>
                       <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                         {memberships.map((membership) => {
@@ -449,7 +449,7 @@ export default function EnhancedBusinessDisplay({
               {memberships.length > 1 && (
                 <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                   <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
-                    <ChevronDown className="w-3 h-3 text-foreground" />
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg>
                   </SelectTrigger>
                   <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                     {memberships.map((membership) => {
@@ -532,7 +532,7 @@ export default function EnhancedBusinessDisplay({
                   {memberships.length > 1 && (
                     <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                       <SelectTrigger className="absolute -bottom-1 -right-1 w-5 h-5 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
-                        <ChevronDown className="w-2.5 h-2.5 text-foreground" />
+                        <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg>
                       </SelectTrigger>
                       <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                         {memberships.map((membership) => {
