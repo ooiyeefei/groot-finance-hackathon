@@ -318,6 +318,12 @@ export const catalogItemFormSchema = z.object({
 // INVOICE SETTINGS
 // ============================================
 
+export interface InvoiceTemplateItem {
+  id: string;
+  label: string;
+  text: string;
+}
+
 export interface InvoiceSettings {
   logoStorageId?: string;
   companyName?: string;
@@ -332,7 +338,15 @@ export interface InvoiceSettings {
   defaultPaymentTerms?: string;
   defaultPaymentInstructions?: string;
   selectedTemplate?: string;
+  customNoteTemplates?: InvoiceTemplateItem[];
+  customPaymentTemplates?: InvoiceTemplateItem[];
 }
+
+const invoiceTemplateItemSchema = z.object({
+  id: z.string(),
+  label: z.string().min(1),
+  text: z.string().min(1),
+});
 
 export const invoiceSettingsSchema = z.object({
   logoStorageId: z.string().optional(),
@@ -347,6 +361,8 @@ export const invoiceSettingsSchema = z.object({
   defaultPaymentTerms: z.string().optional(),
   defaultPaymentInstructions: z.string().optional(),
   selectedTemplate: z.string().optional(),
+  customNoteTemplates: z.array(invoiceTemplateItemSchema).optional(),
+  customPaymentTemplates: z.array(invoiceTemplateItemSchema).optional(),
 });
 
 // ============================================

@@ -9,15 +9,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Save, Eye, Send, ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { Save, Eye, Send, ArrowLeft, Plus, Trash2, X } from 'lucide-react'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
-import { useSalesInvoiceMutations, useNextInvoiceNumber } from '../hooks/use-sales-invoices'
-import { useCatalogItemSearch } from '../hooks/use-catalog-items'
+import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceTemplateMutations } from '../hooks/use-sales-invoices'
 import { useInvoicePdf, type PdfRenderData } from '../hooks/use-invoice-pdf'
 import { InvoicePreview } from './invoice-preview'
 import { InvoiceStatusBadge } from './invoice-status-badge'
 import CustomerSelector from './customer-selector'
+import { CatalogSearchInput } from './catalog-search-input'
 import { formatCurrency } from '@/lib/utils/format-number'
 import {
   SUPPORTED_CURRENCIES,
@@ -26,6 +26,7 @@ import {
   PAYMENT_INSTRUCTION_TEMPLATES,
   type PaymentTerms,
   type CustomerSnapshot,
+  type InvoiceTemplateItem,
 } from '../types'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
@@ -38,8 +39,6 @@ export function SalesInvoiceForm() {
   const { profile: businessProfile } = useBusinessProfile()
   const [mode, setMode] = useState<FormMode>('edit')
   const [isSaving, setIsSaving] = useState(false)
-  const [catalogSearchQuery, setCatalogSearchQuery] = useState('')
-  const [showCatalogDropdown, setShowCatalogDropdown] = useState(false)
 
   const invoiceSettings = (business as unknown as Record<string, unknown>)?.invoiceSettings as Record<string, unknown> | undefined
 
@@ -51,11 +50,41 @@ export function SalesInvoiceForm() {
   })
 
   const { createInvoice, sendInvoice, generateUploadUrl, storePdfStorageId } = useSalesInvoiceMutations()
+  const { addTemplate, deleteTemplate } = useInvoiceTemplateMutations()
   const nextInvoiceNumber = useNextInvoiceNumber()
   const { generatePdf, generatePdfBlob, isGenerating } = useInvoicePdf()
   const [isSending, setIsSending] = useState(false)
 
-  const { results: catalogResults } = useCatalogItemSearch(catalogSearchQuery, showCatalogDropdown)
+  // Custom template state
+  const customNoteTemplates = (invoiceSettings?.customNoteTemplates as InvoiceTemplateItem[] | undefined) ?? []
+  const customPaymentTemplates = (invoiceSettings?.customPaymentTemplates as InvoiceTemplateItem[] | undefined) ?? []
+  const [addingNoteTemplate, setAddingNoteTemplate] = useState(false)
+  const [addingPaymentTemplate, setAddingPaymentTemplate] = useState(false)
+  const [newTemplateLabel, setNewTemplateLabel] = useState('')
+  const [newTemplateText, setNewTemplateText] = useState('')
+
+  const handleSaveTemplate = useCallback(async (type: 'note' | 'payment') => {
+    if (!businessId || !newTemplateLabel.trim() || !newTemplateText.trim()) return
+    await addTemplate({
+      businessId: businessId as Id<"businesses">,
+      templateType: type,
+      label: newTemplateLabel.trim(),
+      text: newTemplateText.trim(),
+    })
+    setNewTemplateLabel('')
+    setNewTemplateText('')
+    if (type === 'note') setAddingNoteTemplate(false)
+    else setAddingPaymentTemplate(false)
+  }, [businessId, newTemplateLabel, newTemplateText, addTemplate])
+
+  const handleDeleteTemplate = useCallback(async (type: 'note' | 'payment', templateId: string) => {
+    if (!businessId) return
+    await deleteTemplate({
+      businessId: businessId as Id<"businesses">,
+      templateType: type,
+      templateId,
+    })
+  }, [businessId, deleteTemplate])
 
   // Build business info from profile for invoice preview & PDF
   const businessInfo = businessProfile ? {
@@ -229,21 +258,6 @@ export function SalesInvoiceForm() {
     form.setCustomerId(customer._id)
   }, [form])
 
-  const handleSelectCatalogItem = useCallback((item: {
-    _id: string
-    name: string
-    description?: string
-    unitPrice: number
-    currency: string
-    sku?: string
-    unitMeasurement?: string
-    taxRate?: number
-  }) => {
-    form.addCatalogItem(item)
-    setShowCatalogDropdown(false)
-    setCatalogSearchQuery('')
-  }, [form])
-
   // Build preview invoice object
   const previewInvoice = {
     invoiceNumber: nextInvoiceNumber ?? 'INV-XXXX-XXX',
@@ -331,40 +345,8 @@ export function SalesInvoiceForm() {
 
           {/* Line Items */}
           <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <CardTitle className="text-foreground text-base">Line Items</CardTitle>
-              {/* Catalog item search */}
-              <div className="relative">
-                <Input
-                  placeholder="Add from catalog..."
-                  value={catalogSearchQuery}
-                  onChange={(e) => {
-                    setCatalogSearchQuery(e.target.value)
-                    setShowCatalogDropdown(e.target.value.length > 0)
-                  }}
-                  onFocus={() => catalogSearchQuery.length > 0 && setShowCatalogDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowCatalogDropdown(false), 200)}
-                  className="bg-input border-border text-foreground w-48 text-sm"
-                />
-                {showCatalogDropdown && catalogResults.length > 0 && (
-                  <div className="absolute z-10 right-0 w-64 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {catalogResults.map((item) => (
-                      <button
-                        key={item._id}
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-muted text-foreground text-sm"
-                        onMouseDown={() => handleSelectCatalogItem(item)}
-                      >
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-muted-foreground text-xs">
-                          {formatCurrency(item.unitPrice, item.currency)}
-                          {item.sku && ` · ${item.sku}`}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             </CardHeader>
             <CardContent>
               {/* Desktop table */}
@@ -385,18 +367,38 @@ export function SalesInvoiceForm() {
                     {form.lineItems.map((item, index) => (
                       <tr key={index} className="border-b border-border/50">
                         <td className="py-2 px-2">
-                          <Input
-                            placeholder="SKU"
+                          <CatalogSearchInput
                             value={item.itemCode ?? ''}
-                            onChange={(e) => form.updateLineItem(index, { itemCode: e.target.value })}
+                            onChange={(v) => form.updateLineItem(index, { itemCode: v })}
+                            onSelect={(catItem) => form.updateLineItem(index, {
+                              description: catItem.name,
+                              unitPrice: catItem.unitPrice,
+                              itemCode: catItem.sku ?? '',
+                              taxRate: catItem.taxRate,
+                              unitMeasurement: catItem.unitMeasurement,
+                              catalogItemId: catItem._id,
+                              currency: catItem.currency,
+                            })}
+                            searchField="sku"
+                            placeholder="SKU"
                             className="bg-input border-border text-foreground text-sm h-8"
                           />
                         </td>
                         <td className="py-2 px-2">
-                          <Input
-                            placeholder="Item description"
+                          <CatalogSearchInput
                             value={item.description}
-                            onChange={(e) => form.updateLineItem(index, { description: e.target.value })}
+                            onChange={(v) => form.updateLineItem(index, { description: v })}
+                            onSelect={(catItem) => form.updateLineItem(index, {
+                              description: catItem.name,
+                              unitPrice: catItem.unitPrice,
+                              itemCode: catItem.sku ?? '',
+                              taxRate: catItem.taxRate,
+                              unitMeasurement: catItem.unitMeasurement,
+                              catalogItemId: catItem._id,
+                              currency: catItem.currency,
+                            })}
+                            searchField="name"
+                            placeholder="Item description"
                             className="bg-input border-border text-foreground text-sm h-8"
                           />
                         </td>
@@ -456,10 +458,20 @@ export function SalesInvoiceForm() {
                 {form.lineItems.map((item, index) => (
                   <div key={index} className="bg-muted rounded-lg p-3 space-y-2">
                     <div className="flex justify-between items-start">
-                      <Input
-                        placeholder="Item description"
+                      <CatalogSearchInput
                         value={item.description}
-                        onChange={(e) => form.updateLineItem(index, { description: e.target.value })}
+                        onChange={(v) => form.updateLineItem(index, { description: v })}
+                        onSelect={(catItem) => form.updateLineItem(index, {
+                          description: catItem.name,
+                          unitPrice: catItem.unitPrice,
+                          itemCode: catItem.sku ?? '',
+                          taxRate: catItem.taxRate,
+                          unitMeasurement: catItem.unitMeasurement,
+                          catalogItemId: catItem._id,
+                          currency: catItem.currency,
+                        })}
+                        searchField="name"
+                        placeholder="Item description"
                         className="bg-input border-border text-foreground text-sm flex-1 mr-2"
                       />
                       <Button variant="ghost" size="sm" onClick={() => form.removeLineItem(index)} disabled={form.lineItems.length <= 1}>
@@ -468,10 +480,20 @@ export function SalesInvoiceForm() {
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Item Code</Label>
-                      <Input
-                        placeholder="SKU"
+                      <CatalogSearchInput
                         value={item.itemCode ?? ''}
-                        onChange={(e) => form.updateLineItem(index, { itemCode: e.target.value })}
+                        onChange={(v) => form.updateLineItem(index, { itemCode: v })}
+                        onSelect={(catItem) => form.updateLineItem(index, {
+                          description: catItem.name,
+                          unitPrice: catItem.unitPrice,
+                          itemCode: catItem.sku ?? '',
+                          taxRate: catItem.taxRate,
+                          unitMeasurement: catItem.unitMeasurement,
+                          catalogItemId: catItem._id,
+                          currency: catItem.currency,
+                        })}
+                        searchField="sku"
+                        placeholder="SKU"
                         className="bg-input border-border text-foreground text-sm h-8"
                       />
                     </div>
@@ -524,6 +546,53 @@ export function SalesInvoiceForm() {
                       {tpl.label}
                     </button>
                   ))}
+                  {customNoteTemplates.map((tpl) => (
+                    <span key={tpl.id} className="group inline-flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => form.setNotes(form.notes ? `${form.notes}\n${tpl.text}` : tpl.text)}
+                        className="text-xs px-2 py-1 rounded-l-md border border-r-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                      >
+                        {tpl.label}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTemplate('note', tpl.id)}
+                        className="text-xs px-1 py-1 rounded-r-md border border-primary/30 bg-primary/10 text-primary/60 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {!addingNoteTemplate ? (
+                    <button
+                      type="button"
+                      onClick={() => { setAddingNoteTemplate(true); setNewTemplateLabel(''); setNewTemplateText('') }}
+                      className="text-xs px-2 py-1 rounded-md border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary transition-colors"
+                    >
+                      + Add
+                    </button>
+                  ) : (
+                    <div className="w-full flex flex-col gap-1 mt-1 p-2 rounded-md border border-border bg-muted">
+                      <Input
+                        placeholder="Label (e.g. Refund policy)"
+                        value={newTemplateLabel}
+                        onChange={(e) => setNewTemplateLabel(e.target.value)}
+                        className="bg-input border-border text-foreground text-xs h-7"
+                      />
+                      <Textarea
+                        placeholder="Template text..."
+                        value={newTemplateText}
+                        onChange={(e) => setNewTemplateText(e.target.value)}
+                        rows={2}
+                        className="bg-input border-border text-foreground text-xs"
+                      />
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setAddingNoteTemplate(false)}>Cancel</Button>
+                        <Button size="sm" className="h-6 text-xs bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleSaveTemplate('note')} disabled={!newTemplateLabel.trim() || !newTemplateText.trim()}>Save</Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <Textarea
                   placeholder="Additional notes for the customer..."
@@ -546,6 +615,53 @@ export function SalesInvoiceForm() {
                       {tpl.label}
                     </button>
                   ))}
+                  {customPaymentTemplates.map((tpl) => (
+                    <span key={tpl.id} className="group inline-flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => form.setPaymentInstructions(form.paymentInstructions ? `${form.paymentInstructions}\n${tpl.text}` : tpl.text)}
+                        className="text-xs px-2 py-1 rounded-l-md border border-r-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                      >
+                        {tpl.label}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTemplate('payment', tpl.id)}
+                        className="text-xs px-1 py-1 rounded-r-md border border-primary/30 bg-primary/10 text-primary/60 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {!addingPaymentTemplate ? (
+                    <button
+                      type="button"
+                      onClick={() => { setAddingPaymentTemplate(true); setNewTemplateLabel(''); setNewTemplateText('') }}
+                      className="text-xs px-2 py-1 rounded-md border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary transition-colors"
+                    >
+                      + Add
+                    </button>
+                  ) : (
+                    <div className="w-full flex flex-col gap-1 mt-1 p-2 rounded-md border border-border bg-muted">
+                      <Input
+                        placeholder="Label (e.g. PayPal)"
+                        value={newTemplateLabel}
+                        onChange={(e) => setNewTemplateLabel(e.target.value)}
+                        className="bg-input border-border text-foreground text-xs h-7"
+                      />
+                      <Textarea
+                        placeholder="Template text..."
+                        value={newTemplateText}
+                        onChange={(e) => setNewTemplateText(e.target.value)}
+                        rows={2}
+                        className="bg-input border-border text-foreground text-xs"
+                      />
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setAddingPaymentTemplate(false)}>Cancel</Button>
+                        <Button size="sm" className="h-6 text-xs bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleSaveTemplate('payment')} disabled={!newTemplateLabel.trim() || !newTemplateText.trim()}>Save</Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <Textarea
                   placeholder="Bank account details, payment methods..."

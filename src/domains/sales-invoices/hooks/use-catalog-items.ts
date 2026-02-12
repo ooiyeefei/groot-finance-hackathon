@@ -38,7 +38,11 @@ export function useCatalogItems(options?: {
 /**
  * Hook for catalog item autocomplete search
  */
-export function useCatalogItemSearch(query: string, enabled: boolean = true) {
+export function useCatalogItemSearch(
+  query: string,
+  enabled: boolean = true,
+  searchField?: 'sku' | 'name' | 'all'
+) {
   const { businessId } = useActiveBusiness()
 
   const items = useQuery(
@@ -48,6 +52,7 @@ export function useCatalogItemSearch(query: string, enabled: boolean = true) {
           businessId: businessId as Id<"businesses">,
           query,
           limit: 10,
+          searchField,
         }
       : "skip"
   )

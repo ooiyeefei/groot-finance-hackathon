@@ -157,6 +157,16 @@ export function usePaymentsByInvoice(invoiceId: string | undefined) {
 }
 
 /**
+ * Hook for invoice template mutations (custom note/payment templates)
+ */
+export function useInvoiceTemplateMutations() {
+  const addTemplate = useMutation(api.functions.salesInvoices.addInvoiceTemplate)
+  const deleteTemplate = useMutation(api.functions.salesInvoices.deleteInvoiceTemplate)
+
+  return { addTemplate, deleteTemplate }
+}
+
+/**
  * Hook for payment history by customer
  */
 export function usePaymentsByCustomer(

@@ -941,6 +941,71 @@ export const generateDueInvoices = internalMutation({
 });
 
 // ============================================
+// CUSTOM TEMPLATE MUTATIONS
+// ============================================
+
+export const addInvoiceTemplate = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    templateType: v.union(v.literal("note"), v.literal("payment")),
+    label: v.string(),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdmin(ctx, args.businessId);
+
+    const business = await ctx.db.get(args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const settings = (business as Record<string, unknown>).invoiceSettings as Record<string, unknown> | undefined ?? {};
+    const field = args.templateType === "note" ? "customNoteTemplates" : "customPaymentTemplates";
+    const existing = (settings[field] as Array<{ id: string; label: string; text: string }>) ?? [];
+
+    const newTemplate = {
+      id: `${args.templateType}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      label: args.label,
+      text: args.text,
+    };
+
+    await ctx.db.patch(args.businessId, {
+      invoiceSettings: {
+        ...settings,
+        [field]: [...existing, newTemplate],
+      } as never,
+      updatedAt: Date.now(),
+    });
+
+    return newTemplate.id;
+  },
+});
+
+export const deleteInvoiceTemplate = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    templateType: v.union(v.literal("note"), v.literal("payment")),
+    templateId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdmin(ctx, args.businessId);
+
+    const business = await ctx.db.get(args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const settings = (business as Record<string, unknown>).invoiceSettings as Record<string, unknown> | undefined ?? {};
+    const field = args.templateType === "note" ? "customNoteTemplates" : "customPaymentTemplates";
+    const existing = (settings[field] as Array<{ id: string; label: string; text: string }>) ?? [];
+
+    await ctx.db.patch(args.businessId, {
+      invoiceSettings: {
+        ...settings,
+        [field]: existing.filter((t) => t.id !== args.templateId),
+      } as never,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
 

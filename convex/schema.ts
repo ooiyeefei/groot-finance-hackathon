@@ -131,6 +131,8 @@ export default defineSchema({
       defaultPaymentTerms: v.optional(v.string()),
       defaultPaymentInstructions: v.optional(v.string()),
       selectedTemplate: v.optional(v.string()),
+      customNoteTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
+      customPaymentTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
     })),
 
     // Timestamps

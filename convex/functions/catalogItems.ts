@@ -127,6 +127,7 @@ export const searchByName = query({
     businessId: v.id("businesses"),
     query: v.string(),
     limit: v.optional(v.number()),
+    searchField: v.optional(v.union(v.literal("sku"), v.literal("name"), v.literal("all"))),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -143,12 +144,21 @@ export const searchByName = query({
       .collect();
 
     const queryLower = args.query.toLowerCase();
+    const field = args.searchField ?? "all";
     const filtered = items
-      .filter((item) =>
-        !item.deletedAt &&
-        (item.name.toLowerCase().includes(queryLower) ||
-         (item.sku?.toLowerCase().includes(queryLower)))
-      )
+      .filter((item) => {
+        if (item.deletedAt) return false;
+        switch (field) {
+          case "sku":
+            return item.sku?.toLowerCase().includes(queryLower) ?? false;
+          case "name":
+            return item.name.toLowerCase().includes(queryLower) ||
+              (item.description?.toLowerCase().includes(queryLower) ?? false);
+          default:
+            return item.name.toLowerCase().includes(queryLower) ||
+              (item.sku?.toLowerCase().includes(queryLower) ?? false);
+        }
+      })
       .slice(0, args.limit ?? 10);
 
     return filtered;
