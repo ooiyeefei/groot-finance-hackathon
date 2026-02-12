@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Save, Eye, Send, ArrowLeft, Plus, Trash2, X } from 'lucide-react'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
-import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceTemplateMutations } from '../hooks/use-sales-invoices'
+import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceTemplateMutations, useCustomInvoiceTemplates } from '../hooks/use-sales-invoices'
 import { useInvoicePdf, type PdfRenderData } from '../hooks/use-invoice-pdf'
 import { InvoicePreview } from './invoice-preview'
 import { InvoiceStatusBadge } from './invoice-status-badge'
@@ -55,9 +55,8 @@ export function SalesInvoiceForm() {
   const { generatePdf, generatePdfBlob, isGenerating } = useInvoicePdf()
   const [isSending, setIsSending] = useState(false)
 
-  // Custom template state
-  const customNoteTemplates = (invoiceSettings?.customNoteTemplates as InvoiceTemplateItem[] | undefined) ?? []
-  const customPaymentTemplates = (invoiceSettings?.customPaymentTemplates as InvoiceTemplateItem[] | undefined) ?? []
+  // Custom template state (reactive Convex subscription)
+  const { customNoteTemplates, customPaymentTemplates } = useCustomInvoiceTemplates()
   const [addingNoteTemplate, setAddingNoteTemplate] = useState(false)
   const [addingPaymentTemplate, setAddingPaymentTemplate] = useState(false)
   const [newTemplateLabel, setNewTemplateLabel] = useState('')

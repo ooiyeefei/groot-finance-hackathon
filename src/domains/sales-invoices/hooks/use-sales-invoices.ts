@@ -157,6 +157,26 @@ export function usePaymentsByInvoice(invoiceId: string | undefined) {
 }
 
 /**
+ * Hook for custom invoice templates (reactive via Convex subscription)
+ */
+export function useCustomInvoiceTemplates() {
+  const { businessId } = useActiveBusiness()
+
+  const result = useQuery(
+    api.functions.salesInvoices.getCustomTemplates,
+    businessId
+      ? { businessId: businessId as Id<"businesses"> }
+      : "skip"
+  )
+
+  return {
+    customNoteTemplates: result?.customNoteTemplates ?? [],
+    customPaymentTemplates: result?.customPaymentTemplates ?? [],
+    isLoading: result === undefined,
+  }
+}
+
+/**
  * Hook for invoice template mutations (custom note/payment templates)
  */
 export function useInvoiceTemplateMutations() {

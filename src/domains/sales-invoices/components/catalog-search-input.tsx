@@ -64,7 +64,7 @@ export function CatalogSearchInput({
         className={className}
       />
       {isOpen && results.length > 0 && (
-        <div className="absolute z-20 left-0 w-64 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+        <div className="absolute z-20 left-0 min-w-64 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-72 overflow-y-auto">
           {results.map((item) => (
             <button
               key={item._id}

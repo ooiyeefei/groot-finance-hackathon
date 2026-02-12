@@ -941,8 +941,27 @@ export const generateDueInvoices = internalMutation({
 });
 
 // ============================================
-// CUSTOM TEMPLATE MUTATIONS
+// CUSTOM TEMPLATE QUERIES & MUTATIONS
 // ============================================
+
+export const getCustomTemplates = query({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { customNoteTemplates: [], customPaymentTemplates: [] };
+
+    const business = await ctx.db.get(args.businessId);
+    if (!business) return { customNoteTemplates: [], customPaymentTemplates: [] };
+
+    const settings = (business as Record<string, unknown>).invoiceSettings as Record<string, unknown> | undefined;
+    return {
+      customNoteTemplates: (settings?.customNoteTemplates as Array<{ id: string; label: string; text: string }>) ?? [],
+      customPaymentTemplates: (settings?.customPaymentTemplates as Array<{ id: string; label: string; text: string }>) ?? [],
+    };
+  },
+});
 
 export const addInvoiceTemplate = mutation({
   args: {
