@@ -75,7 +75,7 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
   return (
     <div id="invoice-template" className="bg-card text-foreground p-10 max-w-[800px] mx-auto">
       {/* Company Header - Centered */}
-      <div className="text-center border-b-2 border-border pb-6 mb-6">
+      <div className="text-center border-b-2 border-border pb-6 mb-6" style={{ pageBreakInside: 'avoid' }}>
         {businessInfo?.logoUrl && (
           <div className="mb-3">
             <img
@@ -256,7 +256,7 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
       </div>
 
       {/* Totals Section - Aligned Right */}
-      <div className="flex justify-end mb-8">
+      <div className="flex justify-end mb-8" style={{ pageBreakInside: 'avoid' }}>
         <div className="w-72">
           <table className="w-full text-sm">
             <tbody>
@@ -333,7 +333,7 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
 
       {/* Signature */}
       {invoice.signatureName && (
-        <div className="mt-8 pt-6">
+        <div className="mt-8 pt-6" style={{ pageBreakInside: 'avoid' }}>
           <div className="flex justify-end">
             <div className="text-right">
               <p
@@ -351,7 +351,7 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
       )}
 
       {/* Bottom Border Line */}
-      <div className="mt-8 border-t-2 border-border pt-4 text-center">
+      <div className="mt-8 border-t-2 border-border pt-4 text-center" style={{ pageBreakInside: 'avoid' }}>
         <p className="text-xs text-muted-foreground">
           Thank you for your business.
         </p>

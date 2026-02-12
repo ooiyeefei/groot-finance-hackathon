@@ -73,7 +73,7 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
       className="bg-card text-foreground w-full max-w-[800px] mx-auto p-10 border border-border rounded-lg shadow-sm"
     >
       {/* ── Header ── */}
-      <header className="flex items-start justify-between gap-6 pb-8 border-b border-border">
+      <header className="flex items-start justify-between gap-6 pb-8 border-b border-border" style={{ pageBreakInside: 'avoid' }}>
         {/* Left: company info */}
         <div className="flex-1 min-w-0">
           {businessInfo?.logoUrl && (
@@ -243,7 +243,7 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
       </section>
 
       {/* ── Totals ── */}
-      <section className="flex justify-end border-t border-border pt-6 pb-8">
+      <section className="flex justify-end border-t border-border pt-6 pb-8" style={{ pageBreakInside: 'avoid' }}>
         <dl className="w-72 space-y-2 text-sm">
           {/* Subtotal */}
           <div className="flex justify-between">
@@ -327,7 +327,7 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
 
       {/* ── Signature ── */}
       {invoice.signatureName && (
-        <div className="border-t border-border pt-8 mt-6">
+        <div className="border-t border-border pt-8 mt-6" style={{ pageBreakInside: 'avoid' }}>
           <div className="flex justify-end">
             <div className="text-right">
               <p
