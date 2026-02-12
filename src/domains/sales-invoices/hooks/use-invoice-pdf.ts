@@ -11,22 +11,20 @@ const PDF_OPTIONS = {
 }
 
 /**
- * Clone the target element into an off-screen container so html2canvas
- * captures from a clean position — immune to viewport scroll offset
- * and parent `overflow: hidden` clipping.
+ * Build capture options with the current scroll offset so html2canvas
+ * renders the element from its true position regardless of page scroll.
  */
-function cloneOffScreen(source: HTMLElement): HTMLElement {
-  const clone = source.cloneNode(true) as HTMLElement
-  clone.removeAttribute('id')
-  Object.assign(clone.style, {
-    position: 'absolute',
-    left: '-9999px',
-    top: '0',
-    width: `${source.scrollWidth}px`,
-    overflow: 'visible',
-  })
-  document.body.appendChild(clone)
-  return clone
+function buildOptions(margin: number | [number, number, number, number], filename: string) {
+  return {
+    ...PDF_OPTIONS,
+    margin,
+    filename,
+    html2canvas: {
+      ...PDF_OPTIONS.html2canvas,
+      scrollY: -window.scrollY,
+      scrollX: -window.scrollX,
+    },
+  }
 }
 
 /**
@@ -44,22 +42,21 @@ export function useInvoicePdf() {
     }
   ) => {
     setIsGenerating(true)
-    let clone: HTMLElement | null = null
 
     try {
       const html2pdf = (await import('html2pdf.js')).default
 
-      const source = document.getElementById(options?.elementId ?? 'invoice-template')
-      if (!source) {
+      const element = document.getElementById(options?.elementId ?? 'invoice-template')
+      if (!element) {
         throw new Error('Invoice template element not found')
       }
 
-      clone = cloneOffScreen(source)
       const filename = `${invoiceNumber}.pdf`
+      const pdfOpts = buildOptions(options?.margin ?? PDF_OPTIONS.margin, filename)
 
       await html2pdf()
-        .set({ ...PDF_OPTIONS, margin: options?.margin ?? PDF_OPTIONS.margin, filename })
-        .from(clone)
+        .set(pdfOpts)
+        .from(element)
         .save()
 
       return { success: true, filename }
@@ -67,7 +64,6 @@ export function useInvoicePdf() {
       console.error('[useInvoicePdf] PDF generation failed:', error)
       return { success: false, error: String(error) }
     } finally {
-      clone?.remove()
       setIsGenerating(false)
     }
   }, [])
@@ -80,30 +76,26 @@ export function useInvoicePdf() {
     invoiceNumber: string,
     options?: { elementId?: string; margin?: number }
   ): Promise<{ success: boolean; blob?: Blob; filename?: string; error?: string }> => {
-    let clone: HTMLElement | null = null
-
     try {
       const html2pdf = (await import('html2pdf.js')).default
 
-      const source = document.getElementById(options?.elementId ?? 'invoice-template')
-      if (!source) {
+      const element = document.getElementById(options?.elementId ?? 'invoice-template')
+      if (!element) {
         throw new Error('Invoice template element not found')
       }
 
-      clone = cloneOffScreen(source)
       const filename = `${invoiceNumber}.pdf`
+      const pdfOpts = buildOptions(options?.margin ?? PDF_OPTIONS.margin, filename)
 
       const blob: Blob = await html2pdf()
-        .set({ ...PDF_OPTIONS, margin: options?.margin ?? PDF_OPTIONS.margin, filename })
-        .from(clone)
+        .set(pdfOpts)
+        .from(element)
         .outputPdf('blob')
 
       return { success: true, blob, filename }
     } catch (error) {
       console.error('[useInvoicePdf] PDF blob generation failed:', error)
       return { success: false, error: String(error) }
-    } finally {
-      clone?.remove()
     }
   }, [])
 

@@ -97,7 +97,7 @@ export function InvoicePreview({
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-lg overflow-hidden print:border-none print:shadow-none">
+      <div className="bg-card border border-border rounded-lg print:border-none print:shadow-none">
         <TemplateComponent invoice={invoice} businessInfo={businessInfo} />
       </div>
     </div>
