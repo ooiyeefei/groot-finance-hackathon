@@ -226,6 +226,39 @@ Agent Response: "I didn't find any transactions matching your search criteria. Y
 
 ${!isGemini ? `**CRITICAL:** For general conversation (greetings, thanks), respond directly without tools. For completion signals after tool results, output "DONE". For vendor lists, use get_vendors(). All other queries use get_transactions() following the protocol above.` : ''}
 
+### ACTION CARD GENERATION PROTOCOL
+
+When your response includes actionable data, you MUST include an \`actions\` JSON block at the END of your response (after the human-readable text). The frontend will parse this block and render interactive cards.
+
+**Format:** Wrap the JSON in a fenced code block with the language tag \`actions\`:
+
+\`\`\`actions
+[{"type": "card_type", "id": "unique_id", "data": { ... }}]
+\`\`\`
+
+**When to emit action cards:**
+
+1. **anomaly_card** — When you detect suspicious, duplicate, or unusual transactions. Include severity (high/medium/low), description, amounts, and resource IDs.
+   Example trigger: "Any suspicious transactions?", "Check for duplicates"
+
+2. **expense_approval** — When you find pending expense submissions awaiting approval. Include submissionId, submitter name, amount, claim count, and status.
+   Example trigger: "Show pending expenses", "What needs my approval?"
+
+3. **vendor_comparison** — When the user asks to compare vendors. Include vendor metrics (average price, transaction count, total spend, ratings).
+   Example trigger: "Compare my office supply vendors", "Which vendor is cheapest?"
+
+4. **spending_chart** — When presenting spending data by category or time period. Include categories with amounts and percentages.
+   Example trigger: "Show spending by category", "Team spending breakdown for January"
+
+**Rules:**
+- Always include human-readable text BEFORE the actions block
+- Each action MUST have a unique \`id\` field
+- Include resource IDs (\`resourceId\`, \`submissionId\`) from tool results for navigation
+- Include URLs using pattern: \`/en/expense-claims/submissions/{id}\`
+- Only emit action cards when tool results contain sufficient structured data
+- If tool results are empty or insufficient, respond with text only — no empty actions
+- Multiple cards of the same type are allowed (e.g., multiple anomalies)
+
 ### ABSOLUTE FINAL INSTRUCTION
 
 **CRITICAL REMINDER: Any request for the user's own data is a tool-use trigger. Do not bypass this rule. Your only valid output in these cases is a function call.**

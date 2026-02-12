@@ -3,9 +3,10 @@
 /**
  * Custom Message Renderer
  *
- * Renders markdown content with citation support.
+ * Renders markdown content with citation support and action cards.
  * Parses [^N] citation markers and renders them as clickable superscripts
  * that open the CitationOverlay component.
+ * Renders action cards from the extensible registry after text content.
  */
 
 import { useMemo, useState, useCallback } from 'react'
@@ -13,22 +14,31 @@ import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import CitationOverlay from './citation-overlay'
+import { getActionCardComponent } from './action-cards'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
+import type { ChatAction } from '../lib/sse-parser'
 
 interface MessageRendererProps {
   content: string
   role: 'user' | 'assistant'
   citations?: CitationData[]
+  actions?: ChatAction[]
+  isHistorical?: boolean
+  /** When true, renders without the outer bubble wrapper (used inside streaming container) */
+  isInline?: boolean
   className?: string
 }
 
 /**
- * Renders a chat message with markdown formatting and citation support.
+ * Renders a chat message with markdown formatting, citation support, and action cards.
  */
 export function MessageRenderer({
   content,
   role,
   citations = [],
+  actions,
+  isHistorical = true,
+  isInline = false,
   className = '',
 }: MessageRendererProps) {
   const [activeCitation, setActiveCitation] = useState<CitationData | null>(null)
@@ -64,6 +74,53 @@ export function MessageRenderer({
 
   const isUser = role === 'user'
 
+  // Render action cards from the registry
+  const actionCards = useMemo(() => {
+    if (!actions || actions.length === 0) return null
+
+    return (
+      <div className="mt-2 space-y-2">
+        {actions.map((action, idx) => {
+          try {
+            const CardComponent = getActionCardComponent(action.type)
+            return (
+              <CardComponent
+                key={action.id || `action-${idx}`}
+                action={action}
+                isHistorical={isHistorical}
+              />
+            )
+          } catch (err) {
+            console.warn('[MessageRenderer] Failed to render action card:', action.type, err)
+            return null
+          }
+        })}
+      </div>
+    )
+  }, [actions, isHistorical])
+
+  // Inline mode: render content directly without the bubble wrapper
+  if (isInline && !isUser) {
+    return (
+      <>
+        <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
+          <ReactMarkdown
+            rehypePlugins={[rehypeRaw, rehypeSanitize]}
+            components={markdownComponents(handleCitationClick)}
+          >
+            {processedContent}
+          </ReactMarkdown>
+        </div>
+        {actionCards}
+        <CitationOverlay
+          citation={activeCitation}
+          isOpen={isCitationOpen}
+          onClose={handleCloseCitation}
+        />
+      </>
+    )
+  }
+
   return (
     <>
       <div
@@ -82,90 +139,17 @@ export function MessageRenderer({
           {isUser ? (
             <p className="whitespace-pre-wrap">{content}</p>
           ) : (
-            <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
-              <ReactMarkdown
-                rehypePlugins={[rehypeRaw, rehypeSanitize]}
-                components={{
-                  // Handle citation superscripts
-                  sup: ({ children, ...props }) => {
-                    const citationIndex = (props as any)['data-citation-index']
-                    if (citationIndex) {
-                      return (
-                        <button
-                          type="button"
-                          className="inline-flex items-center text-primary hover:text-primary/80 font-medium cursor-pointer transition-colors text-xs align-super"
-                          onClick={() => handleCitationClick(Number(citationIndex))}
-                          aria-label={`View citation ${citationIndex}`}
-                        >
-                          [{citationIndex}]
-                        </button>
-                      )
-                    }
-                    return <sup {...props}>{children}</sup>
-                  },
-                  // Style code blocks
-                  code: ({ children, className: codeClassName, ...props }) => {
-                    const isInline = !codeClassName
-                    if (isInline) {
-                      return (
-                        <code
-                          className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono"
-                          {...props}
-                        >
-                          {children}
-                        </code>
-                      )
-                    }
-                    return (
-                      <code className={codeClassName} {...props}>
-                        {children}
-                      </code>
-                    )
-                  },
-                  // Style tables for financial data
-                  table: ({ children, ...props }) => (
-                    <div className="overflow-x-auto my-2">
-                      <table
-                        className="min-w-full border border-border rounded text-xs"
-                        {...props}
-                      >
-                        {children}
-                      </table>
-                    </div>
-                  ),
-                  th: ({ children, ...props }) => (
-                    <th
-                      className="bg-muted px-3 py-2 text-left font-medium text-foreground border-b border-border"
-                      {...props}
-                    >
-                      {children}
-                    </th>
-                  ),
-                  td: ({ children, ...props }) => (
-                    <td
-                      className="px-3 py-2 text-foreground border-b border-border"
-                      {...props}
-                    >
-                      {children}
-                    </td>
-                  ),
-                  // Style links
-                  a: ({ children, href, ...props }) => (
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:text-primary/80 underline"
-                      {...props}
-                    >
-                      {children}
-                    </a>
-                  ),
-                }}
-              >
-                {processedContent}
-              </ReactMarkdown>
-            </div>
+            <>
+              <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
+                <ReactMarkdown
+                  rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                  components={markdownComponents(handleCitationClick)}
+                >
+                  {processedContent}
+                </ReactMarkdown>
+              </div>
+              {actionCards}
+            </>
           )}
         </div>
       </div>
@@ -178,4 +162,85 @@ export function MessageRenderer({
       />
     </>
   )
+}
+
+/** Shared markdown component overrides */
+function markdownComponents(handleCitationClick: (index: number) => void) {
+  return {
+    // Handle citation superscripts
+    sup: ({ children, ...props }: any) => {
+      const citationIndex = props['data-citation-index']
+      if (citationIndex) {
+        return (
+          <button
+            type="button"
+            className="inline-flex items-center text-primary hover:text-primary/80 font-medium cursor-pointer transition-colors text-xs align-super"
+            onClick={() => handleCitationClick(Number(citationIndex))}
+            aria-label={`View citation ${citationIndex}`}
+          >
+            [{citationIndex}]
+          </button>
+        )
+      }
+      return <sup {...props}>{children}</sup>
+    },
+    // Style code blocks
+    code: ({ children, className: codeClassName, ...props }: any) => {
+      const isInline = !codeClassName
+      if (isInline) {
+        return (
+          <code
+            className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono"
+            {...props}
+          >
+            {children}
+          </code>
+        )
+      }
+      return (
+        <code className={codeClassName} {...props}>
+          {children}
+        </code>
+      )
+    },
+    // Style tables for financial data
+    table: ({ children, ...props }: any) => (
+      <div className="overflow-x-auto my-2">
+        <table
+          className="min-w-full border border-border rounded text-xs"
+          {...props}
+        >
+          {children}
+        </table>
+      </div>
+    ),
+    th: ({ children, ...props }: any) => (
+      <th
+        className="bg-muted px-3 py-2 text-left font-medium text-foreground border-b border-border"
+        {...props}
+      >
+        {children}
+      </th>
+    ),
+    td: ({ children, ...props }: any) => (
+      <td
+        className="px-3 py-2 text-foreground border-b border-border"
+        {...props}
+      >
+        {children}
+      </td>
+    ),
+    // Style links
+    a: ({ children, href, ...props }: any) => (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:text-primary/80 underline"
+        {...props}
+      >
+        {children}
+      </a>
+    ),
+  }
 }

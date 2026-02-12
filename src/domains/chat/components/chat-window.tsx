@@ -4,8 +4,8 @@
  * Chat Window Component
  *
  * The main chat interface rendered inside the floating widget.
- * Uses CopilotKit's headless hooks for message handling and streaming.
- * Displays conversation history from Convex with CopilotKit's active session overlay.
+ * Displays conversation history from Convex with SSE streaming overlay.
+ * Shows progressive status updates, streaming text, and action cards.
  */
 
 import { useState, useRef, useEffect, useCallback, type FormEvent } from 'react'
@@ -15,6 +15,7 @@ import { ConversationSwitcher } from './conversation-switcher'
 import { useCopilotBridge } from '../hooks/use-copilot-chat'
 import { useAuth } from '@clerk/nextjs'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
+import type { ChatAction } from '../lib/sse-parser'
 
 interface ChatWindowProps {
   onClose: () => void
@@ -27,12 +28,19 @@ interface ChatWindowProps {
 export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, onInitialMessageConsumed }: ChatWindowProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const { userId } = useAuth()
+
+  // Smart auto-scroll: track if user has scrolled up
+  const [userScrolledUp, setUserScrolledUp] = useState(false)
 
   const {
     isLoading,
     error,
+    streamingText,
+    streamingStatus,
+    streamingActions,
     stopGeneration,
     conversations,
     activeConversationId,
@@ -45,10 +53,21 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     sendMessage,
   } = useCopilotBridge({ businessId })
 
-  // Auto-scroll to bottom when messages change
+  // Smart auto-scroll: only scroll if user hasn't scrolled up
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [convexMessages, isLoading])
+    if (!userScrolledUp) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [convexMessages, isLoading, streamingText, userScrolledUp])
+
+  // Track scroll position to detect user scrolling up
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50
+    setUserScrolledUp(!isAtBottom)
+  }, [])
 
   // Focus input on mount and prefill if initialMessage provided
   useEffect(() => {
@@ -66,6 +85,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
       if (!trimmed || isLoading) return
 
       setInput('')
+      setUserScrolledUp(false) // Reset scroll lock on new message
       await sendMessage(trimmed)
     },
     [input, isLoading, sendMessage]
@@ -83,12 +103,16 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
   )
 
   // Build display messages from Convex (single source of truth)
-  const displayMessages: DisplayMessage[] = convexMessages.map((msg) => ({
-    id: msg.id,
-    role: msg.role as 'user' | 'assistant',
-    content: msg.content,
-    citations: msg.metadata?.citations as CitationData[] | undefined,
-  }))
+  const displayMessages: DisplayMessage[] = convexMessages.map((msg) => {
+    const meta = msg.metadata as Record<string, unknown> | undefined
+    return {
+      id: msg.id,
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+      citations: meta?.citations as CitationData[] | undefined,
+      actions: meta?.actions as ChatAction[] | undefined,
+    }
+  })
 
   return (
     <div className="flex flex-col h-full bg-background rounded-t-xl overflow-hidden border border-border shadow-2xl">
@@ -124,12 +148,16 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
+      >
         {isLoadingMessages ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>
-        ) : displayMessages.length === 0 ? (
+        ) : displayMessages.length === 0 && !isLoading ? (
           <EmptyState />
         ) : (
           displayMessages.map((msg, index) => (
@@ -138,18 +166,39 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
               content={msg.content}
               role={msg.role}
               citations={msg.citations}
+              actions={msg.actions}
+              isHistorical={true}
             />
           ))
         )}
 
-        {/* Loading indicator */}
+        {/* Streaming response: status + progressive text + action cards */}
         {isLoading && (
           <div className="flex items-start gap-2">
-            <div className="bg-card border border-border rounded-lg px-4 py-3 max-w-[85%]">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Thinking...</span>
-              </div>
+            <div className="bg-card border border-border rounded-lg px-4 py-3 max-w-[85%] w-full">
+              {/* Status indicator */}
+              {streamingStatus && !streamingText && (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                  <span>{streamingStatus}</span>
+                </div>
+              )}
+
+              {/* Progressive streaming text */}
+              {streamingText ? (
+                <MessageRenderer
+                  content={streamingText}
+                  role="assistant"
+                  actions={streamingActions.length > 0 ? streamingActions : undefined}
+                  isHistorical={false}
+                  isInline={true}
+                />
+              ) : !streamingStatus ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Thinking...</span>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
@@ -224,4 +273,5 @@ interface DisplayMessage {
   role: 'user' | 'assistant'
   content: string
   citations?: CitationData[]
+  actions?: ChatAction[]
 }

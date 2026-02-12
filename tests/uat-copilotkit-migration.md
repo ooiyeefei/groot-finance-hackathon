@@ -1,59 +1,71 @@
-# CopilotKit Migration - Implementation Report & UAT Test Cases
+# Chat Migration - Implementation Report & UAT Test Cases
 
-**Branch**: `copilotkit`
-**Date**: 2026-02-11
-**Spec**: `specs/010-copilotkit-migration/`
+**Branch**: `011-chat-streaming-actions`
+**Date**: 2026-02-12
+**Spec**: `specs/010-copilotkit-migration/` (original), `specs/011-chat-streaming-actions/` (streaming + actions)
 
 ---
 
 ## 1. What Was Implemented
 
-### New Files Created (9 files)
+### Phase 0 (Branch 010): CopilotKit Migration → Floating Widget
+
+The initial migration (branch 010) replaced the full-page AI assistant with a floating chat widget. CopilotKit runtime was found incompatible with in-process LangGraph agents and was replaced with direct API calls.
+
+### Phase 1 (Branch 011): Dead CopilotKit Code Cleanup
+
+| Change | Detail |
+|--------|--------|
+| Removed 4 npm packages | `@copilotkit/runtime`, `@copilotkit/react-core`, `@copilotkit/react-ui`, `@copilotkit/sdk-js` from `package.json` |
+| Deleted `copilot-provider.tsx` | Unused CopilotKit provider wrapper |
+| Cleaned imports | Zero `@copilotkit` references remain in `src/` |
+
+### Phase 2 (Branch 011): SSE Streaming Infrastructure
 
 | File | Purpose |
 |------|---------|
-| `src/lib/ai/copilotkit-adapter.ts` | Bridges `createFinancialAgent()` with CopilotKit runtime; converts messages to LangChain format, passes UserContext, parses citations |
-| `src/app/api/copilotkit/route.ts` | CopilotKit runtime endpoint with Clerk auth, rate limiting (30/hr/user), GoogleGenerativeAIAdapter for Gemini 3 Flash Preview |
-| `src/domains/chat/components/copilot-provider.tsx` | CopilotKit provider wrapper with Clerk auth token forwarding |
-| `src/domains/chat/hooks/use-copilot-chat.ts` | Bridge hook syncing CopilotKit active session with Convex persistence |
-| `src/domains/chat/components/message-renderer.tsx` | Markdown renderer with citation superscript parsing, code blocks, tables |
-| `src/domains/chat/components/chat-window.tsx` | Main chat UI: message list, input, loading state, empty state |
+| `src/domains/chat/lib/sse-parser.ts` (NEW) | SSE stream parser with typed events: `StatusEvent`, `TextEvent`, `ActionEvent`, `CitationEvent`, `DoneEvent`, `ErrorEvent` |
+| `src/lib/ai/copilotkit-adapter.ts` (MODIFIED) | Added `streamLangGraphAgent()` async generator using LangGraph `.streamEvents()` v2, node-to-status mapping, word-level text chunking, `extractActionsFromContent()` for parsing `` ```actions `` blocks |
+| `src/app/api/copilotkit/route.ts` (REWRITTEN) | Changed from `NextResponse.json()` to SSE `ReadableStream` with `text/event-stream` headers |
+| `src/domains/chat/hooks/use-copilot-chat.ts` (REWRITTEN) | SSE consumer with `streamingText`, `streamingStatus`, `streamingActions` state, 60s inactivity timeout, abort support, single Convex write on stream completion |
+| `src/domains/chat/components/chat-window.tsx` (REWRITTEN) | Dynamic status indicator, progressive text rendering, smart auto-scroll (pauses when user scrolls up), Stop button wired to AbortController |
+
+### Phase 3 (Branch 011): Action Card Infrastructure
+
+| File | Purpose |
+|------|---------|
+| `src/domains/chat/components/action-cards/index.tsx` (NEW) | Action registry: `Map<string, ComponentType>`, `registerActionCard()`, `getActionCardComponent()`, `FallbackCard` for unknown types |
+| `src/lib/ai/agent/config/prompts.ts` (MODIFIED) | Added "Action Card Generation Protocol" to agent system prompt — instructs model to emit structured `` ```actions `` JSON blocks |
+| `src/domains/chat/components/message-renderer.tsx` (MODIFIED) | Added action card rendering via registry, `isInline`/`isHistorical` props for streaming vs history modes |
+
+### Phase 4 (Branch 011): Anomaly & Expense Approval Cards
+
+| File | Purpose |
+|------|---------|
+| `src/domains/chat/components/action-cards/anomaly-card.tsx` (NEW) | Severity badges (high/medium/low), navigation links (`router.push`), action buttons, historical read-only mode |
+| `src/domains/chat/components/action-cards/expense-approval-card.tsx` (NEW) | State machine (idle→confirm→loading→done/error), Convex mutations (`approve`/`reject`), inline confirmation, claim details list |
+
+### Phase 5 (Branch 011): Vendor & Spending Cards
+
+| File | Purpose |
+|------|---------|
+| `src/domains/chat/components/action-cards/vendor-comparison-card.tsx` (NEW) | Stacked vendor layout, metrics grid (price, on-time rate, rating, spend), "View Vendor History" navigation |
+| `src/domains/chat/components/action-cards/spending-chart.tsx` (NEW) | CSS horizontal bar chart, percentage fill, 8 rotating colors, auto-calculated percentages, total footer |
+
+### Files from Phase 0 (Preserved)
+
+| File | Purpose |
+|------|---------|
 | `src/domains/chat/components/chat-widget.tsx` | Floating button (bottom-right) that toggles the chat window |
 | `src/domains/chat/components/conversation-switcher.tsx` | Dropdown conversation picker with create/switch/archive |
 | `src/domains/chat/components/rich-content-panel.tsx` | Expandable side panel for charts, tables, dashboards |
-
-### Files Modified (6 files)
-
-| File | Change |
-|------|--------|
-| `src/app/[locale]/layout.tsx` | Wrapped content with `<CopilotProvider>`, added `<ChatWidget />` |
-| `src/components/ui/sidebar.tsx` | Removed `/ai-assistant` nav entry |
-| `src/components/ui/mobile-app-shell.tsx` | Removed `/ai-assistant` bottom nav item |
-| `src/domains/analytics/components/action-center/InsightCard.tsx` | Changed "Ask AI" from `router.push('/ai-assistant')` to `CustomEvent('finanseal:open-chat')` |
-| `src/app/api/v1/chat/citation-preview/route.ts` | Inlined `proxyCitationDocument` (was importing from deleted `chat.service.ts`) |
-| `package.json` | Added `@copilotkit/runtime`, `@copilotkit/react-core`, `@copilotkit/react-ui`, `@copilotkit/sdk-js` |
-
-### Files Deleted (9 files, ~2,560 lines removed)
-
-| File | What It Was |
-|------|-------------|
-| `src/app/[locale]/ai-assistant/page.tsx` | Full-page AI assistant (replaced by floating widget) |
-| `src/app/api/v1/chat/route.ts` | Old SSE streaming chat endpoint |
-| `src/app/api/v1/chat/conversations/route.ts` | Old conversation CRUD endpoint |
-| `src/app/api/v1/chat/conversations/[conversationId]/route.ts` | Old single-conversation endpoint |
-| `src/app/api/v1/chat/warmup/route.ts` | Old agent warmup endpoint |
-| `src/app/api/v1/chat/messages/[messageId]/route.ts` | Old message edit/delete endpoint |
-| `src/domains/chat/lib/chat.service.ts` | Old chat service layer (679 lines) |
-| `src/domains/chat/components/chat-interface.tsx` | Old full-page chat UI |
-| `src/domains/chat/components/chat-interface-client.tsx` | Old client-side chat logic |
-| `src/domains/chat/components/conversation-sidebar.tsx` | Old full sidebar conversation list |
-| `src/domains/chat/components/warmup-loading.tsx` | Old loading skeleton |
+| `src/domains/chat/components/citation-overlay.tsx` | Citation overlay (preserved from original) |
 
 ### What Was NOT Changed (by design)
 
 - `src/lib/ai/langgraph-agent.ts` - Agent internals unchanged
+- `src/lib/ai/agent/nodes/model-node.ts` - Model node uses raw fetch (token streaming deferred)
 - `src/domains/chat/hooks/use-realtime-chat.ts` - Convex hooks preserved as-is
-- `src/domains/chat/components/citation-overlay.tsx` - Citation overlay preserved
 - MCP server, Qdrant integration, Mem0 memory - All untouched
 - Convex schema, functions, queries - No changes needed
 
@@ -66,31 +78,29 @@
 ```
 Root Layout (layout.tsx)
   |
-  +-- CopilotProvider (auth token forwarding to CopilotKit)
+  +-- Page Content (existing app)
+  |
+  +-- ChatWidget (fixed bottom-right, z-50)
         |
-        +-- Page Content (existing app)
+        +-- Floating Button (MessageCircle icon)
         |
-        +-- ChatWidget (fixed bottom-right, z-50)
+        +-- ChatWindow (400x600px dialog)
               |
-              +-- Floating Button (MessageCircle icon)
+              +-- Header
+              |     +-- ConversationSwitcher (dropdown)
+              |     +-- Minimize / Close buttons
               |
-              +-- ChatWindow (400x600px dialog)
-                    |
-                    +-- Header
-                    |     +-- ConversationSwitcher (dropdown)
-                    |     +-- Minimize / Close buttons
-                    |
-                    +-- Messages Area
-                    |     +-- MessageRenderer (markdown + citations)
-                    |     +-- Loading indicator
-                    |     +-- EmptyState
-                    |
-                    +-- Input Area
-                          +-- Textarea (Enter=send, Shift+Enter=newline)
-                          +-- Send / Stop button
+              +-- Messages Area
+              |     +-- MessageRenderer (markdown + citations + action cards)
+              |     +-- Streaming Overlay (status + progressive text + action cards)
+              |     +-- EmptyState
+              |
+              +-- Input Area
+                    +-- Textarea (Enter=send, Shift+Enter=newline)
+                    +-- Send / Stop button (AbortController)
 ```
 
-### Data Flow
+### Data Flow (SSE Streaming)
 
 ```
 User types message
@@ -99,13 +109,50 @@ User types message
   --> Convex mutation (persist user message immediately)
   --> fetch('/api/copilotkit', { message, history, conversationId })
       --> Clerk auth (cookies) + rate limit check
-      --> invokeLangGraphAgent()
-          --> createFinancialAgent().invoke() [LangGraph 8-node StateGraph]
-          --> Qdrant RAG, MCP tools, Mem0 memory (all internal)
-      --> JSON response { content, citations }
-  --> Convex mutation (persist assistant response)
-  --> Convex real-time subscription updates UI
-  --> MessageRenderer displays response with citations
+      --> streamLangGraphAgent() [async generator]
+          --> financialAgent.streamEvents(state, config) [LangGraph .streamEvents() v2]
+          --> Yields SSE events progressively:
+              - status events (node starts: "Checking query...", "Generating response...")
+              - text events (word-level chunks from completed model output)
+              - action events (parsed from ```actions``` blocks)
+              - citation events
+              - done event
+      --> ReadableStream writes SSE-formatted events
+  --> useCopilotBridge consumes via parseSSEStream()
+      --> Updates: streamingText, streamingStatus, streamingActions
+      --> 60-second inactivity timeout
+  --> ChatWindow renders progressively:
+      --> Status indicator → Progressive text → Action cards
+  --> On stream completion:
+      --> Single Convex mutation (persist text + actions + citations as metadata)
+  --> Convex real-time subscription updates UI with persisted message
+```
+
+### Action Card System
+
+```
+Agent system prompt → Instructs model to emit ```actions``` blocks
+  |
+  v
+streamLangGraphAgent() → extractActionsFromContent() strips blocks from text
+  |
+  v
+SSE 'action' events → useCopilotBridge → streamingActions state
+  |
+  v
+MessageRenderer → getActionCardComponent(action.type) → Registry lookup
+  |
+  v
+Registered Cards (self-registering via module side effects):
+  - anomaly_card      → AnomalyCard      (severity badges, navigation)
+  - expense_approval  → ExpenseApprovalCard (Convex mutations, confirmation)
+  - vendor_comparison → VendorComparisonCard (metrics grid, navigation)
+  - spending_chart    → SpendingChart     (CSS bar chart)
+  - [unknown type]    → FallbackCard      (formatted JSON display)
+
+Historical vs Active:
+  - isHistorical=true  → Read-only (status badges, no action buttons)
+  - isHistorical=false → Interactive (buttons trigger mutations, navigation)
 ```
 
 ### Conversation Persistence (Single Source)
@@ -118,27 +165,8 @@ User types message
   useConversations()  -->  ConversationSwitcher
   useMessages()       -->  ChatWindow (display messages)
   createMessage()     -->  Persist user + assistant messages
-        |
+        |                  (text + metadata: { citations, actions })
   Real-time subscriptions auto-update UI
-```
-
-### Dynamic Rich Content
-
-```
-Agent response metadata contains:
-  - chartData     --> RichContentPanel (type: 'chart')
-  - tableData     --> RichContentPanel (type: 'table')
-  - dashboardData --> RichContentPanel (type: 'dashboard')
-
-detectRichContent(metadata) checks for these keys.
-
-Simple text/small results --> inline MessageRenderer
-Complex visualizations    --> expanded side panel (480x600px)
-
-Panel renderers:
-  - RichTable: HTML table with semantic design tokens
-  - RichChart: Horizontal bar visualization (percentage-based)
-  - RichDashboard: 2-column metric grid with change indicators
 ```
 
 ### Cross-Component Communication (InsightCard --> ChatWidget)
@@ -161,32 +189,33 @@ ChatWindow receives initialMessage prop
 ## 3. Programmatic Test Results
 
 ### Build Verification
-- **`npm run build`**: PASS (compiled with only pre-existing warnings)
+- **TypeScript compilation**: PASS (compiled successfully in 20.9s)
 - **Translation validation**: PASS (992 keys, all 3 locales match)
-
-### TypeScript Type-Check
-- **`tsc --noEmit`**: All errors are pre-existing (middleware.ts, test files) -- zero new type errors
+- **Prerender**: Pre-existing error on `/onboarding/business` (circular dep, unrelated to chat changes)
 
 ### Vitest Suite
 - **36 passed / 5 failed**: All failures pre-existing (Convex connection, missing types module)
-- Zero test regressions from migration
+- Zero test regressions from streaming + action card implementation
 
 ### Structural Validation
 | Check | Result |
 |-------|--------|
-| All 9 new files exist | PASS |
-| All 9 deleted files removed | PASS |
-| No broken imports to deleted modules | PASS |
-| No references to `/ai-assistant` route | PASS |
-| CopilotKit packages installed | PASS |
-| CopilotProvider in root layout | PASS |
-| ChatWidget in root layout | PASS |
+| CopilotKit packages removed from package.json | PASS |
+| `copilot-provider.tsx` deleted | PASS |
+| Zero `@copilotkit` references in `src/` | PASS |
+| SSE parser created (`sse-parser.ts`) | PASS |
+| `streamLangGraphAgent()` in adapter | PASS |
+| Route streams SSE (text/event-stream) | PASS |
+| Hook consumes SSE with streaming state | PASS |
+| Chat window shows progressive rendering | PASS |
+| Action card registry created | PASS |
+| 4 card types registered (anomaly, expense, vendor, spending) | PASS |
+| Agent prompt includes Action Card Generation Protocol | PASS |
+| MessageRenderer renders action cards | PASS |
+| Semantic design tokens in all new components | PASS |
 | No hardcoded colors in new files | PASS |
-| Semantic design tokens used in UI components | PASS |
-| NEXT_PUBLIC_COPILOTKIT_ENDPOINT in .env.local | PASS |
-| Custom event wiring (InsightCard -> ChatWidget) | PASS |
 | Convex hooks (use-realtime-chat.ts) intact | PASS |
-| Citation-preview route self-contained | PASS |
+| Convex mutations use correct arg signatures | PASS |
 
 ---
 
@@ -243,8 +272,8 @@ ChatWindow receives initialMessage prop
 | 1 | Log in as manager | Chat button visible |
 | 2 | Open chat widget | Empty state or conversation history |
 | 3 | Type "How much did [employee name] spend on meals in January 2026?" | Text appears in input |
-| 4 | Press Enter | Message appears in chat, "Thinking..." indicator shows |
-| 5 | Wait for response | Streamed response with expense data appears |
+| 4 | Press Enter | Message appears in chat, status indicator shows ("Checking query...", "Analyzing your question...") |
+| 5 | Wait for response | Text streams word-by-word with expense data |
 | 6 | Verify citation markers (if any) | Clickable `[^1]` superscripts visible |
 | 7 | Click a citation | Citation overlay opens with source details |
 
@@ -307,13 +336,15 @@ ChatWindow receives initialMessage prop
 
 ---
 
-### TC-10: Stop Generation
+### TC-10: Stop Generation (SSE Streaming)
 
 | # | Step | Expected |
 |---|------|----------|
-| 1 | Send a message | "Thinking..." indicator appears |
-| 2 | Click the red stop button (square icon) | Generation stops |
-| 3 | Partial response may appear | No error shown |
+| 1 | Send a message | Status indicator appears ("Checking query...", "Generating response...") |
+| 2 | Wait for text to start streaming | Text appears word-by-word |
+| 3 | Click the red stop button (square icon) | Stream aborts immediately |
+| 4 | Check partial response | Partial text preserved with "*[Response interrupted]*" suffix |
+| 5 | Check Convex | Partial message persisted to database |
 
 ---
 
@@ -346,6 +377,116 @@ ChatWindow receives initialMessage prop
 | 2 | If chart/table data returned | Side panel expands with chart or table |
 | 3 | Click close on side panel | Panel collapses back to chat-only |
 | 4 | Simple text response | No panel expansion, inline rendering |
+
+---
+
+### TC-13A: SSE Streaming — Progressive Rendering
+
+| # | Step | Expected |
+|---|------|----------|
+| 1 | Send any message | Status text appears within 2 seconds (e.g. "Checking query...", "Analyzing your question...") |
+| 2 | Watch status updates | Status changes as agent progresses through nodes |
+| 3 | Wait for text | Text appears word-by-word (progressive rendering), status hides once text starts |
+| 4 | Wait for completion | Complete message appears, streaming overlay disappears |
+| 5 | Check Convex (Convex dashboard) | Message persisted with full text content |
+
+---
+
+### TC-13B: SSE Streaming — Smart Auto-Scroll
+
+| # | Step | Expected |
+|---|------|----------|
+| 1 | Send a message that generates a long response | Text streams progressively |
+| 2 | During streaming, scroll UP in the messages area | Auto-scroll pauses (user is reading earlier content) |
+| 3 | Scroll back to bottom | Auto-scroll resumes |
+| 4 | Send a new message | Auto-scroll resets to enabled |
+
+---
+
+### TC-13C: SSE Streaming — Inactivity Timeout
+
+| # | Step | Expected |
+|---|------|----------|
+| 1 | Send a message | Stream starts |
+| 2 | If no SSE events received for 60 seconds | Error message: "Response timed out. Please try again." |
+| 3 | Stream is aborted | Loading state cleared |
+
+---
+
+### TC-13D: Anomaly Card
+
+| # | Step | Expected |
+|---|------|----------|
+| 1 | Ask "Are there any suspicious transactions this month?" | Agent responds with text and anomaly_card action |
+| 2 | Verify card renders | Card shows: header with alert icon, anomaly count |
+| 3 | Check severity badges | High=red, Medium=yellow, Low=gray color coding |
+| 4 | Check anomaly details | Title, description, amount, date visible per anomaly |
+| 5 | Click "View Transaction" button | Navigates to `/expense-claims/submissions/{id}` |
+| 6 | Close chat, reopen | Historical card shows read-only (no interactive action buttons, only navigation links) |
+
+---
+
+### TC-13E: Expense Approval Card
+
+| # | Step | Expected |
+|---|------|----------|
+| 1 | Ask (as manager) "Show pending expenses for approval" | Agent responds with expense_approval action card |
+| 2 | Verify card renders | Shows: submitter name, amount, claim count, submitted date |
+| 3 | Check claim details | First 3 claims listed with descriptions and amounts; "+N more" for additional |
+| 4 | Click "Approve" | Inline confirmation: "Approve SGD X from Name? Yes / Cancel" |
+| 5 | Click "Cancel" | Returns to idle state (Approve/Reject buttons) |
+| 6 | Click "Approve" then "Yes" | Loading spinner, then green "Approved" badge |
+| 7 | Check Convex | `expenseSubmissions.approve` mutation fired successfully |
+| 8 | Click "Reject" then "Yes" | Loading spinner, then red "Rejected" badge |
+| 9 | On mutation error | Error message with "Try again" link |
+| 10 | Close chat, reopen | Historical card shows final status badge (no active buttons) |
+
+---
+
+### TC-13F: Vendor Comparison Card
+
+| # | Step | Expected |
+|---|------|----------|
+| 1 | Ask "Compare my top office supply vendors" | Agent responds with vendor_comparison action card |
+| 2 | Verify card renders | Header with building icon, comparison period |
+| 3 | Check vendor sections | Each vendor in own section: name, star rating |
+| 4 | Check metrics grid | Average price, on-time rate, transaction count, total spend (2-col grid) |
+| 5 | Click "View Vendor History" | Navigates to `/expense-claims?vendor={id}` |
+| 6 | Close chat, reopen | Historical card shows metrics (no action buttons) |
+
+---
+
+### TC-13G: Spending Chart Card
+
+| # | Step | Expected |
+|---|------|----------|
+| 1 | Ask "Show team spending by category for January" | Agent responds with spending_chart action card |
+| 2 | Verify card renders | Header with chart icon, title, period |
+| 3 | Check bar chart | Horizontal bars with category labels, amounts, percentage bars |
+| 4 | Check colors | Each category has a distinct color (8-color rotation) |
+| 5 | Check percentages | Percentage labels shown to right of each bar |
+| 6 | Check total | Footer shows total spending amount |
+
+---
+
+### TC-13H: Fallback Card (Unknown Action Type)
+
+| # | Step | Expected |
+|---|------|----------|
+| 1 | Agent returns action with unknown type | FallbackCard renders |
+| 2 | Verify fallback | Shows: alert icon, action type name (humanized), truncated JSON data |
+| 3 | No crash | App continues to function normally |
+
+---
+
+### TC-13I: Action Cards — Historical vs Active
+
+| # | Step | Expected |
+|---|------|----------|
+| 1 | Trigger an action card (e.g. expense approval) | Card renders with interactive buttons (isHistorical=false) |
+| 2 | Complete the action or let stream finish | Message persists to Convex with actions metadata |
+| 3 | Close and reopen chat | Card renders from Convex history with isHistorical=true |
+| 4 | Check historical card | No Approve/Reject/action buttons; only status badges and read-only navigation |
 
 ---
 
@@ -430,26 +571,36 @@ ChatWindow receives initialMessage prop
 
 ## 5. Known Limitations & Architecture Decisions
 
-### CopilotKit Runtime Removed (Post-UAT Fix)
+### CopilotKit Runtime Removed & Dead Code Cleaned Up
 
-CopilotKit v1.51.3's `CopilotListeners` component requires a registered remote agent named `"default"` (via `LangGraphAgent` or `LangGraphHttpAgent`). Our LangGraph agent runs **in-process** (not as a remote deployment), making it incompatible with CopilotKit's agent discovery protocol.
+CopilotKit v1.51.3 was incompatible with in-process LangGraph agents (required remote agent discovery). All CopilotKit packages (`@copilotkit/runtime`, `react-core`, `react-ui`, `sdk-js`) have been removed from `package.json`. The `copilot-provider.tsx` wrapper was deleted. Zero `@copilotkit` references remain.
 
-**Root cause**: The `<CopilotKit>` provider crashed on every page load with:
-```
-useAgent: Agent 'default' not found after runtime sync (runtimeUrl=/api/copilotkit)
-```
+**Current architecture**: Direct API calls via fetch → SSE streaming → Convex persistence.
 
-**Fix applied**: Replaced CopilotKit runtime with direct API calls:
-- `/api/copilotkit` POST endpoint calls `invokeLangGraphAgent()` directly
-- Bridge hook uses `fetch()` instead of `useCopilotChat()`
-- Convex is the single source of truth (no dual-source deduplication needed)
-- Removed `<CopilotKit>` provider from layout
-- CopilotKit npm packages remain installed but are not actively used at runtime
+### Word-Level vs Token-Level Streaming
+
+The model node (`model-node.ts`) uses raw `fetch()` to Modal/Qwen3 (not a LangChain ChatModel), so LangGraph's `.streamEvents()` cannot capture `on_llm_stream` events at the token level. Instead:
+- `.streamEvents()` v2 captures node-level events (on_chain_start/end)
+- Status updates appear immediately as each node starts
+- Completed text is split into words and emitted as rapid text events
+- This provides equivalent UX (status + progressive text) without deep model layer refactoring
+
+### Action Card Rendering Depends on Agent Output
+
+Action cards only render when the LLM follows the "Action Card Generation Protocol" in the system prompt and emits properly formatted `` ```actions `` JSON blocks. If the LLM ignores the protocol or generates malformed JSON:
+- Text content still renders normally (action blocks are stripped)
+- Malformed blocks are logged as warnings and silently dropped
+- FallbackCard handles unknown action types gracefully
+
+### Pre-existing Build Issues
+
+- Prerender error on `/en/onboarding/business` — circular dependency in webpack bundling, unrelated to chat changes
+- 5 Vitest failures — Convex connection errors and missing types module, all pre-existing
 
 ### Other Limitations
 
 1. **Rich content panel**: Uses simplified bar chart visualization. Full `recharts` integration can be added when specific chart requirements are defined.
 
-2. **No streaming**: Current implementation waits for the full agent response before displaying. Streaming can be added by changing the API to SSE (Server-Sent Events).
+2. **Expense rejection reason**: Currently hardcoded to "Rejected via chat assistant". Could be enhanced with a text input in the confirmation dialog.
 
-3. **Validation tasks (T003, T008, T013-T028, T036-T040)**: These require a running app with test data and are left for manual UAT execution per above test cases.
+3. **Vendor comparison "Request Quote" action**: Not yet wired to a backend operation (would need a new Convex mutation or external service integration).

@@ -1,8 +1,8 @@
 /**
- * Chat Runtime Endpoint
+ * Chat Runtime Endpoint — SSE Streaming
  *
- * POST /api/copilotkit — handles AI chat requests.
- * Invokes the in-process LangGraph financial agent directly.
+ * POST /api/copilotkit — handles AI chat requests via Server-Sent Events.
+ * Invokes the in-process LangGraph financial agent and streams events progressively.
  *
  * Auth: Clerk session (via cookies)
  * Rate limit: 30 messages/hour/user
@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getUserDataConvex } from '@/lib/convex'
 import { rateLimit } from '@/domains/security/lib/rate-limit'
-import { invokeLangGraphAgent } from '@/lib/ai/copilotkit-adapter'
+import { streamLangGraphAgent } from '@/lib/ai/copilotkit-adapter'
 
 interface ChatRequestBody {
   message: string
@@ -75,34 +75,51 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // 5. Invoke the LangGraph agent
-  try {
-    console.log(`[Chat API] Invoking agent for user ${userId}, conversation ${conversationId}`)
+  // 5. Create SSE stream from the LangGraph agent
+  console.log(`[Chat API] Streaming agent for user ${userId}, conversation ${conversationId}`)
 
-    const result = await invokeLangGraphAgent({
-      message,
-      conversationHistory,
-      userContext: {
-        userId,
-        convexUserId: userData.id,
-        businessId: userData.business_id,
-        conversationId: conversationId || 'new',
-      },
-      language,
-    })
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder()
 
-    return NextResponse.json({
-      content: result.content,
-      citations: result.citations,
-      needsClarification: result.needsClarification,
-      clarificationQuestions: result.clarificationQuestions,
-      confidence: result.confidence,
-    })
-  } catch (error) {
-    console.error('[Chat API] Agent error:', error)
-    return NextResponse.json(
-      { error: 'Failed to process message' },
-      { status: 500 }
-    )
-  }
+      function writeEvent(event: string, data: unknown) {
+        const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+        controller.enqueue(encoder.encode(payload))
+      }
+
+      try {
+        const eventStream = streamLangGraphAgent({
+          message,
+          conversationHistory,
+          userContext: {
+            userId,
+            convexUserId: userData.id,
+            businessId: userData.business_id!,
+            conversationId: conversationId || 'new',
+          },
+          language,
+        })
+
+        for await (const event of eventStream) {
+          writeEvent(event.event, event.data)
+        }
+      } catch (error) {
+        console.error('[Chat API] Stream error:', error)
+        writeEvent('error', {
+          message: 'Failed to process message',
+          code: 'STREAM_ERROR',
+        })
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  })
 }

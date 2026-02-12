@@ -1,14 +1,12 @@
 /**
- * CopilotKit LangGraph Adapter
+ * LangGraph Agent Adapter
  *
- * Bridges the existing LangGraph financial agent with CopilotKit's runtime.
+ * Bridges the LangGraph financial agent with the chat API.
  * The agent runs in-process — no external deployment needed.
  *
- * This adapter:
- * 1. Creates the LangGraph agent via createFinancialAgent()
- * 2. Converts CopilotKit messages to LangChain format
- * 3. Invokes the agent with UserContext
- * 4. Returns the response with citation metadata
+ * Two invocation modes:
+ * 1. invokeLangGraphAgent() — synchronous, returns complete response (legacy)
+ * 2. streamLangGraphAgent() — yields SSE-compatible events progressively
  */
 
 import { createFinancialAgent, createAgentState } from '@/lib/ai/langgraph-agent'
@@ -103,6 +101,207 @@ export async function invokeLangGraphAgent(
     clarificationQuestions: agentResult.clarificationQuestions || [],
     confidence: agentResult.currentIntent?.confidence || 0.8,
   }
+}
+
+// --- SSE Stream Event Types ---
+
+export interface SSEStatusEvent {
+  event: 'status'
+  data: { phase: string }
+}
+
+export interface SSETextEvent {
+  event: 'text'
+  data: { token: string }
+}
+
+export interface SSEActionEvent {
+  event: 'action'
+  data: { type: string; id?: string; data: Record<string, unknown> }
+}
+
+export interface SSECitationEvent {
+  event: 'citation'
+  data: { citations: CitationData[] }
+}
+
+export interface SSEDoneEvent {
+  event: 'done'
+  data: { totalTokens?: number }
+}
+
+export interface SSEErrorEvent {
+  event: 'error'
+  data: { message: string; code?: string }
+}
+
+export type SSEEvent =
+  | SSEStatusEvent
+  | SSETextEvent
+  | SSEActionEvent
+  | SSECitationEvent
+  | SSEDoneEvent
+  | SSEErrorEvent
+
+/** Map LangGraph node names to user-facing status messages */
+const NODE_STATUS_MAP: Record<string, string> = {
+  topicGuardrail: 'Checking query...',
+  validate: 'Validating request...',
+  analyzeIntent: 'Analyzing your question...',
+  callModel: 'Generating response...',
+  executeTool: 'Searching data...',
+  correctToolCall: 'Refining search...',
+  handleClarification: 'Processing clarification...',
+  handleOffTopic: 'Processing...',
+}
+
+/**
+ * Stream the LangGraph financial agent using .streamEvents() v2.
+ * Yields SSE-compatible event objects progressively.
+ */
+export async function* streamLangGraphAgent(
+  request: CopilotAgentRequest
+): AsyncGenerator<SSEEvent> {
+  const { message, conversationHistory, userContext, language } = request
+
+  const langchainHistory: BaseMessage[] = conversationHistory.map((msg) =>
+    msg.role === 'user' ? new HumanMessage(msg.content) : new AIMessage(msg.content)
+  )
+
+  const agentState = createAgentState(userContext, message, language)
+  agentState.messages = [...langchainHistory, new HumanMessage(message)]
+
+  const financialAgent = createFinancialAgent()
+
+  const runConfig = {
+    configurable: { thread_id: userContext.conversationId },
+    runName: `FinanSEAL Stream - ${language}`,
+    metadata: {
+      userId: userContext.userId,
+      businessId: userContext.businessId,
+      conversationId: userContext.conversationId,
+      language,
+      source: 'chat-stream',
+    },
+    tags: ['finanseal', 'stream', `lang:${language}`],
+    version: 'v2' as const,
+  }
+
+  console.log(`[Stream Adapter] Streaming agent for user ${userContext.userId}`)
+
+  let finalContent = ''
+  let finalCitations: CitationData[] = []
+  const seenNodes = new Set<string>()
+
+  try {
+    const eventStream = financialAgent.streamEvents(agentState, runConfig)
+
+    for await (const event of eventStream) {
+      const { event: eventName, name, data } = event
+
+      // Emit status updates when nodes start
+      if (eventName === 'on_chain_start' && name && NODE_STATUS_MAP[name]) {
+        if (!seenNodes.has(name)) {
+          seenNodes.add(name)
+          yield { event: 'status', data: { phase: NODE_STATUS_MAP[name] } }
+        }
+      }
+
+      // When a tool executes, emit a more specific status
+      if (eventName === 'on_chain_start' && name === 'executeTool') {
+        yield { event: 'status', data: { phase: 'Searching data...' } }
+      }
+
+      // Capture the final state when the graph ends
+      if (eventName === 'on_chain_end' && data?.output) {
+        const output = data.output
+        if (output.messages && Array.isArray(output.messages)) {
+          // Extract the last AI message from final output
+          for (let i = output.messages.length - 1; i >= 0; i--) {
+            const msg = output.messages[i]
+            if (msg._getType?.() === 'ai' && typeof msg.content === 'string' && msg.content.length > 0) {
+              finalContent = msg.content
+              break
+            }
+          }
+          if (output.citations) {
+            finalCitations = output.citations
+          }
+        }
+      }
+    }
+
+    // Clean the final content
+    if (!finalContent) {
+      finalContent = 'I apologize, but I encountered an issue processing your request. Please try again.'
+    }
+    finalContent = parseFinalAnswer(finalContent)
+    finalContent = ensureCitationMarkers(finalContent, finalCitations)
+
+    // Extract action cards from the response (```actions ... ``` blocks)
+    const { textContent, actions } = extractActionsFromContent(finalContent)
+    finalContent = textContent
+
+    // Emit text as word-level chunks for progressive rendering
+    yield { event: 'status', data: { phase: 'Preparing response...' } }
+    const words = finalContent.split(/(\s+)/)
+    for (const word of words) {
+      if (word) {
+        yield { event: 'text', data: { token: word } }
+      }
+    }
+
+    // Emit action cards
+    for (const action of actions) {
+      yield { event: 'action', data: action }
+    }
+
+    // Emit citations if available
+    if (finalCitations.length > 0) {
+      yield { event: 'citation', data: { citations: finalCitations } }
+    }
+
+    // Done
+    yield { event: 'done', data: {} }
+  } catch (error) {
+    console.error('[Stream Adapter] Error:', error)
+    yield {
+      event: 'error',
+      data: {
+        message: error instanceof Error ? error.message : 'Failed to process message',
+        code: 'AGENT_ERROR',
+      },
+    }
+  }
+}
+
+/**
+ * Extract action card JSON from ```actions``` fenced code blocks in the response.
+ * Returns the text content with action blocks removed, and parsed action objects.
+ */
+function extractActionsFromContent(content: string): {
+  textContent: string
+  actions: Array<{ type: string; id?: string; data: Record<string, unknown> }>
+} {
+  const actions: Array<{ type: string; id?: string; data: Record<string, unknown> }> = []
+  const actionBlockRegex = /```actions\s*\n([\s\S]*?)```/g
+
+  const textContent = content.replace(actionBlockRegex, (_match, jsonBlock: string) => {
+    try {
+      const parsed = JSON.parse(jsonBlock.trim())
+      const items = Array.isArray(parsed) ? parsed : [parsed]
+      for (const item of items) {
+        if (item && typeof item.type === 'string' && item.data) {
+          actions.push(item)
+        }
+      }
+    } catch (err) {
+      console.warn('[Stream Adapter] Failed to parse actions block:', err)
+    }
+    return '' // Remove the actions block from text
+  }).trim()
+
+  return { textContent, actions }
 }
 
 /**
