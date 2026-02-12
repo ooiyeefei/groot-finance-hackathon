@@ -115,8 +115,8 @@ export async function authenticateApiKey(authHeader: string | undefined): Promis
     // Hash the key for comparison
     const keyHash = await hashApiKey(extracted.key);
 
-    // Validate against Convex (using financialIntelligence module for deployment reliability)
-    const result = await client.query(api.functions.financialIntelligence.validateMcpApiKey, {
+    // Validate against Convex
+    const result = await client.query(api.functions.mcpApiKeys.validateApiKey, {
       keyPrefix: extracted.prefix,
       keyHash,
     });
@@ -133,7 +133,7 @@ export async function authenticateApiKey(authHeader: string | undefined): Promis
     }
 
     // Check rate limit
-    const rateLimitResult = await client.mutation(api.functions.financialIntelligence.checkMcpRateLimit, {
+    const rateLimitResult = await client.mutation(api.functions.mcpApiKeys.checkRateLimit, {
       apiKeyId: result.apiKeyId,
       rateLimitPerMinute: result.rateLimitPerMinute,
     });
@@ -202,7 +202,7 @@ export async function authenticateApiKey(authHeader: string | undefined): Promis
 export async function updateApiKeyUsage(apiKeyId: string): Promise<void> {
   try {
     const client = getConvexClient();
-    await client.mutation(api.functions.financialIntelligence.updateMcpApiKeyLastUsed, {
+    await client.mutation(api.functions.mcpApiKeys.updateLastUsed, {
       apiKeyId: apiKeyId as any,
     });
   } catch (error) {
