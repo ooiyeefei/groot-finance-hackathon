@@ -1144,38 +1144,13 @@ ${this.config!.appUrl}
   }
 
   private generateInvoiceEmailHTML(data: InvoiceEmailData): string {
-    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, subtotal, totalTax, paymentInstructions, businessName, businessAddress, businessPhone, businessEmail, lineItems } = data
+    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, paymentInstructions, businessName, businessAddress, businessPhone, businessEmail, pdfAttachment } = data
 
     const fmt = (amount: number) => {
       return `${currency} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}`
     }
 
-    const lineItemsHTML = lineItems && lineItems.length > 0 ? `
-        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 0 0 24px 0;">
-          <tr style="background-color: #f8fafc;">
-            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">Item Code</td>
-            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">Description</td>
-            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; text-align: center;">Qty</td>
-            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; text-align: right;">Unit Price</td>
-            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; text-align: right;">Amount</td>
-          </tr>
-          ${lineItems.map(item => `
-          <tr>
-            <td style="padding: 10px 12px; font-size: 14px; color: #64748b; border-bottom: 1px solid #f1f5f9;">${item.itemCode || '-'}</td>
-            <td style="padding: 10px 12px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;">${item.description}</td>
-            <td style="padding: 10px 12px; font-size: 14px; color: #475569; border-bottom: 1px solid #f1f5f9; text-align: center;">${item.quantity}</td>
-            <td style="padding: 10px 12px; font-size: 14px; color: #475569; border-bottom: 1px solid #f1f5f9; text-align: right;">${fmt(item.unitPrice)}</td>
-            <td style="padding: 10px 12px; font-size: 14px; color: #1e293b; font-weight: 500; border-bottom: 1px solid #f1f5f9; text-align: right;">${fmt(item.amount)}</td>
-          </tr>
-          `).join('')}
-        </table>
-    ` : ''
-
-    const businessDetailsHTML = [businessAddress, businessPhone, businessEmail].filter(Boolean).length > 0 ? `
-        <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b; line-height: 1.5;">
-          ${[businessAddress, businessPhone, businessEmail].filter(Boolean).join(' &middot; ')}
-        </p>
-    ` : ''
+    const businessContactParts = [businessAddress, businessPhone, businessEmail].filter(Boolean)
 
     return `
     <!DOCTYPE html>
@@ -1185,71 +1160,82 @@ ${this.config!.appUrl}
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Invoice ${invoiceNumber}</title>
     </head>
-    <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; padding: 32px 16px;">
+    <body style="margin: 0; padding: 0; background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; padding: 40px 16px;">
         <tr>
           <td align="center">
-            <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-              <!-- Header -->
+            <table width="520" cellpadding="0" cellspacing="0" style="background-color: #ffffff;">
+
+              <!-- Business Name -->
               <tr>
-                <td style="padding: 32px 32px 24px 32px; border-bottom: 3px solid #1e40af;">
-                  <table width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td>
-                        <p style="margin: 0; font-size: 18px; font-weight: 700; color: #0f172a;">${businessName}</p>
-                        ${businessDetailsHTML}
-                      </td>
-                      <td align="right" style="vertical-align: top;">
-                        <p style="margin: 0; font-size: 28px; font-weight: 800; color: #1e293b; letter-spacing: -0.5px;">INVOICE</p>
-                        <p style="margin: 4px 0 0 0; font-size: 14px; color: #64748b;">${invoiceNumber}</p>
-                      </td>
-                    </tr>
-                  </table>
+                <td style="padding: 0 0 32px 0;">
+                  <p style="margin: 0; font-size: 16px; font-weight: 600; color: #111827;">${businessName}</p>
+                  ${businessContactParts.length > 0 ? `<p style="margin: 4px 0 0 0; font-size: 13px; color: #6b7280;">${businessContactParts.join(' &middot; ')}</p>` : ''}
                 </td>
               </tr>
 
               <!-- Greeting -->
               <tr>
-                <td style="padding: 24px 32px 8px 32px;">
-                  <p style="margin: 0; font-size: 15px; color: #334155; line-height: 1.6;">
+                <td style="padding: 0 0 24px 0;">
+                  <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.7;">
                     Dear ${recipientName},
                   </p>
-                  <p style="margin: 8px 0 0 0; font-size: 15px; color: #334155; line-height: 1.6;">
-                    Please find your invoice details below.
+                  <p style="margin: 8px 0 0 0; font-size: 14px; color: #374151; line-height: 1.7;">
+                    Please find attached invoice <strong>${invoiceNumber}</strong> for your reference.
                   </p>
                 </td>
               </tr>
 
-              <!-- Key Details -->
+              <!-- Invoice Summary -->
               <tr>
-                <td style="padding: 16px 32px;">
-                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+                <td style="padding: 0 0 24px 0;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;">
                     <tr>
-                      <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+                      <td style="padding: 14px 0; border-bottom: 1px solid #f3f4f6;">
                         <table width="100%" cellpadding="0" cellspacing="0">
                           <tr>
-                            <td style="font-size: 13px; color: #64748b;">Invoice Date</td>
-                            <td align="right" style="font-size: 14px; font-weight: 600; color: #0f172a;">${invoiceDate}</td>
+                            <td style="font-size: 13px; color: #6b7280;">Invoice Number</td>
+                            <td align="right" style="font-size: 13px; font-weight: 600; color: #111827;">${invoiceNumber}</td>
                           </tr>
                         </table>
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+                      <td style="padding: 14px 0; border-bottom: 1px solid #f3f4f6;">
                         <table width="100%" cellpadding="0" cellspacing="0">
                           <tr>
-                            <td style="font-size: 13px; color: #64748b;">Due Date</td>
-                            <td align="right" style="font-size: 14px; font-weight: 700; color: #dc2626;">${dueDate}</td>
+                            <td style="font-size: 13px; color: #6b7280;">Invoice Date</td>
+                            <td align="right" style="font-size: 13px; font-weight: 500; color: #111827;">${invoiceDate}</td>
                           </tr>
                         </table>
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding: 16px 20px;">
+                      <td style="padding: 14px 0; border-bottom: 1px solid #f3f4f6;">
                         <table width="100%" cellpadding="0" cellspacing="0">
                           <tr>
-                            <td style="font-size: 13px; color: #64748b;">Currency</td>
-                            <td align="right" style="font-size: 14px; font-weight: 600; color: #0f172a;">${currency}</td>
+                            <td style="font-size: 13px; color: #6b7280;">Due Date</td>
+                            <td align="right" style="font-size: 13px; font-weight: 600; color: #111827;">${dueDate}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 14px 0; border-bottom: 1px solid #f3f4f6;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="font-size: 13px; color: #6b7280;">Total Amount</td>
+                            <td align="right" style="font-size: 13px; font-weight: 500; color: #111827;">${fmt(totalAmount)}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 16px 0;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="font-size: 14px; font-weight: 600; color: #111827;">Balance Due</td>
+                            <td align="right" style="font-size: 16px; font-weight: 700; color: #111827;">${fmt(balanceDue)}</td>
                           </tr>
                         </table>
                       </td>
@@ -1258,92 +1244,39 @@ ${this.config!.appUrl}
                 </td>
               </tr>
 
-              <!-- Line Items -->
-              ${lineItemsHTML ? `
+              ${pdfAttachment ? `
+              <!-- PDF Note -->
               <tr>
-                <td style="padding: 8px 32px 0 32px;">
-                  <p style="margin: 0 0 12px 0; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Items</p>
-                  ${lineItemsHTML}
+                <td style="padding: 0 0 24px 0;">
+                  <p style="margin: 0; font-size: 13px; color: #6b7280; line-height: 1.6;">
+                    The full invoice is attached as a PDF for your records.
+                  </p>
                 </td>
               </tr>
               ` : ''}
 
-              <!-- Totals -->
-              <tr>
-                <td style="padding: 0 32px 8px 32px;">
-                  <table width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td width="50%"></td>
-                      <td width="50%">
-                        <table width="100%" cellpadding="0" cellspacing="0">
-                          ${subtotal !== undefined ? `
-                          <tr>
-                            <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Subtotal</td>
-                            <td align="right" style="padding: 6px 0; font-size: 14px; color: #334155;">${fmt(subtotal)}</td>
-                          </tr>
-                          ` : ''}
-                          ${totalTax !== undefined ? `
-                          <tr>
-                            <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Tax</td>
-                            <td align="right" style="padding: 6px 0; font-size: 14px; color: #334155;">${fmt(totalTax)}</td>
-                          </tr>
-                          ` : ''}
-                          <tr>
-                            <td style="padding: 6px 0; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 10px;">Total</td>
-                            <td align="right" style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #0f172a; border-top: 1px solid #e2e8f0; padding-top: 10px;">${fmt(totalAmount)}</td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-
-              <!-- Amount Due Highlight -->
-              <tr>
-                <td style="padding: 8px 32px 16px 32px;">
-                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #1e40af; border-radius: 6px;">
-                    <tr>
-                      <td style="padding: 20px 24px;">
-                        <table width="100%" cellpadding="0" cellspacing="0">
-                          <tr>
-                            <td style="font-size: 14px; color: #bfdbfe; font-weight: 500;">Balance Due</td>
-                            <td align="right" style="font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">${fmt(balanceDue)}</td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-
               ${paymentInstructions ? `
               <!-- Payment Instructions -->
               <tr>
-                <td style="padding: 0 32px 16px 32px;">
-                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">
-                    <tr>
-                      <td style="padding: 16px 20px;">
-                        <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #15803d; text-transform: uppercase; letter-spacing: 0.5px;">Payment Instructions</p>
-                        <p style="margin: 0; font-size: 14px; color: #334155; white-space: pre-wrap; line-height: 1.6;">${paymentInstructions}</p>
-                      </td>
-                    </tr>
-                  </table>
+                <td style="padding: 0 0 24px 0;">
+                  <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: 600; color: #111827;">Payment Instructions</p>
+                  <p style="margin: 0; font-size: 13px; color: #6b7280; white-space: pre-wrap; line-height: 1.6;">${paymentInstructions}</p>
                 </td>
               </tr>
               ` : ''}
 
               <!-- Footer -->
               <tr>
-                <td style="padding: 20px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
-                  <p style="margin: 0; font-size: 13px; color: #94a3b8; text-align: center;">
-                    If you have any questions about this invoice, please contact us.
+                <td style="padding: 24px 0 0 0; border-top: 1px solid #e5e7eb;">
+                  <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+                    If you have any questions, please reply to this email or contact us directly.
                   </p>
-                  <p style="margin: 8px 0 0 0; font-size: 12px; color: #cbd5e1; text-align: center;">
+                  <p style="margin: 8px 0 0 0; font-size: 11px; color: #d1d5db;">
                     Sent from ${businessName} via FinanSEAL
                   </p>
                 </td>
               </tr>
+
             </table>
           </td>
         </tr>
@@ -1354,32 +1287,23 @@ ${this.config!.appUrl}
   }
 
   private generateInvoiceEmailText(data: InvoiceEmailData): string {
-    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, subtotal, totalTax, paymentInstructions, businessName, lineItems } = data
+    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, paymentInstructions, businessName, pdfAttachment } = data
 
     const fmt = (amount: number) => `${currency} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}`
 
-    const itemsText = lineItems && lineItems.length > 0
-      ? `\nItems:\n${lineItems.map(item => `  - ${item.itemCode ? `[${item.itemCode}] ` : ''}${item.description} (x${item.quantity}) — ${fmt(item.amount)}`).join('\n')}\n`
-      : ''
-
-    return `
-INVOICE ${invoiceNumber}
-${businessName}
+    return `${businessName}
 
 Dear ${recipientName},
 
-Please find your invoice details below.
+Please find attached invoice ${invoiceNumber} for your reference.
 
+Invoice Number: ${invoiceNumber}
 Invoice Date: ${invoiceDate}
 Due Date: ${dueDate}
-Currency: ${currency}
-${itemsText}
-${subtotal !== undefined ? `Subtotal: ${fmt(subtotal)}` : ''}
-${totalTax !== undefined ? `Tax: ${fmt(totalTax)}` : ''}
-Total: ${fmt(totalAmount)}
+Total Amount: ${fmt(totalAmount)}
 Balance Due: ${fmt(balanceDue)}
-${paymentInstructions ? `\nPayment Instructions:\n${paymentInstructions}\n` : ''}
-If you have any questions about this invoice, please contact us.
+${pdfAttachment ? '\nThe full invoice is attached as a PDF for your records.\n' : ''}${paymentInstructions ? `\nPayment Instructions:\n${paymentInstructions}\n` : ''}
+If you have any questions, please reply to this email or contact us directly.
 
 ---
 Sent from ${businessName} via FinanSEAL

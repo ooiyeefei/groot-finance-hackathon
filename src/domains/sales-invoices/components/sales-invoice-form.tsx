@@ -128,13 +128,28 @@ export function SalesInvoiceForm() {
       // 1. Create the invoice
       const invoiceId = await createInvoice(createInvoiceData())
 
-      // 2. Upload PDF to Convex storage (template is rendered in preview)
-      await uploadPdfToStorage(invoiceId)
+      // 2. Generate PDF blob directly from the rendered template for email attachment
+      const invoiceNum = nextInvoiceNumber ?? 'INV-XXXX-XXX'
+      let pdfPayload: Record<string, unknown> = {}
+      const pdfResult = await generatePdfBlob(invoiceNum)
+      if (pdfResult.success && pdfResult.blob) {
+        // Convert blob to base64 for email
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve((reader.result as string).split(',')[1])
+          reader.onerror = reject
+          reader.readAsDataURL(pdfResult.blob!)
+        })
+        pdfPayload = { pdfAttachment: { content: base64, filename: pdfResult.filename! } }
+
+        // Also upload to Convex storage for future resend (fire-and-forget)
+        uploadPdfToStorage(invoiceId).catch(() => {})
+      }
 
       // 3. Mark as sent
       await sendInvoice({ id: invoiceId, businessId: businessId as Id<"businesses"> })
 
-      // 4. Send email — the API will fetch the stored PDF via pdfUrl
+      // 4. Send email with PDF attachment
       const resolvedBusinessName = businessProfile?.name || (business as unknown as Record<string, unknown>)?.businessName as string || 'Our Company'
       try {
         await fetch(`/api/v1/sales-invoices/${invoiceId}/send-email`, {
@@ -143,7 +158,7 @@ export function SalesInvoiceForm() {
           body: JSON.stringify({
             to: form.customerSnapshot.email,
             recipientName: form.customerSnapshot.contactPerson || form.customerSnapshot.businessName,
-            invoiceNumber: nextInvoiceNumber ?? 'INV-XXXX-XXX',
+            invoiceNumber: invoiceNum,
             invoiceDate: form.invoiceDate,
             dueDate: form.dueDate,
             totalAmount: form.totals.totalAmount,
@@ -162,6 +177,7 @@ export function SalesInvoiceForm() {
               unitPrice: item.unitPrice,
               amount: item.totalAmount,
             })),
+            ...pdfPayload,
           }),
         })
       } catch (emailError) {
@@ -174,7 +190,7 @@ export function SalesInvoiceForm() {
     } finally {
       setIsSending(false)
     }
-  }, [businessId, business, businessProfile, form, nextInvoiceNumber, createInvoice, createInvoiceData, sendInvoice, uploadPdfToStorage, router, locale])
+  }, [businessId, business, businessProfile, form, nextInvoiceNumber, createInvoice, createInvoiceData, sendInvoice, generatePdfBlob, uploadPdfToStorage, router, locale])
 
   const handleCustomerSelect = useCallback((customer: { _id: string; businessName: string; contactPerson?: string; email: string; phone?: string; address?: string; taxId?: string }) => {
     form.setCustomerId(customer._id)
