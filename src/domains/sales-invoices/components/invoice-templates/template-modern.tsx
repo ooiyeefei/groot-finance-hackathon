@@ -332,7 +332,7 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
             <div className="text-right">
               <p
                 className="text-2xl text-foreground mb-1"
-                style={{ fontFamily: "'Brush Script MT', 'Segoe Script', cursive" }}
+                style={{ fontFamily: "'Autography', cursive" }}
               >
                 {invoice.signatureName}
               </p>

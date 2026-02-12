@@ -548,7 +548,7 @@ export function SalesInvoiceForm() {
                 {form.signatureName && (
                   <p
                     className="mt-2 text-lg text-muted-foreground"
-                    style={{ fontFamily: "'Brush Script MT', 'Segoe Script', cursive" }}
+                    style={{ fontFamily: "'Autography', cursive" }}
                   >
                     {form.signatureName}
                   </p>

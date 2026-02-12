@@ -74,8 +74,8 @@ interface InvoicePdfDocumentProps {
 
 // ─── Register cursive font for signature ─────────────────
 Font.register({
-  family: 'GreatVibes',
-  src: '/fonts/GreatVibes-Regular.ttf',
+  family: 'Autography',
+  src: '/fonts/Autography.otf',
 })
 
 // ─── Colors (light-mode palette for PDF) ─────────────────
@@ -165,7 +165,7 @@ const s = StyleSheet.create({
 
   // Signature
   signatureBlock: { alignItems: 'flex-end', marginTop: 24 },
-  signatureName: { fontSize: 22, fontFamily: 'GreatVibes', marginBottom: 4 },
+  signatureName: { fontSize: 22, fontFamily: 'Autography', marginBottom: 4 },
   signatureLine: { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 4, width: 160 },
   signatureLabel: { fontSize: 8, color: C.muted, textAlign: 'right' },
 })
