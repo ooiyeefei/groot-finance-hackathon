@@ -75,7 +75,7 @@ interface InvoicePdfDocumentProps {
 // ─── Register cursive font for signature ─────────────────
 Font.register({
   family: 'GreatVibes',
-  src: 'https://fonts.gstatic.com/s/greatvibes/v18/RWmMoKWR9v4ksMfaWd_JN9XFiaQ.ttf',
+  src: '/fonts/GreatVibes-Regular.ttf',
 })
 
 // ─── Colors (light-mode palette for PDF) ─────────────────
