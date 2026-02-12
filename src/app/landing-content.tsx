@@ -375,6 +375,15 @@ export default function LandingContent({ country }: { country: string }) {
           --section-gap: 3rem;         /* 48px */
           font-size: 1rem;
         }
+        /* Restore standard max-width values (dashboard globals.css overrides these) */
+        .landing-page .max-w-7xl { max-width: 80rem !important; }
+        .landing-page .max-w-6xl { max-width: 72rem !important; }
+        .landing-page .max-w-5xl { max-width: 64rem !important; }
+        .landing-page .max-w-4xl { max-width: 56rem !important; }
+        .landing-page .max-w-3xl { max-width: 48rem !important; }
+        .landing-page .max-w-2xl { max-width: 42rem !important; }
+        .landing-page .max-w-xl { max-width: 36rem !important; }
+        .landing-page .max-w-lg { max-width: 32rem !important; }
       `}</style>
 
       {/* Navigation */}
@@ -404,8 +413,10 @@ export default function LandingContent({ country }: { country: string }) {
             From chaos to <span className="text-[#4285F4]">clarity</span>
           </h1>
 
-          <p className="hero-fade hero-fade-3 text-lg md:text-xl text-[#6B7280] mb-10 max-w-2xl mx-auto">
-            Stop drowning in receipts and spreadsheets. AI processes your documents, tracks every dollar, and surfaces the insights that matter.
+          <p className="hero-fade hero-fade-3 text-lg md:text-xl text-[#6B7280] font-medium mb-10 max-w-2xl mx-auto">
+            Stop drowning in receipts and spreadsheets.<br />
+            AI processes your documents, tracks every dollar,
+            and surfaces the insights that matter.
           </p>
 
           <div className="hero-fade hero-fade-4 flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
@@ -420,33 +431,33 @@ export default function LandingContent({ country }: { country: string }) {
             </button>
           </div>
 
-          <p className="hero-fade hero-fade-4 text-sm text-[#6B7280] mb-10">14-day free trial &middot; No credit card required</p>
+          <p className="hero-fade hero-fade-4 text-sm text-[#6B7280] font-medium mb-10">14-day free trial &middot; No credit card required</p>
 
           <div className="hero-fade hero-fade-4 grid grid-cols-3 gap-8 max-w-lg mx-auto">
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-semibold text-[#111111]">5K+</div>
-              <div className="text-sm text-[#6B7280] uppercase tracking-wide">Documents Processed</div>
+              <div className="text-3xl md:text-4xl font-semibold text-[#111111]">3K+</div>
+              <div className="text-sm text-[#6B7280] font-medium uppercase tracking-wide">Documents Processed</div>
             </div>
             <div className="text-center">
               <div className="text-3xl md:text-4xl font-semibold text-[#111111]">95%+</div>
-              <div className="text-sm text-[#6B7280] uppercase tracking-wide">OCR Accuracy</div>
+              <div className="text-sm text-[#6B7280] font-medium uppercase tracking-wide">OCR Accuracy</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-semibold text-[#111111]">3</div>
-              <div className="text-sm text-[#6B7280] uppercase tracking-wide">Languages</div>
+              <div className="text-3xl md:text-4xl font-semibold text-[#111111]">4</div>
+              <div className="text-sm text-[#6B7280] font-medium uppercase tracking-wide">Languages</div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Features */}
-      <section className="section-muted px-6 py-10 snap-section">
-        <div className="max-w-5xl mx-auto">
+      <section className="section-muted px-6 lg:px-16 py-10 snap-section">
+        <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
               Everything you need to <span className="text-[#4285F4]">thrive</span>
             </h2>
-            <p className="text-sm text-[#6B7280]">AI-powered tools to transform your financial operations</p>
+            <p className="text-sm text-[#6B7280] font-medium">AI-powered tools to transform your financial operations</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -470,7 +481,7 @@ export default function LandingContent({ country }: { country: string }) {
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
               Simple, transparent <span className="text-[#4285F4]">pricing</span>
             </h2>
-            <p className="text-sm text-[#6B7280]">Choose the plan that works for your business</p>
+            <p className="text-sm text-[#6B7280] font-medium">Choose the plan that works for your business</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -487,7 +498,7 @@ export default function LandingContent({ country }: { country: string }) {
                   </div>
                 )}
                 <h3 className="text-lg font-semibold text-[#111111] text-center">{tier.name}</h3>
-                <p className="text-sm text-[#6B7280] text-center mb-4">{tier.subtitle}</p>
+                <p className="text-sm text-[#6B7280] font-medium text-center mb-4">{tier.subtitle}</p>
 
                 {/* Price placeholder - geo-aware */}
                 <div className="flex items-baseline gap-1 justify-center mb-5">
@@ -501,7 +512,7 @@ export default function LandingContent({ country }: { country: string }) {
                   )}
                 </div>
 
-                <ul className="space-y-2.5 mb-6 text-sm text-[#6B7280] flex-1">
+                <ul className="space-y-2.5 mb-6 text-sm text-[#6B7280] font-medium flex-1">
                   {tier.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
@@ -529,22 +540,22 @@ export default function LandingContent({ country }: { country: string }) {
             ))}
           </div>
 
-          <p className="text-center text-[#6B7280] text-sm mt-5">All plans include a 14-day free trial. Cancel anytime.</p>
+          <p className="text-center text-[#6B7280] text-sm font-medium mt-5">All plans include a 14-day free trial. Cancel anytime.</p>
 
           {/* CTA */}
           <div className="mt-8 pt-8 border-t border-[#E5E7EB] text-center">
             <h2 className="text-xl md:text-2xl font-semibold text-[#111111] mb-1 tracking-tight">
               Ready to <span className="text-[#4285F4]">transform</span> your finances?
             </h2>
-            <p className="text-sm text-[#6B7280] mb-4">Join businesses automating their financial operations with confidence</p>
+            <p className="text-sm text-[#6B7280] font-medium mb-4">Join businesses automating their financial operations with confidence</p>
             <a href="/en/sign-up" className="btn-primary inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm">
               <span className="btn-primary-text flex items-center gap-2">Get started <Sparkles className="w-4 h-4" /></span>
             </a>
           </div>
         </div>
 
-        <footer className="border-t border-[#E5E7EB] py-3 mt-auto">
-          <p className="text-xs text-[#6B7280] text-center">&copy; {currentYear} Groot. Simplifying financial management for businesses.</p>
+        <footer className="border-t border-[#E5E7EB] py-4 mt-8">
+          <p className="text-xs text-[#6B7280] font-medium text-center">&copy; {currentYear} Groot. Simplifying financial management for businesses.</p>
         </footer>
       </section>
     </main>
