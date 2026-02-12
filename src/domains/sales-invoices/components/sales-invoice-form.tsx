@@ -546,22 +546,21 @@ export function SalesInvoiceForm() {
                     </button>
                   ))}
                   {customNoteTemplates.map((tpl) => (
-                    <span key={tpl.id} className="group inline-flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        onClick={() => form.setNotes(form.notes ? `${form.notes}\n${tpl.text}` : tpl.text)}
-                        className="text-xs px-2 py-1 rounded-l-md border border-r-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                      >
-                        {tpl.label}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteTemplate('note', tpl.id)}
-                        className="text-xs px-1 py-1 rounded-r-md border border-primary/30 bg-primary/10 text-primary/60 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      onClick={() => form.setNotes(form.notes ? `${form.notes}\n${tpl.text}` : tpl.text)}
+                      className="group text-xs px-2 py-1 rounded-md border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors inline-flex items-center gap-1"
+                    >
+                      {tpl.label}
+                      <span
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteTemplate('note', tpl.id) }}
+                        className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
                       >
                         <X className="w-3 h-3" />
-                      </button>
-                    </span>
+                      </span>
+                    </button>
                   ))}
                   {!addingNoteTemplate ? (
                     <button
@@ -615,22 +614,21 @@ export function SalesInvoiceForm() {
                     </button>
                   ))}
                   {customPaymentTemplates.map((tpl) => (
-                    <span key={tpl.id} className="group inline-flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        onClick={() => form.setPaymentInstructions(form.paymentInstructions ? `${form.paymentInstructions}\n${tpl.text}` : tpl.text)}
-                        className="text-xs px-2 py-1 rounded-l-md border border-r-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                      >
-                        {tpl.label}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteTemplate('payment', tpl.id)}
-                        className="text-xs px-1 py-1 rounded-r-md border border-primary/30 bg-primary/10 text-primary/60 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      onClick={() => form.setPaymentInstructions(form.paymentInstructions ? `${form.paymentInstructions}\n${tpl.text}` : tpl.text)}
+                      className="group text-xs px-2 py-1 rounded-md border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors inline-flex items-center gap-1"
+                    >
+                      {tpl.label}
+                      <span
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteTemplate('payment', tpl.id) }}
+                        className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
                       >
                         <X className="w-3 h-3" />
-                      </button>
-                    </span>
+                      </span>
+                    </button>
                   ))}
                   {!addingPaymentTemplate ? (
                     <button
