@@ -1,61 +1,25 @@
 /**
- * CopilotKit Runtime Endpoint
+ * Chat Runtime Endpoint
  *
- * POST /api/copilotkit — handles all CopilotKit agent communication.
- * Replaces the old /api/v1/chat endpoint.
+ * POST /api/copilotkit — handles AI chat requests.
+ * Invokes the in-process LangGraph financial agent directly.
  *
- * Auth: Clerk session token
+ * Auth: Clerk session (via cookies)
  * Rate limit: 30 messages/hour/user
- * LLM: GoogleGenerativeAIAdapter (gemini-3-flash-preview)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  CopilotRuntime,
-  GoogleGenerativeAIAdapter,
-  copilotRuntimeNextJSAppRouterEndpoint,
-} from '@copilotkit/runtime'
 import { auth } from '@clerk/nextjs/server'
 import { getUserDataConvex } from '@/lib/convex'
 import { rateLimit } from '@/domains/security/lib/rate-limit'
 import { invokeLangGraphAgent } from '@/lib/ai/copilotkit-adapter'
 
-// Create the LLM adapter for CopilotKit's own needs
-// (The LangGraph agent manages its own LLM calls internally)
-const serviceAdapter = new GoogleGenerativeAIAdapter({
-  model: 'gemini-3-flash-preview',
-})
-
-// Create CopilotKit runtime with our LangGraph agent as a server-side action
-const runtime = new CopilotRuntime({
-  actions: [
-    {
-      name: 'financialAgent',
-      description:
-        'FinanSEAL financial co-pilot agent. Handles expense queries, vendor analytics, compliance questions, and financial insights for Southeast Asian SMEs.',
-      parameters: [
-        {
-          name: 'message',
-          type: 'string',
-          description: 'The user message to send to the financial agent',
-          required: true,
-        },
-        {
-          name: 'conversationId',
-          type: 'string',
-          description: 'The conversation ID for context',
-          required: false,
-        },
-      ],
-      handler: async ({ message, conversationId }: { message: string; conversationId?: string }) => {
-        // UserContext is injected via request properties (set in POST handler)
-        // For now, return a placeholder — the actual agent invocation happens
-        // through the CopilotKit message flow
-        return { result: message }
-      },
-    },
-  ],
-})
+interface ChatRequestBody {
+  message: string
+  conversationId?: string
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+  language?: string
+}
 
 export async function POST(req: NextRequest) {
   // 1. Rate limit (30 messages/hour/user)
@@ -91,17 +55,54 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // 4. Pass to CopilotKit runtime with user context as properties
-  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
-    serviceAdapter,
-    endpoint: '/api/copilotkit',
-    properties: {
-      userId,
-      convexUserId: userData.id,
-      businessId: userData.business_id,
-    },
-  })
+  // 4. Parse request body
+  let body: ChatRequestBody
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid request body' },
+      { status: 400 }
+    )
+  }
 
-  return handleRequest(req)
+  const { message, conversationId, conversationHistory = [], language = 'en' } = body
+
+  if (!message || typeof message !== 'string') {
+    return NextResponse.json(
+      { error: 'Message is required' },
+      { status: 400 }
+    )
+  }
+
+  // 5. Invoke the LangGraph agent
+  try {
+    console.log(`[Chat API] Invoking agent for user ${userId}, conversation ${conversationId}`)
+
+    const result = await invokeLangGraphAgent({
+      message,
+      conversationHistory,
+      userContext: {
+        userId,
+        convexUserId: userData.id,
+        businessId: userData.business_id,
+        conversationId: conversationId || 'new',
+      },
+      language,
+    })
+
+    return NextResponse.json({
+      content: result.content,
+      citations: result.citations,
+      needsClarification: result.needsClarification,
+      clarificationQuestions: result.clarificationQuestions,
+      confidence: result.confidence,
+    })
+  } catch (error) {
+    console.error('[Chat API] Agent error:', error)
+    return NextResponse.json(
+      { error: 'Failed to process message' },
+      { status: 500 }
+    )
+  }
 }

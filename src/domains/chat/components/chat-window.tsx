@@ -31,8 +31,8 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
   const { userId } = useAuth()
 
   const {
-    visibleMessages,
     isLoading,
+    error,
     stopGeneration,
     conversations,
     activeConversationId,
@@ -48,7 +48,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [convexMessages, visibleMessages])
+  }, [convexMessages, isLoading])
 
   // Focus input on mount and prefill if initialMessage provided
   useEffect(() => {
@@ -82,9 +82,13 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     [handleSubmit]
   )
 
-  // Build the combined message list:
-  // Convex messages (persisted history) + CopilotKit visibleMessages (active session)
-  const displayMessages = buildDisplayMessages(convexMessages, visibleMessages)
+  // Build display messages from Convex (single source of truth)
+  const displayMessages: DisplayMessage[] = convexMessages.map((msg) => ({
+    id: msg.id,
+    role: msg.role as 'user' | 'assistant',
+    content: msg.content,
+    citations: msg.metadata?.citations as CitationData[] | undefined,
+  }))
 
   return (
     <div className="flex flex-col h-full bg-background rounded-t-xl overflow-hidden border border-border shadow-2xl">
@@ -150,6 +154,13 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
           </div>
         )}
 
+        {/* Error display */}
+        {error && (
+          <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 text-sm">
+            {error}
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -208,50 +219,9 @@ function EmptyState() {
   )
 }
 
-// Combine Convex persisted messages with CopilotKit active session messages
 interface DisplayMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   citations?: CitationData[]
-}
-
-function buildDisplayMessages(
-  convexMessages: Array<{
-    id: string
-    role: string
-    content: string
-    metadata?: { citations?: unknown[] }
-  }>,
-  visibleMessages: any[]
-): DisplayMessage[] {
-  // Start with Convex messages (persisted history)
-  // Citations stored in Convex contain full CitationData objects at runtime
-  const display: DisplayMessage[] = convexMessages.map((msg) => ({
-    id: msg.id,
-    role: msg.role as 'user' | 'assistant',
-    content: msg.content,
-    citations: msg.metadata?.citations as CitationData[] | undefined,
-  }))
-
-  // Add any CopilotKit messages that aren't yet in Convex
-  // (active session messages that haven't been persisted yet)
-  if (visibleMessages.length > 0) {
-    const convexContents = new Set(convexMessages.map((m) => m.content))
-
-    visibleMessages.forEach((msg, index) => {
-      const content = 'content' in msg ? String((msg as any).content) : ''
-      if (content && !convexContents.has(content)) {
-        const role =
-          'role' in msg && (msg as any).role === 'user' ? 'user' : 'assistant'
-        display.push({
-          id: `copilot-${index}`,
-          role: role as 'user' | 'assistant',
-          content,
-        })
-      }
-    })
-  }
-
-  return display
 }

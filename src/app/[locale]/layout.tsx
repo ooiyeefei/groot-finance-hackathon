@@ -10,7 +10,6 @@ import { ConvexClientProvider } from '@/components/providers/ConvexClientProvide
 import { SentryUserProvider } from '@/components/providers/SentryUserProvider';
 import { PWAProvider } from '@/components/providers/PWAProvider';
 import { MobileAppShellConnected } from '@/components/ui/mobile-app-shell-connected';
-import { CopilotProvider } from '@/domains/chat/components/copilot-provider';
 import { ChatWidget } from '@/domains/chat/components/chat-widget';
 
 interface LocaleLayoutProps {
@@ -65,14 +64,12 @@ export default async function LocaleLayout({
             <NextIntlClientProvider locale={locale} messages={messages}>
               <BusinessContextProvider>
                 <SentryUserProvider>
-                  <CopilotProvider>
-                    <PWAProvider>
-                      <MobileAppShellConnected>
-                        {children}
-                      </MobileAppShellConnected>
-                    </PWAProvider>
-                    <ChatWidget />
-                  </CopilotProvider>
+                  <PWAProvider>
+                    <MobileAppShellConnected>
+                      {children}
+                    </MobileAppShellConnected>
+                  </PWAProvider>
+                  <ChatWidget />
                 </SentryUserProvider>
               </BusinessContextProvider>
             </NextIntlClientProvider>
