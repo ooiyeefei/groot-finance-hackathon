@@ -372,6 +372,7 @@ export function SalesInvoiceForm() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
+                      <th className="text-left text-muted-foreground font-medium py-2 px-2 w-24">Item Code</th>
                       <th className="text-left text-muted-foreground font-medium py-2 px-2">Description</th>
                       <th className="text-right text-muted-foreground font-medium py-2 px-2 w-20">Qty</th>
                       <th className="text-right text-muted-foreground font-medium py-2 px-2 w-28">Unit Price</th>
@@ -383,6 +384,14 @@ export function SalesInvoiceForm() {
                   <tbody>
                     {form.lineItems.map((item, index) => (
                       <tr key={index} className="border-b border-border/50">
+                        <td className="py-2 px-2">
+                          <Input
+                            placeholder="SKU"
+                            value={item.itemCode ?? ''}
+                            onChange={(e) => form.updateLineItem(index, { itemCode: e.target.value })}
+                            className="bg-input border-border text-foreground text-sm h-8"
+                          />
+                        </td>
                         <td className="py-2 px-2">
                           <Input
                             placeholder="Item description"
@@ -456,6 +465,15 @@ export function SalesInvoiceForm() {
                       <Button variant="ghost" size="sm" onClick={() => form.removeLineItem(index)} disabled={form.lineItems.length <= 1}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Item Code</Label>
+                      <Input
+                        placeholder="SKU"
+                        value={item.itemCode ?? ''}
+                        onChange={(e) => form.updateLineItem(index, { itemCode: e.target.value })}
+                        className="bg-input border-border text-foreground text-sm h-8"
+                      />
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>
