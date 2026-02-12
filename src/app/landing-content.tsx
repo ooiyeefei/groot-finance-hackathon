@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { FileText, Globe, AlertTriangle, Receipt, MessageCircle, BarChart3, Sparkles, Check } from 'lucide-react';
 
 // Finance icon SVG as base64 (provided)
-const FINANCE_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDQ4IDQ4Ij48ZyBmaWxsPSJub25lIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjQiPjxwYXRoIGZpbGw9IiMyZjg4ZmYiIHN0cm9rZT0iIzAwMCIgZD0iTTI0IDQ0QzM1LjA0NTcgNDQgNDQgMzUuMDQ1NyA0NCAyNEM0NCAxMi45NTQzIDM1LjA0NTcgNCAyNCA0QzEyLjk1NDMgNCA0IDEyLjk1NDMgNCAyNEM0IDM1LjA0NTcgMTIuOTU0MyA0NCAyNCA0NFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgZD0iTTE4IDIySDMwIi8+PHBhdGggc3Ryb2tlPSIjZmZmIiBzdHJva2UtbGluZWNhcD0icm91bmQiIGQ9Ik0xOCAyOEgzMCIvPjxwYXRoIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJNMjQuMDA4MyAyMlYzNCIvPjxwYXRoIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJNMzAgMTVMMjQgMjFMMTggMTUiLz48L2c+PC9zdmc+';
+const FINANCE_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDQ4IDQ4Ij48ZyBmaWxsPSJub25lIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjQiPjxwYXRoIGZpbGw9IiMyZjg4ZmYiIHN0cm9rZT0ibm9uZSIgZD0iTTI0IDQ0QzM1LjA0NTcgNDQgNDQgMzUuMDQ1NyA0NCAyNEM0NCAxMi45NTQzIDM1LjA0NTcgNCAyNCA0QzEyLjk1NDMgNCA0IDEyLjk1NDMgNCAyNEM0IDM1LjA0NTcgMTIuOTU0MyA0NCAyNCA0NFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgZD0iTTE4IDIySDMwIi8+PHBhdGggc3Ryb2tlPSIjZmZmIiBzdHJva2UtbGluZWNhcD0icm91bmQiIGQ9Ik0xOCAyOEgzMCIvPjxwYXRoIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJNMjQuMDA4MyAyMlYzNCIvPjxwYXRoIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJNMzAgMTVMMjQgMjFMMTggMTUiLz48L2c+PC9zdmc+';
 
 /** Map country code to currency symbol */
 function getCurrencyInfo(country: string): { symbol: string; code: string } {
@@ -340,6 +340,14 @@ export default function LandingContent({ country }: { country: string }) {
         .feature-card:hover .icon-box {
           background: rgba(66, 133, 244, 0.15);
         }
+
+        /* Restore standard layout values overridden by dashboard-specific globals.css */
+        .landing-page { font-size: 1rem; }
+        .landing-page .max-w-5xl { max-width: 64rem !important; }
+        .landing-page .max-w-4xl { max-width: 56rem !important; }
+        .landing-page .max-w-3xl { max-width: 48rem !important; }
+        .landing-page .max-w-2xl { max-width: 42rem !important; }
+        .landing-page .max-w-xl { max-width: 36rem !important; }
       `}</style>
 
       {/* Navigation */}
