@@ -153,10 +153,107 @@ export const SOURCE_DOCUMENT_TYPES = {
   EXPENSE_CLAIM: "expense_claim",
   INVOICE: "invoice",
   MANUAL: "manual",
+  SALES_INVOICE: "sales_invoice",
 } as const;
 
 export type SourceDocumentType = typeof SOURCE_DOCUMENT_TYPES[keyof typeof SOURCE_DOCUMENT_TYPES];
 export const SOURCE_DOCUMENT_TYPE_VALUES = Object.values(SOURCE_DOCUMENT_TYPES);
+
+// ============================================
+// SALES INVOICE STATUSES
+// ============================================
+
+export const SALES_INVOICE_STATUSES = {
+  DRAFT: "draft",
+  SENT: "sent",
+  PARTIALLY_PAID: "partially_paid",
+  PAID: "paid",
+  OVERDUE: "overdue",
+  VOID: "void",
+} as const;
+
+export type SalesInvoiceStatus = typeof SALES_INVOICE_STATUSES[keyof typeof SALES_INVOICE_STATUSES];
+export const SALES_INVOICE_STATUS_VALUES = Object.values(SALES_INVOICE_STATUSES);
+
+// ============================================
+// PAYMENT TERMS
+// ============================================
+
+export const PAYMENT_TERMS_OPTIONS = {
+  DUE_ON_RECEIPT: "due_on_receipt",
+  NET_15: "net_15",
+  NET_30: "net_30",
+  NET_60: "net_60",
+  CUSTOM: "custom",
+} as const;
+
+export type PaymentTermsOption = typeof PAYMENT_TERMS_OPTIONS[keyof typeof PAYMENT_TERMS_OPTIONS];
+export const PAYMENT_TERMS_VALUES = Object.values(PAYMENT_TERMS_OPTIONS);
+
+// ============================================
+// CUSTOMER STATUSES
+// ============================================
+
+export const CUSTOMER_STATUSES = {
+  ACTIVE: "active",
+  INACTIVE: "inactive",
+} as const;
+
+export type CustomerStatusType = typeof CUSTOMER_STATUSES[keyof typeof CUSTOMER_STATUSES];
+export const CUSTOMER_STATUS_VALUES = Object.values(CUSTOMER_STATUSES);
+
+// ============================================
+// CATALOG ITEM STATUSES
+// ============================================
+
+export const CATALOG_ITEM_STATUSES = {
+  ACTIVE: "active",
+  INACTIVE: "inactive",
+} as const;
+
+export type CatalogItemStatusType = typeof CATALOG_ITEM_STATUSES[keyof typeof CATALOG_ITEM_STATUSES];
+export const CATALOG_ITEM_STATUS_VALUES = Object.values(CATALOG_ITEM_STATUSES);
+
+// ============================================
+// RECURRING FREQUENCIES
+// ============================================
+
+export const RECURRING_FREQUENCIES = {
+  WEEKLY: "weekly",
+  MONTHLY: "monthly",
+  QUARTERLY: "quarterly",
+  YEARLY: "yearly",
+} as const;
+
+export type RecurringFrequencyType = typeof RECURRING_FREQUENCIES[keyof typeof RECURRING_FREQUENCIES];
+export const RECURRING_FREQUENCY_VALUES = Object.values(RECURRING_FREQUENCIES);
+
+// ============================================
+// PAYMENT TYPES (010-ar-debtor-management)
+// ============================================
+
+export const PAYMENT_TYPES = {
+  PAYMENT: "payment",
+  REVERSAL: "reversal",
+} as const;
+
+export type PaymentType = typeof PAYMENT_TYPES[keyof typeof PAYMENT_TYPES];
+export const PAYMENT_TYPE_VALUES = Object.values(PAYMENT_TYPES);
+
+// ============================================
+// PAYMENT METHODS (010-ar-debtor-management)
+// ============================================
+
+export const PAYMENT_METHODS_ENUM = {
+  BANK_TRANSFER: "bank_transfer",
+  CASH: "cash",
+  CHEQUE: "cheque",
+  CARD: "card",
+  OTHER: "other",
+} as const;
+
+export type PaymentMethodType = typeof PAYMENT_METHODS_ENUM[keyof typeof PAYMENT_METHODS_ENUM];
+export const PAYMENT_METHOD_VALUES = Object.values(PAYMENT_METHODS_ENUM);
 
 // ============================================
 // CREATED BY METHODS

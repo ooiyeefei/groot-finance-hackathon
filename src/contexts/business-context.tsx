@@ -38,6 +38,9 @@ interface BusinessProfile {
   logo_url?: string
   logo_fallback_color?: string
   home_currency?: string
+  address?: string | null
+  contact_email?: string | null
+  contact_phone?: string | null
 }
 
 interface BusinessContextState {

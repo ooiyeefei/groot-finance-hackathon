@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
-import DocumentsContainer from '@/domains/invoices/components/documents-container'
+import InvoicesTabContainer from '@/domains/invoices/components/invoices-tab-container'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { getUserRole } from '@/domains/users/lib/user.service'
 
@@ -41,7 +41,7 @@ export default async function DocumentsPage({ params }: { params: Promise<{ loca
 
           {/* Main Content Area */}
           <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
-            <DocumentsContainer />
+            <InvoicesTabContainer />
           </main>
         </div>
       </div>

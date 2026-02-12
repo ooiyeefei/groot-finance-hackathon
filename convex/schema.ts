@@ -23,6 +23,13 @@ import {
   exportTriggerValidator,
   dateRangeTypeValidator,
   thousandSeparatorValidator,
+  salesInvoiceStatusValidator,
+  paymentTermsValidator,
+  customerStatusValidator,
+  catalogItemStatusValidator,
+  recurringFrequencyValidator,
+  paymentTypeValidator,
+  paymentMethodValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -77,6 +84,7 @@ export default defineSchema({
     taxId: v.optional(v.string()),
     address: v.optional(v.string()),
     contactEmail: v.optional(v.string()),
+    contactPhone: v.optional(v.string()),
     homeCurrency: v.string(),               // Default: "MYR"
     countryCode: v.optional(v.string()),    // ISO country code
     businessType: v.optional(v.string()),   // e.g., "sole_proprietor", "llc"
@@ -107,6 +115,23 @@ export default defineSchema({
 
     // Onboarding
     onboardingCompletedAt: v.optional(v.number()),  // Unix timestamp
+
+    // Invoice Settings (009-sales-invoice-generation)
+    invoiceSettings: v.optional(v.object({
+      logoStorageId: v.optional(v.string()),
+      companyName: v.optional(v.string()),
+      companyAddress: v.optional(v.string()),
+      companyPhone: v.optional(v.string()),
+      companyEmail: v.optional(v.string()),
+      registrationNumber: v.optional(v.string()),
+      taxId: v.optional(v.string()),
+      defaultCurrency: v.optional(v.string()),
+      invoiceNumberPrefix: v.optional(v.string()),
+      nextInvoiceNumber: v.optional(v.number()),
+      defaultPaymentTerms: v.optional(v.string()),
+      defaultPaymentInstructions: v.optional(v.string()),
+      selectedTemplate: v.optional(v.string()),
+    })),
 
     // Timestamps
     updatedAt: v.optional(v.number()),
@@ -250,6 +275,7 @@ export default defineSchema({
   expense_claims: defineTable({
     // Identity
     legacyId: v.optional(v.string()),
+    submissionId: v.optional(v.string()),   // Link to expense_claim_submissions
     businessId: v.id("businesses"),
     userId: v.id("users"),                  // Submitter
 
@@ -1153,4 +1179,198 @@ export default defineSchema({
     .index("by_initiatedBy", ["initiatedBy"])
     .index("by_scheduleId", ["scheduleId"])
     .index("by_expiresAt", ["expiresAt"]),
+
+  // ============================================
+  // SALES INVOICES DOMAIN (009-sales-invoice-generation)
+  // ============================================
+
+  sales_invoices: defineTable({
+    // Identity & Scoping
+    businessId: v.id("businesses"),
+    userId: v.id("users"),
+    invoiceNumber: v.string(),
+
+    // Customer Info (snapshot at creation time)
+    customerId: v.optional(v.id("customers")),
+    customerSnapshot: v.object({
+      businessName: v.string(),
+      contactPerson: v.optional(v.string()),
+      email: v.string(),
+      phone: v.optional(v.string()),
+      address: v.optional(v.string()),
+      taxId: v.optional(v.string()),
+    }),
+
+    // Line Items (embedded)
+    lineItems: v.array(v.object({
+      lineOrder: v.number(),
+      description: v.string(),
+      quantity: v.number(),
+      unitPrice: v.number(),
+      taxRate: v.optional(v.number()),
+      taxAmount: v.optional(v.number()),
+      discountType: v.optional(v.union(v.literal("percentage"), v.literal("fixed"))),
+      discountValue: v.optional(v.number()),
+      discountAmount: v.optional(v.number()),
+      totalAmount: v.number(),
+      currency: v.string(),
+      itemCode: v.optional(v.string()),
+      unitMeasurement: v.optional(v.string()),
+      catalogItemId: v.optional(v.string()),
+    })),
+
+    // Financial Totals
+    subtotal: v.number(),
+    totalDiscount: v.optional(v.number()),
+    invoiceDiscountType: v.optional(v.union(v.literal("percentage"), v.literal("fixed"))),
+    invoiceDiscountValue: v.optional(v.number()),
+    totalTax: v.number(),
+    totalAmount: v.number(),
+    amountPaid: v.optional(v.number()),
+    balanceDue: v.number(),
+
+    // Currency
+    currency: v.string(),
+    exchangeRate: v.optional(v.number()),
+    homeCurrencyAmount: v.optional(v.number()),
+
+    // Tax Mode
+    taxMode: v.union(v.literal("exclusive"), v.literal("inclusive")),
+
+    // Dates
+    invoiceDate: v.string(),
+    dueDate: v.string(),
+    sentAt: v.optional(v.number()),
+    paidAt: v.optional(v.string()),
+    voidedAt: v.optional(v.number()),
+
+    // Payment Terms
+    paymentTerms: paymentTermsValidator,
+
+    // Status
+    status: salesInvoiceStatusValidator,
+
+    // Content
+    notes: v.optional(v.string()),
+    paymentInstructions: v.optional(v.string()),
+    templateId: v.optional(v.string()),
+    signatureName: v.optional(v.string()),
+
+    // Recurring
+    recurringScheduleId: v.optional(v.string()),
+    isRecurringSource: v.optional(v.boolean()),
+
+    // Accounting
+    accountingEntryId: v.optional(v.string()),
+
+    // Soft Delete & Timestamps
+    deletedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_businessId_customerId", ["businessId", "customerId"])
+    .index("by_businessId_invoiceNumber", ["businessId", "invoiceNumber"])
+    .index("by_businessId_dueDate", ["businessId", "dueDate"])
+    .index("by_recurringScheduleId", ["recurringScheduleId"]),
+
+  customers: defineTable({
+    businessId: v.id("businesses"),
+    businessName: v.string(),
+    contactPerson: v.optional(v.string()),
+    email: v.string(),
+    phone: v.optional(v.string()),
+    address: v.optional(v.string()),
+    taxId: v.optional(v.string()),
+    customerCode: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    status: customerStatusValidator,
+
+    // Soft Delete & Timestamps
+    deletedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_businessId_businessName", ["businessId", "businessName"])
+    .index("by_businessId_email", ["businessId", "email"]),
+
+  catalog_items: defineTable({
+    businessId: v.id("businesses"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    sku: v.optional(v.string()),
+    unitPrice: v.number(),
+    currency: v.string(),
+    unitMeasurement: v.optional(v.string()),
+    taxRate: v.optional(v.number()),
+    category: v.optional(v.string()),
+    status: catalogItemStatusValidator,
+
+    // Soft Delete & Timestamps
+    deletedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_businessId_name", ["businessId", "name"])
+    .index("by_businessId_sku", ["businessId", "sku"]),
+
+  recurring_invoice_schedules: defineTable({
+    businessId: v.id("businesses"),
+    sourceInvoiceId: v.id("sales_invoices"),
+    frequency: recurringFrequencyValidator,
+    nextGenerationDate: v.string(),
+    endDate: v.optional(v.string()),
+    isActive: v.boolean(),
+    lastGeneratedAt: v.optional(v.number()),
+    generationCount: v.optional(v.number()),
+
+    // Soft Delete & Timestamps
+    deletedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_isActive_nextDate", ["isActive", "nextGenerationDate"])
+    .index("by_sourceInvoiceId", ["sourceInvoiceId"]),
+
+  // ============================================
+  // PAYMENTS DOMAIN (010-ar-debtor-management)
+  // ============================================
+
+  payments: defineTable({
+    // Scoping
+    businessId: v.id("businesses"),
+    customerId: v.id("customers"),
+    userId: v.id("users"),
+
+    // Payment Type
+    type: paymentTypeValidator,
+
+    // Financial
+    amount: v.number(),
+    currency: v.string(),
+    paymentDate: v.string(),
+    paymentMethod: paymentMethodValidator,
+    paymentReference: v.optional(v.string()),
+    notes: v.optional(v.string()),
+
+    // Reversal reference
+    reversesPaymentId: v.optional(v.id("payments")),
+
+    // Allocations (embedded)
+    allocations: v.array(v.object({
+      invoiceId: v.id("sales_invoices"),
+      amount: v.number(),
+      allocatedAt: v.number(),
+    })),
+
+    // Timestamps
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_customerId", ["businessId", "customerId"])
+    .index("by_businessId_paymentDate", ["businessId", "paymentDate"])
+    .index("by_reversesPaymentId", ["reversesPaymentId"]),
 });

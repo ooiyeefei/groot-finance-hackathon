@@ -52,6 +52,40 @@ interface LeaveNotificationData {
   businessName: string
 }
 
+interface InvoiceLineItemEmail {
+  itemCode?: string
+  description: string
+  quantity: number
+  unitPrice: number
+  amount: number
+}
+
+interface EmailAttachment {
+  content: string   // base64-encoded file content
+  filename: string
+}
+
+interface InvoiceEmailData {
+  recipientEmail: string
+  recipientName: string
+  invoiceNumber: string
+  invoiceDate: string
+  dueDate: string
+  totalAmount: number
+  currency: string
+  balanceDue: number
+  subtotal?: number
+  totalTax?: number
+  paymentInstructions?: string
+  businessName: string
+  businessAddress?: string
+  businessPhone?: string
+  businessEmail?: string
+  lineItems?: InvoiceLineItemEmail[]
+  viewUrl?: string
+  pdfAttachment?: EmailAttachment
+}
+
 interface EmailServiceConfig {
   fromEmail: string
   appUrl: string
@@ -158,6 +192,7 @@ class EmailService {
     subject: string
     htmlBody: string
     textBody: string
+    attachments?: EmailAttachment[]
   }): Promise<{ success: boolean; error?: string; messageId?: string }> {
     if (!this.resend) {
       return { success: false, error: 'Resend not configured (RESEND_API_KEY missing)' }
@@ -169,7 +204,13 @@ class EmailService {
         to: params.to,
         subject: params.subject,
         html: params.htmlBody,
-        text: params.textBody
+        text: params.textBody,
+        ...(params.attachments?.length ? {
+          attachments: params.attachments.map(a => ({
+            filename: a.filename,
+            content: Buffer.from(a.content, 'base64'),
+          })),
+        } : {}),
       })
 
       if (error) {
@@ -189,7 +230,8 @@ class EmailService {
   }
 
   /**
-   * Build raw MIME message for SES
+   * Build raw MIME message for SES.
+   * When attachments are provided, uses multipart/mixed wrapping multipart/alternative.
    */
   private buildRawEmail(params: {
     from: string
@@ -197,10 +239,11 @@ class EmailService {
     subject: string
     htmlBody: string
     textBody: string
+    attachments?: EmailAttachment[]
   }): string {
-    const { from, to, subject, htmlBody, textBody } = params
+    const { from, to, subject, htmlBody, textBody, attachments } = params
 
-    const boundary = `----=_Part_${Date.now().toString(36)}`
+    const altBoundary = `----=_Alt_${Date.now().toString(36)}`
     const lines: string[] = []
 
     // Required headers
@@ -209,11 +252,42 @@ class EmailService {
     lines.push(`Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`)
     lines.push('MIME-Version: 1.0')
 
-    // Content type
-    lines.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
-    lines.push('')
+    if (attachments?.length) {
+      // Wrap in multipart/mixed so we can add attachments
+      const mixedBoundary = `----=_Mixed_${Date.now().toString(36)}`
+      lines.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`)
+      lines.push('')
 
-    // Plain text part
+      // Body part (multipart/alternative)
+      lines.push(`--${mixedBoundary}`)
+      lines.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`)
+      lines.push('')
+      this.appendBodyParts(lines, altBoundary, textBody, htmlBody)
+
+      // Attachment parts
+      for (const att of attachments) {
+        lines.push(`--${mixedBoundary}`)
+        lines.push(`Content-Type: application/pdf; name="${att.filename}"`)
+        lines.push('Content-Transfer-Encoding: base64')
+        lines.push(`Content-Disposition: attachment; filename="${att.filename}"`)
+        lines.push('')
+        // Break base64 into 76-char lines per MIME spec
+        lines.push(att.content.replace(/(.{76})/g, '$1\r\n'))
+        lines.push('')
+      }
+
+      lines.push(`--${mixedBoundary}--`)
+    } else {
+      // Simple alternative (text + html, no attachments)
+      lines.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`)
+      lines.push('')
+      this.appendBodyParts(lines, altBoundary, textBody, htmlBody)
+    }
+
+    return lines.join('\r\n')
+  }
+
+  private appendBodyParts(lines: string[], boundary: string, textBody: string, htmlBody: string) {
     lines.push(`--${boundary}`)
     lines.push('Content-Type: text/plain; charset=UTF-8')
     lines.push('Content-Transfer-Encoding: quoted-printable')
@@ -221,7 +295,6 @@ class EmailService {
     lines.push(textBody)
     lines.push('')
 
-    // HTML part
     lines.push(`--${boundary}`)
     lines.push('Content-Type: text/html; charset=UTF-8')
     lines.push('Content-Transfer-Encoding: base64')
@@ -229,10 +302,7 @@ class EmailService {
     lines.push(Buffer.from(htmlBody).toString('base64').replace(/(.{76})/g, '$1\r\n'))
     lines.push('')
 
-    // End boundary
     lines.push(`--${boundary}--`)
-
-    return lines.join('\r\n')
   }
 
   /**
@@ -991,6 +1061,328 @@ View in FinanSEAL: ${this.config!.appUrl}/en/leave
 This notification was sent from ${businessName} via FinanSEAL
 Financial Co-Pilot for Southeast Asian SMEs
 ${this.config!.appUrl}
+    `
+  }
+
+  /**
+   * Send invoice email to customer (with Resend fallback)
+   */
+  async sendInvoiceEmail(data: InvoiceEmailData): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {
+    this.initialize()
+
+    const { recipientEmail, businessName, invoiceNumber, pdfAttachment } = data
+
+    const htmlBody = this.generateInvoiceEmailHTML(data)
+    const textBody = this.generateInvoiceEmailText(data)
+    const subject = `Invoice ${invoiceNumber} from ${businessName}`
+    const attachments = pdfAttachment ? [pdfAttachment] : undefined
+
+    // Try SES first
+    try {
+      const rawMessage = this.buildRawEmail({
+        from: this.config!.fromEmail,
+        to: recipientEmail,
+        subject,
+        htmlBody,
+        textBody,
+        attachments,
+      })
+
+      const command = new SendRawEmailCommand({
+        RawMessage: {
+          Data: Buffer.from(rawMessage)
+        },
+        ConfigurationSetName: this.config!.configurationSet
+      })
+
+      const response = await this.ses!.send(command)
+
+      if (response.MessageId) {
+        console.log(`[EmailService] Invoice email sent via SES to ${recipientEmail}, MessageId: ${response.MessageId}`)
+        return { success: true, messageId: response.MessageId, provider: 'ses' }
+      }
+    } catch (sesError) {
+      console.error('[EmailService] SES failed for invoice email:', sesError)
+
+      // Fall back to Resend on any SES failure (credentials, sandbox, etc.)
+      if (this.resend) {
+        console.log('[EmailService] SES failed, falling back to Resend for invoice email...')
+
+        try {
+          const resendResult = await this.sendViaResend({
+            to: recipientEmail,
+            subject,
+            htmlBody,
+            textBody,
+            attachments,
+          })
+
+          if (resendResult.success) {
+            return { ...resendResult, provider: 'resend' }
+          }
+
+          return {
+            success: false,
+            error: `SES failed and Resend fallback also failed: ${resendResult.error}`
+          }
+        } catch (resendError) {
+          console.error('[EmailService] Resend fallback also failed:', resendError)
+          return {
+            success: false,
+            error: `SES failed and Resend fallback also failed: ${resendError instanceof Error ? resendError.message : 'Unknown error'}`
+          }
+        }
+      }
+
+      return {
+        success: false,
+        error: sesError instanceof Error ? sesError.message : 'Unknown email error'
+      }
+    }
+
+    return { success: false, error: 'SES did not return a MessageId' }
+  }
+
+  private generateInvoiceEmailHTML(data: InvoiceEmailData): string {
+    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, subtotal, totalTax, paymentInstructions, businessName, businessAddress, businessPhone, businessEmail, lineItems } = data
+
+    const fmt = (amount: number) => {
+      return `${currency} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}`
+    }
+
+    const lineItemsHTML = lineItems && lineItems.length > 0 ? `
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 0 0 24px 0;">
+          <tr style="background-color: #f8fafc;">
+            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">Item Code</td>
+            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">Description</td>
+            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; text-align: center;">Qty</td>
+            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; text-align: right;">Unit Price</td>
+            <td style="padding: 10px 12px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; text-align: right;">Amount</td>
+          </tr>
+          ${lineItems.map(item => `
+          <tr>
+            <td style="padding: 10px 12px; font-size: 14px; color: #64748b; border-bottom: 1px solid #f1f5f9;">${item.itemCode || '-'}</td>
+            <td style="padding: 10px 12px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;">${item.description}</td>
+            <td style="padding: 10px 12px; font-size: 14px; color: #475569; border-bottom: 1px solid #f1f5f9; text-align: center;">${item.quantity}</td>
+            <td style="padding: 10px 12px; font-size: 14px; color: #475569; border-bottom: 1px solid #f1f5f9; text-align: right;">${fmt(item.unitPrice)}</td>
+            <td style="padding: 10px 12px; font-size: 14px; color: #1e293b; font-weight: 500; border-bottom: 1px solid #f1f5f9; text-align: right;">${fmt(item.amount)}</td>
+          </tr>
+          `).join('')}
+        </table>
+    ` : ''
+
+    const businessDetailsHTML = [businessAddress, businessPhone, businessEmail].filter(Boolean).length > 0 ? `
+        <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b; line-height: 1.5;">
+          ${[businessAddress, businessPhone, businessEmail].filter(Boolean).join(' &middot; ')}
+        </p>
+    ` : ''
+
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Invoice ${invoiceNumber}</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; padding: 32px 16px;">
+        <tr>
+          <td align="center">
+            <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+              <!-- Header -->
+              <tr>
+                <td style="padding: 32px 32px 24px 32px; border-bottom: 3px solid #1e40af;">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td>
+                        <p style="margin: 0; font-size: 18px; font-weight: 700; color: #0f172a;">${businessName}</p>
+                        ${businessDetailsHTML}
+                      </td>
+                      <td align="right" style="vertical-align: top;">
+                        <p style="margin: 0; font-size: 28px; font-weight: 800; color: #1e293b; letter-spacing: -0.5px;">INVOICE</p>
+                        <p style="margin: 4px 0 0 0; font-size: 14px; color: #64748b;">${invoiceNumber}</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <!-- Greeting -->
+              <tr>
+                <td style="padding: 24px 32px 8px 32px;">
+                  <p style="margin: 0; font-size: 15px; color: #334155; line-height: 1.6;">
+                    Dear ${recipientName},
+                  </p>
+                  <p style="margin: 8px 0 0 0; font-size: 15px; color: #334155; line-height: 1.6;">
+                    Please find your invoice details below.
+                  </p>
+                </td>
+              </tr>
+
+              <!-- Key Details -->
+              <tr>
+                <td style="padding: 16px 32px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+                    <tr>
+                      <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="font-size: 13px; color: #64748b;">Invoice Date</td>
+                            <td align="right" style="font-size: 14px; font-weight: 600; color: #0f172a;">${invoiceDate}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="font-size: 13px; color: #64748b;">Due Date</td>
+                            <td align="right" style="font-size: 14px; font-weight: 700; color: #dc2626;">${dueDate}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 16px 20px;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="font-size: 13px; color: #64748b;">Currency</td>
+                            <td align="right" style="font-size: 14px; font-weight: 600; color: #0f172a;">${currency}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <!-- Line Items -->
+              ${lineItemsHTML ? `
+              <tr>
+                <td style="padding: 8px 32px 0 32px;">
+                  <p style="margin: 0 0 12px 0; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Items</p>
+                  ${lineItemsHTML}
+                </td>
+              </tr>
+              ` : ''}
+
+              <!-- Totals -->
+              <tr>
+                <td style="padding: 0 32px 8px 32px;">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td width="50%"></td>
+                      <td width="50%">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          ${subtotal !== undefined ? `
+                          <tr>
+                            <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Subtotal</td>
+                            <td align="right" style="padding: 6px 0; font-size: 14px; color: #334155;">${fmt(subtotal)}</td>
+                          </tr>
+                          ` : ''}
+                          ${totalTax !== undefined ? `
+                          <tr>
+                            <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Tax</td>
+                            <td align="right" style="padding: 6px 0; font-size: 14px; color: #334155;">${fmt(totalTax)}</td>
+                          </tr>
+                          ` : ''}
+                          <tr>
+                            <td style="padding: 6px 0; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 10px;">Total</td>
+                            <td align="right" style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #0f172a; border-top: 1px solid #e2e8f0; padding-top: 10px;">${fmt(totalAmount)}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <!-- Amount Due Highlight -->
+              <tr>
+                <td style="padding: 8px 32px 16px 32px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #1e40af; border-radius: 6px;">
+                    <tr>
+                      <td style="padding: 20px 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="font-size: 14px; color: #bfdbfe; font-weight: 500;">Balance Due</td>
+                            <td align="right" style="font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">${fmt(balanceDue)}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              ${paymentInstructions ? `
+              <!-- Payment Instructions -->
+              <tr>
+                <td style="padding: 0 32px 16px 32px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">
+                    <tr>
+                      <td style="padding: 16px 20px;">
+                        <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #15803d; text-transform: uppercase; letter-spacing: 0.5px;">Payment Instructions</p>
+                        <p style="margin: 0; font-size: 14px; color: #334155; white-space: pre-wrap; line-height: 1.6;">${paymentInstructions}</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              ` : ''}
+
+              <!-- Footer -->
+              <tr>
+                <td style="padding: 20px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
+                  <p style="margin: 0; font-size: 13px; color: #94a3b8; text-align: center;">
+                    If you have any questions about this invoice, please contact us.
+                  </p>
+                  <p style="margin: 8px 0 0 0; font-size: 12px; color: #cbd5e1; text-align: center;">
+                    Sent from ${businessName} via FinanSEAL
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    `
+  }
+
+  private generateInvoiceEmailText(data: InvoiceEmailData): string {
+    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, subtotal, totalTax, paymentInstructions, businessName, lineItems } = data
+
+    const fmt = (amount: number) => `${currency} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}`
+
+    const itemsText = lineItems && lineItems.length > 0
+      ? `\nItems:\n${lineItems.map(item => `  - ${item.itemCode ? `[${item.itemCode}] ` : ''}${item.description} (x${item.quantity}) — ${fmt(item.amount)}`).join('\n')}\n`
+      : ''
+
+    return `
+INVOICE ${invoiceNumber}
+${businessName}
+
+Dear ${recipientName},
+
+Please find your invoice details below.
+
+Invoice Date: ${invoiceDate}
+Due Date: ${dueDate}
+Currency: ${currency}
+${itemsText}
+${subtotal !== undefined ? `Subtotal: ${fmt(subtotal)}` : ''}
+${totalTax !== undefined ? `Tax: ${fmt(totalTax)}` : ''}
+Total: ${fmt(totalAmount)}
+Balance Due: ${fmt(balanceDue)}
+${paymentInstructions ? `\nPayment Instructions:\n${paymentInstructions}\n` : ''}
+If you have any questions about this invoice, please contact us.
+
+---
+Sent from ${businessName} via FinanSEAL
     `
   }
 
