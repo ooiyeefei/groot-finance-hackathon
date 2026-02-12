@@ -129,42 +129,17 @@ export const getEvents = query({
       })
     );
 
-    // Get holidays for the date range
-    const countryCode = business.countryCode ?? "MY";
-    const startYear = parseInt(args.startDate.substring(0, 4));
-    const endYear = parseInt(args.endDate.substring(0, 4));
-
-    const allHolidays: any[] = [];
-
-    // Get system holidays for each year in range
-    for (let year = startYear; year <= endYear; year++) {
-      const systemHolidays = await ctx.db
-        .query("public_holidays")
-        .withIndex("by_countryCode_year", (q) =>
-          q.eq("countryCode", countryCode).eq("year", year)
-        )
-        .collect();
-
-      allHolidays.push(...systemHolidays.filter((h) => !h.isCustom));
-    }
-
-    // Get custom holidays for the business
+    // Get custom holidays for the business from DB
+    // System holidays are provided client-side via date-holidays library
     const customHolidays = await ctx.db
       .query("public_holidays")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
       .collect();
 
     // Filter custom holidays to date range
-    const relevantCustomHolidays = customHolidays.filter(
-      (h) => h.date >= args.startDate && h.date <= args.endDate
-    );
-
-    allHolidays.push(...relevantCustomHolidays);
-
-    // Filter all holidays to date range
-    const holidaysInRange = allHolidays.filter(
-      (h) => h.date >= args.startDate && h.date <= args.endDate
-    );
+    const holidaysInRange = customHolidays
+      .filter((h) => h.isCustom && h.date >= args.startDate && h.date <= args.endDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     // Detect conflicts (dates with multiple people on leave)
     const dateAbsenceCount = new Map<string, number>();

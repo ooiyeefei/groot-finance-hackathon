@@ -1,24 +1,25 @@
 'use client';
 
 /**
- * Public Holidays Hooks - Convex real-time subscriptions and mutations
+ * Public Holidays Hooks - Convex real-time subscriptions + date-holidays library
  *
- * Provides hooks for:
- * - Fetching holidays for business day calculation
- * - Managing custom holidays (admin)
+ * System holidays come from date-holidays library (client-side).
+ * Custom holidays come from Convex DB.
+ * Hooks merge both and return unified results.
  */
 
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useCallback, useState, useMemo } from 'react';
+import { getSystemHolidays, getSystemHolidayDates } from '../lib/system-holidays';
 
 // ============================================
 // TYPES
 // ============================================
 
 export interface Holiday {
-  _id: string;
+  _id?: string;
   businessId?: string;
   countryCode: string;
   date: string;
@@ -32,37 +33,69 @@ export interface Holiday {
 // ============================================
 
 /**
- * Get holidays for a business (system + custom merged)
- * Used for business day calculations and date picker
+ * Get holidays for a business (system from library + custom from DB)
  */
 export function useBusinessHolidays(businessId: string | undefined, year?: number) {
   const currentYear = year ?? new Date().getFullYear();
-  return useQuery(
+
+  const result = useQuery(
     api.functions.publicHolidays.getForBusiness,
     businessId ? { businessId, year: currentYear } : 'skip'
   );
+
+  return useMemo(() => {
+    if (!result) return undefined;
+
+    const { customHolidays, countryCode } = result;
+
+    // Get system holidays from date-holidays library
+    const systemHolidays = getSystemHolidays(countryCode, currentYear);
+
+    // Merge: system holidays + custom holidays
+    const customDates = new Set(customHolidays.map((h: { date: string }) => h.date));
+    const merged: Holiday[] = [
+      ...systemHolidays
+        .filter((h) => !customDates.has(h.date))
+        .map((h) => ({ ...h, isCustom: false as const })),
+      ...customHolidays.map((h: any) => ({
+        _id: h._id,
+        businessId: h.businessId,
+        countryCode: h.countryCode,
+        date: h.date,
+        name: h.name,
+        year: h.year,
+        isCustom: true as const,
+      })),
+    ];
+
+    merged.sort((a, b) => a.date.localeCompare(b.date));
+    return merged;
+  }, [result, currentYear]);
 }
 
 /**
- * Get holiday dates as strings for date calculations
+ * Get holiday dates as strings for date calculations (system + custom merged)
  */
 export function useHolidayDates(businessId: string | undefined, year?: number) {
   const currentYear = year ?? new Date().getFullYear();
-  return useQuery(
+
+  const result = useQuery(
     api.functions.publicHolidays.getHolidayDates,
     businessId ? { businessId, year: currentYear } : 'skip'
   );
-}
 
-/**
- * Get system holidays by country
- */
-export function useCountryHolidays(countryCode: string | undefined, year?: number) {
-  const currentYear = year ?? new Date().getFullYear();
-  return useQuery(
-    api.functions.publicHolidays.getByCountry,
-    countryCode ? { countryCode, year: currentYear } : 'skip'
-  );
+  return useMemo(() => {
+    if (!result) return undefined;
+
+    const { customDates, countryCode } = result;
+
+    // Get system holiday dates from date-holidays library
+    const systemDates = getSystemHolidayDates(countryCode, currentYear);
+
+    // Merge and deduplicate
+    const allDates = new Set([...systemDates, ...customDates]);
+    return Array.from(allDates).sort();
+  }, [result, currentYear]);
 }
 
 /**
@@ -210,106 +243,18 @@ export function useHolidayLookup(businessId: string | undefined, year?: number) 
 }
 
 /**
- * Hook for bulk importing system holidays from API
- */
-export function useImportCountryHolidays() {
-  const bulkImportMutation = useMutation(api.functions.publicHolidays.bulkImportSystem);
-  const clearMutation = useMutation(api.functions.publicHolidays.clearSystemHolidays);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const importCountryHolidays = useCallback(
-    async (businessId: string, countryCode: string, year: number, clearExisting = false) => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Fetch holidays from API
-        const response = await fetch(
-          `/api/v1/leave-management/holidays?country=${countryCode}&year=${year}`
-        );
-        const data = await response.json();
-
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to fetch holidays');
-        }
-
-        // Optionally clear existing system holidays first
-        if (clearExisting) {
-          await clearMutation({
-            businessId: businessId as Id<'businesses'>,
-            year,
-          });
-        }
-
-        // Bulk import the holidays (strip extra fields like 'type' that API returns)
-        const result = await bulkImportMutation({
-          businessId: businessId as Id<'businesses'>,
-          countryCode,
-          year,
-          holidays: data.data.holidays.map((h: { date: string; name: string }) => ({
-            date: h.date,
-            name: h.name,
-          })),
-        });
-
-        return {
-          ...result,
-          countryName: data.data.countryName,
-        };
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to import holidays';
-        setError(errorMessage);
-        throw err;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [bulkImportMutation, clearMutation]
-  );
-
-  const clearSystemHolidays = useCallback(
-    async (businessId: string, year?: number) => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const result = await clearMutation({
-          businessId: businessId as Id<'businesses'>,
-          year,
-        });
-
-        return result;
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to clear holidays';
-        setError(errorMessage);
-        throw err;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [clearMutation]
-  );
-
-  return { importCountryHolidays, clearSystemHolidays, isLoading, error };
-}
-
-/**
  * Combined hook for holiday admin operations
  */
 export function useHolidayOperations() {
   const { addCustomHoliday, isLoading: addLoading, error: addError } = useAddCustomHoliday();
   const { removeCustomHoliday, isLoading: removeLoading, error: removeError } = useRemoveCustomHoliday();
   const { updateCustomHoliday, isLoading: updateLoading, error: updateError } = useUpdateCustomHoliday();
-  const { importCountryHolidays, clearSystemHolidays, isLoading: importLoading, error: importError } = useImportCountryHolidays();
 
   return {
     addCustomHoliday,
     removeCustomHoliday,
     updateCustomHoliday,
-    importCountryHolidays,
-    clearSystemHolidays,
-    isLoading: addLoading || removeLoading || updateLoading || importLoading,
-    error: addError || removeError || updateError || importError,
+    isLoading: addLoading || removeLoading || updateLoading,
+    error: addError || removeError || updateError,
   };
 }

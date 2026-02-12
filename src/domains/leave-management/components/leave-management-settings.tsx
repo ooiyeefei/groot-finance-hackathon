@@ -21,7 +21,6 @@ import {
   CalendarDays,
   Globe,
   Settings,
-  Download,
   RefreshCw,
   Users,
   UserPlus,
@@ -85,7 +84,7 @@ export default function LeaveManagementSettings() {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const holidays = useBusinessHolidays(businessId, selectedYear);
-  const { addCustomHoliday, removeCustomHoliday, updateCustomHoliday, importCountryHolidays, clearSystemHolidays, isLoading: isHolidayLoading } = useHolidayOperations();
+  const { addCustomHoliday, removeCustomHoliday, updateCustomHoliday, isLoading: isHolidayLoading } = useHolidayOperations();
 
   // Employee balances
   const [balanceYear, setBalanceYear] = useState(currentYear);
@@ -93,12 +92,7 @@ export default function LeaveManagementSettings() {
   const { initializeAll, isLoading: isBalanceLoading } = useBalanceOperations();
   const [initResult, setInitResult] = useState<{ created: number; skipped: number } | null>(null);
 
-  // Import holidays dialog state
-  const [importDialog, setImportDialog] = useState(false);
-  const [importCountry, setImportCountry] = useState('MY');
-  const [importYear, setImportYear] = useState(selectedYear);
-  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; countryName: string } | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
+  // System holidays now come from date-holidays library automatically
 
   // Leave type dialog state
   const [leaveTypeDialog, setLeaveTypeDialog] = useState(false);
@@ -125,8 +119,6 @@ export default function LeaveManagementSettings() {
   });
 
   // Clear holidays confirmation dialog
-  const [clearConfirmDialog, setClearConfirmDialog] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
 
   // Entitlement editing dialog state
   const [entitlementDialog, setEntitlementDialog] = useState(false);
@@ -349,22 +341,6 @@ export default function LeaveManagementSettings() {
     }
   };
 
-  const handleImportHolidays = async () => {
-    if (!businessId) return;
-
-    setIsImporting(true);
-    setImportResult(null);
-
-    try {
-      const result = await importCountryHolidays(businessId, importCountry, importYear);
-      setImportResult(result);
-    } catch (error) {
-      console.error('Failed to import holidays:', error);
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   if (!businessId) {
     return (
       <div className="text-center py-8">
@@ -522,24 +498,6 @@ export default function LeaveManagementSettings() {
               </Select>
             </div>
             <div className="flex items-center gap-2">
-              {holidays && holidays.filter((h: { isCustom?: boolean }) => !h.isCustom).length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setClearConfirmDialog(true)}
-                  className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Clear Loaded
-                </Button>
-              )}
-              <Button variant="outline" onClick={() => {
-                setImportYear(selectedYear);
-                setImportDialog(true);
-              }}>
-                <Download className="w-4 h-4 mr-2" />
-                Load Country Holidays
-              </Button>
               <Button onClick={() => openHolidayDialog()}>
                 <Plus className="w-4 h-4 mr-2" />
                 Add Custom
@@ -569,21 +527,27 @@ export default function LeaveManagementSettings() {
           ) : (
             <div className="space-y-2">
               {holidays.map((holiday: {
-                _id: string;
+                _id?: string;
                 name: string;
                 date: string;
                 countryCode?: string;
+                isCustom?: boolean;
               }) => {
                 const country = SEA_COUNTRIES.find(c => c.code === holiday.countryCode);
                 return (
                   <div
-                    key={holiday._id}
+                    key={holiday._id || holiday.date}
                     className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border"
                   >
                     <div className="flex items-center gap-3">
                       <CalendarDays className="w-4 h-4 text-muted-foreground" />
                       <div>
-                        <p className="font-medium text-foreground">{holiday.name}</p>
+                        <p className="font-medium text-foreground">
+                          {holiday.name}
+                          {holiday.isCustom && (
+                            <span className="ml-2 text-xs text-orange-500 font-normal">(custom)</span>
+                          )}
+                        </p>
                         <p className="text-sm text-muted-foreground">
                           {new Date(holiday.date + 'T00:00:00').toLocaleDateString('en-US', {
                             weekday: 'short',
@@ -594,24 +558,26 @@ export default function LeaveManagementSettings() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openHolidayDialog(holiday)}
-                        className="text-muted-foreground hover:text-foreground hover:bg-muted"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteHoliday(holiday._id)}
-                        className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    {holiday.isCustom && holiday._id && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openHolidayDialog(holiday as any)}
+                          className="text-muted-foreground hover:text-foreground hover:bg-muted"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteHoliday(holiday._id!)}
+                          className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1088,209 +1054,6 @@ export default function LeaveManagementSettings() {
                     <>
                       <CheckCircle className="w-4 h-4 mr-2" />
                       Add Holiday
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Import Country Holidays Modal */}
-      {importDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 transition-opacity"
-            style={{
-              backgroundColor: 'rgba(0, 0, 0, 0.4)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)'
-            }}
-            onClick={() => { setImportDialog(false); setImportResult(null); }}
-          />
-          <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl w-full max-w-md border border-border">
-            <div className="p-6 space-y-4">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                  <Globe className="w-5 h-5" />
-                  Load Country Holidays
-                </h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Automatically import public holidays for your country
-                </p>
-              </div>
-
-              {importResult ? (
-                <div className="py-4">
-                  <div className="flex items-center justify-center mb-4">
-                    <div className="p-3 bg-green-500/10 rounded-full">
-                      <CheckCircle className="w-8 h-8 text-green-600" />
-                    </div>
-                  </div>
-                  <div className="text-center space-y-2">
-                    <p className="font-medium text-foreground">
-                      Successfully loaded {importResult.countryName} holidays!
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {importResult.imported} holidays imported
-                      {importResult.skipped > 0 && `, ${importResult.skipped} duplicates skipped`}
-                    </p>
-                  </div>
-                  <div className="flex justify-center mt-6">
-                    <Button onClick={() => { setImportDialog(false); setImportResult(null); }}>
-                      Done
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="import-country">Country</Label>
-                      <Select
-                        value={importCountry}
-                        onValueChange={setImportCountry}
-                      >
-                        <SelectTrigger className="bg-input border-border">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SEA_COUNTRIES.map((country) => (
-                            <SelectItem key={country.code} value={country.code}>
-                              {country.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="import-year">Year</Label>
-                      <Select
-                        value={importYear.toString()}
-                        onValueChange={(v) => setImportYear(parseInt(v))}
-                      >
-                        <SelectTrigger className="bg-input border-border">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((year) => (
-                            <SelectItem key={year} value={year.toString()}>
-                              {year}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
-                    <p className="flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <span>
-                        This will import official public holidays for the selected country and year.
-                        Existing holidays won't be duplicated.
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-2">
-                    <Button variant="outline" onClick={() => setImportDialog(false)}>
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleImportHolidays}
-                      disabled={isImporting}
-                    >
-                      {isImporting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Importing...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-4 h-4 mr-2" />
-                          Import Holidays
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Clear Holidays Confirmation Dialog */}
-      {clearConfirmDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 transition-opacity"
-            style={{
-              backgroundColor: 'rgba(0, 0, 0, 0.4)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)'
-            }}
-            onClick={() => !isClearing && setClearConfirmDialog(false)}
-          />
-          <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl w-full max-w-md border border-border">
-            <div className="p-6 space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-red-500/10 rounded-full flex-shrink-0">
-                  <Trash2 className="w-6 h-6 text-red-500" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground">Clear Loaded Holidays</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    This action cannot be undone
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                <p className="text-sm text-foreground">
-                  You are about to clear <span className="font-semibold">{holidays?.filter((h: { isCustom?: boolean }) => !h.isCustom).length || 0}</span> loaded holidays for <span className="font-semibold">{selectedYear}</span>.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  • Holidays loaded via "Load Country Holidays" will be removed<br />
-                  • Custom holidays you added manually will be kept
-                </p>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setClearConfirmDialog(false)}
-                  disabled={isClearing}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={async () => {
-                    if (!businessId) return;
-                    setIsClearing(true);
-                    try {
-                      await clearSystemHolidays(businessId, selectedYear);
-                      setClearConfirmDialog(false);
-                    } catch (error) {
-                      console.error('Failed to clear holidays:', error);
-                    } finally {
-                      setIsClearing(false);
-                    }
-                  }}
-                  disabled={isClearing}
-                >
-                  {isClearing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Clearing...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Clear Holidays
                     </>
                   )}
                 </Button>

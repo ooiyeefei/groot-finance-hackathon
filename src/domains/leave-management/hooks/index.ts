@@ -57,7 +57,6 @@ export {
 export {
   useBusinessHolidays,
   useHolidayDates,
-  useCountryHolidays,
   useCustomHolidays,
   useAddCustomHoliday,
   useRemoveCustomHoliday,
