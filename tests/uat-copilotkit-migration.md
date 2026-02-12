@@ -96,44 +96,30 @@ Root Layout (layout.tsx)
 User types message
   --> ChatWindow.handleSubmit()
   --> useCopilotBridge.sendMessage()
-  --> CopilotKit appendMessage() [optimistic UI]
-  --> /api/copilotkit (POST)
-      --> Clerk auth + rate limit check
-      --> CopilotRuntime action: "financialAgent"
+  --> Convex mutation (persist user message immediately)
+  --> fetch('/api/copilotkit', { message, history, conversationId })
+      --> Clerk auth (cookies) + rate limit check
       --> invokeLangGraphAgent()
           --> createFinancialAgent().invoke() [LangGraph 8-node StateGraph]
           --> Qdrant RAG, MCP tools, Mem0 memory (all internal)
-      --> Stream response back
-  --> visibleMessages updates (CopilotKit state)
-  --> Convex mutation (persist message)
+      --> JSON response { content, citations }
+  --> Convex mutation (persist assistant response)
+  --> Convex real-time subscription updates UI
   --> MessageRenderer displays response with citations
 ```
 
-### Conversation Persistence (Dual-Source Pattern)
+### Conversation Persistence (Single Source)
 
 ```
-                  +-----------+
-                  | Convex DB |  (Source of truth for history)
-                  +-----+-----+
-                        |
-                  useConversations()
-                  useMessages()
-                        |
-  +---------------------+---------------------+
-  |                                           |
-  | convexMessages                            |
-  | (persisted history)                       |
-  |                                           |
-  +--- buildDisplayMessages() ---+            |
-  |                              |            |
-  | visibleMessages              |            |
-  | (active CopilotKit session)  |            |
-  |                              |            |
-  +------------------------------+            |
-  |                                           |
-  | Combined display list                     |
-  | (deduplicated by content)                 |
-  +-------------------------------------------+
+  +-----------+
+  | Convex DB |  (Single source of truth)
+  +-----+-----+
+        |
+  useConversations()  -->  ConversationSwitcher
+  useMessages()       -->  ChatWindow (display messages)
+  createMessage()     -->  Persist user + assistant messages
+        |
+  Real-time subscriptions auto-update UI
 ```
 
 ### Dynamic Rich Content
@@ -442,14 +428,28 @@ ChatWindow receives initialMessage prop
 
 ---
 
-## 5. Known Limitations
+## 5. Known Limitations & Architecture Decisions
 
-1. **CopilotKit v1.51.3 open-source limitations**: `useCopilotChat` hook omits `messages`, `sendMessage`, `setMessages`, `deleteMessage` from the return type. Bridge hook uses `visibleMessages` + `appendMessage` (deprecated but functional) as workaround.
+### CopilotKit Runtime Removed (Post-UAT Fix)
 
-2. **Rich content panel**: Uses simplified bar chart visualization. Full `recharts` integration can be added when specific chart requirements are defined.
+CopilotKit v1.51.3's `CopilotListeners` component requires a registered remote agent named `"default"` (via `LangGraphAgent` or `LangGraphHttpAgent`). Our LangGraph agent runs **in-process** (not as a remote deployment), making it incompatible with CopilotKit's agent discovery protocol.
 
-3. **Conversation deduplication**: Uses content-matching to avoid showing duplicate messages from both Convex and CopilotKit sources. Edge case: identical messages in the same conversation could be deduplicated incorrectly.
+**Root cause**: The `<CopilotKit>` provider crashed on every page load with:
+```
+useAgent: Agent 'default' not found after runtime sync (runtimeUrl=/api/copilotkit)
+```
 
-4. **`@whatwg-node/fetch` webpack warning**: CopilotKit runtime dependency produces a "Critical dependency" warning during build. This is cosmetic and does not affect functionality.
+**Fix applied**: Replaced CopilotKit runtime with direct API calls:
+- `/api/copilotkit` POST endpoint calls `invokeLangGraphAgent()` directly
+- Bridge hook uses `fetch()` instead of `useCopilotChat()`
+- Convex is the single source of truth (no dual-source deduplication needed)
+- Removed `<CopilotKit>` provider from layout
+- CopilotKit npm packages remain installed but are not actively used at runtime
 
-5. **Validation tasks (T003, T008, T013-T028, T036-T040)**: These require a running app with test data and are left for manual UAT execution per above test cases.
+### Other Limitations
+
+1. **Rich content panel**: Uses simplified bar chart visualization. Full `recharts` integration can be added when specific chart requirements are defined.
+
+2. **No streaming**: Current implementation waits for the full agent response before displaying. Streaming can be added by changing the API to SSE (Server-Sent Events).
+
+3. **Validation tasks (T003, T008, T013-T028, T036-T040)**: These require a running app with test data and are left for manual UAT execution per above test cases.
