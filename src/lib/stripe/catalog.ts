@@ -215,7 +215,7 @@ function parseProductMetadata(
   const interval = price?.recurring?.interval as 'month' | 'year' | null
 
   return {
-    name: product.name,
+    name: product.name.replace(/FinanSEAL/gi, 'Groot Finance'),
     planKey,
     priceId: price?.id || null,
     productId: product.id,
