@@ -343,13 +343,13 @@ export function SalesInvoiceForm() {
           </Card>
 
           {/* Line Items */}
-          <Card className="bg-card border-border">
+          <Card className="bg-card border-border overflow-visible">
             <CardHeader>
               <CardTitle className="text-foreground text-base">Line Items</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-visible">
               {/* Desktop table */}
-              <div className="hidden sm:block overflow-x-auto">
+              <div className="hidden sm:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
