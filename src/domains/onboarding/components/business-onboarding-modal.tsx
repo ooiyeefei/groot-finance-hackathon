@@ -18,12 +18,14 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
+import { SignOutButton } from '@clerk/nextjs'
 import {
   Building2,
   ArrowLeft,
   Loader2,
   Check,
   X,
+  LogOut,
   Sparkles,
   Wand2,
   Rocket,
@@ -79,12 +81,14 @@ interface BusinessOnboardingModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void // Called after successful business creation
+  mode?: 'modal' | 'page' // 'modal' for sidebar trigger, 'page' for /onboarding/business
 }
 
 export default function BusinessOnboardingModal({
   isOpen,
   onClose,
   onSuccess,
+  mode = 'modal',
 }: BusinessOnboardingModalProps) {
   const router = useRouter()
   const { refreshMemberships, refreshContext } = useBusinessContext()
@@ -125,15 +129,18 @@ export default function BusinessOnboardingModal({
 
     if (isOpen) {
       document.addEventListener('keydown', handleEscape)
-      // Prevent body scroll when modal is open
-      document.body.style.overflow = 'hidden'
+      if (mode !== 'page') {
+        document.body.style.overflow = 'hidden'
+      }
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'unset'
+      if (mode !== 'page') {
+        document.body.style.overflow = 'unset'
+      }
     }
-  }, [isOpen, onClose])
+  }, [isOpen, onClose, mode])
 
   // Reset wizard when modal closes
   useEffect(() => {
@@ -192,7 +199,7 @@ export default function BusinessOnboardingModal({
           customCOGSNames: wizardData.customCOGSNames || [],
           customExpenseNames: wizardData.customExpenseNames || [],
           selectedPlan: selectedPlan,
-          forceCreateNew: true,  // Always create new from modal
+          forceCreateNew: mode !== 'page',  // modal: always new, page: may complete placeholder
         }),
       })
 
@@ -225,33 +232,28 @@ export default function BusinessOnboardingModal({
         }
       }
 
-      // Step 3: Refresh business context
-      console.log('[BusinessOnboardingModal] Refreshing business context...')
-      await refreshMemberships()
-      await refreshContext()
-
-      // Call success callback if provided
-      onSuccess?.()
-
-      // Close modal first
-      onClose()
-
-      // CRITICAL: Clear localStorage caches before reload
-      // This ensures the page loads with fresh data from the server
+      // Step 3: Clear caches and handle post-creation navigation
       try {
         localStorage.removeItem('business-profile')
         localStorage.removeItem('user-role-cache')
-        console.log('[BusinessOnboardingModal] Cleared localStorage caches')
       } catch (cacheError) {
         console.warn('[BusinessOnboardingModal] Failed to clear caches:', cacheError)
       }
 
-      // CRITICAL: Force full page reload to clear ALL caches
-      // router.refresh() is a soft refresh that doesn't clear React Query,
-      // Convex subscriptions, or localStorage caches. A full reload ensures
-      // the business switcher and all pages show the new business.
-      console.log('[BusinessOnboardingModal] Triggering full page reload...')
-      window.location.reload()
+      if (mode === 'page') {
+        // Page mode: navigate to dashboard
+        console.log('[BusinessOnboarding] Redirecting to dashboard...')
+        router.push('/')
+      } else {
+        // Modal mode: refresh context and force full page reload
+        console.log('[BusinessOnboardingModal] Refreshing business context...')
+        await refreshMemberships()
+        await refreshContext()
+        onSuccess?.()
+        onClose()
+        console.log('[BusinessOnboardingModal] Triggering full page reload...')
+        window.location.reload()
+      }
     } catch (err) {
       console.error('[BusinessOnboardingModal] Error:', err)
       setSubmitError(err instanceof Error ? err.message : 'Failed to create business')
@@ -260,8 +262,7 @@ export default function BusinessOnboardingModal({
     }
   }
 
-  // Portal to document.body to escape sidebar's transform containing block
-  return createPortal(
+  const content = (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
@@ -274,8 +275,8 @@ export default function BusinessOnboardingModal({
         onClick={onClose}
       />
 
-      {/* Modal Content - 699px wide */}
-      <div className="relative w-full max-w-[699px] min-h-[85vh] max-h-[96vh] overflow-hidden m-4 flex flex-col">
+      {/* Modal Content */}
+      <div className={cn("relative w-full min-h-[85vh] max-h-[96vh] overflow-hidden m-4 flex flex-col", mode === 'page' ? 'max-w-3xl' : 'max-w-[699px]')}>
         <Card className="bg-card border-border shadow-2xl flex flex-col h-full">
           {/* Header with close button */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -292,14 +293,28 @@ export default function BusinessOnboardingModal({
                 </p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="h-9 w-9 p-0"
-            >
-              <X className="h-5 w-5" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {mode === 'page' && (
+                <SignOutButton redirectUrl="/en/sign-in">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <LogOut className="h-4 w-4 mr-1.5" />
+                    Sign out
+                  </Button>
+                </SignOutButton>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="h-9 w-9 p-0"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
 
           {/* Progress bar */}
@@ -653,7 +668,10 @@ export default function BusinessOnboardingModal({
           </CardContent>
         </Card>
       </div>
-    </div>,
-    document.body
+    </div>
   )
+
+  // Page mode: render directly, Modal mode: portal to escape sidebar's transform
+  if (mode === 'page') return content
+  return createPortal(content, document.body)
 }
