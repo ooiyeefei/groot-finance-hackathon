@@ -72,6 +72,12 @@ interface InvoicePdfDocumentProps {
   templateId?: string
 }
 
+// ─── Register cursive font for signature ─────────────────
+Font.register({
+  family: 'GreatVibes',
+  src: 'https://fonts.gstatic.com/s/greatvibes/v18/RWmMoKWR9v4ksMfaWd_JN9XFiaQ.ttf',
+})
+
 // ─── Colors (light-mode palette for PDF) ─────────────────
 const C = {
   foreground: '#1a1a1a',
@@ -154,12 +160,12 @@ const s = StyleSheet.create({
   grandTotalValue: { fontSize: 11, fontFamily: 'Helvetica-Bold' },
 
   // Footer sections
-  footerSection: { marginTop: 8 },
-  footerText: { fontSize: 9, color: C.muted, lineHeight: 1.5 },
+  footerSection: { marginTop: 8, width: '100%' },
+  footerText: { fontSize: 9, color: C.muted, lineHeight: 1.5, width: '100%' },
 
   // Signature
   signatureBlock: { alignItems: 'flex-end', marginTop: 24 },
-  signatureName: { fontSize: 18, fontFamily: 'Helvetica-Oblique', marginBottom: 4 },
+  signatureName: { fontSize: 22, fontFamily: 'GreatVibes', marginBottom: 4 },
   signatureLine: { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 4, width: 160 },
   signatureLabel: { fontSize: 8, color: C.muted, textAlign: 'right' },
 })
