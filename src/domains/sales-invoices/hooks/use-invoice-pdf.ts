@@ -1,63 +1,65 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, createElement } from 'react'
+import type { PdfInvoiceData, PdfBusinessInfo } from '../components/invoice-templates/pdf-document'
 
-const PDF_OPTIONS = {
-  margin: [15, 10, 15, 10] as [number, number, number, number], // [top, left, bottom, right] mm
-  image: { type: 'jpeg' as const, quality: 0.98 },
-  html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-  jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const },
-  pagebreak: { mode: ['css', 'legacy'] as string[] },
+export interface PdfRenderData {
+  invoice: PdfInvoiceData
+  businessInfo?: PdfBusinessInfo
+  templateId?: string
 }
 
 /**
- * Build capture options with the current scroll offset so html2canvas
- * renders the element from its true position regardless of page scroll.
- */
-function buildOptions(margin: number | [number, number, number, number], filename: string) {
-  return {
-    ...PDF_OPTIONS,
-    margin,
-    filename,
-    html2canvas: {
-      ...PDF_OPTIONS.html2canvas,
-      scrollY: -window.scrollY,
-      scrollX: -window.scrollX,
-    },
-  }
-}
-
-/**
- * Hook for generating PDFs from invoice templates using html2pdf.js
- * Uses dynamic import to avoid SSR issues (html2pdf.js uses window/document)
+ * Hook for generating invoice PDFs with @react-pdf/renderer.
+ *
+ * Produces real vector PDFs — no DOM capture, no scroll offset issues,
+ * no parent overflow clipping.
  */
 export function useInvoicePdf() {
   const [isGenerating, setIsGenerating] = useState(false)
 
+  /**
+   * Render the PDF React element to a Blob.
+   * Uses dynamic import so @react-pdf/renderer is only loaded client-side.
+   */
+  const renderToBlob = useCallback(async (data: PdfRenderData): Promise<Blob> => {
+    const [{ pdf }, { InvoicePdfDocument }] = await Promise.all([
+      import('@react-pdf/renderer'),
+      import('../components/invoice-templates/pdf-document'),
+    ])
+
+    const element = createElement(InvoicePdfDocument, {
+      invoice: data.invoice,
+      businessInfo: data.businessInfo,
+      templateId: data.templateId,
+    })
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pdf() accepts any React element rendering a <Document>
+    return await pdf(element as any).toBlob()
+  }, [])
+
+  /**
+   * Generate PDF and trigger browser download.
+   */
   const generatePdf = useCallback(async (
     invoiceNumber: string,
-    options?: {
-      elementId?: string
-      margin?: number
-    }
+    data: PdfRenderData,
   ) => {
     setIsGenerating(true)
 
     try {
-      const html2pdf = (await import('html2pdf.js')).default
-
-      const element = document.getElementById(options?.elementId ?? 'invoice-template')
-      if (!element) {
-        throw new Error('Invoice template element not found')
-      }
-
+      const blob = await renderToBlob(data)
       const filename = `${invoiceNumber}.pdf`
-      const pdfOpts = buildOptions(options?.margin ?? PDF_OPTIONS.margin, filename)
 
-      await html2pdf()
-        .set(pdfOpts)
-        .from(element)
-        .save()
+      // Trigger browser download
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
 
       return { success: true, filename }
     } catch (error) {
@@ -66,38 +68,25 @@ export function useInvoicePdf() {
     } finally {
       setIsGenerating(false)
     }
-  }, [])
+  }, [renderToBlob])
 
   /**
-   * Generate PDF as a Blob (for email attachment, etc.)
-   * Does not trigger download — returns the raw PDF data.
+   * Generate PDF as a Blob (for email attachment, storage upload, etc.)
+   * Does not trigger download.
    */
   const generatePdfBlob = useCallback(async (
     invoiceNumber: string,
-    options?: { elementId?: string; margin?: number }
+    data: PdfRenderData,
   ): Promise<{ success: boolean; blob?: Blob; filename?: string; error?: string }> => {
     try {
-      const html2pdf = (await import('html2pdf.js')).default
-
-      const element = document.getElementById(options?.elementId ?? 'invoice-template')
-      if (!element) {
-        throw new Error('Invoice template element not found')
-      }
-
+      const blob = await renderToBlob(data)
       const filename = `${invoiceNumber}.pdf`
-      const pdfOpts = buildOptions(options?.margin ?? PDF_OPTIONS.margin, filename)
-
-      const blob: Blob = await html2pdf()
-        .set(pdfOpts)
-        .from(element)
-        .outputPdf('blob')
-
       return { success: true, blob, filename }
     } catch (error) {
       console.error('[useInvoicePdf] PDF blob generation failed:', error)
       return { success: false, error: String(error) }
     }
-  }, [])
+  }, [renderToBlob])
 
   return {
     generatePdf,

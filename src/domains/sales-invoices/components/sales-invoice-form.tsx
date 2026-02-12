@@ -14,7 +14,7 @@ import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-conte
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
 import { useSalesInvoiceMutations, useNextInvoiceNumber } from '../hooks/use-sales-invoices'
 import { useCatalogItemSearch } from '../hooks/use-catalog-items'
-import { useInvoicePdf } from '../hooks/use-invoice-pdf'
+import { useInvoicePdf, type PdfRenderData } from '../hooks/use-invoice-pdf'
 import { InvoicePreview } from './invoice-preview'
 import { InvoiceStatusBadge } from './invoice-status-badge'
 import CustomerSelector from './customer-selector'
@@ -57,11 +57,44 @@ export function SalesInvoiceForm() {
 
   const { results: catalogResults } = useCatalogItemSearch(catalogSearchQuery, showCatalogDropdown)
 
+  // Build business info from profile for invoice preview & PDF
+  const businessInfo = businessProfile ? {
+    companyName: businessProfile.name,
+    companyAddress: businessProfile.address || undefined,
+    companyPhone: businessProfile.contact_phone || undefined,
+    companyEmail: businessProfile.contact_email || undefined,
+  } : undefined
+
+  // Data bundle for @react-pdf/renderer
+  const buildPdfData = useCallback((): PdfRenderData => ({
+    invoice: {
+      invoiceNumber: nextInvoiceNumber ?? 'INV-XXXX-XXX',
+      invoiceDate: form.invoiceDate,
+      dueDate: form.dueDate,
+      customerSnapshot: form.customerSnapshot,
+      lineItems: form.lineItems,
+      subtotal: form.totals.subtotal,
+      totalDiscount: form.totals.totalDiscount,
+      totalTax: form.totals.totalTax,
+      totalAmount: form.totals.totalAmount,
+      balanceDue: form.totals.totalAmount,
+      currency: form.currency,
+      taxMode: form.taxMode,
+      notes: form.notes,
+      paymentInstructions: form.paymentInstructions,
+      paymentTerms: form.paymentTerms,
+      signatureName: form.signatureName,
+      status: 'draft',
+    },
+    businessInfo,
+    templateId: form.templateId,
+  }), [nextInvoiceNumber, form, businessInfo])
+
   /** Upload PDF blob to Convex storage and store the reference on the invoice */
   const uploadPdfToStorage = useCallback(async (invoiceId: Id<"sales_invoices">) => {
     try {
       const invoiceNum = nextInvoiceNumber ?? 'INV-XXXX-XXX'
-      const pdfResult = await generatePdfBlob(invoiceNum)
+      const pdfResult = await generatePdfBlob(invoiceNum, buildPdfData())
       if (!pdfResult.success || !pdfResult.blob) return
 
       // Upload to Convex storage
@@ -82,7 +115,7 @@ export function SalesInvoiceForm() {
     } catch {
       console.error('Failed to upload PDF to storage')
     }
-  }, [nextInvoiceNumber, generatePdfBlob, generateUploadUrl, storePdfStorageId, businessId])
+  }, [nextInvoiceNumber, generatePdfBlob, buildPdfData, generateUploadUrl, storePdfStorageId, businessId])
 
   const createInvoiceData = useCallback(() => ({
     businessId: businessId as Id<"businesses">,
@@ -128,10 +161,10 @@ export function SalesInvoiceForm() {
       // 1. Create the invoice
       const invoiceId = await createInvoice(createInvoiceData())
 
-      // 2. Generate PDF blob directly from the rendered template for email attachment
+      // 2. Generate PDF blob directly for email attachment
       const invoiceNum = nextInvoiceNumber ?? 'INV-XXXX-XXX'
       let pdfPayload: Record<string, unknown> = {}
-      const pdfResult = await generatePdfBlob(invoiceNum)
+      const pdfResult = await generatePdfBlob(invoiceNum, buildPdfData())
       if (pdfResult.success && pdfResult.blob) {
         // Convert blob to base64 for email
         const base64 = await new Promise<string>((resolve, reject) => {
@@ -190,7 +223,7 @@ export function SalesInvoiceForm() {
     } finally {
       setIsSending(false)
     }
-  }, [businessId, business, businessProfile, form, nextInvoiceNumber, createInvoice, createInvoiceData, sendInvoice, generatePdfBlob, uploadPdfToStorage, router, locale])
+  }, [businessId, business, businessProfile, form, nextInvoiceNumber, createInvoice, createInvoiceData, sendInvoice, generatePdfBlob, buildPdfData, uploadPdfToStorage, router, locale])
 
   const handleCustomerSelect = useCallback((customer: { _id: string; businessName: string; contactPerson?: string; email: string; phone?: string; address?: string; taxId?: string }) => {
     form.setCustomerId(customer._id)
@@ -232,14 +265,6 @@ export function SalesInvoiceForm() {
     status: 'draft',
   }
 
-  // Build business info from profile for invoice preview
-  const businessInfo = businessProfile ? {
-    companyName: businessProfile.name,
-    companyAddress: businessProfile.address || undefined,
-    companyPhone: businessProfile.contact_phone || undefined,
-    companyEmail: businessProfile.contact_email || undefined,
-  } : undefined
-
   if (mode === 'preview') {
     return (
       <div className="space-y-4">
@@ -253,7 +278,7 @@ export function SalesInvoiceForm() {
           invoice={previewInvoice}
           businessInfo={businessInfo}
           templateId={form.templateId}
-          onDownloadPdf={() => generatePdf(previewInvoice.invoiceNumber)}
+          onDownloadPdf={() => generatePdf(previewInvoice.invoiceNumber, buildPdfData())}
           onSend={form.isValid && !isSending ? handleSaveAndSend : undefined}
         />
       </div>

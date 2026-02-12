@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoice, useSalesInvoiceMutations, useInvoicePdfUrl } from '@/domains/sales-invoices/hooks/use-sales-invoices'
-import { useInvoicePdf } from '@/domains/sales-invoices/hooks/use-invoice-pdf'
+import { useInvoicePdf, type PdfRenderData } from '@/domains/sales-invoices/hooks/use-invoice-pdf'
 import { InvoicePreview } from '@/domains/sales-invoices/components/invoice-preview'
 import { InvoiceStatusBadge } from '@/domains/sales-invoices/components/invoice-status-badge'
 import { formatCurrency } from '@/lib/utils/format-number'
@@ -91,7 +91,7 @@ export default function SalesInvoiceDetailPage() {
   /** Generate PDF blob and convert to base64 for email attachment */
   const buildPdfAttachment = async (): Promise<{ content: string; filename: string } | undefined> => {
     try {
-      const result = await generatePdfBlob(invoice.invoiceNumber)
+      const result = await generatePdfBlob(invoice.invoiceNumber, pdfData)
       if (!result.success || !result.blob) return undefined
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
@@ -177,7 +177,7 @@ export default function SalesInvoiceDetailPage() {
   }
 
   const handleDownloadPdf = async () => {
-    await generatePdf(invoice.invoiceNumber)
+    await generatePdf(invoice.invoiceNumber, pdfData)
   }
 
   // Build business info from profile for invoice templates
@@ -186,6 +186,32 @@ export default function SalesInvoiceDetailPage() {
     companyAddress: businessProfile?.address || undefined,
     companyPhone: businessProfile?.contact_phone || undefined,
     companyEmail: businessProfile?.contact_email || undefined,
+  }
+
+  // Data bundle for @react-pdf/renderer
+  const pdfData: PdfRenderData = {
+    invoice: {
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.invoiceDate,
+      dueDate: invoice.dueDate,
+      customerSnapshot: invoice.customerSnapshot,
+      lineItems: invoice.lineItems ?? [],
+      subtotal: invoice.subtotal,
+      totalDiscount: invoice.totalDiscount,
+      totalTax: invoice.totalTax,
+      totalAmount: invoice.totalAmount,
+      balanceDue: invoice.balanceDue,
+      amountPaid: invoice.amountPaid,
+      currency: invoice.currency,
+      taxMode: invoice.taxMode,
+      notes: invoice.notes,
+      paymentInstructions: invoice.paymentInstructions,
+      paymentTerms: invoice.paymentTerms,
+      signatureName: invoice.signatureName,
+      status: invoice.status,
+    },
+    businessInfo,
+    templateId: invoice.templateId,
   }
 
   return (
