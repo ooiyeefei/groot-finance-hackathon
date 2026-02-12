@@ -275,7 +275,6 @@ export default defineSchema({
   expense_claims: defineTable({
     // Identity
     legacyId: v.optional(v.string()),
-    submissionId: v.optional(v.string()),   // Link to expense_claim_submissions
     businessId: v.id("businesses"),
     userId: v.id("users"),                  // Submitter
 
