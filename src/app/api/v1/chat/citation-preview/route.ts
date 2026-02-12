@@ -7,15 +7,11 @@
  * - Displays regulatory PDFs in chat AI assistant citation overlay
  * - Bypasses CORS restrictions for government document embedding
  * - Validates domain whitelist for security
- *
- * North Star Architecture:
- * - Thin wrapper delegating to chat.service.ts
- * - Handles HTTP concerns (validation, error mapping)
- * - Business logic in service layer
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { proxyCitationDocument } from '@/domains/chat/lib/chat.service'
+
+const ALLOWED_DOMAINS = ['ssm.com.my', 'gov.sg', 'jhi.gov.my', 'mida.gov.my']
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,25 +27,46 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log(`[Citation Preview V1 API] Proxying document: ${url}`)
+    // Validate URL is from trusted government domains
+    const urlObj = new URL(url)
+    const isAllowed = ALLOWED_DOMAINS.some(domain => urlObj.hostname.includes(domain))
 
-    // Call service layer
-    const response = await proxyCitationDocument(url)
-
-    return response
-
-  } catch (error) {
-    console.error('[Citation Preview V1 API] Error:', error)
-
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch document'
-
-    // Map specific errors to HTTP status codes
-    if (errorMessage.includes('not allowed')) {
+    if (!isAllowed) {
       return NextResponse.json(
         { error: 'Domain not allowed' },
         { status: 403 }
       )
     }
+
+    console.log(`[Citation Preview V1 API] Proxying document: ${url}`)
+
+    // Fetch PDF from government server
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'FinanSEAL Bot 1.0'
+      }
+    })
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: `Failed to fetch PDF: ${response.status}` },
+        { status: 502 }
+      )
+    }
+
+    const pdfBuffer = await response.arrayBuffer()
+
+    return new Response(pdfBuffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Cache-Control': 'public, max-age=3600'
+      }
+    })
+
+  } catch (error) {
+    console.error('[Citation Preview V1 API] Error:', error)
+
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch document'
 
     return NextResponse.json(
       { error: errorMessage },
