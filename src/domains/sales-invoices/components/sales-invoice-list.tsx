@@ -11,6 +11,7 @@ import {
   Send,
   CreditCard,
   Ban,
+  Trash2,
   Loader2,
   Filter,
 } from 'lucide-react'
@@ -62,10 +63,11 @@ export default function SalesInvoiceList() {
     status: statusFilter,
   })
   const convex = useConvex()
-  const { sendInvoice, voidInvoice } = useSalesInvoiceMutations()
+  const { sendInvoice, voidInvoice, removeInvoice } = useSalesInvoiceMutations()
 
   const [sendingIds, setSendingIds] = useState<Set<string>>(new Set())
   const [voidingIds, setVoidingIds] = useState<Set<string>>(new Set())
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
 
   // -----------------------------------------------------------------------
   // Handlers
@@ -154,6 +156,24 @@ export default function SalesInvoiceList() {
       }
     },
     [voidInvoice],
+  )
+
+  const handleDelete = useCallback(
+    async (invoice: SalesInvoice) => {
+      if (!confirm(`Delete draft invoice ${invoice.invoiceNumber}? This cannot be undone.`)) return
+      const id = invoice._id
+      setDeletingIds((prev) => new Set(prev).add(id))
+      try {
+        await removeInvoice({ id, businessId: invoice.businessId })
+      } finally {
+        setDeletingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+      }
+    },
+    [removeInvoice],
   )
 
   // -----------------------------------------------------------------------
@@ -395,6 +415,23 @@ export default function SalesInvoiceList() {
                               )}
                             </Button>
                           )}
+
+                        {/* Delete (draft only) */}
+                        {isDraft(invoice.status) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Delete draft"
+                            disabled={deletingIds.has(invoice._id)}
+                            onClick={() => handleDelete(invoice)}
+                          >
+                            {deletingIds.has(invoice._id) ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -495,6 +532,22 @@ export default function SalesInvoiceList() {
                         Void
                       </Button>
                     )}
+
+                  {isDraft(invoice.status) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={deletingIds.has(invoice._id)}
+                      onClick={() => handleDelete(invoice)}
+                    >
+                      {deletingIds.has(invoice._id) ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 mr-1 text-destructive" />
+                      )}
+                      Delete
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
