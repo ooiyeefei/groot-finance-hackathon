@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
-import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceTemplateMutations, useCustomInvoiceTemplates, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
+import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
 import { useInvoicePdf, type PdfRenderData } from '../hooks/use-invoice-pdf'
 import { InvoiceEditorHeader } from './invoice-editor-header'
 import { InvoiceFormPanel } from './invoice-form-panel'
@@ -13,6 +13,9 @@ import { InvoicePreviewPanel } from './invoice-preview-panel'
 import { ReviewInvoiceView } from './review-invoice-view'
 import type { PaymentTerms, SalesInvoiceFormInput } from '../types'
 import type { Id } from '../../../../convex/_generated/dataModel'
+
+const DEFAULT_NOTES = 'Thank you for your business.'
+const DEFAULT_PAYMENT_INSTRUCTIONS = `Please make payment via bank transfer:\nBank: \nAccount Name: \nAccount Number: \nReference: Invoice number`
 
 interface InvoiceEditorLayoutProps {
   mode: 'create' | 'edit'
@@ -31,8 +34,6 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   const { createInvoice, updateInvoice, sendInvoice, generateUploadUrl, storePdfStorageId } = useSalesInvoiceMutations()
   const nextInvoiceNumber = useNextInvoiceNumber()
   const { generatePdf, generatePdfBlob } = useInvoicePdf()
-  const { customNoteTemplates, customPaymentTemplates } = useCustomInvoiceTemplates()
-  const { addTemplate, deleteTemplate } = useInvoiceTemplateMutations()
   const { updateDefaults } = useInvoiceDefaultsMutation()
 
   // Auto-save handler
@@ -93,9 +94,8 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   const form = useSalesInvoiceForm({
     defaultCurrency: (invoiceSettings?.defaultCurrency as string) ?? (business as unknown as Record<string, unknown>)?.homeCurrency as string ?? 'SGD',
     defaultPaymentTerms: (invoiceSettings?.defaultPaymentTerms as PaymentTerms) ?? 'net_30',
-    defaultPaymentInstructions: invoiceSettings?.defaultPaymentInstructions as string,
-    defaultNotes: invoiceSettings?.defaultNotes as string | undefined,
-    defaultFooter: invoiceSettings?.defaultFooter as string | undefined,
+    defaultPaymentInstructions: (invoiceSettings?.defaultPaymentInstructions as string) ?? (business ? DEFAULT_PAYMENT_INSTRUCTIONS : undefined),
+    defaultNotes: (invoiceSettings?.defaultNotes as string) ?? (business ? DEFAULT_NOTES : undefined),
     defaultSignatureName: invoiceSettings?.defaultSignatureName as string | undefined,
     defaultTemplateId: (invoiceSettings?.selectedTemplate as string) ?? 'modern',
     initialData,
@@ -307,33 +307,13 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
             form={form}
             businessSettings={invoiceSettings as Record<string, unknown>}
             onDraftCreated={handleDraftCreated}
-            customNoteTemplates={customNoteTemplates}
-            customPaymentTemplates={customPaymentTemplates}
             onSaveDefaults={async () => {
               if (!businessId) return
               await updateDefaults({
                 businessId: businessId as Id<'businesses'>,
                 defaultNotes: form.notes || undefined,
-                defaultFooter: form.footer || undefined,
                 defaultPaymentInstructions: form.paymentInstructions || undefined,
                 defaultSignatureName: form.signatureName || undefined,
-              })
-            }}
-            onAddTemplate={async (type, label, text) => {
-              if (!businessId) return
-              await addTemplate({
-                businessId: businessId as Id<'businesses'>,
-                templateType: type,
-                label,
-                text,
-              })
-            }}
-            onDeleteTemplate={async (type, templateId) => {
-              if (!businessId) return
-              await deleteTemplate({
-                businessId: businessId as Id<'businesses'>,
-                templateType: type,
-                templateId,
               })
             }}
           />
