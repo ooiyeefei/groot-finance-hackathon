@@ -307,7 +307,7 @@ export default function CustomerSelector({
           {/* Business Name */}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
-              Customer / Business Name
+              Customer / Business Name <span className="text-destructive">*</span>
             </label>
             <Input
               value={value.businessName}
@@ -334,7 +334,7 @@ export default function CustomerSelector({
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Email
+                Email <span className="text-destructive">*</span>
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />

@@ -78,7 +78,7 @@ export function InvoiceFormPanel({
     <div className="p-6 space-y-6">
       {/* Section 1: Customer */}
       <section>
-        <h2 className="text-sm font-semibold text-foreground mb-3">Customer</h2>
+        <h2 className="text-sm font-semibold text-foreground mb-3">Customer <span className="text-destructive">*</span></h2>
         <CustomerSelector
           value={form.customerSnapshot}
           onChange={form.setCustomerSnapshot}
@@ -100,7 +100,7 @@ export function InvoiceFormPanel({
 
       {/* Section 3: Line Items */}
       <section>
-        <h2 className="text-sm font-semibold text-foreground mb-3">Items</h2>
+        <h2 className="text-sm font-semibold text-foreground mb-3">Items <span className="text-destructive">*</span></h2>
         <InvoiceLineItemsTable
           lineItems={form.lineItems}
           onUpdateItem={form.updateLineItem}

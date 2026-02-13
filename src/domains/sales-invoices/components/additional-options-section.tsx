@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, X } from 'lucide-react'
+import { Plus, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -175,13 +175,6 @@ export function AdditionalOptionsSection({
   onAddTemplate,
   onDeleteTemplate,
 }: AdditionalOptionsSectionProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [showMemo, setShowMemo] = useState(!!memo)
-  const [showFooter, setShowFooter] = useState(!!footer)
-  const [showCustomFields, setShowCustomFields] = useState(customFields.length > 0)
-  const [showPaymentInstructions, setShowPaymentInstructions] = useState(!!paymentInstructions)
-  const [showSignature, setShowSignature] = useState(!!signatureName)
-
   const handleAddCustomField = () => {
     onCustomFieldsChange([...customFields, { key: '', value: '' }])
   }
@@ -197,18 +190,9 @@ export function AdditionalOptionsSection({
     onCustomFieldsChange(customFields.filter((_, i) => i !== index))
   }
 
-  const toggleOptions: Array<{ key: string; label: string; active: boolean; onToggle: () => void }> = [
-    { key: 'memo', label: 'Memo', active: showMemo, onToggle: () => { setShowMemo(!showMemo); if (showMemo) onMemoChange('') } },
-    { key: 'footer', label: 'Footer', active: showFooter, onToggle: () => { setShowFooter(!showFooter); if (showFooter) onFooterChange('') } },
-    { key: 'customFields', label: 'Custom fields', active: showCustomFields, onToggle: () => { setShowCustomFields(!showCustomFields); if (showCustomFields) onCustomFieldsChange([]) } },
-    { key: 'taxId', label: 'Show tax ID', active: showTaxId, onToggle: () => onToggleTaxId(!showTaxId) },
-    { key: 'payment', label: 'Payment instructions', active: showPaymentInstructions, onToggle: () => { setShowPaymentInstructions(!showPaymentInstructions); if (showPaymentInstructions) onPaymentInstructionsChange('') } },
-    { key: 'signature', label: 'Signature', active: showSignature, onToggle: () => { setShowSignature(!showSignature); if (showSignature) onSignatureNameChange('') } },
-  ]
-
   return (
-    <div className="space-y-3">
-      {/* Template selector (always visible) */}
+    <div className="space-y-4">
+      {/* Template selector */}
       <div>
         <label className="text-xs font-medium text-muted-foreground mb-1 block">Template</label>
         <Select value={templateId} onValueChange={onTemplateChange}>
@@ -222,143 +206,119 @@ export function AdditionalOptionsSection({
         </Select>
       </div>
 
-      {/* Collapsible advanced options */}
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors"
-      >
-        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        More options
-      </button>
+      {/* Memo (notes) */}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">Memo</label>
+        <TemplateTags
+          type="note"
+          builtInTemplates={NOTE_TEMPLATES}
+          customTemplates={customNoteTemplates ?? []}
+          onSelect={(text) => onMemoChange(memo ? `${memo}\n${text}` : text)}
+          onAddTemplate={onAddTemplate}
+          onDeleteTemplate={onDeleteTemplate}
+        />
+        <Textarea
+          value={memo}
+          onChange={(e) => onMemoChange(e.target.value)}
+          placeholder="Notes visible on the invoice..."
+          rows={3}
+          className="text-sm"
+        />
+      </div>
 
-      {isExpanded && (
-        <div className="space-y-4 pl-1">
-          {/* Toggle chips */}
-          <div className="flex flex-wrap gap-2">
-            {toggleOptions.map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={opt.onToggle}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                  opt.active
-                    ? 'bg-primary/10 border-primary/30 text-primary'
-                    : 'bg-muted/50 border-border text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+      {/* Footer */}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">Footer</label>
+        <Textarea
+          value={footer}
+          onChange={(e) => onFooterChange(e.target.value)}
+          placeholder="Footer text for the invoice..."
+          rows={2}
+          className="text-sm"
+        />
+      </div>
+
+      {/* Custom fields */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-muted-foreground block">Custom fields</label>
+        {customFields.map((field, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <Input
+              value={field.key}
+              onChange={(e) => handleUpdateCustomField(index, 'key', e.target.value)}
+              placeholder="Label"
+              className="h-8 text-sm flex-1"
+            />
+            <Input
+              value={field.value}
+              onChange={(e) => handleUpdateCustomField(index, 'value', e.target.value)}
+              placeholder="Value"
+              className="h-8 text-sm flex-1"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleRemoveCustomField(index)}
+              className="text-destructive hover:text-destructive shrink-0 h-8 w-8 p-0"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           </div>
+        ))}
+        <Button variant="outline" size="sm" onClick={handleAddCustomField} className="h-7 text-xs">
+          <Plus className="h-3 w-3 mr-1" />
+          Add field
+        </Button>
+      </div>
 
-          {/* Memo (notes) */}
-          {showMemo && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Memo</label>
-              <TemplateTags
-                type="note"
-                builtInTemplates={NOTE_TEMPLATES}
-                customTemplates={customNoteTemplates ?? []}
-                onSelect={(text) => onMemoChange(memo ? `${memo}\n${text}` : text)}
-                onAddTemplate={onAddTemplate}
-                onDeleteTemplate={onDeleteTemplate}
-              />
-              <Textarea
-                value={memo}
-                onChange={(e) => onMemoChange(e.target.value)}
-                placeholder="Notes visible on the invoice..."
-                rows={3}
-                className="text-sm"
-              />
-            </div>
-          )}
+      {/* Show tax ID toggle */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onToggleTaxId(!showTaxId)}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+            showTaxId ? 'bg-primary' : 'bg-muted-foreground/30'
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+              showTaxId ? 'translate-x-4' : 'translate-x-0'
+            }`}
+          />
+        </button>
+        <label className="text-xs font-medium text-muted-foreground">Show tax ID on invoice</label>
+      </div>
 
-          {/* Footer */}
-          {showFooter && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Footer</label>
-              <Textarea
-                value={footer}
-                onChange={(e) => onFooterChange(e.target.value)}
-                placeholder="Footer text for the invoice..."
-                rows={2}
-                className="text-sm"
-              />
-            </div>
-          )}
+      {/* Payment instructions */}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">Payment instructions</label>
+        <TemplateTags
+          type="payment"
+          builtInTemplates={PAYMENT_INSTRUCTION_TEMPLATES}
+          customTemplates={customPaymentTemplates ?? []}
+          onSelect={(text) => onPaymentInstructionsChange(paymentInstructions ? `${paymentInstructions}\n${text}` : text)}
+          onAddTemplate={onAddTemplate}
+          onDeleteTemplate={onDeleteTemplate}
+        />
+        <Textarea
+          value={paymentInstructions}
+          onChange={(e) => onPaymentInstructionsChange(e.target.value)}
+          placeholder="Bank details, payment methods..."
+          rows={3}
+          className="text-sm"
+        />
+      </div>
 
-          {/* Custom fields */}
-          {showCustomFields && (
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground block">Custom fields</label>
-              {customFields.map((field, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <Input
-                    value={field.key}
-                    onChange={(e) => handleUpdateCustomField(index, 'key', e.target.value)}
-                    placeholder="Label"
-                    className="h-8 text-sm flex-1"
-                  />
-                  <Input
-                    value={field.value}
-                    onChange={(e) => handleUpdateCustomField(index, 'value', e.target.value)}
-                    placeholder="Value"
-                    className="h-8 text-sm flex-1"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemoveCustomField(index)}
-                    className="text-destructive hover:text-destructive shrink-0 h-8 w-8 p-0"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-              <Button variant="outline" size="sm" onClick={handleAddCustomField} className="h-7 text-xs">
-                <Plus className="h-3 w-3 mr-1" />
-                Add field
-              </Button>
-            </div>
-          )}
-
-          {/* Payment instructions */}
-          {showPaymentInstructions && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Payment instructions</label>
-              <TemplateTags
-                type="payment"
-                builtInTemplates={PAYMENT_INSTRUCTION_TEMPLATES}
-                customTemplates={customPaymentTemplates ?? []}
-                onSelect={(text) => onPaymentInstructionsChange(paymentInstructions ? `${paymentInstructions}\n${text}` : text)}
-                onAddTemplate={onAddTemplate}
-                onDeleteTemplate={onDeleteTemplate}
-              />
-              <Textarea
-                value={paymentInstructions}
-                onChange={(e) => onPaymentInstructionsChange(e.target.value)}
-                placeholder="Bank details, payment methods..."
-                rows={3}
-                className="text-sm"
-              />
-            </div>
-          )}
-
-          {/* Signature */}
-          {showSignature && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Signature name</label>
-              <Input
-                value={signatureName}
-                onChange={(e) => onSignatureNameChange(e.target.value)}
-                placeholder="Authorized signatory name"
-                className="h-9 text-sm"
-              />
-            </div>
-          )}
-        </div>
-      )}
+      {/* Signature */}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">Signature name</label>
+        <Input
+          value={signatureName}
+          onChange={(e) => onSignatureNameChange(e.target.value)}
+          placeholder="Authorized signatory name"
+          className="h-9 text-sm"
+        />
+      </div>
     </div>
   )
 }
