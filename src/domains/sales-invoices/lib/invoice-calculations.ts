@@ -101,6 +101,9 @@ export function recalculateLineItem(
     itemCode: item.itemCode,
     unitMeasurement: item.unitMeasurement,
     catalogItemId: item.catalogItemId,
+    supplyDateStart: item.supplyDateStart,
+    supplyDateEnd: item.supplyDateEnd,
+    isDiscountable: item.isDiscountable,
   };
 }
 
@@ -143,7 +146,11 @@ export function applyInvoiceDiscount(
 }
 
 /**
- * Calculate the complete invoice totals
+ * Calculate the complete invoice totals.
+ *
+ * Invoice-level discounts are only applied to line items whose
+ * `isDiscountable` flag is not explicitly set to `false`.
+ * (Default: all items are discountable unless opted out.)
  */
 export function calculateInvoiceTotals(
   lineItems: LineItem[],
@@ -170,10 +177,19 @@ export function calculateInvoiceTotals(
     recalculated.reduce((sum, item) => sum + item.totalAmount, 0) * 100
   ) / 100;
 
-  // Invoice-level discount applied to line totals sum
-  const invoiceDiscount = applyInvoiceDiscount(lineTotalsSum, invoiceDiscountType, invoiceDiscountValue);
-  const totalDiscount = totalLineDiscount + invoiceDiscount;
+  // Invoice-level discount: only applies to discountable items
+  // Items with isDiscountable === false are excluded from the invoice discount base
+  let invoiceDiscount = 0;
+  if (invoiceDiscountType && invoiceDiscountValue && invoiceDiscountValue > 0) {
+    const discountableSum = Math.round(
+      recalculated
+        .filter((item) => item.isDiscountable !== false)
+        .reduce((sum, item) => sum + item.totalAmount, 0) * 100
+    ) / 100;
+    invoiceDiscount = applyInvoiceDiscount(discountableSum, invoiceDiscountType, invoiceDiscountValue);
+  }
 
+  const totalDiscount = totalLineDiscount + invoiceDiscount;
   const totalAmount = Math.round((lineTotalsSum - invoiceDiscount) * 100) / 100;
 
   return {

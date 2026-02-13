@@ -27,6 +27,8 @@ interface InvoiceTemplateProps {
       currency: string
       itemCode?: string
       unitMeasurement?: string
+      supplyDateStart?: string
+      supplyDateEnd?: string
     }>
     subtotal: number
     totalDiscount?: number
@@ -41,6 +43,9 @@ interface InvoiceTemplateProps {
     paymentTerms?: string
     signatureName?: string
     status: string
+    footer?: string
+    customFields?: Array<{ key: string; value: string }>
+    showTaxId?: boolean
   }
   businessInfo?: {
     companyName?: string
@@ -218,6 +223,11 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
                       ({item.unitMeasurement})
                     </span>
                   )}
+                  {item.supplyDateStart && item.supplyDateEnd && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {formatBusinessDate(item.supplyDateStart)} – {formatBusinessDate(item.supplyDateEnd)}
+                    </div>
+                  )}
                 </td>
                 {lineItems.some((li) => li.itemCode) && (
                   <td className="border border-border px-3 py-2 text-muted-foreground">
@@ -350,10 +360,31 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
         </div>
       )}
 
+      {/* Custom Fields */}
+      {invoice.customFields && invoice.customFields.length > 0 && (
+        <div className="mt-6 border-t border-border pt-4">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-sm">
+            {invoice.customFields.map((field, index) => (
+              <div key={index} className="flex justify-between">
+                <span className="text-muted-foreground">{field.key}</span>
+                <span className="font-medium text-foreground">{field.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      {invoice.footer && (
+        <div className="mt-4 border-t border-border pt-4 text-center">
+          <p className="text-xs text-muted-foreground whitespace-pre-line">{invoice.footer}</p>
+        </div>
+      )}
+
       {/* Bottom Border Line */}
       <div className="mt-8 border-t-2 border-border pt-4 text-center" style={{ pageBreakInside: 'avoid' }}>
         <p className="text-xs text-muted-foreground">
-          Thank you for your business.
+          {invoice.footer ? '' : 'Thank you for your business.'}
         </p>
       </div>
     </div>

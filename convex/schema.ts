@@ -133,6 +133,8 @@ export default defineSchema({
       selectedTemplate: v.optional(v.string()),
       customNoteTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
       customPaymentTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
+      // 012-stripe-invoice-ux: Accepted payment methods for invoice display
+      acceptedPaymentMethods: v.optional(v.array(v.string())),
     })),
 
     // Timestamps
@@ -1218,6 +1220,10 @@ export default defineSchema({
       itemCode: v.optional(v.string()),
       unitMeasurement: v.optional(v.string()),
       catalogItemId: v.optional(v.string()),
+      // 012-stripe-invoice-ux: Advanced item options
+      supplyDateStart: v.optional(v.string()),
+      supplyDateEnd: v.optional(v.string()),
+      isDiscountable: v.optional(v.boolean()),
     })),
 
     // Financial Totals
@@ -1256,6 +1262,14 @@ export default defineSchema({
     paymentInstructions: v.optional(v.string()),
     templateId: v.optional(v.string()),
     signatureName: v.optional(v.string()),
+
+    // 012-stripe-invoice-ux: Additional customization
+    footer: v.optional(v.string()),
+    customFields: v.optional(v.array(v.object({
+      key: v.string(),
+      value: v.string(),
+    }))),
+    showTaxId: v.optional(v.boolean()),
 
     // Recurring
     recurringScheduleId: v.optional(v.string()),

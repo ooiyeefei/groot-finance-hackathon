@@ -5,6 +5,8 @@ import { Plus, Trash2, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils/format-number'
+import { formatBusinessDate } from '@/lib/utils'
+import { ItemDetailForm } from './item-detail-form'
 import type { LineItem, TaxMode } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -113,8 +115,8 @@ export default function InvoiceLineItemsTable({
                 />
               </td>
 
-              {/* Description */}
-              <td className="px-3 py-2">
+              {/* Description + Item options */}
+              <td className="px-3 py-2" colSpan={1}>
                 <Input
                   value={item.description}
                   onChange={(e) =>
@@ -123,10 +125,23 @@ export default function InvoiceLineItemsTable({
                   placeholder="Item description"
                   className="h-9 text-sm bg-background border-border"
                 />
+                {item.supplyDateStart && item.supplyDateEnd && (
+                  <div className="text-xs text-muted-foreground mt-0.5 px-1">
+                    {formatBusinessDate(item.supplyDateStart)} – {formatBusinessDate(item.supplyDateEnd)}
+                  </div>
+                )}
+                <div className="mt-1">
+                  <ItemDetailForm
+                    item={item}
+                    index={index}
+                    currency={currency}
+                    onUpdate={onUpdateItem}
+                  />
+                </div>
               </td>
 
               {/* Quantity */}
-              <td className="px-3 py-2">
+              <td className="px-3 py-2 align-top">
                 <Input
                   type="number"
                   min={0}
@@ -141,7 +156,7 @@ export default function InvoiceLineItemsTable({
               </td>
 
               {/* Unit Price */}
-              <td className="px-3 py-2">
+              <td className="px-3 py-2 align-top">
                 <Input
                   type="number"
                   min={0}
@@ -155,8 +170,8 @@ export default function InvoiceLineItemsTable({
                 />
               </td>
 
-              {/* Tax Rate */}
-              <td className="px-3 py-2">
+              {/* Tax Rate — hidden since ItemDetailForm handles it */}
+              <td className="px-3 py-2 align-top">
                 <Input
                   type="number"
                   min={0}
@@ -176,12 +191,12 @@ export default function InvoiceLineItemsTable({
               </td>
 
               {/* Total (read-only) */}
-              <td className="px-3 py-2 text-right font-medium text-foreground whitespace-nowrap">
+              <td className="px-3 py-2 text-right font-medium text-foreground whitespace-nowrap align-top">
                 {formatCurrency(item.totalAmount, currency)}
               </td>
 
               {/* Remove */}
-              <td className="px-3 py-2 text-center">
+              <td className="px-3 py-2 text-center align-top">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -254,6 +269,11 @@ export default function InvoiceLineItemsTable({
                 placeholder="Item description"
                 className="h-9 text-sm"
               />
+              {item.supplyDateStart && item.supplyDateEnd && (
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {formatBusinessDate(item.supplyDateStart)} – {formatBusinessDate(item.supplyDateEnd)}
+                </div>
+              )}
             </div>
           </div>
 
@@ -325,6 +345,14 @@ export default function InvoiceLineItemsTable({
               </div>
             </div>
           </div>
+
+          {/* Item options (advanced) */}
+          <ItemDetailForm
+            item={item}
+            index={index}
+            currency={currency}
+            onUpdate={onUpdateItem}
+          />
         </div>
       ))}
     </div>

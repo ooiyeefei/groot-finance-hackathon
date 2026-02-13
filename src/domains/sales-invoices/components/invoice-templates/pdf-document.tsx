@@ -40,6 +40,8 @@ export interface PdfInvoiceData {
     currency: string
     itemCode?: string
     unitMeasurement?: string
+    supplyDateStart?: string
+    supplyDateEnd?: string
   }>
   subtotal: number
   totalDiscount?: number
@@ -54,6 +56,9 @@ export interface PdfInvoiceData {
   paymentTerms?: string
   signatureName?: string
   status: string
+  footer?: string
+  customFields?: Array<{ key: string; value: string }>
+  showTaxId?: boolean
 }
 
 export interface PdfBusinessInfo {
@@ -273,6 +278,11 @@ export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocument
               {item.unitMeasurement && (
                 <Text style={{ fontSize: 7, color: C.muted }}>Unit: {item.unitMeasurement}</Text>
               )}
+              {item.supplyDateStart && item.supplyDateEnd && (
+                <Text style={{ fontSize: 7, color: C.muted }}>
+                  {formatBusinessDate(item.supplyDateStart)} – {formatBusinessDate(item.supplyDateEnd)}
+                </Text>
+              )}
               {(item.discountAmount ?? 0) > 0 && (
                 <Text style={{ fontSize: 7, color: C.muted }}>
                   Discount: -{formatCurrency(item.discountAmount, currency)}
@@ -345,6 +355,26 @@ export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocument
           <View style={s.footerSection}>
             <Text style={s.sectionLabel}>Payment Instructions</Text>
             <Text style={s.footerText}>{invoice.paymentInstructions}</Text>
+          </View>
+        )}
+
+        {/* ── Custom Fields ── */}
+        {invoice.customFields && invoice.customFields.length > 0 && (
+          <View style={[s.footerSection, { marginTop: 12 }]}>
+            <Text style={s.sectionLabel}>Additional Information</Text>
+            {invoice.customFields.map((field, i) => (
+              <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+                <Text style={{ fontSize: 9, color: C.muted }}>{field.key}</Text>
+                <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold' }}>{field.value}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* ── Footer ── */}
+        {invoice.footer && (
+          <View style={{ marginTop: 16, borderTopWidth: 0.5, borderTopColor: C.border, paddingTop: 8 }}>
+            <Text style={{ fontSize: 8, color: C.muted, textAlign: 'center' }}>{invoice.footer}</Text>
           </View>
         )}
 
