@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback } from 'react'
-import { Plus, Trash2, Package } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { Plus, Trash2, Pencil, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { ItemDetailForm } from './item-detail-form'
@@ -36,6 +37,13 @@ export default function InvoiceLineItemsTable({
   taxMode,
   onAddCatalogItem,
 }: InvoiceLineItemsTableProps) {
+  // Index of item currently being edited. null = none editing.
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  // Snapshot of item before editing — used for cancel/restore
+  const [editSnapshot, setEditSnapshot] = useState<LineItem | null>(null)
+
+  const canRemove = lineItems.length > 1
+
   // -----------------------------------------------------------------------
   // Handlers
   // -----------------------------------------------------------------------
@@ -50,8 +58,6 @@ export default function InvoiceLineItemsTable({
 
       if (numericFields.includes(field)) {
         const parsed = parseFloat(rawValue)
-        // For taxRate, store as a decimal (e.g. 0.07 for 7%).
-        // The input displays whole percentage numbers so we convert.
         if (field === 'taxRate') {
           onUpdateItem(index, {
             [field]: isNaN(parsed) ? 0 : parsed / 100,
@@ -68,285 +74,222 @@ export default function InvoiceLineItemsTable({
     [onUpdateItem],
   )
 
-  const canRemove = lineItems.length > 1
-
-  // -----------------------------------------------------------------------
-  // Desktop table view
-  // -----------------------------------------------------------------------
-
-  const renderDesktopTable = () => (
-    <div className="hidden md:block overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-muted/50">
-            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground w-[12%]">
-              Item Code
-            </th>
-            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground w-[27%]">
-              Description
-            </th>
-            <th className="px-3 py-2.5 text-right font-medium text-muted-foreground w-[10%]">
-              Qty
-            </th>
-            <th className="px-3 py-2.5 text-right font-medium text-muted-foreground w-[14%]">
-              Unit Price
-            </th>
-            <th className="px-3 py-2.5 text-right font-medium text-muted-foreground w-[10%]">
-              Tax %
-            </th>
-            <th className="px-3 py-2.5 text-right font-medium text-muted-foreground w-[17%]">
-              Total
-            </th>
-            <th className="px-3 py-2.5 w-[8%]" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {lineItems.map((item, index) => (
-            <tr key={index} className="group hover:bg-muted/20 transition-colors">
-              {/* Item Code */}
-              <td className="px-3 py-2">
-                <Input
-                  value={item.itemCode || ''}
-                  onChange={(e) =>
-                    handleFieldChange(index, 'itemCode', e.target.value)
-                  }
-                  placeholder="Code"
-                  className="h-9 text-sm bg-background border-border"
-                />
-              </td>
-
-              {/* Description + Item options */}
-              <td className="px-3 py-2" colSpan={1}>
-                <Input
-                  value={item.description}
-                  onChange={(e) =>
-                    handleFieldChange(index, 'description', e.target.value)
-                  }
-                  placeholder="Item description"
-                  className="h-9 text-sm bg-background border-border"
-                />
-                {item.supplyDateStart && item.supplyDateEnd && (
-                  <div className="text-xs text-muted-foreground mt-0.5 px-1">
-                    {formatBusinessDate(item.supplyDateStart)} – {formatBusinessDate(item.supplyDateEnd)}
-                  </div>
-                )}
-                <div className="mt-1">
-                  <ItemDetailForm
-                    item={item}
-                    index={index}
-                    currency={currency}
-                    onUpdate={onUpdateItem}
-                  />
-                </div>
-              </td>
-
-              {/* Quantity */}
-              <td className="px-3 py-2 align-top">
-                <Input
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={item.quantity || ''}
-                  onChange={(e) =>
-                    handleFieldChange(index, 'quantity', e.target.value)
-                  }
-                  placeholder="1"
-                  className="h-9 text-sm text-right bg-background border-border"
-                />
-              </td>
-
-              {/* Unit Price */}
-              <td className="px-3 py-2 align-top">
-                <Input
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={item.unitPrice || ''}
-                  onChange={(e) =>
-                    handleFieldChange(index, 'unitPrice', e.target.value)
-                  }
-                  placeholder="0.00"
-                  className="h-9 text-sm text-right bg-background border-border"
-                />
-              </td>
-
-              {/* Tax Rate — hidden since ItemDetailForm handles it */}
-              <td className="px-3 py-2 align-top">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="any"
-                  value={
-                    item.taxRate !== undefined && item.taxRate !== null
-                      ? Math.round(item.taxRate * 100 * 100) / 100
-                      : ''
-                  }
-                  onChange={(e) =>
-                    handleFieldChange(index, 'taxRate', e.target.value)
-                  }
-                  placeholder="0"
-                  className="h-9 text-sm text-right bg-background border-border"
-                />
-              </td>
-
-              {/* Total (read-only) */}
-              <td className="px-3 py-2 text-right font-medium text-foreground whitespace-nowrap align-top">
-                {formatCurrency(item.totalAmount, currency)}
-              </td>
-
-              {/* Remove */}
-              <td className="px-3 py-2 text-center align-top">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!canRemove}
-                  onClick={() => onRemoveItem(index)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                  title="Remove line"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+  const handleStartEdit = useCallback(
+    (index: number) => {
+      setEditSnapshot({ ...lineItems[index] })
+      setEditingIndex(index)
+    },
+    [lineItems],
   )
 
+  const handleCancelEdit = useCallback(() => {
+    // Restore from snapshot if we have one
+    if (editingIndex !== null && editSnapshot) {
+      onUpdateItem(editingIndex, editSnapshot)
+    }
+    setEditingIndex(null)
+    setEditSnapshot(null)
+  }, [editingIndex, editSnapshot, onUpdateItem])
+
+  const handleSave = useCallback(() => {
+    setEditingIndex(null)
+    setEditSnapshot(null)
+  }, [])
+
+  const handleSaveAndAddAnother = useCallback(() => {
+    setEditingIndex(null)
+    setEditSnapshot(null)
+    onAddItem()
+    // The new item will be at the end — auto-open it for editing
+    setTimeout(() => {
+      setEditingIndex(lineItems.length)
+      setEditSnapshot(null)
+    }, 0)
+  }, [onAddItem, lineItems.length])
+
+  const handleAddItem = useCallback(() => {
+    onAddItem()
+    // Auto-open editing for the new item
+    setTimeout(() => {
+      setEditingIndex(lineItems.length)
+      setEditSnapshot(null)
+    }, 0)
+  }, [onAddItem, lineItems.length])
+
+  const handleRemoveItem = useCallback(
+    (index: number) => {
+      if (editingIndex === index) {
+        setEditingIndex(null)
+        setEditSnapshot(null)
+      } else if (editingIndex !== null && index < editingIndex) {
+        setEditingIndex(editingIndex - 1)
+      }
+      onRemoveItem(index)
+    },
+    [editingIndex, onRemoveItem],
+  )
+
+  const isEditing = editingIndex !== null
+
   // -----------------------------------------------------------------------
-  // Mobile card view
+  // Summary row — compact read-only view for saved items
   // -----------------------------------------------------------------------
 
-  const renderMobileCards = () => (
-    <div className="md:hidden space-y-3">
-      {lineItems.map((item, index) => (
-        <div
-          key={index}
-          className="bg-muted/30 border border-border rounded-lg p-4 space-y-3"
-        >
-          <div className="flex items-start justify-between">
-            <span className="text-xs font-medium text-muted-foreground uppercase">
-              Item {index + 1}
+  const renderSummaryRow = (item: LineItem, index: number) => {
+    const isDimmed = isEditing && editingIndex !== index
+    const taxPercent =
+      item.taxRate != null && item.taxRate > 0
+        ? ` + ${Math.round(item.taxRate * 100)}% tax`
+        : ''
+
+    return (
+      <div
+        key={index}
+        className={`group flex items-center gap-3 px-4 py-3 border-b border-border last:border-b-0 transition-opacity ${
+          isDimmed ? 'opacity-40' : ''
+        }`}
+      >
+        {/* Item info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-medium text-foreground truncate">
+              {item.description || 'Untitled item'}
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={!canRemove}
-              onClick={() => onRemoveItem(index)}
-              className="text-destructive hover:text-destructive -mt-1 -mr-2"
-              title="Remove line"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {item.itemCode && (
+              <span className="text-xs text-muted-foreground shrink-0">
+                ({item.itemCode})
+              </span>
+            )}
           </div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {formatCurrency(item.unitPrice, currency)} × {item.quantity || 1}
+            {taxPercent}
+            {item.supplyDateStart && item.supplyDateEnd && (
+              <span className="ml-2">
+                · {formatBusinessDate(item.supplyDateStart)} – {formatBusinessDate(item.supplyDateEnd)}
+              </span>
+            )}
+          </div>
+        </div>
 
-          {/* Item Code / Description row */}
-          <div className="grid grid-cols-3 gap-3">
+        {/* Total */}
+        <div className="text-sm font-medium text-foreground whitespace-nowrap tabular-nums">
+          {formatCurrency(item.totalAmount, currency)}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleStartEdit(index)}
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+            title="Edit item"
+            disabled={isEditing}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!canRemove || isEditing}
+            onClick={() => handleRemoveItem(index)}
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+            title="Remove item"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // -----------------------------------------------------------------------
+  // Editing card — Stripe-style focused item editor
+  // -----------------------------------------------------------------------
+
+  const renderEditingCard = (item: LineItem, index: number) => {
+    const totalDisplay = item.unitPrice > 0
+      ? `${formatCurrency(item.unitPrice, currency)} × ${item.quantity || 1} = ${formatCurrency(item.totalAmount, currency)}`
+      : null
+
+    return (
+      <div
+        key={index}
+        className="border-2 border-primary/30 bg-card rounded-lg shadow-sm mx-0 my-1"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h3 className="text-sm font-semibold text-foreground">Item details</h3>
+          {totalDisplay && (
+            <span className="text-sm font-medium text-muted-foreground tabular-nums">
+              {totalDisplay}
+            </span>
+          )}
+        </div>
+
+        {/* Fields */}
+        <div className="p-4 space-y-4">
+          {/* Row 1: Item description + Qty */}
+          <div className="grid grid-cols-[1fr_100px] gap-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Item Code
-              </label>
-              <Input
-                value={item.itemCode || ''}
-                onChange={(e) =>
-                  handleFieldChange(index, 'itemCode', e.target.value)
-                }
-                placeholder="Code"
-                className="h-9 text-sm"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Description
-              </label>
+              <Label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Item
+              </Label>
               <Input
                 value={item.description}
-                onChange={(e) =>
-                  handleFieldChange(index, 'description', e.target.value)
-                }
-                placeholder="Item description"
-                className="h-9 text-sm"
+                onChange={(e) => handleFieldChange(index, 'description', e.target.value)}
+                placeholder="Enter an item name or description"
+                className="h-9 text-sm bg-background border-border"
+                autoFocus
               />
-              {item.supplyDateStart && item.supplyDateEnd && (
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {formatBusinessDate(item.supplyDateStart)} – {formatBusinessDate(item.supplyDateEnd)}
-                </div>
-              )}
             </div>
-          </div>
-
-          {/* Qty / Unit Price row */}
-          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Quantity
-              </label>
+              <Label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Qty
+              </Label>
               <Input
                 type="number"
                 min={0}
                 step="any"
                 value={item.quantity || ''}
-                onChange={(e) =>
-                  handleFieldChange(index, 'quantity', e.target.value)
-                }
+                onChange={(e) => handleFieldChange(index, 'quantity', e.target.value)}
                 placeholder="1"
-                className="h-9 text-sm"
+                className="h-9 text-sm text-right bg-background border-border"
               />
             </div>
+          </div>
+
+          {/* Row 2: Price + Item Code */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Unit Price
-              </label>
+              <Label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Price
+              </Label>
               <Input
                 type="number"
                 min={0}
                 step="any"
                 value={item.unitPrice || ''}
-                onChange={(e) =>
-                  handleFieldChange(index, 'unitPrice', e.target.value)
-                }
+                onChange={(e) => handleFieldChange(index, 'unitPrice', e.target.value)}
                 placeholder="0.00"
-                className="h-9 text-sm"
+                className="h-9 text-sm bg-background border-border"
               />
             </div>
-          </div>
-
-          {/* Tax / Total row */}
-          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Tax %
-              </label>
+              <Label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Item code (optional)
+              </Label>
               <Input
-                type="number"
-                min={0}
-                max={100}
-                step="any"
-                value={
-                  item.taxRate !== undefined && item.taxRate !== null
-                    ? Math.round(item.taxRate * 100 * 100) / 100
-                    : ''
-                }
-                onChange={(e) =>
-                  handleFieldChange(index, 'taxRate', e.target.value)
-                }
-                placeholder="0"
-                className="h-9 text-sm"
+                value={item.itemCode || ''}
+                onChange={(e) => handleFieldChange(index, 'itemCode', e.target.value)}
+                placeholder="SKU / code"
+                className="h-9 text-sm bg-background border-border"
               />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Total
-              </label>
-              <div className="h-9 flex items-center justify-end px-3 text-sm font-medium text-foreground bg-muted rounded-md border border-border">
-                {formatCurrency(item.totalAmount, currency)}
-              </div>
             </div>
           </div>
 
-          {/* Item options (advanced) */}
+          {/* Item options (collapsible advanced options) */}
           <ItemDetailForm
             item={item}
             index={index}
@@ -354,9 +297,37 @@ export default function InvoiceLineItemsTable({
             onUpdate={onUpdateItem}
           />
         </div>
-      ))}
-    </div>
-  )
+
+        {/* Footer actions */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30 rounded-b-lg">
+          <div className="flex items-center gap-2">
+            {canRemove && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleRemoveItem(index)}
+                className="text-destructive hover:text-destructive text-xs"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                Remove
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={handleCancelEdit} className="text-xs">
+              Cancel
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleSaveAndAddAnother} className="text-xs">
+              Save and add another
+            </Button>
+            <Button size="sm" onClick={handleSave} className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs">
+              Save
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // -----------------------------------------------------------------------
   // Main render
@@ -365,24 +336,37 @@ export default function InvoiceLineItemsTable({
   return (
     <div className="space-y-3">
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        {renderDesktopTable()}
-        {renderMobileCards()}
-      </div>
-
-      {/* Action buttons */}
-      <div className="flex items-center gap-2">
-        <Button size="sm" onClick={onAddItem} className="bg-blue-600 hover:bg-blue-700 text-white">
-          <Plus className="h-4 w-4 mr-1.5" />
-          Add Line
-        </Button>
-
-        {onAddCatalogItem && (
-          <Button variant="outline" size="sm" onClick={onAddCatalogItem}>
-            <Package className="h-4 w-4 mr-1.5" />
-            Add from Catalog
-          </Button>
+        {lineItems.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            No items yet. Add an item to get started.
+          </div>
+        ) : (
+          <div>
+            {lineItems.map((item, index) =>
+              editingIndex === index
+                ? renderEditingCard(item, index)
+                : renderSummaryRow(item, index)
+            )}
+          </div>
         )}
       </div>
+
+      {/* Action buttons — shown when not editing */}
+      {!isEditing && (
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={handleAddItem} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Plus className="h-4 w-4 mr-1.5" />
+            Add item
+          </Button>
+
+          {onAddCatalogItem && (
+            <Button variant="outline" size="sm" onClick={onAddCatalogItem}>
+              <Package className="h-4 w-4 mr-1.5" />
+              Add from Catalog
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Tax mode hint */}
       <p className="text-xs text-muted-foreground">
