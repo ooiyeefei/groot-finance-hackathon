@@ -30,21 +30,27 @@ interface InvoiceLineItemsTableProps {
 // Catalog search sub-component for the Item field
 // ---------------------------------------------------------------------------
 
+type CatalogItemData = {
+  _id: string
+  name: string
+  unitPrice: number
+  currency: string
+  sku?: string
+  unitMeasurement?: string
+  taxRate?: number
+}
+
 interface ItemSearchFieldProps {
   value: string
   onChange: (value: string) => void
-  onSelectCatalog: (item: {
-    _id: string
-    name: string
-    unitPrice: number
-    currency: string
-    sku?: string
-    unitMeasurement?: string
-    taxRate?: number
-  }) => void
+  onSelectCatalog: (item: CatalogItemData) => void
   onClearCatalog: () => void
   hasCatalogItem: boolean
   currency: string
+  catalogItems: CatalogItemData[]
+  /** Which field this input searches: 'name' filters by name/description, 'sku' filters by SKU */
+  mode: 'name' | 'sku'
+  placeholder?: string
   autoFocus?: boolean
 }
 
@@ -55,26 +61,32 @@ function ItemSearchField({
   onClearCatalog,
   hasCatalogItem,
   currency,
+  catalogItems,
+  mode,
+  placeholder,
   autoFocus,
 }: ItemSearchFieldProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Fetch all active catalog items (show on focus, filter client-side)
-  const { items: catalogItems } = useCatalogItems({ status: 'active', limit: 50 })
-
-  // Filter catalog items by search query
+  // Filter catalog items by search query based on mode
   const filteredItems = useMemo(() => {
     if (!value.trim()) return catalogItems
     const query = value.toLowerCase()
+    if (mode === 'sku') {
+      return catalogItems.filter(
+        (item) =>
+          (item.sku && item.sku.toLowerCase().includes(query)) ||
+          item.name.toLowerCase().includes(query)
+      )
+    }
     return catalogItems.filter(
       (item) =>
         item.name.toLowerCase().includes(query) ||
-        (item.sku && item.sku.toLowerCase().includes(query)) ||
-        (item.description && item.description.toLowerCase().includes(query))
+        (item.sku && item.sku.toLowerCase().includes(query))
     )
-  }, [catalogItems, value])
+  }, [catalogItems, value, mode])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -107,7 +119,7 @@ function ItemSearchField({
               setIsDropdownOpen(true)
             }
           }}
-          placeholder="Find or add an item"
+          placeholder={placeholder ?? (mode === 'sku' ? 'Search SKU / code' : 'Find or add an item')}
           className="h-9 text-sm bg-background border-border pl-8 pr-8"
           autoFocus={autoFocus}
         />
@@ -129,22 +141,23 @@ function ItemSearchField({
       {/* Catalog dropdown — shows on focus */}
       {isDropdownOpen && !hasCatalogItem && (
         <div className="absolute z-20 left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
-          {/* "Add a new line item" option — always at top */}
-          <button
-            type="button"
-            className="w-full text-left px-3 py-2.5 hover:bg-primary/5 transition-colors border-b border-border flex items-center gap-2"
-            onMouseDown={() => {
-              setIsDropdownOpen(false)
-              // Keep the current typed value as a one-time item
-            }}
-          >
-            <Plus className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="text-sm font-medium text-primary">
-              {value.trim()
-                ? `Add "${value.trim()}" as one-time item`
-                : 'Add a new line item'}
-            </span>
-          </button>
+          {/* "Add a new line item" option — always at top (name mode only) */}
+          {mode === 'name' && (
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2.5 hover:bg-primary/5 transition-colors border-b border-border flex items-center gap-2"
+              onMouseDown={() => {
+                setIsDropdownOpen(false)
+              }}
+            >
+              <Plus className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="text-sm font-medium text-primary">
+                {value.trim()
+                  ? `Add "${value.trim()}" as one-time item`
+                  : 'Add a new line item'}
+              </span>
+            </button>
+          )}
 
           {/* Catalog items */}
           {filteredItems.map((item) => (
@@ -159,13 +172,26 @@ function ItemSearchField({
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {item.name}
-                  </p>
-                  {item.sku && (
-                    <p className="text-xs text-muted-foreground">
-                      {item.sku}
-                    </p>
+                  {mode === 'sku' ? (
+                    <>
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {item.sku || '—'}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {item.name}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {item.name}
+                      </p>
+                      {item.sku && (
+                        <p className="text-xs text-muted-foreground">
+                          {item.sku}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
                 <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
@@ -224,6 +250,21 @@ export default function InvoiceLineItemsTable({
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   // Snapshot of item before editing — used for cancel/restore
   const [editSnapshot, setEditSnapshot] = useState<LineItem | null>(null)
+
+  // Fetch catalog items once — shared by all ItemSearchField instances
+  const { items: rawCatalogItems } = useCatalogItems({ status: 'active', limit: 50 })
+  const catalogItems = useMemo<CatalogItemData[]>(
+    () => (rawCatalogItems ?? []).map((item) => ({
+      _id: item._id,
+      name: item.name,
+      unitPrice: item.unitPrice,
+      currency: item.currency,
+      sku: item.sku,
+      unitMeasurement: item.unitMeasurement,
+      taxRate: item.taxRate,
+    })),
+    [rawCatalogItems],
+  )
 
   const canRemove = lineItems.length > 1
 
@@ -459,6 +500,8 @@ export default function InvoiceLineItemsTable({
                 onClearCatalog={() => handleClearCatalogItem(index)}
                 hasCatalogItem={hasCatalogItem}
                 currency={currency}
+                catalogItems={catalogItems}
+                mode="name"
                 autoFocus
               />
             </div>
@@ -498,11 +541,15 @@ export default function InvoiceLineItemsTable({
               <Label className="text-xs font-medium text-muted-foreground mb-1 block">
                 Item code (optional)
               </Label>
-              <Input
+              <ItemSearchField
                 value={item.itemCode || ''}
-                onChange={(e) => handleFieldChange(index, 'itemCode', e.target.value)}
-                placeholder="SKU / code"
-                className="h-9 text-sm bg-background border-border"
+                onChange={(val) => handleFieldChange(index, 'itemCode', val)}
+                onSelectCatalog={(catItem) => handleSelectCatalogItem(index, catItem)}
+                onClearCatalog={() => handleClearCatalogItem(index)}
+                hasCatalogItem={hasCatalogItem}
+                currency={currency}
+                catalogItems={catalogItems}
+                mode="sku"
               />
             </div>
           </div>
