@@ -27,7 +27,7 @@ The initial migration (branch 010) replaced the full-page AI assistant with a fl
 | `src/domains/chat/lib/sse-parser.ts` (NEW) | SSE stream parser with typed events: `StatusEvent`, `TextEvent`, `ActionEvent`, `CitationEvent`, `DoneEvent`, `ErrorEvent` |
 | `src/lib/ai/copilotkit-adapter.ts` (MODIFIED) | Added `streamLangGraphAgent()` async generator using LangGraph `.streamEvents()` v2, node-to-status mapping, word-level text chunking, `extractActionsFromContent()` for parsing `` ```actions `` blocks |
 | `src/app/api/copilotkit/route.ts` (REWRITTEN) | Changed from `NextResponse.json()` to SSE `ReadableStream` with `text/event-stream` headers |
-| `src/domains/chat/hooks/use-copilot-chat.ts` (REWRITTEN) | SSE consumer with `streamingText`, `streamingStatus`, `streamingActions` state, 60s inactivity timeout, abort support, single Convex write on stream completion |
+| `src/domains/chat/hooks/use-copilot-chat.ts` (REWRITTEN) | SSE consumer with `streamingText`, `streamingStatus`, `streamingActions` state, 180s inactivity timeout (Modal cold start compatible), abort support, single Convex write on stream completion |
 | `src/domains/chat/components/chat-window.tsx` (REWRITTEN) | Dynamic status indicator, progressive text rendering, smart auto-scroll (pauses when user scrolls up), Stop button wired to AbortController |
 
 ### Phase 3 (Branch 011): Action Card Infrastructure
@@ -120,7 +120,7 @@ User types message
       --> ReadableStream writes SSE-formatted events
   --> useCopilotBridge consumes via parseSSEStream()
       --> Updates: streamingText, streamingStatus, streamingActions
-      --> 60-second inactivity timeout
+      --> 180-second inactivity timeout (accommodates Modal cold starts)
   --> ChatWindow renders progressively:
       --> Status indicator → Progressive text → Action cards
   --> On stream completion:
@@ -408,7 +408,7 @@ ChatWindow receives initialMessage prop
 | # | Step | Expected |
 |---|------|----------|
 | 1 | Send a message | Stream starts |
-| 2 | If no SSE events received for 60 seconds | Error message: "Response timed out. Please try again." |
+| 2 | If no SSE events received for 180 seconds | Error message: "Response timed out. Please try again." |
 | 3 | Stream is aborted | Loading state cleared |
 
 ---

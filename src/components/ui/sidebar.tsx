@@ -86,30 +86,13 @@ export default function Sidebar() {
     { name: t('reporting') || 'Reporting & Exports', href: localizedHref('/reporting'), icon: FileSpreadsheet },
   ]
 
-  // Business management navigation (managers and finance_admins only)
-  const businessNavigation = userRole.manager || userRole.finance_admin ? [
-    { name: t('businessSettings'), href: localizedHref('/business-settings'), icon: Building2 },
-  ] : []
-
-  // Billing navigation (finance_admins and owners only - managers don't manage billing)
-  const billingNavigation = userRole.finance_admin ? [
-    { name: t('billing'), href: localizedHref('/settings/billing'), icon: Sparkles }
-  ] : []
-
-  // Personal settings (available to everyone)
-  const settingsNavigation = [
-    { name: t('settings'), href: localizedHref('/settings'), icon: Settings }
+  // Group 3: Utility (all users) — settings only (AI Assistant removed, now floating widget)
+  const utilityGroup = [
+    { name: t('settings') || 'Settings', href: localizedHref('/business-settings'), icon: Settings },
   ]
 
-  // Build complete navigation based on role
-  const navigation = [
-    ...coreNavigationPart1,
-    ...managerNavigation,
-    ...reportingNavigation,
-    ...businessNavigation,
-    ...billingNavigation,
-    ...settingsNavigation
-  ]
+  // Filter out empty groups, then render with separators between them
+  const navigationGroups = [financeGroup, workspaceGroup, utilityGroup].filter(g => g.length > 0)
 
   // Load saved state from localStorage and fetch user role
   useEffect(() => {

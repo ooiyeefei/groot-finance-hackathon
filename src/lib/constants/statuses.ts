@@ -154,7 +154,6 @@ export const SOURCE_DOCUMENT_TYPES = {
   INVOICE: "invoice",
   SALES_INVOICE: "sales_invoice",
   MANUAL: "manual",
-  SALES_INVOICE: "sales_invoice",
 } as const;
 
 export type SourceDocumentType = typeof SOURCE_DOCUMENT_TYPES[keyof typeof SOURCE_DOCUMENT_TYPES];

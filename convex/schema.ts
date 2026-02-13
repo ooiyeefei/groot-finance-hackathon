@@ -113,11 +113,6 @@ export default defineSchema({
     trialStartDate: v.optional(v.number()),   // Unix timestamp (ms)
     trialEndDate: v.optional(v.number()),     // Unix timestamp (ms)
 
-    // Invoice Settings
-    invoiceSettings: v.optional(v.object({
-      nextInvoiceNumber: v.optional(v.number()),
-    })),
-
     // Onboarding
     onboardingCompletedAt: v.optional(v.number()),  // Unix timestamp
 
