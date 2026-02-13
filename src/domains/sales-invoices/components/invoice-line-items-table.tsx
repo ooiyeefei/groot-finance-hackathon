@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { Plus, Trash2, Pencil, Package } from 'lucide-react'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { Plus, Trash2, Pencil, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { ItemDetailForm } from './item-detail-form'
+import { useCatalogItemSearch } from '../hooks/use-catalog-items'
 import type { LineItem, TaxMode } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -21,7 +22,129 @@ interface InvoiceLineItemsTableProps {
   onAddItem: () => void
   currency: string
   taxMode: TaxMode
-  onAddCatalogItem?: () => void
+}
+
+// ---------------------------------------------------------------------------
+// Catalog search sub-component for the Item field
+// ---------------------------------------------------------------------------
+
+interface ItemSearchFieldProps {
+  value: string
+  onChange: (value: string) => void
+  onSelectCatalog: (item: {
+    _id: string
+    name: string
+    unitPrice: number
+    currency: string
+    sku?: string
+    unitMeasurement?: string
+    taxRate?: number
+  }) => void
+  onClearCatalog: () => void
+  hasCatalogItem: boolean
+  currency: string
+  autoFocus?: boolean
+}
+
+function ItemSearchField({
+  value,
+  onChange,
+  onSelectCatalog,
+  onClearCatalog,
+  hasCatalogItem,
+  currency,
+  autoFocus,
+}: ItemSearchFieldProps) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const { results } = useCatalogItemSearch(value, isDropdownOpen && !hasCatalogItem, 'all')
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false)
+      }
+    }
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isDropdownOpen])
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <Input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value)
+            if (!hasCatalogItem) {
+              setIsDropdownOpen(e.target.value.length > 0)
+            }
+          }}
+          onFocus={() => {
+            if (!hasCatalogItem && value.length > 0) {
+              setIsDropdownOpen(true)
+            }
+          }}
+          placeholder="Enter item name or search catalog"
+          className="h-9 text-sm bg-background border-border pl-8 pr-8"
+          autoFocus={autoFocus}
+        />
+        {hasCatalogItem && (
+          <button
+            type="button"
+            onClick={() => {
+              onClearCatalog()
+              inputRef.current?.focus()
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-muted-foreground/20 hover:bg-muted-foreground/30 flex items-center justify-center transition-colors"
+            title="Clear catalog item"
+          >
+            <X className="h-3 w-3 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+
+      {/* Catalog search dropdown */}
+      {isDropdownOpen && !hasCatalogItem && results.length > 0 && (
+        <div className="absolute z-20 left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-56 overflow-y-auto">
+          {results.map((item) => (
+            <button
+              key={item._id}
+              type="button"
+              className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-b border-border last:border-b-0"
+              onMouseDown={() => {
+                onSelectCatalog(item)
+                setIsDropdownOpen(false)
+              }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {item.name}
+                  </p>
+                  {item.sku && (
+                    <p className="text-xs text-muted-foreground">
+                      {item.sku}
+                    </p>
+                  )}
+                </div>
+                <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
+                  {formatCurrency(item.unitPrice, item.currency || currency)}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -35,7 +158,6 @@ export default function InvoiceLineItemsTable({
   onAddItem,
   currency,
   taxMode,
-  onAddCatalogItem,
 }: InvoiceLineItemsTableProps) {
   // Index of item currently being edited. null = none editing.
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
@@ -70,6 +192,37 @@ export default function InvoiceLineItemsTable({
       } else {
         onUpdateItem(index, { [field]: rawValue })
       }
+    },
+    [onUpdateItem],
+  )
+
+  const handleSelectCatalogItem = useCallback(
+    (index: number, catItem: {
+      _id: string
+      name: string
+      unitPrice: number
+      currency: string
+      sku?: string
+      unitMeasurement?: string
+      taxRate?: number
+    }) => {
+      onUpdateItem(index, {
+        description: catItem.name,
+        unitPrice: catItem.unitPrice,
+        itemCode: catItem.sku || '',
+        taxRate: catItem.taxRate,
+        unitMeasurement: catItem.unitMeasurement,
+        catalogItemId: catItem._id,
+      })
+    },
+    [onUpdateItem],
+  )
+
+  const handleClearCatalogItem = useCallback(
+    (index: number) => {
+      onUpdateItem(index, {
+        catalogItemId: undefined,
+      })
     },
     [onUpdateItem],
   )
@@ -213,6 +366,8 @@ export default function InvoiceLineItemsTable({
       ? `${formatCurrency(item.unitPrice, currency)} × ${item.quantity || 1} = ${formatCurrency(item.totalAmount, currency)}`
       : null
 
+    const hasCatalogItem = !!item.catalogItemId
+
     return (
       <div
         key={index}
@@ -230,17 +385,19 @@ export default function InvoiceLineItemsTable({
 
         {/* Fields */}
         <div className="p-4 space-y-4">
-          {/* Row 1: Item description + Qty */}
+          {/* Row 1: Item search + Qty */}
           <div className="grid grid-cols-[1fr_100px] gap-3">
             <div>
               <Label className="text-xs font-medium text-muted-foreground mb-1 block">
                 Item
               </Label>
-              <Input
+              <ItemSearchField
                 value={item.description}
-                onChange={(e) => handleFieldChange(index, 'description', e.target.value)}
-                placeholder="Enter an item name or description"
-                className="h-9 text-sm bg-background border-border"
+                onChange={(val) => handleFieldChange(index, 'description', val)}
+                onSelectCatalog={(catItem) => handleSelectCatalogItem(index, catItem)}
+                onClearCatalog={() => handleClearCatalogItem(index)}
+                hasCatalogItem={hasCatalogItem}
+                currency={currency}
                 autoFocus
               />
             </div>
@@ -335,6 +492,13 @@ export default function InvoiceLineItemsTable({
 
   return (
     <div className="space-y-3">
+      {/* Hint text */}
+      <p className="text-xs text-muted-foreground">
+        Add single, one-time items or products from your{' '}
+        <span className="text-primary font-medium">product catalog</span>{' '}
+        to this invoice.
+      </p>
+
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         {lineItems.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -358,13 +522,6 @@ export default function InvoiceLineItemsTable({
             <Plus className="h-4 w-4 mr-1.5" />
             Add item
           </Button>
-
-          {onAddCatalogItem && (
-            <Button variant="outline" size="sm" onClick={onAddCatalogItem}>
-              <Package className="h-4 w-4 mr-1.5" />
-              Add from Catalog
-            </Button>
-          )}
         </div>
       )}
 
