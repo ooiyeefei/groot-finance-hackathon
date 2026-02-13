@@ -152,6 +152,7 @@ export const MESSAGE_ROLE_VALUES = Object.values(MESSAGE_ROLES);
 export const SOURCE_DOCUMENT_TYPES = {
   EXPENSE_CLAIM: "expense_claim",
   INVOICE: "invoice",
+  SALES_INVOICE: "sales_invoice",
   MANUAL: "manual",
   SALES_INVOICE: "sales_invoice",
 } as const;
