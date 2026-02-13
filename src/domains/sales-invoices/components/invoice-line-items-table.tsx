@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Pencil, Search, X } from 'lucide-react'
+import { useLocale } from 'next-intl'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { ItemDetailForm } from './item-detail-form'
-import { useCatalogItemSearch } from '../hooks/use-catalog-items'
+import { useCatalogItems } from '../hooks/use-catalog-items'
 import type { LineItem, TaxMode } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -59,7 +61,20 @@ function ItemSearchField({
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const { results } = useCatalogItemSearch(value, isDropdownOpen && !hasCatalogItem, 'all')
+  // Fetch all active catalog items (show on focus, filter client-side)
+  const { items: catalogItems } = useCatalogItems({ status: 'active', limit: 50 })
+
+  // Filter catalog items by search query
+  const filteredItems = useMemo(() => {
+    if (!value.trim()) return catalogItems
+    const query = value.toLowerCase()
+    return catalogItems.filter(
+      (item) =>
+        item.name.toLowerCase().includes(query) ||
+        (item.sku && item.sku.toLowerCase().includes(query)) ||
+        (item.description && item.description.toLowerCase().includes(query))
+    )
+  }, [catalogItems, value])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -84,15 +99,15 @@ function ItemSearchField({
           onChange={(e) => {
             onChange(e.target.value)
             if (!hasCatalogItem) {
-              setIsDropdownOpen(e.target.value.length > 0)
-            }
-          }}
-          onFocus={() => {
-            if (!hasCatalogItem && value.length > 0) {
               setIsDropdownOpen(true)
             }
           }}
-          placeholder="Enter item name or search catalog"
+          onFocus={() => {
+            if (!hasCatalogItem) {
+              setIsDropdownOpen(true)
+            }
+          }}
+          placeholder="Find or add an item"
           className="h-9 text-sm bg-background border-border pl-8 pr-8"
           autoFocus={autoFocus}
         />
@@ -111,10 +126,28 @@ function ItemSearchField({
         )}
       </div>
 
-      {/* Catalog search dropdown */}
-      {isDropdownOpen && !hasCatalogItem && results.length > 0 && (
-        <div className="absolute z-20 left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-56 overflow-y-auto">
-          {results.map((item) => (
+      {/* Catalog dropdown — shows on focus */}
+      {isDropdownOpen && !hasCatalogItem && (
+        <div className="absolute z-20 left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
+          {/* "Add a new line item" option — always at top */}
+          <button
+            type="button"
+            className="w-full text-left px-3 py-2.5 hover:bg-primary/5 transition-colors border-b border-border flex items-center gap-2"
+            onMouseDown={() => {
+              setIsDropdownOpen(false)
+              // Keep the current typed value as a one-time item
+            }}
+          >
+            <Plus className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="text-sm font-medium text-primary">
+              {value.trim()
+                ? `Add "${value.trim()}" as one-time item`
+                : 'Add a new line item'}
+            </span>
+          </button>
+
+          {/* Catalog items */}
+          {filteredItems.map((item) => (
             <button
               key={item._id}
               type="button"
@@ -141,9 +174,37 @@ function ItemSearchField({
               </div>
             </button>
           ))}
+
+          {/* No catalog items found */}
+          {filteredItems.length === 0 && catalogItems.length > 0 && (
+            <div className="px-3 py-2.5 text-sm text-muted-foreground">
+              No matching catalog items
+            </div>
+          )}
         </div>
       )}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Hint text with clickable catalog link
+// ---------------------------------------------------------------------------
+
+function CatalogHintText() {
+  const locale = useLocale()
+  return (
+    <p className="text-xs text-muted-foreground">
+      Add single, one-time items or products from your{' '}
+      <Link
+        href={`/${locale}/invoices#catalog`}
+        target="_blank"
+        className="text-primary font-medium hover:underline"
+      >
+        product catalog
+      </Link>{' '}
+      to this invoice.
+    </p>
   )
 }
 
@@ -493,11 +554,7 @@ export default function InvoiceLineItemsTable({
   return (
     <div className="space-y-3">
       {/* Hint text */}
-      <p className="text-xs text-muted-foreground">
-        Add single, one-time items or products from your{' '}
-        <span className="text-primary font-medium">product catalog</span>{' '}
-        to this invoice.
-      </p>
+      <CatalogHintText />
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         {lineItems.length === 0 ? (
