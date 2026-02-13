@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
-import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
+import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceDefaults, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
 import { useInvoicePdf, type PdfRenderData } from '../hooks/use-invoice-pdf'
 import { InvoiceEditorHeader } from './invoice-editor-header'
 import { InvoiceFormPanel } from './invoice-form-panel'
@@ -29,7 +29,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   const { businessId, business } = useActiveBusiness()
   const { profile: businessProfile } = useBusinessProfile()
 
-  const invoiceSettings = (business as unknown as Record<string, unknown>)?.invoiceSettings as Record<string, unknown> | undefined
+  const invoiceDefaults = useInvoiceDefaults()
 
   const { createInvoice, updateInvoice, sendInvoice, generateUploadUrl, storePdfStorageId } = useSalesInvoiceMutations()
   const nextInvoiceNumber = useNextInvoiceNumber()
@@ -92,12 +92,12 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   }, [businessId, mode, invoiceId, createInvoice, updateInvoice])
 
   const form = useSalesInvoiceForm({
-    defaultCurrency: (invoiceSettings?.defaultCurrency as string) ?? (business as unknown as Record<string, unknown>)?.homeCurrency as string ?? 'SGD',
-    defaultPaymentTerms: (invoiceSettings?.defaultPaymentTerms as PaymentTerms) ?? 'net_30',
-    defaultPaymentInstructions: (invoiceSettings?.defaultPaymentInstructions as string) ?? (business ? DEFAULT_PAYMENT_INSTRUCTIONS : undefined),
-    defaultNotes: (invoiceSettings?.defaultNotes as string) ?? (business ? DEFAULT_NOTES : undefined),
-    defaultSignatureName: invoiceSettings?.defaultSignatureName as string | undefined,
-    defaultTemplateId: (invoiceSettings?.selectedTemplate as string) ?? 'modern',
+    defaultCurrency: invoiceDefaults?.defaultCurrency ?? 'SGD',
+    defaultPaymentTerms: (invoiceDefaults?.defaultPaymentTerms as PaymentTerms) ?? 'net_30',
+    defaultPaymentInstructions: invoiceDefaults?.defaultPaymentInstructions ?? (invoiceDefaults !== undefined ? DEFAULT_PAYMENT_INSTRUCTIONS : undefined),
+    defaultNotes: invoiceDefaults?.defaultNotes ?? (invoiceDefaults !== undefined ? DEFAULT_NOTES : undefined),
+    defaultSignatureName: invoiceDefaults?.defaultSignatureName,
+    defaultTemplateId: invoiceDefaults?.selectedTemplate ?? 'modern',
     initialData,
     invoiceId,
     onAutoSave: handleAutoSave,
@@ -305,7 +305,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
         <div className={`overflow-y-auto ${isPreviewVisible ? 'w-1/2' : 'w-full'} border-r border-border transition-all`}>
           <InvoiceFormPanel
             form={form}
-            businessSettings={invoiceSettings as Record<string, unknown>}
+            businessSettings={invoiceDefaults as Record<string, unknown> | undefined}
             onDraftCreated={handleDraftCreated}
             onSaveDefaults={async () => {
               if (!businessId) return
