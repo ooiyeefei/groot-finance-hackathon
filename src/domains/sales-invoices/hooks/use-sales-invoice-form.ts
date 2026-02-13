@@ -31,16 +31,7 @@ export function useSalesInvoiceForm(options: UseInvoiceFormOptions = {}) {
 
   // Line items
   const [lineItems, setLineItems] = useState<LineItem[]>(
-    initialData?.lineItems ?? [
-      {
-        lineOrder: 0,
-        description: '',
-        quantity: 1,
-        unitPrice: 0,
-        totalAmount: 0,
-        currency: options.defaultCurrency ?? 'SGD',
-      },
-    ]
+    initialData?.lineItems ?? []
   )
 
   // Invoice settings

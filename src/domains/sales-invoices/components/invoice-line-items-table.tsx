@@ -491,7 +491,7 @@ export default function InvoiceLineItemsTable({
           <div className="grid grid-cols-[1fr_100px] gap-3">
             <div>
               <Label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Item
+                Item <span className="text-destructive">*</span>
               </Label>
               <ItemSearchField
                 value={item.description}
@@ -507,7 +507,7 @@ export default function InvoiceLineItemsTable({
             </div>
             <div>
               <Label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Qty
+                Qty <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="number"
@@ -525,7 +525,7 @@ export default function InvoiceLineItemsTable({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Price
+                Price <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="number"
