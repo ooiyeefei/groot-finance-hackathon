@@ -109,9 +109,9 @@ export function InvoicePreviewPanel({
       </div>
 
       {/* Preview content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
         {activeTab === 'pdf' ? (
-          <div className="transform origin-top scale-[0.75] w-[133.33%]">
+          <div className="w-full [&_#invoice-template]:max-w-none [&_#invoice-template]:p-6 [&_#invoice-template]:text-[0.85em]">
             <InvoicePreview
               invoice={invoice}
               businessInfo={businessInfo}

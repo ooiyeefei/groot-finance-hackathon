@@ -29,7 +29,7 @@ export default function CustomerSelector({
   onCustomerSelect,
 }: CustomerSelectorProps) {
   const { businessId } = useActiveBusiness()
-  const { createCustomer } = useCustomerMutations()
+  const { createCustomer, updateCustomer } = useCustomerMutations()
 
   // -----------------------------------------------------------------------
   // Local state
@@ -40,6 +40,8 @@ export default function CustomerSelector({
   const [isCreatingNew, setIsCreatingNew] = useState(false)
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
   const [isSavingNew, setIsSavingNew] = useState(false)
+  const [isSavingUpdate, setIsSavingUpdate] = useState(false)
+  const [originalSnapshot, setOriginalSnapshot] = useState<CustomerSnapshot | null>(null)
 
   const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -85,6 +87,7 @@ export default function CustomerSelector({
         taxId: customer.taxId,
       }
       onChange(snapshot)
+      setOriginalSnapshot(snapshot)
       setSelectedCustomerId(customer._id)
       setSearchQuery('')
       setIsDropdownOpen(false)
@@ -99,6 +102,7 @@ export default function CustomerSelector({
       email: '',
     })
     setSelectedCustomerId(null)
+    setOriginalSnapshot(null)
     setSearchQuery('')
     setIsCreatingNew(false)
   }, [onChange])
@@ -146,6 +150,42 @@ export default function CustomerSelector({
       setIsSavingNew(false)
     }
   }, [businessId, value, createCustomer, onCustomerSelect])
+
+  const handleSaveUpdatedCustomer = useCallback(async () => {
+    if (!businessId || !selectedCustomerId || !value.businessName || !value.email) return
+
+    setIsSavingUpdate(true)
+    try {
+      await updateCustomer({
+        id: selectedCustomerId as Id<'customers'>,
+        businessId: businessId as Id<'businesses'>,
+        businessName: value.businessName,
+        contactPerson: value.contactPerson,
+        email: value.email,
+        phone: value.phone,
+        address: value.address,
+        taxId: value.taxId,
+      })
+      setOriginalSnapshot({ ...value })
+    } catch {
+      // Silently handle -- the customer snapshot is still usable inline
+    } finally {
+      setIsSavingUpdate(false)
+    }
+  }, [businessId, selectedCustomerId, value, updateCustomer])
+
+  // Check if any field has been modified from the original selected customer
+  const hasUnsavedChanges = !!(
+    selectedCustomerId &&
+    !isCreatingNew &&
+    originalSnapshot &&
+    (value.businessName !== originalSnapshot.businessName ||
+      value.email !== originalSnapshot.email ||
+      (value.contactPerson ?? '') !== (originalSnapshot.contactPerson ?? '') ||
+      (value.phone ?? '') !== (originalSnapshot.phone ?? '') ||
+      (value.address ?? '') !== (originalSnapshot.address ?? '') ||
+      (value.taxId ?? '') !== (originalSnapshot.taxId ?? ''))
+  )
 
   const handleFieldChange = useCallback(
     (field: keyof CustomerSnapshot, fieldValue: string) => {
@@ -353,7 +393,7 @@ export default function CustomerSelector({
             </div>
           </div>
 
-          {/* Save to directory button (only for new customers) */}
+          {/* Save buttons */}
           {isCreatingNew && (
             <div className="flex justify-end pt-1">
               <Button
@@ -365,6 +405,19 @@ export default function CustomerSelector({
                 }
               >
                 {isSavingNew ? 'Saving...' : 'Save to Customer Directory'}
+              </Button>
+            </div>
+          )}
+          {hasUnsavedChanges && (
+            <div className="flex items-center justify-between pt-1 border-t border-border mt-2">
+              <span className="text-xs text-muted-foreground">Customer info modified</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveUpdatedCustomer}
+                disabled={isSavingUpdate || !value.businessName || !value.email}
+              >
+                {isSavingUpdate ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
           )}
