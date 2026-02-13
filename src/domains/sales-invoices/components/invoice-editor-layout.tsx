@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
-import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceTemplateMutations, useCustomInvoiceTemplates } from '../hooks/use-sales-invoices'
+import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceTemplateMutations, useCustomInvoiceTemplates, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
 import { useInvoicePdf, type PdfRenderData } from '../hooks/use-invoice-pdf'
 import { InvoiceEditorHeader } from './invoice-editor-header'
 import { InvoiceFormPanel } from './invoice-form-panel'
@@ -33,6 +33,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   const { generatePdf, generatePdfBlob } = useInvoicePdf()
   const { customNoteTemplates, customPaymentTemplates } = useCustomInvoiceTemplates()
   const { addTemplate, deleteTemplate } = useInvoiceTemplateMutations()
+  const { updateDefaults } = useInvoiceDefaultsMutation()
 
   // Auto-save handler
   const handleAutoSave = useCallback(async (data: SalesInvoiceFormInput): Promise<string | void> => {
@@ -93,6 +94,9 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
     defaultCurrency: (invoiceSettings?.defaultCurrency as string) ?? (business as unknown as Record<string, unknown>)?.homeCurrency as string ?? 'SGD',
     defaultPaymentTerms: (invoiceSettings?.defaultPaymentTerms as PaymentTerms) ?? 'net_30',
     defaultPaymentInstructions: invoiceSettings?.defaultPaymentInstructions as string,
+    defaultNotes: invoiceSettings?.defaultNotes as string | undefined,
+    defaultFooter: invoiceSettings?.defaultFooter as string | undefined,
+    defaultSignatureName: invoiceSettings?.defaultSignatureName as string | undefined,
     defaultTemplateId: (invoiceSettings?.selectedTemplate as string) ?? 'modern',
     initialData,
     invoiceId,
@@ -305,6 +309,16 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
             onDraftCreated={handleDraftCreated}
             customNoteTemplates={customNoteTemplates}
             customPaymentTemplates={customPaymentTemplates}
+            onSaveDefaults={async () => {
+              if (!businessId) return
+              await updateDefaults({
+                businessId: businessId as Id<'businesses'>,
+                defaultNotes: form.notes || undefined,
+                defaultFooter: form.footer || undefined,
+                defaultPaymentInstructions: form.paymentInstructions || undefined,
+                defaultSignatureName: form.signatureName || undefined,
+              })
+            }}
             onAddTemplate={async (type, label, text) => {
               if (!businessId) return
               await addTemplate({

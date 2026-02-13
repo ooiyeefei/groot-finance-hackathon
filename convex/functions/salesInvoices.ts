@@ -1016,6 +1016,35 @@ export const addInvoiceTemplate = mutation({
   },
 });
 
+export const updateInvoiceDefaults = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    defaultNotes: v.optional(v.string()),
+    defaultFooter: v.optional(v.string()),
+    defaultPaymentInstructions: v.optional(v.string()),
+    defaultSignatureName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdmin(ctx, args.businessId);
+
+    const business = await ctx.db.get(args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const settings = (business as Record<string, unknown>).invoiceSettings as Record<string, unknown> | undefined ?? {};
+
+    await ctx.db.patch(args.businessId, {
+      invoiceSettings: {
+        ...settings,
+        defaultNotes: args.defaultNotes,
+        defaultFooter: args.defaultFooter,
+        defaultPaymentInstructions: args.defaultPaymentInstructions,
+        defaultSignatureName: args.defaultSignatureName,
+      } as never,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const deleteInvoiceTemplate = mutation({
   args: {
     businessId: v.id("businesses"),

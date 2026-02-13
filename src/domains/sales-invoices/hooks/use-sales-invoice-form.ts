@@ -10,6 +10,9 @@ interface UseInvoiceFormOptions {
   defaultCurrency?: string
   defaultPaymentTerms?: PaymentTerms
   defaultPaymentInstructions?: string
+  defaultNotes?: string
+  defaultFooter?: string
+  defaultSignatureName?: string
   defaultTaxMode?: TaxMode
   defaultTemplateId?: string
   initialData?: SalesInvoiceFormInput
@@ -50,7 +53,7 @@ export function useSalesInvoiceForm(options: UseInvoiceFormOptions = {}) {
   const [dueDate, setDueDate] = useState(
     initialData?.dueDate ?? computeDueDate(today, options.defaultPaymentTerms ?? 'net_30')
   )
-  const [notes, setNotes] = useState(initialData?.notes ?? '')
+  const [notes, setNotes] = useState(initialData?.notes ?? options.defaultNotes ?? '')
   const [paymentInstructions, setPaymentInstructions] = useState(
     initialData?.paymentInstructions ?? options.defaultPaymentInstructions ?? ''
   )
@@ -58,7 +61,7 @@ export function useSalesInvoiceForm(options: UseInvoiceFormOptions = {}) {
     initialData?.templateId ?? options.defaultTemplateId ?? 'modern'
   )
   const [signatureName, setSignatureName] = useState(
-    initialData?.signatureName ?? ''
+    initialData?.signatureName ?? options.defaultSignatureName ?? ''
   )
   const [invoiceDiscountType, setInvoiceDiscountType] = useState<DiscountType | undefined>(
     initialData?.invoiceDiscountType
@@ -68,7 +71,7 @@ export function useSalesInvoiceForm(options: UseInvoiceFormOptions = {}) {
   )
 
   // New fields (012-stripe-invoice-ux)
-  const [footer, setFooter] = useState(initialData?.footer ?? '')
+  const [footer, setFooter] = useState(initialData?.footer ?? options.defaultFooter ?? '')
   const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>(
     initialData?.customFields ?? []
   )

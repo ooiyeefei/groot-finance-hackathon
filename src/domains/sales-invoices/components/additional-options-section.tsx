@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, X } from 'lucide-react'
+import { Plus, Trash2, X, Save, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -31,6 +31,8 @@ interface AdditionalOptionsSectionProps {
   // Signature
   signatureName: string
   onSignatureNameChange: (name: string) => void
+  // Save defaults
+  onSaveDefaults?: () => Promise<void>
   // Templates for notes and payment instructions
   customNoteTemplates?: InvoiceTemplateItem[]
   customPaymentTemplates?: InvoiceTemplateItem[]
@@ -170,11 +172,14 @@ export function AdditionalOptionsSection({
   onPaymentInstructionsChange,
   signatureName,
   onSignatureNameChange,
+  onSaveDefaults,
   customNoteTemplates,
   customPaymentTemplates,
   onAddTemplate,
   onDeleteTemplate,
 }: AdditionalOptionsSectionProps) {
+  const [isSavingDefaults, setIsSavingDefaults] = useState(false)
+  const [defaultsSaved, setDefaultsSaved] = useState(false)
   const handleAddCustomField = () => {
     onCustomFieldsChange([...customFields, { key: '', value: '' }])
   }
@@ -319,6 +324,45 @@ export function AdditionalOptionsSection({
           className="h-9 text-sm"
         />
       </div>
+
+      {/* Save as defaults */}
+      {onSaveDefaults && (
+        <div className="pt-2 border-t border-border">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            disabled={isSavingDefaults}
+            onClick={async () => {
+              setIsSavingDefaults(true)
+              try {
+                await onSaveDefaults()
+                setDefaultsSaved(true)
+                setTimeout(() => setDefaultsSaved(false), 2000)
+              } catch {
+                // Save failure is non-blocking
+              } finally {
+                setIsSavingDefaults(false)
+              }
+            }}
+          >
+            {defaultsSaved ? (
+              <>
+                <Check className="h-3 w-3 mr-1" />
+                Saved
+              </>
+            ) : (
+              <>
+                <Save className="h-3 w-3 mr-1" />
+                {isSavingDefaults ? 'Saving...' : 'Save as invoice defaults'}
+              </>
+            )}
+          </Button>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Saves memo, footer, payment instructions, and signature as defaults for new invoices.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
