@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Settings, Save, Loader2, Eye } from 'lucide-react'
+import { Settings, Save, Loader2, Eye, CreditCard } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useActiveBusiness } from '@/contexts/business-context'
 import {
   SUPPORTED_CURRENCIES,
@@ -24,6 +25,18 @@ import { formatInvoiceNumber } from '../lib/invoice-number-format'
 // Types
 // ---------------------------------------------------------------------------
 
+const PAYMENT_METHODS = [
+  { id: 'bank_transfer', label: 'Bank Transfer' },
+  { id: 'credit_card', label: 'Credit Card' },
+  { id: 'paynow', label: 'PayNow (SG)' },
+  { id: 'grabpay', label: 'GrabPay' },
+  { id: 'promptpay', label: 'PromptPay (TH)' },
+  { id: 'gcash', label: 'GCash (PH)' },
+  { id: 'paypal', label: 'PayPal' },
+  { id: 'cheque', label: 'Cheque' },
+  { id: 'cash', label: 'Cash' },
+] as const
+
 interface InvoiceSettingsState {
   invoicePrefix: string
   nextNumber: number
@@ -33,6 +46,7 @@ interface InvoiceSettingsState {
   defaultPaymentInstructions: string
   defaultNotes: string
   defaultTemplateId: InvoiceTemplate
+  acceptedPaymentMethods: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +68,7 @@ export default function InvoiceSettingsForm() {
     defaultPaymentInstructions: (invoiceSettings?.defaultPaymentInstructions as string) ?? '',
     defaultNotes: (invoiceSettings?.defaultNotes as string) ?? '',
     defaultTemplateId: (invoiceSettings?.selectedTemplate as InvoiceTemplate) ?? 'modern',
+    acceptedPaymentMethods: (invoiceSettings?.acceptedPaymentMethods as string[]) ?? ['bank_transfer'],
   })
 
   const [isSaving, setIsSaving] = useState(false)
@@ -260,6 +275,52 @@ export default function InvoiceSettingsForm() {
             </CardContent>
           </Card>
 
+          {/* Accepted Payment Methods */}
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground text-base flex items-center gap-2">
+                <CreditCard className="w-4 h-4" />
+                Accepted Payment Methods
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-muted-foreground text-xs">
+                Select the payment methods your business accepts. These will be shown on invoices.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {PAYMENT_METHODS.map((method) => (
+                  <label
+                    key={method.id}
+                    className="flex items-center gap-2.5 p-2.5 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+                  >
+                    <Checkbox
+                      checked={settings.acceptedPaymentMethods.includes(method.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          updateSetting('acceptedPaymentMethods', [
+                            ...settings.acceptedPaymentMethods,
+                            method.id,
+                          ])
+                        } else {
+                          updateSetting(
+                            'acceptedPaymentMethods',
+                            settings.acceptedPaymentMethods.filter((m) => m !== method.id)
+                          )
+                        }
+                      }}
+                    />
+                    <span className="text-sm text-foreground">{method.label}</span>
+                  </label>
+                ))}
+              </div>
+              {settings.acceptedPaymentMethods.length === 0 && (
+                <p className="text-xs text-destructive">
+                  Select at least one payment method
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Default Text Fields */}
           <Card className="bg-card border-border">
             <CardHeader>
@@ -382,6 +443,12 @@ export default function InvoiceSettingsForm() {
                   <dt className="text-muted-foreground">Has Notes</dt>
                   <dd className="text-foreground font-medium">
                     {settings.defaultNotes ? 'Yes' : 'No'}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Payment Methods</dt>
+                  <dd className="text-foreground font-medium">
+                    {settings.acceptedPaymentMethods.length}
                   </dd>
                 </div>
               </dl>

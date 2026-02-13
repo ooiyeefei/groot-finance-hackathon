@@ -165,6 +165,9 @@ export interface LineItem {
   itemCode?: string;
   unitMeasurement?: string;
   catalogItemId?: string;
+  supplyDateStart?: string;
+  supplyDateEnd?: string;
+  isDiscountable?: boolean;
 }
 
 export const lineItemSchema = z.object({
@@ -182,6 +185,9 @@ export const lineItemSchema = z.object({
   itemCode: z.string().optional(),
   unitMeasurement: z.string().optional(),
   catalogItemId: z.string().optional(),
+  supplyDateStart: z.string().optional(),
+  supplyDateEnd: z.string().optional(),
+  isDiscountable: z.boolean().optional(),
 });
 
 // ============================================
@@ -242,6 +248,9 @@ export interface SalesInvoice {
   paymentInstructions?: string;
   templateId?: string;
   signatureName?: string;
+  footer?: string;
+  customFields?: Array<{ key: string; value: string }>;
+  showTaxId?: boolean;
   recurringScheduleId?: string;
   isRecurringSource?: boolean;
   pdfStorageId?: string;
@@ -340,6 +349,7 @@ export interface InvoiceSettings {
   selectedTemplate?: string;
   customNoteTemplates?: InvoiceTemplateItem[];
   customPaymentTemplates?: InvoiceTemplateItem[];
+  acceptedPaymentMethods?: string[];
 }
 
 const invoiceTemplateItemSchema = z.object({
@@ -363,6 +373,7 @@ export const invoiceSettingsSchema = z.object({
   selectedTemplate: z.string().optional(),
   customNoteTemplates: z.array(invoiceTemplateItemSchema).optional(),
   customPaymentTemplates: z.array(invoiceTemplateItemSchema).optional(),
+  acceptedPaymentMethods: z.array(z.string()).optional(),
 });
 
 // ============================================
@@ -403,6 +414,9 @@ export const salesInvoiceFormSchema = z.object({
   invoiceDiscountType: z.enum(["percentage", "fixed"]).optional(),
   invoiceDiscountValue: z.number().min(0).optional(),
   customerId: z.string().optional(),
+  footer: z.string().optional(),
+  customFields: z.array(z.object({ key: z.string(), value: z.string() })).optional(),
+  showTaxId: z.boolean().optional(),
 });
 
 export type SalesInvoiceFormInput = z.infer<typeof salesInvoiceFormSchema>;
