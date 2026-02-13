@@ -6,7 +6,7 @@ import InvoiceLineItemsTable from './invoice-line-items-table'
 import { PaymentCollectionSection } from './payment-collection-section'
 import { AdditionalOptionsSection } from './additional-options-section'
 import { formatCurrency } from '@/lib/utils/format-number'
-import type { Customer, InvoiceTemplateItem, LineItem, PaymentTerms, TaxMode, DiscountType, CustomerSnapshot } from '../types'
+import type { Customer, LineItem, PaymentTerms, TaxMode, DiscountType, CustomerSnapshot } from '../types'
 
 interface InvoiceFormPanelProps {
   form: {
@@ -57,20 +57,12 @@ interface InvoiceFormPanelProps {
   }
   businessSettings?: Record<string, unknown>
   onDraftCreated?: (invoiceId: string) => void
-  customNoteTemplates?: InvoiceTemplateItem[]
-  customPaymentTemplates?: InvoiceTemplateItem[]
   onSaveDefaults?: () => Promise<void>
-  onAddTemplate?: (type: 'note' | 'payment', label: string, text: string) => Promise<void>
-  onDeleteTemplate?: (type: 'note' | 'payment', templateId: string) => Promise<void>
 }
 
 export function InvoiceFormPanel({
   form,
-  customNoteTemplates,
-  customPaymentTemplates,
   onSaveDefaults,
-  onAddTemplate,
-  onDeleteTemplate,
 }: InvoiceFormPanelProps) {
   const handleCustomerSelect = (customer: Customer) => {
     form.setCustomerId(customer._id)
@@ -164,21 +156,11 @@ export function InvoiceFormPanel({
           onTemplateChange={form.setTemplateId}
           memo={form.notes}
           onMemoChange={form.setNotes}
-          footer={form.footer}
-          onFooterChange={form.setFooter}
-          customFields={form.customFields}
-          onCustomFieldsChange={form.setCustomFields}
-          showTaxId={form.showTaxId}
-          onToggleTaxId={form.setShowTaxId}
           paymentInstructions={form.paymentInstructions}
           onPaymentInstructionsChange={form.setPaymentInstructions}
           signatureName={form.signatureName}
           onSignatureNameChange={form.setSignatureName}
-          customNoteTemplates={customNoteTemplates}
-          customPaymentTemplates={customPaymentTemplates}
           onSaveDefaults={onSaveDefaults}
-          onAddTemplate={onAddTemplate}
-          onDeleteTemplate={onDeleteTemplate}
         />
       </section>
 

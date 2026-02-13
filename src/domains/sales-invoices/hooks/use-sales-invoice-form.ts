@@ -77,6 +77,21 @@ export function useSalesInvoiceForm(options: UseInvoiceFormOptions = {}) {
   )
   const [showTaxId, setShowTaxId] = useState(initialData?.showTaxId ?? false)
 
+  // Apply defaults when they become available (business data loads asynchronously)
+  const defaultsAppliedRef = useRef(false)
+  useEffect(() => {
+    if (defaultsAppliedRef.current || initialData) return
+    const hasDefaults = options.defaultNotes !== undefined ||
+      options.defaultPaymentInstructions !== undefined ||
+      options.defaultSignatureName !== undefined
+    if (!hasDefaults) return
+    if (options.defaultNotes !== undefined) setNotes(options.defaultNotes)
+    if (options.defaultPaymentInstructions !== undefined) setPaymentInstructions(options.defaultPaymentInstructions)
+    if (options.defaultSignatureName !== undefined) setSignatureName(options.defaultSignatureName)
+    defaultsAppliedRef.current = true
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.defaultNotes, options.defaultPaymentInstructions, options.defaultSignatureName, initialData])
+
   // Auto-save state
   const [isDraftCreated, setIsDraftCreated] = useState(!!options.invoiceId)
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
