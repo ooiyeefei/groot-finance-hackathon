@@ -22,9 +22,6 @@ export function ChatWidget({ businessId }: ChatWidgetProps) {
   const [pendingMessage, setPendingMessage] = useState<string | undefined>()
   const { isSignedIn } = useAuth()
 
-  // Don't render for unauthenticated users
-  if (!isSignedIn) return null
-
   const handleOpen = useCallback(() => {
     setIsOpen(true)
     setIsMinimized(false)
@@ -64,6 +61,9 @@ export function ChatWidget({ businessId }: ChatWidgetProps) {
     window.addEventListener('finanseal:open-chat', handleOpenChat)
     return () => window.removeEventListener('finanseal:open-chat', handleOpenChat)
   }, [])
+
+  // Don't render for unauthenticated users
+  if (!isSignedIn) return null
 
   return (
     <>
