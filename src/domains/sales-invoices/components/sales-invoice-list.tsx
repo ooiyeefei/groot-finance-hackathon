@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import {
@@ -68,6 +68,7 @@ export default function SalesInvoiceList() {
   const [sendingIds, setSendingIds] = useState<Set<string>>(new Set())
   const [voidingIds, setVoidingIds] = useState<Set<string>>(new Set())
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   // -----------------------------------------------------------------------
   // Handlers
@@ -158,14 +159,14 @@ export default function SalesInvoiceList() {
     [voidInvoice],
   )
 
-  const handleDelete = useCallback(
+  const handleDeleteConfirm = useCallback(
     async (invoice: SalesInvoice) => {
-      if (!confirm(`Delete draft invoice ${invoice.invoiceNumber}? This cannot be undone.`)) return
       const id = invoice._id
       setDeletingIds((prev) => new Set(prev).add(id))
       try {
         await removeInvoice({ id, businessId: invoice.businessId })
       } finally {
+        setConfirmDeleteId(null)
         setDeletingIds((prev) => {
           const next = new Set(prev)
           next.delete(id)
@@ -313,8 +314,8 @@ export default function SalesInvoiceList() {
               </thead>
               <tbody className="divide-y divide-border">
                 {invoices.map((invoice) => (
+                  <React.Fragment key={invoice._id}>
                   <tr
-                    key={invoice._id}
                     className="hover:bg-muted/30 transition-colors"
                   >
                     <td className="px-4 py-3 font-medium text-foreground">
@@ -423,7 +424,7 @@ export default function SalesInvoiceList() {
                             size="sm"
                             title="Delete draft"
                             disabled={deletingIds.has(invoice._id)}
-                            onClick={() => handleDelete(invoice)}
+                            onClick={() => setConfirmDeleteId(invoice._id)}
                           >
                             {deletingIds.has(invoice._id) ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -435,6 +436,42 @@ export default function SalesInvoiceList() {
                       </div>
                     </td>
                   </tr>
+                  {/* Inline delete confirmation */}
+                  {confirmDeleteId === invoice._id && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-3 bg-destructive/5 border-b border-destructive/20">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-foreground">
+                            Delete <span className="font-medium">{invoice.invoiceNumber}</span>? This draft will be permanently removed.
+                          </p>
+                          <div className="flex items-center gap-2 shrink-0 ml-4">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="text-xs"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={deletingIds.has(invoice._id)}
+                              onClick={() => handleDeleteConfirm(invoice)}
+                              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs"
+                            >
+                              {deletingIds.has(invoice._id) ? (
+                                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              )}
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -538,7 +575,7 @@ export default function SalesInvoiceList() {
                       variant="ghost"
                       size="sm"
                       disabled={deletingIds.has(invoice._id)}
-                      onClick={() => handleDelete(invoice)}
+                      onClick={() => setConfirmDeleteId(invoice._id)}
                     >
                       {deletingIds.has(invoice._id) ? (
                         <Loader2 className="h-4 w-4 mr-1 animate-spin" />
@@ -549,6 +586,38 @@ export default function SalesInvoiceList() {
                     </Button>
                   )}
                 </div>
+
+                {/* Inline delete confirmation */}
+                {confirmDeleteId === invoice._id && (
+                  <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 space-y-2">
+                    <p className="text-sm text-foreground">
+                      Delete <span className="font-medium">{invoice.invoiceNumber}</span>? This draft will be permanently removed.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="text-xs"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={deletingIds.has(invoice._id)}
+                        onClick={() => handleDeleteConfirm(invoice)}
+                        className="bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs"
+                      >
+                        {deletingIds.has(invoice._id) ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        )}
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
