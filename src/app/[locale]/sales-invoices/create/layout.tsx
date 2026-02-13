@@ -4,7 +4,7 @@ import Sidebar from '@/components/ui/sidebar'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { getUserRole } from '@/domains/users/lib/user.service'
 
-export default async function SalesInvoiceDetailLayout({
+export default async function CreateSalesInvoiceLayout({
   children,
   params,
 }: {

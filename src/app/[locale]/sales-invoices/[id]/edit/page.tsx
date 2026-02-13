@@ -19,7 +19,7 @@ export default function EditSalesInvoicePage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
+      <div className="flex items-center justify-center h-full bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
@@ -27,7 +27,7 @@ export default function EditSalesInvoicePage() {
 
   if (!invoice) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-background gap-4">
+      <div className="flex flex-col items-center justify-center h-full bg-background gap-4">
         <p className="text-muted-foreground">Invoice not found.</p>
         <Link href={`/${locale}/invoices#sales-invoices`}>
           <Button variant="outline">Back to Invoices</Button>
@@ -38,7 +38,7 @@ export default function EditSalesInvoicePage() {
 
   if (invoice.status !== SALES_INVOICE_STATUSES.DRAFT) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-background gap-4">
+      <div className="flex flex-col items-center justify-center h-full bg-background gap-4">
         <p className="text-muted-foreground">Only draft invoices can be edited.</p>
         <Link href={`/${locale}/sales-invoices/${invoiceId}`}>
           <Button variant="outline">View Invoice</Button>
