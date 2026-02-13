@@ -272,6 +272,9 @@ export const create = mutation({
       itemCode: v.optional(v.string()),
       unitMeasurement: v.optional(v.string()),
       catalogItemId: v.optional(v.string()),
+      supplyDateStart: v.optional(v.string()),
+      supplyDateEnd: v.optional(v.string()),
+      isDiscountable: v.optional(v.boolean()),
     })),
     currency: v.string(),
     taxMode: v.union(v.literal("exclusive"), v.literal("inclusive")),
@@ -284,6 +287,9 @@ export const create = mutation({
     signatureName: v.optional(v.string()),
     invoiceDiscountType: v.optional(v.union(v.literal("percentage"), v.literal("fixed"))),
     invoiceDiscountValue: v.optional(v.number()),
+    footer: v.optional(v.string()),
+    customFields: v.optional(v.array(v.object({ key: v.string(), value: v.string() }))),
+    showTaxId: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { user } = await requireFinanceAdmin(ctx, args.businessId);
@@ -344,6 +350,9 @@ export const create = mutation({
       paymentInstructions: args.paymentInstructions,
       templateId: args.templateId,
       signatureName: args.signatureName,
+      footer: args.footer,
+      customFields: args.customFields,
+      showTaxId: args.showTaxId,
       updatedAt: Date.now(),
     });
 
@@ -392,6 +401,9 @@ export const update = mutation({
       itemCode: v.optional(v.string()),
       unitMeasurement: v.optional(v.string()),
       catalogItemId: v.optional(v.string()),
+      supplyDateStart: v.optional(v.string()),
+      supplyDateEnd: v.optional(v.string()),
+      isDiscountable: v.optional(v.boolean()),
     }))),
     currency: v.optional(v.string()),
     taxMode: v.optional(v.union(v.literal("exclusive"), v.literal("inclusive"))),
@@ -404,6 +416,9 @@ export const update = mutation({
     signatureName: v.optional(v.string()),
     invoiceDiscountType: v.optional(v.union(v.literal("percentage"), v.literal("fixed"))),
     invoiceDiscountValue: v.optional(v.number()),
+    footer: v.optional(v.string()),
+    customFields: v.optional(v.array(v.object({ key: v.string(), value: v.string() }))),
+    showTaxId: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireFinanceAdmin(ctx, args.businessId);
@@ -433,6 +448,9 @@ export const update = mutation({
     if (args.signatureName !== undefined) updates.signatureName = args.signatureName;
     if (args.invoiceDiscountType !== undefined) updates.invoiceDiscountType = args.invoiceDiscountType;
     if (args.invoiceDiscountValue !== undefined) updates.invoiceDiscountValue = args.invoiceDiscountValue;
+    if (args.footer !== undefined) updates.footer = args.footer;
+    if (args.customFields !== undefined) updates.customFields = args.customFields;
+    if (args.showTaxId !== undefined) updates.showTaxId = args.showTaxId;
 
     // Recalculate totals if line items changed
     if (args.lineItems) {

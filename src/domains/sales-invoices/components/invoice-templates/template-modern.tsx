@@ -31,6 +31,8 @@ interface InvoiceTemplateProps {
       currency: string
       itemCode?: string
       unitMeasurement?: string
+      supplyDateStart?: string
+      supplyDateEnd?: string
     }>
     subtotal: number
     totalDiscount?: number
@@ -45,6 +47,9 @@ interface InvoiceTemplateProps {
     paymentTerms?: string
     signatureName?: string
     status: string
+    footer?: string
+    customFields?: Array<{ key: string; value: string }>
+    showTaxId?: boolean
   }
   businessInfo?: {
     companyName?: string
@@ -216,6 +221,11 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
                       Unit: {item.unitMeasurement}
                     </div>
                   )}
+                  {item.supplyDateStart && item.supplyDateEnd && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {formatBusinessDate(item.supplyDateStart)} – {formatBusinessDate(item.supplyDateEnd)}
+                    </div>
+                  )}
                   {(item.discountAmount ?? 0) > 0 && (
                     <div className="text-xs text-muted-foreground mt-0.5">
                       Discount: -{formatCurrency(item.discountAmount, currency)}
@@ -299,6 +309,20 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
         </dl>
       </section>
 
+      {/* ── Custom Fields ── */}
+      {invoice.customFields && invoice.customFields.length > 0 && (
+        <section className="border-t border-border pt-6 pb-4">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+            {invoice.customFields.map((field, index) => (
+              <div key={index} className="flex justify-between">
+                <dt className="text-muted-foreground">{field.key}</dt>
+                <dd className="font-medium text-foreground">{field.value}</dd>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── Notes & Payment Instructions ── */}
       {(invoice.notes || invoice.paymentInstructions) && (
         <footer className="border-t border-border pt-6 space-y-4">
@@ -323,6 +347,15 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
             </div>
           )}
         </footer>
+      )}
+
+      {/* ── Footer ── */}
+      {invoice.footer && (
+        <div className="border-t border-border pt-4 mt-4">
+          <p className="text-xs text-muted-foreground text-center whitespace-pre-line">
+            {invoice.footer}
+          </p>
+        </div>
       )}
 
       {/* ── Signature ── */}
