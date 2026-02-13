@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { NOTE_TEMPLATES, PAYMENT_INSTRUCTION_TEMPLATES } from '../types'
 import type { InvoiceTemplateItem } from '../types'
 
 interface AdditionalOptionsSectionProps {
@@ -37,6 +38,123 @@ interface AdditionalOptionsSectionProps {
   onDeleteTemplate?: (type: 'note' | 'payment', templateId: string) => Promise<void>
 }
 
+// ---------------------------------------------------------------------------
+// Template tags sub-component
+// ---------------------------------------------------------------------------
+
+function TemplateTags({
+  type,
+  builtInTemplates,
+  customTemplates,
+  onSelect,
+  onAddTemplate,
+  onDeleteTemplate,
+}: {
+  type: 'note' | 'payment'
+  builtInTemplates: Array<{ label: string; text: string }>
+  customTemplates: InvoiceTemplateItem[]
+  onSelect: (text: string) => void
+  onAddTemplate?: (type: 'note' | 'payment', label: string, text: string) => Promise<void>
+  onDeleteTemplate?: (type: 'note' | 'payment', templateId: string) => Promise<void>
+}) {
+  const [isAdding, setIsAdding] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+  const [newText, setNewText] = useState('')
+
+  const handleSave = async () => {
+    if (!onAddTemplate || !newLabel.trim() || !newText.trim()) return
+    await onAddTemplate(type, newLabel.trim(), newText.trim())
+    setNewLabel('')
+    setNewText('')
+    setIsAdding(false)
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-1.5">
+      {/* Built-in templates */}
+      {builtInTemplates.map((tpl) => (
+        <button
+          key={tpl.label}
+          type="button"
+          onClick={() => onSelect(tpl.text)}
+          className="text-xs px-2 py-1 rounded-md border border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+        >
+          {tpl.label}
+        </button>
+      ))}
+
+      {/* Custom templates */}
+      {customTemplates.map((tpl) => (
+        <button
+          key={tpl.id}
+          type="button"
+          onClick={() => onSelect(tpl.text)}
+          className="group text-xs px-2 py-1 rounded-md border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors inline-flex items-center gap-1"
+        >
+          {tpl.label}
+          {onDeleteTemplate && (
+            <span
+              role="button"
+              onClick={(e) => { e.stopPropagation(); onDeleteTemplate(type, tpl.id) }}
+              className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+            >
+              <X className="w-3 h-3" />
+            </span>
+          )}
+        </button>
+      ))}
+
+      {/* Add new template button / form */}
+      {onAddTemplate && (
+        <>
+          {!isAdding ? (
+            <button
+              type="button"
+              onClick={() => { setIsAdding(true); setNewLabel(''); setNewText('') }}
+              className="text-xs px-2 py-1 rounded-md border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary transition-colors"
+            >
+              + Add
+            </button>
+          ) : (
+            <div className="w-full flex flex-col gap-1 mt-1 p-2 rounded-md border border-border bg-muted">
+              <Input
+                placeholder={type === 'note' ? 'Label (e.g. Refund policy)' : 'Label (e.g. PayPal)'}
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                className="bg-input border-border text-foreground text-xs h-7"
+              />
+              <Textarea
+                placeholder="Template text..."
+                value={newText}
+                onChange={(e) => setNewText(e.target.value)}
+                rows={2}
+                className="bg-input border-border text-foreground text-xs"
+              />
+              <div className="flex gap-1 justify-end">
+                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setIsAdding(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-6 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={handleSave}
+                  disabled={!newLabel.trim() || !newText.trim()}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export function AdditionalOptionsSection({
   templateId,
   onTemplateChange,
@@ -52,6 +170,10 @@ export function AdditionalOptionsSection({
   onPaymentInstructionsChange,
   signatureName,
   onSignatureNameChange,
+  customNoteTemplates,
+  customPaymentTemplates,
+  onAddTemplate,
+  onDeleteTemplate,
 }: AdditionalOptionsSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [showMemo, setShowMemo] = useState(!!memo)
@@ -134,6 +256,14 @@ export function AdditionalOptionsSection({
           {showMemo && (
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Memo</label>
+              <TemplateTags
+                type="note"
+                builtInTemplates={NOTE_TEMPLATES}
+                customTemplates={customNoteTemplates ?? []}
+                onSelect={(text) => onMemoChange(memo ? `${memo}\n${text}` : text)}
+                onAddTemplate={onAddTemplate}
+                onDeleteTemplate={onDeleteTemplate}
+              />
               <Textarea
                 value={memo}
                 onChange={(e) => onMemoChange(e.target.value)}
@@ -197,6 +327,14 @@ export function AdditionalOptionsSection({
           {showPaymentInstructions && (
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Payment instructions</label>
+              <TemplateTags
+                type="payment"
+                builtInTemplates={PAYMENT_INSTRUCTION_TEMPLATES}
+                customTemplates={customPaymentTemplates ?? []}
+                onSelect={(text) => onPaymentInstructionsChange(paymentInstructions ? `${paymentInstructions}\n${text}` : text)}
+                onAddTemplate={onAddTemplate}
+                onDeleteTemplate={onDeleteTemplate}
+              />
               <Textarea
                 value={paymentInstructions}
                 onChange={(e) => onPaymentInstructionsChange(e.target.value)}
