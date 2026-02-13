@@ -187,6 +187,14 @@ export function useInvoiceTemplateMutations() {
 }
 
 /**
+ * Hook for saving invoice defaults (notes, footer, payment instructions, signature)
+ */
+export function useInvoiceDefaultsMutation() {
+  const updateDefaults = useMutation(api.functions.salesInvoices.updateInvoiceDefaults)
+  return { updateDefaults }
+}
+
+/**
  * Hook for payment history by customer
  */
 export function usePaymentsByCustomer(

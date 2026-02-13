@@ -59,6 +59,7 @@ interface InvoiceFormPanelProps {
   onDraftCreated?: (invoiceId: string) => void
   customNoteTemplates?: InvoiceTemplateItem[]
   customPaymentTemplates?: InvoiceTemplateItem[]
+  onSaveDefaults?: () => Promise<void>
   onAddTemplate?: (type: 'note' | 'payment', label: string, text: string) => Promise<void>
   onDeleteTemplate?: (type: 'note' | 'payment', templateId: string) => Promise<void>
 }
@@ -67,6 +68,7 @@ export function InvoiceFormPanel({
   form,
   customNoteTemplates,
   customPaymentTemplates,
+  onSaveDefaults,
   onAddTemplate,
   onDeleteTemplate,
 }: InvoiceFormPanelProps) {
@@ -174,6 +176,7 @@ export function InvoiceFormPanel({
           onSignatureNameChange={form.setSignatureName}
           customNoteTemplates={customNoteTemplates}
           customPaymentTemplates={customPaymentTemplates}
+          onSaveDefaults={onSaveDefaults}
           onAddTemplate={onAddTemplate}
           onDeleteTemplate={onDeleteTemplate}
         />
