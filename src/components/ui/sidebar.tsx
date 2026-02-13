@@ -86,9 +86,8 @@ export default function Sidebar() {
     { name: t('reporting') || 'Reporting & Exports', href: localizedHref('/reporting'), icon: FileSpreadsheet },
   ]
 
-  // Group 3: Utility (all users) — tools and settings
+  // Group 3: Utility (all users) — settings only (AI Assistant removed, now floating widget)
   const utilityGroup = [
-    { name: t('aiAssistant'), href: localizedHref('/ai-assistant'), icon: MessageSquare },
     { name: t('settings') || 'Settings', href: localizedHref('/business-settings'), icon: Settings },
   ]
 

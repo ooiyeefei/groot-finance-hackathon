@@ -1,7 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useLocale } from 'next-intl';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -60,9 +58,6 @@ const categoryConfig = {
 };
 
 export function InsightCard({ insight, onDismiss, onAction, onReview }: InsightCardProps) {
-  const router = useRouter();
-  const locale = useLocale();
-
   const priority = priorityConfig[insight.priority];
   const category = categoryConfig[insight.category];
   const CategoryIcon = category.icon;
@@ -96,8 +91,10 @@ Please:
 3. Provide specific recommendations with actionable next steps
 4. Flag any related concerns I should address`;
 
-    const encodedMessage = encodeURIComponent(contextMessage);
-    router.push(`/${locale}/ai-assistant?prefill=${encodedMessage}`);
+    // Open the global chat widget with the prefilled message
+    window.dispatchEvent(
+      new CustomEvent('finanseal:open-chat', { detail: { message: contextMessage } })
+    );
   };
 
   return (

@@ -10,6 +10,7 @@ import { ConvexClientProvider } from '@/components/providers/ConvexClientProvide
 import { SentryUserProvider } from '@/components/providers/SentryUserProvider';
 import { PWAProvider } from '@/components/providers/PWAProvider';
 import { MobileAppShellConnected } from '@/components/ui/mobile-app-shell-connected';
+import { ChatWidget } from '@/domains/chat/components/chat-widget';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -68,6 +69,7 @@ export default async function LocaleLayout({
                       {children}
                     </MobileAppShellConnected>
                   </PWAProvider>
+                  <ChatWidget />
                 </SentryUserProvider>
               </BusinessContextProvider>
             </NextIntlClientProvider>
