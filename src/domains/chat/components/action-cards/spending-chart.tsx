@@ -8,7 +8,7 @@
  */
 
 import { BarChart3 } from 'lucide-react'
-import { registerActionCard, type ActionCardProps } from './index'
+import { registerActionCard, type ActionCardProps } from './registry'
 
 interface ChartCategory {
   label: string

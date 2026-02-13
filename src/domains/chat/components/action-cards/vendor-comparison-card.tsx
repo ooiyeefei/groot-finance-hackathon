@@ -9,7 +9,7 @@
 
 import { useRouter } from 'next/navigation'
 import { Building2, ExternalLink, Star } from 'lucide-react'
-import { registerActionCard, type ActionCardProps } from './index'
+import { registerActionCard, type ActionCardProps } from './registry'
 
 interface VendorMetrics {
   id: string

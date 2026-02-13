@@ -9,7 +9,7 @@
 
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, ExternalLink, Bell } from 'lucide-react'
-import { registerActionCard, type ActionCardProps } from './index'
+import { registerActionCard, type ActionCardProps } from './registry'
 
 interface AnomalyItem {
   id: string

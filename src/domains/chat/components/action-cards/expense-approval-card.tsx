@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Check, X, Loader2, Receipt } from 'lucide-react'
-import { registerActionCard, type ActionCardProps } from './index'
+import { registerActionCard, type ActionCardProps } from './registry'
 
 interface ExpenseApprovalData {
   submissionId: string

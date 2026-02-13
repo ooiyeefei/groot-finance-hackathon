@@ -1,48 +1,21 @@
 /**
- * Action Card Registry
+ * Action Card Registry — Public API
  *
- * Extensible type-to-component map for rendering interactive cards inline in chat.
- * New card types can be added by calling registerActionCard().
- * Unrecognized types fall back to a formatted text display.
+ * Re-exports registry functions and triggers card module side-effect imports.
+ * Card modules import from ./registry (not here) to avoid circular deps.
  */
 
+// Re-export registry API
+export { registerActionCard, hasActionCard, type ActionCardProps } from './registry'
+import { getRegisteredCard } from './registry'
 import type { ComponentType } from 'react'
-import type { ChatAction } from '../../lib/sse-parser'
+import type { ActionCardProps } from './registry'
 
 // Import card modules so their registerActionCard() side-effects execute
 import './anomaly-card'
 import './expense-approval-card'
 import './vendor-comparison-card'
 import './spending-chart'
-
-export interface ActionCardProps {
-  action: ChatAction
-  isHistorical: boolean
-  onActionComplete?: (result: { success: boolean; message?: string }) => void
-}
-
-/** Registry of action type → React component */
-const registry = new Map<string, ComponentType<ActionCardProps>>()
-
-/** Register a new action card component for a given type */
-export function registerActionCard(
-  type: string,
-  component: ComponentType<ActionCardProps>
-) {
-  registry.set(type, component)
-}
-
-/** Look up and render an action card, or fall back to FallbackCard */
-export function getActionCardComponent(
-  type: string
-): ComponentType<ActionCardProps> {
-  return registry.get(type) || FallbackCard
-}
-
-/** Check if a specific card type is registered */
-export function hasActionCard(type: string): boolean {
-  return registry.has(type)
-}
 
 // --- Fallback Card ---
 
@@ -63,4 +36,11 @@ function FallbackCard({ action }: ActionCardProps) {
       </pre>
     </div>
   )
+}
+
+/** Look up and render an action card, or fall back to FallbackCard */
+export function getActionCardComponent(
+  type: string
+): ComponentType<ActionCardProps> {
+  return getRegisteredCard(type) || FallbackCard
 }
