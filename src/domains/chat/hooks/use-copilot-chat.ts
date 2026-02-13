@@ -63,8 +63,9 @@ export interface UseCopilotBridgeReturn {
   stopGeneration: () => void
 }
 
-/** Inactivity timeout before showing retry prompt (ms) */
-const STREAM_TIMEOUT_MS = 60_000
+/** Inactivity timeout before showing retry prompt (ms).
+ *  Set to 180s to accommodate cold starts on serverless LLM endpoints (e.g. Modal). */
+const STREAM_TIMEOUT_MS = 180_000
 
 /**
  * Bridge hook: sends messages to the chat API via SSE and syncs with Convex.

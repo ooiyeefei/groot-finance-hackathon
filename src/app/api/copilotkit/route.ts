@@ -88,6 +88,10 @@ export async function POST(req: NextRequest) {
       }
 
       try {
+        // Emit an immediate status event so the client knows the stream is alive.
+        // This resets the inactivity timeout while the LLM endpoint cold-starts.
+        writeEvent('status', { phase: 'Connecting to AI agent...' })
+
         const eventStream = streamLangGraphAgent({
           message,
           conversationHistory,
