@@ -5,6 +5,7 @@ import { useLocale } from 'next-intl'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import HeaderWithUser from '@/components/ui/header-with-user'
 import { useSalesInvoice } from '@/domains/sales-invoices/hooks/use-sales-invoices'
 import { PaymentRecorder } from '@/domains/sales-invoices/components/payment-recorder'
 import { InvoiceStatusBadge } from '@/domains/sales-invoices/components/invoice-status-badge'
@@ -21,24 +22,37 @@ export default function RecordPaymentPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <>
+        <HeaderWithUser title="Record Payment" subtitle="" />
+        <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        </main>
+      </>
     )
   }
 
   if (!invoice) {
     return (
-      <div className="text-center py-24">
-        <p className="text-muted-foreground">Invoice not found.</p>
-        <Link href={`/${locale}/invoices#sales-invoices`} className="mt-4 inline-block">
-          <Button variant="outline">Back to Invoices</Button>
-        </Link>
-      </div>
+      <>
+        <HeaderWithUser title="Record Payment" subtitle="" />
+        <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
+          <div className="text-center py-24">
+            <p className="text-muted-foreground">Invoice not found.</p>
+            <Link href={`/${locale}/invoices#sales-invoices`} className="mt-4 inline-block">
+              <Button variant="outline">Back to Invoices</Button>
+            </Link>
+          </div>
+        </main>
+      </>
     )
   }
 
   return (
+    <>
+    <HeaderWithUser title="Record Payment" subtitle="" />
+    <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -84,5 +98,7 @@ export default function RecordPaymentPage() {
         onCancel={() => router.push(`/${locale}/sales-invoices/${invoiceId}`)}
       />
     </div>
+    </main>
+    </>
   )
 }

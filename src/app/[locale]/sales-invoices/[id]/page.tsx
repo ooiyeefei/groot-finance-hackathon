@@ -6,6 +6,7 @@ import { useLocale } from 'next-intl'
 import { ArrowLeft, Pencil, Send, RotateCw, CreditCard, Ban, Download, Loader2, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import HeaderWithUser from '@/components/ui/header-with-user'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoice, useSalesInvoiceMutations, useInvoicePdfUrl } from '@/domains/sales-invoices/hooks/use-sales-invoices'
@@ -40,20 +41,30 @@ export default function SalesInvoiceDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <>
+        <HeaderWithUser title="Invoice Details" subtitle="" />
+        <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        </main>
+      </>
     )
   }
 
   if (!invoice) {
     return (
-      <div className="text-center py-24">
-        <p className="text-muted-foreground">Invoice not found.</p>
-        <Link href={`/${locale}/invoices#sales-invoices`} className="mt-4 inline-block">
-          <Button variant="outline">Back to Invoices</Button>
-        </Link>
-      </div>
+      <>
+        <HeaderWithUser title="Invoice Details" subtitle="" />
+        <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
+          <div className="text-center py-24">
+            <p className="text-muted-foreground">Invoice not found.</p>
+            <Link href={`/${locale}/invoices#sales-invoices`} className="mt-4 inline-block">
+              <Button variant="outline">Back to Invoices</Button>
+            </Link>
+          </div>
+        </main>
+      </>
     )
   }
 
@@ -215,6 +226,9 @@ export default function SalesInvoiceDetailPage() {
   }
 
   return (
+    <>
+    <HeaderWithUser title="Invoice Details" subtitle="" />
+    <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -481,5 +495,7 @@ export default function SalesInvoiceDetailPage() {
         </div>
       </div>
     </div>
+    </main>
+    </>
   )
 }
