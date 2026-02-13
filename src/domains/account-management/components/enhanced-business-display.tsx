@@ -263,7 +263,7 @@ export default function EnhancedBusinessDisplay({
                 {/* Business dropdown - always show to allow creating new business */}
               <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                 <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg]:hidden">
-                  <span className="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg></span>
+                  <span className="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg></span>
                 </SelectTrigger>
                 <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                   {memberships.map((membership) => {
@@ -343,7 +343,7 @@ export default function EnhancedBusinessDisplay({
                     {/* Business dropdown - always show to allow creating new business */}
                     <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                       <SelectTrigger className="absolute -bottom-1 -right-1 w-5 h-5 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg]:hidden">
-                        <span className="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg></span>
+                        <span className="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg></span>
                       </SelectTrigger>
                       <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                         {memberships.map((membership) => {
@@ -449,7 +449,7 @@ export default function EnhancedBusinessDisplay({
               {memberships.length > 1 && (
                 <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                   <SelectTrigger className="absolute -bottom-1 -right-1 w-6 h-6 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
-                    <span className="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg></span>
+                    <span className="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg></span>
                   </SelectTrigger>
                   <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                     {memberships.map((membership) => {
@@ -532,7 +532,7 @@ export default function EnhancedBusinessDisplay({
                   {memberships.length > 1 && (
                     <Select value={business?.businessId} onValueChange={handleBusinessSwitch} disabled={isSwitching} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                       <SelectTrigger className="absolute -bottom-1 -right-1 w-5 h-5 p-0 border-2 border-border bg-background hover:bg-accent rounded-full flex items-center justify-center focus:ring-1 focus:ring-ring focus:ring-offset-0 transition-colors [&>svg:first-child]:hidden">
-                        <span className="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg></span>
+                        <span className="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"><path fill="currentColor" d="m12 15l5-5H7z"/></svg></span>
                       </SelectTrigger>
                       <SelectContent className="w-80 bg-background text-foreground border border-border shadow-lg">
                         {memberships.map((membership) => {
