@@ -177,28 +177,40 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
         })
       }
 
-      // Generate and upload PDF
+      // Generate PDF blob for email attachment + Convex storage
+      const invoiceNum = nextInvoiceNumber ?? 'INV-XXXX-XXX'
+      let pdfPayload: Record<string, unknown> = {}
       try {
-        const invoiceNum = nextInvoiceNumber ?? 'INV-XXXX-XXX'
         const pdfResult = await generatePdfBlob(invoiceNum, buildPdfData())
         if (pdfResult.success && pdfResult.blob) {
-          const uploadUrl = await generateUploadUrl()
-          const uploadResponse = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/pdf' },
-            body: pdfResult.blob,
+          // Convert to base64 for email attachment
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve((reader.result as string).split(',')[1])
+            reader.onerror = reject
+            reader.readAsDataURL(pdfResult.blob!)
           })
-          if (uploadResponse.ok) {
-            const { storageId } = await uploadResponse.json()
-            await storePdfStorageId({
-              id: currentInvoiceId as Id<'sales_invoices'>,
-              businessId: businessId as Id<'businesses'>,
-              storageId,
+          pdfPayload = { pdfAttachment: { content: base64, filename: pdfResult.filename! } }
+
+          // Also upload to Convex storage (fire-and-forget)
+          generateUploadUrl().then(async (uploadUrl) => {
+            const uploadResponse = await fetch(uploadUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/pdf' },
+              body: pdfResult.blob,
             })
-          }
+            if (uploadResponse.ok) {
+              const { storageId } = await uploadResponse.json()
+              await storePdfStorageId({
+                id: currentInvoiceId as Id<'sales_invoices'>,
+                businessId: businessId as Id<'businesses'>,
+                storageId,
+              })
+            }
+          }).catch(() => {})
         }
       } catch {
-        // PDF upload failure is non-blocking
+        // PDF generation failure is non-blocking
       }
 
       // Send
@@ -207,7 +219,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
         businessId: businessId as Id<'businesses'>,
       })
 
-      // Send email
+      // Send email with PDF attachment
       const resolvedBusinessName = businessProfile?.name || (business as unknown as Record<string, unknown>)?.businessName as string || 'Our Company'
       try {
         await fetch(`/api/v1/sales-invoices/${currentInvoiceId}/send-email`, {
@@ -216,7 +228,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
           body: JSON.stringify({
             to: form.customerSnapshot.email,
             recipientName: form.customerSnapshot.contactPerson || form.customerSnapshot.businessName,
-            invoiceNumber: nextInvoiceNumber ?? 'INV-XXXX-XXX',
+            invoiceNumber: invoiceNum,
             invoiceDate: form.invoiceDate,
             dueDate: form.dueDate,
             totalAmount: form.totals.totalAmount,
@@ -235,6 +247,8 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
               unitPrice: item.unitPrice,
               amount: item.totalAmount,
             })),
+            viewUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/${locale}/sales-invoices/${currentInvoiceId}`,
+            ...pdfPayload,
           }),
         })
       } catch {

@@ -42,6 +42,7 @@ export async function POST(
       lineItems,
       pdfAttachment,
       pdfUrl,
+      viewUrl,
     } = body as {
       to: string
       recipientName?: string
@@ -61,6 +62,7 @@ export async function POST(
       lineItems?: { itemCode?: string; description: string; quantity: number; unitPrice: number; amount: number }[]
       pdfAttachment?: { content: string; filename: string }
       pdfUrl?: string
+      viewUrl?: string
     }
 
     if (!to) {
@@ -117,6 +119,7 @@ export async function POST(
       businessEmail,
       lineItems,
       pdfAttachment: resolvedPdfAttachment,
+      viewUrl,
     })
 
     if (!result.success) {

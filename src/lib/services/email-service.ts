@@ -1144,7 +1144,7 @@ ${this.config!.appUrl}
   }
 
   private generateInvoiceEmailHTML(data: InvoiceEmailData): string {
-    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, paymentInstructions, businessName, businessAddress, businessPhone, businessEmail, pdfAttachment } = data
+    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, paymentInstructions, businessName, businessAddress, businessPhone, businessEmail, pdfAttachment, viewUrl } = data
 
     const fmt = (amount: number) => {
       return `${currency} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}`
@@ -1244,6 +1244,17 @@ ${this.config!.appUrl}
                 </td>
               </tr>
 
+              ${viewUrl ? `
+              <!-- View Invoice Button -->
+              <tr>
+                <td style="padding: 0 0 24px 0;" align="center">
+                  <a href="${viewUrl}" target="_blank" style="display: inline-block; padding: 12px 32px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px;">
+                    Download invoice PDF
+                  </a>
+                </td>
+              </tr>
+              ` : ''}
+
               ${pdfAttachment ? `
               <!-- PDF Note -->
               <tr>
@@ -1287,7 +1298,7 @@ ${this.config!.appUrl}
   }
 
   private generateInvoiceEmailText(data: InvoiceEmailData): string {
-    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, paymentInstructions, businessName, pdfAttachment } = data
+    const { recipientName, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, balanceDue, paymentInstructions, businessName, pdfAttachment, viewUrl } = data
 
     const fmt = (amount: number) => `${currency} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}`
 
@@ -1302,7 +1313,7 @@ Invoice Date: ${invoiceDate}
 Due Date: ${dueDate}
 Total Amount: ${fmt(totalAmount)}
 Balance Due: ${fmt(balanceDue)}
-${pdfAttachment ? '\nThe full invoice is attached as a PDF for your records.\n' : ''}${paymentInstructions ? `\nPayment Instructions:\n${paymentInstructions}\n` : ''}
+${viewUrl ? `\nDownload invoice PDF: ${viewUrl}\n` : ''}${pdfAttachment ? '\nThe full invoice is attached as a PDF for your records.\n' : ''}${paymentInstructions ? `\nPayment Instructions:\n${paymentInstructions}\n` : ''}
 If you have any questions, please reply to this email or contact us directly.
 
 ---
