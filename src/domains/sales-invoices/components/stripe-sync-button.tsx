@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { useStripeConnection } from '@/domains/sales-invoices/hooks/use-stripe-integration'
 import { useActiveBusiness } from '@/contexts/business-context'
-import { useQuery, useAction } from 'convex/react'
+import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { Loader2, RefreshCw } from 'lucide-react'
@@ -15,8 +15,6 @@ export default function StripeSyncButton() {
   const { isConnected, connection } = useStripeConnection()
   const { addToast } = useToast()
   const [isSyncing, setIsSyncing] = useState(false)
-
-  const syncAction = useAction(api.functions.catalogItems.syncFromStripe)
 
   // Real-time sync progress
   const syncProgress = useQuery(
@@ -40,17 +38,22 @@ export default function StripeSyncButton() {
     setIsSyncing(true)
 
     try {
-      const result = await syncAction({
-        businessId: businessId as Id<"businesses">,
+      const response = await fetch('/api/v1/stripe-integration/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId }),
       })
+      const data = await response.json()
 
-      if (result.success) {
-        addToast({
-          type: 'success',
-          title: 'Stripe Sync Complete',
-          description: `${result.created} created, ${result.updated} updated, ${result.deactivated} deactivated`,
-        })
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to sync from Stripe')
       }
+
+      addToast({
+        type: 'success',
+        title: 'Stripe Sync Complete',
+        description: `${data.data.created} created, ${data.data.updated} updated, ${data.data.deactivated} deactivated`,
+      })
     } catch (err) {
       addToast({
         type: 'error',

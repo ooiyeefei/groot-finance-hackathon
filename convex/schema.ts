@@ -1407,7 +1407,6 @@ export default defineSchema({
   // ── Stripe Integration (014-stripe-catalog-sync) ──────────────────────
   stripe_integrations: defineTable({
     businessId: v.id("businesses"),
-    stripeSecretKey: v.string(),
     stripeAccountId: v.string(),
     stripeAccountName: v.optional(v.string()),
     status: v.string(), // "connected" | "disconnected"

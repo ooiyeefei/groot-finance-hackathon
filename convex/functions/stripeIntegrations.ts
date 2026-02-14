@@ -1,16 +1,14 @@
 /**
- * Stripe Integration Functions — connection management
+ * Stripe Integration Functions — connection metadata management
  *
- * Queries, mutations, and actions for connecting/disconnecting
- * a business's Stripe account and managing the integration state.
- *
- * Security: stripeSecretKey is NEVER returned by public queries.
- * Only internal queries read the key for use inside actions.
+ * Queries and mutations for managing Stripe integration status.
+ * The Stripe secret key is stored in AWS SSM Parameter Store (not in Convex).
+ * Connect/disconnect/sync operations happen via Next.js API routes which
+ * call these mutations to update metadata.
  */
 
 import { v } from "convex/values";
-import { query, mutation, action, internalQuery, internalMutation } from "../_generated/server";
-import { internal } from "../_generated/api";
+import { query, mutation } from "../_generated/server";
 import { resolveUserByClerkId } from "../lib/resolvers";
 
 // ============================================
@@ -49,74 +47,11 @@ async function requireRole(
 }
 
 // ============================================
-// INTERNAL QUERIES (used by actions)
-// ============================================
-
-/**
- * Get integration record including secret key (internal only)
- */
-export const getIntegrationInternal = internalQuery({
-  args: { businessId: v.id("businesses") },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("stripe_integrations")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
-      .first();
-  },
-});
-
-// ============================================
-// INTERNAL MUTATIONS (used by actions)
-// ============================================
-
-/**
- * Upsert integration record after successful validation
- */
-export const upsertIntegration = internalMutation({
-  args: {
-    businessId: v.id("businesses"),
-    stripeSecretKey: v.string(),
-    stripeAccountId: v.string(),
-    stripeAccountName: v.optional(v.string()),
-    createdBy: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("stripe_integrations")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
-      .first();
-
-    const now = Date.now();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        stripeSecretKey: args.stripeSecretKey,
-        stripeAccountId: args.stripeAccountId,
-        stripeAccountName: args.stripeAccountName,
-        status: "connected",
-        connectedAt: now,
-        disconnectedAt: undefined,
-      });
-    } else {
-      await ctx.db.insert("stripe_integrations", {
-        businessId: args.businessId,
-        stripeSecretKey: args.stripeSecretKey,
-        stripeAccountId: args.stripeAccountId,
-        stripeAccountName: args.stripeAccountName,
-        status: "connected",
-        connectedAt: now,
-        createdBy: args.createdBy,
-      });
-    }
-  },
-});
-
-// ============================================
 // PUBLIC QUERIES
 // ============================================
 
 /**
- * Get Stripe connection status for a business (never exposes secret key)
+ * Get Stripe connection status for a business
  */
 export const getConnection = query({
   args: {
@@ -143,72 +78,53 @@ export const getConnection = query({
 });
 
 // ============================================
-// ACTIONS (external API calls)
-// ============================================
-
-/**
- * Validate Stripe secret key and store the connection
- */
-export const connect = action({
-  args: {
-    businessId: v.id("businesses"),
-    stripeSecretKey: v.string(),
-  },
-  handler: async (ctx, args): Promise<{
-    success: boolean;
-    accountName?: string;
-    accountId?: string;
-    error?: string;
-  }> => {
-    // Auth check: verify the caller is an owner
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return { success: false, error: "Not authenticated" };
-
-    // Validate key format
-    if (!args.stripeSecretKey.startsWith("sk_test_") && !args.stripeSecretKey.startsWith("sk_live_")) {
-      return { success: false, error: "Invalid Stripe secret key format. Key must start with sk_test_ or sk_live_." };
-    }
-
-    try {
-      // Create a new Stripe client with the provided key
-      const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(args.stripeSecretKey);
-
-      // Validate by retrieving account info
-      const account = await stripe.accounts.retrieve();
-
-      const accountName = account.settings?.dashboard?.display_name
-        || account.business_profile?.name
-        || account.email
-        || "Stripe Account";
-
-      // Store the connection via internal mutation
-      await ctx.runMutation(internal.functions.stripeIntegrations.upsertIntegration, {
-        businessId: args.businessId,
-        stripeSecretKey: args.stripeSecretKey,
-        stripeAccountId: account.id,
-        stripeAccountName: accountName,
-        createdBy: identity.subject,
-      });
-
-      return {
-        success: true,
-        accountName,
-        accountId: account.id,
-      };
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to connect to Stripe";
-      return { success: false, error: message };
-    }
-  },
-});
-
-// ============================================
 // MUTATIONS
 // ============================================
 
 /**
- * Disconnect Stripe integration — clears key, preserves synced catalog items
+ * Update connection metadata after API route stores key in SSM.
+ * Called by POST /api/v1/stripe-integration/connect
+ */
+export const updateConnection = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    stripeAccountId: v.string(),
+    stripeAccountName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { clerkId } = await requireRole(ctx, args.businessId, ["owner"]);
+
+    const existing = await ctx.db
+      .query("stripe_integrations")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .first();
+
+    const now = Date.now();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        stripeAccountId: args.stripeAccountId,
+        stripeAccountName: args.stripeAccountName,
+        status: "connected",
+        connectedAt: now,
+        disconnectedAt: undefined,
+      });
+    } else {
+      await ctx.db.insert("stripe_integrations", {
+        businessId: args.businessId,
+        stripeAccountId: args.stripeAccountId,
+        stripeAccountName: args.stripeAccountName,
+        status: "connected",
+        connectedAt: now,
+        createdBy: clerkId,
+      });
+    }
+  },
+});
+
+/**
+ * Disconnect Stripe integration — preserves synced catalog items.
+ * Key deletion from SSM happens in the API route before this mutation.
  */
 export const disconnect = mutation({
   args: {
@@ -228,8 +144,31 @@ export const disconnect = mutation({
 
     await ctx.db.patch(integration._id, {
       status: "disconnected",
-      stripeSecretKey: "",
       disconnectedAt: Date.now(),
     });
+  },
+});
+
+/**
+ * Update lastSyncAt timestamp on integration record.
+ * Called by the sync API route after completing a sync.
+ */
+export const updateLastSync = mutation({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, args.businessId, ["owner", "finance_admin", "manager"]);
+
+    const integration = await ctx.db
+      .query("stripe_integrations")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .first();
+
+    if (integration) {
+      await ctx.db.patch(integration._id, {
+        lastSyncAt: Date.now(),
+      });
+    }
   },
 });
