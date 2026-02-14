@@ -44,6 +44,7 @@ import type * as functions_publicHolidays from "../functions/publicHolidays.js";
 import type * as functions_salesInvoices from "../functions/salesInvoices.js";
 import type * as functions_seedActionCenter from "../functions/seedActionCenter.js";
 import type * as functions_stripeEvents from "../functions/stripeEvents.js";
+import type * as functions_stripeIntegrations from "../functions/stripeIntegrations.js";
 import type * as functions_system from "../functions/system.js";
 import type * as functions_systemMonitoring from "../functions/systemMonitoring.js";
 import type * as functions_teamCalendar from "../functions/teamCalendar.js";
@@ -100,6 +101,7 @@ declare const fullApi: ApiFromModules<{
   "functions/salesInvoices": typeof functions_salesInvoices;
   "functions/seedActionCenter": typeof functions_seedActionCenter;
   "functions/stripeEvents": typeof functions_stripeEvents;
+  "functions/stripeIntegrations": typeof functions_stripeIntegrations;
   "functions/system": typeof functions_system;
   "functions/systemMonitoring": typeof functions_systemMonitoring;
   "functions/teamCalendar": typeof functions_teamCalendar;

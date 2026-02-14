@@ -308,6 +308,12 @@ export interface CatalogItem {
   taxRate?: number;
   category?: string;
   status: CatalogItemStatus;
+  // Stripe sync fields
+  source?: string; // "manual" | "stripe" — undefined treated as "manual"
+  stripeProductId?: string;
+  stripePriceId?: string;
+  lastSyncedAt?: number;
+  locallyDeactivated?: boolean;
   deletedAt?: number;
   updatedAt?: number;
 }

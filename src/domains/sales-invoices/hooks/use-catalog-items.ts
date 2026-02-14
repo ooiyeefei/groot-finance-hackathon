@@ -12,6 +12,7 @@ export function useCatalogItems(options?: {
   status?: string
   category?: string
   search?: string
+  source?: string // "manual" | "stripe"
   limit?: number
 }) {
   const { businessId } = useActiveBusiness()
@@ -24,6 +25,7 @@ export function useCatalogItems(options?: {
           status: options?.status,
           category: options?.category,
           search: options?.search,
+          source: options?.source,
           limit: options?.limit,
         }
       : "skip"

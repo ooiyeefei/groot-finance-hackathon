@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, memo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User } from 'lucide-react'
+import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { useUser } from '@clerk/nextjs'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -14,6 +14,7 @@ const TeamsManagementClient = lazy(() => import('@/domains/account-management/co
 const ApiKeysManagementClient = lazy(() => import('@/domains/api-keys/components/api-keys-management-client'))
 const LeaveManagementSettings = lazy(() => import('@/domains/leave-management/components/leave-management-settings'))
 const BillingSettingsContent = lazy(() => import('@/domains/billing/components/billing-settings-content'))
+const StripeIntegrationCard = lazy(() => import('@/domains/account-management/components/stripe-integration-card'))
 const UserProfileSection = lazy(() => import('@/domains/account-management/components/user-profile-section'))
 
 // Wrapper components for existing components that need userId
@@ -33,7 +34,7 @@ const TabbedBusinessSettings = memo(() => {
   const pathname = usePathname()
 
   // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'leave-management', 'team-management', 'api-keys', 'billing', 'profile'] as const
+  const validTabs = ['business-profile', 'category-management', 'leave-management', 'team-management', 'api-keys', 'billing', 'integrations', 'profile'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
   // Default tab: 'business-profile' for finance_admin/owner, 'profile' for everyone else
@@ -110,6 +111,16 @@ const TabbedBusinessSettings = memo(() => {
               <Sparkles className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Billing</span>
               <span className="sm:hidden">Bill</span>
+            </TabsTrigger>
+          )}
+          {isOwner && (
+            <TabsTrigger
+              value="integrations"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Plug className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Integrations</span>
+              <span className="sm:hidden">Intg</span>
             </TabsTrigger>
           )}
           <TabsTrigger
@@ -212,6 +223,22 @@ const TabbedBusinessSettings = memo(() => {
             }>
               <BillingSettingsContent />
             </Suspense>
+          </TabsContent>
+        )}
+
+        {/* Integrations Tab Content - Owner Only */}
+        {isOwner && (
+          <TabsContent value="integrations" className="space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6">
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">Loading integrations...</span>
+                </div>
+              }>
+                <StripeIntegrationCard />
+              </Suspense>
+            </div>
           </TabsContent>
         )}
 
