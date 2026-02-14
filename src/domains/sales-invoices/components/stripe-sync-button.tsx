@@ -70,8 +70,8 @@ export default function StripeSyncButton() {
       <Button
         onClick={handleSync}
         disabled={isSyncing}
-        variant="secondary"
         size="sm"
+        className="bg-primary hover:bg-primary/90 text-primary-foreground"
       >
         {isSyncing ? (
           <>
