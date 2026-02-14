@@ -9,6 +9,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
+import { paymentTermsValidator } from "../lib/validators";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // ============================================
@@ -223,6 +224,101 @@ export const getCategories = query({
   },
 });
 
+/**
+ * Get vendor context for invoice review.
+ * Returns vendor profile, outstanding payable summary, and suggested due date.
+ */
+export const getVendorContext = query({
+  args: {
+    vendorId: v.id("vendors"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return null;
+    }
+
+    // Verify business membership
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return null;
+    }
+
+    const vendor = await ctx.db.get(args.vendorId);
+    if (!vendor || vendor.businessId !== args.businessId) {
+      return null;
+    }
+
+    // Fetch unpaid entries for this vendor
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId_vendorId_status", (q) =>
+        q.eq("businessId", args.businessId).eq("vendorId", args.vendorId)
+      )
+      .collect();
+
+    const unpaidEntries = entries.filter(
+      (e) =>
+        !e.deletedAt &&
+        (e.status === "pending" || e.status === "overdue") &&
+        (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")
+    );
+
+    let totalAmount = 0;
+    let oldestDueDate: string | undefined;
+
+    for (const entry of unpaidEntries) {
+      const outstanding = (entry.homeCurrencyAmount ?? entry.originalAmount) - (entry.paidAmount ?? 0);
+      totalAmount += outstanding;
+      if (entry.dueDate && (!oldestDueDate || entry.dueDate < oldestDueDate)) {
+        oldestDueDate = entry.dueDate;
+      }
+    }
+
+    // Calculate suggested due date from vendor payment terms
+    const today = new Date();
+    let dueDays = 30; // default
+    if (vendor.paymentTerms === "due_on_receipt") dueDays = 0;
+    else if (vendor.paymentTerms === "net_15") dueDays = 15;
+    else if (vendor.paymentTerms === "net_30") dueDays = 30;
+    else if (vendor.paymentTerms === "net_60") dueDays = 60;
+    else if (vendor.paymentTerms === "custom" && vendor.customPaymentDays) {
+      dueDays = vendor.customPaymentDays;
+    }
+
+    const suggestedDate = new Date(today);
+    suggestedDate.setDate(suggestedDate.getDate() + dueDays);
+    const suggestedDueDate = suggestedDate.toISOString().split("T")[0];
+
+    return {
+      vendor: {
+        name: vendor.name,
+        paymentTerms: vendor.paymentTerms,
+        customPaymentDays: vendor.customPaymentDays,
+        defaultCurrency: vendor.defaultCurrency,
+      },
+      outstanding: {
+        totalAmount,
+        entryCount: unpaidEntries.length,
+        oldestDueDate,
+      },
+      suggestedDueDate,
+    };
+  },
+});
+
 // ============================================
 // MUTATIONS
 // ============================================
@@ -311,6 +407,19 @@ export const update = mutation({
     taxId: v.optional(v.string()),
     category: v.optional(v.string()),
     supplierCode: v.optional(v.string()),
+    // AP Vendor Management fields
+    paymentTerms: v.optional(paymentTermsValidator),
+    customPaymentDays: v.optional(v.number()),
+    defaultCurrency: v.optional(v.string()),
+    contactPerson: v.optional(v.string()),
+    website: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    bankDetails: v.optional(v.object({
+      bankName: v.optional(v.string()),
+      accountNumber: v.optional(v.string()),
+      routingCode: v.optional(v.string()),
+      accountHolderName: v.optional(v.string()),
+    })),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -340,6 +449,13 @@ export const update = mutation({
       throw new Error("Not authorized");
     }
 
+    // Validate: if paymentTerms = "custom", customPaymentDays must be > 0
+    if (args.paymentTerms === "custom") {
+      if (!args.customPaymentDays || args.customPaymentDays <= 0) {
+        throw new Error("Custom payment terms require customPaymentDays > 0");
+      }
+    }
+
     // Check for duplicate name if name is being changed
     if (args.name && args.name.toLowerCase() !== vendor.name.toLowerCase()) {
       const existingVendors = await ctx.db
@@ -366,6 +482,13 @@ export const update = mutation({
     if (updates.taxId !== undefined) updateData.taxId = updates.taxId;
     if (updates.category !== undefined) updateData.category = updates.category;
     if (updates.supplierCode !== undefined) updateData.supplierCode = updates.supplierCode;
+    if (updates.paymentTerms !== undefined) updateData.paymentTerms = updates.paymentTerms;
+    if (updates.customPaymentDays !== undefined) updateData.customPaymentDays = updates.customPaymentDays;
+    if (updates.defaultCurrency !== undefined) updateData.defaultCurrency = updates.defaultCurrency;
+    if (updates.contactPerson !== undefined) updateData.contactPerson = updates.contactPerson;
+    if (updates.website !== undefined) updateData.website = updates.website;
+    if (updates.notes !== undefined) updateData.notes = updates.notes;
+    if (updates.bankDetails !== undefined) updateData.bankDetails = updates.bankDetails;
 
     await ctx.db.patch(vendor._id, updateData);
     return vendor._id;

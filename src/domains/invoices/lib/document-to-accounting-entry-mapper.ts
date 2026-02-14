@@ -301,6 +301,22 @@ export function mapDocumentToAccountingEntry(document: DocumentData): Partial<Cr
     }
   }
 
+  // Extract due date from OCR data if available
+  if (extractedData.due_date) {
+    mappedData.due_date = parseDate(extractedData.due_date)
+  } else if (summary && (summary as any).due_date?.value) {
+    mappedData.due_date = parseDate((summary as any).due_date.value)
+  } else if (extractedData.payment_due_date) {
+    mappedData.due_date = parseDate(extractedData.payment_due_date)
+  }
+
+  // Default due date: 30 days from transaction date (if not extracted from OCR)
+  if (!mappedData.due_date && mappedData.transaction_date) {
+    const txDate = new Date(mappedData.transaction_date)
+    txDate.setDate(txDate.getDate() + 30)
+    mappedData.due_date = txDate.toISOString().split('T')[0]
+  }
+
   // Fallback to entity extraction if structured data is not available
   if (!mappedData.vendor_name) {
     const vendorEntity = findEntity(['vendor', 'vendor_name', 'company', 'business'])

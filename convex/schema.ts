@@ -211,6 +211,16 @@ export default defineSchema({
     paymentDate: v.optional(v.string()),
     paymentMethod: v.optional(v.string()),
 
+    // AP Payment Tracking (013-ap-vendor-management)
+    paidAmount: v.optional(v.number()),
+    paymentHistory: v.optional(v.array(v.object({
+      amount: v.number(),
+      paymentDate: v.string(),
+      paymentMethod: v.string(),
+      notes: v.optional(v.string()),
+      recordedAt: v.number(),
+    }))),
+
     // Creation Method (validator from src/lib/constants/statuses.ts)
     createdByMethod: v.optional(createdByMethodValidator),
 
@@ -252,7 +262,9 @@ export default defineSchema({
     .index("by_category", ["category"])
     .index("by_status", ["status"])
     .index("by_sourceDocument", ["sourceDocumentType", "sourceRecordId"])
-    .index("by_legacyId", ["legacyId"]),
+    .index("by_legacyId", ["legacyId"])
+    .index("by_businessId_dueDate", ["businessId", "dueDate"])
+    .index("by_businessId_vendorId_status", ["businessId", "vendorId", "status"]),
 
   // Line Items table (for migration - will be embedded later)
   line_items: defineTable({
@@ -615,6 +627,22 @@ export default defineSchema({
     // Classification & Status
     category: v.optional(v.string()),
     status: v.optional(vendorStatusValidator),  // prospective → active → inactive
+
+    // Payment Terms (013-ap-vendor-management)
+    paymentTerms: v.optional(paymentTermsValidator),
+    customPaymentDays: v.optional(v.number()),
+    defaultCurrency: v.optional(v.string()),
+
+    // Contact & Bank Details (013-ap-vendor-management)
+    contactPerson: v.optional(v.string()),
+    website: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    bankDetails: v.optional(v.object({
+      bankName: v.optional(v.string()),
+      accountNumber: v.optional(v.string()),
+      routingCode: v.optional(v.string()),
+      accountHolderName: v.optional(v.string()),
+    })),
 
     // Timestamps
     updatedAt: v.optional(v.number()),

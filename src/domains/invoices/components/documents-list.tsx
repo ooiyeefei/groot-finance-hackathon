@@ -12,6 +12,7 @@ import { mapDocumentToAccountingEntry, canCreateAccountingEntryFromDocument } fr
 import { CreateAccountingEntryRequest } from '@/domains/accounting-entries/types'
 import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import ExtractedInfoTags from './ExtractedInfoTags'
+import VendorContextNote from '@/domains/payables/components/vendor-context-note'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
@@ -572,6 +573,19 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
               <div className="mt-4 pt-4 border-t border-border">
                 <h5 className="text-sm font-medium text-muted-foreground mb-2">Extracted Information</h5>
                 <ExtractedInfoTags extractedData={document.extracted_data} />
+                {/* Vendor context: payment terms, outstanding balance when vendor is identified */}
+                {(() => {
+                  const extractedAny = document.extracted_data as any
+                  const vendorName = extractedAny?.vendor_name
+                    || extractedAny?.document_summary?.vendor_name?.value
+                  return vendorName && businessId ? (
+                    <VendorContextNote
+                      vendorName={vendorName}
+                      businessId={businessId}
+                      currency={userHomeCurrency || 'USD'}
+                    />
+                  ) : null
+                })()}
               </div>
             )}
 
