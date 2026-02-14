@@ -38,9 +38,18 @@ export default function StripeIntegrationCard() {
       addToast({
         type: 'success',
         title: 'Stripe Connected',
-        description: `Connected to ${result.accountName}`,
+        description: `Connected to ${result.accountName}. Syncing your product catalog...`,
       })
       setApiKey('')
+
+      // Auto-sync products immediately after connecting
+      fetch('/api/v1/stripe-integration/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId }),
+      }).catch(() => {
+        // Sync errors are non-blocking — user can retry from Catalog tab
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
     } finally {
