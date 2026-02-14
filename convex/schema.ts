@@ -1356,6 +1356,10 @@ export default defineSchema({
     taxRate: v.optional(v.number()),
     category: v.optional(v.string()),
     status: catalogItemStatusValidator,
+    source: v.optional(v.string()),
+    stripeProductId: v.optional(v.string()),
+    stripePriceId: v.optional(v.string()),
+    lastSyncedAt: v.optional(v.number()),
 
     // Stripe sync fields (014-stripe-catalog-sync)
     source: v.optional(v.string()), // "manual" | "stripe" — undefined treated as "manual"
