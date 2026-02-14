@@ -15,14 +15,12 @@
  */
 
 import { getSignedUrl } from '@aws-sdk/cloudfront-signer'
-import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm'
-import { fromWebToken } from '@aws-sdk/credential-providers'
+import { createSSMClient } from './aws-ssm'
+import { GetParameterCommand } from '@aws-sdk/client-ssm'
 
 // Configuration from environment
 const CLOUDFRONT_DOMAIN = process.env.CLOUDFRONT_DOMAIN || process.env.NEXT_PUBLIC_CLOUDFRONT_DOMAIN
 const CLOUDFRONT_KEY_PAIR_ID = process.env.CLOUDFRONT_KEY_PAIR_ID
-const AWS_REGION = process.env.AWS_REGION || 'us-west-2'
-const AWS_ROLE_ARN = process.env.AWS_ROLE_ARN
 
 // SSM Parameter names
 const SSM_PRIVATE_KEY_PARAM = '/finanseal/cloudfront/private-key'
@@ -37,33 +35,6 @@ export const CLOUDFRONT_URL_EXPIRY = {
   shortLived: 600, // 10 minutes for processing
   longLived: 86400, // 24 hours for cached content
 } as const
-
-/**
- * Create SSM client with appropriate credentials
- */
-function createSSMClient(): SSMClient {
-  const clientConfig: ConstructorParameters<typeof SSMClient>[0] = {
-    region: AWS_REGION,
-  }
-
-  // Use Vercel OIDC if AWS_ROLE_ARN is configured (production)
-  if (AWS_ROLE_ARN) {
-    clientConfig.credentials = async () => {
-      const { getVercelOidcToken } = await import('@vercel/oidc')
-      const token = await getVercelOidcToken()
-      const provider = fromWebToken({
-        roleArn: AWS_ROLE_ARN,
-        webIdentityToken: token,
-        roleSessionName: `finanseal-ssm-${Date.now()}`,
-        durationSeconds: 3600,
-      })
-      return provider()
-    }
-  }
-  // Otherwise uses default credential chain (local dev)
-
-  return new SSMClient(clientConfig)
-}
 
 /**
  * Fetch private key from SSM Parameter Store (with caching)

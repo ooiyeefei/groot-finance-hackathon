@@ -10,7 +10,6 @@ import { useToast } from '@/components/ui/toast'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useStripeConnection, useStripeConnect, useStripeDisconnect } from '@/domains/sales-invoices/hooks/use-stripe-integration'
 import { Loader2, Unplug, Zap } from 'lucide-react'
-import type { Id } from '../../../../convex/_generated/dataModel'
 
 export default function StripeIntegrationCard() {
   const { businessId } = useActiveBusiness()
@@ -32,20 +31,16 @@ export default function StripeIntegrationCard() {
 
     try {
       const result = await connect({
-        businessId: businessId as Id<"businesses">,
+        businessId,
         stripeSecretKey: apiKey.trim(),
       })
 
-      if (result.success) {
-        addToast({
-          type: 'success',
-          title: 'Stripe Connected',
-          description: `Connected to ${result.accountName}`,
-        })
-        setApiKey('')
-      } else {
-        setError(result.error || 'Failed to connect to Stripe')
-      }
+      addToast({
+        type: 'success',
+        title: 'Stripe Connected',
+        description: `Connected to ${result.accountName}`,
+      })
+      setApiKey('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
     } finally {
@@ -58,9 +53,7 @@ export default function StripeIntegrationCard() {
     setIsDisconnecting(true)
 
     try {
-      await disconnect({
-        businessId: businessId as Id<"businesses">,
-      })
+      await disconnect({ businessId })
       addToast({
         type: 'success',
         title: 'Stripe Disconnected',
