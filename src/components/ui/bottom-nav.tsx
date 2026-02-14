@@ -162,7 +162,7 @@ export function BottomNavSpacer({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'h-20 sm:h-0', // 80px on mobile, 0 on larger screens
+        'h-20', // 80px spacer to clear fixed bottom nav (mobile) and chat widget (all sizes)
         className
       )}
       aria-hidden="true"

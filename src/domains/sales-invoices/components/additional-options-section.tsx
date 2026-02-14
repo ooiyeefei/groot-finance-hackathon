@@ -36,7 +36,12 @@ export function AdditionalOptionsSection({
   onSaveDefaults,
 }: AdditionalOptionsSectionProps) {
   const [isSavingDefaults, setIsSavingDefaults] = useState(false)
-  const [defaultsSaved, setDefaultsSaved] = useState(false)
+  const [savedSnapshot, setSavedSnapshot] = useState<{ memo: string; paymentInstructions: string; signatureName: string } | null>(null)
+
+  const isCurrentlySaved = savedSnapshot !== null &&
+    memo === savedSnapshot.memo &&
+    paymentInstructions === savedSnapshot.paymentInstructions &&
+    signatureName === savedSnapshot.signatureName
 
   return (
     <div className="space-y-4">
@@ -95,14 +100,13 @@ export function AdditionalOptionsSection({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs"
-            disabled={isSavingDefaults}
+            className={`h-8 text-xs ${isCurrentlySaved ? 'border-green-600/30 text-green-600' : ''}`}
+            disabled={isSavingDefaults || isCurrentlySaved}
             onClick={async () => {
               setIsSavingDefaults(true)
               try {
                 await onSaveDefaults()
-                setDefaultsSaved(true)
-                setTimeout(() => setDefaultsSaved(false), 2000)
+                setSavedSnapshot({ memo, paymentInstructions, signatureName })
               } catch {
                 // Save failure is non-blocking
               } finally {
@@ -110,10 +114,10 @@ export function AdditionalOptionsSection({
               }
             }}
           >
-            {defaultsSaved ? (
+            {isCurrentlySaved ? (
               <>
                 <Check className="h-3 w-3 mr-1" />
-                Saved
+                Defaults saved
               </>
             ) : (
               <>
@@ -123,7 +127,9 @@ export function AdditionalOptionsSection({
             )}
           </Button>
           <p className="text-[11px] text-muted-foreground mt-1">
-            Saves memo, payment instructions, and signature as defaults for new invoices.
+            {isCurrentlySaved
+              ? 'These values will auto-populate on new invoices.'
+              : 'Saves memo, payment instructions, and signature as defaults for new invoices.'}
           </p>
         </div>
       )}

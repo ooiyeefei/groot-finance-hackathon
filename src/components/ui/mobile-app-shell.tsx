@@ -178,8 +178,8 @@ export function MobileAppShell({
   return (
     <>
       {children}
-      {/* Spacer to prevent content from being hidden behind bottom nav */}
-      <BottomNavSpacer className="sm:hidden" />
+      {/* Spacer to prevent content from being hidden behind bottom nav and chat widget */}
+      <BottomNavSpacer />
       {/* Bottom navigation - visible only on mobile */}
       <BottomNav items={navItems} />
     </>
