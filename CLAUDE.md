@@ -126,6 +126,7 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - Convex (conversations, messages), Qdrant Cloud (RAG embeddings), Mem0 (conversation memory) (010-copilotkit-migration)
 - TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, @langchain/langgraph 0.4.5, Convex 1.31.3, React 19.1.2, Clerk 6.30.0 (011-chat-streaming-actions)
 - Convex (conversations, messages with metadata), Qdrant Cloud (RAG), Mem0 (memory) (011-chat-streaming-actions)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Stripe SDK 20.1.0 (already installed), React 19.1.2, Clerk 6.30.0 (014-stripe-catalog-sync)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

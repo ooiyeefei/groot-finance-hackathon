@@ -1,14 +1,17 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Search, Plus, Pencil, Ban, RotateCcw, Package, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Ban, RotateCcw, Package, Loader2, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useCatalogItems, useCatalogItemMutations } from '../hooks/use-catalog-items'
+import { useMutation } from 'convex/react'
+import { api } from '../../../../convex/_generated/api'
 import CatalogItemForm from './catalog-item-form'
+import StripeSyncButton from './stripe-sync-button'
 import { formatCurrency } from '@/lib/utils/format-number'
 import type { CatalogItem } from '../types'
 import { CATALOG_ITEM_STATUSES } from '../types'
@@ -27,15 +30,18 @@ type FormMode = { kind: 'closed' } | { kind: 'create' } | { kind: 'edit'; item: 
 export default function CatalogItemManager() {
   const { businessId } = useActiveBusiness()
   const [searchQuery, setSearchQuery] = useState('')
+  const [sourceFilter, setSourceFilter] = useState<string>('all')
   const [formMode, setFormMode] = useState<FormMode>({ kind: 'closed' })
   const [actionLoadingIds, setActionLoadingIds] = useState<Set<string>>(new Set())
 
   // Data hooks
   const { items, isLoading } = useCatalogItems({
     search: searchQuery || undefined,
+    source: sourceFilter !== 'all' ? sourceFilter : undefined,
   })
   const { createItem, updateItem, deactivateItem, reactivateItem } =
     useCatalogItemMutations()
+  const restoreFromStripe = useMutation(api.functions.catalogItems.restoreFromStripe)
 
   // -------------------------------------------------------------------------
   // Filtered items based on local search
@@ -135,6 +141,15 @@ export default function CatalogItemManager() {
     [businessId, reactivateItem, withActionLoading],
   )
 
+  const handleRestoreFromStripe = useCallback(
+    async (item: CatalogItem) => {
+      await withActionLoading(item._id, async () => {
+        await restoreFromStripe({ id: item._id, businessId: businessId as Id<"businesses"> })
+      })
+    },
+    [businessId, restoreFromStripe, withActionLoading],
+  )
+
   // -------------------------------------------------------------------------
   // Status badge helper
   // -------------------------------------------------------------------------
@@ -152,7 +167,7 @@ export default function CatalogItemManager() {
 
   return (
     <div className="space-y-6">
-      {/* Header row: search + add button */}
+      {/* Header row: search + sync + add button */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -163,15 +178,36 @@ export default function CatalogItemManager() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => setFormMode({ kind: 'create' })}
-          disabled={formMode.kind !== 'closed'}
-        >
-          <Plus className="h-4 w-4" />
-          Add Item
-        </Button>
+        <div className="flex items-center gap-2">
+          <StripeSyncButton />
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setFormMode({ kind: 'create' })}
+            disabled={formMode.kind !== 'closed'}
+          >
+            <Plus className="h-4 w-4" />
+            Add Item
+          </Button>
+        </div>
+      </div>
+
+      {/* Source filter */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Source:</span>
+        {(['all', 'manual', 'stripe'] as const).map((value) => (
+          <button
+            key={value}
+            onClick={() => setSourceFilter(value)}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+              sourceFilter === value
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
+            }`}
+          >
+            {value === 'all' ? 'All' : value === 'stripe' ? 'Stripe' : 'Manual'}
+          </button>
+        ))}
       </div>
 
       {/* Inline create form */}
@@ -275,12 +311,24 @@ export default function CatalogItemManager() {
                       >
                         <td className="px-4 py-3">
                           <div>
-                            <p className="text-sm font-medium text-foreground">
-                              {item.name}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-sm font-medium text-foreground">
+                                {item.name}
+                              </p>
+                              {item.source === 'stripe' && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30">
+                                  Stripe
+                                </span>
+                              )}
+                            </div>
                             {item.description && (
                               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                                 {item.description}
+                              </p>
+                            )}
+                            {item.source === 'stripe' && item.lastSyncedAt && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                Synced: {new Date(item.lastSyncedAt).toLocaleDateString()}
                               </p>
                             )}
                           </div>
@@ -324,6 +372,20 @@ export default function CatalogItemManager() {
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
                                   <Ban className="h-4 w-4" />
+                                )}
+                              </Button>
+                            ) : item.source === 'stripe' && item.locallyDeactivated ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRestoreFromStripe(item)}
+                                title="Restore from Stripe"
+                                disabled={isActionLoading}
+                              >
+                                {isActionLoading ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Undo2 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                                 )}
                               </Button>
                             ) : (
@@ -375,9 +437,16 @@ export default function CatalogItemManager() {
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {item.name}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {item.name}
+                          </p>
+                          {item.source === 'stripe' && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30">
+                              Stripe
+                            </span>
+                          )}
+                        </div>
                         {item.sku && (
                           <p className="text-xs text-muted-foreground">
                             SKU: {item.sku}
@@ -428,6 +497,20 @@ export default function CatalogItemManager() {
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                               <Ban className="h-4 w-4" />
+                            )}
+                          </Button>
+                        ) : item.source === 'stripe' && item.locallyDeactivated ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRestoreFromStripe(item)}
+                            title="Restore from Stripe"
+                            disabled={isActionLoading}
+                          >
+                            {isActionLoading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Undo2 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                             )}
                           </Button>
                         ) : (

@@ -1328,6 +1328,13 @@ export default defineSchema({
     category: v.optional(v.string()),
     status: catalogItemStatusValidator,
 
+    // Stripe sync fields (014-stripe-catalog-sync)
+    source: v.optional(v.string()), // "manual" | "stripe" — undefined treated as "manual"
+    stripeProductId: v.optional(v.string()),
+    stripePriceId: v.optional(v.string()),
+    lastSyncedAt: v.optional(v.number()),
+    locallyDeactivated: v.optional(v.boolean()),
+
     // Soft Delete & Timestamps
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
@@ -1335,7 +1342,9 @@ export default defineSchema({
     .index("by_businessId", ["businessId"])
     .index("by_businessId_status", ["businessId", "status"])
     .index("by_businessId_name", ["businessId", "name"])
-    .index("by_businessId_sku", ["businessId", "sku"]),
+    .index("by_businessId_sku", ["businessId", "sku"])
+    .index("by_businessId_stripeProductId", ["businessId", "stripeProductId"])
+    .index("by_businessId_source", ["businessId", "source"]),
 
   recurring_invoice_schedules: defineTable({
     businessId: v.id("businesses"),
@@ -1394,4 +1403,33 @@ export default defineSchema({
     .index("by_businessId_customerId", ["businessId", "customerId"])
     .index("by_businessId_paymentDate", ["businessId", "paymentDate"])
     .index("by_reversesPaymentId", ["reversesPaymentId"]),
+
+  // ── Stripe Integration (014-stripe-catalog-sync) ──────────────────────
+  stripe_integrations: defineTable({
+    businessId: v.id("businesses"),
+    stripeSecretKey: v.string(),
+    stripeAccountId: v.string(),
+    stripeAccountName: v.optional(v.string()),
+    status: v.string(), // "connected" | "disconnected"
+    connectedAt: v.number(),
+    disconnectedAt: v.optional(v.number()),
+    lastSyncAt: v.optional(v.number()),
+    createdBy: v.string(), // Clerk user ID
+  })
+    .index("by_businessId", ["businessId"]),
+
+  sync_logs: defineTable({
+    businessId: v.id("businesses"),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    status: v.string(), // "running" | "completed" | "partial" | "failed"
+    productsCreated: v.number(),
+    productsUpdated: v.number(),
+    productsDeactivated: v.number(),
+    productsSkipped: v.number(),
+    totalStripeProducts: v.number(),
+    errors: v.optional(v.array(v.string())),
+    triggeredBy: v.string(), // Clerk user ID
+  })
+    .index("by_businessId", ["businessId"]),
 });
