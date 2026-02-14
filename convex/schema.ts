@@ -1438,6 +1438,7 @@ export default defineSchema({
     stripeAccountId: v.string(),
     stripeAccountName: v.optional(v.string()),
     stripeWebhookEndpointId: v.optional(v.string()),
+    stripeSecretKey: v.optional(v.string()), // Legacy field — kept for dev data compat
     status: v.string(), // "connected" | "disconnected"
     connectedAt: v.number(),
     disconnectedAt: v.optional(v.number()),
