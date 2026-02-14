@@ -250,6 +250,26 @@ When your response includes actionable data, you MUST include an \`actions\` JSO
 4. **spending_chart** — When presenting spending data by category or time period. Include categories with amounts and percentages.
    Example trigger: "Show spending by category", "Team spending breakdown for January"
 
+5. **invoice_posting** — When showing OCR-processed invoices ready to post to accounting. Include invoiceId, vendorName, amount, currency, invoiceDate, confidenceScore (0-1), lineItems array, and status "ready". Only emit for invoices with status "completed" that have extractedData.
+   Example trigger: "Show invoices ready to post", "Any invoices ready to post?"
+   Data schema: \`{"invoiceId": "...", "vendorName": "...", "amount": 1234.56, "currency": "SGD", "invoiceDate": "2026-01-15", "invoiceNumber": "INV-001", "confidenceScore": 0.95, "lineItems": [{"description": "...", "quantity": 1, "unitPrice": 100, "totalAmount": 100}], "status": "ready"}\`
+
+6. **cash_flow_dashboard** — When reporting cash flow analysis results. Include runwayDays, monthlyBurnRate, estimatedBalance, totalIncome, totalExpenses, expenseToIncomeRatio, currency, forecastPeriod, and alerts array with type/severity/message.
+   Example trigger: "What's my cash flow?", "How many days of runway?", "Show cash flow"
+   Data schema: \`{"runwayDays": 45, "monthlyBurnRate": 5000, "estimatedBalance": 15000, "totalIncome": 20000, "totalExpenses": 18000, "expenseToIncomeRatio": 0.9, "currency": "SGD", "forecastPeriod": "30-day forecast", "alerts": [{"type": "low_runway", "severity": "high", "message": "Cash runway below 60 days"}]}\`
+
+7. **compliance_alert** — When returning regulatory/compliance information from the knowledge base. Include country, countryCode, authority, topic, severity (action_required/warning/for_information), requirements array, and citationIndices referencing the SSE citation array. Emit after searchRegulatoryKnowledgeBase or analyze_cross_border_compliance returns results.
+   Example trigger: "GST registration requirements", "Tax compliance for Singapore", "Regulatory requirements"
+   Data schema: \`{"country": "Singapore", "countryCode": "SG", "authority": "IRAS", "topic": "GST Registration Requirements", "severity": "for_information", "requirements": ["Register if taxable turnover exceeds S$1M", "Voluntary registration available below threshold"], "citationIndices": [1, 2], "effectiveDate": "2024-01-01"}\`
+
+8. **budget_alert** — When comparing current spending against historical averages. Fetch 4 months of transactions via get_transactions, aggregate by category, compute rolling 3-month average. Include period, currency, categories array with name/currentSpend/averageSpend/percentOfAverage/status, and totals. Status thresholds: on_track (<80%), above_average (80-100%), overspending (>100%).
+   Example trigger: "Am I overspending?", "Budget status", "Spending vs. average"
+   Data schema: \`{"period": "February 2026", "currency": "SGD", "categories": [{"name": "Office Supplies", "currentSpend": 800, "averageSpend": 600, "percentOfAverage": 133, "status": "overspending"}], "totalCurrentSpend": 5000, "totalAverageSpend": 4500, "overallStatus": "above_average"}\`
+
+9. **spending_time_series** — When presenting spending trends over multiple periods. Include chartType "time_series", title, currency, periods array with label/total/categories, and optional trendPercent/trendDirection.
+   Example trigger: "Spending trends for last 6 months", "Show spending over time", "Monthly spending comparison"
+   Data schema: \`{"chartType": "time_series", "title": "6-Month Spending Trend", "currency": "SGD", "periods": [{"label": "Sep 2025", "total": 4200, "categories": [{"name": "Office", "amount": 1500}]}], "trendPercent": 12, "trendDirection": "up"}\`
+
 **Rules:**
 - Always include human-readable text BEFORE the actions block
 - Each action MUST have a unique \`id\` field

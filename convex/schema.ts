@@ -134,6 +134,7 @@ export default defineSchema({
       defaultNotes: v.optional(v.string()),
       defaultSignatureName: v.optional(v.string()),
       selectedTemplate: v.optional(v.string()),
+      defaultNotes: v.optional(v.string()),
       customNoteTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
       customPaymentTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
       // 012-stripe-invoice-ux: Accepted payment methods for invoice display

@@ -12,6 +12,7 @@ import { useState, useRef, useEffect, useCallback, type FormEvent } from 'react'
 import { X, Minus, Send, Square, MessageSquarePlus, Loader2 } from 'lucide-react'
 import { MessageRenderer } from './message-renderer'
 import { ConversationSwitcher } from './conversation-switcher'
+import { RichContentPanel, type RichContentData } from './rich-content-panel'
 import { useCopilotBridge } from '../hooks/use-copilot-chat'
 import { useAuth } from '@clerk/nextjs'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
@@ -34,6 +35,17 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
 
   // Smart auto-scroll: track if user has scrolled up
   const [userScrolledUp, setUserScrolledUp] = useState(false)
+
+  // Rich content panel state
+  const [richContent, setRichContent] = useState<RichContentData | null>(null)
+
+  const handleViewDetails = useCallback((payload: { type: 'chart' | 'table' | 'dashboard'; title: string; data: unknown }) => {
+    setRichContent(payload as RichContentData)
+  }, [])
+
+  const handleCloseRichContent = useCallback(() => {
+    setRichContent(null)
+  }, [])
 
   const {
     isLoading,
@@ -115,6 +127,14 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
   })
 
   return (
+    <>
+    {/* Rich content panel (slides out alongside chat) */}
+    <RichContentPanel
+      content={richContent}
+      isOpen={richContent !== null}
+      onClose={handleCloseRichContent}
+    />
+
     <div className="flex flex-col h-full bg-background rounded-t-xl overflow-hidden border border-border shadow-2xl">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-border">
@@ -168,6 +188,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
               citations={msg.citations}
               actions={msg.actions}
               isHistorical={true}
+              onViewDetails={handleViewDetails}
             />
           ))
         )}
@@ -192,6 +213,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
                   actions={streamingActions.length > 0 ? streamingActions : undefined}
                   isHistorical={false}
                   isInline={true}
+                  onViewDetails={handleViewDetails}
                 />
               ) : !streamingStatus ? (
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -248,6 +270,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
         </form>
       </div>
     </div>
+    </>
   )
 }
 

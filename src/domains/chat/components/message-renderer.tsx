@@ -15,6 +15,7 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import CitationOverlay from './citation-overlay'
 import { getActionCardComponent } from './action-cards'
+import { BulkActionBar } from './action-cards/bulk-action-bar'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 import type { ChatAction } from '../lib/sse-parser'
 
@@ -27,6 +28,7 @@ interface MessageRendererProps {
   /** When true, renders without the outer bubble wrapper (used inside streaming container) */
   isInline?: boolean
   className?: string
+  onViewDetails?: (payload: { type: 'chart' | 'table' | 'dashboard'; title: string; data: unknown }) => void
 }
 
 /**
@@ -40,6 +42,7 @@ export function MessageRenderer({
   isHistorical = true,
   isInline = false,
   className = '',
+  onViewDetails,
 }: MessageRendererProps) {
   const [activeCitation, setActiveCitation] = useState<CitationData | null>(null)
   const [isCitationOpen, setIsCitationOpen] = useState(false)
@@ -74,13 +77,68 @@ export function MessageRenderer({
 
   const isUser = role === 'user'
 
-  // Render action cards from the registry
+  // Handle citation clicks from action cards (event delegation for compliance_alert cards)
+  const handleCardCitationClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement
+      const citationRef = target.closest('[data-citation-index]')
+      if (citationRef) {
+        const index = Number(citationRef.getAttribute('data-citation-index'))
+        if (index > 0) handleCitationClick(index)
+      }
+    },
+    [handleCitationClick]
+  )
+
+  // Render action cards from the registry (with bulk action support)
   const actionCards = useMemo(() => {
     if (!actions || actions.length === 0) return null
 
+    // Check for bulk-actionable groups (2+ cards of the same approval type)
+    const BULK_TYPES = ['expense_approval', 'invoice_posting']
+    const typeCounts = new Map<string, ChatAction[]>()
+    for (const action of actions) {
+      if (BULK_TYPES.includes(action.type)) {
+        const list = typeCounts.get(action.type) || []
+        list.push(action)
+        typeCounts.set(action.type, list)
+      }
+    }
+
+    // Find the bulk group (if any with 2+ cards)
+    let bulkType: string | null = null
+    let bulkActions: ChatAction[] = []
+    for (const [type, list] of typeCounts) {
+      if (list.length >= 2) {
+        bulkType = type
+        bulkActions = list
+        break
+      }
+    }
+
+    // Separate non-bulk actions
+    const bulkIds = new Set(bulkActions.map((a) => a.id))
+    const nonBulkActions = bulkType
+      ? actions.filter((a) => !bulkIds.has(a.id) || a.type !== bulkType)
+      : actions
+
     return (
-      <div className="mt-2 space-y-2">
-        {actions.map((action, idx) => {
+      // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+      <div className="mt-2 space-y-2" onClick={handleCardCitationClick}>
+        {/* Bulk action group */}
+        {bulkType && bulkActions.length >= 2 && (
+          <BulkActionBar
+            actions={bulkActions}
+            cardType={bulkType}
+            isHistorical={isHistorical}
+          />
+        )}
+
+        {/* Individual cards */}
+        {nonBulkActions.map((action, idx) => {
+          // Skip actions that are in the bulk group
+          if (bulkType && action.type === bulkType && bulkIds.has(action.id)) return null
+
           try {
             const CardComponent = getActionCardComponent(action.type)
             return (
@@ -88,6 +146,7 @@ export function MessageRenderer({
                 key={action.id || `action-${idx}`}
                 action={action}
                 isHistorical={isHistorical}
+                onViewDetails={onViewDetails}
               />
             )
           } catch (err) {
@@ -97,7 +156,7 @@ export function MessageRenderer({
         })}
       </div>
     )
-  }, [actions, isHistorical])
+  }, [actions, isHistorical, onViewDetails, handleCardCitationClick])
 
   // Inline mode: render content directly without the bubble wrapper
   if (isInline && !isUser) {
