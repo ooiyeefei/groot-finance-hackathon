@@ -1409,6 +1409,7 @@ export default defineSchema({
     businessId: v.id("businesses"),
     stripeAccountId: v.string(),
     stripeAccountName: v.optional(v.string()),
+    stripeWebhookEndpointId: v.optional(v.string()),
     status: v.string(), // "connected" | "disconnected"
     connectedAt: v.number(),
     disconnectedAt: v.optional(v.number()),

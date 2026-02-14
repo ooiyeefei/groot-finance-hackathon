@@ -85,9 +85,28 @@ export const getConnection = query({
       status: integration.status as "connected" | "disconnected",
       stripeAccountName: integration.stripeAccountName,
       stripeAccountId: integration.stripeAccountId,
+      stripeWebhookEndpointId: integration.stripeWebhookEndpointId,
       connectedAt: integration.connectedAt,
       lastSyncAt: integration.lastSyncAt,
     };
+  },
+});
+
+/**
+ * Look up business ID from Stripe account ID (used by webhook route).
+ * No user auth — webhook route verifies the Stripe signature.
+ */
+export const getBusinessByStripeAccount = query({
+  args: { stripeAccountId: v.string() },
+  handler: async (ctx, args) => {
+    const integrations = await ctx.db
+      .query("stripe_integrations")
+      .collect();
+    const match = integrations.find(
+      (i) => i.stripeAccountId === args.stripeAccountId && i.status === "connected"
+    );
+    if (!match) return null;
+    return { businessId: match.businessId };
   },
 });
 
@@ -104,6 +123,7 @@ export const updateConnection = mutation({
     businessId: v.id("businesses"),
     stripeAccountId: v.string(),
     stripeAccountName: v.optional(v.string()),
+    stripeWebhookEndpointId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { clerkId } = await requireRole(ctx, args.businessId, ["owner"]);
@@ -119,6 +139,7 @@ export const updateConnection = mutation({
       await ctx.db.patch(existing._id, {
         stripeAccountId: args.stripeAccountId,
         stripeAccountName: args.stripeAccountName,
+        stripeWebhookEndpointId: args.stripeWebhookEndpointId,
         status: "connected",
         connectedAt: now,
         disconnectedAt: undefined,
@@ -128,6 +149,7 @@ export const updateConnection = mutation({
         businessId: args.businessId,
         stripeAccountId: args.stripeAccountId,
         stripeAccountName: args.stripeAccountName,
+        stripeWebhookEndpointId: args.stripeWebhookEndpointId,
         status: "connected",
         connectedAt: now,
         createdBy: clerkId,

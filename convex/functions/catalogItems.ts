@@ -588,3 +588,96 @@ export const restoreFromStripe = mutation({
     return args.id;
   },
 });
+
+// ============================================
+// STRIPE WEBHOOK — mutations called from webhook route
+// No user auth — the webhook route verifies the Stripe signature.
+// ============================================
+
+/**
+ * Upsert a catalog item from a Stripe webhook event.
+ * Same logic as upsertSyncedItem but without user auth.
+ */
+export const webhookUpsertItem = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    stripeProductId: v.string(),
+    stripePriceId: v.optional(v.string()),
+    name: v.string(),
+    description: v.optional(v.string()),
+    unitPrice: v.number(),
+    currency: v.string(),
+  },
+  handler: async (ctx, args): Promise<"created" | "updated" | "skipped"> => {
+    // Verify business exists (basic validation)
+    const business = await ctx.db.get(args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const existing = await ctx.db
+      .query("catalog_items")
+      .withIndex("by_businessId_stripeProductId", (q) =>
+        q.eq("businessId", args.businessId).eq("stripeProductId", args.stripeProductId)
+      )
+      .first();
+
+    const now = Date.now();
+
+    if (existing) {
+      if (existing.locallyDeactivated) return "skipped";
+      await ctx.db.patch(existing._id, {
+        name: args.name,
+        description: args.description,
+        unitPrice: args.unitPrice,
+        currency: args.currency,
+        stripePriceId: args.stripePriceId,
+        lastSyncedAt: now,
+        status: "active",
+        updatedAt: now,
+      });
+      return "updated";
+    } else {
+      await ctx.db.insert("catalog_items", {
+        businessId: args.businessId,
+        name: args.name,
+        description: args.description,
+        unitPrice: args.unitPrice,
+        currency: args.currency.toLowerCase(),
+        source: "stripe",
+        stripeProductId: args.stripeProductId,
+        stripePriceId: args.stripePriceId,
+        lastSyncedAt: now,
+        status: "active",
+        updatedAt: now,
+      });
+      return "created";
+    }
+  },
+});
+
+/**
+ * Deactivate a catalog item when product is deleted/archived in Stripe.
+ */
+export const webhookDeactivateItem = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    stripeProductId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const business = await ctx.db.get(args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const item = await ctx.db
+      .query("catalog_items")
+      .withIndex("by_businessId_stripeProductId", (q) =>
+        q.eq("businessId", args.businessId).eq("stripeProductId", args.stripeProductId)
+      )
+      .first();
+
+    if (item && item.status === "active") {
+      await ctx.db.patch(item._id, {
+        status: "inactive",
+        updatedAt: Date.now(),
+      });
+    }
+  },
+});

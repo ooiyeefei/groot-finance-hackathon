@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
+import Stripe from 'stripe'
 import { getAuthenticatedConvex } from '@/lib/convex'
-import { deleteSSMParameter } from '@/lib/aws-ssm'
+import { getSSMParameter, deleteSSMParameter } from '@/lib/aws-ssm'
 import { api } from '@/convex/_generated/api'
 import type { Id } from '@/convex/_generated/dataModel'
 
 /**
  * POST /api/v1/stripe-integration/disconnect
  *
- * Deletes the Stripe secret key from SSM Parameter Store
- * and updates the integration status in Convex.
+ * Deletes the Stripe webhook endpoint, removes both the secret key
+ * and webhook secret from SSM, and updates integration status in Convex.
  * Synced catalog items are preserved.
  */
 export async function POST(request: NextRequest) {
@@ -32,11 +33,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Delete key from SSM Parameter Store
-    const ssmPath = `/finanseal/stripe/${businessId}/secret-key`
-    await deleteSSMParameter(ssmPath)
+    const typedBusinessId = businessId as Id<'businesses'>
 
-    // Update Convex status
+    // Get authenticated Convex client to read webhook endpoint ID
     const { client } = await getAuthenticatedConvex()
     if (!client) {
       return NextResponse.json(
@@ -45,8 +44,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Read connection to get webhook endpoint ID before disconnecting
+    const connection = await client.query(api.functions.stripeIntegrations.getConnection, {
+      businessId: typedBusinessId,
+    })
+
+    // Delete webhook endpoint from Stripe (best-effort)
+    if (connection?.stripeWebhookEndpointId) {
+      const stripeSecretKey = await getSSMParameter(`/finanseal/stripe/${businessId}/secret-key`)
+      if (stripeSecretKey) {
+        try {
+          const stripe = new Stripe(stripeSecretKey)
+          await stripe.webhookEndpoints.del(connection.stripeWebhookEndpointId)
+          console.log('[Stripe Integration] Webhook endpoint deleted:', connection.stripeWebhookEndpointId)
+        } catch (webhookError) {
+          // Non-blocking — endpoint may already be deleted on Stripe side
+          console.warn('[Stripe Integration] Failed to delete webhook endpoint (non-blocking):', webhookError)
+        }
+      }
+    }
+
+    // Delete secrets from SSM
+    await Promise.all([
+      deleteSSMParameter(`/finanseal/stripe/${businessId}/secret-key`),
+      deleteSSMParameter(`/finanseal/stripe/${businessId}/webhook-secret`),
+    ])
+
+    // Update Convex status
     await client.mutation(api.functions.stripeIntegrations.disconnect, {
-      businessId: businessId as Id<'businesses'>,
+      businessId: typedBusinessId,
     })
 
     console.log('[Stripe Integration] Disconnected for business:', businessId)
