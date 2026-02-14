@@ -187,6 +187,18 @@ export function useInvoiceTemplateMutations() {
 }
 
 /**
+ * Hook for reading invoice defaults from the business document via Convex query
+ */
+export function useInvoiceDefaults() {
+  const { businessId } = useActiveBusiness()
+  const defaults = useQuery(
+    api.functions.salesInvoices.getInvoiceDefaults,
+    businessId ? { businessId: businessId as Id<'businesses'> } : 'skip'
+  )
+  return defaults
+}
+
+/**
  * Hook for saving invoice defaults (notes, footer, payment instructions, signature)
  */
 export function useInvoiceDefaultsMutation() {

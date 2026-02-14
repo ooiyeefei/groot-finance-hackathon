@@ -1016,6 +1016,29 @@ export const addInvoiceTemplate = mutation({
   },
 });
 
+export const getInvoiceDefaults = query({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const business = await ctx.db.get(args.businessId);
+    if (!business) return null;
+
+    const settings = business.invoiceSettings;
+    return {
+      defaultCurrency: settings?.defaultCurrency ?? "SGD",
+      defaultPaymentTerms: settings?.defaultPaymentTerms ?? "net_30",
+      defaultPaymentInstructions: settings?.defaultPaymentInstructions,
+      defaultNotes: settings?.defaultNotes,
+      defaultSignatureName: settings?.defaultSignatureName,
+      selectedTemplate: settings?.selectedTemplate ?? "modern",
+    };
+  },
+});
+
 export const updateInvoiceDefaults = mutation({
   args: {
     businessId: v.id("businesses"),
