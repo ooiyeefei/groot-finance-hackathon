@@ -14,6 +14,8 @@ import { DetectAnomaliesTool } from './detect-anomalies-tool'
 import { AnalyzeCashFlowTool } from './analyze-cashflow-tool'
 import { AnalyzeVendorRiskTool } from './analyze-vendor-risk-tool'
 import { GetInsightTool } from './get-insight-tool'
+// Invoice retrieval tool (OCR-processed invoices)
+import { GetInvoicesTool } from './get-invoices-tool'
 // Manager cross-employee query tools
 import { EmployeeExpenseTool } from './employee-expense-tool'
 import { TeamSummaryTool } from './team-summary-tool'
@@ -30,6 +32,8 @@ export type ToolName =
   | 'analyze_cash_flow'
   | 'analyze_vendor_risk'
   | 'get_action_center_insight'
+  // Invoice retrieval tool
+  | 'get_invoices'
   // Manager cross-employee query tools
   | 'get_employee_expenses'
   | 'get_team_summary'
@@ -58,6 +62,9 @@ export class ToolFactory {
     this.registerTool('analyze_cash_flow', () => new AnalyzeCashFlowTool())
     this.registerTool('analyze_vendor_risk', () => new AnalyzeVendorRiskTool())
     this.registerTool('get_action_center_insight', () => new GetInsightTool())
+
+    // Invoice retrieval tool (OCR-processed invoices ready to post)
+    this.registerTool('get_invoices', () => new GetInvoicesTool())
 
     // Manager cross-employee query tools (require manager/finance_admin/owner role)
     this.registerTool('get_employee_expenses', () => new EmployeeExpenseTool())

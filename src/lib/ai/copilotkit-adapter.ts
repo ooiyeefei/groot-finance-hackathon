@@ -10,7 +10,7 @@
  */
 
 import { createFinancialAgent, createAgentState } from '@/lib/ai/langgraph-agent'
-import { HumanMessage, AIMessage, type BaseMessage } from '@langchain/core/messages'
+import { HumanMessage, AIMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 import type { UserContext } from '@/lib/ai/tools/base-tool'
 
@@ -191,6 +191,7 @@ export async function* streamLangGraphAgent(
 
   let finalContent = ''
   let finalCitations: CitationData[] = []
+  let finalMessages: BaseMessage[] = []
   const seenNodes = new Set<string>()
 
   try {
@@ -216,6 +217,7 @@ export async function* streamLangGraphAgent(
       if (eventName === 'on_chain_end' && data?.output) {
         const output = data.output
         if (output.messages && Array.isArray(output.messages)) {
+          finalMessages = output.messages
           // Extract the last AI message from final output
           for (let i = output.messages.length - 1; i >= 0; i--) {
             const msg = output.messages[i]
@@ -239,8 +241,19 @@ export async function* streamLangGraphAgent(
     finalContent = ensureCitationMarkers(finalContent, finalCitations)
 
     // Extract action cards from the response (```actions ... ``` blocks)
-    const { textContent, actions } = extractActionsFromContent(finalContent)
+    const { textContent, actions: llmActions } = extractActionsFromContent(finalContent)
     finalContent = textContent
+
+    // Server-side auto-generation: if the LLM didn't emit action cards,
+    // generate them from structured tool results
+    const autoActions = llmActions.length === 0
+      ? autoGenerateActionsFromToolResults(finalMessages)
+      : []
+    const actions = [...llmActions, ...autoActions]
+
+    if (autoActions.length > 0) {
+      console.log(`[Stream Adapter] Auto-generated ${autoActions.length} action card(s) from tool results`)
+    }
 
     // Emit text as word-level chunks for progressive rendering
     yield { event: 'status', data: { phase: 'Preparing response...' } }
@@ -362,4 +375,189 @@ function ensureCitationMarkers(content: string, citations: CitationData[]): stri
   }
 
   return processed
+}
+
+// --- Server-side Action Card Auto-Generation ---
+
+type ActionCard = { type: string; id: string; data: Record<string, unknown> }
+
+/**
+ * Auto-generate action cards from tool results when the LLM doesn't emit them.
+ * Scans the message history for successful ToolMessages and maps known tool
+ * results to their corresponding card types.
+ */
+function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard[] {
+  const actions: ActionCard[] = []
+
+  for (const msg of messages) {
+    if (msg._getType?.() !== 'tool') continue
+    const toolMsg = msg as ToolMessage
+    const toolName = toolMsg.name
+    const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
+
+    // Skip error responses
+    if (content.startsWith('TOOL_ERROR:') || content.startsWith('SYSTEM_ERROR:') || content.startsWith('DATA_EMPTY:')) {
+      continue
+    }
+
+    // Try to parse structured data from tool result
+    let parsed: Record<string, unknown> | null = null
+    try {
+      parsed = JSON.parse(content)
+    } catch {
+      // Not JSON — tool returned formatted text (e.g., get_transactions)
+    }
+
+    if (toolName === 'analyze_cash_flow' && parsed) {
+      const card = buildCashFlowCard(parsed)
+      if (card) actions.push(card)
+    }
+
+    if (toolName === 'detect_anomalies' && parsed) {
+      const cards = buildAnomalyCards(parsed)
+      actions.push(...cards)
+    }
+
+    if (toolName === 'analyze_vendor_risk' && parsed) {
+      const card = buildVendorComparisonCard(parsed)
+      if (card) actions.push(card)
+    }
+
+    if (toolName === 'get_invoices' && parsed) {
+      const cards = buildInvoicePostingCards(parsed)
+      actions.push(...cards)
+    }
+
+    if (toolName === 'searchRegulatoryKnowledgeBase' && content && !parsed) {
+      // Regulatory results come as formatted text with citations — generate compliance card
+      const card = buildComplianceCardFromText(content)
+      if (card) actions.push(card)
+    }
+  }
+
+  return actions
+}
+
+function buildCashFlowCard(data: Record<string, unknown>): ActionCard | null {
+  // Validate that the data has the expected cash flow fields
+  if (data.runwayDays === undefined && data.monthlyBurnRate === undefined) return null
+
+  return {
+    type: 'cash_flow_dashboard',
+    id: `cashflow-auto-${Date.now()}`,
+    data: {
+      runwayDays: data.runwayDays ?? 0,
+      monthlyBurnRate: data.monthlyBurnRate ?? 0,
+      estimatedBalance: data.estimatedBalance ?? data.currentBalance ?? 0,
+      totalIncome: data.totalIncome ?? 0,
+      totalExpenses: data.totalExpenses ?? 0,
+      expenseToIncomeRatio: data.expenseToIncomeRatio ?? data.expenseRatio ?? 0,
+      currency: data.currency ?? 'SGD',
+      forecastPeriod: data.forecastPeriod ?? `${data.horizonDays ?? 30}-day forecast`,
+      alerts: Array.isArray(data.alerts) ? data.alerts : [],
+    },
+  }
+}
+
+function buildAnomalyCards(data: Record<string, unknown>): ActionCard[] {
+  const anomalies = Array.isArray(data.anomalies) ? data.anomalies : (Array.isArray(data) ? data : [])
+  return anomalies.map((anomaly: Record<string, unknown>, idx: number) => ({
+    type: 'anomaly_card',
+    id: `anomaly-auto-${Date.now()}-${idx}`,
+    data: anomaly,
+  }))
+}
+
+function buildVendorComparisonCard(data: Record<string, unknown>): ActionCard | null {
+  const vendors = Array.isArray(data.vendors) ? data.vendors : (Array.isArray(data) ? data : [])
+  if (vendors.length === 0) return null
+
+  return {
+    type: 'vendor_comparison',
+    id: `vendor-auto-${Date.now()}`,
+    data: { vendors, ...data },
+  }
+}
+
+function buildInvoicePostingCards(data: Record<string, unknown>): ActionCard[] {
+  const invoices = Array.isArray(data.invoices) ? data.invoices : (Array.isArray(data) ? data : [])
+  return invoices.map((inv: Record<string, unknown>, idx: number) => ({
+    type: 'invoice_posting',
+    id: `invoice-auto-${Date.now()}-${idx}`,
+    data: {
+      invoiceId: inv._id ?? inv.invoiceId ?? '',
+      vendorName: inv.vendorName ?? (inv.extractedData as Record<string, unknown>)?.vendorName ?? 'Unknown',
+      amount: inv.amount ?? (inv.extractedData as Record<string, unknown>)?.totalAmount ?? 0,
+      currency: inv.currency ?? (inv.extractedData as Record<string, unknown>)?.currency ?? 'SGD',
+      invoiceDate: inv.invoiceDate ?? (inv.extractedData as Record<string, unknown>)?.invoiceDate ?? '',
+      invoiceNumber: inv.invoiceNumber ?? (inv.extractedData as Record<string, unknown>)?.invoiceNumber,
+      confidenceScore: inv.confidenceScore ?? (inv.extractedData as Record<string, unknown>)?.confidence ?? 0.5,
+      lineItems: inv.lineItems ?? (inv.extractedData as Record<string, unknown>)?.lineItems ?? [],
+      status: 'ready',
+    },
+  }))
+}
+
+function buildComplianceCardFromText(content: string): ActionCard | null {
+  // Extract key information from regulatory text response
+  // Look for country/authority patterns
+  const countryMatch = content.match(/\b(Singapore|Malaysia|Thailand|Indonesia|Philippines|Vietnam)\b/i)
+  if (!countryMatch) return null
+
+  const country = countryMatch[1]
+  const codeMap: Record<string, string> = {
+    singapore: 'SG', malaysia: 'MY', thailand: 'TH',
+    indonesia: 'ID', philippines: 'PH', vietnam: 'VN',
+  }
+  const authorityMap: Record<string, string> = {
+    singapore: 'IRAS', malaysia: 'LHDN', thailand: 'RD',
+    indonesia: 'DJP', philippines: 'BIR', vietnam: 'GDT',
+  }
+
+  const countryLower = country.toLowerCase()
+
+  // Extract requirements from bullet points or numbered items
+  const requirements: string[] = []
+  const bulletMatches = content.match(/[-•]\s+(.+?)(?:\n|$)/g)
+  if (bulletMatches) {
+    bulletMatches.forEach((m) => {
+      const text = m.replace(/^[-•]\s+/, '').trim()
+      if (text.length > 10 && text.length < 200) requirements.push(text)
+    })
+  }
+  const numberedMatches = content.match(/\d+\.\s+(.+?)(?:\n|$)/g)
+  if (numberedMatches) {
+    numberedMatches.forEach((m) => {
+      const text = m.replace(/^\d+\.\s+/, '').trim()
+      if (text.length > 10 && text.length < 200 && !requirements.includes(text)) {
+        requirements.push(text)
+      }
+    })
+  }
+
+  if (requirements.length === 0) return null
+
+  // Extract topic from first line or heading
+  const topicMatch = content.match(/^#+\s*(.+?)$/m) || content.match(/^(.{10,80}?)[\n.]/m)
+  const topic = topicMatch ? topicMatch[1].trim() : `Regulatory Information - ${country}`
+
+  // Extract citation indices
+  const citationMatches = content.match(/\[\^(\d+)\]/g)
+  const citationIndices = citationMatches
+    ? citationMatches.map((m) => parseInt(m.replace(/[\[\]^]/g, '')))
+    : []
+
+  return {
+    type: 'compliance_alert',
+    id: `compliance-auto-${Date.now()}`,
+    data: {
+      country,
+      countryCode: codeMap[countryLower] ?? country.slice(0, 2).toUpperCase(),
+      authority: authorityMap[countryLower] ?? 'Tax Authority',
+      topic,
+      severity: 'for_information',
+      requirements,
+      citationIndices,
+    },
+  }
 }

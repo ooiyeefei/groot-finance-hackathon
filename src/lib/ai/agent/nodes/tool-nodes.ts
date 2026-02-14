@@ -138,7 +138,9 @@ export async function executeTool(state: AgentState): Promise<Partial<AgentState
     }
 
     // SUCCESS CASE: Create successful response message
-    const successContent = result.data || 'Tool executed successfully but returned no data'
+    // CRITICAL: Ensure content is always a string for LLM consumption
+    const rawData = result.data || 'Tool executed successfully but returned no data'
+    const successContent = typeof rawData === 'string' ? rawData : JSON.stringify(rawData)
     const toolMessage = new ToolMessage({
       content: successContent,
       tool_call_id: toolCall.id || 'tool_exec',

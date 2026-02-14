@@ -139,8 +139,8 @@ The card components themselves could NOT be visually verified because no action 
 
 ## Next Steps (Priority Order)
 
-1. **Fix LLM card emission** — This is the blocker for ALL card testing. Either strengthen prompts or add server-side card generation.
-2. **Create `get_invoices` tool** — Required for invoice posting card to work.
-3. **Fix embedding service** — Required for compliance card testing.
-4. **Debug `get_transactions` filtering** — Investigate why tool returns 0 when dashboard shows data.
+1. ~~**Fix LLM card emission**~~ — **FIXED**: Added server-side auto-generation in `copilotkit-adapter.ts`. When the LLM doesn't emit ```actions``` blocks, `autoGenerateActionsFromToolResults()` generates cards from tool results deterministically. Also strengthened prompts with explicit few-shot examples.
+2. ~~**Create `get_invoices` tool**~~ — **FIXED**: Created `GetInvoicesTool` in `src/lib/ai/tools/get-invoices-tool.ts`, registered in `tool-factory.ts`, added Convex query `invoices.getCompletedForAI`, deployed to Convex. Added tool to system prompt.
+3. **Fix embedding service** — Required for compliance card testing. Infrastructure/Qdrant issue — check `.env.local` credentials.
+4. ~~**Debug `get_transactions` filtering**~~ — **FIXED**: Root cause was LLM passing `query: "overspending"` (text filter matching nothing) and narrow date range. Strengthened prompt for budget_alert to use `dateRange: "4 months"` with empty query. Also ensured tool results are JSON-stringified in `tool-nodes.ts`.
 5. **Re-run UAT** after fixes.
