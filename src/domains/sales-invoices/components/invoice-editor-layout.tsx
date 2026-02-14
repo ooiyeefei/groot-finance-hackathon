@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { useToast } from '@/components/ui/toast'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
 import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceDefaults, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
@@ -26,8 +27,10 @@ interface InvoiceEditorLayoutProps {
 export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEditorLayoutProps) {
   const router = useRouter()
   const locale = useLocale()
+  const { addToast } = useToast()
   const { businessId, business } = useActiveBusiness()
   const { profile: businessProfile } = useBusinessProfile()
+  const isSendingRef = useRef(false)
 
   const invoiceDefaults = useInvoiceDefaults()
 
@@ -37,12 +40,13 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   const { updateDefaults } = useInvoiceDefaultsMutation()
 
   // Auto-save handler
-  const handleAutoSave = useCallback(async (data: SalesInvoiceFormInput): Promise<string | void> => {
+  const handleAutoSave = useCallback(async (data: SalesInvoiceFormInput, existingDraftId?: string): Promise<string | void> => {
     if (!businessId) return
     try {
-      if (mode === 'edit' && invoiceId) {
+      const targetId = existingDraftId || (mode === 'edit' ? invoiceId : undefined)
+      if (targetId) {
         await updateInvoice({
-          id: invoiceId as Id<'sales_invoices'>,
+          id: targetId as Id<'sales_invoices'>,
           businessId: businessId as Id<'businesses'>,
           customerId: data.customerId as Id<'customers'> | undefined,
           customerSnapshot: data.customerSnapshot,
@@ -62,7 +66,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
           customFields: data.customFields,
           showTaxId: data.showTaxId,
         })
-        return invoiceId
+        return targetId
       } else {
         const newId = await createInvoice({
           businessId: businessId as Id<'businesses'>,
@@ -152,7 +156,8 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   }, [router, locale])
 
   const handleSendInvoice = useCallback(async () => {
-    if (!businessId || !form.isValid) return
+    if (!businessId || !form.isValid || isSendingRef.current) return
+    isSendingRef.current = true
     setIsSending(true)
     try {
       let currentInvoiceId = form.draftId ?? invoiceId
@@ -226,7 +231,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
       // Send email with PDF attachment
       const resolvedBusinessName = businessProfile?.name || (business as unknown as Record<string, unknown>)?.businessName as string || 'Our Company'
       try {
-        await fetch(`/api/v1/sales-invoices/${currentInvoiceId}/send-email`, {
+        const emailResponse = await fetch(`/api/v1/sales-invoices/${currentInvoiceId}/send-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -255,17 +260,36 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
             ...pdfPayload,
           }),
         })
+        if (!emailResponse.ok) {
+          const errorData = await emailResponse.json().catch(() => null)
+          console.error('Email send failed:', errorData)
+          addToast({
+            type: 'warning',
+            title: 'Invoice saved but email delivery failed',
+            description: `Could not send email to ${form.customerSnapshot.email}. You can resend from the invoice details page.`,
+          })
+        }
       } catch {
-        // Email failure is non-blocking
+        addToast({
+          type: 'warning',
+          title: 'Invoice saved but email delivery failed',
+          description: 'A network error occurred while sending the email. You can resend later.',
+        })
       }
 
       router.push(`/${locale}/invoices#sales-invoices`)
     } catch (error) {
       console.error('Failed to send invoice:', error)
+      addToast({
+        type: 'error',
+        title: 'Failed to send invoice',
+        description: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.',
+      })
     } finally {
+      isSendingRef.current = false
       setIsSending(false)
     }
-  }, [businessId, form, invoiceId, nextInvoiceNumber, createInvoice, sendInvoice, generatePdfBlob, buildPdfData, generateUploadUrl, storePdfStorageId, businessProfile, business, router, locale])
+  }, [businessId, form, invoiceId, nextInvoiceNumber, createInvoice, sendInvoice, generatePdfBlob, buildPdfData, generateUploadUrl, storePdfStorageId, businessProfile, business, router, locale, addToast])
 
   const handleDraftCreated = useCallback((newInvoiceId: string) => {
     // Navigate to edit URL if in create mode and draft was auto-saved

@@ -17,7 +17,7 @@ interface UseInvoiceFormOptions {
   defaultTemplateId?: string
   initialData?: SalesInvoiceFormInput
   invoiceId?: string
-  onAutoSave?: (data: SalesInvoiceFormInput) => Promise<string | void>
+  onAutoSave?: (data: SalesInvoiceFormInput, existingDraftId?: string) => Promise<string | void>
 }
 
 export function useSalesInvoiceForm(options: UseInvoiceFormOptions = {}) {
@@ -240,6 +240,7 @@ export function useSalesInvoiceForm(options: UseInvoiceFormOptions = {}) {
   // Auto-save with 1.5s debounce
   const formDataRef = useRef(getFormData)
   formDataRef.current = getFormData
+  const isSavingRef = useRef(false)
 
   useEffect(() => {
     if (!options.onAutoSave || !hasMeaningfulInput) return
@@ -249,9 +250,11 @@ export function useSalesInvoiceForm(options: UseInvoiceFormOptions = {}) {
     }
 
     autoSaveTimerRef.current = setTimeout(async () => {
+      if (isSavingRef.current) return
+      isSavingRef.current = true
       setIsSaving(true)
       try {
-        const result = await options.onAutoSave!(formDataRef.current())
+        const result = await options.onAutoSave!(formDataRef.current(), draftIdRef.current)
         if (result) {
           draftIdRef.current = result
           setIsDraftCreated(true)
@@ -260,6 +263,7 @@ export function useSalesInvoiceForm(options: UseInvoiceFormOptions = {}) {
       } catch {
         // Auto-save failures are non-blocking
       } finally {
+        isSavingRef.current = false
         setIsSaving(false)
       }
     }, 1500)
