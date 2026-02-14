@@ -58,7 +58,21 @@ export const getConnection = query({
     businessId: v.id("businesses"),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.businessId, ["owner", "finance_admin", "manager"]);
+    // Soft auth check — queries must not throw, return null instead.
+    // useQuery re-subscribes reactively and auth may not be ready on first render.
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return null;
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+    if (!membership || membership.status !== "active") return null;
 
     const integration = await ctx.db
       .query("stripe_integrations")
