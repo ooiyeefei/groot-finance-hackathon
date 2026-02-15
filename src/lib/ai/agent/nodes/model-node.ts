@@ -6,7 +6,7 @@
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { ToolFactory } from '../../tools/tool-factory';
 import { ModelType } from '../../tools/base-tool';
-import { detectModelType, geminiService } from '../config/model-config';
+import { detectModelType } from '../config/model-config';
 import { getSystemPrompt } from '../config/prompts';
 import { aiConfig } from '../../config/ai-config';
 import { AgentState } from '../types';
@@ -38,33 +38,10 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
   // Set phase to execution when we start model processing
   console.log('[CallModel] Setting phase to execution for model processing');
 
-  // MODEL-CONDITIONAL ARCHITECTURE: Detect model type for appropriate approach
   const modelType = detectModelType();
   const systemPrompt = getSystemPrompt(state.language || 'en', modelType);
 
-  console.log(`[CallModel] Using ${modelType} approach for this request`);
-
-  // DEBUG: Check if this looks like a regulatory question (development only)
-  if (process.env.NODE_ENV === 'development') {
-    const lastMessage = state.messages[state.messages.length - 1];
-    if (lastMessage && typeof lastMessage.content === 'string') {
-      const query = lastMessage.content.toLowerCase();
-      const regulatoryKeywords = ['gst', 'tax', 'regulation', 'compliance', 'registration', 'ovr', 'overseas vendor', 'requirements'];
-      const isRegulatoryQuestion = regulatoryKeywords.some(keyword => query.includes(keyword));
-      console.log(`[CallModel] Query classification - Regulatory keywords detected: ${isRegulatoryQuestion}`);
-    }
-  }
-
-  // --- CONDITIONAL SANITIZATION (GEMINI ONLY) ---
-  // Only apply sanitization workarounds for Gemini due to safety restrictions
   const processedMessages = [...state.messages];
-
-  if (modelType === 'gemini') {
-    console.log(`[CallModel] Applying Gemini-specific sanitization workarounds`);
-    await applyGeminiSanitization(processedMessages);
-  } else {
-    console.log(`[CallModel] Using original approach for ${modelType} - no sanitization needed`);
-  }
 
   // CRITICAL FIX: Trim conversation history to prevent context pollution
   // Keep only the last 6 messages (3 user/assistant pairs) to prevent LLM confusion
@@ -74,7 +51,7 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
     console.log(`[CallModel] TRIMMED conversation history from ${processedMessages.length} to ${trimmedMessages.length} messages to prevent context pollution`);
   }
 
-  // Prepare messages for LLM using trimmed messages (sanitized for Gemini, original for others)
+  // Prepare messages for LLM using trimmed messages
   console.log(`[CallModel] Building messages for LLM from ${trimmedMessages.length} processed messages`);
 
   const messages = buildMessagesForLLM(trimmedMessages, systemPrompt);
@@ -88,125 +65,11 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
     // Role-based filtering: managers see team tools, employees don't
     const tools = await getValidatedTools(modelType, state.userContext.role);
 
-    // Check if we should use Gemini
-    if (modelType === 'gemini' && geminiService) {
-      const isFinancial = detectFinancialQuery(state);
-      return await handleGeminiResponse(state, messages, systemPrompt, tools, isFinancial);
-    }
-
-    // Fallback to original OpenAI-compatible API
     return await handleOpenAIResponse(state, messages, tools);
 
   } catch (error) {
     return handleModelError(state, error);
   }
-}
-
-/**
- * Apply Gemini-specific sanitization workarounds
- */
-async function applyGeminiSanitization(processedMessages: any[]): Promise<void> {
-  const lastMessage = processedMessages[processedMessages.length - 1];
-
-  // Enhanced message type detection - try multiple approaches
-  const isHumanMessage = lastMessage instanceof HumanMessage;
-  const hasHumanContent = lastMessage && lastMessage.content && typeof lastMessage.content === 'string';
-
-  // Check if we need to sanitize - only for Gemini
-  if (lastMessage && hasHumanContent) {
-    const originalQuery = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
-
-    // Check for financial trigger words
-    const financialTriggers = [
-      'invoice', 'amount', 'largest', 'biggest', 'expense', 'transaction',
-      'payment', 'financial', 'money', 'cost', 'price', 'bill', 'receipt',
-      'purchase', 'spend', 'budget', 'revenue', 'profit', 'loss', 'vendor',
-      'accounting', 'finance', 'economic', 'monetary', 'fiscal', 'currency',
-      'dollar', 'euro', 'pound', 'yen', 'credit', 'debit', 'bank', 'account'
-    ];
-
-    const containsFinancialTerms = financialTriggers.some(trigger =>
-      originalQuery.toLowerCase().includes(trigger)
-    );
-
-    if (containsFinancialTerms) {
-      const sanitizedQuery = await sanitizeFinancialQuery(originalQuery);
-      if (sanitizedQuery) {
-        // Replace the last message with sanitized version for LLM processing only
-        const sanitizedMessage = new HumanMessage(sanitizedQuery);
-        processedMessages[processedMessages.length - 1] = sanitizedMessage;
-      }
-    }
-  }
-}
-
-/**
- * Sanitize financial queries for Gemini safety compliance
- */
-async function sanitizeFinancialQuery(originalQuery: string): Promise<string | null> {
-  try {
-    const sanitizationPrompt = `You are a query sanitizer that removes financial terminology to bypass AI safety restrictions. Your job is to rewrite queries to be generic while preserving the core intent.
-
-SANITIZATION RULES:
-- Replace "invoice" → "document" or "record"
-- Replace "amount/money/cost/price" → "value" or "number"
-- Replace "transaction/payment/expense" → "data record" or "entry"
-- Replace "financial/accounting" → "data"
-- Replace "largest/biggest" → "highest" or "maximum"
-- Replace "vendor/company name" → "entity" or "source"
-- Remove currency symbols and financial context
-- Keep date ranges, numerical filters, and comparison logic
-- Preserve the core analytical intent
-
-EXAMPLES:
-Original: "What is the largest invoice amount I have in the past 60 days?"
-Sanitized: "What is the highest value in my data records from the past 60 days?"
-
-Original: "Show me all expenses from ABC Company over $500"
-Sanitized: "Show me all entries from ABC Company with values over 500"
-
-Rewrite this query to remove financial terminology while preserving intent:
-"${originalQuery}"
-
-Return ONLY the sanitized query, no explanations.`;
-
-    // Build headers conditionally based on API key presence
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-
-    // Only add Authorization header if API key is present
-    if (aiConfig.chat.apiKey) {
-      headers['Authorization'] = `Bearer ${aiConfig.chat.apiKey}`;
-    }
-
-    const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: aiConfig.chat.modelId,
-        messages: [
-          { role: 'system', content: sanitizationPrompt }
-        ],
-        max_tokens: 200,
-        temperature: 0.1
-      })
-    });
-
-    if (response.ok) {
-      const result = await response.json();
-      const sanitizedQuery = result.choices?.[0]?.message?.content?.trim();
-      if (sanitizedQuery) {
-        return sanitizedQuery;
-      }
-    } else {
-      console.warn('[CallModel] Sanitization failed, using original query');
-    }
-  } catch (error) {
-    console.warn('[CallModel] Sanitization error, using original query:', error);
-  }
-
-  return null;
 }
 
 /**
@@ -296,75 +159,6 @@ async function getValidatedTools(modelType: ModelType, userRole?: string): Promi
   }
 
   return tools;
-}
-
-/**
- * Handle Gemini model response
- */
-async function handleGeminiResponse(state: AgentState, messages: any[], systemPrompt: string, tools: any[], isFinancialQuery: boolean = false): Promise<Partial<AgentState>> {
-  console.log(`\n🤖 [GEMINI PATH] Using model: ${aiConfig.gemini.model} with ${messages.length} messages, financial query: ${isFinancialQuery}\n`);
-
-  // Convert messages to GeminiMessage format
-  const geminiMessages = messages.slice(1).map((msg: any) => ({
-    role: msg.role === 'assistant' ? 'assistant' : msg.role,
-    content: msg.content,
-    tool_call_id: msg.tool_call_id
-  }));
-
-  const response = await geminiService!.generateContent(geminiMessages, systemPrompt, tools);
-
-  if (!response.success) {
-    console.error('[CallModel] Gemini error:', response.error);
-    return {
-      messages: [...state.messages, new AIMessage('I apologize, but I encountered an error processing your request.')],
-    };
-  }
-
-  // Check for function calls
-  if (response.tool_calls && response.tool_calls.length > 0) {
-    const toolCall = response.tool_calls[0];
-    const toolName = toolCall.function.name;
-
-    console.log('[CallModel] Gemini function call detected:', toolCall);
-
-    if (!ToolFactory.hasToolType(toolName)) {
-      console.error(`[CallModel] Unknown tool requested: ${toolName}`);
-      return {
-        messages: [...state.messages, new AIMessage('I apologize, but I cannot use the requested tool.')],
-      };
-    }
-
-    // Convert to LangChain ToolCall format
-    const aiMessageWithToolCall = new AIMessage({
-      content: '',
-      tool_calls: [{
-        name: toolName,
-        args: JSON.parse(toolCall.function.arguments),
-        id: toolCall.id,
-        type: 'tool_call'
-      }],
-    });
-
-    return {
-      messages: [...state.messages, aiMessageWithToolCall],
-    };
-  }
-
-  // ANTI-HALLUCINATION GUARD: Block financial responses without tool usage (same as OpenAI path)
-  if (isFinancialQuery) {
-    console.log(`[CallModel] 🚨 GEMINI BLOCKED FINANCIAL HALLUCINATION: Financial query detected but Gemini returned text instead of tool call`);
-    return {
-      messages: [...state.messages, new AIMessage('I need to look up your actual financial data to answer that question accurately. Let me search your records now.')],
-    };
-  }
-
-  // Return text response from Gemini
-  const content = response.content || 'I apologize, but I cannot process your request right now.';
-  console.log('[CallModel] Gemini text response generated');
-
-  return {
-    messages: [...state.messages, new AIMessage(content)],
-  };
 }
 
 /**

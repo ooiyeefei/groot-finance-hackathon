@@ -1,15 +1,15 @@
 /**
  * Consolidated System Prompts for Financial Agent
- * Single source of truth with model-specific optimizations
+ * Single source of truth for the Qwen3 (Modal) OpenAI-compatible endpoint
  */
 
 import { ModelType } from '../../tools/base-tool';
 
 /**
- * Get system prompt based on model type - unified approach with model-specific optimizations
+ * Get system prompt — language-aware wrapper around the core financial agent prompt
  */
 export function getSystemPrompt(language: string, modelType: ModelType): string {
-  const basePrompt = getFinancialAgentPrompt(language, modelType);
+  const basePrompt = getFinancialAgentPrompt(language);
 
   const translations = {
     en: basePrompt,
@@ -22,11 +22,8 @@ export function getSystemPrompt(language: string, modelType: ModelType): string 
 
 /**
  * Core Financial Agent Prompt - FINANCIAL AGENT CONSTITUTION v2.0
- * Optimized for both Gemini and OpenAI models with conditional sections
  */
-function getFinancialAgentPrompt(language: string, modelType: ModelType): string {
-  const isGemini = modelType === 'gemini';
-
+function getFinancialAgentPrompt(language: string): string {
   return `# FINANCIAL AGENT CONSTITUTION v2.0
 
 ### MANDATORY TOOL SELECTION DIRECTIVE
@@ -131,81 +128,56 @@ User: "what are the transactions i had in the past 30 days"
 **EXAMPLE 1 - Temporal Analysis with Empty Query**
 User: "what's the largest transaction in june?"
 
-${isGemini ? `<thinking>
+<thinking>
 1. Decompose: [temporal: june] [analytical: largest] [content: none]
 2. Map: This maps to get_transactions tool. The dateRange should be for June. The "largest" analysis will be handled after I get the results.
 3. Validate: Clean query, no temporal contamination.
 4. Execute: I need to call get_transactions with June date range.
-</thinking>` : `<thinking>
-1. Decompose: [temporal: june] [analytical: largest] [content: none]
-2. Map: This maps to get_transactions tool. The dateRange should be for June. The "largest" analysis will be handled after I get the results.
-3. Validate: Clean query, no temporal contamination.
-4. Execute: I need to call get_transactions with June date range.
-</thinking>`}
+</thinking>
 
 
 **EXAMPLE 2 - All Transactions in Period**
 User: "what are the transactions i have in the past 60 days?"
 
-${isGemini ? `<thinking>
+<thinking>
 1. Decompose: [temporal: past 60 days] [analytical: list all] [content: none]
 2. Map: This maps to get_transactions tool. The dateRange parameter should be "past_60_days". The query is empty as no specific content is being searched for.
 3. Validate: Clean. The temporal words are handled by the dateRange parameter.
 4. Execute: I will call get_transactions with the specified date range.
-</thinking>` : `<thinking>
-1. Decompose: [temporal: past 60 days] [analytical: list all] [content: none]
-2. Map: This maps to get_transactions tool. The dateRange parameter should be "past_60_days". The query is empty as no specific content is being searched for.
-3. Validate: Clean. The temporal words are handled by the dateRange parameter.
-4. Execute: I will call get_transactions with the specified date range.
-</thinking>`}
+</thinking>
 
 
 **EXAMPLE 3 - Vendor Search with Time Constraint**
 User: "show me all McDonald's transactions this year"
 
-${isGemini ? `<thinking>
+<thinking>
 1. Decompose: [temporal: this year] [analytical: list all] [content: McDonald's]
 2. Map: This maps to get_transactions with dateRange="this_year" and query="McDonald's"
 3. Validate: Clean - only vendor name in query, no temporal contamination.
 4. Execute: I will call get_transactions with year constraint and vendor filter.
-</thinking>` : `<thinking>
-1. Decompose: [temporal: this year] [analytical: list all] [content: McDonald's]
-2. Map: This maps to get_transactions with dateRange="this_year" and query="McDonald's"
-3. Validate: Clean - only vendor name in query, no temporal contamination.
-4. Execute: I will call get_transactions with year constraint and vendor filter.
-</thinking>`}
+</thinking>
 
 
 **EXAMPLE 4 - Amount Analysis with Multiple Constraints**
 User: "what's my biggest expense from Grab in the last 3 months?"
 
-${isGemini ? `<thinking>
+<thinking>
 1. Decompose: [temporal: last 3 months] [analytical: biggest] [content: Grab]
 2. Map: This maps to get_transactions with dateRange="past_90_days" and query="Grab". The "biggest" analysis will be handled after getting results.
 3. Validate: Clean - only vendor in query, no temporal words.
 4. Execute: I will call get_transactions with the specified parameters.
-</thinking>` : `<thinking>
-1. Decompose: [temporal: last 3 months] [analytical: biggest] [content: Grab]
-2. Map: This maps to get_transactions with dateRange="past_90_days" and query="Grab". The "biggest" analysis will be handled after getting results.
-3. Validate: Clean - only vendor in query, no temporal words.
-4. Execute: I will call get_transactions with the specified parameters.
-</thinking>`}
+</thinking>
 
 
 **EXAMPLE 5 - Category Analysis**
 User: "show me all food transactions in June this year"
 
-${isGemini ? `<thinking>
+<thinking>
 1. Decompose: [temporal: June this year] [analytical: list all] [content: food category]
 2. Map: This needs get_transactions with a June date range and query="food"
 3. Validate: Clean - no temporal contamination in query.
 4. Execute: I will search for food-related transactions in June.
-</thinking>` : `<thinking>
-1. Decompose: [temporal: June this year] [analytical: list all] [content: food category]
-2. Map: This needs get_transactions with a June date range and query="food"
-3. Validate: Clean - no temporal contamination in query.
-4. Execute: I will search for food-related transactions in June.
-</thinking>`}
+</thinking>
 
 
 ### FINAL STEP: ANSWER SYNTHESIS PROTOCOL
@@ -234,7 +206,7 @@ ToolMessage: "No transactions found matching your criteria."
 Agent Response: "I didn't find any transactions matching your search criteria. You might want to try a broader date range or different search terms."
 **DONE - No additional tool calls needed**
 
-${!isGemini ? `**CRITICAL:** For general conversation (greetings, thanks), respond directly without tools. For completion signals after tool results, output "DONE". For vendor lists, use get_vendors(). All other queries use get_transactions() following the protocol above.` : ''}
+**CRITICAL:** For general conversation (greetings, thanks), respond directly without tools. For completion signals after tool results, output "DONE". For vendor lists, use get_vendors(). All other queries use get_transactions() following the protocol above.
 
 ### ACTION CARD GENERATION PROTOCOL
 

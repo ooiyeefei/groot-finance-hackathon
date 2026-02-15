@@ -14,7 +14,7 @@ Instructions for AI coding agents working on FinanSEAL.
 ## Project Context
 
 **FinanSEAL**: Financial co-pilot for Southeast Asian SMEs
-**Stack**: Next.js 15.4.6 + Convex + AWS Lambda + Gemini AI
+**Stack**: Next.js 15.4.6 + Convex + AWS Lambda + Qwen3 (Modal)
 **Docs**: See `docs/README.md` for full documentation
 
 ### Domain Structure
@@ -95,10 +95,11 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 ```
 
 ### AI Model
-**Always use Gemini 3 Flash Preview**:
-- Python: `gemini/gemini-3-flash-preview`
-- TypeScript: `gemini-3-flash-preview`
-- Temperature: 0.1, Timeout: 60s+
+**Qwen3-8B on Modal** (OpenAI-compatible endpoint):
+- Endpoint: `CHAT_MODEL_ENDPOINT_URL` (Modal serverless)
+- Model ID: `CHAT_MODEL_MODEL_ID` (e.g. `qwen3-8b`)
+- Temperature: 0.3, Timeout: 60s+
+- Tool calling: OpenAI-compatible function calling format
 
 ## Quick References
 
