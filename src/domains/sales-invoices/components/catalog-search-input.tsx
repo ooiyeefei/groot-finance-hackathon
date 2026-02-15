@@ -14,6 +14,7 @@ interface CatalogSearchItem {
   sku?: string
   unitMeasurement?: string
   taxRate?: number
+  billingInterval?: string
 }
 
 interface CatalogSearchInputProps {
@@ -78,6 +79,10 @@ export function CatalogSearchInput({
               <div className="font-medium">{item.name}</div>
               <div className="text-muted-foreground text-xs">
                 {formatCurrency(item.unitPrice, item.currency)}
+                {item.billingInterval && item.billingInterval !== 'one_time' && (
+                  <span className="ml-0.5">/ {item.billingInterval === 'monthly' ? 'mo' : item.billingInterval === 'yearly' ? 'yr' : item.billingInterval === 'weekly' ? 'wk' : 'day'}</span>
+                )}
+                {item.billingInterval === 'one_time' && <span className="ml-1">one-time</span>}
                 {item.sku && ` · ${item.sku}`}
               </div>
             </button>

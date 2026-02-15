@@ -38,6 +38,8 @@ type CatalogItemData = {
   sku?: string
   unitMeasurement?: string
   taxRate?: number
+  billingInterval?: string
+  stripeProductId?: string
 }
 
 interface ItemSearchFieldProps {
@@ -159,47 +161,106 @@ function ItemSearchField({
             </button>
           )}
 
-          {/* Catalog items */}
-          {filteredItems.map((item) => (
-            <button
-              key={item._id}
-              type="button"
-              className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-b border-border last:border-b-0"
-              onMouseDown={() => {
-                onSelectCatalog(item)
-                setIsDropdownOpen(false)
-              }}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  {mode === 'sku' ? (
-                    <>
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {item.sku || '—'}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {item.name}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {item.name}
-                      </p>
-                      {item.sku && (
-                        <p className="text-xs text-muted-foreground">
-                          {item.sku}
-                        </p>
+          {/* Catalog items — grouped by product for Stripe items */}
+          {(() => {
+            // Group items by stripeProductId
+            const groups = new Map<string, CatalogItemData[]>()
+            const standalone: CatalogItemData[] = []
+            for (const item of filteredItems) {
+              if (item.stripeProductId) {
+                const g = groups.get(item.stripeProductId) ?? []
+                g.push(item)
+                groups.set(item.stripeProductId, g)
+              } else {
+                standalone.push(item)
+              }
+            }
+
+            const billingShort = (interval?: string) => {
+              if (!interval || interval === 'one_time') return interval === 'one_time' ? 'one-time' : ''
+              const m: Record<string, string> = { monthly: '/ mo', yearly: '/ yr', weekly: '/ wk', daily: '/ day' }
+              return m[interval] ?? ''
+            }
+
+            const sections: React.ReactNode[] = []
+
+            // Render grouped Stripe products
+            for (const [, groupItems] of groups) {
+              if (groupItems.length > 1) {
+                // Product header (non-clickable)
+                sections.push(
+                  <div key={`hdr-${groupItems[0].stripeProductId}`} className="px-3 py-1.5 bg-muted/50 border-b border-border">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{groupItems[0].name}</p>
+                  </div>
+                )
+                // Variant rows
+                for (const item of groupItems) {
+                  sections.push(
+                    <button
+                      key={item._id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors border-b border-border last:border-b-0 pl-5"
+                      onMouseDown={() => { onSelectCatalog(item); setIsDropdownOpen(false) }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          {item.billingInterval && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 mr-1.5">
+                              {item.billingInterval === 'monthly' ? 'Monthly' : item.billingInterval === 'yearly' ? 'Yearly' : item.billingInterval === 'one_time' ? 'One-time' : item.billingInterval}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
+                          {formatCurrency(item.unitPrice, item.currency || currency)}
+                          {billingShort(item.billingInterval) && (
+                            <span className="text-xs text-muted-foreground font-normal ml-1">{billingShort(item.billingInterval)}</span>
+                          )}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                }
+              } else {
+                standalone.push(groupItems[0])
+              }
+            }
+
+            // Render standalone items (manual + single-price Stripe)
+            for (const item of standalone) {
+              sections.push(
+                <button
+                  key={item._id}
+                  type="button"
+                  className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-b border-border last:border-b-0"
+                  onMouseDown={() => { onSelectCatalog(item); setIsDropdownOpen(false) }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      {mode === 'sku' ? (
+                        <>
+                          <p className="text-sm font-medium text-foreground truncate">{item.sku || '—'}</p>
+                          <p className="text-xs text-muted-foreground truncate">{item.name}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
+                          {item.sku && <p className="text-xs text-muted-foreground">{item.sku}</p>}
+                        </>
                       )}
-                    </>
-                  )}
-                </div>
-                <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
-                  {formatCurrency(item.unitPrice, item.currency || currency)}
-                </span>
-              </div>
-            </button>
-          ))}
+                    </div>
+                    <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
+                      {formatCurrency(item.unitPrice, item.currency || currency)}
+                      {billingShort(item.billingInterval) && (
+                        <span className="text-xs text-muted-foreground font-normal ml-1">{billingShort(item.billingInterval)}</span>
+                      )}
+                    </span>
+                  </div>
+                </button>
+              )
+            }
+
+            return sections
+          })()}
 
           {/* No catalog items found */}
           {filteredItems.length === 0 && catalogItems.length > 0 && (
@@ -262,6 +323,8 @@ export default function InvoiceLineItemsTable({
       sku: item.sku,
       unitMeasurement: item.unitMeasurement,
       taxRate: item.taxRate,
+      billingInterval: item.billingInterval,
+      stripeProductId: item.stripeProductId,
     })),
     [rawCatalogItems],
   )
