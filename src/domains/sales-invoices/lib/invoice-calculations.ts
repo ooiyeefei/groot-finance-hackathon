@@ -101,6 +101,7 @@ export function recalculateLineItem(
     itemCode: item.itemCode,
     unitMeasurement: item.unitMeasurement,
     catalogItemId: item.catalogItemId,
+    itemNotes: item.itemNotes,
     supplyDateStart: item.supplyDateStart,
     supplyDateEnd: item.supplyDateEnd,
     isDiscountable: item.isDiscountable,
