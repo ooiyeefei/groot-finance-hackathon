@@ -287,6 +287,38 @@ I found [N] invoices ready to post:
 
 **NOTE:** The server will auto-generate action cards from tool results if you don't emit them. However, you SHOULD always try to include the actions block for the best user experience.
 
+### FOLLOW-UP SUGGESTIONS PROTOCOL
+
+After EVERY response that contains substantive content (not tool calls), you MUST include a \`suggestions\` block at the very END of your response (after any \`actions\` block). This helps users discover related questions.
+
+**Format:** Wrap the JSON array in a fenced code block with the language tag \`suggestions\`:
+\`\`\`suggestions
+["Question 1?", "Question 2?", "Question 3?"]
+\`\`\`
+
+**Rules:**
+- Include exactly 2-3 suggestions per response
+- Suggestions MUST be contextually relevant to what was just discussed
+- Suggestions should help users dig deeper into the data or explore related areas
+- Keep each suggestion under 50 characters
+- Do NOT include suggestions in tool-call-only responses
+
+**Examples:**
+After showing cash flow analysis:
+\`\`\`suggestions
+["Any unusual spending patterns?", "Show vendor cost comparison", "Invoice status this month"]
+\`\`\`
+
+After showing invoice status:
+\`\`\`suggestions
+["Analyze my cash flow", "Check overdue invoices", "Compare vendor costs"]
+\`\`\`
+
+After regulatory information:
+\`\`\`suggestions
+["Check my compliance status", "Show cross-border transactions", "GST filing deadlines"]
+\`\`\`
+
 ### ABSOLUTE FINAL INSTRUCTION
 
 **CRITICAL REMINDER: Any request for the user's own data is a tool-use trigger. Do not bypass this rule. Your only valid output in these cases is a function call.**

@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo, type FormEvent } from 'react'
-import { X, Minus, ArrowUp, Square, Loader2 } from 'lucide-react'
+import { X, Minus, ArrowUp, Square, Loader2, Sparkles } from 'lucide-react'
 import { MessageRenderer } from './message-renderer'
 import { ConversationSwitcher } from './conversation-switcher'
 import { RichContentPanel, type RichContentData } from './rich-content-panel'
@@ -171,6 +171,14 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     }
   })
 
+  // Parse follow-up suggestions from the last assistant message
+  const followUpSuggestions = useMemo(() => {
+    if (isLoading || displayMessages.length === 0) return []
+    const lastMsg = displayMessages[displayMessages.length - 1]
+    if (lastMsg.role !== 'assistant') return []
+    return parseSuggestions(lastMsg.content)
+  }, [displayMessages, isLoading])
+
   return (
     <>
     {/* Rich content panel (slides out alongside chat) */}
@@ -271,6 +279,23 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
           </div>
         )}
 
+        {/* Follow-up suggestion pills (horizontal, after last assistant message) */}
+        {followUpSuggestions.length > 0 && !isLoading && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-thin">
+            <Sparkles className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+            {followUpSuggestions.map((text) => (
+              <button
+                key={text}
+                onClick={() => { setUserScrolledUp(false); sendMessage(text) }}
+                className="text-xs px-3 py-1.5 rounded-full border border-primary/25 text-foreground
+                  hover:bg-primary/10 hover:border-primary/40 transition-colors whitespace-nowrap flex-shrink-0"
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -363,4 +388,28 @@ interface DisplayMessage {
   content: string
   citations?: CitationData[]
   actions?: ChatAction[]
+}
+
+/**
+ * Parse follow-up suggestions from a ```suggestions code block in message content.
+ * Returns an array of suggestion strings, or empty if none found.
+ */
+function parseSuggestions(content: string): string[] {
+  // Match ```suggestions ... ``` blocks (handles raw and escaped backticks)
+  const match = content.match(/(?:\\*`){3,}suggestions\s*\n?([\s\S]*?)(?:\\*`){3,}/)
+  if (!match?.[1]) return []
+
+  try {
+    const parsed = JSON.parse(match[1].trim())
+    if (Array.isArray(parsed) && parsed.every((s) => typeof s === 'string')) {
+      return parsed.slice(0, 3) // Max 3 suggestions
+    }
+  } catch {
+    // Fallback: try to extract quoted strings
+    const strings = match[1].match(/"([^"]+)"/g)
+    if (strings) {
+      return strings.slice(0, 3).map((s) => s.replace(/^"|"$/g, ''))
+    }
+  }
+  return []
 }

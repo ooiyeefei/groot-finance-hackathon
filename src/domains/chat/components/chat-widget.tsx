@@ -73,7 +73,7 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
       {/* Chat Window */}
       {isOpen && !isMinimized && (
         <div
-          className="fixed bottom-20 right-4 z-50 w-[400px] h-[600px] max-h-[80vh] max-w-[calc(100vw-2rem)]
+          className="fixed bottom-20 right-4 z-50 w-[452px] h-[678px] max-h-[85vh] max-w-[calc(100vw-2rem)]
             animate-in slide-in-from-bottom-4 fade-in duration-200"
           role="dialog"
           aria-label="FinanSEAL Chat Assistant"
