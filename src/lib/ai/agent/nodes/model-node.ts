@@ -90,7 +90,8 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
 
     // Check if we should use Gemini
     if (modelType === 'gemini' && geminiService) {
-      return await handleGeminiResponse(state, messages, systemPrompt, tools);
+      const isFinancial = detectFinancialQuery(state);
+      return await handleGeminiResponse(state, messages, systemPrompt, tools, isFinancial);
     }
 
     // Fallback to original OpenAI-compatible API
@@ -300,8 +301,8 @@ async function getValidatedTools(modelType: ModelType, userRole?: string): Promi
 /**
  * Handle Gemini model response
  */
-async function handleGeminiResponse(state: AgentState, messages: any[], systemPrompt: string, tools: any[]): Promise<Partial<AgentState>> {
-  console.log(`\n🤖 [GEMINI PATH] Using model: ${aiConfig.gemini.model} with ${messages.length} messages\n`);
+async function handleGeminiResponse(state: AgentState, messages: any[], systemPrompt: string, tools: any[], isFinancialQuery: boolean = false): Promise<Partial<AgentState>> {
+  console.log(`\n🤖 [GEMINI PATH] Using model: ${aiConfig.gemini.model} with ${messages.length} messages, financial query: ${isFinancialQuery}\n`);
 
   // Convert messages to GeminiMessage format
   const geminiMessages = messages.slice(1).map((msg: any) => ({
@@ -349,6 +350,14 @@ async function handleGeminiResponse(state: AgentState, messages: any[], systemPr
     };
   }
 
+  // ANTI-HALLUCINATION GUARD: Block financial responses without tool usage (same as OpenAI path)
+  if (isFinancialQuery) {
+    console.log(`[CallModel] 🚨 GEMINI BLOCKED FINANCIAL HALLUCINATION: Financial query detected but Gemini returned text instead of tool call`);
+    return {
+      messages: [...state.messages, new AIMessage('I need to look up your actual financial data to answer that question accurately. Let me search your records now.')],
+    };
+  }
+
   // Return text response from Gemini
   const content = response.content || 'I apologize, but I cannot process your request right now.';
   console.log('[CallModel] Gemini text response generated');
@@ -390,6 +399,13 @@ function detectFinancialQuery(state: AgentState): boolean {
     'what invoices', 'what payments', 'what income', 'how much', 'total amount',
     'largest', 'biggest', 'smallest', 'most expensive', 'least expensive',
 
+    // Overview / status queries — user wants to see their actual data
+    'income and expense', 'expense status', 'income status', 'financial status',
+    'financial health', 'financial overview', 'financial summary', 'spending summary',
+    'business doing', 'cash position', 'cash flow',
+    'invoice status', 'invoices status', 'account receivable', 'account payable',
+    'sales invoice', 'pending invoice', 'overdue invoice',
+
     // Query patterns that need database access
     'transactions from', 'expenses from', 'invoices from', 'payments to',
     'spent on', 'paid to', 'received from', 'amount paid', 'amount spent',
@@ -408,15 +424,17 @@ function detectFinancialQuery(state: AgentState): boolean {
   ];
 
   // Personal pronouns indicating user's own data
-  const personalIndicators = ['my', 'i have', 'i paid', 'i spent', 'i received', 'show me', 'list my'];
+  const personalIndicators = ['my', 'i have', 'i paid', 'i spent', 'i received', 'show me', 'list my', 'tell me about my'];
 
   // Check for financial triggers
   const hasFinancialTrigger = financialTriggers.some(trigger => query.includes(trigger));
 
-  // Check for personal data requests
+  // Check for personal data requests — personal pronoun + any financial-adjacent word
   const hasPersonalIndicator = personalIndicators.some(indicator => query.includes(indicator));
+  const financialAdjacent = ['transaction', 'expense', 'income', 'invoice', 'payment', 'spending', 'finance', 'money', 'budget', 'cost', 'revenue'];
+  const hasFinancialWord = financialAdjacent.some(word => query.includes(word));
 
-  const isFinancialQuery = hasFinancialTrigger || (hasPersonalIndicator && query.includes('transaction'));
+  const isFinancialQuery = hasFinancialTrigger || (hasPersonalIndicator && hasFinancialWord);
 
   if (isFinancialQuery) {
     console.log(`[CallModel] 🚨 FINANCIAL QUERY DETECTED - Forcing tool usage to prevent hallucination: "${query.substring(0, 100)}..."`);

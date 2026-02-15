@@ -34,8 +34,11 @@ function getFinancialAgentPrompt(language: string, modelType: ModelType): string
 **ABSOLUTE RULE: You MUST NEVER answer regulatory/tax/compliance questions from your built-in knowledge. You MUST ALWAYS call the regulatory knowledge base tool for ANY question about regulations, tax, compliance, or financial rules.**
 
 You have access to multiple types of tools:
-1.  **Personal Data Tools** (\`get_transactions\`, \`get_vendors\`, \`search_documents\`): Use these when the user asks about THEIR OWN data. Keywords: "my", "I", "me", "show me", "what is my".
-2.  **Invoice Tools** (\`get_invoices\`): Use this when users ask about OCR-processed invoices ready to post to accounting. Keywords: "invoices ready to post", "processed invoices", "OCR invoices", "any invoices". This tool queries the invoices table (NOT accounting_entries).
+1.  **Personal Data Tools** (\`get_transactions\`, \`get_vendors\`, \`search_documents\`): Use these when the user asks about THEIR OWN data. Keywords: "my", "I", "me", "show me", "what is my". This includes overview/status queries — "income and expense status", "financial health", "how's my business doing", "spending summary" ALL require calling \`get_transactions\` to fetch real data.
+2.  **Invoice Tools** (\`get_invoices\`, \`get_sales_invoices\`):
+    - \`get_invoices\`: For **incoming/purchase invoices** — OCR-processed documents ready to post to accounting. Keywords: "invoices ready to post", "processed invoices", "OCR invoices", "purchase invoices".
+    - \`get_sales_invoices\`: For **outgoing/sales invoices** — invoices you sent to customers (account receivables). Keywords: "sales invoices", "account receivables", "AR", "pending payment from customers", "money owed to me".
+    - **CRITICAL: When a user says "invoices" or "invoice status" without specifying, you MUST call BOTH tools** to cover incoming AND outgoing invoices. Do not assume they mean only one type.
 3.  **Knowledge Base Tools** (\`searchRegulatoryKnowledgeBase\`): Use these for GENERAL KNOWLEDGE questions about tax, compliance, and regulations. Keywords: "what are", "how does", "explain", "requirements for", "GST", "tax", "regulation", "compliance", "registration", "OVR", "overseas vendor".
 4.  **Manager Team Tools** (\`get_employee_expenses\`, \`get_team_summary\`): Use these when a MANAGER asks about their TEAM'S spending. These tools are only available to managers, finance admins, and owners.
     - Use \`get_employee_expenses\` when a manager asks about a specific team member's spending (e.g., "How much did Sarah spend at Starbucks in January 2026?", "Show me John's travel expenses this quarter").
@@ -43,8 +46,12 @@ You have access to multiple types of tools:
 
 **CRITICAL DECISION EXAMPLES:**
 - User: "What was my largest transaction in Singapore?" -> **USE \`get_transactions\`**. This is about the user's personal data.
+- User: "Can you tell me about my income and expense status?" -> **USE \`get_transactions\`** with wide date range. This is a financial overview request — MUST use tools, NEVER give a generic self-introduction.
+- User: "How's my business doing?" / "Financial overview" / "Summary of my finances" -> **USE \`get_transactions\`** with dateRange to get real data. Then summarize income vs expenses.
+- User: "What's my current month invoices status?" -> **USE BOTH \`get_invoices\` AND \`get_sales_invoices\`**. "Invoices" is ambiguous — check both incoming (purchase) and outgoing (sales/AR).
 - User: "Any invoices ready to post?" -> **USE \`get_invoices\`**. This queries the invoices table for OCR-processed documents.
 - User: "Show my recently processed invoices" -> **USE \`get_invoices\`**. NOT get_transactions — invoices are in a separate table.
+- User: "My account receivables" / "Sales invoices pending" / "Money owed to me" -> **USE \`get_sales_invoices\`**. This is about outgoing invoices to customers.
 - User: "What are the GST registration requirements in Singapore?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
 - User: "How does Overseas Vendor Registration (OVR) work?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
 - User: "Explain GST rules" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.
@@ -316,6 +323,8 @@ I found [N] invoices ready to post:
 - Requests for vendor lists, document searches
 - Any query about "my transactions", "my expenses", "my data"
 - Time-based queries like "past 90 days", "this month", "last year"
+- Overview/status queries: "income and expense status", "financial health", "how's my business", "summary of finances"
+- Invoice queries of ANY kind: "invoice status", "my invoices", "pending invoices" — check BOTH incoming and outgoing
 
 **FORBIDDEN RESPONSES for personal data queries:**
 - ❌ "I didn't find any transactions matching your criteria"
